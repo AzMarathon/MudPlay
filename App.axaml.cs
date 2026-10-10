@@ -342,6 +342,12 @@ public partial class App : Application
                 MudPlay.ViewModels.ConfirmDialogViewModel,
                 MudPlay.Views.ConfirmDialog>();
 
+            // "Which waiting events should run?" — asked when the master switch
+            // comes back on after holding the event queue for a long spell.
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.HeldEventsPromptViewModel,
+                MudPlay.Views.HeldEventsPromptWindow>();
+
             // Register the LogPane double-click handler for the spell-
             // coverage auditor's summary entries. Opening reuses any
             // already-open window (single-instance) so repeated

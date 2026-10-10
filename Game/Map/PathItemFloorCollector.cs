@@ -66,7 +66,15 @@ public sealed class PathItemFloorCollector : IDisposable
         }
     }
 
-    private void OnSurvey() => CollectRevealed();
+    // The master switch (true = off): off, a route item seen on the floor is not
+    // picked up. Stateless, so the next survey after it is back on collects it.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
+    private void OnSurvey()
+    {
+        if (MasterSwitchOff?.Invoke() == true) return;
+        CollectRevealed();
+    }
 
     public void Dispose()
     {

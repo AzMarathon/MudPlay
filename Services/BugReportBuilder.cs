@@ -361,6 +361,14 @@ public static class BugReportBuilder
         // three, plus what this death said was gone and the trail it kept.
         if (lastDeath is not null)
         {
+            // What the record took the pile to be: lost holds the pack, the key ring
+            // and the light that was lit. A "pile that never completes" report
+            // turns on whether an entry here was really held.
+            Kv(sb, "Latest deathpile as recorded",
+                $"worn {lastDeath.EquippedAtDeath?.Count ?? 0}, lost {lastDeath.LostItems?.Count ?? 0} entries"
+                + (lastDeath.LostItems is { } lostEntries && lostEntries.Exists(i => i.OnKeyRing)
+                    ? $" (keys: {string.Join(", ", lostEntries.Where(i => i.OnKeyRing).Select(i => i.Name))})"
+                    : " (no keys)"));
             Kv(sb, "Latest deathpile still missing",
                 lastDeath.UnrecoveredItems is { Count: > 0 } missing ? string.Join(", ", missing) : "(nothing)");
             if (lastDeath.ReturnedItems is { Count: > 0 } returned)
@@ -369,6 +377,7 @@ public static class BugReportBuilder
                 Kv(sb, "Latest death: rooms walked up to it (newest first)",
                     string.Join(", ", trail.Select(r => $"{r.Map}/{r.Room}")));
         }
+        Kv(sb, "Death-room pickup", svc.DeathRecovery.DeathRoomGrabState);
         Kv(sb, "Stock spill sweep", svc.DeathRecovery.SpillSweepState);
         Kv(sb, "Stock spill sweep held back right now by", svc.DeathRecovery.SpillSweepBlockers);
         if (svc.DeathRecovery.SpillSweepPlan is { Length: > 0 } plan)
@@ -714,6 +723,16 @@ public static class BugReportBuilder
         // (HP still above the flee trigger) — the engine is force-engaging to clear it
         // so recovery can proceed (report paradigm-20260901-093301).
         Kv(sb, "Engaging to clear a rest-blocker", svc.Health.ForceClearForRest.ToString());
+        // The room the Combat gate was last held in decides what a roster wiped clean
+        // means: still standing there, a room cleared; anywhere else, a fight walked
+        // out on, which halts the walker (the AbandonedCombat gate).
+        Kv(sb, "Combat gate",
+            $"{(svc.CombatTracker.HasEngageableHostiles ? "held" : "not held")}; last held in "
+            + (svc.CombatTracker.GateRoom?.ToString() ?? "(no room known)"));
+        // No rest is started in a room whose own spell damages the character; a "why
+        // won't it rest" report turns on this line.
+        Kv(sb, "Room spell and resting", RoomSpellRestLine(svc));
+        Kv(sb, "Room spells changed from the default (Periodic Damage Room Spells)", RoomSpellRestChoices(svc));
         Kv(sb, "Clearing a see-hidden room (combat off)", svc.CombatTracker.SeeHiddenClearActive.ToString());
         Kv(sb, "Sneak broken by a see-hidden monster, not sneaking again yet", svc.CombatTracker.SneakBrokenBySeeHidden.ToString());
         Kv(sb, "Clearing after a failed sneak (combat off)", svc.CombatTracker.SneakFailClearActive.ToString());
@@ -830,7 +849,7 @@ public static class BugReportBuilder
         List<Models.Profile.MonsterObservation> rows = svc.MonsterObservations.Snapshot()
             .OrderByDescending(o => o.LastObservedAt).ToList();
 
-        sb.Append("Combat outcomes THIS character has observed per monster — landed-hit damage, hit rate, and confirmed physical/spell no-effect discoveries (")
+        sb.Append("Combat outcomes THIS character has observed per monster — its WEAPON swings (landed damage, and swings landed of swings made; a spell is not a swing), and confirmed physical/spell no-effect discoveries (")
           .Append(rows.Count).Append(")\n\n");
         if (rows.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }
 
@@ -840,11 +859,11 @@ public static class BugReportBuilder
             List<string> parts = new();
             if (o.HitCount > 0)
                 parts.Add($"hits {o.HitCount} (dmg {o.HitDamageMin}-{o.HitDamageMax}, avg {o.AvgHitDamage:0.#})");
-            if (o.SwingCount > 0)
-                parts.Add($"hit-rate {o.HitRatePercent:0}% ({o.HitCount}/{o.SwingCount})");
+            parts.Add(o.SwingCount > 0
+                ? $"weapon hit-rate {o.HitRatePercent:0}% ({o.HitCount}/{o.SwingCount} swings)"
+                : "no weapon swings");
             if (o.PhysicalNoEffectCount > 0) parts.Add($"physical-no-effect x{o.PhysicalNoEffectCount}");
             if (o.SpellNoEffectCount > 0) parts.Add($"spell-no-effect x{o.SpellNoEffectCount}");
-            if (parts.Count == 0) parts.Add("(no outcomes recorded)");
 
             sb.Append("- #").Append(o.MonsterNumber).Append(' ').Append(name)
               .Append(" — ").Append(string.Join(", ", parts)).Append('\n');
@@ -1603,7 +1622,9 @@ public static class BugReportBuilder
         // game, held until the party reform has seen the room when one is pending: a
         // "walked off without the party after a relog" report needs which it was.
         Kv(sb, "Loop restart after reconnect", svc.LoopRunner.PendingReconnectResumeName is { } pendingLoop
-            ? $"'{pendingLoop}' — on the next in-game prompt"
+            ? svc.LoopRunner.ReconnectResumeHeldForMasterSwitch
+                ? $"'{pendingLoop}' — when the master switch is back on"
+                : $"'{pendingLoop}' — on the next in-game prompt"
             : svc.LoopRunner.ReconnectResumeHeldForReform
                 ? "restarted — held until the party reform has seen the room"
                 : "(none pending)");
@@ -2366,8 +2387,24 @@ public static class BugReportBuilder
     private static string BuildAutoMode(AppServices svc)
     {
         StringBuilder sb = new();
-        Kv(sb, "Kill-switch engaged", svc.AutoModeController.KillSwitchEngaged.ToString());
-        Kv(sb, "All wired engines off", svc.AutoModeController.AllWiredOff.ToString());
+        // First, because with it off nothing automatic acts and most "it didn't do
+        // X" reports end here.
+        bool off = svc.AutoModeController.KillSwitchEngaged;
+        Kv(sb, "Master switch (Auto-All)", off
+            ? "OFF — nothing automatic acts: no engines, remote commands (but @auto-all), triggers, events, polls, holds or hand-started runs"
+            : "on");
+        if (off)
+        {
+            Kv(sb, "Skipped because the master switch is off", svc.AutoModeController.DescribeSkipped());
+            IReadOnlyCollection<string> parked = svc.MovementCoordinator.ParkedGates;
+            Kv(sb, "Holds owed but not asserted", parked.Count == 0 ? "(none)" : string.Join(", ", parked.OrderBy(g => g)));
+            IReadOnlyCollection<string> comebacks = svc.RemoteCommands.HeldComebackSenders;
+            Kv(sb, "@comeback kept to answer at switch-on", comebacks.Count == 0 ? "(none)" : string.Join(", ", comebacks));
+            Kv(sb, "Allow hangup in all-off mode",
+                svc.AllowHangupInAllOffMode ? "ticked — automatic hang-ups still fire" : "not ticked — nothing hangs up on its own");
+        }
+        Kv(sb, "All eleven toggles off", svc.AutoModeController.AllWiredOff.ToString()
+            + " (not the master switch: toggles unticked by hand leave it on)");
         sb.Append("\nPer-engine toggles live in the `General` settings block below: `AutoMode` is the live toolbar state, `AutoModeBase` the base defaults reconciled onto it at profile load / loop / auto-lair start (null = pre-split character, treated as equal to `AutoMode`).\n");
         return sb.ToString();
     }
@@ -2616,6 +2653,37 @@ public static class BugReportBuilder
 
     private static void Kv(StringBuilder sb, string key, string value)
         => sb.Append("- **").Append(key).Append("**: ").Append(value).Append('\n');
+
+    // The spell on the room we stand in, how the game data has it for damage, and
+    // what that is doing to the rest right now.
+    private static string RoomSpellRestLine(AppServices svc)
+    {
+        if (svc.RoomTracker.State.CurrentRoom is not { Spell: > 0 } here) return "(no room spell here, or the room isn't placed)";
+        string spell = $"{svc.SpellCatalog.GetSpellNameByNumber(here.Spell) ?? "room spell"} (#{here.Spell})";
+        if (!svc.RoomSpellDamage.Readings.TryGetValue(here.Spell, out Game.Map.RoomSpellDamageReading? reading))
+            return $"{spell}: no damage in the game data";
+        string does = $"{spell}: {Game.Map.RoomSpellDamageText.Damage(reading)} damage, "
+            + Game.Map.RoomSpellDamageText.How(reading, svc.ItemNames.GetName, svc.SpellCatalog.GetSpellNameByNumber);
+        if (!svc.RoomSpellBarsResting(here.Spell))
+            return $"{does}; not set to bar resting — rests as normal";
+        if (svc.RoomSpellCounteredNow(here.Spell))
+            return $"{does}; bars resting, but countered by what is worn or held — rests as normal";
+        return svc.Health.RestDeferredByRoomSpell is not null
+            ? $"{does}; bars resting: resting deferred (healing as set; the rest starts in the next room that isn't barred)"
+            : $"{does}; bars resting: no rest would be started here (none is due)";
+    }
+
+    // The room spells whose Bars resting box (Settings → Periodic Damage Room
+    // Spells) the character has set away from the default, as stored.
+    private static string RoomSpellRestChoices(AppServices svc)
+    {
+        Dictionary<int, bool> chosen = ViewModels.Settings.PeriodicDamageRoomSpellsSectionViewModel
+            .ReadOrDefault(svc.Profile.Current).BarsResting;
+        if (chosen.Count == 0) return "(none: every spell follows its default)";
+        return string.Join("; ", chosen.OrderBy(static c => c.Key).Select(c =>
+            $"{svc.SpellCatalog.GetSpellNameByNumber(c.Key) ?? "not in the loaded game data"} (#{c.Key}) "
+            + (c.Value ? "bars resting" : "doesn't bar resting")));
+    }
 
     // The item worn in a given inventory slot (e.g. "Weapon Hand"), or null when
     // that slot is empty / the loadout hasn't been parsed yet.

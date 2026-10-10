@@ -216,6 +216,42 @@ public sealed class EventRunSurvivalTests : IDisposable
     // after five minutes with nothing moving the event is given up as a user Stop
     // ends it. Something called the detour off, so nothing sets off by itself now:
     // no Then walk, no waiting event, one terminal notice.
+    // With the master switch off every engine stands idle by design, so the idle
+    // limit must not run then, or every suspended event would be given up five
+    // minutes after the switch went off. It counts time the switch was on.
+    [Fact]
+    public void ASuspendedEvent_IsNotGivenUpForTimeTheMasterSwitchWasOff()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 10, 18, 0, 0, TimeSpan.Zero);
+        h.Events.Now = () => now;
+        bool off = false;
+        h.Events.IsMasterSwitchOff = () => off;
+        h.Events.Fire(FarmThenWalk(h));
+        DetourResume.Snapshot(h.Walker, h.Runner, h.AutoLair, includeWalk: true)
+            .Stop(h.Walker, h.Runner, h.AutoLair, "sell detour");
+        h.Events.Tick();
+        now += TimeSpan.FromMinutes(4);
+        h.Events.Tick();
+
+        off = true;
+        h.Events.NoteMasterSwitchChanged();
+        now += TimeSpan.FromHours(3);
+        h.Events.Tick();
+        Assert.Contains("'farm' Loop", h.Events.RunSummary);
+        Assert.Empty(h.Notices);
+
+        off = false;
+        h.Events.NoteMasterSwitchChanged();
+        h.Events.Tick();
+        Assert.Contains("'farm' Loop", h.Events.RunSummary);   // four of its five minutes used
+
+        now += TimeSpan.FromMinutes(2);
+        h.Events.Tick();
+        Assert.Equal("(none)", h.Events.RunSummary);
+        Assert.Contains("[Event 'farm' given up:", Assert.Single(h.Notices));
+    }
+
     [Fact]
     public void ADetourThatNeverComesBack_IsGivenUpAsAStopIs_NothingSetsOff()
     {

@@ -86,6 +86,13 @@ public sealed partial class WirePromptScanner
     private bool _matchedSinceSend;
     private int _tailReportedFrom = -1;
 
+    // True while Append is handing the prompts it matched to PromptObserved. A
+    // handler that sends commands from there (the prompt that ends a rest starts a
+    // gear swap) reaches NoteCommandSent before the matched text is trimmed off the
+    // buffer, and the second command of the burst reported the prompt that had just
+    // matched as one the statline can't read (report paradigm-20261010-145330).
+    private bool _dispatchingMatches;
+
     // Longest prompt text quoted in a report — enough to recognise it, short enough
     // for a one-line notice.
     private const int MaxReportedPrompt = 80;
@@ -197,7 +204,9 @@ public sealed partial class WirePromptScanner
                 _            => PlayerPosition.Standing,
             };
 
-            PromptObserved?.Invoke(new PromptObservation(hp, manaType, mana, position));
+            _dispatchingMatches = true;
+            try { PromptObserved?.Invoke(new PromptObservation(hp, manaType, mana, position)); }
+            finally { _dispatchingMatches = false; }
             lastEnd = m.Index + m.Length;
             previousAcceptedEnd = lastEnd;
         }
@@ -338,6 +347,8 @@ public sealed partial class WirePromptScanner
     // Append.
     public void NoteCommandSent()
     {
+        // Sent in answer to a prompt that matched: the cursor's row holds that prompt.
+        if (_dispatchingMatches) return;
         if (_matchedSinceSend)
         {
             _matchedSinceSend = false;

@@ -308,9 +308,19 @@ public sealed class PartyComebackManager : IDisposable
 
     // ----- @where probe (path B) -------------------------------------
 
+    // The master switch (true = off): off, nobody is probed for or gone back to
+    // on our own. The @comeback and @forget a member sends are remote commands
+    // and are stopped at the dispatcher (which keeps a @comeback to hand over
+    // when the switch is back on). A recovery under way when the switch goes off
+    // is held: see SettleAfterMasterSwitch.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
+    private bool MasterOff => MasterSwitchOff?.Invoke() == true;
+
     private void OnMemberReturned(string given)
     {
         if (string.IsNullOrEmpty(given)) return;
+        if (MasterOff) return;
         if (_busy) return;                 // a recovery is already running
         if (MemberInParty(given)) return;  // already back with us
         if (!_wire.IsBound) return;        // can't probe without a wire
@@ -350,7 +360,7 @@ public sealed class PartyComebackManager : IDisposable
             _log?.Info(LogCategory, $"{given} rejoined after the CR — no @where needed.");
             return;
         }
-        if (_busy || !_wire.IsBound) return;
+        if (_busy || !_wire.IsBound || MasterOff) return;
         ProbeWhere(given);
     }
 
@@ -369,6 +379,7 @@ public sealed class PartyComebackManager : IDisposable
     private void OnTelepathIn(MatchResult result)
     {
         if (_pendingProbes.Count == 0) return;
+        if (MasterOff) return;
         if (result.Groups.Count < 2) return;
         PruneProbes();
         string sender = GivenName(result.Groups[0]);
@@ -416,6 +427,7 @@ public sealed class PartyComebackManager : IDisposable
     private void OnMemberLeftBehind(string given)
     {
         if (string.IsNullOrEmpty(given) || _busy) return;
+        if (MasterOff) return;
         if (_ownTeleportAt is { } at && NowProvider() - at <= OwnTeleportWindow)
         {
             _log?.Info(LogCategory, $"{given} was dropped by our own teleport — not going back for them.");
@@ -712,6 +724,7 @@ public sealed class PartyComebackManager : IDisposable
         _followTimer.Stop();
         _backtrack.Clear();
         _backtrackIndex = 0;
+        _rejoinedWhileOff = null;
     }
 
     // ----- walk driving ----------------------------------------------
@@ -852,6 +865,13 @@ public sealed class PartyComebackManager : IDisposable
 
         if (!_busy || _phase == ComebackPhase.Idle) return;
         if (!string.Equals(GivenName(name), _senderGiven, StringComparison.OrdinalIgnoreCase)) return;
+        // Everything below telepaths or restarts the run. With the master switch
+        // off the rejoin is only noted, and settled when it is back on.
+        if (MasterOff)
+        {
+            _rejoinedWhileOff = name;
+            return;
+        }
         bool midWalk = _phase is ComebackPhase.WalkingToRoom or ComebackPhase.WalkingBacktrack;
         if (midWalk)
         {
@@ -894,9 +914,27 @@ public sealed class PartyComebackManager : IDisposable
         Resume();
     }
 
+    // The member a recovery was for, seen following again while the master switch
+    // was off.
+    private string? _rejoinedWhileOff;
+
+    // The master switch is back on. A recovery under way when it went off was
+    // held, not dropped: its walk froze with every other, and its wait for the
+    // follow did not time out. Its walk resumes with the rest; this settles a
+    // rejoin that was seen meanwhile.
+    public void SettleAfterMasterSwitch()
+    {
+        if (_rejoinedWhileOff is not { } name) return;
+        _rejoinedWhileOff = null;
+        OnMemberFollowConfirmed(name);
+    }
+
     private void OnFollowTimeout(object? sender, EventArgs e)
     {
         if (!_busy || _phase != ComebackPhase.AwaitingFollow) return;
+        // The timer keeps ticking, so the wait runs out at its first tick after
+        // the master switch is back on.
+        if (MasterOff) return;
         _reply("follow timed out — resuming anyway");
         Resume();
     }

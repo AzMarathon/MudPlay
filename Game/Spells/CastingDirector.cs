@@ -608,6 +608,21 @@ public sealed class CastingDirector : IDisposable
         _isTriggeredRest = isTriggeredRest;
     }
 
+    // Wire HealthManager.HpRestDeferredByRoomSpell. True while an HP rest is due and
+    // isn't being taken because the room's own spell does damage (the rest would be
+    // broken every few seconds). The rest-time heal is cast only while resting, so
+    // without this it would never fire there and the room would wear the character
+    // down unanswered: the heal goes out standing instead (user, 2026-10-09: "we
+    // should heal but not actively try to rest in a room like this, because it'll
+    // kill us if we dont have heals").
+    public void SetRestDeferredGate(Func<bool> hpRestDeferredHere)
+    {
+        ArgumentNullException.ThrowIfNull(hpRestDeferredHere);
+        _hpRestDeferredHere = hpRestDeferredHere;
+    }
+
+    private Func<bool>? _hpRestDeferredHere;
+
     // Wire the mana-rest-lock gate for "cast before resting for mana" slots (see
     // _isManaRestActive). True while a mana-recovery rest is active — held through a
     // combat interruption until mana reaches its rest-max target.
@@ -1063,6 +1078,46 @@ public sealed class CastingDirector : IDisposable
         if (doomed is null) return 0;
         foreach ((string, string) key in doomed) _activeUntil.Remove(key);
         return doomed.Count;
+    }
+
+    // Drop the run-out timers of anyone who is no longer in the party. A member's
+    // timer outlives its expiry on purpose: the entry is what a negative recast
+    // margin counts from, and the next cast overwrites it. Once they have left,
+    // nothing casts on them again, so theirs sat in the store, and in every bug
+    // report as "expired, not yet cleared", until the profile was reloaded (report
+    // paradigm-20261010-145330). A timer still running is kept: whoever comes back
+    // inside it is still buffed. So is one inside a negative margin's wait after the
+    // run-out: a member off the roster for one pass (dropped and back, a party
+    // re-formed) would otherwise be recast on the moment they returned, with the
+    // wait the user set thrown away.
+    private void DropExpiredTimersOfDeparted()
+    {
+        if (_activeUntil.Count == 0) return;
+        DateTime now = _now();
+        List<(string Target, string Short)>? doomed = null;
+        foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
+        {
+            if (kv.Key.Target.Length == 0 || IsInPartyGiven(kv.Key.Target)) continue;
+            int waitAfter = Math.Max(0, -EffectiveMargin(kv.Key.Target, kv.Key.Short, kv.Value.MarginSec));
+            if (now >= kv.Value.Until.AddSeconds(waitAfter))
+                (doomed ??= new()).Add(kv.Key);
+        }
+        if (doomed is null) return;
+        foreach ((string, string) key in doomed) _activeUntil.Remove(key);
+        _log?.Info(LogCategory,
+            $"dropped {doomed.Count} expired buff timer(s) on target(s) no longer in the party: "
+            + string.Join(", ", doomed.Select(k => $"{k.Short} on {k.Target}")) + ".");
+    }
+
+    // Anyone on the roster, ourselves included: a slot aimed at our own name keys its
+    // timer by that name.
+    private bool IsInPartyGiven(string given)
+    {
+        if (_party is null) return false;
+        foreach (PartyMember m in _party.Members)
+            if (string.Equals(GivenName(m.Name), given, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     // The instant the timers were frozen on a disconnect, or null while running. The
@@ -1770,6 +1825,9 @@ public sealed class CastingDirector : IDisposable
         // first in-game prompt clears the latch. Without this, buffs drain onto the
         // login prompts during re-entry (report paradigm-20260908-053448).
         if (_suspended) return null;
+        // Ahead of the master switches: the timers are shown and reported whether or
+        // not anything is being cast.
+        DropExpiredTimersOfDeparted();
         // Two independent masters share this loop: the heal / cure / debuff
         // categories run under AutoHeal (_isEnabled), buffing runs under
         // AutoBless (_autoBlessEnabled), and each is gated separately in the
@@ -2260,7 +2318,7 @@ public sealed class CastingDirector : IDisposable
 
     private SelfHealInputs SelfHealState() => new(
         _state.Hp, _state.MaxHp, _state.Ma, _state.MaxMa, _state.InCombat,
-        Resting: _state.Position == PlayerPosition.Resting,
+        Resting: _state.Position == PlayerPosition.Resting || _hpRestDeferredHere?.Invoke() == true,
         HealHpTrigger: ResolveHealHpTrigger,
         Affordable: SpellAffordable,
         HpRegenRecastDue: spell => IsRecastDue("", spell));

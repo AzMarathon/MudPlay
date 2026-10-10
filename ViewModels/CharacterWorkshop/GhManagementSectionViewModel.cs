@@ -299,6 +299,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private void Resume()
     {
         RoomContentsTitle = null;
+        if (Services.AppServices.Current.RefuseStartForMasterSwitch("Roomba sweep")) return;
         if (_sweep.Resume()) { StartHint = null; CompletionSummary = null; }
         else StartHint = _sweep.LastStartError;
         RefreshStatus();
@@ -324,6 +325,8 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
             return;
         }
         StartBlockedNoRooms = false;
+        // The sweep is a loop started by hand.
+        if (Services.AppServices.Current.RefuseStartForMasterSwitch("Roomba sweep")) return;
         if (_sweep.Start(mode)) { StartHint = null; CompletionSummary = null; }
         else StartHint = _sweep.LastStartError;
     }

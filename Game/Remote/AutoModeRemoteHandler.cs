@@ -17,10 +17,12 @@ namespace MudPlay.Game.Remote;
 // @auto-heal and @auto-rest are separate switches (AutoActionDefaults.AutoHeal /
 // AutoRest): healing casts and the rest engine turn on and off independently.
 //
-// @auto-all drives the shared AutoModeController master kill-switch (same session
-// snapshot as the toolbar / Action-menu "Auto-All" button). No arg toggles
-// (kill → restore); explicit off ensures every engine is off, on restores the
-// snapshot. Reply reports whether everything is now off.
+// @auto-all drives the shared AutoModeController master switch (the same one as
+// the toolbar / Action-menu "Auto-All" button). No arg flips it; `off` switches
+// it off even when every toggle was already off by hand; `on` switches it on,
+// falling back to the character's base modes when no toggle is remembered. The
+// reply reports the switch, not the toggles. It is the one remote command still
+// obeyed while the switch is off (RemoteCommandManager.MasterSwitchCommand).
 //
 // All commands require PlayerRemoteControls.AlterSettings per the catalog — a
 // "do something on my behalf" tier.
@@ -136,16 +138,15 @@ public sealed class AutoModeRemoteHandler : IDisposable
             return;
         }
 
+        string by = $"@auto-all from {ctx.Sender}";
         if (ctx.Args.Count == 0)
         {
-            // No arg → snapshot toggle (same shape as the Auto-All button).
-            _controller.ToggleAll();
+            _controller.ToggleAll(by);
         }
         else if (TryParseOnOff(ctx.Args[0], out bool wanted))
         {
-            // Explicit: on = ensure restored, off = ensure killed.
-            if (wanted && _controller.AllWiredOff) _controller.ToggleAll();
-            else if (!wanted && !_controller.AllWiredOff) _controller.ToggleAll();
+            if (wanted) _controller.TurnOn(by);
+            else _controller.TurnOff(by);
         }
         else
         {
@@ -153,7 +154,7 @@ public sealed class AutoModeRemoteHandler : IDisposable
             return;
         }
 
-        string state = _controller.AllWiredOff ? "off" : "on";
+        string state = _controller.KillSwitchEngaged ? "off" : "on";
         _log?.Log(LogSeverity.Info, LogCategory, $"@auto-all from {ctx.Sender}: {state}");
         ctx.Reply($"@auto-all: {state}");
     }

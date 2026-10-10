@@ -1549,29 +1549,89 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(afterFirst, h.Sent.Count);   // no second re-announce within the window
     }
 
-    // A *Combat Off* nothing of ours explains, in spell mode: the round tick doesn't
-    // bring the spell back (the heartbeat stands down while combat is off), a combat
-    // line does. Pinned as it is, since the program log says so.
-    [Fact]
-    public void SpellMode_UnexplainedCombatOff_TickAloneDoesNotResume_ACombatLineDoes()
+    // A *Combat Off* nothing of ours explains, in a spell fight (a stun, a typed
+    // command): the round tick alone brings the spell back (user, 2026-10-09). It
+    // used to take a combat line the client reads, which a monster whose swings it
+    // doesn't read never gives.
+    private static Harness SpellFightStoppedAfterTheAnnounceWasAnswered(out int announced)
     {
+        Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "small zombie");
+        h.Feed("Also here: small zombie.");
+        Assert.Equal("turn small zombie", h.LastSent);
+        h.Feed("*Combat Engaged*");
+        announced = h.Sent.Count;
+        h.Feed("*Combat Off*");
+        Assert.Equal(announced, h.Sent.Count);               // nothing on the Off line itself
+        return h;
+    }
+
+    [Fact]
+    public void SpellMode_UnexplainedCombatOff_RoundTickAloneReAnnouncesTheSpell()
+    {
+        using Harness h = SpellFightStoppedAfterTheAnnounceWasAnswered(out int announced);
+
+        h.Combat.OnCombatTick();
+
+        Assert.Equal(announced + 1, h.Sent.Count);
+        Assert.Equal("turn small zombie", h.LastSent);
+    }
+
+    [Fact]
+    public void SpellMode_UnexplainedCombatOff_ALineAndTheTickOfOneRound_AreOneReAnnounce()
+    {
+        // The round's first line wakes OnCombatLine and is the tick as well; later
+        // ticks inside the pacing window add nothing. One announce a round is what
+        // keeps the casts to what the spell's energy allows.
+        using Harness h = SpellFightStoppedAfterTheAnnounceWasAnswered(out int announced);
+
+        h.Feed("The small zombie claws you for 5 damage!");
+        h.Combat.OnCombatTick();
+        h.Combat.OnCombatTick();
+
+        Assert.Equal(announced + 1, h.Sent.Count);
+    }
+
+    [Fact]
+    public void SpellMode_UnexplainedCombatOff_TargetGone_TickSendsNothing()
+    {
+        using Harness h = SpellFightStoppedAfterTheAnnounceWasAnswered(out int announced);
+
+        h.Classifier.NoteRoomChanged();                         // the room emptied; nothing to cast at
+        h.Combat.OnCombatTick();
+
+        Assert.Equal(announced, h.Sent.Count);
+    }
+
+    [Fact]
+    public void SpellMode_UnexplainedCombatOff_AutoCombatOff_TickSendsNothing()
+    {
+        using Harness h = SpellFightStoppedAfterTheAnnounceWasAnswered(out int announced);
+        h.AutoCombatEnabled = false;
+
+        h.Combat.OnCombatTick();
+
+        Assert.Equal(announced, h.Sent.Count);
+    }
+
+    [Fact]
+    public void SpellMode_FreshAnnounceNotYetAnswered_TickDoesNotAnnounceAgain()
+    {
+        // The Off the game prints for the announce itself, before its Engaged: the
+        // spell is in flight, and a second announce would only break it off.
         using Harness h = new();
         h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
         h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
         h.AddMonster(1, "small zombie");
-
         h.Feed("Also here: small zombie.");
-        Assert.Equal("turn small zombie", h.LastSent);
-        h.Feed("*Combat Engaged*");
         int announced = h.Sent.Count;
 
         h.Feed("*Combat Off*");
         h.Combat.OnCombatTick();
-        Assert.Equal(announced, h.Sent.Count);
 
-        h.Feed("The small zombie claws you for 5 damage!");
-        Assert.Equal(announced + 1, h.Sent.Count);
-        Assert.Equal("turn small zombie", h.LastSent);
+        Assert.Equal(announced, h.Sent.Count);
     }
 
     // Report paradigm-20261009-120757, 12:07:17: the heal's latch was armed, the game

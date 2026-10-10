@@ -547,9 +547,41 @@ public sealed class HealthManager : IDisposable
         return _hpGateAsserted || _maGateAsserted;
     }
 
-    // Do-not-rest, and Auto-Rest being off, win over rest-up-here on the same room.
+    // Do-not-rest, a room whose own spell does damage, and Auto-Rest being off, win
+    // over rest-up-here on the same room.
     private (bool Hp, bool Mana) RestHereNow() =>
-        RestSwitchedOff() || _shouldSkipRestHere?.Invoke() == true ? default : _restHere?.Invoke() ?? default;
+        RestSwitchedOff() || _shouldSkipRestHere?.Invoke() == true || _roomSpellHurting?.Invoke() is not null
+            ? default
+            : _restHere?.Invoke() ?? default;
+
+    // Wire the damaging-room probe: the name of the spell on the room we stand in
+    // when it bars resting (Settings → Periodic Damage Room Spells) and no counter
+    // is worn or held against it, else null. It is asked afresh each time, so a
+    // change saved in Settings is in effect at the next check. No rest or meditate
+    // is started in such a room (user, 2026-10-09: "we
+    // should heal but not actively try to rest in a room like this"): the game
+    // re-casts the spell every six seconds and each hit breaks the rest, so resting
+    // there is a rest / stand loop that recovers nothing. It behaves as a do-not-rest
+    // room does: no recovery hold is raised, so a walk or loop carries on out of it,
+    // and the rest is taken up in the next room that doesn't hurt. Healing by spell
+    // goes on meanwhile (RestDeferredByRoomSpell).
+    public void SetRoomSpellDamageProbe(Func<string?> roomSpellHurting)
+    {
+        ArgumentNullException.ThrowIfNull(roomSpellHurting);
+        _roomSpellHurting = roomSpellHurting;
+    }
+
+    private Func<string?>? _roomSpellHurting;
+    private bool _roomSpellSkipLogged;       // once per room: the "not resting here" line
+    private Map.RoomKey? _roomSpellSkipRoom; // the placed room that flag stands for, null when not known
+    private bool _restOwedFromDamagingRoom;  // a rest was put off for a room's spell and hasn't started since
+
+    // The spell whose damage is keeping a due rest from starting in this room, or
+    // null. While set with HP under its rest trigger, CastingDirector heals as it
+    // would during the rest that isn't happening (HpRestDeferredByRoomSpell).
+    public string? RestDeferredByRoomSpell { get; private set; }
+
+    public bool HpRestDeferredByRoomSpell { get; private set; }
 
     // Wire the Auto-Rest switch. The engine switch (isEnabled) turns the whole
     // manager off; this one turns off only the resting — the recovery holds and the
@@ -562,6 +594,32 @@ public sealed class HealthManager : IDisposable
     }
 
     private bool RestSwitchedOff() => _isRestEnabled?.Invoke() == false;
+
+    // Wire the master switch: isOff reads it, noteHeld counts a hang-up it held
+    // back (AutoModeController.Blocks). Unwired, the switch reads as on.
+    public void SetMasterSwitch(Func<bool> isOff, Action<string?> noteHeld)
+    {
+        ArgumentNullException.ThrowIfNull(isOff);
+        ArgumentNullException.ThrowIfNull(noteHeld);
+        _masterSwitchOff = isOff;
+        _noteHeldByMasterSwitch = noteHeld;
+    }
+
+    private Func<bool>? _masterSwitchOff;
+    private Action<string?>? _noteHeldByMasterSwitch;
+
+    // The master-switch rule every hang-up of ours follows (user, 2026-10-09): with
+    // the switch off, "none of our auto systems should respond" unless Allow hangup
+    // in all-off mode is ticked, and then every hang-up is respected. what names
+    // the hang-up for the log; null for the low-HP check, which is asked on every
+    // prompt inside its window.
+    private bool HeldByMasterSwitch(GeneralSettings? general, string? what)
+    {
+        if (_masterSwitchOff?.Invoke() != true) return false;
+        if (general is { AllowHangupInAllOffMode: true }) return false;
+        _noteHeldByMasterSwitch?.Invoke(what);
+        return true;
+    }
 
     public void SetDoNotRestSelector(Func<bool> shouldSkipRestHere)
     {
@@ -911,6 +969,9 @@ public sealed class HealthManager : IDisposable
             _restConfirmedByPrompt = false;
             _wasPoisoned = false;
             _fledThisCombat = false;
+            RestDeferredByRoomSpell = null;
+            HpRestDeferredByRoomSpell = false;
+            _restOwedFromDamagingRoom = false;
             // A stale engage-to-clear latch (report paradigm-20260903-073107) would let
             // CombatManager keep bypassing the auto-combat-off gate — firing a swing /
             // drain at the next room's hostile — even though the rest engine is now off.
@@ -921,19 +982,12 @@ public sealed class HealthManager : IDisposable
                 _log?.Combat(LogCategory, "engage-to-clear released — auto-heal / rest engine disabled");
             }
 
-            // All-off carve-out: even with the engine disabled, honour the
-            // emergency hangup when the user opted in. An AFK character
-            // shouldn't be left dying just because auto-heal is off — but
-            // it stays opt-in (default off) since hanging up is a last
-            // resort. Only the hangup branch runs; everything else above
-            // already cleared. TryEmergencyHangup self-guards on MaxHp and the
-            // trigger/death-floor window, so we just need a prompt — the hangup
-            // stays live all the way through the bleeding-out zone.
-            if (_readGeneralSettings?.Invoke() is { AllowHangupInAllOffMode: true }
-                && _state.HasPromptData)
-            {
-                TryEmergencyHangup(_readSettings());
-            }
+            // The engine is off, but the low-HP hang-up has its own rule: with the
+            // master switch off it still runs when the user opted into Allow
+            // hangup in all-off mode, so an AFK character isn't left dying.
+            // TryEmergencyHangup decides; only that branch runs, everything else
+            // above already cleared.
+            if (_state.HasPromptData) TryEmergencyHangup(_readSettings());
             return;
         }
         if (!_state.HasPromptData) return;
@@ -1027,7 +1081,13 @@ public sealed class HealthManager : IDisposable
         // Auto-Rest off behaves like a do-not-rest room everywhere: no hold is raised
         // and one already up is released.
         bool restOff = RestSwitchedOff();
-        bool skipRest = restOff || (_shouldSkipRestHere?.Invoke() ?? false);
+        bool doNotRest = _shouldSkipRestHere?.Invoke() ?? false;
+        // A room whose own spell damages us is a do-not-rest room of the game's
+        // making (SetRoomSpellDamageProbe). Asked only when a rest could otherwise
+        // happen, so "deferred for the room" below never names a rest that Auto-Rest
+        // being off or Sprint mode had already ruled out.
+        string? roomHurts = restOff || doNotRest ? null : _roomSpellHurting?.Invoke();
+        bool skipRest = restOff || doNotRest || roomHurts is not null;
         (bool restHereHp, bool restHereMa) = RestHereNow();
 
         // Falling edge: combat was on as of the previous Evaluate call, off now.
@@ -1112,6 +1172,7 @@ public sealed class HealthManager : IDisposable
             _coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate,
                 AsserterName,
                 restOff ? "auto-rest is off"
+                    : roomHurts is not null ? $"this room's {roomHurts} does damage — not resting here"
                     : skipRest
                     ? "do-not-rest room — advancing instead of resting"
                     : midRecovery
@@ -1151,6 +1212,7 @@ public sealed class HealthManager : IDisposable
             _coordinator.ClearGate(MovementCoordinator.ManaRecoveryGate,
                 AsserterName,
                 restOff ? "auto-rest is off"
+                    : roomHurts is not null ? $"this room's {roomHurts} does damage — not resting here"
                     : skipRest
                     ? "do-not-rest room — advancing instead of resting"
                     : ManaAtGameFull() && _state.Ma < maClearFloor
@@ -1172,14 +1234,43 @@ public sealed class HealthManager : IDisposable
         if (skipRest && !restOff && (_state.Hp < hpRestTrigger || _state.Ma < maRestTrigger))
             _skipRestDeferredRecovery = true;
 
+        // The same deficit, when it is the room's spell that keeps the rest from
+        // starting: said once per room, and remembered so the log can say where the
+        // rest finally starts. CastingDirector reads the HP half to heal meanwhile.
+        bool hpRestDue = _state.MaxHp > 0 && _state.Hp < hpRestTrigger;
+        bool maRestDue = _state.MaxMa > 0 && _state.Ma < maRestTrigger;
+        RestDeferredByRoomSpell = roomHurts is not null && (hpRestDue || maRestDue) ? roomHurts : null;
+        HpRestDeferredByRoomSpell = roomHurts is not null && hpRestDue;
+        if (RestDeferredByRoomSpell is not null)
+        {
+            _restOwedFromDamagingRoom = true;
+            LogRestSkippedForRoomSpell(roomHurts!,
+                $"rest due (hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
+        }
+        else if (roomHurts is null && _restOwedFromDamagingRoom)
+        {
+            _restOwedFromDamagingRoom = false;
+            if (_hpGateAsserted || _maGateAsserted)
+                _log?.Info(LogCategory,
+                    $"the rest put off in a damaging room starts here (hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
+        }
+
         // Auto-Rest switched off while a follower's @wait is out: the pools may never
         // reach rest-max now, so release the leader rather than hold it for a rest
-        // that isn't coming.
-        if (restOff && _partyWaitSignaled)
+        // that isn't coming. The same in a room whose spell bars resting, which the
+        // leader dragged us into or which began to hurt under us: the wait was asked
+        // for a rest that can't be taken here, and holding the leader in the heat for
+        // its whole wait window helps nobody. The follower keeps following (user,
+        // 2026-10-10) and asks again in the next room it can rest in.
+        if ((restOff || roomHurts is not null) && _partyWaitSignaled)
         {
             _partyWaitSignaled = false;
             _partyOkRestedSince = null;
             _partyOkHeldSince = null;
+            if (roomHurts is not null && _isPartyFollower?.Invoke() == true)
+                _log?.Info(LogCategory,
+                    $"a @wait is out, but this room's {roomHurts} does damage — releasing the leader with @ok; "
+                    + "asking again in the next room that doesn't hurt");
             _requestPartyOk?.Invoke();
         }
 
@@ -1432,7 +1523,7 @@ public sealed class HealthManager : IDisposable
         // engages when there's actually something to recover; once both pools
         // hit rest-max NeedsOpportunisticTopOff goes false and the post-rest
         // chain fires through the shared !shouldRest recovery branch.
-        bool opportunistic = !anyGate
+        bool opportunisticWanted = !anyGate
             && !restOff
             && !selfPoisoned
             && (_isLeaderResting?.Invoke() ?? false)
@@ -1446,11 +1537,19 @@ public sealed class HealthManager : IDisposable
         // wait-window timer), not at an intermediate rest-max floor (report
         // paradigm-20260827-132906). The movement gate keeps us sitting until the
         // @wait clears, at which point the resumed engine's next move stands us up.
-        bool leaderWaitedRest = !anyGate
+        bool leaderWaitedWanted = !anyGate
             && !restOff
             && !selfPoisoned
             && (_isLeaderWaited?.Invoke() ?? false)
             && NeedsWaitDowntimeTopOff();
+
+        // Neither downtime rest is taken in a room whose spell does damage: it would
+        // be broken on the spell's next tick like any other.
+        bool opportunistic = opportunisticWanted && roomHurts is null;
+        bool leaderWaitedRest = leaderWaitedWanted && roomHurts is null;
+        if (roomHurts is not null && (opportunisticWanted || leaderWaitedWanted))
+            LogRestSkippedForRoomSpell(roomHurts,
+                opportunisticWanted ? "the leader is resting" : "waited on by a member");
 
         bool shouldRest = anyGate || opportunistic || leaderWaitedRest;
         // Gate for the actual send below — a just-asserted, unconfirmed gate
@@ -1648,9 +1747,21 @@ public sealed class HealthManager : IDisposable
         }
         else if (!shouldRest && _restInFlight)
         {
-            SendChained(s.PostRestCommand);
-            _log?.Combat(LogCategory,
-                $"recovered hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
+            // The post-rest chain is for a rest that ran its course. One given up
+            // because the room began to bar it (the counter came off, the spell was
+            // ticked) recovered nothing, and its commands would follow a rest that
+            // never finished. The stamp below still stands: a sit the game confirms
+            // late is this rest's tail either way.
+            if (roomHurts is null)
+            {
+                SendChained(s.PostRestCommand);
+                _log?.Combat(LogCategory,
+                    $"recovered hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
+            }
+            else
+                _log?.Combat(LogCategory,
+                    $"rest given up — this room's {roomHurts} does damage; no post-rest commands " +
+                    $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
             _restInFlight = false;
             _recoveredAt = _now();
             _restConfirmedByPrompt = false;
@@ -1681,6 +1792,16 @@ public sealed class HealthManager : IDisposable
         bool recovering = IsRecoveringRest;
         if (_wasRecovering && !recovering) _onRecoveryComplete?.Invoke();
         _wasRecovering = recovering;
+    }
+
+    // Once per room: every prompt in the room asks again.
+    private void LogRestSkippedForRoomSpell(string spell, string why)
+    {
+        if (_roomSpellSkipLogged) return;
+        _roomSpellSkipLogged = true;
+        _log?.Info(LogCategory,
+            $"{why}, but this room's {spell} does damage — not resting here; "
+            + "healing as set, and resting in the next room that doesn't hurt");
     }
 
     // Re-verify a just-asserted HP threshold breach one dispatch tick later,
@@ -1764,21 +1885,22 @@ public sealed class HealthManager : IDisposable
     // fires the disconnect, even though nothing about our own PlayerState changed
     // to drive the normal Evaluate. Deliberately narrow: it must not run the
     // rest / run / flee machinery, which a room change would otherwise re-trigger
-    // (e.g. spuriously re-issuing `rest`). Honours the same engine-off carve-out
-    // as Evaluate — the hangup evaluates while auto-heal is off only when the user
-    // opted into AllowHangupInAllOffMode.
+    // (e.g. spuriously re-issuing `rest`). TryEmergencyHangup applies the same
+    // switches as on the Evaluate path.
     public void ReevaluateEmergencyHangup()
     {
         if (!_state.HasPromptData) return;
-        if (HangupHeldByAllOff()) return;
         TryEmergencyHangup(_readSettings());
     }
 
-    // The all-off rule for a hang-up: with the health engine off (Auto-Heal and
-    // Auto-Rest both off) nothing hangs up on its own unless the user opted into
-    // AllowHangupInAllOffMode.
-    private bool HangupHeldByAllOff() =>
-        !_isEnabled() && _readGeneralSettings?.Invoke() is not { AllowHangupInAllOffMode: true };
+    // The low-HP hang-up's own switches. Master switch off: only with Allow hangup
+    // in all-off mode. Master switch on: it sits behind Auto-Rest, the engine that
+    // watches HP ("if auto-rest is off, it shouldnt work"; user, 2026-10-09). It
+    // used to run under Auto-Heal alone too.
+    private bool LowHpHangupHeld(GeneralSettings? general) =>
+        _masterSwitchOff?.Invoke() == true
+            ? HeldByMasterSwitch(general, what: null)
+            : RestSwitchedOff() || !_isEnabled();
 
     // Hangup-on-emergency: HP at or below HealthSettings.HangIfBelowHp WITH a
     // hostile in the room triggers a hard disconnect via the configured Game-Exit
@@ -1814,10 +1936,11 @@ public sealed class HealthManager : IDisposable
     // normal rest / flee run as a fallback.
     private bool TryEmergencyHangup(HealthSettings s)
     {
-        // Master kill-switch: the user has declared only an explicit local
-        // action may drop the carrier. Hard-overrides AllowHangupInAllOffMode —
-        // an opted-out character won't auto-disconnect even at low HP.
-        if (_readGeneralSettings?.Invoke() is { DisableHangups: true }) return false;
+        // Disable Hangups: the user has declared only an explicit local action
+        // may drop the carrier. Hard-overrides AllowHangupInAllOffMode — an
+        // opted-out character won't auto-disconnect even at low HP.
+        GeneralSettings? general = _readGeneralSettings?.Invoke();
+        if (general is { DisableHangups: true }) return false;
         if (_state.MaxHp <= 0) return false;
 
         int hangTrigger = ResolveHpThreshold(s.HpThresholdMode, s.HangIfBelowHp);
@@ -1840,6 +1963,9 @@ public sealed class HealthManager : IDisposable
             return false;
         }
         if (_hangFired) return false;
+        // After the window check, so a held hang-up is only counted while there
+        // is one to hold, and unlatched, so it fires the moment its switch allows.
+        if (LowHpHangupHeld(general)) return false;
 
         // Another escape has only just gone out (a Hangup monster or a PvP enemy in
         // the same room roster): the danger is answered, so no second exit command
@@ -1987,34 +2113,42 @@ public sealed class HealthManager : IDisposable
     // for the carrier-drop path (an opted-out character wimpy-jumps if configured
     // but is never force-dropped by someone else's panic). Returns true when it
     // acted. Wired to Game.Conditions.PanicResponder; the receive-side IgnorePanics
-    // gate is checked there before this is called.
+    // gate is checked there before this is called. With the master switch off it
+    // is held, jump included, unless Allow hangup in all-off mode is ticked.
     public bool RespondToReceivedPanic(string fromWhom)
     {
         HealthSettings s = _readSettings();
-        bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
+        GeneralSettings? general = _readGeneralSettings?.Invoke();
+        if (HeldByMasterSwitch(general, $"@panic from {fromWhom}")) return false;
+        bool allowDrop = general is not { DisableHangups: true };
         _log?.Warn(LogCategory, $"received @panic from {fromWhom} — bailing (wimpy-or-hang)");
         return Acted(ExecuteEscape(s, $"@panic from {fromWhom}", allowDrop, pvpResponse: false));
     }
 
     // The PvP response's hang-up: the same escape a received @panic takes, so the
-    // sysop wimpy jump stands in when it is set up, and DisableHangups is honoured.
+    // sysop wimpy jump stands in when it is set up, and DisableHangups and the
+    // master switch are honoured the same way.
     public bool HangUpForPvp(string reason)
     {
-        bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
+        GeneralSettings? general = _readGeneralSettings?.Invoke();
+        if (HeldByMasterSwitch(general, $"PvP hang-up ({reason})")) return false;
+        bool allowDrop = general is not { DisableHangups: true };
         _log?.Warn(LogCategory, $"PvP — bailing (wimpy-or-hang): {reason}");
         return Acted(ExecuteEscape(_readSettings(), $"PvP: {reason}", allowDrop, pvpResponse: true));
     }
 
     // A monster whose Game Data relationship is Hangup is in the room
     // (MonsterRelationshipWatcher). It takes the escape our own low-HP trigger takes, at
-    // any HP: the sight is the trigger. The two switches that stop the low-HP
-    // trigger stop this the same way, the wimpy jump included: Disable Hangups,
-    // and the all-off rule (user, 2026-10-09: with the autos off and Allow hangup
-    // in all-off mode not ticked, "none of our auto systems should respond").
+    // any HP: the sight is the trigger. Two switches stop it, the wimpy jump
+    // included: Disable Hangups, and the master switch being off without Allow
+    // hangup in all-off mode (user, 2026-10-09: "none of our auto systems should
+    // respond"). With the master switch on it needs no toggle: Auto-Rest gates
+    // the low-HP hang-up only.
     public EscapeOutcome HangUpForMonster(string reason)
     {
-        if (_readGeneralSettings?.Invoke() is { DisableHangups: true }) return EscapeOutcome.HangupsDisabled;
-        if (HangupHeldByAllOff()) return EscapeOutcome.AllOff;
+        GeneralSettings? general = _readGeneralSettings?.Invoke();
+        if (general is { DisableHangups: true }) return EscapeOutcome.HangupsDisabled;
+        if (HeldByMasterSwitch(general, $"monster hang-up ({reason})")) return EscapeOutcome.AllOff;
         return ExecuteEscape(_readSettings(), reason, allowCarrierDrop: true, pvpResponse: false);
     }
 
@@ -2850,6 +2984,18 @@ public sealed class HealthManager : IDisposable
             _log?.Combat(LogCategory, "rest-in-flight cleared on room change");
         }
         _restResumeOwed = false;
+        _roomSpellSkipLogged = false;
+        _roomSpellSkipRoom = newRoom;
+
+        // Arrived, still holding a rest gate from the room just left, in a room whose
+        // spell bars resting: the leader's wait window ran out and it walked on into
+        // the heat with us in tow. Settle it now, before the re-ask below: the gate
+        // comes down, the wait that is out is released, and the rest is owed for the
+        // next room that doesn't bar it. Left to the next prompt, the re-ask went out
+        // first and parked the party in the damage with nobody resting. Not mid-flee,
+        // like the re-arm at the end: the flee drives its own arrivals.
+        if ((_hpGateAsserted || _maGateAsserted) && _fleeEngine is null && _roomSpellHurting?.Invoke() is not null)
+            Evaluate();
 
         // Moved while still below a rest floor as a follower: our own movement is held
         // by the recovery gate, so this is the leader walking on — it isn't (or no
@@ -2881,6 +3027,36 @@ public sealed class HealthManager : IDisposable
             _skipRestDeferredRecovery = false;
             Evaluate();
         }
+    }
+
+    // The room we stand in stopped being a placed one, or became one: the tracker
+    // lost its place leaving a room, or found it again. NoteRoomChanged is told only
+    // of a move between two placed rooms, so without this a rest put off for a room's
+    // spell stayed "owed here" after the room was left for one the map doesn't hold:
+    // the once-per-room log flag stood, and CastingDirector went on casting the
+    // rest-time heal standing, until some later HP change re-ran the check. The
+    // probe answers for the room as it is now (an unplaced room bars nothing), so
+    // asking again is all it takes. Not a move as far as the rest latch goes: the
+    // tracker can lose its place without the character leaving the room.
+    //
+    // placedIn is the room found, null when the place was lost. The once-per-room
+    // log line is said again only for a room other than the one it was last said
+    // in: a tracker flapping between placed and lost in a grid of barred rooms
+    // comes back to the same room each time, and said the line once per flap.
+    public void NoteRoomPlacementChanged(Map.RoomKey? placedIn = null)
+    {
+        if (placedIn is { } room && !room.Equals(_roomSpellSkipRoom))
+        {
+            _roomSpellSkipLogged = false;
+            _roomSpellSkipRoom = room;
+        }
+        if (_fleeEngine is not null) return;
+        // Found again in a room that bars resting while a rest gate is up counts too.
+        bool barredNow = (_hpGateAsserted || _maGateAsserted) && _roomSpellHurting?.Invoke() is not null;
+        if (!barredNow && !_skipRestDeferredRecovery && RestDeferredByRoomSpell is null && !_restOwedFromDamagingRoom)
+            return;
+        _skipRestDeferredRecovery = false;
+        Evaluate();
     }
 
     // Send the pre-/post-rest chain: one wire line per command, split by the same

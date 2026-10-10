@@ -431,7 +431,9 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
                     "Apply to running loop?",
                     "You edited the loop that's currently running. Restart the runner with the new version now?",
                     yesLabel: "Restart now");
-                if (restart)
+                // A restart is a start: with the master switch off it is refused
+                // (with the notice) and the runner stays on the version it holds.
+                if (restart && !AppServices.Current.RefuseStartForMasterSwitch("Loop"))
                 {
                     runner.Stop("edited; restarting with new definition");
                     runner.Start(_original);

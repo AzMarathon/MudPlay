@@ -83,9 +83,14 @@ public sealed class PvpStrangerLookup : IDisposable
         if (_players.Find(match.Groups[0]) is null) Ask(match.Groups[0], inTheRoom: false);
     }
 
+    // The master switch (true = off): off, no `who` is sent for a stranger.
+    // Nothing is stamped, so the stranger is looked up at the next sighting.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void Ask(string given, bool inTheRoom)
     {
         if (given.Length == 0) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         DateTimeOffset now = _now();
         if (_askedAt.TryGetValue(given, out DateTimeOffset asked) && now - asked < NameRetry) return;
         _askedAt[given] = now;

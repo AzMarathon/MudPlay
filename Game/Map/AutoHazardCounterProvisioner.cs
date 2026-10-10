@@ -45,13 +45,21 @@ namespace MudPlay.Game.Map;
 // next step, so it can't pre-empt; the per-item timer still spends one charge per
 // buff window), and the lapse prompt re-raises the same as on a walk.
 //
-// No master toggle: surviving a hazard room the route already commits to walking
-// is not opt-in (mirrors auto-light's "leave it off if you don't want it" — here
-// the equivalent is simply not routing through the hazard). It only ever acts when
-// a checkspell hazard and a carried source item coincide during a live walk — ours,
-// or the leader's we're following.
+// No toggle of its own: surviving a hazard room the route already commits to
+// walking is not opt-in (mirrors auto-light's "leave it off if you don't want it" —
+// here the equivalent is simply not routing through the hazard). The master switch
+// is the one thing that stops it, as a survival item too: "with the master switch
+// off, it shouldnt automatically swap gear" (user, 2026-10-10). Off, no `use`, no
+// re-raise and no "out of" say goes out, and no latch or timer is stamped, so
+// when the switch comes back on the next arrival or lapse acts afresh. It only
+// ever acts when a checkspell hazard and a carried source item coincide during a
+// live walk — ours, or the leader's we're following.
 public sealed class AutoHazardCounterProvisioner
 {
+    // True (and counted) while the master switch is off; asked right before
+    // anything is sent. Null in tests that don't exercise the switch.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // LogService category — [HazardCounter] rows per buff raise / skip.
     public const string LogCategory = "HazardCounter";
 
@@ -202,6 +210,10 @@ public sealed class AutoHazardCounterProvisioner
             && now - last < TimeSpan.FromSeconds(refreshSec))
             return;   // buff still up — don't spend a charge
 
+        // Asked after the window check, before SendUse stamps _lastUsed, so a skip
+        // leaves no timer behind that would read as a buff still covering us.
+        if (MasterSwitchOff?.Invoke() == true) return;
+
         if (SendUse(pick, now) is not { } name)
         {
             _log?.Debug(LogCategory,
@@ -252,6 +264,10 @@ public sealed class AutoHazardCounterProvisioner
                 $"buff spell {counter.BuffSpell}: lapse prompt ignored — immune via {_itemName(guard) ?? guard.ToString()}");
             return;
         }
+
+        // Before the out-of-charges branches too: they say "I'm out of …" and halt
+        // the walk, and neither may happen (nor latch _announcedOut) while off.
+        if (MasterSwitchOff?.Invoke() == true) return;
 
         // A prior `use` never produced its swig: the item drew nothing (out of
         // charges / waterskins). Re-firing would march deeper into a hazard we can
