@@ -1979,10 +1979,11 @@ public sealed class AppServices
     // items are never sold.
     public Game.Inventory.AutoSellManager AutoSell { get; private set; } = null!;
 
-    // Auto-open engine. On every inventory change, sends open <name> once for
-    // each container item (ItemType == Container) flagged
-    // Models.GameData.ItemOverlay.AutoOpen that newly entered the pack. Shares
-    // the AutoGetItems master toggle; the per-item AutoOpen flag is the real gate.
+    // Auto-open engine. On every inventory change, each container item
+    // (ItemType == Container) flagged Models.GameData.ItemOverlay.AutoOpen that
+    // newly entered the pack is opened through ChestOpens, so what it gave joins
+    // the Chest Offload list. Shares the AutoGetItems master toggle; the per-item
+    // AutoOpen flag is the real gate.
     public Game.Inventory.AutoOpenManager AutoOpen { get; private set; } = null!;
 
     // Base auto-search engine — sends a bare sea on each room
@@ -6894,15 +6895,62 @@ public sealed class AppServices
             log: Log,
             isParadigm: onParadigm);
 
+        // The engine holds no wire sender of its own: each open goes to the Chest
+        // Offload tracker, which sends it and reads what it gave. Nothing is left
+        // for the main window to bind, and so nothing to leave unbound.
         AutoOpen = new Game.Inventory.AutoOpenManager(
             carriedItems: () => Inventory.Snapshot.CarriedItems,
             resolve: ResolveAutoOpenItem,
-            isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems),
+            // With the Auto-All switch off nothing automatic is sent.
+            isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems) && !AutoModeController.KillSwitchEngaged,
             isLoaded: () => Inventory.IsLoaded,
-            log: Log);
+            open: name => ChestOpens.TryOpenNow(name),
+            log: Log)
+        {
+            // An `open` typed at the board's menus would be a menu choice.
+            SendGateOpen = () => !EngineGate.IsLocked && InGameCapture.InGame,
+            InCombat = () => PlayerState.InCombat,
+            // `open` stands a resting character up, as the door and trap tries do.
+            Resting = RestHeld,
+            SneakKept = () => SneakGuard.Holds,
+            ComingBack = name => HangupItems.BeingPickedUp(name),
+            // The pile of a death is open until its record is recovered, found
+            // missing or cleared. A minute's slack: the record and the engine each
+            // stamp the death themselves.
+            DeathpileOpenSince = since => Profile.Current?.DeathHistory?.Any(r =>
+                r.At >= since.AddMinutes(-1)
+                && r.Status is Models.Profile.DeathRecoveryStatus.Active
+                    or Models.Profile.DeathRecoveryStatus.Partial) == true,
+        };
         // Auto-open re-evaluates the pack on every inventory change — the seam
         // that surfaces a container the moment it enters inventory.
         Inventory.Changed += AutoOpen.OnInventoryChanged;
+        Inventory.FullInventoryParsed += AutoOpen.OnFullInventoryRead;
+        ChestOpens.OpenSettled += AutoOpen.OnOpenSettled;
+        ChestOpens.PlayerOpened += AutoOpen.OnPlayerOpened;
+        // Each of these may be what an owed open was waiting on.
+        EngineGate.Released += AutoOpen.Recheck;
+        SneakGuard.Released += AutoOpen.Recheck;
+        MovementCoordinator.GatesChanged += AutoOpen.Recheck;
+        InGameCapture.InGameChanged += inGame =>
+        {
+            if (inGame) AutoOpen.OnEnteredGame();
+            AutoOpen.Recheck();
+        };
+        PlayerState.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Game.PlayerState.InCombat) && !PlayerState.InCombat) AutoOpen.Recheck();
+        };
+        // Switched off, an owed open is forgotten then and there: back on a moment
+        // later, with nothing having moved in the pack, it must not go out. The
+        // Auto Get Items toggle does the same from the main window.
+        AutoModeController.KillSwitchToggled += _ => AutoOpen.Recheck();
+        Profile.ProfileLoaded += _ => AutoOpen.Reset();
+        RoomTracker.PlayerDeathObserved += AutoOpen.OnPlayerDied;
+        RoomTracker.UnwitnessedDeathRecorded += () =>
+        {
+            if (Profile.Current?.DeathHistory?.LastOrDefault() is { } record) AutoOpen.OnUnwitnessedDeath(record.At);
+        };
         // Settings → Talk auto-greet. Self name resolves through the
         // PartyManager's LocalCharacterName first (set on connect), then
         // the loaded profile name as a fallback. Wire-sender bound by
@@ -7268,6 +7316,8 @@ public sealed class AppServices
         // change reaches the next walk and a profile swap brings its own list.
         Walker.SetAutomaticWalkTeleports(() => Game.Map.TeleportCatalog.ParseKeys(
             ReadSection<Models.Profile.TeleportSettings>(Profile.Current, "Teleports").AutomaticWalkTeleports));
+        // A refused automatic walk names the line to tick by its title on that tab.
+        Walker.SetTeleportChoices(() => TeleportChoices);
         RoomGraph.GraphReloaded += () => _teleportChoices = null;
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo
@@ -8386,6 +8436,9 @@ public sealed class AppServices
             Walker.Stop("player died — halting in graveyard");
             AutoLair.Stop("player died — halting in graveyard");
             MovementControl.DropQueuedRun();
+            // After the engines: a run their stop didn't end (a wait, a rest) and
+            // the events queued behind it end here.
+            Events.NoteDeath();
         });
         // Wipe the classifier's room view so a hostile from the room we died in
         // doesn't linger as a stale target the combat engine re-attacks when a
@@ -8988,6 +9041,8 @@ public sealed class AppServices
         // moment the sweep ends.
         AutoGetItems.SuppressDuringSweep = () => GhSweep.IsActive;
         AutoDiscard.SuppressDuringSweep = () => GhSweep.IsActive;
+        // A container the sweep carries is being moved, not looted.
+        AutoOpen.SuppressDuringSweep = () => GhSweep.IsActive;
         // A sweep starting takes back the engine's piles still waiting to be sent.
         // One ending may have left the character somewhere with room for the hides
         // a full room refused, and lets the engine's own discards go again.
@@ -9344,6 +9399,13 @@ public sealed class AppServices
         Events.SetStashTransferHooks(StartStashTransfer, () => StashTransfer.Cancel("another event took over"));
         StashTransfer.Ended += Events.NoteStashTransferEnded;
         Events.SetRestHooks(() => Health.IsRecoveringRest || Health.RestInFlight, () => Health.Evaluate());
+        // Posted: the engine event that reports a refused walk back can arrive from
+        // inside the message pump, where a terminal write re-feeds the emulator.
+        Events.SetNotice(msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)));
+        // Stop with no engine running to report it (an event waiting or resting, or
+        // suspended behind a detour) still ends the event and its queue. Wired here,
+        // after Events exists; MovementControl is built further up.
+        MovementControl.Stopping += Events.NoteUserStop;
         Events.SetStatsReader(ReadEventReadings);
         GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
         BossTimers.BossKilled += def => Events.NoteBossKilled(def.Name);
@@ -9465,6 +9527,9 @@ public sealed class AppServices
         // The event the other engines take a death of our own from (both wordings).
         RoomTracker.PlayerDeathObserved += HangupItems.OnPlayerDied;
         InGameCapture.InGameChanged += HangupItems.OnInGameChanged;
+        // The opens owed for what a hang-up took end with the check that would
+        // have picked it back up (AutoOpen is built far above).
+        HangupItems.CheckFinished += AutoOpen.OnHangupCheckFinished;
         Inventory.FullInventoryParsed += HangupItems.OnInventoryRead;
         Inventory.ItemTaken += HangupItems.OnItemTaken;
         GroundItems.SurveyUpdated += HangupItems.NoteFloorSurveyed;
@@ -11144,6 +11209,9 @@ public sealed class AppServices
         ArgumentNullException.ThrowIfNull(send);
         _engineWireSend = send;
     }
+
+    // Whether SendGameCommand has a wire to send on, for the bug report.
+    public bool EngineWireBound => _engineWireSend is not null;
 
     // Un-wrapped wire sender that pierces the EngineSendGate — bound to the same raw
     // SendUserInput the emergency hangup uses (NOT the gate-wrapped engine sender).
@@ -12963,20 +13031,20 @@ public sealed class AppServices
     private const int ContainerItemType = 8;
 
     // Resolve a carried entry for AutoOpen: map the loose carry wording to an
-    // item Number, read the verbatim Name, and resolve the AutoOpen flag gated
-    // on the item actually being a container (ItemType == 8) — a stale overlay
-    // flag on a non-container never opens. Returns null only when the entry
-    // isn't an item in the active set.
+    // item Number, read the verbatim Name and the AutoOpen flag. Null unless the
+    // item is a container (ItemType == 8), so a stale overlay flag on anything
+    // else never opens. A container comes back whether it is flagged or not: the
+    // engine counts them all, so that ticking the flag on one already carried is
+    // not a copy arriving.
     private Game.Inventory.AutoOpenManager.ResolvedOpen? ResolveAutoOpenItem(string entry)
     {
         if (ItemNames.FindByName(entry) is not int number) return null;
+        if (ItemNames.ItemTypeOf(number) != ContainerItemType) return null;
         string? name = ItemNames.GetName(number);
         if (string.IsNullOrWhiteSpace(name)) return null;
 
-        Models.GameData.ItemOverlay overlay = ResolveItemOverlay(number);
-        bool open = (overlay.AutoOpen ?? false)
-            && ItemNames.ItemTypeOf(number) == ContainerItemType;
-        return new Game.Inventory.AutoOpenManager.ResolvedOpen(number, name, open);
+        return new Game.Inventory.AutoOpenManager.ResolvedOpen(
+            number, name, ResolveItemOverlay(number).AutoOpen ?? false);
     }
 
     // The 4-tier ItemOverlay for an item Number (Defaults seed → Global → BBS →

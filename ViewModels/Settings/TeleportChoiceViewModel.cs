@@ -27,10 +27,7 @@ public sealed partial class TeleportChoiceViewModel : ObservableObject
         Choice = choice;
         _changed = changed;
         _isAllowed = allowed;
-        // Map/room numbers beside both names: a spot the user doesn't know by
-        // name can be looked up on the map.
-        Title = $"{choice.FromName} ({choice.From.Map}/{choice.From.Room}) {(choice.TwoWay ? "⇄" : "→")} "
-            + $"{choice.ToName} ({choice.To.Map}/{choice.To.Room})";
+        Title = choice.Title;
         string leadsTo = choice.RoomsBeyond > 0
             ? $"leads to {choice.Area}: {choice.RoomsBeyond:N0} rooms reached no other way"
             : "a shortcut: both ends can be walked to";

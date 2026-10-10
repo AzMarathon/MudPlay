@@ -3365,9 +3365,10 @@ public sealed class AutoWalkManagerTests : IDisposable
     }
 
     // When the only way there is a teleport the walk may not use, it doesn't take it
-    // quietly: it fails, and says which teleport so the user knows what to tick.
+    // quietly: it fails, says it was refused as an automatic walk, and names the
+    // line to tick as Settings → Teleports shows it.
     [Fact]
-    public void AutomaticWalk_OnlyRouteIsATeleportItMayNotUse_FailsAndNamesIt()
+    public void AutomaticWalk_OnlyRouteIsATeleportItMayNotUse_FailsAndNamesTheLineToTick()
     {
         Harness h = ArmTeleport(NewHarness(TeleportGraphJson));
         h.Walker.SetAutomaticWalkTeleports(() => Allow());
@@ -3377,8 +3378,83 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Empty(h.Sent);
         Assert.Equal(WalkState.Idle, h.Walker.State);
         WalkEvent failed = Assert.Single(h.Events, e => e.Kind == WalkEventKind.Failed);
-        Assert.Contains("the teleport from 1/10 (Grove) to 7/131 (Stone Arch)", failed.Detail);
-        Assert.Contains("Settings → Teleports", failed.Detail);
+        Assert.Contains("this is an automatic walk", failed.Detail);
+        Assert.Contains("Tick \"Grove (1/10) → Stone Arch (7/131)\" on Settings → Teleports", failed.Detail);
+    }
+
+    // A two-way spot is one line on the tab, listed from either end: the walk names
+    // it as the tab does, not by the direction it wanted to take it.
+    [Fact]
+    public void AutomaticWalk_RefusedTeleport_IsNamedByItsLineOnTheTeleportsTab()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportGraphJson));
+        h.Walker.SetAutomaticWalkTeleports(() => Allow());
+        (RoomKey From, RoomKey To) back = (Arch.To, Arch.From);
+        h.Walker.SetTeleportChoices(() => new[]
+        {
+            new TeleportChoice(Arch.To, "Stone Arch", Arch.From, "Grove", TwoWay: true, "go arch", "", 0,
+                new[] { back, Arch }),
+        });
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        WalkEvent failed = Assert.Single(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Contains("Tick \"Stone Arch (7/131) ⇄ Grove (1/10)\"", failed.Detail);
+    }
+
+    // Two teleports in a row, neither allowed: no one box opens the route, and the
+    // walk says so and names both instead of pointing at the first.
+    //
+    // 1/10 Grove --SW (CMD 100)--> 7/131 Stone Arch --N (CMD 101)--> 7/140 Far Gate
+    private const string TwoTeleportsGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 10, "Name": "Grove",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 100,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "7/131 (Item: 474)",
+            "U": "0", "D": "0" },
+          { "Map Number": 7, "Room Number": 131, "Name": "Stone Arch",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 101,
+            "N": "7/140 (Item: 474)", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0",
+            "U": "0", "D": "0" },
+          { "Map Number": 7, "Room Number": 140, "Name": "Far Gate",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0",
+            "U": "0", "D": "0" }
+        ]
+        """;
+
+    private const string TwoTeleportsTbinfoJson = """
+        [ { "Number": 100, "Action": "go arch:teleport 131 7\n" },
+          { "Number": 101, "Action": "go gate:teleport 140 7\n" } ]
+        """;
+
+    [Fact]
+    public void AutomaticWalk_TwoRefusedTeleportsInARow_SaysNoSingleLineOpensARoute()
+    {
+        Harness h = ArmTeleport(NewHarness(TwoTeleportsGraphJson, tbinfoJson: TwoTeleportsTbinfoJson));
+        h.Walker.SetAutomaticWalkTeleports(() => Allow());
+
+        h.Walker.WalkTo(new RoomKey(7, 140));
+
+        WalkEvent failed = Assert.Single(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Contains("uses 2 teleports it isn't allowed; ticking any one of them alone opens no route", failed.Detail);
+        Assert.Contains("\"Grove (1/10) → Stone Arch (7/131)\"; \"Stone Arch (7/131) → Far Gate (7/140)\"", failed.Detail);
+    }
+
+    // With one of the two already ticked, the other is the one box that opens it.
+    [Fact]
+    public void AutomaticWalk_OneOfTwoTeleportsAllowed_NamesTheOther()
+    {
+        Harness h = ArmTeleport(NewHarness(TwoTeleportsGraphJson, tbinfoJson: TwoTeleportsTbinfoJson));
+        h.Walker.SetAutomaticWalkTeleports(() => Allow(Arch));
+
+        h.Walker.WalkTo(new RoomKey(7, 140));
+
+        WalkEvent failed = Assert.Single(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Contains("Tick \"Stone Arch (7/131) → Far Gate (7/140)\" on Settings → Teleports", failed.Detail);
     }
 
     // A walk the user started says which route it wants (the route cards pass it),

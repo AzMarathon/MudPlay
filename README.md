@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.163.1**
+> **Version 3.165.2**
 > - A follower left behind at an exit (door, item, toll, level or class gate) now sends `@comeback`
 > - Also when the leader is seen leaving without it, or its own `par` shows the leader `[Invited]`
 > - No `@comeback` after an uninvite, a typed `leave`, a move of your own, a death or a party teleport

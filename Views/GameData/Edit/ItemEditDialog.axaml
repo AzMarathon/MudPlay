@@ -120,7 +120,7 @@
                                                       ToolTip.Tip="Never pick it up, even with Auto-collect on."/>
                                             <CheckBox Content="Auto-open" IsChecked="{Binding AutoOpen, Mode=TwoWay}"
                                                       IsVisible="{Binding CanAutoOpen}"
-                                                      ToolTip.Tip="Open this container as soon as it's in your inventory."/>
+                                                      ToolTip.Tip="Open this container when one comes into your pack (Auto Get Items must be on). It waits out a fight, and what it gives is listed on Workshop → Chest Offload. One you already carry isn't opened."/>
                                             <CheckBox Content="Auto-obtain for path" IsChecked="{Binding AutoObtainForPath, Mode=TwoWay}"
                                                       ToolTip.Tip="When a route needs this item, go get it (party redistribute, shop buy via bank withdraw, or drop reroute) instead of failing the only route or asking in the route picker. Min. to keep / Max to get set how many per person."/>
                                         </StackPanel>

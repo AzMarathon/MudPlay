@@ -321,9 +321,26 @@ public sealed class HangupItemRecheck
     public IReadOnlyList<(string Name, int Count)> LastMissing { get; private set; } = [];
     public IReadOnlyList<(string Name, int Count)> LastStillMissing { get; private set; } = [];
 
+    // A pass ran to an answer: nothing more will be picked up by it. True when a
+    // death by the hang-up is still to be judged on the next `stat` read.
+    public event Action<bool>? CheckFinished;
+
     // The last time a hang-up that could have killed was looked into: what was
     // seen, and what it was taken to mean.
     public string LastDeathCheck { get; private set; } = NoneYet;
+
+    // Copies of an item this check has asked the game for and not yet seen arrive:
+    // those are coming back, not being acquired. Only while it is picking up. The
+    // lists above are a record of how the last check went and say nothing about now.
+    public int BeingPickedUp(string name)
+    {
+        if (_phase != Phase.PickingUp) return 0;
+        string key = Key(name);
+        foreach ((string planned, int wanted) in _plan)
+            if (string.Equals(Key(planned), key, StringComparison.OrdinalIgnoreCase))
+                return Math.Max(0, wanted - _taken.GetValueOrDefault(planned));
+        return 0;
+    }
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
@@ -1429,6 +1446,7 @@ public sealed class HangupItemRecheck
         End(outcome);
         // The list just compared is spent: what is held now replaces it.
         _saveProfile();
+        CheckFinished?.Invoke(_deathBefore is not null);
     }
 
     // The pass was cut short by the link or by another character being loaded.

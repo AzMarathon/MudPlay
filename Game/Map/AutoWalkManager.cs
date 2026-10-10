@@ -1930,25 +1930,63 @@ public sealed class AutoWalkManager : IRecoverableEngine
             : $"no route: the only way there is across {rooms}, and no crossing of them could be planned";
     }
 
-    // "no route without the teleport from 3/784 (Darkwood Forest) to 3/740 (Black
-    // Wasteland), which automatic walks aren't allowed to use (Settings → Teleports)":
-    // the first teleport the route would take with the allow-list lifted that the
-    // list refuses. Null when lifting it finds no route either, so the walk is
-    // blocked by something else and the usual wording names that.
+    // Why an automatic walk has no route, and which box would give it one (user,
+    // 2026-10-10: "tell them it was refused because this is an automatic walk, and
+    // no routes are avail, recommend which gates to check"). The route the walk
+    // would take with the allow-list lifted shows the teleports the list refuses.
+    // One of them alone may be enough, since another way round can need only that
+    // one, so each is tried by itself before all of them are named together. Null
+    // when lifting the list finds no route either: the walk is blocked by something
+    // else and the usual wording names that.
     private string? DescribeRefusedTeleport(RoomKey source, RoomKey destination, AutomaticWalkTeleportFilter teleports)
     {
         IReadOnlyList<Direction>? open = _bfs.FindPath(source, destination, _filter);
         if (open is null) return null;
+        List<(RoomKey From, RoomKey To)> refused = new();
         RoomKey at = source;
         foreach (Direction dir in open)
         {
             if (_graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
-            if (AutomaticWalkTeleportFilter.IsTeleport(in exit) && teleports.IsExitRefused(at, in exit))
-                return $"no route without the teleport from {at} ({room.Name}) to {exit.Target} "
-                    + $"({_graph.GetRoom(exit.Target)?.Name ?? "?"}), which automatic walks aren't allowed to use (Settings → Teleports)";
+            if (AutomaticWalkTeleportFilter.IsTeleport(in exit) && teleports.IsExitRefused(at, in exit)
+                && !refused.Contains((at, exit.Target)))
+                refused.Add((at, exit.Target));
             at = exit.Target;
         }
-        return null;
+        if (refused.Count == 0) return null;
+
+        const string Where = "Settings → Teleports (Allow automatic walks to use the following teleports)";
+        const string Why = "no route: this is an automatic walk, and ";
+        foreach ((RoomKey From, RoomKey To) exit in refused)
+        {
+            (string title, IReadOnlyList<(RoomKey From, RoomKey To)> exits) = TeleportLine(exit);
+            if (refused.Count > 1 && _bfs.FindPath(source, destination, teleports.AlsoAllowing(exits)) is null) continue;
+            return $"{Why}the way there uses a teleport it isn't allowed. Tick \"{title}\" on {Where} to open it.";
+        }
+        string all = string.Join("; ", refused.Select(exit => $"\"{TeleportLine(exit).Title}\"").Distinct());
+        // Only the teleports on that one route were tried, so that is all it claims.
+        return $"{Why}the shortest way there uses {refused.Count} teleports it isn't allowed; ticking any one of them "
+            + $"alone opens no route. It needs all of these on {Where}: {all}.";
+    }
+
+    // The teleport spots as Settings → Teleports lists them (AppServices.TeleportChoices).
+    private Func<IReadOnlyList<TeleportChoice>>? _teleportChoices;
+    public void SetTeleportChoices(Func<IReadOnlyList<TeleportChoice>> choices)
+    {
+        ArgumentNullException.ThrowIfNull(choices);
+        _teleportChoices = choices;
+    }
+
+    // The Settings → Teleports line a teleport belongs to, by its on-screen title,
+    // and the exits that line's box allows (a two-way spot is one line, listed from
+    // either end). Unwired, or for a teleport the list doesn't hold, the title is
+    // built the way the list builds a one-way line's.
+    private (string Title, IReadOnlyList<(RoomKey From, RoomKey To)> Exits) TeleportLine((RoomKey From, RoomKey To) exit)
+    {
+        if (_teleportChoices?.Invoke().FirstOrDefault(c => c.Exits.Contains(exit)) is { } line)
+            return (line.Title, line.Exits);
+        string title = TeleportChoice.TitleOf(
+            exit.From, _graph.GetRoom(exit.From)?.Name ?? "?", exit.To, _graph.GetRoom(exit.To)?.Name ?? "?", twoWay: false);
+        return (title, new[] { exit });
     }
 
     // "the exit east of 14/10218 (Small Chamber) is opened from 14/10329 (Central
@@ -2089,7 +2127,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         return ExpandRouteKeys(from, path);
     }
 
-    public void Stop(string reason = "user stop")
+    // willResume: the caller stops the walk only to take it up again itself (a sell
+    // trip, a flee), which the Stopped event says (WalkEvent.WillResume).
+    public void Stop(string reason = "user stop", bool willResume = false)
     {
         if (State == WalkState.Idle)
         {
@@ -2098,7 +2138,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // the next leg hears of a stop only through this event, so it is raised
             // for the journey: without it the leg went out after the user's Stop.
             if (_journey is { } standing)
-                Raise(new WalkEvent(WalkEventKind.Stopped, reason, standing.Destination));
+                Raise(new WalkEvent(WalkEventKind.Stopped, reason, standing.Destination, WillResume: willResume));
             return;
         }
         RoomKey? dest = _destination;
@@ -2106,7 +2146,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // Free any party-reform gate this walk was holding so a stopped user
         // isn't pinned by an in-progress chime-teleport re-invite.
         _onPartySplitAbort?.Invoke();
-        Raise(new WalkEvent(WalkEventKind.Stopped, reason, dest));
+        Raise(new WalkEvent(WalkEventKind.Stopped, reason, dest, WillResume: willResume));
     }
 
     public void Pause() => _coordinator.AssertGate(MovementCoordinator.UserGate);
@@ -4340,4 +4380,7 @@ public enum WalkEventKind
 // before entering" and ended one room short of it: Destination is where the walk
 // ended, Requested the room that was asked for. A caller waiting on its own room
 // matches either.
-public readonly record struct WalkEvent(WalkEventKind Kind, string Detail, RoomKey? Destination, RoomKey? Requested = null);
+//
+// WillResume is set on a Stopped whose caller takes the walk up again itself.
+public readonly record struct WalkEvent(
+    WalkEventKind Kind, string Detail, RoomKey? Destination, RoomKey? Requested = null, bool WillResume = false);

@@ -31,7 +31,7 @@ public sealed class ChestOpenTrackerTests : IDisposable
     private ChestOpenTracker NewTracker() => new(
         _inv, _profile, _typed,
         isContainer: name => name.EndsWith("chest", StringComparison.OrdinalIgnoreCase),
-        send: _sent.Add,
+        send: Send,
         schedule: (_, a) => _scheduled.Add(a),
         post: a => a(),
         runicName: () => "runic");
@@ -40,6 +40,14 @@ public sealed class ChestOpenTrackerTests : IDisposable
     {
         _tracker.Dispose();
         _inv.Dispose();
+    }
+
+    // As in the client: whatever the tracker sends passes the outbound observers,
+    // its own `open` included.
+    private void Send(string command)
+    {
+        _sent.Add(command);
+        _typed.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
     }
 
     private void Feed(string text)
@@ -148,7 +156,8 @@ public sealed class ChestOpenTrackerTests : IDisposable
 
         Feed("You hid ruby.");
         Assert.Empty(_tracker.Loot(new[] { "ruby" }));
-        Assert.Empty(_profile.Current!.ChestLoot!.Items);   // saved, the coin tally stays
+        Assert.Null(_profile.Current!.ChestLoot);   // the last item gone, the tally goes with it
+        Assert.Equal(0, _tracker.Coin.TotalCopperValue);
     }
 
     private void OpenOakChestAgain()
@@ -254,6 +263,85 @@ public sealed class ChestOpenTrackerTests : IDisposable
         _typed.ObserveOutbound(Encoding.Latin1.GetBytes("open door\r\n"));
 
         Assert.Empty(_scheduled);
+    }
+
+    // `open s` is the south door, to the game and so to the list, whatever in the
+    // pack has a word starting with s.
+    [Fact]
+    public void TypedOpen_OfADirection_IsADoor_NotAContainer()
+    {
+        Inventory("small chest", gold: 10);
+
+        _typed.ObserveOutbound(Encoding.Latin1.GetBytes("open s\r\n"));
+
+        Assert.Empty(_scheduled);
+    }
+
+    // The game takes `op` and `ope` for `open`.
+    [Theory]
+    [InlineData("op oak chest")]
+    [InlineData("ope chest")]
+    [InlineData("OPEN oak chest")]
+    public void TypedOpen_Abbreviated_IsTracked(string typed)
+    {
+        Inventory("oak chest, 2 rusty dagger", gold: 10);
+
+        _typed.ObserveOutbound(Encoding.Latin1.GetBytes(typed + "\r\n"));
+        RunScheduled();
+        Inventory("2 rusty dagger, sapphire", gold: 10);
+
+        Assert.Equal(new[] { ("sapphire", 1) }, _tracker.Loot(_inv.Snapshot.CarriedItems));
+    }
+
+    [Theory]
+    [InlineData("o oak chest")]     // nothing to the game
+    [InlineData("opened chest")]    // runs past the command's spelling
+    public void TypedOpen_NotAnOpenWord_IsIgnored(string typed)
+    {
+        Inventory("oak chest", gold: 10);
+
+        _typed.ObserveOutbound(Encoding.Latin1.GetBytes(typed + "\r\n"));
+
+        Assert.Empty(_scheduled);
+    }
+
+    // An inventory read is `i`, or `inve` and longer; `in` and `inv` are nothing.
+    [Theory]
+    [InlineData("i", true)]
+    [InlineData("inve", true)]
+    [InlineData("INVENTORY", true)]
+    [InlineData("in", false)]
+    [InlineData("inv", false)]
+    [InlineData("invite bob", false)]
+    [InlineData("i am here", true)]     // only the first word is looked up
+    public void InventoryRequest_IsSeenByTheGamesOwnSpellings(string typed, bool isRead)
+    {
+        OutboundOpenObserver observer = new();
+        int reads = 0;
+        observer.InventoryRequested += () => reads++;
+
+        observer.ObserveOutbound(Encoding.Latin1.GetBytes(typed + "\r"));
+
+        Assert.Equal(isRead ? 1 : 0, reads);
+    }
+
+    // The button's own read of the pack is still unanswered when its `open` goes
+    // out on a timeout; that reply then comes after the open and is not the read
+    // after it.
+    [Fact]
+    public void TheButtonsOwnLateBeforeRead_IsNotTakenForTheAfterRead()
+    {
+        Inventory("oak chest", gold: 10);
+        _tracker.Open("oak chest");                  // `i` out, no reply yet
+        RunScheduled();                              // 3 s: opens on the cached pack
+        RunScheduled();                              // 900 ms: the after `i`
+        Inventory("oak chest", gold: 10);            // the before-read's reply, late
+        Assert.Empty(_tracker.Loot(_inv.Snapshot.CarriedItems));
+        Assert.True(_tracker.IsOpening);
+
+        Inventory("2 moonstone", gold: 10);
+
+        Assert.Equal(new[] { ("moonstone", 2) }, _tracker.Loot(_inv.Snapshot.CarriedItems));
     }
 
     [Fact]
