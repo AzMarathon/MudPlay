@@ -95,7 +95,7 @@ public sealed partial class PartyLevelProbe : IDisposable
     // ("?" until it has one). Once it counts past the next level the figure carries a
     // "(L60)" tag and the estimate reads "+2 in 2-3 days". Anchored on "Level: N
     // Needed: N" for the same chatter guard as the MudPlay shape.
-    [GeneratedRegex(@"^\{?Level:\s*(\d+)\s+Needed:\s*([\d,]+)(?:\s*\(L\d+[^)]*\))?(?:\s+Will level in:\s*([^}]*?))?\s*\}?\s*$",
+    [GeneratedRegex(@"^\{?Level:\s*(\d+)\s+Needed:\s*([\d,]+)(?:\s*\(L(\d+)[^)]*\))?(?:\s+Will level in:\s*([^}]*?))?\s*\}?\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex MegaMudLevelReply();
 
@@ -109,10 +109,10 @@ public sealed partial class PartyLevelProbe : IDisposable
     // Raised for every parsed level reply (probe in flight or not): the member's
     // given name, level, exp still needed for the next level (null when the reply
     // didn't carry it), the sender's own "will level in" text (MegaMUD only; null
-    // otherwise or when it's "?"), its total exp (MudPlay's reply only) and, for an
-    // @exp reply that doesn't state a level, the level its "(L<n>)" tag implies (0
-    // when there is none) — a guess for the listener to use only when it knows nothing
-    // better. Feeds the Party window's leveling line.
+    // otherwise or when it's "?"), its total exp (MudPlay's reply only) and the level
+    // the needed figure counts toward when the reply names one in its "(L<n>)" tag (0
+    // when it doesn't). An @exp reply states no level, so there the tag is only a hint
+    // at one. Feeds the Party window's leveling line.
     public event Action<string, int, long?, string?, long?, int>? ProgressObserved;
 
     [GeneratedRegex(@"^\{?level unknown\b",
@@ -195,14 +195,14 @@ public sealed partial class PartyLevelProbe : IDisposable
         // An @exp reply isn't a level reading for the probe, but its exp-to-next still
         // feeds the Party window. It never states a level: its tag names the level the
         // exp figure counts toward, which is past the member's own once they have exp
-        // banked to train, so the tag only goes along as a hint.
-        if (TryParseExpReply(entry.Message, out int expLevel, out long expNeeded, out string? expEta))
+        // banked to train, so it goes along as a target, never as the member's level.
+        if (TryParseExpReply(entry.Message, out int expToLevel, out long expNeeded, out string? expEta))
         {
-            ProgressObserved?.Invoke(GivenName(entry.Speaker), 0, expNeeded, expEta, null, expLevel);
+            ProgressObserved?.Invoke(GivenName(entry.Speaker), 0, expNeeded, expEta, null, expToLevel);
             return;
         }
 
-        bool known = TryParseLevelReply(entry.Message, out int level, out long? needed, out string? willLevelIn, out long? totalExp);
+        bool known = TryParseLevelReply(entry.Message, out int level, out long? needed, out string? willLevelIn, out long? totalExp, out int toLevel);
         bool unknown = !known && LevelUnknownReply().IsMatch(entry.Message);
         if (!known && !unknown) return;
 
@@ -218,7 +218,7 @@ public sealed partial class PartyLevelProbe : IDisposable
         {
             _recordLevel?.Invoke(given, level);
             _log?.Info("PartyLevel", $"recorded {given} = level {level}");
-            ProgressObserved?.Invoke(given, level, needed, willLevelIn, totalExp, 0);
+            ProgressObserved?.Invoke(given, level, needed, willLevelIn, totalExp, toLevel);
         }
 
         // Pending-query bookkeeping only applies while a probe is awaiting
@@ -259,10 +259,12 @@ public sealed partial class PartyLevelProbe : IDisposable
     }
 
     // Both reply shapes: MudPlay's "Level N, X exp, Y to next level" and MegaMUD's
-    // "Level: N  Needed: Y  Will level in: T".
+    // "Level: N  Needed: Y  Will level in: T". toLevel is the level the needed figure
+    // counts toward, from MegaMUD's "(L<n>)" tag; 0 for MudPlay's shape or no tag.
     internal static bool TryParseLevelReply(
-        string message, out int level, out long? needed, out string? willLevelIn, out long? totalExp)
+        string message, out int level, out long? needed, out string? willLevelIn, out long? totalExp, out int toLevel)
     {
+        toLevel = 0;
         needed = null;
         willLevelIn = null;
         totalExp = null;
@@ -280,7 +282,8 @@ public sealed partial class PartyLevelProbe : IDisposable
         {
             level = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
             needed = ParseCount(m.Groups[2].Value);
-            string eta = m.Groups[3].Success ? m.Groups[3].Value.Trim() : "";
+            if (m.Groups[3].Success) toLevel = int.Parse(m.Groups[3].Value, CultureInfo.InvariantCulture);
+            string eta = m.Groups[4].Success ? m.Groups[4].Value.Trim() : "";
             willLevelIn = eta.Length == 0 || eta == "?" ? null : eta;
             return true;
         }
@@ -288,18 +291,18 @@ public sealed partial class PartyLevelProbe : IDisposable
         return false;
     }
 
-    internal static bool TryParseExpReply(string message, out int level, out long needed, out string? willLevelIn)
+    // toLevel is the "(L<n>)" tag's number — the level the needed figure counts toward
+    // (0 when the reply has none).
+    internal static bool TryParseExpReply(string message, out int toLevel, out long needed, out string? willLevelIn)
     {
-        level = 0;
+        toLevel = 0;
         needed = 0;
         willLevelIn = null;
         Match m = ExpReply().Match(message.Trim());
         if (!m.Success || ParseCount(m.Groups[1].Value) is not { } n) return false;
         needed = n;
-        // "(L2, …)" is the level being worked toward — one past the member's own only
-        // while they have no exp banked, so this is a lower-confidence guess.
-        if (m.Groups[2].Success && int.TryParse(m.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int next))
-            level = Math.Max(0, next - 1);
+        if (m.Groups[2].Success)
+            int.TryParse(m.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out toLevel);
         string eta = m.Groups[3].Success ? m.Groups[3].Value.Trim() : "";
         willLevelIn = eta.Length == 0 || eta == "?" ? null : eta;
         return true;

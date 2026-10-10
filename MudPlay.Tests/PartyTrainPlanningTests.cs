@@ -118,6 +118,17 @@ public sealed class PartyTrainPlanningTests
     public void ResolveLevel_HintNeverOutranksAKnownLevel(int prior, int report, int recorded, int hint, int expected) =>
         Assert.Equal(expected, PartyTrainCoordinator.ResolveLevel(prior, report, recorded, hint));
 
+    // The row names the level the reply's figure counts toward: its own "(L60)" tag when
+    // it names one past the next level, else the next level.
+    [Theory]
+    [InlineData(58, 60, 216526237L, "216,526,237 to L60")]
+    [InlineData(58, 0, 216526237L, "216,526,237 to L59")]
+    [InlineData(58, 58, 216526237L, "216,526,237 to L59")]   // a tag not above their level is ignored
+    [InlineData(58, 60, 0L, "L60 reached")]
+    [InlineData(58, 0, 0L, "L59 reached")]
+    public void LevelReplyText_NamesTheLevelTheFigureCountsToward(int level, int toLevel, long needed, string expected) =>
+        Assert.Contains(expected, PartyTrainCoordinator.LevelReplyText(level, toLevel, needed, "?", 0, null));
+
     // ----- who can be asked -------------------------------------------------
 
     [Theory]

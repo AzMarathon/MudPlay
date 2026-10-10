@@ -4,6 +4,7 @@
 
 - Party window: a member's level is the one they state, no longer the level their exp could train to
 - MegaMUD `@level` replies that count past the next level (`Needed: N (L60)  Will level in: +2 in 2-3 days`) are now read
+- Party window: a member's exp line names the level their figure counts toward
 
 ## 3.161.7
 

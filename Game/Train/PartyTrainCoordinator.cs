@@ -106,7 +106,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         new(StringComparer.OrdinalIgnoreCase);
     // @level readings for members that can't send @ptrain reports (another client, or
     // an older MudPlay) — enough for the Party window's leveling line, never a vote.
-    private readonly Dictionary<string, (int Level, long? Needed, string? TheirEta, DateTimeOffset At, long OurExpAt)> _levelReplies =
+    private readonly Dictionary<string, (int Level, int ToLevel, long? Needed, string? TheirEta, DateTimeOffset At, long OurExpAt)> _levelReplies =
         new(StringComparer.OrdinalIgnoreCase);
     // Members already asked this membership, and when each was first seen in it.
     private readonly Dictionary<string, DateTimeOffset> _asked = new(StringComparer.OrdinalIgnoreCase);
@@ -606,7 +606,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     // the report the row is estimating from, so it re-anchors that estimate: the
     // report's exp becomes the reply's total (MudPlay's reply carries it; a reply with
     // only "needed" is read against the report's next-level mark), counted from now.
-    public void NoteLevelProgress(string given, int level, long? needed, string? theirEta, long? totalExp, int levelHint)
+    public void NoteLevelProgress(string given, int level, long? needed, string? theirEta, long? totalExp, int toLevel)
     {
         string name = GivenName(given);
         // An @exp reply doesn't state the level — keep the one we know.
@@ -615,8 +615,8 @@ public sealed class PartyTrainCoordinator : IDisposable
                 _levelReplies.TryGetValue(name, out var prior) ? prior.Level : 0,
                 _reports.TryGetValue(name, out var rep) ? rep.Status.Level : 0,
                 _recordedLevel(name) ?? 0,
-                levelHint);
-        _levelReplies[name] = (level, needed, theirEta, _now(), _selfExp());
+                toLevel > 0 ? toLevel - 1 : 0);
+        _levelReplies[name] = (level, toLevel > level ? toLevel : 0, needed, theirEta, _now(), _selfExp());
 
         if (_reports.TryGetValue(name, out var report))
         {
@@ -1010,7 +1010,7 @@ public sealed class PartyTrainCoordinator : IDisposable
                 }
             }
 
-            (int Level, long? Needed, string? TheirEta, DateTimeOffset At, long OurExpAt)? reply =
+            (int Level, int ToLevel, long? Needed, string? TheirEta, DateTimeOffset At, long OurExpAt)? reply =
                 !m.IsSelf && _levelReplies.TryGetValue(GivenName(m.Name), out var lr) ? lr : null;
 
             int level = status?.Level
@@ -1034,7 +1034,7 @@ public sealed class PartyTrainCoordinator : IDisposable
                 tnl = MemberTnl(given, needed - Math.Max(0, _selfExp() - rr.OurExpAt), rate);
 
             string text = status is { } st ? RowText(st, gain, tnl, canTrain)
-                : show && reply is { } r2 ? LevelReplyText(r2.Level, r2.Needed, r2.TheirEta, Math.Max(0, _selfExp() - r2.OurExpAt),
+                : show && reply is { } r2 ? LevelReplyText(r2.Level, r2.ToLevel, r2.Needed, r2.TheirEta, Math.Max(0, _selfExp() - r2.OurExpAt),
                     tnl, canTrain, otherClient: !Speaks(given))
                 : canTrain is { } c ? $"can train L{c}"
                 : "";
@@ -1077,22 +1077,23 @@ public sealed class PartyTrainCoordinator : IDisposable
     }
 
     // A line from a member's @level / @exp reply — a member that doesn't report, or
-    // anyone on a follower's screen (reports only go to the leader). Its "needed" only
-    // runs to the NEXT level — MegaMUD doesn't count past it the way our banked-aware
-    // TNL does — so the line names that level. Their own "will level in" is shown only
-    // while our rate is unknown. An announced trainable level (canTrain) outranks the
+    // anyone on a follower's screen (reports only go to the leader). Its "needed" runs
+    // to the level its reply names (toLevel), else only to the NEXT level — unlike our
+    // banked-aware TNL — so the line names that level. Their own "will level in" is
+    // shown only while our rate is unknown. An announced trainable level (canTrain) outranks the
     // reading, which predates it. otherClient tags a member on another client (or an
     // older MudPlay), which is why it can't report.
-    private static string LevelReplyText(int level, long? needed, string? theirEta, long gain, TimeSpan? tnl,
+    internal static string LevelReplyText(int level, int toLevel, long? needed, string? theirEta, long gain, TimeSpan? tnl,
         int? canTrain = null, bool otherClient = true)
     {
         string tag = otherClient ? " · other client" : "";
         if (canTrain is { } c) return $"can train L{c}{tag}";
         if (needed is not { } n) return $"L{level}{tag}";
-        if (n <= 0) return $"L{level + 1} reached · can train{tag}";
+        int target = toLevel > level ? toLevel : level + 1;
+        if (n <= 0) return $"L{target} reached · can train{tag}";
         long left = Math.Max(0, n - gain);
         string when = FormatTnl(tnl) ?? theirEta ?? "?";
-        return $"{left:N0} to L{level + 1} · TNL {when}{tag}";
+        return $"{left:N0} to L{target} · TNL {when}{tag}";
     }
 
     // "due" once the countdown says it's reached (the next report / re-ask settles

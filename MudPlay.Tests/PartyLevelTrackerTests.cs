@@ -254,7 +254,7 @@ public sealed class PartyLevelTrackerTests
 
     // A level-58 member with exp banked for 59 is asked @level: MegaMUD counts the
     // Needed figure to L60 and still says Level: 58. That is their level, recorded
-    // and handed to the Party window as stated, with no tag-derived hint.
+    // and handed to the Party window as stated, with the level its figure counts toward.
     [Fact]
     public void LevelReply_MegaMudBankedShape_RecordsTheStatedLevel()
     {
@@ -262,16 +262,16 @@ public sealed class PartyLevelTrackerTests
         h.AddMember("Bob");
         h.Lead();
         var seen = new List<(int Level, int Hint)>();
-        h.Probe.ProgressObserved += (_, level, _, _, _, hint) => seen.Add((level, hint));
+        h.Probe.ProgressObserved += (_, level, _, _, _, toLevel) => seen.Add((level, toLevel));
 
         h.Reply("Bob", "{Level: 58  Needed: 216,526,237 (L60)  Will level in: +2 in 2-3 days}");
 
         Assert.Equal(58, h.Players.Find("Bob")!.Level);
-        Assert.Equal([(58, 0)], seen);
+        Assert.Equal([(58, 60)], seen);
     }
 
-    // An @exp reply states no level: its (L<n>) tag rides along as a hint only, and
-    // is never recorded as the member's level.
+    // An @exp reply states no level: its (L<n>) tag rides along as the level the
+    // figure counts toward, and is never recorded as the member's level.
     [Fact]
     public void ExpReply_CarriesTheTagAsAHint_NotALevel()
     {
@@ -279,22 +279,23 @@ public sealed class PartyLevelTrackerTests
         h.AddMember("Bob");
         h.Lead();
         var seen = new List<(int Level, int Hint)>();
-        h.Probe.ProgressObserved += (_, level, _, _, _, hint) => seen.Add((level, hint));
+        h.Probe.ProgressObserved += (_, level, _, _, _, toLevel) => seen.Add((level, toLevel));
 
         h.Reply("Bob", "{Made: 0  Needed: 216,526,237 (L60)  Rate: unknown}");
 
-        Assert.Equal([(0, 59)], seen);
+        Assert.Equal([(0, 60)], seen);
         Assert.Null(h.Players.Find("Bob"));
     }
 
     [Theory]
-    [InlineData("{Made: 359  Needed: 1,077 (L2, +0.38 lvls)  Rate: 1,816/hr  Will level in: 35m}", 1, 1077L, "35m")]
-    [InlineData("{Made: 0  Needed: 1,750 (L2, +0.18 lvls)  Rate: unknown}", 1, 1750L, null)]
+    [InlineData("{Made: 359  Needed: 1,077 (L2, +0.38 lvls)  Rate: 1,816/hr  Will level in: 35m}", 2, 1077L, "35m")]
+    [InlineData("{Made: 0  Needed: 1,750 (L2, +0.18 lvls)  Rate: unknown}", 2, 1750L, null)]
+    [InlineData("{Made: 0  Needed: 216,526,237 (L60)  Rate: unknown}", 60, 216526237L, null)]
     [InlineData("{Made: 0  Needed: 1,000  Rate: ? k/hr  Will level in: ?}", 0, 1000L, null)]
-    public void TryParseExpReply_ReadsBothClients(string reply, int level, long needed, string? eta)
+    public void TryParseExpReply_ReadsBothClients(string reply, int toLevel, long needed, string? eta)
     {
         Assert.True(Game.Remote.PartyLevelProbe.TryParseExpReply(reply, out int l, out long n, out string? e));
-        Assert.Equal(level, l);
+        Assert.Equal(toLevel, l);
         Assert.Equal(needed, n);
         Assert.Equal(eta, e);
     }
@@ -313,19 +314,20 @@ public sealed class PartyLevelTrackerTests
     }
 
     [Theory]
-    [InlineData("{Level 12, 1,234 exp, 500 to next level}", 12, 500L, null)]
-    [InlineData("Level 12, 1,234 exp, exp-to-next unknown (type exp)", 12, null, null)]
-    [InlineData("{Level: 1  Needed: 1,000  Will level in: ?}", 1, 1000L, null)]
-    [InlineData("{Level: 30  Needed: 2,345,678  Will level in: 1 hour}", 30, 2345678L, "1 hour")]
-    [InlineData("{Level: 58  Needed: 216,526,237 (L60)  Will level in: +2 in 2-3 days}", 58, 216526237L, "+2 in 2-3 days")]
-    [InlineData("{Level: 58  Needed: 208,954,024 (L60)  Will level in: ?}", 58, 208954024L, null)]
-    [InlineData("{Level: 58  Needed: 208,954,024 (L60)}", 58, 208954024L, null)]
-    public void TryParseLevelReply_ReadsBothShapes(string reply, int level, long? needed, string? eta)
+    [InlineData("{Level 12, 1,234 exp, 500 to next level}", 12, 500L, null, 0)]
+    [InlineData("Level 12, 1,234 exp, exp-to-next unknown (type exp)", 12, null, null, 0)]
+    [InlineData("{Level: 1  Needed: 1,000  Will level in: ?}", 1, 1000L, null, 0)]
+    [InlineData("{Level: 30  Needed: 2,345,678  Will level in: 1 hour}", 30, 2345678L, "1 hour", 0)]
+    [InlineData("{Level: 58  Needed: 216,526,237 (L60)  Will level in: +2 in 2-3 days}", 58, 216526237L, "+2 in 2-3 days", 60)]
+    [InlineData("{Level: 58  Needed: 208,954,024 (L60)  Will level in: ?}", 58, 208954024L, null, 60)]
+    [InlineData("{Level: 58  Needed: 208,954,024 (L60)}", 58, 208954024L, null, 60)]
+    public void TryParseLevelReply_ReadsBothShapes(string reply, int level, long? needed, string? eta, int toLevel)
     {
-        Assert.True(Game.Remote.PartyLevelProbe.TryParseLevelReply(reply, out int l, out long? n, out string? e, out _));
+        Assert.True(Game.Remote.PartyLevelProbe.TryParseLevelReply(reply, out int l, out long? n, out string? e, out _, out int tl));
         Assert.Equal(level, l);
         Assert.Equal(needed, n);
         Assert.Equal(eta, e);
+        Assert.Equal(toLevel, tl);
     }
 
     // ----- Route-scoped freshness warm (WarmStaleLevels) -----------------
