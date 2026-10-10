@@ -1,13 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.29**
-> - Chest Offload's Drop and Drop All hide the items when Settings → Other → Hide items when discarding is ticked, and a hidden item leaves the list
-> - A discard's hide that a full room refuses (Stock) keeps the item and is sent again in each new room entered until it lands; never dropped instead, and never out of copies you were keeping
-> - Selling, dropping or hiding the item yourself, or taking it off the Chest Offload list, calls a waiting hide off
-> - No hide is sent for a copy that isn't in the pack or is already on its way, so a second Drop before the game answers sends nothing
-> - **Auto-discard now counts copies, not pack entries: an item with a Min. to keep of 1 or more was silently never discarded, and now is, down to that amount.** A pile goes in one `drop N` on Paradigm and one per copy, paced, on Stock, instead of one copy per confirmation
-> - An item named after a coin (iron crown, sack of coins) leaves the pack and the list when hidden or dropped by count
+> **Version 3.161.2**
+> - Auto-discard counts copies, not pack entries
+> - An item with Min. to keep of 1 or more was never auto-discarded before; now it is, down to that amount
+> - Worn copies and the lit light count toward Min. to keep and are never the copy discarded
+> - A pile goes in one drop N on Paradigm, one per copy (paced) on Stock
+> - A queued Stock pile is recalled on a Roomba sweep, the switch going off, an unticked flag or a raised keep
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

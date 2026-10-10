@@ -738,7 +738,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // way go out, so a second press before the game answers the first sends nothing.
     private void QueueDiscard(List<string> commands, ChestOffloadItemRow item)
     {
-        (string verb, int sent, int held) = _discard.EmitDiscard(commands.Add, item.Name, item.Gained);
+        (string verb, int sent, int held, string? blocked) = _discard.EmitDiscard(commands.Add, item.Name, item.Gained);
         if (sent > 0)
             _log?.Info(LogCategory, $"discard {sent} {item.Name} via {verb}" +
                 (sent < item.Gained ? $" (of {item.Gained}; the rest held, already sent or not carried)" : " (whole stack)"));
@@ -755,10 +755,11 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
 
         // Until an `i` has been read the pack is unknown, and nothing is sent for a
         // copy that can't be shown to be carried.
-        bool waiting = _inventory.IsLoaded && _discard.HeldFor(item.Name) > 0;
-        string why = !_inventory.IsLoaded ? "your inventory hasn't been read yet (type i)"
+        bool waiting = blocked is null && _inventory.IsLoaded && _discard.HeldFor(item.Name) > 0;
+        string why = blocked
+            ?? (!_inventory.IsLoaded ? "your inventory hasn't been read yet (type i)"
             : waiting ? "it is waiting for the next room to be hidden"
-            : "it was already sent, or is no longer in your pack";
+            : "it was already sent, or is no longer in your pack");
         _log?.Info(LogCategory, $"discard of {item.Name} not sent: {why}");
         // A waiting hide's note comes down with the hide; any other on the next press.
         if (!_tour.IsRunning) ShowNote($"{item.Name}: nothing sent — {why}.", waiting ? item.Name : null);

@@ -1,13 +1,58 @@
 # Version history
 
-## 3.159.29
+## 3.161.2
 
-- Chest Offload's Drop and Drop All hide the items when Settings → Other → Hide items when discarding is ticked, and a hidden item leaves the list
-- A discard's hide that a full room refuses (Stock) keeps the item and is sent again in each new room entered until it lands; never dropped instead, and never out of copies you were keeping
-- Selling, dropping or hiding the item yourself, or taking it off the Chest Offload list, calls a waiting hide off
-- No hide is sent for a copy that isn't in the pack or is already on its way, so a second Drop before the game answers sends nothing
-- **Auto-discard now counts copies, not pack entries: an item with a Min. to keep of 1 or more was silently never discarded, and now is, down to that amount.** A pile goes in one `drop N` on Paradigm and one per copy, paced, on Stock, instead of one copy per confirmation
-- An item named after a coin (iron crown, sack of coins) leaves the pack and the list when hidden or dropped by count
+- Auto-discard counts copies, not pack entries
+- An item with Min. to keep of 1 or more was never auto-discarded before; now it is, down to that amount
+- Worn copies and the lit light count toward Min. to keep and are never the copy discarded
+- A pile goes in one drop N on Paradigm, one per copy (paced) on Stock
+- A queued Stock pile is recalled on a Roomba sweep, the switch going off, an unticked flag or a raised keep
+
+## 3.161.1
+
+- Party item gates: a member who never answers the `@have` count is no longer fetched another copy on every trip
+- A copy you handed them and the game confirmed is remembered until the party changes
+
+## 3.161.0
+
+- Stock death recovery follows the game's spill order: up to five rooms out, behind doors and hidden exits
+- With items still missing, it searches the rooms walked before the death (never a stash room)
+- The sweep runs for Recover Now or your own walk-to; a loop's or Auto-Lair's arrival only looks next door
+- It walks to 12 rooms at most and returns; Stop and Pause reach it
+- It gives way to other engines, following and any other walk; silent during a rest, a pause or Auto-All off
+- Stock: loyal, major-cursed and "returned to its rightful place" items no longer waited for
+- Stock: a partly recovered pile keeps its count; an empty death-room floor no longer stalls recovery
+- Stop calls off a Recover Now that was still walking (both realms)
+- Bug report: the pile's missing items and the sweep's plan, state and blockers
+
+## 3.160.4
+
+- Gear sets, backstab armour, location gear and weapon swaps equip a piece the pack holds two or more of
+- Combat no longer counts out an alternate weapon the pack holds two or more of
+
+## 3.160.2
+
+- Chest Offload Drop / Drop All hide when Hide items when discarding is on
+- Hidden items leave the Chest Offload list
+- A hide a full room refuses is retried in each new room
+- A sale, drop, ✕ or Clear list calls a waiting hide off
+- No hide sent for a copy not in the pack
+- Refused or unanswered auto-discard drops no longer stay counted all session
+- No discard after a death or reconnect until the inventory is read
+- Items named after a coin (iron crown) no longer read as coin
+
+## 3.160.1
+
+- Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
+- In that mode the room tooltip and the Legend name the colours
+
+## 3.160.0
+
+- Items a hang-up penalty dropped are picked up on re-entering the game
+- Only on a realm set to drop items, and never more than it drops
+- The gear set last equipped is applied again for pieces that came back
+- Loops and walks wait for the check
+- Never changes when the client hangs up
 
 ## 3.159.27
 

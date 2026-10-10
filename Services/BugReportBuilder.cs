@@ -192,6 +192,27 @@ public static class BugReportBuilder
         // for this realm. It explains HP or items missing after a reconnect.
         Kv(sb, "Realm hang-up penalty",
             Game.Health.HangupPenaltyNotice.Describe(svc.ResolveActiveRealm()?.Realm));
+        // The check for what a penalised hang-up dropped: whether it runs on this
+        // realm, how the last one ended, and what it found short.
+        int hangupItemCap = Game.Health.HangupPenaltyNotice.MaxItemsDropped(svc.ResolveActiveRealm()?.Realm);
+        Kv(sb, "Hang-up item check",
+            (hangupItemCap > 0
+                ? $"on (the realm drops up to {hangupItemCap} item(s) for a hang-up)" : "off (the realm's settings drop no items)")
+            + $"; now: {svc.HangupItems.Status}; last: {svc.HangupItems.LastOutcome}");
+        static string HeldNames(IEnumerable<(string Name, int Count)> items) =>
+            string.Join(", ", items.Select(m => m.Count > 1 ? $"{m.Count} {m.Name}" : m.Name));
+        Kv(sb, "Missing after hang-up", svc.HangupItems.LastMissing.Count == 0
+            ? "(nothing)"
+            : HeldNames(svc.HangupItems.LastMissing)
+              + (svc.HangupItems.LastStillMissing.Count == 0
+                  ? "; all back"
+                  : "; still missing: " + HeldNames(svc.HangupItems.LastStillMissing)));
+        Kv(sb, "Held list on file", svc.Profile.Current?.HeldAtDisconnect is { } heldList
+            ? $"{heldList.Items.Count} kind(s) of item, written {heldList.At.ToLocalTime():yyyy-MM-dd HH:mm:ss} "
+              + $"on {heldList.Realm ?? "(no realm)"}, "
+              + (heldList.Room is { } heldRoom ? $"room {heldRoom.Map}/{heldRoom.Room}" : "room not known")
+              + (heldList.PenaltiesSpanned > 1 ? $", covering {heldList.PenaltiesSpanned} drops of the link" : "")
+            : "(none)");
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
             + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));
@@ -230,6 +251,9 @@ public static class BugReportBuilder
         Kv(sb, "Automatic update check", svc.Settings.Current.AutoCheckForUpdates ? "on" : "off");
         Kv(sb, "Map other floors", $"{svc.Settings.Current.MapOtherFloors}, {svc.Settings.Current.MapOtherFloorsLevels} floor(s), overlap limit {svc.Settings.Current.MapOtherFloorsMaxOverlapPercent}%");
         Kv(sb, "Map loop lines", svc.Profile.Current?.NavLoopLinesMode.ToString() ?? "(no profile)");
+        // Says what a red, yellow or green room in a map screenshot is.
+        Kv(sb, "Map room spells", svc.Profile.Current is { } mapProfile
+            ? Game.Map.SpellDisplayModes.Read(mapProfile).ToString() : "(no profile)");
         // What a colour in a screenshot or a "the red text" in a report really is.
         Kv(sb, "Terminal colours", svc.DescribeTerminalColors());
         Kv(sb, "Last update check", DescribeUpdate(svc));
@@ -320,6 +344,24 @@ public static class BugReportBuilder
             ? "(none)"
             : $"{lastDeath.Status} @ {lastDeath.RoomKeyText}"
               + (lastDeath.RecoveryMessage is { Length: > 0 } msg ? $" — {msg}" : ""));
+        // The Stock spill sweep: what the pile is still waiting on, where the sweep
+        // is (or how the last one ended), and the rooms it tries in order — a "it
+        // walked off and found nothing" or "it never looked there" report needs all
+        // three, plus what this death said was gone and the trail it kept.
+        if (lastDeath is not null)
+        {
+            Kv(sb, "Latest deathpile still missing",
+                lastDeath.UnrecoveredItems is { Count: > 0 } missing ? string.Join(", ", missing) : "(nothing)");
+            if (lastDeath.ReturnedItems is { Count: > 0 } returned)
+                Kv(sb, "Latest death: returned to their rightful place", string.Join(", ", returned));
+            if (lastDeath.Trail is { Count: > 0 } trail)
+                Kv(sb, "Latest death: rooms walked up to it (newest first)",
+                    string.Join(", ", trail.Select(r => $"{r.Map}/{r.Room}")));
+        }
+        Kv(sb, "Stock spill sweep", svc.DeathRecovery.SpillSweepState);
+        Kv(sb, "Stock spill sweep held back right now by", svc.DeathRecovery.SpillSweepBlockers);
+        if (svc.DeathRecovery.SpillSweepPlan is { Length: > 0 } plan)
+            Kv(sb, "Stock spill sweep rooms, in order", plan);
         return sb.ToString();
     }
 
@@ -1379,7 +1421,10 @@ public static class BugReportBuilder
         // it is waiting on, and how many hides are out with no answer yet.
         var heldHides = svc.AutoDiscard.HeldHides;
         sb.Append("\n**Discard hides held for the next room** (").Append(heldHides.Count)
-          .Append("; ").Append(svc.AutoDiscard.UnansweredHides).Append(" sent and unanswered)\n\n");
+          .Append("; ").Append(svc.AutoDiscard.UnansweredHides).Append(" hides and ")
+          .Append(svc.AutoDiscard.UnansweredDrops).Append(" drops sent and unanswered")
+          .Append(svc.AutoDiscard.AwaitingInventoryRead ? "; waiting for an inventory read" : "")
+          .Append(")\n\n");
         if (heldHides.Count == 0)
             sb.Append("_(none)_\n");
         else
@@ -1867,7 +1912,12 @@ public static class BugReportBuilder
         // back to. A journey can stand with the walker idle, between two legs.
         Kv(sb, "Whole trip (every leg keeps to this)",
             walker.Journey is not { } journey
-                ? (walker.State == Game.Map.WalkState.Idle ? "(none)" : "(none — this walk is on no trip's rules)")
+                ? (walker.State == Game.Map.WalkState.Idle ? "(none)"
+                    // A spill sweep's leg is a journey the walker doesn't report, so
+                    // nothing saves it to resume; here it is named for what it is.
+                    : svc.DeathRecovery.SpillSweepActive && walker.Destination is { } stop
+                        ? $"a Stock spill sweep's leg to {stop.Map}/{stop.Room}, on foot (not a trip anything resumes)"
+                    : "(none — this walk is on no trip's rules)")
             : $"to {journey.Destination.Map}/{journey.Destination.Room}: {journey.Describe()}"
               + (journey.ClosedGates is { Count: > 0 } closed
                   ? $" ({string.Join(", ", closed.Select(id => $"#{id} {svc.ItemNames.GetName(id) ?? "?"}"))})" : string.Empty)
@@ -1928,6 +1978,8 @@ public static class BugReportBuilder
         // from, or a route card's count waiting for the walk that card starts.
         Kv(sb, "Party counts standing for this trip", svc.PartyPathItemGate.JourneyCountsSummary);
         Kv(sb, "Route card counts not yet taken by a walk", svc.CardCountSummary);
+        // Why a member who never answers a count was or wasn't fetched a copy.
+        Kv(sb, "Gate items handed to party members (remembered)", svc.PartyHandOvers.Summary);
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));

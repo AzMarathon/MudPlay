@@ -1075,6 +1075,33 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
     }
 
+    // On a realm that drops items for a hang-up, the item check's hold goes up at
+    // the connect, ahead of the prompt the loop restarts on: the loop comes back as
+    // a paused run and takes its first step only when the check lets go.
+    [Fact]
+    public void FirstPromptAfterDisconnect_UnderTheHangupItemCheck_WaitsForItBeforeStepping()
+    {
+        Harness h = NewHarness(deferResume: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        h.Runner.NotifyDisconnected();
+        h.Coordinator.AssertGate(MovementCoordinator.HangupItemCheckGate);   // the reconnect
+
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.Single(h.Sent);                      // no step out of the room
+
+        h.Coordinator.ClearGate(MovementCoordinator.HangupItemCheckGate);   // the check is over
+        h.Drain();
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
     private Harness HeldAfterReconnect(Func<bool> reformPending)
     {
         Harness h = NewHarness();

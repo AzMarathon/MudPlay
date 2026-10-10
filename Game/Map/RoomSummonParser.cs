@@ -87,6 +87,20 @@ public static class RoomSummonParser
         return 0;
     }
 
+    // The lines of a d100 roll table, in order: each one's leading threshold and the
+    // steps after it. A line that doesn't lead with a number isn't a band and is left
+    // out. Shared with RoomSpellTeleportClassifier, which reads the same tables for
+    // their teleports.
+    internal static IEnumerable<(int Threshold, string[] Steps)> ReadBands(string table)
+    {
+        foreach (string raw in table.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string[] parts = raw.Split(':', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0 || !int.TryParse(parts[0], out int threshold)) continue;
+            yield return (threshold, parts[1..]);
+        }
+    }
+
     // Parse a d100 roll table. Each line is "<cumulativeThreshold>:<act>[:<act>…]"; a
     // line's band probability is (threshold − prevThreshold) / lastThreshold, and if any
     // of its actions is "summon <mon>", that band summons the monster.
@@ -94,14 +108,12 @@ public static class RoomSummonParser
         string table, bool noMonsters, Func<int, (int Exp, string Name)> monster)
     {
         var lines = new List<(int Threshold, int Summon)>();
-        foreach (string raw in table.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        foreach ((int threshold, string[] steps) in ReadBands(table))
         {
-            string[] parts = raw.Split(':', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0 || !int.TryParse(parts[0], out int threshold)) continue;
             int summon = 0;
-            for (int i = 1; i < parts.Length; i++)
-                if (parts[i].StartsWith("summon ", StringComparison.OrdinalIgnoreCase)
-                    && int.TryParse(parts[i].AsSpan("summon ".Length).Trim(), out int m) && m > 0)
+            foreach (string step in steps)
+                if (step.StartsWith("summon ", StringComparison.OrdinalIgnoreCase)
+                    && int.TryParse(step.AsSpan("summon ".Length).Trim(), out int m) && m > 0)
                 {
                     summon = m;
                     break;

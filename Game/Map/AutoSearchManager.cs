@@ -251,6 +251,14 @@ public sealed class AutoSearchManager : IDisposable
         ReleaseGate("search settle elapsed");
     }
 
+    // Something else searched this room (the Stock spill sweep, which sends its own
+    // `sea` at a trail stop). Recorded as searched, so the movement-start search
+    // doesn't search it again as the next walk leaves.
+    public void NoteSearchedByOther(RoomKey room)
+    {
+        if (!_disposed) _lastSearchedFor = room;
+    }
+
     // The room-wide `sea` came back empty (KnownPatterns.SearchRevealedNothing, wired
     // in AppServices). There's nothing concealed to collect, so the settle's whole
     // job — bridging the reveal so the get engines can take over the hold — is moot:

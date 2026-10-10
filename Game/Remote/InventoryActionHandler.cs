@@ -198,17 +198,23 @@ public sealed class InventoryActionHandler : IDisposable
     public void CancelPaced() => _pacer?.Cancel();
 
     // Item commands from elsewhere (the Chest Offload tab's discards, the
-    // auto-discard engine's held hides on entering a room) that should share the
-    // sweeps' pacing.
-    public void SendPaced(IReadOnlyList<string> commands)
+    // auto-discard engine's piles and its held hides on entering a room) that
+    // should share the sweeps' pacing. A sender that may want its waiting commands
+    // back names itself as their owner (RecallPaced).
+    public void SendPaced(IReadOnlyList<string> commands, object? owner = null)
     {
         ArgumentNullException.ThrowIfNull(commands);
-        Dispatch(commands);
+        Dispatch(commands, owner);
     }
 
-    private void Dispatch(IReadOnlyList<string> commands)
+    // Take back the owner's commands still waiting in the pacer that `take` picks.
+    // Returns the ones taken; without a pacer everything has gone out already.
+    public IReadOnlyList<string> RecallPaced(object owner, Func<string, bool> take)
+        => _pacer?.CancelOwned(owner, take) ?? Array.Empty<string>();
+
+    private void Dispatch(IReadOnlyList<string> commands, object? owner = null)
     {
-        if (_pacer is { } pacer) pacer.Enqueue(commands);
+        if (_pacer is { } pacer) pacer.Enqueue(commands, owner);
         else foreach (string command in commands) Send(command);
     }
 

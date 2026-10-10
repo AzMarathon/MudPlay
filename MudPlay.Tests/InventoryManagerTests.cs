@@ -1243,6 +1243,47 @@ public sealed class InventoryManagerTests
         Assert.DoesNotContain("lantern", Carried(h));
     }
 
+    // The giver's own line is the one proof a give landed, in either wording: the
+    // item, how many, and who was given it. Coins and a refused give raise nothing.
+    [Fact]
+    public void GiveConfirmed_RaisesItemGivenAway_ForItemsNotCoins()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        h.Feed("You are carrying lantern, 3 darkwood ring, torch.");
+        h.Feed("Wealth:    0 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+        List<(string Item, int Copies, string To)> gave = new();
+        h.Inv.ItemGivenAway += (item, copies, to) => gave.Add((item, copies, to));
+
+        h.Feed("You just gave lantern to Member.");
+        h.Feed("You give 2 darkwood ring to Member.");
+        h.Feed("You give torch to Member.");
+        h.Feed("You just gave 30 gold crowns to Member.");
+        h.Feed("You give 5 gold crowns to Member");
+        h.Feed("Member refuses your offer.");
+
+        Assert.Equal(
+            new[] { ("lantern", 1, "Member"), ("darkwood ring", 2, "Member"), ("torch", 1, "Member") }, gave);
+    }
+
+    // The Stock engine's three refusals of a give: two name the player it was for,
+    // one names nobody. Nothing leaves the pack.
+    [Fact]
+    public void GiveRefused_IsRaisedWithThePlayerTheLineNames()
+    {
+        using Harness h = new();
+        FeedCarriedBaseline(h);
+        List<string?> refused = new();
+        h.Inv.GiveRefused += refused.Add;
+
+        h.Feed("Member refuses your offer.");
+        h.Feed("Member cannot accept your offer.");
+        h.Feed("You may not give that item away!");
+
+        Assert.Equal(new string?[] { "Member", "Member", null }, refused);
+        Assert.Contains("lantern", Carried(h));
+    }
+
     // Keys sit on their own ring in the dump. A key given away must leave it, or the
     // character still "holds" the key and a door it opens stays passable to the planner.
     [Fact]

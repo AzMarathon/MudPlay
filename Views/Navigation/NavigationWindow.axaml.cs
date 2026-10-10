@@ -176,8 +176,11 @@ public partial class NavigationWindow : Window
             return;
         }
 
+        Game.Map.RoomSpellTeleport? spellTeleport = map.SpellMode == Game.Map.SpellDisplayMode.ByTeleport
+            ? svc.RoomSpellTeleports.ClassOf(room.Spell)
+            : null;
         label.Text = Game.Map.RoomTooltipBuilder.Build(room, svc.RoomGraph, svc.GameData, svc.TBInfo, svc.MonsterSpawns, svc.SpellCatalog, svc.PlayerIllumination.Current, svc.RoomFloorItems,
-            svc.TrapDisarm.DisarmOdds, svc.PlayerStats.Picklocks);
+            svc.TrapDisarm.DisarmOdds, svc.PlayerStats.Picklocks, spellTeleport);
 
         // Font is char-tier configurable (Settings → General → Navigation tooltip
         // font). Read it live per hover so a Settings change lands on the next

@@ -113,4 +113,26 @@ public sealed class BulkCommandPacerTests
         Assert.Equal(10, h.Sent.Count);
         Assert.Equal(10, h.Sent.Distinct().Count());
     }
+
+    // One sender takes back its own waiting commands; another's, and what has
+    // already gone out, stay as they were and in their order.
+    [Fact]
+    public void AnOwnerTakesBackItsOwnWaitingCommands_AndNothingElse()
+    {
+        Harness h = new();
+        object engine = new();
+        h.Pacer.Enqueue(Enumerable.Repeat("drop dagger", 8), engine);
+        h.Pacer.Enqueue(new[] { "drop moonstone", "drop dagger" });   // nobody's to take back
+        h.Pacer.Enqueue(new[] { "drop ruby" }, engine);
+        h.Drain(10);
+        Assert.Equal(BulkCommandPacer.Window, h.Sent.Count);
+
+        IReadOnlyList<string> taken = h.Pacer.CancelOwned(engine, command => command == "drop dagger");
+
+        Assert.Equal(new[] { "drop dagger", "drop dagger" }, taken);
+        Assert.Equal(3, h.Pacer.Pending);
+        h.Advance(BulkCommandPacer.AnswerTimeout);
+        h.Drain(10);
+        Assert.Equal(new[] { "drop moonstone", "drop dagger", "drop ruby" }, h.Sent.Skip(BulkCommandPacer.Window));
+    }
 }

@@ -38,7 +38,8 @@ public sealed class BulkCommandPacer
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
 
-    private readonly Queue<string> _queue = new();
+    // Each waiting command with whoever asked to be able to take it back, if anyone.
+    private readonly Queue<(string Command, object? Owner)> _queue = new();
     private int _unanswered;
     private DateTimeOffset _lastSend = DateTimeOffset.MinValue;
     private DateTimeOffset _lastActivity = DateTimeOffset.MinValue;
@@ -59,11 +60,30 @@ public sealed class BulkCommandPacer
     // Commands still waiting to be sent.
     public int Pending => _queue.Count;
 
-    public void Enqueue(IEnumerable<string> commands)
+    // An owner marks the commands as its own to take back while they wait
+    // (CancelOwned). Commands without one are only ever dropped by Cancel.
+    public void Enqueue(IEnumerable<string> commands, object? owner = null)
     {
         ArgumentNullException.ThrowIfNull(commands);
-        foreach (string command in commands) _queue.Enqueue(command);
+        foreach (string command in commands) _queue.Enqueue((command, owner));
         Pump();
+    }
+
+    // Take back one owner's waiting commands that `take` picks, leaving everyone
+    // else's and the order of the rest. `take` is asked front to back, once per
+    // command. Returns what was taken; a command already sent is not in reach.
+    public IReadOnlyList<string> CancelOwned(object owner, Func<string, bool> take)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(take);
+        List<string> taken = new();
+        for (int n = _queue.Count; n > 0; n--)
+        {
+            (string Command, object? Owner) waiting = _queue.Dequeue();
+            if (ReferenceEquals(waiting.Owner, owner) && take(waiting.Command)) taken.Add(waiting.Command);
+            else _queue.Enqueue(waiting);
+        }
+        return taken;
     }
 
     // The game sent a prompt: one command has been answered.
@@ -110,7 +130,7 @@ public sealed class BulkCommandPacer
             TimeSpan sinceLast = now - _lastSend;
             if (sinceLast < MinGap) { Arm(MinGap - sinceLast); return; }
 
-            _send(_queue.Dequeue());
+            _send(_queue.Dequeue().Command);
             _unanswered++;
             _lastSend = now;
             _lastActivity = now;
