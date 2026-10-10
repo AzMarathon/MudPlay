@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.5**
+> **Version 3.160.7**
 > - Crystal Lake's teleport rooms are never on a route, for any character, with or without a boat: walks, loop approaches, Auto-Lair travel and automatic trips go round them, and no raft or skiff is offered, fetched or bought for the lake
 > - When those rooms are the only way, a walk you start shows one card to cross them on your pick (nothing fetched); a trip the client starts stops and logs why
 > - Standing in one of those rooms, you are always planned out by the nearest way that leads on to where you are going
