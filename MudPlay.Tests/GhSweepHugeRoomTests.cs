@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using MudPlay.Game.Cash;
@@ -225,35 +224,36 @@ public sealed class GhSweepHugeRoomTests : IDisposable
         Assert.True(slowest.Items > slowest.Stacks);
     }
 
-    // The freeze grew with the square of the list's length and worse: a list twice
-    // as long took five times as long. A straight read takes four times as long for
-    // four times the list, so the pin is the ratio, with room for a busy machine.
+    // A reply four times as long is four times the work when it is read straight
+    // through. What it allocates is counted, not how long it takes: bytes are the
+    // same on a busy machine. The bound is one the old row-by-row join fails. That
+    // join built a new string and attribute array of everything gathered so far for
+    // each wrapped row, about 1,760 bytes per row already held: some 37 MB over the
+    // 206 rows of 1,000 stacks and 620 MB over the 841 rows of 4,000, sixteen times
+    // as much and far more than the rest of the path allocates.
     [Fact]
-    public void ASearchReplyFourTimesAsLong_TakesNoMoreThanItsShareLonger()
+    public void ASearchReplyFourTimesAsLong_AllocatesNoMoreThanItsShare()
     {
         Assert.True(_sweep.Start());
         Arrive("C", Direction.N, Direction.S);
         Assert.Equal("sea", _sent[^1]);
 
-        TimeSpan thousand = FastestRead(1000);
-        TimeSpan fourThousand = FastestRead(4000);
+        long thousand = AllocatedReading(1000);
+        long fourThousand = AllocatedReading(4000);
 
         Assert.Equal(4000, _sweep.ObservedItemsAt(Vault).Count);
-        Assert.True(fourThousand < thousand * 10,
-            $"1,000 stacks read in {thousand.TotalMilliseconds:F1} ms, 4,000 in {fourThousand.TotalMilliseconds:F1} ms");
+        Assert.True(fourThousand < thousand * 6,
+            $"reading 1,000 stacks allocated {thousand:N0} bytes, 4,000 stacks {fourThousand:N0}");
     }
 
-    private TimeSpan FastestRead(int stacks)
+    // The bytes one reply of this many stacks costs once the room already holds
+    // them: the first read is left out, since it also grows the room's records.
+    private long AllocatedReading(int stacks)
     {
         string reply = HugeFloor.Line(stacks);
-        TimeSpan fastest = TimeSpan.MaxValue;
-        for (int i = 0; i < 5; i++)
-        {
-            long started = Stopwatch.GetTimestamp();
-            Wire(reply);
-            TimeSpan took = Stopwatch.GetElapsedTime(started);
-            if (took < fastest) fastest = took;
-        }
-        return fastest;
+        Wire(reply);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        Wire(reply);
+        return GC.GetAllocatedBytesForCurrentThread() - before;
     }
 }

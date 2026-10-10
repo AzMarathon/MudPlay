@@ -113,6 +113,63 @@ public sealed class CasterMessageMatcherLongLineTests : IDisposable
             $"only {ownLineMatched} of {matchers.Count} templates matched their own line");
     }
 
+    // The catalogue's templates and the lines built from them are friendly ground.
+    // This is every template of up to four tokens over two letters, a name
+    // placeholder and a number placeholder, against every line of up to six
+    // characters over an alphabet that holds those letters and everything a number
+    // can be made of. No line the walk refuses may be one the regex accepts, so a
+    // change to the walk can't quietly drop a match.
+    [Fact]
+    public void TheLiteralWalk_RefusesNothingTheRegexAccepts_OverEverySmallTemplateAndLine()
+    {
+        string[] tokens = { "a", "b", "{s}", "{d}" };
+        List<CasterMessageMatcher> matchers = new();
+        HashSet<string> seen = new(StringComparer.Ordinal);
+        void Grow(string template, int tokensLeft)
+        {
+            if (template.Length > 0 && seen.Add(template)
+                && CasterMessageMatcher.TryCreate(template, compiled: false) is { } matcher)
+                matchers.Add(matcher);
+            if (tokensLeft == 0) return;
+            foreach (string token in tokens) Grow(template + token, tokensLeft - 1);
+        }
+        Grow(string.Empty, 4);
+        Assert.True(matchers.Count > 250, $"expected a few hundred small templates, got {matchers.Count}");
+
+        const string alphabet = "ab1-,";
+        List<string> lines = new() { string.Empty };
+        for (int start = 0, length = 1; length <= 6; length++)
+        {
+            int end = lines.Count;
+            for (int i = start; i < end; i++)
+                foreach (char c in alphabet) lines.Add(lines[i] + c);
+            start = end;
+        }
+        Assert.Equal(19_531, lines.Count);
+
+        // Six million pairs: spread over the cores, since a regex and the walk are
+        // both safe to run from any thread.
+        long refused = 0;
+        System.Collections.Concurrent.ConcurrentBag<string> dropped = new();
+        Parallel.ForEach(matchers, matcher =>
+        {
+            Regex regex = (Regex)RegexField.GetValue(matcher)!;
+            long refusedHere = 0;
+            foreach (string line in lines)
+            {
+                if (matcher.LiteralRunsOccurInOrder(line)) continue;
+                refusedHere++;
+                if (regex.IsMatch(line)) dropped.Add($"template '{matcher.Template}', line '{line}'");
+            }
+            Interlocked.Add(ref refused, refusedHere);
+        });
+
+        Assert.True(dropped.IsEmpty,
+            $"the walk refused {dropped.Count} line(s) their regex accepts, e.g. {dropped.FirstOrDefault()}");
+        // Guards the vacuous case: the walk does refuse most of these.
+        Assert.True(refused > matchers.Count * 1000L, $"the walk refused only {refused} pairs");
+    }
+
     // The count of regexes run is what the freeze was made of, so it is what's pinned:
     // a long floor list reaches a handful of the catalogue's regexes at most, and
     // only ones that accept it. Accepting is one pass along the line; it is the

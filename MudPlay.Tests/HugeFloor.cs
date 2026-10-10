@@ -4,7 +4,7 @@ namespace MudPlay.Tests;
 
 // Builds the floor of a room with no item cap: a Paradigm vault holds hundreds of
 // stacks, and a search prints them all as one unbroken "You notice … here." line
-// (report paradigm-20261009-164508: 116 stacks in ~2,200 characters). The names are
+// (report paradigm-20261009-164508: 111–120 stacks in ~2,200 characters). The names are
 // made up from two word lists so a test can ask for thousands of distinct items and
 // write a matching Items table, without leaning on anyone's game data.
 internal static class HugeFloor

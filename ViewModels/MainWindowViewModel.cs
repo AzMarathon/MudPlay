@@ -2174,17 +2174,8 @@ public partial class MainWindowViewModel : ObservableObject
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             WriteTerminalStatus("[Ganghouse roomba complete]", TerminalStatusKind.Notice));
 
-    // Chat is another player's words, so only its length is logged.
     private static void LogSlowLine(LineExtractor.EmittedLine line, TimeSpan took)
-    {
-        const int previewLength = 60;
-        string what = line.IsChat ? "chat line"
-            : line.Text.Length <= previewLength ? $"line '{line.Text}'"
-            : $"line '{line.Text[..previewLength]}…'";
-        AppServices.Current.Log.Warn("Lines",
-            $"the client stood still for {took.TotalMilliseconds:F0} ms reading a "
-            + $"{line.Text.Length}-character {what}");
-    }
+        => AppServices.Current.Log.Warn("Lines", LineExtractor.SlowLineNotice(line, took));
 
     // The login sequence sends stat / exp / inventory (and the user's who, etc.) right
     // after entering the realm. Wait for that to finish rendering, then dump the quests

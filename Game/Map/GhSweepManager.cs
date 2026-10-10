@@ -291,7 +291,7 @@ public sealed class GhSweepManager : IDisposable
     private List<string>? _pendingArrivalSurvey;
     private TimeSpan _pendingArrivalReadTime;
 
-    // A floor of this many stacks is logged on arrival even when recon isn't
+    // A floor of this many stacks is logged as it is read even when recon isn't
     // searching. A Paradigm room has no item cap, and what a list that long cost
     // to read is the first thing a report of a slow sweep needs.
     private const int HugeFloorStacks = 100;
@@ -1296,10 +1296,10 @@ public sealed class GhSweepManager : IDisposable
         if (_reconSearchRoom is { } searchRoom && searchRoom.Equals(current.Key)
             && _reconSearchesSent > 0)
         {
-            // A `sea` re-lists the WHOLE floor (visible + hidden), so only tag the
-            // items that weren't already on the pre-search visible floor as hidden —
-            // otherwise a plainly-visible item gets flagged RequiresSearch and Sorting
-            // wastes a needless `sea` before grabbing it.
+            // A `sea` reply can name a stack the room display already showed, so
+            // only tag the names that weren't on the pre-search visible floor as
+            // hidden — otherwise a plainly-visible item gets flagged RequiresSearch
+            // and Sorting wastes a needless `sea` before grabbing it.
             GhSurveyMerger.MergeHiddenDelta(_hiddenByRoom, current.Key, snapshot, _visibleByRoom, _itemNames);
         }
         else
@@ -1309,6 +1309,14 @@ public sealed class GhSweepManager : IDisposable
         TimeSpan merge = Stopwatch.GetElapsedTime(started);
 
         NoteSurvey(current.Key, _groundItems.LastSurveyReadTime, merge, RecordItemLocations(current.Key));
+        // With searching on, the room's line is written when its searches end.
+        if (!_labels.SearchForHidden) LogRoomSurveyIfHuge(current.Key);
+    }
+
+    private void LogRoomSurveyIfHuge(RoomKey room)
+    {
+        if (_observedByRoom.TryGetValue(room, out List<string>? floor) && floor.Count >= HugeFloorStacks)
+            LogRoomSurvey(room);
     }
 
     // Writes the room's floor to the item-location log and says how long that took.
@@ -1412,8 +1420,7 @@ public sealed class GhSweepManager : IDisposable
             // visible floor — the room display already surfaced it via the survey —
             // and lets the loop walk on, so nothing hidden is ever tagged or sorted.
             if (_labels.SearchForHidden) BeginRoomSearches(here);
-            else if (_observedByRoom.TryGetValue(here, out List<string>? floor) && floor.Count >= HugeFloorStacks)
-                LogRoomSurvey(here);
+            else LogRoomSurveyIfHuge(here);
             return;
         }
         // Final recon just refreshes each room's floor (the arrival survey above

@@ -156,9 +156,14 @@ public sealed partial class LineExtractor
     {
         long started = Stopwatch.GetTimestamp();
         if (!line.IsPromptLine && ChatLineDetector.IsChat(line.Text))
-            ChatLineEmitted?.Invoke(line with { IsChat = true });
+        {
+            line = line with { IsChat = true };
+            ChatLineEmitted?.Invoke(line);
+        }
         else
+        {
             LineEmitted?.Invoke(line);
+        }
 
         TimeSpan took = Stopwatch.GetElapsedTime(started);
         if (took >= SlowLineThreshold) SlowLine?.Invoke(line, took);
@@ -170,10 +175,22 @@ public sealed partial class LineExtractor
     public static readonly TimeSpan SlowLineThreshold = TimeSpan.FromMilliseconds(250);
 
     // Fired after a line whose subscribers together took SlowLineThreshold or longer,
-    // with how long they took. A freeze a user reports is then named in the program
-    // log by the line that caused it (report paradigm-20261009-164508 took timing
-    // gaps between unrelated log entries to find).
+    // with how long they took, so a freeze a user reports shows in the program log
+    // (report paradigm-20261009-164508 took timing gaps between unrelated log entries
+    // to find).
     public event Action<EmittedLine, TimeSpan>? SlowLine;
+
+    // What the program log says of a slow line: how long it took, how long it is and
+    // what kind it is. Never any of its text. A line can be another player's telepath,
+    // and the first lines of a session, which a cold start makes the likeliest to be
+    // slow, are the board's login, where a name or a password may be on the row. The
+    // entry's time finds the line in the scrollback.
+    public static string SlowLineNotice(EmittedLine line, TimeSpan took)
+    {
+        string kind = line.IsChat ? "chat line" : line.IsPromptLine ? "prompt line" : "line";
+        return $"the client stood still for {took.TotalMilliseconds:F0} ms reading a "
+            + $"{line.Text.Length}-character {kind}";
+    }
 
     // Leading status-line prompt — covers [HP=…]: in all the MajorMUD shapes
     // (with or without the MA/KAI suffix, with or without the parenthesised

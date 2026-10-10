@@ -206,6 +206,44 @@ public sealed class LineExtractorTests
         Assert.True(took >= LineExtractor.SlowLineThreshold);
     }
 
+    // The slow line is reported as the chat subscriber saw it, so the log can say a
+    // player's words were what it was reading without holding any of them.
+    [Fact]
+    public void ASlowChatLine_IsReportedAsChat()
+    {
+        TerminalEmulator emulator = new(80, 25);
+        LineExtractor extractor = new(emulator);
+        extractor.ChatLineEmitted += _ =>
+            Thread.Sleep(LineExtractor.SlowLineThreshold + TimeSpan.FromMilliseconds(50));
+        List<(LineExtractor.EmittedLine Line, TimeSpan Took)> slow = new();
+        extractor.SlowLine += (l, took) => slow.Add((l, took));
+
+        emulator.Feed(System.Text.Encoding.Latin1.GetBytes("Phrixas telepaths: QZXJ\r\n"));
+
+        (LineExtractor.EmittedLine line, TimeSpan took) = Assert.Single(slow);
+        Assert.True(line.IsChat);
+        Assert.Contains("chat line", LineExtractor.SlowLineNotice(line, took));
+    }
+
+    // A slow line may be a telepath or a row of the board's login. The notice gives
+    // its length, its kind and the time it took, and not one character of it.
+    [Theory]
+    [InlineData(false, false, "-character line")]
+    [InlineData(true, false, "-character chat line")]
+    [InlineData(false, true, "-character prompt line")]
+    public void TheSlowLineNotice_CarriesNoneOfTheLinesText(bool chat, bool prompt, string kind)
+    {
+        // Characters the notice's own wording never uses.
+        const string text = "QZXJ#@~QZXJ_^|WVUK";
+        LineExtractor.EmittedLine line = new(
+            text, new CellAttributes[text.Length], FixedNow, IsPromptLine: prompt, IsChat: chat);
+
+        string notice = LineExtractor.SlowLineNotice(line, TimeSpan.FromMilliseconds(2913));
+
+        Assert.Equal($"the client stood still for 2913 ms reading a {text.Length}{kind}", notice);
+        Assert.DoesNotContain(notice, c => text.Contains(c));
+    }
+
     [Fact]
     public void HardLineBreaks_AreNotJoined()
     {
