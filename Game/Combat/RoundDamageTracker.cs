@@ -192,6 +192,14 @@ public sealed class RoundDamageTracker : IDisposable
     // OwnCastWindow and read as nobody's.
     public void SetOwnSpellRepeating(Func<bool> repeating) => _ownSpellRepeating = repeating;
 
+    // Whether a damage line is a room's own damage, which falls anywhere in the
+    // round (the round clock's test, wired by AppServices). Such a line is damage
+    // taken in a round already open and never opens one or keeps one open: read as
+    // a fight's it showed up as a round of its own two seconds after the real one.
+    public void SetOffRoundDamageCheck(Func<string, bool> isOffRoundDamage) => _isOffRoundDamage = isOffRoundDamage;
+
+    private Func<string, bool>? _isOffRoundDamage;
+
     // The room's monsters as MonsterHpTracker has them: the one a hit on a name lands on
     // (the first of that name) and every one of them, each with a stable id and its HP
     // estimate before the hit. Unbound, or a monster with no HP data, and damage counts
@@ -338,9 +346,11 @@ public sealed class RoundDamageTracker : IDisposable
         int? dealerId = !a.NoDealer && source is not null && IsFoe(source)
             ? _monsterTarget?.Invoke(source)?.Id : null;
 
-        bool opens = _state.InCombat
-            || source == DamageLineAttributor.Self
-            || (source is not null && target is not null);
+        bool offRound = _isOffRoundDamage?.Invoke(text) == true;
+        bool opens = !offRound
+            && (_state.InCombat
+                || source == DamageLineAttributor.Self
+                || (source is not null && target is not null));
         Attributed?.Invoke(new AttributedLine(text,
             new DamageAttribution(a.NoDealer ? null : source, target, a.Amount, a.NoDealer), ownSpell, proc, foesHit.Count));
         bool counted = _current is not null || opens;
@@ -349,7 +359,7 @@ public sealed class RoundDamageTracker : IDisposable
         if (!counted) return;
 
         RoundAccumulator round = Current(now);
-        NoteActivity();
+        if (!offRound) NoteActivity();
         // Damage nobody dealt (a poison tick) is only damage taken. The dealer dealt what
         // the victims could take.
         // Each number is kept twice: as the cap setting counts it, and the other way

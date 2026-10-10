@@ -933,6 +933,16 @@ public sealed partial class CombatManager : IDisposable
         _wireHeld = isHeld;
     }
 
+    // Whether a damage line is a room's own damage and not a fight's (the same probe
+    // CombatStateTracker and the round clock are given). Unset, every line counts.
+    private Func<string, bool>? _isNotCombatLine;
+
+    public void SetNotCombatLineProbe(Func<string, bool> isNotCombatLine)
+    {
+        ArgumentNullException.ThrowIfNull(isNotCombatLine);
+        _isNotCombatLine = isNotCombatLine;
+    }
+
     // The engine send gate's last hold cleared. An attack decided while it was up never
     // reached the wire, so re-decide the room now rather than waiting on the 5 s engage
     // check (report paradigm-20260930-085259: the train-stats screen's hold was still up
@@ -3222,9 +3232,13 @@ public sealed partial class CombatManager : IDisposable
     // Bare CR is preferred over `l` because the server's CR response is the
     // compact "where am I" payload — the Also Here list plus prompt without the
     // room description, exits block, and ground-item enumeration that `l` dumps.
-    private void OnCombatLine(MatchResult _)
+    private void OnCombatLine(MatchResult match)
     {
         if (!Fighting()) return;
+        // A room's own damage is nothing swinging at us: no re-attack to wake, no
+        // unseen monster to re-display the room for (CombatStateTracker's probe, the
+        // round clock's test).
+        if (_isNotCombatLine?.Invoke(match.Text) == true) return;
 
         // Resume-after-interrupt: a combat line arrived while our
         // auto-attack is off (we cast a buff/heal mid-round, got
@@ -3953,12 +3967,14 @@ public sealed partial class CombatManager : IDisposable
         NoteBetweenRoundCast();
     }
 
-    // A hand-typed `eq` / `wear` / `wield` / `rem` (routed by OutboundGearObserver)
+    // An `eq` / `wear` / `wield` / `rem` of the user's own (routed by
+    // OutboundGearObserver: typed, or sent by a macro, trigger or event of theirs)
     // stops a fight the same way, on both realms, and the fight is to be picked up
-    // again at once (user, 2026-10-09; GAME_MECHANICS "Non-swing actions break combat
-    // (casting, equipping)"). Arms the same latch a cast does, so the *Combat Off* the
-    // command draws re-attacks on the spot, and it lapses with the cast window when
-    // the command stops nothing (an item we don't have).
+    // again at once while Auto-Combat is on (user, 2026-10-09; GAME_MECHANICS
+    // "Non-swing actions break combat (casting, equipping)"). Arms the same latch a
+    // cast does, so the *Combat Off* the command draws re-attacks on the spot, and it
+    // lapses with the cast window when the command stops nothing (an item we don't
+    // have).
     //
     // Two differences from a cast of ours. It is marked manual, so in spell mode a
     // run of typed commands is rate-limited like a run of typed casts. And in weapon
@@ -3968,7 +3984,7 @@ public sealed partial class CombatManager : IDisposable
     {
         if (_disposed || !Fighting()) return;
         if (_classifier.Current is not { } live || !HasEngageable(live)) return;
-        _log?.Combat(LogCategory, $"typed '{command}' during a live fight — arming a re-attack for its *Combat Off*");
+        _log?.Combat(LogCategory, $"the user's '{command}' during a live fight — arming a re-attack for its *Combat Off*");
         NoteBetweenRoundCast(manual: true);
         _typedGearStamp = _betweenRoundCastAt;
     }
@@ -4475,9 +4491,9 @@ public sealed partial class CombatManager : IDisposable
                     + $"spellResumeAlreadyFired={_betweenRoundCastAt == _lastSpellResumeForBetweenRoundCastAt}");
             // The Off nothing of ours explains: no cast in the window, no kill (that
             // would have dropped the target above). Nothing resumes on it here, so say
-            // what it is waiting for: OnCombatLine in either mode, OnCombatTick in
-            // weapon mode only. Not every time: an attack that stops itself after each
-            // strike (KAI pummel) prints this Off every round.
+            // what it is waiting for: OnCombatLine or OnCombatTick, weapon or spell.
+            // Not every time: an attack that stops itself after each strike (KAI
+            // pummel) prints this Off every round.
             else if (_offEndedAnsweredAttack
                 && Fighting()
                 && DateTimeOffset.Now - _unexplainedOffLoggedAt > UnexplainedOffLogSpacing
@@ -4488,8 +4504,7 @@ public sealed partial class CombatManager : IDisposable
                 _unexplainedOffLoggedAt = DateTimeOffset.Now;
                 _log?.Combat(LogCategory,
                     $"*Combat Off* with no cast of ours behind it and '{stillHere}' still in the room "
-                    + "(a typed command, a stun, an attack that stops after each strike) — waiting for the next combat line"
-                    + (_castingSpellTarget is null ? " or the round tick" : " (spell mode: the round tick doesn't resume)"));
+                    + "(a stun, an attack that stops after each strike) — re-attacking on the next combat line or round tick");
             }
 
             if (!suppressBetweenRoundResume

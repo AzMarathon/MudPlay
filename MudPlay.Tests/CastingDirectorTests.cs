@@ -245,6 +245,38 @@ public sealed class CastingDirectorTests
         Assert.Equal("heal", h.CastsSent[0]);
     }
 
+    // In a room whose own spell does damage no rest is started (user, 2026-10-09:
+    // "we should heal but not actively try to rest in a room like this, because
+    // it'll kill us if we dont have heals"). The rest-time heal is cast only while
+    // resting, so it has to go out standing while that rest is owed.
+    [Fact]
+    public void RoutineRest_CastsMinorHealStanding_WhileTheRestIsDeferredForARoomSpell()
+    {
+        using Harness h = new();
+        bool deferred = true;
+        h.Director.SetRestDeferredGate(() => deferred);
+        h.Spells.MinorHealSpell = "heal";
+        h.Health.HealRestTrigger = 80;
+
+        h.SetPrompt(hp: 70, maxHp: 100, inCombat: false, position: PlayerPosition.Standing);
+        h.Director.OnCombatTick();
+        Assert.Equal(new[] { "heal" }, h.CastsSent);
+
+        // Above the heal trigger nothing is cast, deferred rest or not.
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.SetPrompt(hp: 85, maxHp: 100, inCombat: false, position: PlayerPosition.Standing);
+        h.Director.OnCombatTick();
+        Assert.Empty(h.CastsSent);
+
+        // Out of the room, or healed past the rest trigger: back to no heal mid-walk.
+        deferred = false;
+        h.SetPrompt(hp: 70, maxHp: 100, inCombat: false, position: PlayerPosition.Standing);
+        h.Director.OnCombatTick();
+        Assert.Empty(h.CastsSent);
+    }
+
     [Fact]
     public void RoutineRest_NoCast_WhenStanding()
     {

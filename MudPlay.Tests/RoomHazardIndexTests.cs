@@ -345,6 +345,117 @@ public sealed class RoomHazardIndexTests : IDisposable
         Assert.Equal(0, Assert.Single(h!.BuffCounters).LapseSpell);
     }
 
+    // "Countered now", the test behind resting in a hazard room. How an item has to
+    // be had follows from how it counters: the game asks an item's NegateSpell list
+    // of what is worn and of nothing else, and asks a textblock's `failitem` of
+    // everything held (GAME_MECHANICS "Room-spell hazard shape 1 — direct damage,
+    // negated by an item's `NegateSpell-N`"). The records below are the game data's,
+    // cut down to the fields the index reads.
+
+    // The phoenix feather and the magma amulet (Worn 8, the neck) against magma
+    // heat: each negates 526 and 218. In the pack the room still burns (report
+    // paradigm-20261008-202210; user, 2026-10-10: "phoenix feather has to be worn to
+    // negate").
+    [Fact]
+    public void PhoenixFeather_NegatesMagmaHeat_OnlyWhileWorn()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(526),
+            """ [ { "Number": 526, "Name": "magma heat", "MinBase": 30, "MaxBase": 60, "Abil-0": 1, "AbilVal-0": 0, "Abil-1": 115, "AbilVal-1": 66 } ] """,
+            """
+            [ { "Number": 487, "Name": "magma amulet", "Worn": 8, "NegateSpell-0": 526, "NegateSpell-1": 218 },
+              { "Number": 1000, "Name": "phoenix feather", "Worn": 8, "NegateSpell-0": 526, "NegateSpell-1": 218 } ]
+            """);
+
+        RoomHazardIndex.RoomHazard h = idx.HazardForSpell(526)!;
+        Assert.True(h.IsCounteredNow(worn: id => id == 1000, carried: _ => true));
+        Assert.False(h.IsCounteredNow(worn: _ => false, carried: id => id == 1000));
+        Assert.True(h.IsSatisfiedBy(id => id == 1000));   // a route can still be planned on it
+        Assert.Equal("magma amulet or phoenix feather (worn)", h.DescribeCounters(Name));
+    }
+
+    // The sunstone wristband (Worn 14, the wrist) against Stock's desert: the
+    // textblock's `failitem 1180` passes its holder by, and the wristband's own
+    // NegateSpell list has none of the desert's spells in it. Held is enough (user,
+    // 2026-10-10: "sunstone wristband does not" have to be worn).
+    [Fact]
+    public void SunstoneWristband_CountersTheDesert_WhileOnlyHeld()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(683),
+            """
+            [ { "Number": 683, "Name": "desert spell", "Abil-0": 148, "AbilVal-0": 2653, "Abil-1": 115, "AbilVal-1": 66 },
+              { "Number": 711, "Name": "waterskin", "Dur": 600 },
+              { "Number": 712, "Name": "desert damage", "MinBase": 5, "MaxBase": 20, "Abil-0": 1, "AbilVal-0": 0 } ]
+            """,
+            """
+            [ { "Number": 283, "Name": "waterskin", "Worn": 0, "Abil-0": 119, "AbilVal-0": 646, "Abil-1": 43, "AbilVal-1": 711 },
+              { "Number": 1180, "Name": "sunstone wristband", "Worn": 14,
+                "NegateSpell-0": 63, "NegateSpell-1": 300, "NegateSpell-2": 191, "NegateSpell-3": 380, "NegateSpell-4": 381,
+                "NegateSpell-5": 713, "NegateSpell-6": 829, "NegateSpell-7": 53, "NegateSpell-8": 83, "NegateSpell-9": 328 } ]
+            """,
+            """
+            [ { "Number": 2653, "Action": "checkspell 711 2654:random 2655\n" },
+              { "Number": 2654, "Action": "failitem 1180:cast 712:random 2655\ncheckitem 1180:random 2655\n\n" },
+              { "Number": 2655, "Action": "87:addexp 0\n91:message 2018\n99:message 2023\n100:random 2700\n\n" },
+              { "Number": 2700, "Action": "15:nomonsters:summon 570\n30:nomonsters:failitem 1180:cast 743\n100:nomonsters:checkitem 1607:summon 938:summon 938\n" } ]
+            """);
+
+        RoomHazardIndex.RoomHazard h = idx.HazardForSpell(683)!;
+        Assert.True(h.IsCounteredNow(worn: _ => false, carried: id => id == 1180));
+        Assert.True(h.IsCounteredNow(worn: id => id == 1180, carried: id => id == 1180));   // a worn item is held too
+        Assert.False(h.IsCounteredNow(worn: _ => false, carried: _ => false));
+        Assert.Equal("the buff from waterskin (used), or sunstone wristband (held)", h.DescribeCounters(Name));
+    }
+
+    // A raft is nothing that can be worn; the river's `failitem` asks only that it
+    // is held.
+    [Fact]
+    public void Raft_CountersTheRiver_WhileHeld()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(753),
+            """ [ { "Number": 753, "Abil-0": 148, "AbilVal-0": 2750 }, { "Number": 754, "MinBase": 10, "MaxBase": 20, "Abil-0": 1 } ] """,
+            """ [ { "Number": 690, "Name": "log raft", "Worn": 0 }, { "Number": 691, "Name": "wooden skiff", "Worn": 0 } ] """,
+            """ [ { "Number": 2750, "Action": "failitem 690:failitem 691:message 2096:cast 754" } ] """);
+
+        RoomHazardIndex.RoomHazard h = idx.HazardForSpell(753)!;
+        Assert.True(h.IsCounteredNow(worn: _ => false, carried: id => id == 690));
+        Assert.False(h.IsCounteredNow(worn: _ => false, carried: _ => false));
+        Assert.Equal("log raft or wooden skiff (held)", h.DescribeCounters(Name));
+    }
+
+    // Made up: one item that both negates the room's own damage and is the
+    // textblock's `failitem`. The two are separate checks, so in the pack it meets
+    // the second and not the first.
+    [Fact]
+    public void ItemInBothGroups_IsAskedForEachInItsOwnWay()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(700),
+            """ [ { "Number": 700, "Abil-0": 1, "AbilVal-0": 0, "Abil-1": 148, "AbilVal-1": 50 }, { "Number": 754, "Abil-0": 1 } ] """,
+            """ [ { "Number": 42, "Name": "charm", "NegateSpell-0": 700 } ] """,
+            """ [ { "Number": 50, "Action": "failitem 42:cast 754" } ] """);
+
+        RoomHazardIndex.RoomHazard h = idx.HazardForSpell(700)!;
+        Assert.Equal(2, h.RequirementGroups.Count);
+        Assert.False(h.IsCounteredNow(worn: _ => false, carried: id => id == 42));
+        Assert.True(h.IsCounteredNow(worn: id => id == 42, carried: id => id == 42));
+        Assert.Equal("charm (worn); and charm (held)", h.DescribeCounters(Name));
+    }
+
+    private static string? Name(int item) => item switch
+    {
+        42 => "charm",
+        283 => "waterskin",
+        487 => "magma amulet",
+        690 => "log raft",
+        691 => "wooden skiff",
+        1000 => "phoenix feather",
+        1180 => "sunstone wristband",
+        _ => null,
+    };
+
     [Fact]
     public void LayeredProtections_RequireOneFromEachGroup()
     {
