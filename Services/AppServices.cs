@@ -5720,7 +5720,11 @@ public sealed class AppServices
                 : null,
             ItemNames.IsRecordName,
             name => ItemNames.FindByName(name) is int number
-                && ItemNames.ItemTypeOf(number) == Game.Inventory.InventoryManager.KeyItemType);
+                && ItemNames.ItemTypeOf(number) == Game.Inventory.InventoryManager.KeyItemType,
+            // A light whose record is Retain After Uses stays in the pack when it
+            // burns out; any other is gone.
+            staysWhenSpent: name => ItemNames.FindByName(name) is int number
+                && Game.Inventory.ItemChargeMeta.Read(GameData, number) is { Recharges: true });
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
         // Something in the pack that takes Stealth to nothing (a log raft) stands
         // Auto-Sneak down until it is gone, instead of `sn` being resent into a
@@ -7463,7 +7467,16 @@ public sealed class AppServices
             autoSearchesRooms: () => ReadAutoModeFlag(d => d.AutoSearch)
                 || PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
             noteRoomSearched: room => AutoSearch.NoteSearchedByOther(room));
-        DeathRecovery.SetStaysOnDeathProbe(EveryItemOfThisNameStaysOnDeath);
+        DeathRecovery.SetStaysOnDeathProbe(
+            EveryItemOfThisNameStaysOnDeath,
+            isKeyItem: name => ItemNames.FindByName(name) is int number
+                && ItemNames.ItemTypeOf(number) == Game.Inventory.InventoryManager.KeyItemType);
+        // A gift reopens a pile marked Missing only from someone following in our
+        // party now (an invited row is not in it).
+        DeathRecovery.SetPartyMemberProbe(giver =>
+            GivenNameOf(giver) is { Length: > 0 } given
+            && PartyState.Members.Any(m => !m.IsSelf && !m.IsInvited
+                && string.Equals(GivenNameOf(m.Name), given, StringComparison.OrdinalIgnoreCase)));
         // The walker's abandoned-combat halt: the sweep ends in place on it.
         CombatTracker.EngagedTargetAbandoned += _ => DeathRecovery.NoteEngagedTargetAbandoned();
         // Combat-aware re-equip interleaving: recovering a corpse in a room with a
@@ -7814,10 +7827,13 @@ public sealed class AppServices
         Router.Subscribe(Services.Patterns.KnownPatterns.RoomVeryDark,
             _ => AutoLightProvisioner.OnDarkRoomObserved());
 
-        // A readied light burning out ("Your <light> flickers and goes out.")
-        // clears in the snapshot only on the next `i` dump; this live line lets the
-        // provisioner treat the readied light as gone now, so the dark-room line
-        // that follows re-readies a carried spare instead of seeing a stale light.
+        // A readied light burning out ("Your <light> flickers and goes out."). The
+        // inventory takes it off what is held first, so everything that reads the
+        // snapshot (the death record among them) sees the light gone at once and not
+        // at the next `i` dump. The provisioner then drops its own latches on that
+        // light, so the dark-room line that follows re-readies a carried spare.
+        Router.Subscribe(Services.Patterns.KnownPatterns.LightBurnedOut,
+            _ => Inventory.NoteLitLightBurnedOut());
         Router.Subscribe(Services.Patterns.KnownPatterns.LightBurnedOut,
             _ => AutoLightProvisioner.OnReadiedLightExpired());
 

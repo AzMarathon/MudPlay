@@ -1,6 +1,6 @@
 # Version history
 
-## 3.165.5
+## 3.165.14
 
 - Roomba adds a room's hidden copies to its visible ones
 - A hidden count is the highest any one search showed
@@ -13,6 +13,22 @@
 - A room changed after the sort is logged once
 - Roomba's program log is one line per room
 - Bug report shows Roomba's floor counts
+
+## 3.165.9
+
+- Paradigm: a pile is marked Missing only off a confirmed death-room display
+- Paradigm: Recover Now marks Missing when the look shows no corpse
+- Recover Now on a Missing pile walks there and looks again
+- A party member's hand-back reopens a Missing pile
+- A single spare of a worn item is recorded in the deathpile
+- The lit light and keys are recorded in the deathpile
+- A light that burns out comes off what you hold at once
+- Stock: being placed in a death room is not an empty floor
+- Bug report shows where the death-room pickup stands
+
+## 3.165.1
+
+- Conversation window: a picture emote no longer draws over the lines above and below it
 
 ## 3.165.0
 
