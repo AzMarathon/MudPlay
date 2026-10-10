@@ -192,6 +192,12 @@ public sealed class MovementFilter : IRoomFilter
     // Set/cleared through SuspendAcquirableGatesButUncounteredHazards' scope.
     private bool _keepUncounteredHazards;
 
+    // While gates are suspended, a hazard room stays closed when no item makes it
+    // safe to route through (HazardCounterProtects): the pass asks what could be
+    // walked with every gate item in hand, and having one opens nothing there.
+    // Set/cleared through SuspendAcquirableGatesButUnprotectableHazards' scope.
+    private bool _keepUnprotectableHazards;
+
     // The hazard rooms that open anyway while uncountered hazards are kept closed:
     // the ones on a route card's path, which the user saw and agreed to walk into.
     // Set/cleared through SuspendAcquirableGatesExcept's scope.
@@ -407,23 +413,87 @@ public sealed class MovementFilter : IRoomFilter
     // the gated-route planning pass and skipped while inventory is unknown.
     private bool IsHazardEntryBlocked(in RoomExit exit)
     {
-        if (_acquirableGateSuspended
-            && (!_keepUncounteredHazards || _openHazardRooms?.Contains(exit.Target) == true))
-            return false;
-        if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
+        if (_acquirableGateSuspended)
+        {
+            if (!_keepUncounteredHazards && !_keepUnprotectableHazards) return false;
+            if (_openHazardRooms?.Contains(exit.Target) == true) return false;
+        }
         if (Hazards is null || RoomEntrySpellProbe is not { } spellOf) return false;
 
         int spell = spellOf(exit.Target);
         if (spell <= 0) return false;
         RoomHazardIndex.RoomHazard? hazard = Hazards.HazardForSpell(spell);
         if (hazard is null) return false;
+        // A room that teleports its counter's holders too opens to no plan: not with
+        // the item carried, arranged for or assumed in hand, and not for a loop's
+        // own legs either (user, 2026-10-10: nobody loops those rooms). Nothing
+        // carried changes that, so it doesn't wait for the inventory to be read.
+        if (!HazardCounterProtects(hazard)) return true;
+        if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
         if (!_acquirableGateSuspended) return !hazard.IsSatisfiedBy(carries);
+        if (!_keepUncounteredHazards) return false;
 
         // Planning through gates with uncountered hazards kept: the room opens only
         // when what is carried plus what the walk will obtain covers it.
         IReadOnlyList<int> arranged = HazardProvisionProbe?.Invoke(exit.Target) ?? Array.Empty<int>();
         return !hazard.IsSatisfiedBy(id => carries(id) || arranged.Contains(id));
     }
+
+    // Whether holding the hazard's counter makes its rooms safe to route through.
+    // Not on Crystal Lake, whose sea rooms teleport a boat's holder as well
+    // (GAME_MECHANICS "Crystal Lake: the sea room spells").
+    public static bool HazardCounterProtects(RoomHazardIndex.RoomHazard hazard)
+    {
+        ArgumentNullException.ThrowIfNull(hazard);
+        return !hazard.TeleportsCounterHolders;
+    }
+
+    // A room no route is planned into as things stand, though a character standing
+    // in one is always planned out of it (BfsMapper.FindPath): a hazard room nothing
+    // counters, unless this plan has it open (a route card's pick agreed to it, or
+    // every gate is stood down to find the route that card offers).
+    public bool IsClosedToRoutes(RoomKey room)
+    {
+        int spell = RoomEntrySpellProbe?.Invoke(room) ?? 0;
+        return spell > 0
+            && Hazards?.HazardForSpell(spell) is { } hazard
+            && !HazardCounterProtects(hazard)
+            && IsUncounteredHazardRoom(room);
+    }
+
+    // The terms on which the few walks that cross such a room do: the level from
+    // which the room's own textblock treats a boat's holder apart (50 on the lake),
+    // and a boat in hand. With both the lake teleports about 2 entries in 100; with
+    // either missing, about 70. Judged on our own level and pack, and never met on
+    // a level or pack not read yet: a crossing isn't made on a guess.
+    public ClosedRoomTerms? CrossingTerms(RoomKey room)
+    {
+        int spell = RoomEntrySpellProbe?.Invoke(room) ?? 0;
+        if (spell <= 0 || Hazards?.HazardForSpell(spell) is not { } hazard || HazardCounterProtects(hazard))
+            return null;
+        return TermsOf(hazard);
+    }
+
+    private ClosedRoomTerms TermsOf(RoomHazardIndex.RoomHazard hazard) => new(
+        hazard.CounterHolderMinLevel,
+        hazard.ProtectingItems,
+        LevelMet: LevelProvider?.Invoke() is { } level && level >= hazard.CounterHolderMinLevel,
+        ItemHeld: InventoryKnown && ItemCarriedProbe is { } carries && hazard.IsSatisfiedBy(carries));
+
+    public bool MayCrossClosedRooms()
+    {
+        if (Hazards is null) return false;
+        foreach (RoomHazardIndex.RoomHazard hazard in Hazards.Hazards)
+            if (!HazardCounterProtects(hazard) && TermsOf(hazard).Met) return true;
+        return false;
+    }
+
+    // Whether a room spell teleports on a roll or outright (RoomSpellTeleportIndex's
+    // Sudden class). Wired by AppServices; unset, no room reads as one.
+    public Func<int, bool>? SpellTeleportsAtRandomProbe { get; set; }
+
+    public bool TeleportsOnArrival(RoomKey room) =>
+        RoomEntrySpellProbe?.Invoke(room) is > 0 and int spell && SpellTeleportsAtRandomProbe?.Invoke(spell) == true;
 
     private bool InventoryKnown => InventoryReadyProbe?.Invoke() == true;
 
@@ -438,6 +508,14 @@ public sealed class MovementFilter : IRoomFilter
     public IDisposable SuspendAcquirableGatesButUncounteredHazards() =>
         new GateSuspensionScope(this, keepClosed: null, keepUncounteredHazards: true);
 
+    // The suspension for asking what the crosser could walk by obtaining something:
+    // every gate stands down but a hazard room no item makes safe, which obtaining
+    // its counter would not open. The route picker weighs its "acquire, then go"
+    // route against the free one under this, so it never offers a boat as the way
+    // across Crystal Lake.
+    public IDisposable SuspendAcquirableGatesButUnprotectableHazards() =>
+        new GateSuspensionScope(this, keepClosed: null, keepUnprotectableHazards: true);
+
     // Suspends the acquirable gates EXCEPT ones that gate on an item in `keepClosed`,
     // which stay live (blocked unless carried). A BFS in this scope answers "can the
     // crosser still reach the destination WITHOUT relying on those items?" — reachable
@@ -450,6 +528,11 @@ public sealed class MovementFilter : IRoomFilter
         IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false,
         IReadOnlyCollection<RoomKey>? openHazardRooms = null) =>
         new GateSuspensionScope(this, keepClosed, keepUncounteredHazards, openHazardRooms);
+
+    // The same keeping closed the hazard rooms no item makes safe, for the route
+    // picker's sole route.
+    public IDisposable SuspendAcquirableGatesExceptUnprotectable(IReadOnlyCollection<int> keepClosed) =>
+        new GateSuspensionScope(this, keepClosed, keepUnprotectableHazards: true);
 
     // Whether stepping into this room is refused, as things stand, for want of a
     // counter to its cast-on-enter hazard. What a route card's "cross it" asks the
@@ -464,13 +547,15 @@ public sealed class MovementFilter : IRoomFilter
     {
         private readonly MovementFilter _filter;
         internal GateSuspensionScope(MovementFilter filter, IReadOnlyCollection<int>? keepClosed,
-            bool keepUncounteredHazards = false, IReadOnlyCollection<RoomKey>? openHazardRooms = null)
+            bool keepUncounteredHazards = false, IReadOnlyCollection<RoomKey>? openHazardRooms = null,
+            bool keepUnprotectableHazards = false)
         {
             _filter = filter;
             _filter._acquirableGateSuspended = true;
             _filter._keepClosedGateItems = keepClosed;
             _filter._keepUncounteredHazards = keepUncounteredHazards;
             _filter._openHazardRooms = openHazardRooms;
+            _filter._keepUnprotectableHazards = keepUnprotectableHazards;
         }
         public void Dispose()
         {
@@ -478,6 +563,7 @@ public sealed class MovementFilter : IRoomFilter
             _filter._keepClosedGateItems = null;
             _filter._keepUncounteredHazards = false;
             _filter._openHazardRooms = null;
+            _filter._keepUnprotectableHazards = false;
         }
     }
 
@@ -623,7 +709,7 @@ public sealed class MovementFilter : IRoomFilter
         _tollGateForcedClosed = true;
         try
         {
-            using IDisposable _ = SuspendAcquirableGates();
+            using IDisposable _ = SuspendAcquirableGatesButUnprotectableHazards();
             return bfs.FindPath(source, destination, this) is not null;
         }
         finally { _tollGateForcedClosed = false; }
@@ -689,7 +775,7 @@ public sealed class MovementFilter : IRoomFilter
         _tollGateSuspended = true;
         try
         {
-            using IDisposable _ = SuspendAcquirableGates();
+            using IDisposable _ = SuspendAcquirableGatesButUnprotectableHazards();
             return bfs.RouteTollCopper(source, destination, this);
         }
         finally { _tollGateSuspended = false; }

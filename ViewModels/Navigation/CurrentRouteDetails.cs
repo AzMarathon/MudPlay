@@ -186,6 +186,6 @@ public static class CurrentRouteDetails
             RoomDetailLink l = itemLink(id);
             if (seen.Add(l.Text)) items.Add(l);
         }
-        return new RouteStepWarning(hazard?.Spell, items);
+        return new RouteStepWarning(hazard?.Spell, items, hazard?.NoProtection ?? false);
     }
 }

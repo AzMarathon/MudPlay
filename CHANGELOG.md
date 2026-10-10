@@ -1,16 +1,42 @@
 # Version history
 
-## 3.162.0
+## 3.163.0
 
 - Events run one at a time, start to finish, in the order they fired: one that fires while another is running waits its turn
 - A loop or Auto-Lair event with a Stop after rule finishes (its Then included) before the next starts; one with no rule is done once it has started
 - With an event waiting, the finished one's "go back" or loop passes to it, so the loop is restarted once, after the last
 - Logoff events start at once; every other event waits its turn
 - An event isn't queued twice; Settings → Events sets how many may wait (10) and for how long (30 minutes), and one dropped at either says so in the terminal
-- Stopping an event's walk, dying or Reset States drops the waiting events; so does a lost connection
-- A walk back to a loop refused as an automatic walk says so in the terminal and names the Settings → Teleports line to tick
+- Stop, dying or Reset States ends the running event and drops the waiting ones; Stop now ends an event that is waiting or resting too
+- A lost connection keeps the waiting events: they run, in order, once back in the game
+- A bank or sell trip, a flee or a reconnect no longer ends an event's loop or walk: it goes on afterwards, laps and Stop after rule intact
+- A walk refused as an automatic walk says so in the terminal and names the Settings → Teleports line to tick
 - Bug report: the events waiting, the queue limits and what the last Then came to
 - bug reports addressed: paradigm-20261009-185106, paradigm-20261009-220128
+
+## 3.162.3
+
+- Routes never enter Crystal Lake's teleport rooms, boat or not
+- No raft or skiff offered, fetched or bought for the lake
+- A walk the lake blocks says why in one line
+- Stock: White Forest reached along the coast at level 50+ with a boat
+- Paradigm: one card to cross to the Bloodwood Weald room
+- Lake crossings are named on the card and logged once
+- Isle of Bones never reached across the lake
+- The lake's spell-free rooms stay ordinary ground
+- Standing in a teleport room, you are planned out
+- A loop waypoint in a teleport room is refused at start
+- A key-only route goes round the lake and asks for the key alone
+- bug reports addressed: paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314
+
+## 3.162.0
+
+- A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
+- Only on a life lost: Death Recovery gets the room, time and pile; loops, walks and a waiting default task are stopped
+- A life lost on another client, or after a clean exit, is not recorded here
+- The item pickup stands down for it, and nothing is recorded when it can't be told
+- Lives are read again after a life is given back or a level trained
+- Settings → BBS: a box for boards that penalise every hang-up, not only one made in a fight
 
 ## 3.161.16
 

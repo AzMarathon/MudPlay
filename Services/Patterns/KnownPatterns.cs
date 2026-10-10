@@ -543,6 +543,11 @@ public static class KnownPatterns
     // goes back to waiting for a safe room on it.
     public const string RealmExitInterrupted = "realm.exit-interrupted";
     public const string RealmExitDots = "realm.exit-dots";               // "..............." — the wait is counted out in dots, on both realms
+    // "Last time you were on, you disconnected while playing." — Stock prints it,
+    // with "The gods have punished you appropriately.", on the first entry after a
+    // hang-up it didn't let go free (GAME_MECHANICS "Hang-up / lost carrier").
+    // HangupItemRecheck takes its absence to mean a life wasn't lost to this hang-up.
+    public const string HangupLoginNotice = "realm.hangup-login-notice";
 
     // ----- Trainer menu marker -------------------------------------------
     // The "train stats" trainer screen has a "Point Cost Chart" panel
