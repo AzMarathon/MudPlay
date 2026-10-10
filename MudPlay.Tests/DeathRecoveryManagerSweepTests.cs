@@ -109,6 +109,9 @@ public sealed partial class DeathRecoveryManagerTests
         // answer for at all.
         public HashSet<int> Barred { get; } = new();
         public HashSet<int> Silent { get; } = new();
+        // Rooms with no light: a move in gets the too-dark line, with no floor and
+        // no exits line.
+        public HashSet<int> Dark { get; } = new();
         // Every room walked into by a move the client sent, in order.
         public List<int> Walked { get; } = new();
         // Called with the room a step lands in, before that room is shown.
@@ -199,7 +202,8 @@ public sealed partial class DeathRecoveryManagerTests
                     Here = target;
                     Walked.Add(Here.Room);
                     OnStepInto?.Invoke(Here.Room);
-                    ShowRoom();
+                    if (Dark.Contains(Here.Room)) H.Tracker.NoteDarkRoomEntered();
+                    else ShowRoom();
                 }
                 else if (cmd == "look")
                 {
@@ -1341,6 +1345,123 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Equal(new RoomKey(1, 1), w.Here);
         Assert.DoesNotContain(w.H.Sent, s => s.StartsWith("look ") || s.StartsWith("get "));
         Assert.DoesNotContain(4, w.Walked.Skip(2));
+    }
+
+    [Fact]
+    public void RecoverNowWalk_APvpFightBeginsAndEnds_StillRecoversOnArrival()
+    {
+        // The fight stops the walk, ends any sweep, and resumes the walk's journey
+        // when it is over. That is not the user's Stop: the arrival is still the
+        // Recover Now's (Auto-Recover is off, so nothing else would pick up).
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.Enter(1);
+        w.Die(Worn("iron sword"), Array.Empty<string>());
+        w.Put(1, "iron sword");
+        w.Enter(4);
+        Assert.True(w.Recovery.RecoverNow(w.H.Latest));
+        WalkJourney journey = w.H.Walker!.Journey!;
+
+        w.H.Walker.Stop("PvP: fighting Bob");
+        w.Recovery.EndSpillSweep("a fight with a player began");
+        w.Settle();
+        Assert.True(w.H.Walker.ResumeJourney(journey, planThroughAcquirableGates: true));
+        w.Run(8);
+
+        Assert.Equal(new RoomKey(1, 1), w.Here);
+        Assert.Contains("get iron sword", w.H.Sent);
+    }
+
+    [Fact]
+    public void Sweep_EndedByAnEngine_SendsNothingMore()
+    {
+        using SpillWorld w = SweepIn("walking out");
+        w.Recovery.EndSpillSweep("a fight with a player began");
+        w.Settle();
+        int mark = w.H.Sent.Count;
+
+        w.Run(20);
+
+        Assert.StartsWith("idle", w.State);
+        Assert.Empty(w.H.Sent.Skip(mark));
+    }
+
+    [Fact]
+    public void RecoverNow_PressedAgainWhileWalking_SecondCardsClosed_StillRecoversOnArrival()
+    {
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.Enter(1);
+        w.Die(Worn("iron sword"), Array.Empty<string>());
+        w.Put(1, "iron sword");
+        w.Enter(4);
+        Assert.True(w.Recovery.RecoverNow(w.H.Latest));   // picked, and walking
+
+        w.Recovery.SetDemandedWalk(_ => true);            // pressed again: cards go up
+        Assert.True(w.Recovery.RecoverNow(w.H.Latest));
+        w.Recovery.RecoverNowCardsClosed();               // and are closed unpicked
+        w.Run(8);
+
+        Assert.Equal(new RoomKey(1, 1), w.Here);
+        Assert.Contains("get iron sword", w.H.Sent);
+    }
+
+    // 1 is the death room; 2 (north) and 3 (east) both border it and each other.
+    private static string TriangleJson() => "[" + string.Join(",\n",
+        RoomRow(1, new() { ["N"] = "1/2", ["E"] = "1/3" }),
+        RoomRow(2, new() { ["S"] = "1/1", ["SE"] = "1/3" }),
+        RoomRow(3, new() { ["W"] = "1/1", ["NW"] = "1/2" })) + "]";
+
+    [Fact]
+    public void PassThroughGrab_ArmedInOneNeighbour_AsksForTheNextNeighboursFloorOnce()
+    {
+        // The grab armed in 2 (whose floor is bare) is still armed when 3's floor
+        // prints, ahead of the exits line that confirms 3. It asks for the helm
+        // there; arriving in 3 must not ask again.
+        using SpillWorld w = new(TriangleJson()) { DoorsClosed = true };
+        w.Enter(1);
+        w.Die(Worn("iron sword", "steel helm"), Array.Empty<string>());
+        w.H.Recovery.AutoRecover = true;
+        w.Put(1, "iron sword");
+        w.Put(3, "steel helm");
+        w.Enter(1);
+        w.Settle();                                       // the sword is got
+
+        w.H.Tracker.NoteMoveSentByObserver(Direction.N);
+        w.H.Sent.Add("n");
+        w.Settle();
+        w.H.Tracker.NoteMoveSentByObserver(Direction.SE);
+        w.H.Sent.Add("se");
+        w.Settle();
+
+        Assert.Equal(new RoomKey(1, 3), w.Here);
+        Assert.Equal(1, w.H.Sent.Count(s => s == "get steel helm"));
+        Assert.True(w.H.Latest.UnrecoveredItems is null or { Count: 0 },
+            $"still listed: {string.Join(", ", w.H.Latest.UnrecoveredItems ?? new())}");
+    }
+
+    [Fact]
+    public void Sweep_ThroughADarkRoom_SaysSoInThePileNote()
+    {
+        // Back from a death there is no light. A dark stop is walked into and out of
+        // with nothing read, and the note must not pass that off as a room looked at.
+        using SpillWorld w = SwordHereRopeOut();
+        w.Put(2, "rope");
+        w.Dark.Add(2);
+
+        w.RecoverNow(beats: 60);
+
+        Assert.Contains(2, w.Walked);
+        Assert.Equal(new[] { "rope" }, w.H.Latest.UnrecoveredItems);
+        Assert.Contains("1 of the rooms it stopped in was dark", w.Note);
+    }
+
+    [Fact]
+    public void Sweep_ThroughLitRoomsOnly_SaysNothingOfTheDark()
+    {
+        using SpillWorld w = SwordHereRopeOut();
+        w.RecoverNow(beats: 60);
+
+        Assert.Equal(DeathRecoveryStatus.Partial, w.H.Latest.Status);
+        Assert.DoesNotContain("dark", w.Note);
     }
 
     [Fact]

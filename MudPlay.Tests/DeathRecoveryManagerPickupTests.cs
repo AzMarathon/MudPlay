@@ -399,11 +399,82 @@ public sealed partial class DeathRecoveryManagerTests
         h.Recovery.SetDemandedWalk(_ => true);         // the cards went up
         Assert.True(h.Recovery.RecoverNow(h.Latest));
 
-        h.Recovery.ForgetRecoverNowWalk("the route cards were closed");
+        h.Recovery.RecoverNowCardsClosed();
         h.Tracker.NoteMoveSentByObserver(Direction.S); // later, by hand, Auto-Recover off
         h.FeedSurvey("a torch");
         h.EnterGates();
 
         Assert.Empty(h.Sent);
+    }
+
+    // ----- the pass-through grab next door ------------------------------
+
+    // A Stock pile with the sword got and a helm still out, standing in the death
+    // room again after a step into the room north of it (1/3) and back.
+    private static GraphHarness HelmStillOutNextDoor()
+    {
+        GraphHarness h = new() { Paradigm = false };
+        Die(h,
+            new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("steel helm", "Head") },
+            Array.Empty<string>());
+        h.Recovery.AutoRecover = true;
+        h.FeedSurvey("an iron sword");
+        h.EnterGates();
+        h.Recovery.FeedTestLine("You took an iron sword.");
+        h.Tracker.NoteMoveSentByObserver(Direction.N);
+        h.Tracker.NoteRoomObserved(Obs3());
+        h.Tracker.NoteMoveSentByObserver(Direction.S);
+        h.EnterGates();
+        h.Sent.Clear();
+        return h;
+    }
+
+    [Fact]
+    public void PassThroughGrab_WalkMovesOnAtOnce_PickupIsStillCounted()
+    {
+        // A loop steps into the room next door, whose floor holds the helm, and sends
+        // its next move in the same breath as the arrival. Sending a move is a
+        // transition of its own (same room, now pending), and the reply to the get
+        // comes after it.
+        using GraphHarness h = HelmStillOutNextDoor();
+        h.Tracker.NoteMoveSent(Direction.N);
+        h.FeedSurvey("a steel helm");
+        h.Tracker.NoteRoomObserved(Obs3());
+        Assert.Contains("get steel helm", h.Sent);
+
+        h.Tracker.NoteMoveSent(Direction.S);
+        h.Recovery.FeedTestLine("You took a steel helm.");
+
+        Assert.True(h.Latest.UnrecoveredItems is null or { Count: 0 },
+            $"still listed: {string.Join(", ", h.Latest.UnrecoveredItems ?? new())}; status {h.Latest.Status}");
+    }
+
+    [Fact]
+    public void PassThroughGrab_StandingStill_PickupIsCounted()
+    {
+        using GraphHarness h = HelmStillOutNextDoor();
+        h.Tracker.NoteMoveSent(Direction.N);
+        h.FeedSurvey("a steel helm");
+        h.Tracker.NoteRoomObserved(Obs3());
+        h.Recovery.FeedTestLine("You took a steel helm.");
+
+        Assert.True(h.Latest.UnrecoveredItems is null or { Count: 0 },
+            $"still listed: {string.Join(", ", h.Latest.UnrecoveredItems ?? new())}");
+    }
+
+    [Fact]
+    public void WalkInFromNextDoor_WithTheHelmOnTheDeathRoomFloor_GetsItOnce()
+    {
+        using GraphHarness h = HelmStillOutNextDoor();
+        h.Tracker.NoteMoveSentByObserver(Direction.N);
+        h.Tracker.NoteRoomObserved(Obs3());
+        h.Sent.Clear();
+        h.Tracker.NoteMoveSentByObserver(Direction.S);
+        h.FeedSurvey("a steel helm");
+        h.EnterGates();
+
+        Assert.Equal(1, h.Sent.Count(s => s == "get steel helm"));
+        h.Recovery.FeedTestLine("You took a steel helm.");
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
     }
 }

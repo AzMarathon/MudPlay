@@ -1631,14 +1631,15 @@ public partial class MainWindowViewModel : ObservableObject
         // The cards closed without a pick: no walk went out, so the Recover Now that
         // asked for one isn't left waiting for an arrival. Pressed twice, two sets of
         // cards are up for the one request: it is forgotten only when the last of
-        // them has closed and none was picked from.
+        // them has closed and none was picked from. (Nor then, if an earlier press's
+        // walk is still under way: the recovery manager checks that.)
         async Task WalkForRecoverNowAsync(Game.Map.RoomKey room)
         {
             if (_recoverNowCardsOpen++ == 0) _recoverNowWalkPicked = false;
             bool picked = await MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
             _recoverNowWalkPicked |= picked;
             if (--_recoverNowCardsOpen == 0 && !_recoverNowWalkPicked)
-                AppServices.Current.DeathRecovery.ForgetRecoverNowWalk("the route cards were closed");
+                AppServices.Current.DeathRecovery.RecoverNowCardsClosed();
         }
         // A party-splitting CMD teleport (chime-style, Darkwood's `go vortex`)
         // dissolves the follow chain even though the `.@party <kw>` relay sent

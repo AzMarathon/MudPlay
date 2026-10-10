@@ -8055,7 +8055,9 @@ public sealed class AppServices
         // A sweep's leg is not a walk the fight's suspend can see and stop, and a
         // neighbours-only sweep doesn't give way to engines by itself: the fight
         // ends either at once, before the walker takes another step out of the room.
-        PvpFight.Started += _ => DeathRecovery.StopSpillSweep("a fight with a player began");
+        // The sweep only: a Recover Now still walking to the death room is a journey
+        // the fight suspends and resumes, and stays the Recover Now's.
+        PvpFight.Started += _ => DeathRecovery.EndSpillSweep("a fight with a player began");
         PvpStrangers = new Game.Pvp.PvpStrangerLookup(
             Router, RoomClassifier, Players,
             pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
