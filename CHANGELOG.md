@@ -1,6 +1,6 @@
 # Version history
 
-## 3.161.7
+## 3.161.8
 
 - Events run one at a time, start to finish, in the order they fired: one that fires while another is running waits its turn
 - A loop or Auto-Lair event with a Stop after rule finishes (its Then included) before the next starts; one with no rule is done once it has started
@@ -11,6 +11,15 @@
 - A walk back to a loop refused as an automatic walk says so in the terminal and names the Settings → Teleports line to tick
 - Bug report: the events waiting, the queue limits and what the last Then came to
 - bug reports addressed: paradigm-20261009-185106, paradigm-20261009-220128
+
+## 3.161.6
+
+- The client no longer stands still reading a very long line: a search in a room holding hundreds of items froze it for seconds each time
+- Every line from the game is read faster (a slowdown that came in with 3.157.8)
+- Roomba logs one line per room searched, with counts, in place of the full hidden list after every search
+- The program log warns when one line held the client up for a quarter of a second or more, with its length and how long it took
+- Bug report: how much is on the floor here and Roomba's slowest floor read
+- bug reports addressed: paradigm-20261009-164508
 
 ## 3.161.5
 
