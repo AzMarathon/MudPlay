@@ -7315,6 +7315,39 @@ public sealed class AppServices
         // through the walker — attached here since the walker is built
         // after the manager.
         DeathRecovery.AttachWalker(Walker);
+        // The Stock spill sweep plans from the room graph, tells a leg a movement gate
+        // is holding from one that has stalled, and never searches a stash room. The
+        // pile list leaves out what a death doesn't drop.
+        DeathRecovery.AttachSpillSweep(
+            roomLookup: RoomGraph.GetRoom,
+            movementHeld: () => MovementCoordinator.IsPaused,
+            isStashRoom: Movement.IsStash,
+            // The sweep the user asked for gives way to whatever else drives the
+            // character: a loop, Auto-Lair or an errand's walk, any other errand or
+            // solver that has the walker, and a party leader being followed.
+            // A loop being walked to (its handoff pending) is a loop for this purpose:
+            // the walker's arrival hands over to it a moment later.
+            // A fight with a player and a flee from one are engines too: neither
+            // stops a sweep's leg when it takes over (the leg isn't a walk it can save
+            // and resume), so the sweep has to see them and stand down.
+            otherEngineDrives: () =>
+                ErrandOwnsWalk() || ErrandHasTheWalker
+                || LoopRunner.State != Game.Map.LoopState.Idle || LoopHandoff.Pending is not null
+                || PvpFight.IsActive || PvpFlee.IsActive
+                || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.FollowerGate),
+            // A flee, or the walk back from one, that ended here was an engine's walk
+            // though it is over by the time anyone asks.
+            engineWalkEndedAt: room => PvpFlee.WalkJustEndedAt(room),
+            // It sends nothing during a rest (helper actions wait one out) or while
+            // the user has paused; Auto-All is its own probe below.
+            restHeld: RestHeld,
+            userPaused: () => MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate),
+            autoSearchesRooms: () => ReadAutoModeFlag(d => d.AutoSearch)
+                || PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
+            noteRoomSearched: room => AutoSearch.NoteSearchedByOther(room));
+        DeathRecovery.SetStaysOnDeathProbe(EveryItemOfThisNameStaysOnDeath);
+        // The walker's abandoned-combat halt: the sweep ends in place on it.
+        CombatTracker.EngagedTargetAbandoned += _ => DeathRecovery.NoteEngagedTargetAbandoned();
         // Combat-aware re-equip interleaving: recovering a corpse in a room with a
         // live hostile paces the wear/eq burst across combat rounds (each equip
         // breaks the round, same as a between-round cast) instead of firing it all
@@ -8094,6 +8127,12 @@ public sealed class AppServices
             log: Log);
         PvpFight.Reported += what => WriteTerminalNotice($"[PvP: {what}]");
         PvpFight.Started += given => PvpResponse.NoteWeAttack(given);
+        // A sweep's leg is not a walk the fight's suspend can see and stop, and a
+        // neighbours-only sweep doesn't give way to engines by itself: the fight
+        // ends either at once, before the walker takes another step out of the room.
+        // The sweep only: a Recover Now still walking to the death room is a journey
+        // the fight suspends and resumes, and stays the Recover Now's.
+        PvpFight.Started += _ => DeathRecovery.EndSpillSweep("a fight with a player began");
         PvpStrangers = new Game.Pvp.PvpStrangerLookup(
             Router, RoomClassifier, Players,
             pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
@@ -8155,6 +8194,16 @@ public sealed class AppServices
         MovementControl.AddSolver(
             active: () => MazeSolver.Active, held: () => MazeSolver.IsHeld, stop: MazeSolver.Cancel);
         MazeSolver.StateChanged += MovementControl.NoteSolverStateChanged;
+        // So does a Stock spill sweep: the walker is idle while it looks through
+        // exits, gets and searches, and Stop and Pause must reach those stretches too.
+        MovementControl.AddSolver(
+            active: () => DeathRecovery.SpillSweepActive,
+            held: () => DeathRecovery.SpillSweepHeld,
+            stop: DeathRecovery.StopSpillSweep);
+        DeathRecovery.SpillSweepStateChanged += MovementControl.NoteSolverStateChanged;
+        // A sweep still waiting to start isn't running, so the solver list doesn't
+        // reach it; Stop calls it off here.
+        MovementControl.Stopping += DeathRecovery.DropDeferredSweep;
 
         // Gear driven by movement + room, for the While Moving / Bossing sets. Both
         // no-op unless the user enabled + filled the set (AutoEquipCoordinator guards).
@@ -8779,7 +8828,10 @@ public sealed class AppServices
                 || PathItemShopRouter.DetourActive || PathItemGiveRouter.DetourActive
                 || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive
                 || AutoLightShopRouter.DetourActive
-                || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive,
+                || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive
+                // A spill sweep's leg is not a walk to pick back up: the sweep ends when
+                // its walk is taken, and the detour would walk on to a stop nobody wants.
+                || DeathRecovery.SpillSweepActive,
             nearestLoopRoom: NearestLoopRoom,
             nearBankSteps: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").SellOnBankRunWithinSteps,
             log: Log);
@@ -13103,6 +13155,10 @@ public sealed class AppServices
 
     private Game.Map.RoomKey? LightDetourWalkDestination()
     {
+        // A spill sweep's leg reports no journey, and its bare destination is a stop
+        // that means nothing once the detour has taken the walk and ended the sweep.
+        // No destination, no detour: the light is left to the other provisioning.
+        if (DeathRecovery.SpillSweepActive) return null;
         _lightDetourJourney = Walker.State != Game.Map.WalkState.Idle ? Walker.Journey : null;
         return _lightDetourJourney?.Destination ?? Walker.Destination;
     }
@@ -14048,6 +14104,23 @@ public sealed class AppServices
         bool notDroppable = row.TryGetProperty("Not Droppable", out System.Text.Json.JsonElement nd)
             && nd.ValueKind == System.Text.Json.JsonValueKind.Number && nd.GetInt32() != 0;
         return Game.Inventory.ItemDropRule.Refused(notDroppable, ItemAbilityCodes(row), worn);
+    }
+
+    // Whether an item of this name stays on the character through a death: every
+    // item that bears the name must (DeathPileRules.EveryItemOfTheNameStays). The
+    // indexed lookup answers for nearly every name; the table is only walked for a
+    // name whose first item does stay.
+    private bool EveryItemOfThisNameStaysOnDeath(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || GameData.FindRowByName("Items", name) is not { } first) return false;
+        if (!Game.Recovery.DeathPileRules.StaysWithCharacter(ItemAbilityCodes(first))) return false;
+        if (GameData.GetRawTable("Items") is not { } items) return true;
+        string wanted = name.Trim();
+        return Game.Recovery.DeathPileRules.EveryItemOfTheNameStays(items.RootElement.EnumerateArray()
+            .Where(row => row.TryGetProperty("Name", out System.Text.Json.JsonElement n)
+                && n.ValueKind == System.Text.Json.JsonValueKind.String
+                && string.Equals(n.GetString()?.Trim(), wanted, StringComparison.OrdinalIgnoreCase))
+            .Select(ItemAbilityCodes));
     }
 
     // The ability codes an item carries, by name; empty for an item the game data

@@ -5186,6 +5186,9 @@ Among protectable hazards, a further split governs whether the navigator may off
     Movement start arms + searches it before the walker steps out, deduped against the last room actually
     searched so a loop's later legs (each starting from a room already searched on arrival) don't
     re-search.
+  - The Stock spill sweep's own `sea` at a trail stop waits for the room to be clear of hostiles
+    (`DeathRecoveryManager.TrySearchStop`), and is reported to auto-search
+    (`AutoSearchManager.NoteSearchedByOther`) so the movement-start search doesn't repeat it.
 
 ### Toll exits
 *Status: CONFIRMED*
@@ -6245,6 +6248,9 @@ A `get <item>` that can't succeed replies with one of these shapes:
 - `@hide-all [full|coins|keys]` and the Hide All / Hide Everything / Hide Coins / Hide Keys actions
   (`InventoryActionHandler.HideAll`) run the Drop All sweeps with `hide`, always naming the item or coin
   — never a bare `hide`, which would hide the character instead.
+- The Stock spill sweep searches each trail room up to twice (`DeathRecoveryManager.TrailSearchTries`),
+  since each hidden item is found on its own roll and one search can miss. With auto-search on, its
+  search on entering the room counts as one of the two.
 - A discard goes out as `hide <item>` instead of `drop <item>` when Settings → Other *Hide items when
   discarding* is on: `AutoDiscardManager`'s own offloads, and Chest Offload's Drop / Drop All
   (`ChestOffloadViewModel`, through `AutoDiscardManager.EmitDiscard`; the offload sent a plain `drop`
@@ -7747,6 +7753,7 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
 - **Client use:**
   - The stored death threshold is only a starting estimate — the client seeds it at `-25`, a guess. Refine it from **slow deaths and survived negative-HP readings; never from an overkill death reading** (`DeathFloorTracer.RecordDeath` / `NoteHp`); an overkill reading is unreliable and must not push the estimate more negative.
   - The client's floor auto-refinement must classify off the observed HP steps, not the message — and, per `DeathFloorTracer`'s stated assumption, only while the killing blow isn't a huge hit that leaps right past the floor.
+  - `DeathPileRules.StaysWithCharacter` (LoyalItem 100, CursedMajor 83) keeps an item that stays off a Stock deathpile's missing list (`DeathRecoveryManager.DropWhatStays`). A death record holds names, not item numbers, so a name is left off only when every item bearing it stays (`DeathPileRules.EveryItemOfTheNameStays`). Since a death unequips everything, the piece is worn again with the recovered gear (`DeathRecoveryManager.ReequipAllWorn`), also when it was the whole pile. The last-life rule isn't modelled: with no lives left there is no character to recover for.
 
 ### Death wipes all effects
 *Status: CONFIRMED 2026-08-09, 2026-08-28 (user; report `paradigm-20260809-114444`) · Realm: both*
@@ -7825,10 +7832,26 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
   - It only happens on Stock, because **Paradigm rooms have no item cap**.
 - **Stock: where each item goes, in the engine's order** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_dispose_of_item_in_room` @0x41989a, `_dispose_of_item_in_trail` @0x4199aa, called per item from `_check_kill_user` @0x419dfd–0x419e5c; Realm: Stock)*. Each item is placed on its own:
   - **The death room's visible floor first.** If it is full, the engine walks outward **depth-first through the exits in the order N, S, E, W, NE, NW, SE, SW, U, D**, taking at each room the first exit that leads somewhere and is not a `Map Change` exit (type 8) or a `Remote Action` exit (type 12; the type names are in *Monsters, lairs & spawns → Monster roaming and following*) (@0x41991f–0x41993d). It goes on from the room it just tried before it comes back for the next exit, and it nests at most six rooms deep: the death room and five more (@0x4198bb).
+    - **The engine keeps no list of the rooms it has tried; only the depth counts** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_dispose_of_item_in_room` @0x41989a)*. The one piece of state is the nesting counter at `0x47d7d0`: a call returns at once when it is above 5 (@0x4198bb–0x4198c2), raises it on the way in (@0x4198cb) and lowers it on every way out (@0x41995f, @0x419978, @0x419982, @0x41998f, @0x41999c). So the walk goes back into rooms it came from, the full death room included, one level deeper each time, and tries their exits again. That changes which room is reached first: with the death room's exits N→A and E→B, and A's exits back S to the death room and on N to C, the order is A, C, then B through death room→A→C→A→death room→B, before the death room's own E exit is ever come back to. A room first reached at the depth limit is gone on from only when a shorter way reaches it.
+    - **The `Map Change` test is on the exit's type, not on where it leads** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_dispose_of_item_in_room` @0x419934–0x41993d; the `Remote Action` test is @0x419929–0x419932)*. Of the 296 type-8 exits in the Stock data, 8 lead to a room on their own map and are passed over all the same: `11/38` N, `15/335` N, E and W, `8/988` D, `1/2312` W, `1/2689` N, `1/2701` SW. The imported `Rooms` table doesn't carry the exit type (a type-8 exit shows as a plain exit whose target is on another map).
   - **Doors, locks and hidden exits are not looked at**, so items can land behind a closed door or a hidden exit.
   - **If that finds no room, the last 20 rooms the dead player walked through are tried**, each on its visible floor and then on its **hidden** side (@0x4199fc). An item can end up stashed in a room on the way to the death room, where only a `search` shows it.
+    - **The trail is tried newest first, and its first entry is the death room itself** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_dispose_of_item_in_trail` @0x4199aa, room-entry helper @0x416ae6)*. The loop runs index 0 to 19 (@0x4199be–0x419a2a). The room-entry helper shifts both trail arrays down one place (two `memmove`s of `0x4c` bytes, @0x416b22–0x416b58) and writes the room being entered at index 0 (@0x416b3d, @0x416b5b), unless its fourth argument is set (@0x416b18). So with the death room's visible floor full, the first place tried is the death room's own hidden side. (The arrays are the ones `track` reads: *Movement & navigation → Tracking (`track`)*.)
   - **If that fails too, a fixed fallback room is tried** (room 164 of map 1, which is not in the imported Rooms table), and after that the item is gone: `Your %s has returned to its rightful place.` (@0x419e5c).
   - **Loyal (ability 100) and CursedMajor (ability 83) items are not spilled**, except on the last life (@0x419d96–0x419dc4). The test reads the player word `+0x6a6`, the lives count (`_create_player` sets it to 9 @0x416581), for the value 1. What stays with the character, and the open question about it, is in *Death threshold & consequences*. (An earlier note left that word unidentified; superseded 2026-10-09.)
+- **Client use:**
+  - `DeathSpillOrder.Candidates` replays the engine's walk as it runs (exit order, five rooms beyond the death room, no list of rooms tried) and lists each room where it is first tried. `DeathSpillOrder.SpillExits` takes a `Map Change` exit to be one whose target is on another map, the exit type not being imported, so the 8 same-map exits named in this topic are followed where the engine passes them over.
+  - `DeathRecoveryManager`'s Stock spill sweep walks that list until nothing is missing: `DeathGroundSweep` first looks through the death room's exits in `SpillExits` order, a neighbour seen holding our items is visited first, and each stop is a walk through `AutoWalkManager` and a `get` of what its floor shows.
+  - `DeathRecord.Trail` is `RoomTracker.GetHistory` as it stood at the death (20 rooms, newest first, the death room first). When the spill rooms are exhausted with items still missing, the sweep visits those rooms in that order and searches each (`DeathRecoveryManager.QueueTrailStops`, `TrySearchStop`).
+  - `Your <item> has returned to its rightful place.` is read as it prints, before the lives readout that makes the death record, and kept on `DeathRecord.ReturnedItems`; `DeathRecoveryManager.PileNames` leaves those units off the missing list.
+  - An Auto-Recover walk through a room that borders an unrecovered Stock pile takes our overflow off that room's floor as it arrives (`DeathRecoveryManager.TryArmSpillover`): the floor is read from the survey that printed before the room confirmed, and the grab is armed for a later display only when no floor was read.
+- **Client policy** (user, 2026-10-09: extend the sweep along the engine's order on Stock; Paradigm items go into a corpse and don't spill):
+  - **The whole sweep runs only for a recovery the user asked for:** Recover Now and the walk it starts, or the user's own walk-to that ends in the death room with Auto-Recover on. An arrival another engine made (a loop's approach or flee return, an Auto-Lair hop, an errand's walk, a PvP flee or the walk back from one) gets the looks and a walk to a neighbour a look saw our items in, and no more. A remote `@goto` and an Event's walk are the user's instructions and count as the user's.
+  - **It gives way.** It neither starts nor goes on while a loop, Auto-Lair, a solver, an errand, a fight with a player or a flee from one drives the character, or while the character follows a party leader. Any walk it did not start, a Stop, and a step that leaves a room with a hostile engaged end it where it stands, with nothing more sent. It sends nothing while Auto-All is off, during a rest, or while the user has paused; under the user's pause its clocks stop as well and it doesn't end on its own account (Stop, another engine and a foreign walk still end it).
+  - **It starts only from a death room the character stands confirmed in and has seen (not dark, not entered blind), with no walk running**, and ends at once if a move goes out while it looks through the exits.
+  - **The death-room pickup never spends its one grab on a guess.** A floor is taken as read, or as empty, only on an arrival the room was displayed for. In the dark, blind, or when the room only confirmed in place, the grab stays armed for the room's next display, and an armed grab takes a survey only while the tracker says the death room, isn't waiting on a move, and no move has gone out since it was armed. A disconnect leaves an armed grab armed.
+  - **Its bounds:** 12 rooms walked to, 12 rooms in the on-foot route to any one of them or back, 600 s up to the walk back and 120 s for the walk back; a sweep put off (a hostile, a hold) is dropped if it can't start within 600 s. A second run for the same death covers the same rooms in the same order.
+  - **A stash room is never searched**, so that a search doesn't uncover what the user hid there.
 
 ### Corpse recovery (`recover corpse`)
 *Status: CONFIRMED 2026-08-03 (user + captures) · Realm: Paradigm (Stock has no corpse — see *Deathpile — where the items go*)*
@@ -7856,6 +7879,7 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
   - **Client policy:** the PvP realm's slightly different corpse rules aren't modelled.
 - **Five denominations** (largest first): `runic coin`, `platinum piece`, `gold crown`, `silver noble`, `copper farthing` — values per *Money, banks & shops → Currency denominations & value ladder*.
 - **The deathpile display lists each denomination by its own count** (e.g. `100 gold crowns` + `1 platinum piece`), **not** re-bucketed into a consolidated wealth total.
+- **Client use:** `DeathRecoveryManager.StartStockSweep` never sweeps other rooms for a coin entry, and a Stock pile with only coins left counts as recovered (`FullyRecovered`).
 
 ---
 
