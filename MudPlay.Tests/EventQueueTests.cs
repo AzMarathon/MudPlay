@@ -467,6 +467,35 @@ public sealed class EventQueueTests : IDisposable
         Assert.Contains("'waiting' WalkTo", h.Events.RunSummary);
     }
 
+    // An event's walk arrived with the switch off, so its Then was kept. The link
+    // then dropped, and the switch came back on with it down: the Then's loop is
+    // not started against a dead connection (its moves would land at the board's
+    // login prompts on the redial). It starts on the way back into the game.
+    [Fact]
+    public void ThenKeptWhileOff_IsNotRunBySwitchOn_WhileTheConnectionIsDown()
+    {
+        using Harness h = NewHarness();
+        bool off = false;
+        h.Events.IsMasterSwitchOff = () => off;
+        h.Loops.Save(new Loop("Farm", new[] { A, B }));
+        h.Tracker.SetLocated(A);
+        h.Events.Fire(Add(h, BossWalk("boss", "boss", C)));
+
+        off = true;
+        h.Events.NoteMasterSwitchChanged();
+        Arrive(h, C);
+        h.Events.NoteDisconnected();
+        off = false;
+        h.Events.NoteMasterSwitchChanged();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+
+        h.Events.NoteEnteredGame();
+
+        Assert.Equal("Farm", h.Runner.CurrentLoop?.Name);
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);
+    }
+
     // The wait limit counts time the switch was on: an event is not dropped for
     // the hours the switch spent off.
     [Fact]

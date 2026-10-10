@@ -219,6 +219,22 @@ public sealed class EventSchedulerTests
         Assert.Equal("drop\r", Encoding.Latin1.GetString(sent[0]));
     }
 
+    // The count is what went out, so the caller's "fired N Logoff event(s)" line
+    // and its flush wait are not earned by an event the master switch skipped.
+    [Theory]
+    [InlineData(false, 2)]
+    [InlineData(true, 0)]
+    public void FireLogoffEvents_CountsOnlyTheEventsThatWentOut(bool switchOff, int expected)
+    {
+        var (events, _, _, sent) = Build();
+        events.BlockedByMasterSwitch = _ => switchOff;
+        events.Add(CommandEvent(EventTriggerType.Logoff, "save"));
+        events.Add(CommandEvent(EventTriggerType.Logoff, "drop"));
+
+        Assert.Equal(expected, events.FireLogoffEvents());
+        Assert.Equal(expected, sent.Count);
+    }
+
     // ----- Cleanup-warning → Logoff wiring --------------------------
 
     [Fact]

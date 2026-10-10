@@ -10028,6 +10028,16 @@ public sealed class AppServices
         AutoModeController.DescribeInFlight = DescribeInFlightForMasterSwitch;
         AutoModeController.KillSwitchToggled += OnMasterSwitchChanged;
         AutoModeController.ResetByProfileLoad += OnMasterSwitchResetByProfileLoad;
+        // A switch-on that arrived outside the game is finished on the way back in.
+        // Another character loaded first ends it as a profile load ends the switch.
+        EventScheduler.EnteredGame += () =>
+        {
+            if (_masterSwitchSettleOwed) SettleAfterMasterSwitchOn();
+        };
+        Profile.ProfileLoaded += _ =>
+        {
+            if (_masterSwitchSettleOwed) OnMasterSwitchResetByProfileLoad();
+        };
         SneakGuard.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
     }
 
@@ -10060,8 +10070,14 @@ public sealed class AppServices
     private void OnMasterSwitchResetByProfileLoad()
     {
         _collectOwedInRoom = null;
+        _masterSwitchSettleOwed = false;
         MovementControl.ReleaseFromAutoAll();
     }
+
+    // The switch came back on with the link down or the character at the board's
+    // menus. Everything the switch-on does sends or starts something, so it waits
+    // for the first game prompt, with movement still frozen until then.
+    private bool _masterSwitchSettleOwed;
 
     // The master switch changed. Off: freeze movement and park the holds, then
     // drop what would otherwise go on sending by itself. On: put back every hold
@@ -10072,6 +10088,7 @@ public sealed class AppServices
     {
         if (off)
         {
+            _masterSwitchSettleOwed = false;
             // Ahead of everything else: the leader is let go before this client
             // goes quiet.
             PartyRest.ReleaseForMasterSwitch();
@@ -10095,6 +10112,21 @@ public sealed class AppServices
             return;
         }
 
+        if (!EventScheduler.IsInGame)
+        {
+            _masterSwitchSettleOwed = true;
+            Log.Info("AutoMode",
+                "Master switch back on outside the game: movement stays frozen and nothing is sent or started until the first game prompt.");
+            // Its clocks restart now; it starts nothing while the link is down.
+            Events.NoteMasterSwitchChanged();
+            return;
+        }
+        SettleAfterMasterSwitchOn();
+    }
+
+    private void SettleAfterMasterSwitchOn()
+    {
+        _masterSwitchSettleOwed = false;
         MovementControl.RestoreHoldsBeforeAutoAllRelease();
         ReevaluateEnginesForMasterSwitch();
         AllyDropped.ResumeOwedRescues();

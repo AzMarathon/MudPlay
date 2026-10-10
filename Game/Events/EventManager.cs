@@ -407,7 +407,11 @@ public sealed class EventManager : IDisposable
         if (HoldsForMasterSwitch()) return;
         Action[] landed = _whenSwitchBackOn.ToArray();
         _whenSwitchBackOn.Clear();
-        foreach (Action act in landed) act();
+        // A completion starts an engine. With the connection down it waits for
+        // the way back into the game, like one that landed during the outage:
+        // started now, the engine's moves would reach the board's login prompts.
+        if (_offline) _whenBackInGame.AddRange(landed);
+        else foreach (Action act in landed) act();
         StartNextQueued();
     }
 
@@ -467,27 +471,28 @@ public sealed class EventManager : IDisposable
     // safety net finds a missing saved target (Loop / AutoLair name no longer in the
     // manager's collection) — the safety net mirrors what ReconcileTargets does on
     // LoopsChanged / SetupsChanged, defense in depth for races and direct-disk
-    // profile edits.
-    public void Fire(ScheduledEvent e)
+    // profile edits. True when the firing was taken: run now, or given a place in
+    // the queue.
+    public bool Fire(ScheduledEvent e)
     {
         ArgumentNullException.ThrowIfNull(e);
-        if (e.Disabled) return;
+        if (e.Disabled) return false;
         // Master switch — Settings → Events "Disable all events" gate.
         // Per-character; checked here so the scheduler doesn't have to
         // worry about it and tests using the parameterless ctor (no
         // profile) keep firing.
-        if (_profile?.Current?.EventsGloballyDisabled == true) return;
+        if (_profile?.Current?.EventsGloballyDisabled == true) return false;
         // Events are the user's own automation: with the master switch off this
         // firing is skipped, not put off and not queued (user, 2026-10-09). Every
         // trigger kind comes through here, a Logoff event included, so one check
         // covers logon, timed, state and boss events alike.
-        if (BlockedByMasterSwitch?.Invoke($"event '{Label(e)}'") == true) return;
+        if (BlockedByMasterSwitch?.Invoke($"event '{Label(e)}'") == true) return false;
 
         if (e.ActionType == EventActionType.Command && e.ResolvedThen == EventThenType.Nothing)
         {
             Fired?.Invoke(e);
             ExecuteCommand(e);
-            return;
+            return true;
         }
         bool jumps = IsLogoffType(e);
         if (_run is { } holder)
@@ -498,8 +503,9 @@ public sealed class EventManager : IDisposable
             // the queue.
             if (!jumps || IsLogoffType(holder.Origin) || IsLogoffType(holder.Event))
             {
-                if (Enqueue(e, holder, jumps)) Fired?.Invoke(e);
-                return;
+                if (!Enqueue(e, holder, jumps)) return false;
+                Fired?.Invoke(e);
+                return true;
             }
             _log?.Info("Events",
                 $"Logoff event '{Label(e)}' jumps the queue: '{Label(holder.Event)}' is abandoned at {holder.Step}"
@@ -509,12 +515,14 @@ public sealed class EventManager : IDisposable
         {
             // Nothing is running but events are waiting (kept across a dropped
             // connection): this one takes its place behind them.
-            if (Enqueue(e, holder: null, jumps: false)) Fired?.Invoke(e);
+            bool queued = Enqueue(e, holder: null, jumps: false);
+            if (queued) Fired?.Invoke(e);
             StartNextQueued();
-            return;
+            return queued;
         }
         Fired?.Invoke(e);
         StartRun(e, _run is { } current ? current.Resume : SnapshotCurrentActivity(), depth: 0);
+        return true;
     }
 
     // ----- Queue -------------------------------------------------------
@@ -669,7 +677,8 @@ public sealed class EventManager : IDisposable
     // drop). Caller is responsible for the bounded flush window between this call
     // and the actual DisposeAsync so the wire writes have time to drain. Returns
     // the number of events actually dispatched so the caller can skip the flush
-    // wait when nothing fired.
+    // wait when nothing fired: one Fire skipped (the master switch off, "Disable
+    // all events") is not counted.
     public int FireLogoffEvents()
     {
         // Snapshot to a list so an event action that adds / removes
@@ -678,8 +687,10 @@ public sealed class EventManager : IDisposable
         List<ScheduledEvent> snapshot = Events
             .Where(e => e.TriggerType == EventTriggerType.Logoff && !e.Disabled)
             .ToList();
-        foreach (ScheduledEvent e in snapshot) Fire(e);
-        return snapshot.Count;
+        int taken = 0;
+        foreach (ScheduledEvent e in snapshot)
+            if (Fire(e)) taken++;
+        return taken;
     }
 
     // origin: the event that began the chain this run belongs to; null for a run
