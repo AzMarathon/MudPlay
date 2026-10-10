@@ -833,4 +833,30 @@ public sealed class AutoLairManagerTests : IDisposable
             Assert.Equal(AutoLairPhase.Waiting, h.Roam.Phase);
         }
     }
+
+    // The entry timer's interval is the whole wait. A tick that lands while the
+    // master switch has the run frozen is not acted on, and left at that the
+    // entry came one more full wait after the switch was back on. It is owed
+    // instead, and made as the freeze lifts.
+    [Fact]
+    public void Waiting_EntryComesDueWhileFrozen_GoesInAsTheFreezeLifts()
+    {
+        (Harness h, DoorCalls doors) = NewColiseumHarness(wayRound: false, stats: null);
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+            h.Tracker.NoteRoomObserved(new RoomObservation("Viewing Stands",
+                new HashSet<Direction> { Direction.S, Direction.D }));
+            doors.Calls[0].Reply(new DoorOpenResult.Failed("waitingopen timed out with no response"));
+            h.Roam.FireRetryForTests();
+            Assert.Equal(AutoLairPhase.Waiting, h.Roam.Phase);
+
+            h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test", "master switch off");
+            h.Roam.FireEntryTimerForTests();
+            Assert.Equal(AutoLairPhase.Waiting, h.Roam.Phase);
+
+            h.Coordinator.ClearGate(MovementCoordinator.AutoAllGate, "test", "master switch on");
+            Assert.Equal(AutoLairPhase.Entering, h.Roam.Phase);
+        }
+    }
 }

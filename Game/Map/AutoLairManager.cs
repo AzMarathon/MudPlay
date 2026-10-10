@@ -817,6 +817,7 @@ public sealed class AutoLairManager : IDisposable
     private void LatchAndScheduleEntry(DateTimeOffset entryArrival)
     {
         if (Phase != AutoLairPhase.Waiting) return;
+        _entryOwedAfterFreeze = false;
         CurrentEntryArrivalAt = entryArrival;
 
         TimeSpan wait = entryArrival - DateTimeOffset.UtcNow;
@@ -831,10 +832,20 @@ public sealed class AutoLairManager : IDisposable
         _entryTimer.Start();
     }
 
+    // The entry time came while the master switch had the run frozen. The timer's
+    // interval is the whole wait, so left running it would enter one more full
+    // wait after the switch came back on: the entry is owed instead, and made as
+    // the freeze lifts (OnGatesChanged).
+    private bool _entryOwedAfterFreeze;
+
     private void OnEntryTimerFired()
     {
-        if (FrozenByMasterSwitch) return;
         _entryTimer.Stop();
+        if (FrozenByMasterSwitch)
+        {
+            _entryOwedAfterFreeze = true;
+            return;
+        }
         if (!IsActive || IsPaused) return;
         EnterLairNow();
     }
@@ -877,6 +888,12 @@ public sealed class AutoLairManager : IDisposable
     // both matter. The timer is now only the upper bound.
     private void OnGatesChanged()
     {
+        if (_entryOwedAfterFreeze && !FrozenByMasterSwitch)
+        {
+            _entryOwedAfterFreeze = false;
+            if (Phase == AutoLairPhase.Waiting && IsActive && !IsPaused) EnterLairNow();
+            return;
+        }
         if (Phase != AutoLairPhase.Engaging) return;
         if (!IsActive || IsPaused) return;
         if (_coordinator is null) return;
