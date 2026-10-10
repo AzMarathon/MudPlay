@@ -14,6 +14,10 @@
 - Paradigm: freezing cold, ocean drowning, bog poison and murky drown lines recognised
 - Bug report: the room's spell and whether it bars resting, and the spells changed from the default
 
+## 3.165.1
+
+- Conversation window: a picture emote no longer draws over the lines above and below it
+
 ## 3.165.0
 
 - Auto-open opens a flagged container on arrival; it did nothing before
