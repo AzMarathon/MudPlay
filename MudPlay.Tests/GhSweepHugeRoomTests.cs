@@ -130,7 +130,10 @@ public sealed class GhSweepHugeRoomTests : IDisposable
     }
 
     // The game's own bytes: the list unbroken, then the line's end.
-    private void Wire(string text) => _emulator.Feed(Encoding.Latin1.GetBytes(text + "\r\n"));
+    private void Wire(params string[] rows)
+    {
+        foreach (string row in rows) _emulator.Feed(Encoding.Latin1.GetBytes(row + "\r\n"));
+    }
 
     private void Arrive(string roomName, params Direction[] exits) =>
         _tracker.NoteRoomObserved(new RoomObservation(roomName, new HashSet<Direction>(exits)),
@@ -170,14 +173,18 @@ public sealed class GhSweepHugeRoomTests : IDisposable
         const int visible = 400, all = 600;
         Assert.True(_sweep.Start());
 
-        // The vault's own display shows 400 stacks; each search lists all 600.
+        // The vault's own display shows 400 stacks; each search finds the 200
+        // hidden ones, and answers after its echo with those alone.
+        Wire("[HP=611/MA=720]:n", "Bronze House Vault");
         Wire(HugeFloor.Line(visible));
         Arrive("C", Direction.N, Direction.S);
         Assert.Equal("sea", _sent[^1]);
-        Wire(HugeFloor.Line(all));
+        Wire("[HP=611/MA=720]:sea");
+        Wire(HugeFloor.Line(all - visible, first: visible));
         SearchSettles();
         Assert.Equal("sea", _sent[^1]);
-        Wire(HugeFloor.Line(all));
+        Wire("[HP=611/MA=720]:sea");
+        Wire(HugeFloor.Line(all - visible, first: visible));
         SearchSettles();
         Assert.Equal("n", _sent[^1]);
 
@@ -186,6 +193,7 @@ public sealed class GhSweepHugeRoomTests : IDisposable
         Arrive("B", Direction.S);
         SearchSettles();
         SearchSettles();
+        Wire("[HP=611/MA=720]:s", "Bronze House Vault");
         Wire(HugeFloor.Line(visible));
         Arrive("C", Direction.N, Direction.S);
         SearchSettles();
@@ -210,8 +218,11 @@ public sealed class GhSweepHugeRoomTests : IDisposable
         Assert.DoesNotContain(log, m => m.Contains("revealed hidden", StringComparison.Ordinal));
         List<string> vaultLines = log.Where(m => m.StartsWith("recon at 1/3:", StringComparison.Ordinal)).ToList();
         Assert.Equal(2, vaultLines.Count);
-        int items = Enumerable.Range(0, all).Sum(HugeFloor.CountOf);
-        Assert.StartsWith($"recon at 1/3: {all} stack(s), {items} item(s) on the floor; {all - visible} hidden: ", vaultLines[0]);
+        int shown = Enumerable.Range(0, visible).Sum(HugeFloor.CountOf);
+        int hidden = Enumerable.Range(visible, all - visible).Sum(HugeFloor.CountOf);
+        Assert.StartsWith(
+            $"recon at 1/3: {shown + hidden} item(s) of {all} kind(s) in the room; "
+            + $"on display {shown} in {visible} stack(s); hidden {hidden} in {all - visible} stack(s): ", vaultLines[0]);
         Assert.Contains($"(+{all - visible - 20} more)", vaultLines[0]);
         Assert.Contains("; 3 floor read(s), slowest: read ", vaultLines[0]);
         Assert.All(vaultLines, line => Assert.True(line.Length < 800, $"summary line ran to {line.Length} characters"));
@@ -251,7 +262,8 @@ public sealed class GhSweepHugeRoomTests : IDisposable
     private long AllocatedReading(int stacks)
     {
         string reply = HugeFloor.Line(stacks);
-        Wire(reply);
+        Wire("[HP=611/MA=720]:sea", reply);
+        Wire("[HP=611/MA=720]:sea");
         long before = GC.GetAllocatedBytesForCurrentThread();
         Wire(reply);
         return GC.GetAllocatedBytesForCurrentThread() - before;

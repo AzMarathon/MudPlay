@@ -35,10 +35,19 @@ public sealed class GroundItemTracker : IDisposable
     private readonly List<string> _items = new();
     private readonly CurrencyNaming _naming;
     private readonly Func<string, bool>? _isKnownItem;
+    private readonly MessageRouter _router;
 
     private Terminal.LineExtractor? _lines;
     private string? _noticeBuffer;            // multi-line continuation
     private bool _disposed;
+
+    // Whether any line this session followed a command echo, which only a statline
+    // the client can split ever shows. Until one has, a list that doesn't follow a
+    // search's echo proves nothing about where it came from.
+    private bool _echoesRead;
+    // What printed the list now being read, settled on the row that opens it: later
+    // rows of a wrapped list follow that row, not an echo.
+    private FloorSurveySource _openListSource;
 
     // isKnownItem resolves a survey entry against the active item table (true
     // when it names a real Items.json record). Injected so the cash filter can
@@ -51,6 +60,10 @@ public sealed class GroundItemTracker : IDisposable
         ArgumentNullException.ThrowIfNull(naming);
         _naming = naming;
         _isKnownItem = isKnownItem;
+        _router = router;
+        // Ahead of the pattern handlers, and inside the dispatch that knows which
+        // command the line answers.
+        _router.LineDispatched += NoteWhatTheLineFollows;
         _noticeSub = router.Subscribe(KnownPatterns.YouNoticeRoom, OnYouNoticeRoom);
     }
 
@@ -68,6 +81,11 @@ public sealed class GroundItemTracker : IDisposable
     // its own stages so a slow floor read shows in a capture.
     public TimeSpan LastSurveyReadTime { get; private set; }
 
+    // What printed the latest survey: the room's display, or the reply to a room
+    // search. They list different things (FloorSurveySource), and Items holds
+    // whichever came last.
+    public FloorSurveySource LastSurveySource { get; private set; }
+
     // Bind the per-session LineExtractor so the tracker can stitch a wrapped
     // "You notice" survey back together — same shape as AutoGetItemsManager /
     // the CashManager.
@@ -78,6 +96,8 @@ public sealed class GroundItemTracker : IDisposable
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = lines;
         _lines.LineEmitted += OnLine;
+        // A new session may run on another statline.
+        _echoesRead = false;
     }
 
     // Discard the snapshot on an actual room change — the floor loot belonged to
@@ -89,6 +109,17 @@ public sealed class GroundItemTracker : IDisposable
     }
 
     // ----- notice parsing ----------------------------------------------
+
+    private void NoteWhatTheLineFollows(Terminal.LineExtractor.EmittedLine line)
+    {
+        string? echo = _router.CommandEchoedBeforeLine;
+        if (echo is not null) _echoesRead = true;
+        if (line.IsPromptLine || !FloorListLine.Opens(line.Text)) return;
+
+        _openListSource = echo is not null && FloorListLine.IsRoomSearch(echo)
+            ? FloorSurveySource.SearchReply
+            : _echoesRead ? FloorSurveySource.RoomDisplay : FloorSurveySource.Unknown;
+    }
 
     // Single-line "You notice <list> here." — the pattern subscription path.
     // Multi-line wraps stitch through OnLine and feed the same rebuild.
@@ -142,6 +173,7 @@ public sealed class GroundItemTracker : IDisposable
             _items.Add(entry);
         }
         LastSurveyReadTime = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+        LastSurveySource = _openListSource;
         SurveyUpdated?.Invoke();
     }
 
@@ -239,6 +271,7 @@ public sealed class GroundItemTracker : IDisposable
         if (_disposed) return;
         _disposed = true;
         _noticeSub.Dispose();
+        _router.LineDispatched -= NoteWhatTheLineFollows;
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = null;
     }

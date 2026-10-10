@@ -5251,15 +5251,17 @@ Among protectable hazards, a further split governs whether the navigator may off
     and no line break at all; the terminal wraps it at its right margin, mid-word.
   - A Paradigm room has no item cap (*Items, inventory & equipment → Room item capacity: drop
     refusal*), so nothing bounds either one's length.
-- **Paradigm: the reply lists what the search found, not the whole floor** *([OBSERVED] 2026-10-09,
-  report `paradigm-20261009-164508`; Realm: Paradigm, Stock not recorded)*. The vault's replies held
-  111–120 stacks where its display held 341. A room whose display showed
+- **The reply lists the hidden stacks the search found, not the whole floor** *([OBSERVED] 2026-10-09,
+  report `paradigm-20261009-164508`, Paradigm; the mechanism [OBSERVED] 2026-10-10 from the Stock DLL and
+  [CONFIRMED] 2026-10-10 by the user for Paradigm, both in *Items, inventory & equipment → Hiding items in
+  a room (stashing)*; Realm: both)*. The vault's replies held 111–120 stacks where its display held 341.
+  A room whose display showed
   `34 rope and grapple`, `10 pulsating heart`, `scorpion tail` and 28 other stacks answered `sea` with
   `You notice 2 wooden skiff, 2 rope and grapple, scorpion tail, pulsating heart, 10 black diamond here.`:
   two stacks the display didn't show, and three it did, under smaller counts. Searches sent one after
   another gave `8`, `9` or `10 black diamond`, and one left `pulsating heart` out.
-  - `[NEEDS CONFIRMATION]` Are the hidden copies in addition to the visible ones (34 visible + 2 hidden
-    rope and grapple = 36 in the room), or is the reply's count a recount of some of the visible stack?
+  - The hidden copies are in addition to the visible ones: 34 visible + 2 hidden rope and grapple is 36
+    in the room. (This was an open question here on 2026-10-09; settled 2026-10-10.)
 - (Targeted `sea <dir>` hidden-exit reveals are a separate path — see *Hidden exits — `sea <dir>` reveal
   wording*.)
 - **Client use:**
@@ -5267,6 +5269,8 @@ Among protectable hazards, a further split governs whether the navigator may off
     handed the whole reply at once, and a display's 79-column rows together with the row after them.
     `CasterMessageMatcher.LiteralRunsOccurInOrder` keeps the message templates' regexes off a line they
     can't match (report `paradigm-20261009-164508`: the client stood still for seconds on each reply).
+  - What the client does with a reply's counts is in *Items, inventory & equipment → Hiding items in a
+    room (stashing)*.
   - Auto-search holds the `sea` past the fight and fires it **once** the room clears, then keeps the
     walker held briefly so the revealed `You notice … here.` survey lands and the get engines collect it
     **before** the loop sets up sneaking and steps on. One search per room; empty rooms (no fight)
@@ -6338,9 +6342,79 @@ A `get <item>` that can't succeed replies with one of these shapes:
 - **A room `search` finds each stashed item on its own roll** *([OBSERVED] 2026-09-30, `wccmmud.dll`
   1.11p `_display_items_in_room` in its search mode; Stock only)*: 1–100 under the searcher's
   **Perception − 10**. A plain room display never rolls, so walking in shows nothing.
+- **Stock: what a search reads, what its reply lists, and what finding a stack changes** *([OBSERVED]
+  2026-10-10, Stock 1.11p `wccmmud.dll` `_cmd_search` @0x454fc9, `_display_items_in_room` @0x4363a9,
+  `_remove_item_from_room` @0x41d1ff, `_clear_search_flags` @0x41758e)*:
+  - **A room keeps its visible items and its hidden ones as two separate sets of stacks.** The visible
+    set is 17 slots at room +0x470 with a per-slot word of extra copies at +0x574; the hidden set is 15
+    slots at +0x4d8 with its extra-copies words at +0x596. A slot holds one item and 1 + that word
+    copies. (The caps are in *Room item capacity: drop refusal*.)
+  - **A bare `search` runs the room's item list in search mode** (`_display_items_in_room(user, 0, 1, 1)`
+    @0x455082), then tells the room `<Name> is searching the area.` (@0x455099–0x4550c3).
+  - **Search mode walks the hidden set only** (@0x4365e8–0x436824). A slot whose item has 0 at item
+    +0x39e is passed over (@0x436618–0x436623). That word reads as the item's Gettable flag:
+    `_remove_item_from_room` takes a name-matched item at once when it is non-zero, and otherwise goes on
+    to test a flag in the user table (@0x41d272–0x41d290). Each other slot gets its own
+    1–100 roll (@0x436629), and is found when the roll is under Perception − 10 (@0x436635–0x436644).
+  - **The reply names the found hidden stacks, and nothing of the visible floor.** A found slot is added
+    to the reply at 1 + its extra-copies word, slots holding the same item added together
+    (@0x436796–0x4367fb); the line is `You notice `, the hidden coins, then each found item, led by its
+    count when that is over 1 (`%d `, @0x43686e–0x43688c), then ` here.` (@0x436bbd). The branch that
+    prints the visible set (@0x4368b7–0x436bad) is the one search mode jumps past (@0x4368b2). So an item
+    with copies in both sets shows in the room display under its visible count and in the reply under its
+    hidden one, and the room holds the two added.
+  - **Hidden coins are listed without a roll** (the five counts at room +0x548…+0x558, each printed when
+    it is over 0, @0x436444–0x4365da), which is why a search always turns up stashed coins.
+  - **A found stack does not move to the visible set.** Finding it sets its slot's bit in a mask on the
+    room (+0x568, @0x43664a–0x43677f), flags the searcher (player +0x6f4 bit 0x10, @0x436782) and adds one
+    to a count of finds on the room (+0x605, @0x436790). `_remove_item_from_room`, which `get` takes
+    through, tries the visible slots first (@0x41d239–0x41d305) and then a hidden slot only when its bit
+    is set (@0x41d446–0x41d44f); it takes one copy off the slot's extra-copies word, or empties the slot
+    and clears its bit (@0x41d46b–0x41d4a2). A room display never reads the hidden slots, so a found
+    stack is still not in the next room display.
+  - **Every search rolls every hidden slot again.** The loop does not read the mask (@0x4365ea–0x436644),
+    so a later search can name the same copies again, name fewer, or name others; bits are only ever
+    added by it.
+  - **The mask is dropped as the finders go.** `_clear_search_flags` clears a flagged searcher's flag,
+    takes one off the room's count of finds and zeroes the mask when the count reaches 0
+    (@0x4175a8–0x4175d1). It is called when the searcher moves (`_move_user` @0x4179ab, @0x417f58), hangs
+    up (@0x408e5f), dies (`_check_kill_user` @0x419abe) or suicides (@0x46ea59), and from
+    `_fast_update_character` (@0x423185). The count goes up once for each slot found and down once for
+    each finder leaving, so as the code reads, a searcher who found two or more slots leaves the mask set;
+    a room load zeroes both (`_preload_and_generate_buffers` @0x4304f2–0x430513). Not seen in play.
+  - The whole list, in either mode, is printed between `_btutsw(user, 0x4f)` (@0x436422) and
+    `_btutsw(user, 0)` (@0x436c33). 0x4f is 79, the row length of a game-broken room display
+    (*Movement & navigation → Room-wide search during and after combat*); the call itself is the BBS
+    library's and was not followed.
+- **Paradigm reveals items the same way** *([CONFIRMED] 2026-10-10, user: "search reveals items the same
+  way as it does on stock")*. Report `paradigm-20261009-164508` shows it: a room displaying
+  `34 rope and grapple` answered `sea` with `2 rope and grapple`. Those are 2 hidden copies beside 34
+  visible ones: 36 in the room.
+- **Client policy** (user, 2026-10-10: "we should record the highest number seen for each item on each
+  search.. not every search is going to reveal the same items or the same count"): over the searches of
+  one room, an item's hidden count is the highest any one reply showed for it. Never the last reply's,
+  and never the replies added up.
 - Coin stashes: see *Money, banks & shops → Hiding coin in a room (stashing)*.
 
 **Client use:**
+- **Telling a search reply from a room display.** The two lists read alike, so
+  `GroundItemTracker.LastSurveySource` (`FloorSurveySource`) goes by what the list's first row follows:
+  the echo of `sea`…`search` with nothing after it (`MessageRouter.CommandEchoedBeforeLine`,
+  `FloorListLine.IsRoomSearch`) makes it a search reply; any other list, once an echo has been read
+  this session, is a room display. On a statline the client can't split no echo is ever read and the
+  source is unknown.
+- **Roomba adds a room's hidden stacks to its visible ones** (`GhSweepManager`, `GhSurveyMerger`; user
+  rulings 2026-10-10). Recon keeps two records per room, the stacks its displays showed and the stacks
+  its search replies named, each item at the highest count any one read showed. Their sum
+  (`GhSurveyMerger.Total`) is what the room holds: the item-location log, the room's shown inventory and
+  the inventoried total read it. The item-location log is written once per room, when its searches end.
+- **Roomba queues a visible stack and a hidden stack of the same item as two moves**
+  (`GhSweepManager.BuildSortQueue`): the visible one needs no search, the hidden one is searched for
+  first. The game takes from the visible stack before a found hidden one.
+- **A list Roomba can't place** (source unknown, read while a search of its own is out) adds nothing to
+  a stack the display showed: the higher of the two counts stands, and only a name the display never
+  showed is taken as hidden (`GhSurveyMerger.MergeUnattributed`). A redisplay misread as a reply would
+  otherwise double the room.
 - `@hide-all [full|coins|keys]` and the Hide All / Hide Everything / Hide Coins / Hide Keys actions
   (`InventoryActionHandler.HideAll`) run the Drop All sweeps with `hide`, always naming the item or coin
   — never a bare `hide`, which would hide the character instead.

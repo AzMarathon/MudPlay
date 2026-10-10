@@ -3,12 +3,63 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
 
-// Combines the visible floor list and one or more search-result surveys for a
-// GH room. Repeated searches can rediscover the same hidden stack, so counts
-// are maxed rather than summed; otherwise five `sea` commands could invent
-// five copies of one physical item.
+// Keeps a GH room's floor from the lists read of it. The game holds a room's
+// visible items and its hidden ones as two separate sets of stacks: a room display
+// lists the visible set, and the reply to a search lists only the hidden stacks
+// that search found, under their own counts (GAME_MECHANICS "Hiding items in a
+// room (stashing)"). So within one set a repeated read is the same stacks seen
+// again and the highest count stands, never a sum: every search rolls for every
+// hidden stack afresh, and five `sea` commands would otherwise invent five copies
+// of one physical item. Across the two sets the counts add: 34 on display and 2
+// in a search reply is 36 in the room.
 internal static class GhSurveyMerger
 {
+    // What the room holds: each item's visible count plus its hidden one, the
+    // visible stacks first.
+    public static List<string> Total(
+        Dictionary<RoomKey, List<string>> visibleByRoom,
+        Dictionary<RoomKey, List<string>> hiddenByRoom,
+        RoomKey room,
+        ItemNameStore itemNames)
+    {
+        var total = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (Dictionary<RoomKey, List<string>> ledger in new[] { visibleByRoom, hiddenByRoom })
+        {
+            if (!ledger.TryGetValue(room, out List<string>? entries)) continue;
+            foreach (string entry in entries)
+            {
+                string canonical = Canonical(entry, itemNames);
+                total[canonical] = total.GetValueOrDefault(canonical)
+                    + CountedCommand.SplitLeadingCount(entry).Count;
+            }
+        }
+        return total.Select(e => e.Value > 1 ? $"{e.Value} {e.Key}" : e.Key).ToList();
+    }
+
+    // A list read while a search of ours was out, on a statline that hides which
+    // command a line answers: it may be the search's reply or a redisplay of the
+    // room. Adding a redisplay to the room as hidden copies would double the floor,
+    // so nothing is added. A name the display already showed keeps the higher of
+    // the two counts as a visible stack, and only a name it never showed is taken
+    // as hidden.
+    public static void MergeUnattributed(
+        Dictionary<RoomKey, List<string>> visibleByRoom,
+        Dictionary<RoomKey, List<string>> hiddenByRoom,
+        RoomKey room,
+        IReadOnlyList<string> incoming,
+        ItemNameStore itemNames)
+    {
+        MergeHiddenDelta(hiddenByRoom, room, incoming, visibleByRoom, itemNames);
+
+        if (!visibleByRoom.TryGetValue(room, out List<string>? visible)) return;
+        HashSet<string> visibleNames = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string entry in visible) visibleNames.Add(Canonical(entry, itemNames));
+        List<string> seenAgain = incoming
+            .Where(entry => visibleNames.Contains(Canonical(entry, itemNames)))
+            .ToList();
+        if (seenAgain.Count > 0) Merge(visibleByRoom, room, seenAgain, itemNames);
+    }
+
     public static void Merge(
         Dictionary<RoomKey, List<string>> observedByRoom,
         RoomKey room,
@@ -38,15 +89,9 @@ internal static class GhSurveyMerger
         }
     }
 
-    // Merge only the items in `incoming` whose names AREN'T already on the room's
-    // pre-search visible floor. A `sea` reply lists what the search found, not the
-    // whole floor, but it can name a stack the room display already showed: one
-    // Paradigm room displayed `34 rope and grapple` and answered `2 rope and
-    // grapple` (report paradigm-20261009-164508). Tagging such a name hidden would
-    // make Sorting spend a search before grabbing an item it can see, so anything
-    // on `visibleByRoom` (the floor before any search) is excluded here by name.
-    // Whether the reply's copies are in addition to the visible ones is unsettled:
-    // GAME_MECHANICS "Room-wide search during and after combat".
+    // Merge only the items in `incoming` whose names AREN'T on the room's visible
+    // floor, as hidden stacks. The half of MergeUnattributed that takes a list of
+    // unknown origin's new names as hidden.
     public static void MergeHiddenDelta(
         Dictionary<RoomKey, List<string>> hiddenByRoom,
         RoomKey room,
