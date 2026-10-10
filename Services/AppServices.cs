@@ -11807,18 +11807,43 @@ public sealed class AppServices
     public bool IsRoomOrEffectDamage(string line) =>
         OffRoundDamage().IsOffRound(line, RoomTracker.State.CurrentRoom?.Spell ?? 0);
 
-    // The spell on the room we stand in, when it damages this character as things
-    // stand: the game data has it damaging every time it is cast (RoomSpellDamageIndex)
-    // and nothing worn or carried counters it (RoomHazardIndex). Null in a room that
-    // isn't placed, so an unknown room rests as it always did.
+    // The spell on the room we stand in, when it keeps a rest from starting: it is
+    // set to bar resting (Settings → Periodic Damage Room Spells; by default the
+    // spells that damage on every tick) and nothing worn or held counters it
+    // (RoomHazardIndex). Null in a room that isn't placed, so an unknown room rests
+    // as it always did.
     public (int Number, string Name)? RoomSpellHurtingUs()
     {
         if (RoomTracker.State.CurrentRoom is not { Spell: > 0 } here) return null;
-        if (!RoomSpellDamage.DamagesEveryTick(here.Spell)) return null;
-        if (RoomHazards.HazardForSpell(here.Spell) is { } hazard
-            && hazard.IsCounteredNow(IsItemWorn, IsItemCarried)) return null;
+        if (!RoomSpellBarsResting(here.Spell)) return null;
+        if (RoomSpellCounteredNow(here.Spell)) return null;
         return (here.Spell, SpellCatalog.GetSpellNameByNumber(here.Spell) ?? "room spell");
     }
+
+    // The loaded character's choice for the spell, or the default for its class.
+    // Read off the character tier like the Health tab's rest settings, each time it
+    // is asked, so a save in Settings is in effect at the next rest decision.
+    public bool RoomSpellBarsResting(int spell) =>
+        RoomSpellDamage.BarsResting(spell, () => ReadSection<Models.Profile.PeriodicDamageRoomSpellSettings>(
+            Profile.Current, Models.Profile.PeriodicDamageRoomSpellSettings.TabKey).BarsResting);
+
+    public bool RoomSpellCounteredNow(int spell) =>
+        RoomHazards.HazardForSpell(spell) is { } hazard && hazard.IsCounteredNow(IsItemWorn, IsItemCarried);
+
+    // The damaging room spells of the loaded game data, for Settings → Periodic
+    // Damage Room Spells: every tick first, then by how many rooms carry each.
+    public IReadOnlyList<Game.Map.PeriodicDamageRoomSpell> PeriodicDamageRoomSpells() =>
+        RoomSpellDamage.Readings
+            .Select(entry => new Game.Map.PeriodicDamageRoomSpell(
+                entry.Key,
+                SpellCatalog.GetSpellNameByNumber(entry.Key) ?? "room spell",
+                entry.Value,
+                RoomHazards.HazardForSpell(entry.Key)?.DescribeCounters(ItemNames.GetName) ?? string.Empty,
+                RoomSpellDamage.RoomsOf(entry.Key)))
+            .OrderByDescending(static s => s.Reading.Kind)
+            .ThenByDescending(static s => s.Rooms.Count)
+            .ThenBy(static s => s.Number)
+            .ToList();
 
     private bool IsItemWorn(int itemId)
     {

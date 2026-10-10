@@ -5839,6 +5839,41 @@ public sealed class HealthManagerTests
         Assert.False(h.Health.HpRestDeferredByRoomSpell);
     }
 
+    [Fact]
+    public void DamagingRoom_ManaOnly_NoMeditateEither()
+    {
+        // Room damage breaks a meditation as it does a rest (user, 2026-10-10).
+        using Harness h = new();
+        h.Health.SetRoomSpellDamageProbe(() => MagmaHeat);
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 10, maxMa: 100);
+        h.Health.Evaluate();
+
+        Assert.False(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);
+        Assert.Equal(MagmaHeat, h.Health.RestDeferredByRoomSpell);
+        Assert.False(h.Health.HpRestDeferredByRoomSpell);   // no HP rest is owed, so no standing rest-time heal
+    }
+
+    [Fact]
+    public void DamagingRoom_SpellUntickedWhileStandingThere_RestsAtTheNextCheck()
+    {
+        // Settings → Periodic Damage Room Spells: the probe answers from the saved
+        // choice each time, so unticking the spell needs no room change.
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.Empty(h.SentLines);
+
+        hurting = null;
+        h.Health.Evaluate();
+
+        Assert.True(h.HealthGateHeld);
+        Assert.Contains("rest", h.SentLines);
+        Assert.Null(h.Health.RestDeferredByRoomSpell);
+    }
+
     // ----- "do not rest in this room" (per-waypoint) -----------------
 
     [Fact]

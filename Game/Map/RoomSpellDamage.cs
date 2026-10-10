@@ -20,6 +20,7 @@ public enum RoomSpellDamage
 
     // The spell damages every time it is cast, unless a counter is held (a raft, a
     // buff, an item that negates the spell). Whether the character has the counter
-    // is RoomHazardIndex's to say. The one class a rest isn't started in.
+    // is RoomHazardIndex's to say. The one class that bars resting unless the user
+    // says otherwise (Settings → Periodic Damage Room Spells).
     EveryTick,
 }

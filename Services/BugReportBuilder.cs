@@ -707,6 +707,7 @@ public static class BugReportBuilder
         // No rest is started in a room whose own spell damages the character; a "why
         // won't it rest" report turns on this line.
         Kv(sb, "Room spell and resting", RoomSpellRestLine(svc));
+        Kv(sb, "Room spells changed from the default (Periodic Damage Room Spells)", RoomSpellRestChoices(svc));
         Kv(sb, "Clearing a see-hidden room (combat off)", svc.CombatTracker.SeeHiddenClearActive.ToString());
         Kv(sb, "Sneak broken by a see-hidden monster, not sneaking again yet", svc.CombatTracker.SneakBrokenBySeeHidden.ToString());
         Kv(sb, "Clearing after a failed sneak (combat off)", svc.CombatTracker.SneakFailClearActive.ToString());
@@ -2600,20 +2601,29 @@ public static class BugReportBuilder
     {
         if (svc.RoomTracker.State.CurrentRoom is not { Spell: > 0 } here) return "(no room spell here, or the room isn't placed)";
         string spell = $"{svc.SpellCatalog.GetSpellNameByNumber(here.Spell) ?? "room spell"} (#{here.Spell})";
-        switch (svc.RoomSpellDamage.ClassOf(here.Spell))
-        {
-            case Game.Map.RoomSpellDamage.None:
-                return $"{spell}: no damage in the game data";
-            case Game.Map.RoomSpellDamage.Conditional:
-                return $"{spell}: damages only on a condition the client doesn't check — rests as normal";
-            case Game.Map.RoomSpellDamage.OnARoll:
-                return $"{spell}: damages on a roll, not every tick — rests as normal";
-        }
-        if (svc.RoomSpellHurtingUs() is null)
-            return $"{spell}: damages on every tick, countered by what is worn or carried — rests as normal";
+        if (!svc.RoomSpellDamage.Readings.TryGetValue(here.Spell, out Game.Map.RoomSpellDamageReading? reading))
+            return $"{spell}: no damage in the game data";
+        string does = $"{spell}: {Game.Map.RoomSpellDamageText.Damage(reading)} damage, "
+            + Game.Map.RoomSpellDamageText.How(reading, svc.ItemNames.GetName);
+        if (!svc.RoomSpellBarsResting(here.Spell))
+            return $"{does}; not set to bar resting — rests as normal";
+        if (svc.RoomSpellCounteredNow(here.Spell))
+            return $"{does}; bars resting, but countered by what is worn or held — rests as normal";
         return svc.Health.RestDeferredByRoomSpell is not null
-            ? $"{spell}: in a damaging room: resting deferred (healing as set; the rest starts in the next room that doesn't hurt)"
-            : $"{spell}: in a damaging room: no rest would be started here (none is due)";
+            ? $"{does}; bars resting: resting deferred (healing as set; the rest starts in the next room that isn't barred)"
+            : $"{does}; bars resting: no rest would be started here (none is due)";
+    }
+
+    // The room spells whose Bars resting box (Settings → Periodic Damage Room
+    // Spells) the character has set away from the default, as stored.
+    private static string RoomSpellRestChoices(AppServices svc)
+    {
+        Dictionary<int, bool> chosen = ViewModels.Settings.PeriodicDamageRoomSpellsSectionViewModel
+            .ReadOrDefault(svc.Profile.Current).BarsResting;
+        if (chosen.Count == 0) return "(none: every spell follows its default)";
+        return string.Join("; ", chosen.OrderBy(static c => c.Key).Select(c =>
+            $"{svc.SpellCatalog.GetSpellNameByNumber(c.Key) ?? "not in the loaded game data"} (#{c.Key}) "
+            + (c.Value ? "bars resting" : "doesn't bar resting")));
     }
 
     // The item worn in a given inventory slot (e.g. "Weapon Hand"), or null when

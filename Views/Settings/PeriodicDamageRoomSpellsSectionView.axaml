@@ -1,0 +1,145 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MudPlay.ViewModels.Settings"
+             xmlns:edit="using:MudPlay.ViewModels.GameData.Edit"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="980" d:DesignHeight="700"
+             x:Class="MudPlay.Views.Settings.PeriodicDamageRoomSpellsSectionView"
+             x:DataType="vm:PeriodicDamageRoomSpellsSectionViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.Readout">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style Selector="TextBlock.ColumnHead">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.Cell">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <!-- A room link: the same look as the Game Data record links. -->
+        <Style Selector="Button.MdbLink">
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.MdbLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid>
+        <Border IsVisible="{Binding !HasSpells}" Padding="22" VerticalAlignment="Top">
+            <TextBlock Text="{Binding EmptyReason}"
+                       Foreground="{StaticResource ChromeFgSecBrush}"
+                       FontSize="{StaticResource FontSizeMd}" TextWrapping="Wrap"/>
+        </Border>
+
+        <!-- Three lists, each taking the lines in view only: the spells, the picked
+             spell's areas, and the picked area's rooms. A spell can sit on a couple
+             of thousand rooms. -->
+        <Grid IsVisible="{Binding HasSpells}" Margin="22"
+              RowDefinitions="Auto,Auto,Auto,Auto,3*,Auto,Auto,2*"
+              MaxWidth="1100" HorizontalAlignment="Left">
+            <TextBlock Grid.Row="0" Classes="SettingsSectionBanner first" Text="Character profile settings"/>
+            <TextBlock Grid.Row="1" Classes="SettingsSectionSub"
+                       Text="Saved to the loaded character — each character on a BBS keeps its own."/>
+
+            <StackPanel Grid.Row="2" Spacing="4" Margin="0,8,0,8">
+                <TextBlock Classes="FieldLabel" Text="Room spells that do damage, and whether each bars resting:"/>
+                <TextBlock Classes="Readout"
+                           Text="Some rooms cast a spell of their own on whoever stands in them, about every six seconds: the volcano's heat, a swamp's poison, a river with no boat. Damage from it breaks a rest or a meditation. In a room whose spell is ticked here, no rest or meditate is started: healing spells go on as set, a walk or loop carries on, and the rest is taken in the next room that isn't barred. With the spell's counter in effect the room is rested in as normal."/>
+                <TextBlock Classes="Readout"
+                           Text="Ticked to start with: the spells that damage on every tick. Unticked: the ones that damage only on a roll or on a condition. The list comes from the loaded game data."/>
+            </StackPanel>
+
+            <Grid Grid.Row="3" ColumnDefinitions="96,62,180,130,230,*,64" Margin="9,0,24,2">
+                <TextBlock Grid.Column="0" Classes="ColumnHead" Text="BARS RESTING"/>
+                <TextBlock Grid.Column="1" Classes="ColumnHead" Text="RECORD"/>
+                <TextBlock Grid.Column="2" Classes="ColumnHead" Text="SPELL"/>
+                <TextBlock Grid.Column="3" Classes="ColumnHead" Text="DAMAGE"/>
+                <TextBlock Grid.Column="4" Classes="ColumnHead" Text="COMES"/>
+                <TextBlock Grid.Column="5" Classes="ColumnHead" Text="COUNTERED BY"/>
+                <TextBlock Grid.Column="6" Classes="ColumnHead" Text="ROOMS" HorizontalAlignment="Right"/>
+            </Grid>
+
+            <ListBox Grid.Row="4" ItemsSource="{Binding Spells}"
+                     SelectedItem="{Binding SelectedSpell, Mode=TwoWay}"
+                     BorderBrush="{StaticResource ChromeFgMutedBrush}" BorderThickness="1"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PeriodicDamageRoomSpellRowViewModel">
+                        <Grid ColumnDefinitions="96,62,180,130,230,*,64">
+                            <CheckBox Grid.Column="0" IsChecked="{Binding BarsResting, Mode=TwoWay}"
+                                      ToolTip.Tip="Ticked: no rest or meditate is started in a room with this spell, unless its counter is in effect."/>
+                            <TextBlock Grid.Column="1" Classes="Cell" Text="{Binding NumberText}"/>
+                            <TextBlock Grid.Column="2" Classes="Cell" Text="{Binding Name}"/>
+                            <TextBlock Grid.Column="3" Classes="Cell" Text="{Binding Damage}"/>
+                            <TextBlock Grid.Column="4" Classes="Cell" Text="{Binding How}"/>
+                            <TextBlock Grid.Column="5" Classes="Cell" Text="{Binding Counters}"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                            <TextBlock Grid.Column="6" Classes="Cell" Text="{Binding RoomCount}" HorizontalAlignment="Right"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="10" Margin="0,6,0,0">
+                <Button Content="Reset to defaults" Command="{Binding ResetToDefaultsCommand}"
+                        ToolTip.Tip="Ticks every spell that damages on every tick and clears the rest."/>
+                <TextBlock Classes="Readout" Text="{Binding Summary}" VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <TextBlock Grid.Row="6" Classes="FieldLabel" Text="{Binding RoomsTitle}" TextWrapping="Wrap" Margin="0,12,0,4"/>
+
+            <Grid Grid.Row="7" ColumnDefinitions="340,8,*">
+                <ListBox Grid.Column="0" ItemsSource="{Binding Areas}"
+                         SelectedItem="{Binding SelectedArea, Mode=TwoWay}"
+                         BorderBrush="{StaticResource ChromeFgMutedBrush}" BorderThickness="1">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:RoomAreaViewModel">
+                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <ListBox Grid.Column="2" ItemsSource="{Binding RoomLines}"
+                         BorderBrush="{StaticResource ChromeFgMutedBrush}" BorderThickness="1">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <ItemsControl ItemsSource="{Binding}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="edit:RoomLink">
+                                        <Button Classes="MdbLink" Content="{Binding Label}" Command="{Binding Open}"
+                                                Width="84" HorizontalContentAlignment="Left"
+                                                ToolTip.Tip="Show this room on the map."/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

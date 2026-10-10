@@ -1062,15 +1062,15 @@ Healing and resting are two switches. **Auto-Heal** casts your heal and cure spe
 
 This is automatic and needs no toggle — it's the only thing that reaches through an off Auto-Combat, and only to escape the sit-there-and-die deadlock; a healthy character just walks past monsters as before.
 
-**No resting in a room that hurts.** Some rooms damage you every six seconds for as long as you stand in them: the volcano's heat, a swamp's poison, a river without a raft, the frozen north without furs. Every hit breaks a rest, so resting there recovers nothing. In such a room MudPlay does not rest or meditate, even below *rest if below*:
+**No resting in a room that hurts.** Some rooms damage you every six seconds for as long as you stand in them: the volcano's heat, a swamp's poison, a river without a raft, the frozen north without furs. Every hit breaks a rest or a meditation, so resting there recovers nothing. In such a room MudPlay does not rest or meditate, even below *rest if below*:
 
-- A walk, a loop or a followed leader **carries on**, and the rest starts in the **next room that doesn't hurt**. Nothing holds the walk in the damaging room, and a follower sends no `@wait` there.
-- **Healing goes on.** The *Heal (rest)* spell is normally cast only while resting; while a rest is owed in such a room it is cast standing instead, at the same threshold and mana floor. Your combat and emergency heals work as always.
+- A walk, a loop or a followed leader **carries on**, and the rest starts in the **next room that isn't barred**. Nothing holds the walk in the damaging room, and a follower sends no `@wait` there: it keeps following and asks in the next room it can rest in.
+- **Healing goes on.** The *Heal (rest)* spell is normally cast only while resting; while a rest is owed in such a room it is cast standing instead, at the same threshold and mana floor. Your combat and emergency heals work as always. So a character with healing spells set up heals and moves on; one without them just moves on.
 - A character with nothing moving it **stands and heals**. It is not walked anywhere.
-- **Wearing or carrying the room's counter makes it an ordinary room**: with the phoenix feather on in the volcano, or a raft in the pack on the river, you rest as normal. An item that negates the room's spell has to be *worn*.
+- **With the room's counter in effect it is an ordinary room**, and you rest as normal. How the counter has to be had depends on how it works. An item that *negates* the room's spell (the phoenix feather or magma amulet in the volcano, the swamp boots, the fish-helm) protects only while it is **worn**. An item the room simply checks you have (a raft on the river, the rope and grapple in the ice cavern, the sunstone wristband in the desert) only has to be **held**: in the pack is enough, worn or not. A buff (the desert's waterskin) counts while you carry its source, since MudPlay keeps it raised in those rooms.
 - A loop room flagged *rest up here* and a Rest-up event give way to it too.
 
-Only rooms that hurt on every tick count. A room that hurts on a roll now and then (the fungus caves, the Great Pyramid's traps), or only some characters (the white forest burns the evil-aligned), is rested in as before. The program log says once per room that a rest is being put off and why, and where it finally starts.
+**Which rooms count is yours to say**, spell by spell, in **Settings → Periodic Damage Room Spells**. To start with, the rooms that hurt on every tick bar resting. A room that hurts on a roll now and then (the fungus caves, the Great Pyramid's traps), or only some characters (a level cap, an alignment), is rested in: its damage breaks a rest only on the ticks the roll comes up. The program log says once per room that a rest is being put off and why, and where it finally starts.
 
 **A room's own damage is not a fight.** A line such as *You are seared by the flames for 46 damage!* doesn't put you in combat, doesn't interrupt a rest in the client's bookkeeping, doesn't swap your gear to the fighting set, doesn't send the Enter that looks for an unseen attacker, and isn't a round in Round Totals.
 
@@ -3680,12 +3680,12 @@ Only Default-set items you actually **have** (worn or carried) count — an item
 ### Rest if below (HP / MA)
 
 **Default:** HP 60%, Mana 30%
-**What it does:** The trigger for auto-resting. Once a pool drops to or below this, MudPlay pauses movement and starts resting the moment combat ends (never mid-fight). Not in a room whose own damage would break the rest: there it carries on and rests in the next room that doesn't hurt (see *No resting in a room that hurts* under Health).
+**What it does:** The trigger for auto-resting. Once a pool drops to or below this, MudPlay pauses movement and starts resting the moment combat ends (never mid-fight). Not in a room whose own damage would break the rest or the meditation: there it carries on and rests in the next room that isn't barred (see *No resting in a room that hurts* under Health). Which room spells bar resting is set in **Settings → Periodic Damage Room Spells**.
 
 ### Heal (rest)
 
 **Default:** 80%
-**What it does:** While actually resting, cast the Minor heal spell if HP is still below this — a way to speed along recovery rather than waiting on the passive rest tick alone. In a room whose own damage keeps a due rest from starting (see *No resting in a room that hurts* under Health), it is cast standing instead.
+**What it does:** While actually resting, cast the Minor heal spell if HP is still below this — a way to speed along recovery rather than waiting on the passive rest tick alone. In a room whose spell bars resting (**Settings → Periodic Damage Room Spells**; see *No resting in a room that hurts* under Health), it is cast standing instead while a rest is owed.
 
 ### Minor heal (combat) / Major heal (combat)
 
@@ -4488,6 +4488,39 @@ The **filter** box narrows the list to lines holding what you type: a room name,
 
 **Important notes:** Walks **you** start aren't affected: they ask you on the route cards (**Walk it** or **Teleport**) whenever the shortest way there teleports and it could also be walked, and any other card whose route teleports names the teleport. That holds for the whole walk: a side trip it makes to fetch an item its route needs (to an NPC who hands it over, or a shop) isn't held to this list either. It goes on foot when it can and takes a teleport only when it can't, and the leg from there on to where you were going is the route you picked again. The same goes for the walk picking up after a sell trip or a flee, and for a Shortcut card's trip to the shortcut item's source. That covers a walk-to, a **loop you start** from off the loop (getting to it is a walk-to like any other, with every route card a walk-to shows; the loop begins when you arrive), and **Recover Now** on a death. Only that first walk to the loop is yours: once the loop is reached, a walk back to it after a bank or sell trip or a flee is automatic and uses this list. So is a loop started by an event or by another player's remote command. A sailing isn't a teleport and is always allowed. Saved for this character; a change applies from the next automatic walk on, never to one already under way.
 
+## Periodic Damage Room Spells
+
+Settings → Periodic Damage Room Spells. One list, saved for the loaded character: the room spells of your game data that do damage, and for each whether a room with it bars resting.
+
+A *room spell* is a spell a room casts by itself on whoever stands in it, about every six seconds: the volcano's heat, a swamp's poison, a river with no boat. Damage from it breaks a rest or a meditation. What MudPlay does in a barred room is under **Health: rest, heal, flee** → *No resting in a room that hurts*: no rest or meditate is started, healing goes on, a walk or loop carries on, and the rest is taken in the next room that isn't barred.
+
+**With no profile loaded, or no game data, the tab is empty** and says which of the two it is waiting for. The list is read again whenever the game data set changes.
+
+### Bars resting
+
+**Default:** ticked for a spell that damages on **every tick**; clear for one that damages only **on a roll** or **on a condition**
+**What it does:** Ticked, no rest or meditate is started in a room with that spell, unless its counter is in effect (see *Countered by*). Clear, the room is rested in like any other, whatever its spell does.
+
+**Why you might change it:** untick a spell whose damage is too small to matter to you (the frozen north's 1 to 4 a tick) if you would sooner rest through it. Tick a roll spell if its hits keep breaking your rests.
+
+**Important notes:** Only the spells you set away from their default are saved, so a later game-data update that reads a spell differently reaches every spell you never touched. A choice saved for a spell the loaded game data doesn't have (another realm's) is kept. A change is in effect from the next rest decision; the program log names each spell whose rule changed. **Reset to defaults** puts every box back.
+
+### The columns
+
+- **Record** is the spell's number in the Spells table (Game Data Browser → Spells), and **Spell** its name there.
+- **Damage** is what one cast does, from the spell's record: a range (`30–60`), a single figure, or *not in the data* when the game data doesn't hold it (Paradigm's desert thirst). *More with level* marks a spell whose record also has a per-level step. Where a spell ends in a death timer the range reaches its `9999` (freezing water and holding breath lead to drowning).
+- **Comes** is how the damage arrives:
+  - **every tick**: on every cast of the room's spell.
+  - **on a roll: N% of ticks**: only when a roll comes up, with the share of casts that do damage.
+  - **on a failed skill test**: only when you fail a skill check (the Great Pyramid's traps); there is no fixed share.
+  - **only if …**: only for a character or room that meets a condition, named in a few words (*level 19 or under*, *no monster in the room*, *holding* an item). A condition MudPlay has no wording for is shown as the game data writes it, in `code`. When there are many alternatives the first three are named and the rest counted.
+- **Countered by** is what makes the spell harmless, and how it has to be had: **(worn)** for an item that negates the spell, which works only on the body; **(held)** for an item the room checks you have, in the pack or worn; **the buff from … (used)** for a buff you raise by using an item. *Nothing in the game data* means the data has no counter for it.
+- **Rooms** is how many rooms carry the spell.
+
+### The rooms of a spell
+
+Click a spell to list its rooms under the table. A spell can sit on a couple of thousand rooms, so they are grouped: the left list has one line per **map and room name** with its count, the largest first; pick a line and the right list shows that group's rooms as **map/room** links. **Click a room to show it on the map**: the Navigation window opens (or comes to the front), centres on the room, selects it and shows its details, the same as a room link in the Game Data Browser.
+
 ## Other
 
 Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathing) behavior. Most fields here are character-tier; the two solver toggles and the player-database cleanup setting are Global-tier (install-wide).
@@ -5192,6 +5225,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Stop auto-sneaking while a carried item leaves under … % | `15` | 0–95 | `OtherSettings.SneakStandDownChance` | Models/Profile/OtherSettings.cs |
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
 | Teleports: Allow automatic walks to use the following teleports | none | list of teleports | `TeleportSettings.AutomaticWalkTeleports` | Models/Profile/TeleportSettings.cs |
+| Periodic Damage Room Spells: Bars resting | ticked for every-tick spells, clear for roll / condition spells | bool per room spell (only changes are stored) | `PeriodicDamageRoomSpellSettings.BarsResting` | Models/Profile/PeriodicDamageRoomSpellSettings.cs |
 | Auto-request @comeback when left behind | true | bool | `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |
 | Pyramid / Asylum solver enabled | true / true | bool (Global) | `GlobalSettings.PyramidSolverEnabled` / `AsylumSolverEnabled` | Models/Settings/GlobalSettings.cs |
 | Token routes: offer / min rooms saved | true / 50 | bool + 1–300 (Global, Paradigm) | `GlobalSettings.EnableTokenRoutes` / `TokenRouteMinRoomsShorter` | Models/Settings/GlobalSettings.cs |

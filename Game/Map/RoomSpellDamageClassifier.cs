@@ -1,11 +1,12 @@
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using MudPlay.Game.Spells;
 
 namespace MudPlay.Game.Map;
 
-// Reads whether a room's own spell damages whoever stands in the room (GAME_MECHANICS
-// "Resting in a room whose spell does damage").
+// Reads whether a room's own spell damages whoever stands in the room, how much and
+// on what (GAME_MECHANICS "Resting in a room whose spell does damage").
 //
 // A room spell reaches damage three ways: its own Damage ability, an EndCast to a
 // spell that has one, or a `cast` of such a spell in the textblock its TextBlock
@@ -19,7 +20,7 @@ namespace MudPlay.Game.Map;
 //     monsters present, a flag) makes it Conditional, roll or no roll: the client
 //     doesn't work those out, and a room that only burns the evil-aligned is no
 //     reason to keep a good character from resting in it.
-// The spell takes the strongest of its paths.
+// The spell takes the strongest of its paths, and the reading describes those.
 //
 // The same chain RoomSpellTeleportClassifier walks, asked a different question (which
 // gates count, and what a roll does to the answer), so it walks the chain itself and
@@ -27,8 +28,10 @@ namespace MudPlay.Game.Map;
 // reader.
 public static class RoomSpellDamageClassifier
 {
+    // Damage, and damage that magic resistance lessens (chaos storm, the room spell
+    // of Paradigm's Barley Fields).
     private const int DamageAbility = 1;
-    private const int TextBlockAbility = 148;
+    private const int DamageMrAbility = 17;
     private const int EndCastAbility = 151;
 
     // A d100 table runs the first line whose number is above the roll, so only a
@@ -36,18 +39,40 @@ public static class RoomSpellDamageClassifier
     private const int RollCeiling = 100;
 
     // spellOf resolves a spell number to its record, textblock a TBInfo number to its
-    // entry; either returns null for a number the set doesn't have. gap names the
-    // first thing the walk couldn't read, or is null when it read everything.
-    public static RoomSpellDamage Classify(
-        int spell, Func<int, SpellFormulaInput?> spellOf, Func<int, TBInfoEntry?> textblock, out string? gap)
+    // entry; either returns null for a number the set doesn't have.
+    public static RoomSpellDamageReading Classify(
+        int spell, Func<int, SpellFormulaInput?> spellOf, Func<int, TBInfoEntry?> textblock)
     {
         ArgumentNullException.ThrowIfNull(spellOf);
         ArgumentNullException.ThrowIfNull(textblock);
         var walk = new Walk(spellOf, textblock);
-        RoomSpellDamage found = walk.Spell(spell, conditioned: false, 0);
-        gap = walk.Gap;
-        return found;
+        List<Hit> hits = walk.Spell(spell, [], 0);
+        if (hits.Count == 0) return RoomSpellDamageReading.NoDamage(walk.Gap);
+
+        RoomSpellDamage kind = hits.Max(static h => h.Kind);
+        List<Hit> strongest = hits.Where(h => h.Kind == kind).ToList();
+        List<Hit> sized = strongest.Where(static h => h.Max > 0).ToList();
+        bool skillTest = strongest.Any(static h => h.SkillTest);
+        // Bands of one table are apart from each other, so their shares add up.
+        int percent = kind == RoomSpellDamage.EveryTick || skillTest
+            ? 0
+            : Math.Clamp((int)Math.Round(strongest.Sum(static h => h.Chance) * 100), 1, 100);
+        return new RoomSpellDamageReading(
+            kind,
+            sized.Count == 0 ? 0 : sized.Min(static h => h.Min),
+            sized.Count == 0 ? 0 : sized.Max(static h => h.Max),
+            strongest.Any(static h => h.Grows),
+            percent,
+            skillTest,
+            strongest.Select(static h => string.Join(", ", h.Conditions))
+                .Where(static c => c.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            walk.Gap);
     }
+
+    // One damage spell a path ends in. Chance is the share of casts that reach it
+    // past the table bands and EndCast% on the way (1 when there is none).
+    private readonly record struct Hit(
+        RoomSpellDamage Kind, int Min, int Max, bool Grows, double Chance, bool SkillTest, string[] Conditions);
 
     private sealed class Walk(Func<int, SpellFormulaInput?> spellOf, Func<int, TBInfoEntry?> textblock)
     {
@@ -58,76 +83,97 @@ public static class RoomSpellDamageClassifier
 
         public string? Gap { get; private set; }
 
-        public RoomSpellDamage Spell(int number, bool conditioned, int depth)
+        public List<Hit> Spell(int number, string[] conditions, int depth)
         {
-            if (number <= 0) return RoomSpellDamage.None;
+            if (number <= 0) return [];
             if (depth > RoomSpellTeleportClassifier.MaxChainDepth)
                 return Missed($"chain cut at spell {number}, {RoomSpellTeleportClassifier.MaxChainDepth} steps in");
             if (spellOf(number) is not { } spell) return Missed($"spell {number} missing");
-            if (!_spells.Add(number)) return RoomSpellDamage.None;
+            if (!_spells.Add(number)) return [];
 
             // An EndCast% under 100 makes the follow-on spell a roll.
-            bool endCastRolls = SpellEffectFormatter.EndCastPercent(spell) is > 0 and < 100;
-            RoomSpellDamage found = RoomSpellDamage.None;
+            int endCastPercent = SpellEffectFormatter.EndCastPercent(spell);
+            bool endCastRolls = endCastPercent is > 0 and < 100;
+            // A textblock spell with no value in the slot keeps the block's number
+            // in its base values, which are then no damage range.
+            bool baseIsBlock = spell.Abilities.Any(
+                static a => a.Code == SpellTextBlock.AbilityCode && a.Value <= 0);
+
+            var hits = new List<Hit>();
             foreach (SpellAbility ability in spell.Abilities)
             {
-                if (ability.Code == DamageAbility)
-                    found = Stronger(found, conditioned ? RoomSpellDamage.Conditional : RoomSpellDamage.EveryTick);
-                else if (ability.Code == TextBlockAbility)
+                if (ability.Code is DamageAbility or DamageMrAbility)
                 {
-                    // A textblock spell with no value in the slot keeps the block's
-                    // number in MinBase / MaxBase (GAME_MECHANICS "Room-spell hazard
-                    // shape 2 — TextBlock action guarded by `failitem <itemNum>`").
-                    int block = ability.Value > 0 ? ability.Value : spell.MinBase > 0 ? spell.MinBase : spell.MaxBase;
-                    found = Stronger(found, Lines(block, conditioned, depth + 1));
+                    // A value in the slot is the amount; an empty slot takes the
+                    // roll between the record's base values.
+                    (int min, int max) = ability.Value != 0 ? (ability.Value, ability.Value)
+                        : baseIsBlock ? (0, 0)
+                        : (Math.Min(spell.MinBase, spell.MaxBase), Math.Max(spell.MinBase, spell.MaxBase));
+                    bool grows = ability.Value == 0 && !baseIsBlock
+                        && ((spell.MinInc != 0 && spell.MinIncLVLs != 0) || (spell.MaxInc != 0 && spell.MaxIncLVLs != 0));
+                    hits.Add(new Hit(
+                        conditions.Length > 0 ? RoomSpellDamage.Conditional : RoomSpellDamage.EveryTick,
+                        min, max, grows, 1, false, conditions));
                 }
+                else if (ability.Code == SpellTextBlock.AbilityCode)
+                    hits.AddRange(Lines(
+                        SpellTextBlock.Number(ability.Value, spell.MinBase, spell.MaxBase), conditions, depth + 1));
                 else if (ability.Code == EndCastAbility && ability.Value > 0)
-                    found = Stronger(found, Past(Spell(ability.Value, conditioned, depth + 1), endCastRolls));
+                {
+                    List<Hit> follow = Spell(ability.Value, conditions, depth + 1);
+                    hits.AddRange(endCastRolls ? Past(follow, endCastPercent / 100.0, skillTest: false) : follow);
+                }
             }
             _spells.Remove(number);
-            return found;
+            return hits;
         }
 
         // A block run line by line: the game takes the first line whose steps all
         // pass, and which that is depends on the character, so each line is a path
         // of its own from where the block was entered.
-        private RoomSpellDamage Lines(int block, bool conditioned, int depth)
+        private List<Hit> Lines(int block, string[] conditions, int depth)
         {
-            if (!Enter(table: false, block, depth, out string action)) return RoomSpellDamage.None;
-            RoomSpellDamage found = RoomSpellDamage.None;
+            if (!Enter(table: false, block, depth, out string action)) return [];
+            var hits = new List<Hit>();
             foreach (string line in action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                found = Stronger(found, Steps(line.Split(':', StringSplitOptions.TrimEntries), conditioned, depth));
+                hits.AddRange(Steps(line.Split(':', StringSplitOptions.TrimEntries), conditions, depth));
             _blocks.Remove((false, block));
-            return found;
+            return hits;
         }
 
         // A block rolled as a d100 table: one line runs, picked by the roll. A table
         // that damages whatever is rolled is no roll (the ice slide always drops you;
         // the roll only picks where).
-        private RoomSpellDamage Table(int block, bool conditioned, int depth)
+        private List<Hit> Table(int block, string[] conditions, int depth)
         {
-            if (!Enter(table: true, block, depth, out string action)) return RoomSpellDamage.None;
+            if (!Enter(table: true, block, depth, out string action)) return [];
             int covered = 0;
             bool everyBand = true;
-            RoomSpellDamage strongest = RoomSpellDamage.None;
+            var bands = new List<(List<Hit> Hits, int Width)>();
             foreach ((int threshold, string[] steps) in RoomSummonParser.ReadBands(action))
             {
                 // A line at or under an earlier line's number is never the first one
                 // above the roll.
                 if (threshold <= covered || covered >= RollCeiling) continue;
+                int width = Math.Min(threshold, RollCeiling) - covered;
                 covered = threshold;
-                RoomSpellDamage band = Steps(steps, conditioned, depth);
-                strongest = Stronger(strongest, band);
-                everyBand &= band == RoomSpellDamage.EveryTick;
+                List<Hit> band = Steps(steps, conditions, depth);
+                everyBand &= band.Any(static h => h.Kind == RoomSpellDamage.EveryTick);
+                bands.Add((band, width));
             }
             _blocks.Remove((true, block));
-            return everyBand && covered >= RollCeiling ? strongest : Past(strongest, roll: true);
+
+            bool noRoll = everyBand && covered >= RollCeiling;
+            var hits = new List<Hit>();
+            foreach ((List<Hit> band, int width) in bands)
+                hits.AddRange(noRoll ? band : Past(band, width / (double)RollCeiling, skillTest: false));
+            return hits;
         }
 
         // One line's steps, left to right. Only what comes before a cast gates it.
-        private RoomSpellDamage Steps(IEnumerable<string> steps, bool conditioned, int depth)
+        private List<Hit> Steps(IEnumerable<string> steps, string[] conditions, int depth)
         {
-            RoomSpellDamage found = RoomSpellDamage.None;
+            var hits = new List<Hit>();
             foreach (string step in steps)
             {
                 string[] words = step.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -135,21 +181,35 @@ public static class RoomSpellDamageClassifier
                 string verb = words[0];
 
                 if (Is(verb, "cast"))
-                    found = Stronger(found, Spell(Number(words, 1), conditioned, depth + 1));
+                    hits.AddRange(Spell(Number(words, 1), conditions, depth + 1));
                 else if (Is(verb, "random"))
-                    found = Stronger(found, Table(Number(words, 1), conditioned, depth + 1));
+                    hits.AddRange(Table(Number(words, 1), conditions, depth + 1));
                 else if (Is(verb, "checkspell") || Is(verb, "failspell"))
+                {
                     // The second number is the block run when the buff is missing.
-                    found = Stronger(found, Lines(Number(words, 2), conditioned, depth + 1));
+                    int absent = Number(words, 2);
+                    hits.AddRange(Lines(absent, conditions, depth + 1));
+                    // `failspell`: without the buff "the damage fires" (GAME_MECHANICS
+                    // "Room-spell hazard shape 3 — buff check (`checkspell` /
+                    // `failspell`): the desert waterskin"). Paradigm's desert names a
+                    // block its data doesn't have and does its thirst damage all the
+                    // same, so a `failspell` whose block is missing is damage of a
+                    // size the data doesn't give, not no damage.
+                    if (Is(verb, "failspell") && absent > 0 && textblock(absent) is null)
+                        hits.Add(new Hit(
+                            conditions.Length > 0 ? RoomSpellDamage.Conditional : RoomSpellDamage.EveryTick,
+                            0, 0, false, 1, false, conditions));
+                }
                 else if (Is(verb, "testskill"))
                     // `testskill <skill> [<modifier>] <failTextblock>`: the block runs on a miss.
-                    found = Stronger(found, Past(Lines(Number(words, words.Length - 1), conditioned, depth + 1), roll: true));
+                    hits.AddRange(Past(
+                        Lines(Number(words, words.Length - 1), conditions, depth + 1), 1, skillTest: true));
                 else if (Is(verb, "failitem"))
                     continue;
                 else if (RoomSpellTeleportClassifier.IsConditionStep(verb))
-                    conditioned = true;
+                    conditions = [.. conditions, string.Join(' ', words)];
             }
-            return found;
+            return hits;
         }
 
         private bool Enter(bool table, int block, int depth, out string action)
@@ -172,17 +232,24 @@ public static class RoomSpellDamageClassifier
             return true;
         }
 
-        private RoomSpellDamage Missed(string what)
+        private List<Hit> Missed(string what)
         {
             Gap ??= what;
-            return RoomSpellDamage.None;
+            return [];
         }
 
         // Damage reached past a roll is no longer damage on every tick.
-        private static RoomSpellDamage Past(RoomSpellDamage found, bool roll) =>
-            roll && found == RoomSpellDamage.EveryTick ? RoomSpellDamage.OnARoll : found;
-
-        private static RoomSpellDamage Stronger(RoomSpellDamage a, RoomSpellDamage b) => a > b ? a : b;
+        private static List<Hit> Past(List<Hit> hits, double chance, bool skillTest)
+        {
+            for (int i = 0; i < hits.Count; i++)
+                hits[i] = hits[i] with
+                {
+                    Kind = hits[i].Kind == RoomSpellDamage.EveryTick ? RoomSpellDamage.OnARoll : hits[i].Kind,
+                    Chance = hits[i].Chance * chance,
+                    SkillTest = hits[i].SkillTest || skillTest,
+                };
+            return hits;
+        }
 
         private static bool Is(string verb, string name) => verb.Equals(name, StringComparison.OrdinalIgnoreCase);
 
