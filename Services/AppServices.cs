@@ -6676,10 +6676,10 @@ public sealed class AppServices
         Profile.ProfileClosed += () => StashStore.OnRealmChanged(ActiveRealmFolder());
         Inventory.ItemHidden += item =>
         {
-            // An auto-discard offload uses `hide <item>` in HideMode — that's a
-            // discard, not a stash, so it claims its own confirmation here and is
-            // kept out of the ledger. Manual / stash-room hides were never
-            // registered, so they still record.
+            // A discard (an auto-discard offload, a Chest Offload Drop) uses
+            // `hide <item>` in HideMode — that's a discard, not a stash, so it
+            // claims its own confirmation here and is kept out of the ledger.
+            // Manual / stash-room hides were never registered, so they still record.
             if (AutoDiscard.TryConsumeSuppressedHide(item)) return;
             TransactionHistory.NoteStash(
                 Array.Empty<(string, long)>(), new[] { item }, CurrentRoomLabel());
@@ -6781,6 +6781,35 @@ public sealed class AppServices
         // Auto-discard re-evaluates the pack on every inventory change — the
         // seam that surfaces chest dumps and freshly collected loot.
         Inventory.Changed += AutoDiscard.OnInventoryChanged;
+        Inventory.FullInventoryParsed += AutoDiscard.OnFullInventoryRead;
+        // A hide the room had no room for is sent again on arriving somewhere
+        // else. Only a confirmed room counts: a pending move still shows the room
+        // being left, and a suspect reading may not be a move at all.
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewConfidence == Game.Map.RoomConfidence.Confirmed && t.NewRoom is { } arrived)
+                AutoDiscard.OnRoomEntered(arrived.Key);
+        };
+        AutoDiscard.PacedSender = cmds => InventoryAction.SendPaced(cmds);
+        AutoDiscard.SendsQueued = () => InventoryAction.HasPacedCommandsQueued;
+        AutoDiscard.CancelQueuedSends = () => InventoryAction.CancelPaced();
+        // A discard sent while the send gate is up is dropped unsent. And on Stock
+        // a hide gets no answer of its own in the dark or blind (GAME_MECHANICS
+        // "Hiding items in a room"; Paradigm isn't recorded, so sight doesn't hold
+        // its hides back).
+        AutoDiscard.SendGateOpen = () => !EngineGate.IsLocked;
+        AutoDiscard.CanSeeToHide = () =>
+            onParadigm() || (!RoomTracker.IsInDarkRoom && !Conditions.IsBlinded);
+        // Either clearing may be what a discard was waiting on.
+        EngineGate.Released += AutoDiscard.OnInventoryChanged;
+        Conditions.ConditionEnded += _ => AutoDiscard.OnInventoryChanged();
+        // A held hide is for a copy still to be got rid of; sold, it is gone.
+        Inventory.ItemSold += (name, count, _) => AutoDiscard.ReleaseHeld(name, count);
+        // Discards sent to another character's game, or before a death emptied
+        // the pack, will never be answered. (A dropped connection is the main
+        // window's to report.)
+        Profile.ProfileLoaded += _ => AutoDiscard.Reset("profile loaded");
+        RoomTracker.PlayerDeathObserved += () => AutoDiscard.Reset("death");
 
         AutoBuy = new Game.Inventory.AutoBuyManager(Router,
             resolve: ResolveAutoBuyItem,
@@ -8795,6 +8824,9 @@ public sealed class AppServices
         // moment the sweep ends.
         AutoGetItems.SuppressDuringSweep = () => GhSweep.IsActive;
         AutoDiscard.SuppressDuringSweep = () => GhSweep.IsActive;
+        // Hides a full room refused were kept back for the sweep; it may have left
+        // the character somewhere with room.
+        GhSweep.PhaseChanged += () => { if (!GhSweep.IsActive) AutoDiscard.RecheckHeldHides(); };
 
         // Shop-source routing (PR C). On a one-shot walk-to that needs an
         // uncarried Item/Ticket-gate item a shop sells, detour to the
@@ -13705,7 +13737,7 @@ public sealed class AppServices
         TrapDisarm.MaxDisarmAttempts = Math.Clamp(dto.MaxTrapDisarmAttempts, 1, 50);
         // Follower-side auto-@comeback toggle.
         ComebackRequest.Enabled = dto.AutoRequestComebackWhenLeftBehind;
-        // Auto-discard offload verb: hide <item> vs drop <item>.
+        // Discard verb (auto-discard, Chest Offload's drops): hide <item> vs drop <item>.
         AutoDiscard.HideMode = dto.HideWhenDiscarding;
         AutoParty.OnlyWhileNavigating = dto.AutoInviteOnlyWhileNavigating;
     }

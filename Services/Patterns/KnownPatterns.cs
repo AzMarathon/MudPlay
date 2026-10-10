@@ -364,6 +364,7 @@ public static class KnownPatterns
     public const string PlayerGets        = "item.player-gets";     // combined: own + others
     public const string PlayerDrops       = "item.player-drops";    // combined: own + others
     public const string RoomDropRefused   = "item.room-drop-refused"; // "There is no room to drop X here." — room at item capacity
+    public const string RoomHideRefused   = "item.room-hide-refused"; // "There is no room to hide X here." — the room's hidden side is full
     public const string UserEquipped      = "item.user-equipped";   // wearing + lit (torches etc.)
     public const string UserEquipFailed   = "item.user-equip-failed";  // armor: "You may not wear that item!"
     public const string UserWieldFailed   = "item.user-wield-failed";  // weapon EP-zap: "You may not use that weapon."
