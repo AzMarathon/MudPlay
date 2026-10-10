@@ -5,12 +5,13 @@ using System.Text;
 namespace MudPlay.Game;
 
 // A running record of when the game's periodic ticks were seen, to the millisecond:
-// combat rounds, every HP and mana gain, and each change of posture. It exists so a
-// realm's tick cycle can be worked out from a capture — how far apart the gains
-// come, how much each pays, and where they fall against the combat round and
-// against the moment the character lay down. The Stock engine counts every one of
-// its passes off a single one-second tick (GAME_MECHANICS "The engine clock — one
-// fast tick drives every timer"); whether Paradigm does is what this is for.
+// combat rounds, every HP and mana gain, each change of posture, and each hit of
+// damage that is no part of a round (a room's own spell). It exists so a realm's
+// tick cycle can be worked out from a capture — how far apart the gains come, how
+// much each pays, and where they fall against the combat round and against the
+// moment the character lay down. The Stock engine counts every one of its passes
+// off a single one-second tick (GAME_MECHANICS "The engine clock — one fast tick
+// drives every timer"); whether Paradigm does is what this is for.
 //
 // Every gain is kept, not only the ones RegenTracker credits to a cycle: a gain
 // inside its heal window is kept and marked, since dropping it would hide a tick
@@ -30,7 +31,7 @@ public sealed class TickTimingLog : IDisposable
     private bool _hpSeen, _maSeen;
     private PlayerPosition _position;
     private DateTimeOffset? _lastHpGainAt, _lastMaGainAt;
-    private DateTimeOffset? _lastRoundAt, _lastSeenRoundAt, _postureSince;
+    private DateTimeOffset? _lastRoundAt, _lastSeenRoundAt, _postureSince, _lastOffRoundDamageAt;
     private bool _disposed;
 
     private readonly record struct Entry(DateTimeOffset At, string Kind, string Detail);
@@ -61,6 +62,28 @@ public sealed class TickTimingLog : IDisposable
         if (seen) _lastSeenRoundAt = now;
         Add(now, "round", $"{(seen ? "seen" : "projected")}  gap {gap}");
     }
+
+    // A damage line TickEngine left out of the round clock: a room's own spell, mostly.
+    // Kept with its offset from the last round seen, since that offset is what shows
+    // which of the game's passes it rides.
+    //
+    // A monster's on-hit effect is left out of the clock too, and comes with the hit
+    // that caused it: a line inside the round just seen is one of those, says nothing
+    // about any other pass, and would fill the record in a long fight. It gets no row.
+    // (A room spell that meets the round, once in half a minute, loses its row the same
+    // way: the next row's gap then spans two casts.)
+    public void NoteDamageOffTheRound()
+    {
+        DateTimeOffset now = _clock();
+        if (_lastSeenRoundAt is { } seen && now - seen < WithTheRound) return;
+        string gap = _lastOffRoundDamageAt is { } prev ? Seconds(now - prev) : "first";
+        _lastOffRoundDamageAt = now;
+        string round = _lastSeenRoundAt is { } last ? Seconds(now - last) : "?";
+        Add(now, "damage", $"off the round  gap {gap}  round+{round}");
+    }
+
+    // TickEngine's own debounce for the lines of one round's burst.
+    private static readonly TimeSpan WithTheRound = TimeSpan.FromMilliseconds(250);
 
     private void OnPlayerStateChanged(object? sender, PropertyChangedEventArgs e)
     {

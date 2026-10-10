@@ -377,22 +377,37 @@ public sealed class LoopExpSimulatorTests
     }
 
     [Fact]
-    public void Realm_StockFiresSummonSlowerThanParadigm()
+    public void Realm_RoomSummonRollsOnTheRoomSpellTick_NotTheCombatRound()
     {
-        // The realm only changes the summon re-roll cadence: Paradigm re-rolls every
-        // combat round (~5s), Stock on the slower 6s medium tick. So over the same
-        // occupied-lair fight a Paradigm summoning room yields MORE summon rolls —
-        // strictly more exp — than a Stock one. (Lair exp is identical; only the
-        // summon contribution differs.)
+        // A room's spell is re-cast every second spell round on both realms: 6 s on
+        // Stock, 6.05 s measured on Paradigm (reports paradigm-20261009-120757 and
+        // paradigm-20261009-122342; GAME_MECHANICS "Room-spell monster summons").
+        // Paradigm used to roll on its 5 s combat round, a fifth more rolls than it
+        // gets, which put its summon yield per lap some 15% over Stock's here. The
+        // two now come within a few percent (the realms still differ in how a lair
+        // refills, so not to the hundredth the ticks alone would give).
         ExpRoomVisit room = new(new RoomKey(13, 3573),
             new[] { Lair(2, 5000, 120) }, new RoomSummon("crypt summon 2", 1850, 0.15));
         ExpRoute route = Route(room, Empty(13, 3574));
         var stock = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 2, RealConditionsMultiplier: 1, Realm: RealmType.Stock);
         var para = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 2, RealConditionsMultiplier: 1, Realm: RealmType.ParaMud);
 
-        double stockExp = LoopExpSimulator.Simulate(route, stock).ExpPerHour;
-        double paraExp = LoopExpSimulator.Simulate(route, para).ExpPerHour;
-        Assert.True(paraExp > stockExp, $"paradigm {paraExp:N0} should beat stock {stockExp:N0}");
+        ExpSimResult stockRun = LoopExpSimulator.Simulate(route, stock);
+        ExpSimResult paraRun = LoopExpSimulator.Simulate(route, para);
+        double stockPerLap = Assert.Single(stockRun.Summons).ExpPerHour * stockRun.AvgLapSeconds;
+        double paraPerLap = Assert.Single(paraRun.Summons).ExpPerHour * paraRun.AvgLapSeconds;
+
+        Assert.InRange(paraPerLap / stockPerLap, 0.97, 1.03);
+    }
+
+    [Fact]
+    public void SummonFires_SixSecondTicks()
+    {
+        // 30 s of fighting in a summoning room: the entry roll plus five on Stock's
+        // 6 s tick, plus 4.96 on Paradigm's 6.05 s.
+        RoomSummon ungated = new("crypt summon 2", 1850, 0.15, NoMonstersGated: false);
+        Assert.Equal(6.0, LoopExpSimulator.SummonFires(ungated, roomOccupiedOnEntry: true, roomCombatSeconds: 30, roomSpellTick: 6.0), 6);
+        Assert.Equal(1 + 30 / 6.05, LoopExpSimulator.SummonFires(ungated, roomOccupiedOnEntry: true, roomCombatSeconds: 30, roomSpellTick: 6.05), 6);
     }
 
     [Fact]

@@ -1,15 +1,34 @@
 # Version history
 
-## 3.161.3
+## 3.161.7
 
-- Events run one at a time, start to finish: one that fires while another is walking, waiting, resting, sweeping or on a bank trip or stash transfer waits its turn
+- Events run one at a time, start to finish, in the order they fired: one that fires while another is running waits its turn
+- A loop or Auto-Lair event with a Stop after rule finishes (its Then included) before the next starts; one with no rule is done once it has started
 - With an event waiting, the finished one's "go back" or loop passes to it, so the loop is restarted once, after the last
-- An event isn't queued twice; at most 10 wait; one that waited 30 minutes is dropped
+- Logoff events, and events whose command logs off or hangs up, jump the queue
+- An event isn't queued twice; Settings → Events sets how many may wait (10) and for how long (30 minutes)
 - Stopping an event's walk, dying or Reset States drops the waiting events; so does a lost connection
-- A loop or Auto-Lair action still gives way at once, and Logoff events don't wait
-- A Then that can't get going (a loop behind a teleport Settings → Teleports doesn't allow) says why in the terminal
-- Bug report: the events waiting and what the last Then came to
+- A walk back to a loop refused as an automatic walk says so in the terminal and names the Settings → Teleports line to tick
+- Bug report: the events waiting, the queue limits and what the last Then came to
 - bug reports addressed: paradigm-20261009-185106, paradigm-20261009-220128
+
+## 3.161.5
+
+- A room's heat (*You are seared by the flames*) no longer counts as a combat round
+- No more heals or buffs sent mid-round into `You have already cast a spell this round!`
+- A fight stopped just after an attack is re-attacked on the next round line
+- A typed `eq` / `wear` / `wield` / `rem` mid-fight re-attacks at once
+- A refused cast no longer leaves a re-attack armed
+- Exp/Hr and the loop simulator: Paradigm room spells roll every 6.05 s, not every round
+- The giant hellhound's death line is recognised
+- Program log and bug report show re-attack decisions
+- bug reports addressed: paradigm-20261009-120757, paradigm-20261009-122342
+
+## 3.161.2
+
+- A walk or loop held by a fight asks the game where you are before stepping on when the map lost its place during the fight (Paradigm: `rm`), instead of walking into a wall and standing there
+- A step sent while the map was unsure of its room and left unanswered for 10 seconds now asks too, instead of waiting for good
+- bug reports addressed: paradigm-20261009-082958
 
 ## 3.161.1
 

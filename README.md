@@ -1,14 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.3**
-> - Events run one at a time, start to finish: one that fires while another is walking, waiting, resting, sweeping or on a bank trip or stash transfer waits its turn
+> **Version 3.161.7**
+> - Events run one at a time, start to finish, in the order they fired: one that fires while another is running waits its turn
+> - A loop or Auto-Lair event with a Stop after rule finishes (its Then included) before the next starts; one with no rule is done once it has started
 > - With an event waiting, the finished one's "go back" or loop passes to it, so the loop is restarted once, after the last
-> - An event isn't queued twice; at most 10 wait; one that waited 30 minutes is dropped
+> - Logoff events, and events whose command logs off or hangs up, jump the queue
+> - An event isn't queued twice; Settings → Events sets how many may wait (10) and for how long (30 minutes)
 > - Stopping an event's walk, dying or Reset States drops the waiting events; so does a lost connection
-> - A loop or Auto-Lair action still gives way at once, and Logoff events don't wait
-> - A Then that can't get going (a loop behind a teleport Settings → Teleports doesn't allow) says why in the terminal
-> - Bug report: the events waiting and what the last Then came to
+> - A walk back to a loop refused as an automatic walk says so in the terminal and names the Settings → Teleports line to tick
+> - Bug report: the events waiting, the queue limits and what the last Then came to
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

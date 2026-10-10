@@ -687,6 +687,10 @@ public static class BugReportBuilder
         // While true a confusion fumble re-sends no attack: the game answered the
         // last one with *Combat Engaged* and is repeating it itself.
         Kv(sb, "Engaged since last attack", svc.Combat.EngagedSinceLastAttack.ToString());
+        // The last time a combat line or round tick asked to re-attack with combat
+        // off, and what came of it: a skip here beside a live target is a fight left
+        // standing (report paradigm-20261009-122342).
+        Kv(sb, "Last attack-resume decision", svc.Combat.LastResumeDecision ?? "(none this session)");
         // True when Auto-Combat is off but a room hostile is blocking a needed rest
         // (HP still above the flee trigger) — the engine is force-engaging to clear it
         // so recovery can proceed (report paradigm-20260901-093301).
