@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.2**
+> **Version 3.161.6**
 > - A monster set to **Flee** (Game Data → the monster's record → Fighting it) is now run from as soon as it is seen in the room, while a walk or loop is running
 > - It is the Health tab's flee: the Combat tab's run distance and direction, and the walk or loop carries on afterwards
 > - When no run can start, a Flee monster that attacks is fought back

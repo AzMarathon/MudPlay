@@ -3230,12 +3230,13 @@ public sealed partial class CombatManager : IDisposable
         // auto-attack is off (we cast a buff/heal mid-round, got
         // stunned, etc.) and the room still holds an engageable mob.
         // The server stopped swinging for us but the fight is clearly
-        // ongoing — the only combat line that can reach here while
-        // _combatOff is a *mob* swing (we're not attacking, so no
-        // user-hit precedes the resume). Re-pick + re-issue the attack.
-        // Gated on _combatOff so a normal in-combat line (server still
-        // swinging) never re-fires. A just-killed mob can't produce a
-        // combat line, so this won't swing at a corpse on a clean kill.
+        // ongoing. The line reaching here while _combatOff is not ours (we're
+        // not attacking): a mob's swing, a party member's hit, or a room's
+        // own damage, each of which the hit patterns match. Re-pick +
+        // re-issue the attack. Gated on _combatOff so a normal in-combat
+        // line (server still swinging) never re-fires. TryResumeEngage's
+        // guard and the deferred dispatch's target check are what keep
+        // this off a monster a party member has just killed.
         if (_combatOff
             && _classifier.Current is { } live
             && HasEngageable(live))
@@ -3791,6 +3792,7 @@ public sealed partial class CombatManager : IDisposable
         if (_userAttackOverride && !bypassAttackGuard)
         {
             _log?.Combat(LogCategory, "resume suppressed — user attack override holds this round");
+            NoteResumeDecision("held — the user's own attack has this round", log: false);
             return false;
         }
         DateTimeOffset now = DateTimeOffset.Now;
@@ -3800,15 +3802,65 @@ public sealed partial class CombatManager : IDisposable
         // _combatOff and the next mob swing line drops in here (the reported solo
         // double-send). Skip while a real attack is still this recent — unless a
         // between-round cast is what produced this Off (see bypassAttackGuard).
-        if (!bypassAttackGuard && now - _lastAttackSentAt < ResumeAfterAttackGuard) return false;
+        //
+        // That Off is one the fresh swing hasn't been answered past. An Off that
+        // follows the swing's own *Combat Engaged* ended it, so there is nothing to
+        // double: a typed `eq` half a second after the attack broke the fight, the
+        // round's lines and its tick all came inside the guard, the heal that followed
+        // drew no Off of its own (combat was already off) and the monster went
+        // unattacked until it died a round later (report paradigm-20261009-122342).
+        // Not right after a kill, though: the Off that ends an answered attack is then
+        // most likely the kill's own, and if the corpse is still on the roster (its
+        // removal can fail) the guard is what keeps a swing off it.
+        bool answeredThenStopped = _offEndedAnsweredAttack && now - _lastDeathAt >= DeathInterruptWindow;
+        if (!bypassAttackGuard && !answeredThenStopped && now - _lastAttackSentAt < ResumeAfterAttackGuard)
+        {
+            NoteResumeDecision(
+                $"skipped — our attack went out {(now - _lastAttackSentAt).TotalMilliseconds:F0}ms ago and "
+                + (_offEndedAnsweredAttack ? "a kill came right behind it" : "the game hasn't answered it"),
+                log: _resumeSkipLoggedForAttackAt != _lastAttackSentAt);
+            _resumeSkipLoggedForAttackAt = _lastAttackSentAt;
+            return false;
+        }
         // A distinct between-round-cast resume (bypassPacing) is guarded once-per-cast
         // by its own stamp, so it must not be paced out by a prior resume. Still stamp
         // _lastInterruptResumeAt below so the paced mob-swing / tick resumes stay
         // deduped against it and can't double this one in the same round.
-        if (!bypassPacing && now - _lastInterruptResumeAt < ResumePacing) return false;
+        if (!bypassPacing && now - _lastInterruptResumeAt < ResumePacing)
+        {
+            NoteResumeDecision(
+                $"not again — re-attacked {(now - _lastInterruptResumeAt).TotalMilliseconds:F0}ms ago (one resume a round)",
+                log: false);
+            return false;
+        }
         _lastInterruptResumeAt = now;
+        // Reaching here inside the guard's window without a bypass means the answered
+        // attack is what let it through: worth a line, the rest ResumeEngage logs.
+        bool pastGuardOnAnswer = !bypassAttackGuard && now - _lastAttackSentAt < ResumeAfterAttackGuard;
+        NoteResumeDecision(
+            pastGuardOnAnswer
+                ? $"re-attacking — the attack sent {(now - _lastAttackSentAt).TotalMilliseconds:F0}ms ago was engaged, then stopped"
+                : "re-attacking",
+            log: pastGuardOnAnswer);
         DeferResumeEngage(live);
         return true;
+    }
+
+    // What TryResumeEngage last decided and when, for the bug report: a resume that
+    // was skipped used to leave no trace at all. The guard's skip is logged once per
+    // attack it was skipped for, since every line of a round's burst asks again; the
+    // pacing skip is the same burst asking after a resume ResumeEngage already logged.
+    private (DateTimeOffset At, string Text)? _lastResumeDecision;
+    private DateTimeOffset _resumeSkipLoggedForAttackAt = DateTimeOffset.MinValue;
+
+    public string? LastResumeDecision => _lastResumeDecision is { } d
+        ? $"{d.At:HH:mm:ss.fff} {d.Text}"
+        : null;
+
+    private void NoteResumeDecision(string text, bool log)
+    {
+        _lastResumeDecision = (DateTimeOffset.Now, text);
+        if (log) _log?.Combat(LogCategory, $"attack resume with combat off: {text}");
     }
 
     // Both TryResumeEngage callers (OnCombatLine's mob-swing resume, OnCombatTick's
@@ -3899,6 +3951,44 @@ public sealed partial class CombatManager : IDisposable
         if (_classifier.Current is not { } live || !HasEngageable(live)) return;
         _log?.Combat(LogCategory, "gear swap during a live fight — arming interrupt resume for the wear's *Combat Off*");
         NoteBetweenRoundCast();
+    }
+
+    // A hand-typed `eq` / `wear` / `wield` / `rem` (routed by OutboundGearObserver)
+    // stops a fight the same way, on both realms, and the fight is to be picked up
+    // again at once (user, 2026-10-09; GAME_MECHANICS "Non-swing actions break combat
+    // (casting, equipping)"). Arms the same latch a cast does, so the *Combat Off* the
+    // command draws re-attacks on the spot, and it lapses with the cast window when
+    // the command stops nothing (an item we don't have).
+    //
+    // Two differences from a cast of ours. It is marked manual, so in spell mode a
+    // run of typed commands is rate-limited like a run of typed casts. And in weapon
+    // mode its resume keeps ResumePacing (see _typedGearStamp): the engine casts once
+    // a round, a user can type three gear commands in a second.
+    public void NoteTypedGearCommand(string command)
+    {
+        if (_disposed || !Fighting()) return;
+        if (_classifier.Current is not { } live || !HasEngageable(live)) return;
+        _log?.Combat(LogCategory, $"typed '{command}' during a live fight — arming a re-attack for its *Combat Off*");
+        NoteBetweenRoundCast(manual: true);
+        _typedGearStamp = _betweenRoundCastAt;
+    }
+
+    // The _betweenRoundCastAt stamp a typed gear command armed, MinValue when the
+    // latch is a cast's.
+    private DateTimeOffset _typedGearStamp = DateTimeOffset.MinValue;
+
+    // The game refused the cast the latch was armed for (`You have already cast a
+    // spell this round!`). A refused cast prints no *Combat Off* (GAME_MECHANICS "One
+    // between-round spell per combat round"), so nothing is coming for the latch to
+    // answer, and left armed for its three seconds it took the Off of our own re-sent
+    // attack for the cast's (report paradigm-20261009-120757, 12:07:17). A typed gear
+    // command's latch is left alone: the refusal isn't about it.
+    private void DisarmCastResumeOnRefusal()
+    {
+        if (_betweenRoundCastAt == _typedGearStamp) return;
+        if (DateTimeOffset.Now - _betweenRoundCastAt >= CastInterruptResumeWindow) return;
+        _betweenRoundCastAt = DateTimeOffset.MinValue;
+        _log?.Combat(LogCategory, "between-round cast refused — resume disarmed (a refused cast draws no *Combat Off*)");
     }
 
     // ----- Manual user-attack override -------------------------------------
@@ -4279,6 +4369,9 @@ public sealed partial class CombatManager : IDisposable
         string status = match.Groups[0];
         if (string.Equals(status, "Off", StringComparison.OrdinalIgnoreCase))
         {
+            // Only the Off that stops the attack says how it ended; one arriving while
+            // combat is already off adds nothing to that.
+            if (!_combatOff) _offEndedAnsweredAttack = _engagedSinceLastAttack;
             _combatOff = true;
             _engageConfirmed = false;
             _engagedSinceLastAttack = false;
@@ -4380,6 +4473,24 @@ public sealed partial class CombatManager : IDisposable
                     + $"sinceDeath={(DateTimeOffset.Now - _lastDeathAt).TotalMilliseconds:F0}ms, "
                     + $"castAtOrAfterLastSwing={_lastAttackSentAt <= _betweenRoundCastAt}, "
                     + $"spellResumeAlreadyFired={_betweenRoundCastAt == _lastSpellResumeForBetweenRoundCastAt}");
+            // The Off nothing of ours explains: no cast in the window, no kill (that
+            // would have dropped the target above). Nothing resumes on it here, so say
+            // what it is waiting for: OnCombatLine in either mode, OnCombatTick in
+            // weapon mode only. Not every time: an attack that stops itself after each
+            // strike (KAI pummel) prints this Off every round.
+            else if (_offEndedAnsweredAttack
+                && Fighting()
+                && DateTimeOffset.Now - _unexplainedOffLoggedAt > UnexplainedOffLogSpacing
+                && _currentTarget is { } stillHere
+                && _classifier.Current is { } room
+                && HasEngageable(room))
+            {
+                _unexplainedOffLoggedAt = DateTimeOffset.Now;
+                _log?.Combat(LogCategory,
+                    $"*Combat Off* with no cast of ours behind it and '{stillHere}' still in the room "
+                    + "(a typed command, a stun, an attack that stops after each strike) — waiting for the next combat line"
+                    + (_castingSpellTarget is null ? " or the round tick" : " (spell mode: the round tick doesn't resume)"));
+            }
 
             if (!suppressBetweenRoundResume
                 && DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
@@ -4398,12 +4509,16 @@ public sealed partial class CombatManager : IDisposable
                     // Stamp this interrupt as resumed BEFORE dispatching so a later Off
                     // for the SAME cast can't re-fire, and let this distinct cast bypass
                     // ResumePacing — a second party heal a beat after the first must still
-                    // re-attack, not sit paced out for a round.
+                    // re-attack, not sit paced out for a round. A typed gear command
+                    // keeps the pacing (NoteTypedGearCommand).
                     _lastWeaponResumeForBetweenRoundCastAt = _betweenRoundCastAt;
-                    _log?.Combat(LogCategory, "between-round-cast resume → re-engaging weapon attack");
+                    bool typedGear = _betweenRoundCastAt == _typedGearStamp;
+                    _log?.Combat(LogCategory, typedGear
+                        ? "typed gear command's *Combat Off* → re-engaging weapon attack"
+                        : "between-round-cast resume → re-engaging weapon attack");
                     TryResumeEngage(live,
                         bypassAttackGuard: _lastAttackSentAt <= _betweenRoundCastAt,
-                        bypassPacing: true);
+                        bypassPacing: !typedGear);
                 }
             }
 
@@ -4729,6 +4844,15 @@ public sealed partial class CombatManager : IDisposable
     // Engaged line arrives.
     private bool _engagedSinceLastAttack;
     private bool EngagedForLastAttack => _engagedSinceLastAttack && !_combatOff;
+
+    // The `*Combat Off*` that turned combat off came after `*Combat Engaged*` had
+    // answered the attack last sent: the game took that attack and something then
+    // stopped it (a typed `eq`, a cast, a stun). Nothing of ours is in flight, however
+    // recently the attack went out, so ResumeAfterAttackGuard has nothing to protect.
+    // Only meaningful while _combatOff; the next Off that turns combat off sets it anew.
+    private bool _offEndedAnsweredAttack;
+    private DateTimeOffset _unexplainedOffLoggedAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan UnexplainedOffLogSpacing = TimeSpan.FromSeconds(12);
 
     // A fumble line arrived (ConditionTracker.ActionFailed): decide what, if anything,
     // goes out again. In order:

@@ -1,6 +1,6 @@
 # Version history
 
-## 3.161.2
+## 3.161.6
 
 - A monster set to **Flee** (Game Data → the monster's record → Fighting it) is now run from as soon as it is seen in the room, while a walk or loop is running
 - It is the Health tab's flee: the Combat tab's run distance and direction, and the walk or loop carries on afterwards
@@ -8,6 +8,24 @@
 - The gigantic black ooze and the huge gruesome creation ship set to Flee; set a monster to Neutral or Enemy to turn it off
 - Nothing runs with Auto-All off, or with Auto-Heal and Auto-Rest both off; a Hangup monster or a PvP enemy in the room is answered first
 - A monster still standing on your route is met and run from again on every return
+
+## 3.161.5
+
+- A room's heat (*You are seared by the flames*) no longer counts as a combat round
+- No more heals or buffs sent mid-round into `You have already cast a spell this round!`
+- A fight stopped just after an attack is re-attacked on the next round line
+- A typed `eq` / `wear` / `wield` / `rem` mid-fight re-attacks at once
+- A refused cast no longer leaves a re-attack armed
+- Exp/Hr and the loop simulator: Paradigm room spells roll every 6.05 s, not every round
+- The giant hellhound's death line is recognised
+- Program log and bug report show re-attack decisions
+- bug reports addressed: paradigm-20261009-120757, paradigm-20261009-122342
+
+## 3.161.2
+
+- A walk or loop held by a fight asks the game where you are before stepping on when the map lost its place during the fight (Paradigm: `rm`), instead of walking into a wall and standing there
+- A step sent while the map was unsure of its room and left unanswered for 10 seconds now asks too, instead of waiting for good
+- bug reports addressed: paradigm-20261009-082958
 
 ## 3.161.1
 
