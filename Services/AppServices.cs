@@ -8561,6 +8561,9 @@ public sealed class AppServices
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
+        // The exit a loop step just took, to tell a member it can't pass from one
+        // held or too heavy.
+        PartyComeback.RoomLookup = key => RoomGraph.GetRoom(key);
         // A dropped member's reconnect hold (or their @wait) would park the walk to
         // pick them up — the leader never moves while they wait on it.
         PartyComeback.ReleaseHolds = (given, reason) =>
@@ -9361,7 +9364,10 @@ public sealed class AppServices
         //     authorised even though neither is a live party member any more.
         //   - When we receive @forget from a leader we remembered, clear the
         //     crash-rejoin memory so a later reconnect stops telepathing them.
-        AutoParty.ForceAcceptFrom = PartyRejoin.IsRememberedLeader;
+        // The same holds for the leader we asked to come back for us: a member an
+        // exit turned away is out of the party and needs that invite to rejoin.
+        AutoParty.ForceAcceptFrom = name =>
+            PartyRejoin.IsRememberedLeader(name) || ComebackRequest.IsLeaderWeAsked(name);
         RemoteCommands.ForgetEligibility = s =>
             Party.WasRecentlyPartied(s) || PartyRejoin.IsRememberedLeader(s);
         PartyComeback.ForgetLeaderCallback = PartyRejoin.ForgetRememberedLeader;

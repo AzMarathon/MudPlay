@@ -278,6 +278,110 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Contains("we died or dropped", h.Requester.LastIncidentSummary);
     }
 
+    // ----- the three screens a follower sees (Paradigm, 2026-10-10) --------
+
+    // The leader showed its mine pass and went in; this follower has none. The
+    // follow line prints, the exit refuses, and the follow ends.
+    [Fact]
+    public void Screen_GatedAtAnExit_SendsOneComeback()
+    {
+        using Harness h = NewFollower();
+
+        h.Feed("Other just left to the east.");
+        h.Feed("-- Following your Party leader east --");
+        h.Tracker.NoteFollowMove(Direction.E, h.Now);       // what the follow line does to the map
+        h.Feed("You don't have a mine pass, so you can't enter the mines.");
+        h.Tracker.NoteMoveBlocked(h.Now);                   // and what the refusal does
+        h.Feed("You are no longer following Boss.");
+        h.Requester.FireSettleForTests();
+
+        Assert.Equal(new[] { "/Boss @comeback 1/1" }, h.Wire);
+    }
+
+    // The same shape with a refusal the client has never seen: the follow line,
+    // no arrival, and the follow ends. The wording is the exit's own.
+    [Fact]
+    public void Screen_GatedAtAnExit_WithWordingNobodyKnows_SendsOneComeback()
+    {
+        using Harness h = NewFollower();
+
+        h.Feed("Other just left to the north.");
+        h.Feed("-- Following your Party leader north --");
+        h.Feed("The doorman looks you up and down and shakes his head.");
+        h.Feed("You are no longer following Boss.");
+        Assert.Null(h.LastWire);                            // waits for the prompt
+        h.Requester.FireSettleForTests();
+
+        Assert.Equal(new[] { "/Boss @comeback 1/1" }, h.Wire);
+        Assert.Contains("never arrived", h.Requester.LastIncidentSummary);
+    }
+
+    // A follow line whose move was made is no failed follow, however soon after
+    // it the party is ended.
+    [Fact]
+    public void FollowLine_ThenArrival_ThenUninvited_SendsNothing()
+    {
+        using Harness h = NewFollower();
+
+        h.Feed("-- Following your Party leader north --");
+        h.Tracker.SetLocated(new RoomKey(1, 2), h.Now);
+        h.Feed("You are no longer following Boss.");
+        h.Requester.FireSettleForTests();
+
+        Assert.Null(h.LastWire);
+    }
+
+    // The follower leaves by its own command.
+    [Fact]
+    public void Screen_LeaveParty_SendsNothing()
+    {
+        using Harness h = NewFollower();
+
+        h.Type("leave party");
+        h.Feed("You are no longer following Boss.");
+        h.Requester.FireSettleForTests();
+
+        Assert.Null(h.LastWire);
+        Assert.Contains("left the party by command", h.Requester.LastIncidentSummary);
+    }
+
+    // The leader typed `uninvite <name>`: the follower sees the one line, with
+    // nothing of its own before it.
+    [Fact]
+    public void Screen_Uninvited_SendsNothing()
+    {
+        using Harness h = NewFollower();
+
+        h.Feed("You are no longer following Boss.");
+        h.Requester.FireSettleForTests();
+
+        Assert.Null(h.LastWire);
+    }
+
+    // Having asked for the pickup is the consent to take the invite that ends it:
+    // a member an exit turned away is out of the party and has to be re-invited.
+    [Fact]
+    public void TheLeaderWeAsked_IsOneWhoseInviteWeTake_UntilWeFollowOrTheyDecline()
+    {
+        using Harness h = NewFollower();
+        Assert.False(h.Requester.IsLeaderWeAsked("Boss"));
+
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+        Assert.True(h.Requester.IsLeaderWeAsked("Boss Hogg"));
+        Assert.False(h.Requester.IsLeaderWeAsked("Stranger"));
+
+        h.Feed("You are now following Boss.");
+        Assert.False(h.Requester.IsLeaderWeAsked("Boss"));
+
+        h.Advance(TimeSpan.FromSeconds(30));
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+        h.Feed("Boss telepaths: {I can't, my loop goes through an exit you can't pass}");
+        Assert.False(h.Requester.IsLeaderWeAsked("Boss"));
+        Assert.Equal(2, h.Sent);
+    }
+
     // ----- a refusal nobody asked for (the follow ends without a line) -----
 
     [Fact]

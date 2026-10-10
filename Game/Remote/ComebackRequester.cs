@@ -96,6 +96,8 @@ public sealed partial class ComebackRequester : IDisposable
     private string _exitRefusedText = string.Empty;
     private DateTimeOffset _leaderLeftAt = DateTimeOffset.MinValue;
     private string _leaderLeftWord = string.Empty;
+    private DateTimeOffset _followAttemptAt = DateTimeOffset.MinValue;
+    private string _followAttemptWord = string.Empty;
     private DateTimeOffset _ownMoveRefusedAt = DateTimeOffset.MinValue;
     private DateTimeOffset _manualMoveAt = DateTimeOffset.MinValue;
     private DateTimeOffset _typedCommandAt = DateTimeOffset.MinValue;
@@ -155,6 +157,28 @@ public sealed partial class ComebackRequester : IDisposable
         }
     }
 
+    // Whether that player is the leader we asked to come back for us, and hasn't
+    // declined. A member an exit turned away is out of the party and needs a fresh
+    // invite to rejoin; having asked for the pickup is our consent to take it, so
+    // AutoPartyManager follows that leader's invite whatever the per-player "join
+    // if invited" box says. Lapses once we follow again, or after AskedLife.
+    public bool IsLeaderWeAsked(string name)
+    {
+        if (_askedBack is not { } asked || string.IsNullOrEmpty(name)) return false;
+        if (NowProvider() - asked.At > AskedLife)
+        {
+            _askedBack = null;
+            return false;
+        }
+        int space = name.IndexOf(' ');
+        string given = space >= 0 ? name[..space] : name;
+        return given.Equals(asked.Leader, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private (string Leader, DateTimeOffset At)? _askedBack;
+    // Long enough for a leader to finish a fight and walk back its return distance.
+    private static readonly TimeSpan AskedLife = TimeSpan.FromMinutes(10);
+
     // For the bug report: a refusal or a departure still waiting out SettleTime,
     // and a request waiting for the client to be able to send.
     public string? PendingCheckFor => _pendingLeader;
@@ -187,7 +211,7 @@ public sealed partial class ComebackRequester : IDisposable
         _subs.Add(router.Subscribe(KnownPatterns.DirectionFailed, OnExitRefused));
         _subs.Add(router.Subscribe(KnownPatterns.RoomEntryDeparture, OnDeparture));
         _subs.Add(router.Subscribe(KnownPatterns.PartyYouNoLongerFollowing, OnNoLongerFollowing));
-        _subs.Add(router.Subscribe(KnownPatterns.PartyFollowMove, _ => OnFollowingAgain()));
+        _subs.Add(router.Subscribe(KnownPatterns.PartyFollowMove, OnFollowLine));
         _subs.Add(router.Subscribe(KnownPatterns.PartyYouFollowing, _ => OnFollowingAgain()));
         _subs.Add(router.Subscribe(KnownPatterns.PartyMemberDeath, OnPlayerDown));
         _subs.Add(router.Subscribe(KnownPatterns.PartyMemberDied, OnPlayerDown));
@@ -196,6 +220,8 @@ public sealed partial class ComebackRequester : IDisposable
 
         _tracker.ManualMoveObserved += OnManualMove;
         _tracker.PlayerDeathObserved += OnSelfDied;
+        _tracker.MoveConfirmed += OnArrived;
+        _tracker.StateChanged += OnRoomStateChanged;
         if (_party is not null) _party.PropertyChanged += OnPartyChanged;
 
         _settleTimer = new DispatcherTimer { Interval = SettleTime };
@@ -219,6 +245,8 @@ public sealed partial class ComebackRequester : IDisposable
         _subs.Clear();
         _tracker.ManualMoveObserved -= OnManualMove;
         _tracker.PlayerDeathObserved -= OnSelfDied;
+        _tracker.MoveConfirmed -= OnArrived;
+        _tracker.StateChanged -= OnRoomStateChanged;
         if (_party is not null) _party.PropertyChanged -= OnPartyChanged;
         _settleTimer.Stop();
         _retryTimer.Stop();
@@ -335,6 +363,27 @@ public sealed partial class ComebackRequester : IDisposable
             _leaderDownAt = NowProvider();
     }
 
+    // " -- Following your Party leader east --". We were following when it was
+    // printed, so whatever split came before is over. It is not proof the move was
+    // made: Paradigm prints it ahead of the exit's own refusal, and the follow then
+    // ends on the next line. A follow line with no arrival behind it is that shape,
+    // whatever the exit's refusal is worded as.
+    private void OnFollowLine(MatchResult result)
+    {
+        OnFollowingAgain();
+        _followAttemptAt = NowProvider();
+        _followAttemptWord = result.Groups.Count > 0 ? result.Groups[0].Trim() : string.Empty;
+    }
+
+    // The room the follow line promised was shown, or we stand somewhere new: the
+    // move was made.
+    private void OnArrived() => _followAttemptAt = DateTimeOffset.MinValue;
+
+    private void OnRoomStateChanged(RoomTransition transition)
+    {
+        if (transition.NewRoom is { } now && transition.PreviousRoom?.Key != now.Key) OnArrived();
+    }
+
     // The follow line, or "You are now following X.": whatever split came before
     // is over, and so is whatever we typed before it.
     private void OnFollowingAgain()
@@ -344,6 +393,7 @@ public sealed partial class ComebackRequester : IDisposable
         ClearEvidence();
         _incidentAnswered = false;
         _askedLeader = null;
+        _askedBack = null;
         _typedLeaveAt = DateTimeOffset.MinValue;
     }
 
@@ -352,6 +402,7 @@ public sealed partial class ComebackRequester : IDisposable
         _cantMoveAt = DateTimeOffset.MinValue;
         _exitRefusedAt = DateTimeOffset.MinValue;
         _leaderLeftAt = DateTimeOffset.MinValue;
+        _followAttemptAt = DateTimeOffset.MinValue;
     }
 
     private void OnPartyChanged(object? sender, PropertyChangedEventArgs e)
@@ -435,19 +486,27 @@ public sealed partial class ComebackRequester : IDisposable
         _incidentAnswered = false;
 
         string? cause = null;
-        bool leaderLeftOnly = false;
+        string? exitWord = null;
+        bool noRefusalSeen = false;
         if (now - _cantMoveAt <= LeftBehindWindow)
             cause = $"couldn't move: {_cantMoveText}";
         else if (_isMovementPrevented?.Invoke() == true)
             cause = "held when the leader moved";
         else if (now - _exitRefusedAt <= LeftBehindWindow)
             cause = $"a follow move was refused: {_exitRefusedText}";
+        else if (now - _followAttemptAt <= LeftBehindWindow)
+        {
+            // The shape of a follow move that failed, whatever the exit said.
+            cause = $"the follow move {_followAttemptWord} never arrived";
+            exitWord = _followAttemptWord;
+            noRefusalSeen = true;
+        }
         else if (now - _leaderLeftAt <= LeftBehindWindow)
         {
             cause = $"{leader} left {_leaderLeftWord} and the follow ended where we stood";
-            leaderLeftOnly = true;
+            exitWord = _leaderLeftWord;
+            noRefusalSeen = true;
         }
-        string exitWord = _leaderLeftWord;
         ClearEvidence();   // consumed, so none of it can explain a later line
 
         if (cause is null)
@@ -455,14 +514,14 @@ public sealed partial class ComebackRequester : IDisposable
             Withhold($"no longer following {leader}", WhyTheFollowEnded(leader, now), now);
             return;
         }
-        if (!leaderLeftOnly)
+        if (!noRefusalSeen)
         {
             Conclude(leader, cause);
             return;
         }
-        // With nothing but the leader's departure before it, the line may be our own
-        // drop in the monsters' parting attack, and the prompt that carries the HP
-        // comes after it. The verdict waits for that prompt.
+        // With no refusal the client knows before it, the line may be our own drop
+        // in the monsters' parting attack, and the prompt that carries the HP comes
+        // after it. The verdict waits for that prompt.
         _pendingLeader = leader;
         _pendingVerdict = cause;
         _pendingExitWord = exitWord;
@@ -557,6 +616,7 @@ public sealed partial class ComebackRequester : IDisposable
         _wireSender?.Invoke(bytes);
         _askedLeader = leader;
         _askedAt = now;
+        _askedBack = (leader, now);
         Record($"{incident}: sent `{payload}`", now);
         _log?.Info(LogCategory, $"{incident} — sent {payload}");
     }
@@ -667,7 +727,9 @@ public sealed partial class ComebackRequester : IDisposable
         _log?.Info(LogCategory, declined
             ? $"{leader} isn't coming: {answer} — not asking again"
             : $"{leader} answered the @comeback: {answer}");
-        if (declined) _askedLeader = null;
+        if (!declined) return;
+        _askedLeader = null;
+        _askedBack = null;
     }
 
     // ----- helpers -----------------------------------------------------------
@@ -702,7 +764,7 @@ public sealed partial class ComebackRequester : IDisposable
     private static partial Regex TypedTalk();
 
     // The answers PartyComebackManager gives when it is not coming.
-    [GeneratedRegex(@"I can't I'm idle|my party is full|can't find a path|can't come|forget me|going idle",
+    [GeneratedRegex(@"I can't|my party is full|can't find a path|can't come|forget me|going idle",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex LeaderDeclined();
 }
