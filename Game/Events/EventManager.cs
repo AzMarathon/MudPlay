@@ -49,13 +49,30 @@ namespace MudPlay.Game.Events;
 // the queued event takes it as its own Resume target, so "go back to what was
 // running" happens once, after the last of them.
 //
-// A run the user takes over — they stop its walk / loop / auto-lair, or start one
-// of their own while it waits or rests — ends without its Then and empties the
-// queue: the user said stop. So do a death and Reset States. A dropped connection
-// empties the queue and leaves the run to the engines' own reconnect rules, no
-// longer holding later events back. A walk frozen on a movement gate (the user's
-// Pause, Auto-All off) is neither: the run is held with it, the queue waits, and
-// the wait limit is what keeps a long freeze from piling events up.
+// A run the user takes over — they stop its walk / loop / auto-lair, press Stop
+// while it waits or rests, or start something of their own meanwhile — ends
+// without its Then and empties the queue: the user said stop. So do a death and
+// Reset States. A stop by something that brings the engine back itself (a bank or
+// sell trip, a flee, a trainer or comeback detour, the loop's own restart after a
+// reconnect: LoopEvent.WillResume and its walker / auto-lair twins) is not the
+// user's: the run is suspended, keeps its lap count and stop rule, and goes on
+// when the engine is back.
+//
+// A dropped connection ends nothing by itself (user, 2026-10-10: the waiting
+// events "should still be waiting after a reconnect"). The queue is kept, its
+// wait clocks running; nothing is checked, finished or started while the link is
+// down, and it all picks up at the first prompt back in the game. The run that
+// was under way lives or dies with its engine: a loop restarts itself and the run
+// with it, a walk the drop didn't stop goes on, and a run whose engine is stopped
+// during the outage ends without its Then, the next waiting event starting once
+// back in. A walk frozen on a movement gate (the user's Pause, Auto-All off)
+// holds its run the same way, and the wait limit is what keeps a long freeze or
+// outage from piling events up.
+//
+// Engines raise their Failed and Finished from the middle of their own teardown
+// (the walker raises Failed and only then resets). What ends a run is therefore
+// posted (Later), never done inside the raise: a walk the next event started there
+// would be wiped by the reset that follows.
 //
 // Saved-target reconciliation: subscribes to LoopManager.LoopsChanged +
 // LairManager.SetupsChanged. On either, walks every event whose ActionType is
@@ -77,6 +94,9 @@ public sealed class EventManager : IDisposable
     private readonly AutoWalkManager? _walker;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
+    // Runs an action once the engine raise it was asked from has unwound (see the
+    // header). Inline without engines (the parameterless ctor): nothing resets.
+    private readonly Action<Action> _post = static act => act();
 
     // Tracks which events the reconciler auto-disabled (vs the user manually
     // flipping Disabled). The Settings.Events row badge renders "↻ target missing"
@@ -104,7 +124,8 @@ public sealed class EventManager : IDisposable
         LoopRunner loopRunner,
         AutoLairManager autoLair,
         AutoWalkManager walker,
-        LogService? log = null)
+        LogService? log = null,
+        Action<Action>? post = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(loops);
@@ -119,6 +140,7 @@ public sealed class EventManager : IDisposable
         _autoLair = autoLair;
         _walker = walker;
         _log = log;
+        _post = post ?? (act => Avalonia.Threading.Dispatcher.UIThread.Post(act));
 
         profile.ProfileLoaded += LoadFrom;
         profile.ProfileClosed += Clear;
@@ -310,8 +332,13 @@ public sealed class EventManager : IDisposable
         public RoomKey? WalkTarget;
         // The action is done and the run is on its Then walk-to.
         public bool OnThenWalk;
-        // The connection dropped under the run: it no longer holds the queue.
-        public bool Unheld;
+        // Its engine was stopped by something that restarts it itself (a detour, a
+        // reconnect): the run waits for it, lap count and stop rule intact.
+        public bool Suspended;
+        // Since when every engine has stood idle under a suspended run.
+        public DateTimeOffset? IdleSince;
+        // A stop rule met while suspended, applied when the engine is back.
+        public string? StopWhenBack;
 
         // The action still under way; null once the run is on its Then walk.
         public EventActionType? Action => OnThenWalk ? null : Event.ActionType;
@@ -322,6 +349,16 @@ public sealed class EventManager : IDisposable
 
     private EventRun? _run;
     private readonly List<QueuedEvent> _queue = new();
+    // Events already told, in the terminal, that the queue was full. Emptied
+    // whenever the queue gives up a place, so each is told once per full spell.
+    private readonly HashSet<ScheduledEvent> _toldFull = new();
+    // Between a dropped connection and the first prompt back in the game.
+    private bool _offline;
+    // What ended a run while the link was down, done on the way back in.
+    private readonly List<Action> _whenBackInGame = new();
+    // A suspended run whose engine nothing brought back, with every engine idle
+    // this long, is ended as failed rather than left holding the queue for good.
+    private static readonly TimeSpan SuspendedIdleLimit = TimeSpan.FromMinutes(5);
     private Avalonia.Threading.DispatcherTimer? _ticker;
     // Set while this manager stops or starts an engine, so the Stopped / Started
     // that raises isn't read as the user taking over.
@@ -339,7 +376,8 @@ public sealed class EventManager : IDisposable
           + (r.OnThenWalk ? "" : $"; then {r.Event.ResolvedThen}")
           + (r.Resume is { } plan ? $"; resume target {plan.Describe()}" : "")
           + (r.Depth > 0 ? $"; chain depth {r.Depth}" : "")
-          + (r.Unheld ? "; not holding the queue (the connection dropped)" : "");
+          + (r.Suspended ? "; suspended (its engine was stopped by something that brings it back)" : "")
+          + (_offline ? "; connection down" : "");
 
     // For the bug report: the events waiting behind the running one, oldest first.
     public string QueueSummary => _queue.Count == 0
@@ -349,9 +387,6 @@ public sealed class EventManager : IDisposable
     // For the bug report: what the engine the last finished event left running
     // (its Then, or an open-ended loop action) came to.
     public string LastThenSummary { get; private set; } = "(none)";
-
-    // Whether an event that fires now waits for this run to end.
-    private static bool HoldsQueue(EventRun run) => !run.Unheld;
 
     // The events that jump the queue: the Logoff trigger (fired by the cleanup
     // warning or the user's own disconnect). What an event's action does, a command
@@ -380,13 +415,13 @@ public sealed class EventManager : IDisposable
             ExecuteCommand(e);
             return;
         }
-        if (_run is { } holder && HoldsQueue(holder))
+        bool jumps = IsLogoffType(e);
+        if (_run is { } holder)
         {
             // A Logoff event runs in the minutes before a cleanup or the moment
             // before a disconnect; one that waited behind a long trip would miss
             // the connection. Behind another Logoff run it waits, at the head of
             // the queue.
-            bool jumps = IsLogoffType(e);
             if (!jumps || IsLogoffType(holder.Origin) || IsLogoffType(holder.Event))
             {
                 if (Enqueue(e, holder, jumps)) Fired?.Invoke(e);
@@ -395,6 +430,14 @@ public sealed class EventManager : IDisposable
             _log?.Info("Events",
                 $"Logoff event '{Label(e)}' jumps the queue: '{Label(holder.Event)}' is abandoned at {holder.Step}"
                 + (_queue.Count > 0 ? $"; {_queue.Count} waiting event(s) keep their places." : "."));
+        }
+        else if (!jumps && _queue.Count > 0)
+        {
+            // Nothing is running but events are waiting (kept across a dropped
+            // connection): this one takes its place behind them.
+            if (Enqueue(e, holder: null, jumps: false)) Fired?.Invoke(e);
+            StartNextQueued();
+            return;
         }
         Fired?.Invoke(e);
         StartRun(e, _run is { } current ? current.Resume : SnapshotCurrentActivity(), depth: 0);
@@ -407,10 +450,11 @@ public sealed class EventManager : IDisposable
     // a row), or the queue is full. jumps: a Logoff event goes ahead of the
     // ordinary ones (behind any Logoff event already waiting) and is never
     // turned away by the cap.
-    private bool Enqueue(ScheduledEvent e, EventRun holder, bool jumps)
+    private bool Enqueue(ScheduledEvent e, EventRun? holder, bool jumps)
     {
         DropExpired();
-        if (ReferenceEquals(holder.Event, e) || ReferenceEquals(holder.Origin, e))
+        string behind = holder is null ? "the events already waiting" : $"'{Label(holder.Event)}' ({holder.Step})";
+        if (holder is not null && (ReferenceEquals(holder.Event, e) || ReferenceEquals(holder.Origin, e)))
         {
             _log?.Info("Events",
                 $"Event '{Label(e)}' fired again while its own run is still going ({holder.Step}) — this firing is skipped.");
@@ -428,19 +472,29 @@ public sealed class EventManager : IDisposable
             while (at < _queue.Count && IsLogoffType(_queue[at].Event)) at++;
             _queue.Insert(at, new QueuedEvent(e, Now()));
             _log?.Info("Events",
-                $"Logoff event '{Label(e)}' queued ahead of the others, behind '{Label(holder.Event)}' ({holder.Step}); {_queue.Count} waiting.");
+                $"Logoff event '{Label(e)}' queued ahead of the others, behind {behind}; {_queue.Count} waiting.");
             return true;
         }
         if (_queue.Count >= MaxQueued)
         {
-            Dropped(e, $"{_queue.Count} events are already waiting behind '{Label(holder.Event)}' ({holder.Step}), "
-                + "the most Settings → Events lets wait");
+            // An "every minute" event behind a long run would otherwise write the
+            // same line to the terminal every minute.
+            if (_toldFull.Add(e))
+                Dropped(e, $"{_queue.Count} events are already waiting behind {behind}, "
+                    + "the most Settings → Events lets wait");
+            else
+                _log?.Debug("Events", $"Event '{Label(e)}' dropped again — the queue is still full.");
             return false;
         }
         _queue.Add(new QueuedEvent(e, Now()));
-        _log?.Info("Events",
-            $"Event '{Label(e)}' queued behind '{Label(holder.Event)}' ({holder.Step}); {_queue.Count} waiting.");
+        _log?.Info("Events", $"Event '{Label(e)}' queued behind {behind}; {_queue.Count} waiting.");
         return true;
+    }
+
+    private void RemoveQueuedAt(int index)
+    {
+        _queue.RemoveAt(index);
+        _toldFull.Clear();
     }
 
     // An event turned away at one of the queue's limits: the log and the terminal
@@ -458,7 +512,7 @@ public sealed class EventManager : IDisposable
         {
             if (now - _queue[i].At <= MaxQueueWait) continue;
             ScheduledEvent stale = _queue[i].Event;
-            _queue.RemoveAt(i);
+            RemoveQueuedAt(i);
             Dropped(stale, $"it waited {MaxQueueWait.TotalMinutes:0} minutes"
                 + (_run is { } holder ? $" behind '{Label(holder.Event)}' ({holder.Step})" : "")
                 + ", the longest Settings → Events lets one wait");
@@ -471,6 +525,7 @@ public sealed class EventManager : IDisposable
         _log?.Info("Events",
             $"{_queue.Count} waiting event(s) dropped ({string.Join(", ", _queue.Select(q => $"'{Label(q.Event)}'"))}) — {why}.");
         _queue.Clear();
+        _toldFull.Clear();
     }
 
     // The next waiting event that may still run, taken off the queue. One removed,
@@ -481,7 +536,7 @@ public sealed class EventManager : IDisposable
         while (_queue.Count > 0)
         {
             QueuedEvent next = _queue[0];
-            _queue.RemoveAt(0);
+            RemoveQueuedAt(0);
             if (!Events.Contains(next.Event))
                 _log?.Info("Events", $"Event '{Label(next.Event)}' dropped from the queue — it was removed or edited while it waited.");
             else if (next.Event.Disabled || _profile?.Current?.EventsGloballyDisabled == true)
@@ -496,13 +551,20 @@ public sealed class EventManager : IDisposable
         return null;
     }
 
-    // The run that held the queue is over (or the one just started doesn't hold
-    // it): start the next waiting event as if it had fired now.
+    // The run that held the queue is over: start the next waiting event as if it
+    // had fired now. Not while the connection is down; NoteEnteredGame does it then.
     private void StartNextQueued()
     {
-        if (_run is { } holder && HoldsQueue(holder)) return;
-        if (TakeNextQueued() is { } next)
-            StartRun(next, _run is { } prior ? prior.Resume : SnapshotCurrentActivity(), depth: 0);
+        if (_run is not null || _offline) return;
+        if (TakeNextQueued() is { } next) StartRun(next, SnapshotCurrentActivity(), depth: 0);
+    }
+
+    // Runs `act` once the engine raise it was asked from has unwound, or on the way
+    // back into the game when the connection is down (see the header).
+    private void Later(Action act)
+    {
+        if (_offline) _whenBackInGame.Add(act);
+        else _post(act);
     }
 
     // Synchronously fires every EventTriggerType.Logoff event in the list. Called
@@ -546,13 +608,13 @@ public sealed class EventManager : IDisposable
             $"Event '{Label(e)}' started: {e.ActionType}; then {e.ResolvedThen}"
             + (resume is { } plan ? $" (resume target {plan.Describe()})." : "."));
 
+        bool openEnded = e.ActionType is EventActionType.Loop or EventActionType.AutoLair && !e.HasStopRule;
+        if (openEnded && HandOpenEndedToQueued(run)) return;
         switch (StartAction(run))
         {
             case ActionStart.Running:
-                if (e.ActionType is EventActionType.Loop or EventActionType.AutoLair && !e.HasStopRule)
-                    FinishOpenEnded(run);
-                else
-                    StartTicker();
+                if (openEnded) FinishOpenEnded(run);
+                else StartTicker();
                 break;
             case ActionStart.Done:
                 Complete(run, finished: true);
@@ -575,6 +637,42 @@ public sealed class EventManager : IDisposable
             loop ? ThenWatchKind.Loop : ThenWatchKind.AutoLair, EngineStart.Started,
             note: " (no Stop after rule, so the event is done and its Then never runs)");
         StartNextQueued();
+    }
+
+    // The same event with another waiting behind it: the loop isn't started to be
+    // stopped in the same breath (its start resets the session statistics, tells the
+    // party @reset and puts a move on the wire). The waiting event starts instead,
+    // with the loop as what it goes back to — as a Then loop is handed on.
+    private bool HandOpenEndedToQueued(EventRun run)
+    {
+        ScheduledEvent e = run.Event;
+        EventResumePlan? plan = null;
+        string what;
+        if (e.ActionType == EventActionType.Loop)
+        {
+            if (FindLoop(e.LoopName) is { } saved) plan = new EventResumePlan.Loop(saved);
+            what = $"loop '{e.LoopName}'";
+        }
+        else
+        {
+            if (FindSetup(e.AutoLairSetupName) is { } setup) plan = PlanFor(setup);
+            what = $"auto-lair '{e.AutoLairSetupName}'";
+        }
+        // A missing target is StartAction's to report and auto-disable.
+        if (plan is null || _queue.Count == 0 || TakeNextQueued() is not { } next) return false;
+        EndRun();
+        _log?.Info("Events",
+            $"Event '{Label(e)}' finished without starting {what}: '{Label(next)}' was waiting and starts now, with it as what it goes back to.");
+        LastThenSummary = $"'{Label(e)}' → {what}: handed to '{Label(next)}' {Stamp()}";
+        StartRun(next, plan, depth: 0);
+        return true;
+    }
+
+    private static EventResumePlan.AutoLair PlanFor(LairSetup setup)
+    {
+        Dictionary<RoomKey, int?> markers = new();
+        foreach (LairMarker m in setup.Markers) markers[new RoomKey(m.Map, m.Room)] = m.OverrideRespawnSeconds;
+        return new EventResumePlan.AutoLair(markers);
     }
 
     private enum ActionStart { Running, Done, Failed }
@@ -682,10 +780,21 @@ public sealed class EventManager : IDisposable
     // The user took the run over (or the character died, or the states were
     // reset): end it without its Then. Nothing that waited behind it starts
     // either — a stop is a stop, not the next event's cue.
-    private void Abort(EventRun run, string why)
+    //
+    // byUser false is an engine reporting it was stopped. With the connection down
+    // that is the drop's doing, not the user's: the run still ends without its
+    // Then, but the waiting events are kept for the way back in.
+    private void Abort(EventRun run, string why, bool byUser = false)
     {
         if (!ReferenceEquals(_run, run)) return;
         EndRun();
+        if (_offline && !byUser)
+        {
+            _log?.Info("Events",
+                $"Event '{Label(run.Event)}' ended at {run.Step} — {why} with the connection down; its Then is skipped"
+                + (_queue.Count > 0 ? $" and {_queue.Count} waiting event(s) are kept for the way back in." : "."));
+            return;
+        }
         _log?.Info("Events", $"Event '{Label(run.Event)}' abandoned at {run.Step} — {why}; its Then is skipped.");
         ClearQueue(why);
     }
@@ -696,35 +805,60 @@ public sealed class EventManager : IDisposable
         StopTicker();
     }
 
-    // Reset States: end the running event without its Then.
-    public void CancelRun()
+    private void EndByUser(string why)
     {
-        if (_run is { } run) Abort(run, "states reset");
+        if (_run is { } run) Abort(run, why, byUser: true);
+        else ClearQueue(why);
+        _whenBackInGame.Clear();
         _thenWatch = null;
     }
+
+    // Reset States: end the running event without its Then.
+    public void CancelRun() => EndByUser("states reset");
 
     // The character died (PlayerDeathHalt). The engines are stopped in the
     // graveyard; a run that was standing still (a wait, a rest) or a queued event
     // must not walk out of it.
-    public void NoteDeath()
+    public void NoteDeath() => EndByUser("the character died");
+
+    // The user pressed Stop (MovementController.Stopping, the Navigation window's
+    // Stop). The engines say so themselves when one of them is running; this is for
+    // a run with none to say it: a wait, a rest, or one suspended behind a detour.
+    public void NoteUserStop()
     {
-        if (_run is { } run) Abort(run, "the character died");
-        _thenWatch = null;
+        // Not a Stop this manager's own engine start set off.
+        if (!_driving) EndByUser("stopped by the user");
     }
 
-    // The connection dropped (EventScheduler.NotifyDisconnected). What waited is
-    // gone: Logon and Re-log events fire afresh on the way back in. The run is left
-    // as it was — whether its walk or trip carries on after a reconnect is the
-    // engines' own business — but stops holding the queue, so an event that fires
-    // after the reconnect takes over as it did before events queued, instead of
-    // waiting on a run the drop may have left stuck.
+    // The connection dropped (EventScheduler.NotifyDisconnected, ahead of the
+    // engines' own handling of the drop). Everything is kept; see the header.
     public void NoteDisconnected()
     {
-        ClearQueue("the connection dropped");
-        if (_run is not { } run || !HoldsQueue(run)) return;
-        run.Unheld = true;
-        _log?.Info("Events",
-            $"Event '{Label(run.Event)}' was at {run.Step} when the connection dropped: it no longer holds later events back.");
+        if (_offline) return;
+        _offline = true;
+        if (_run is { } run)
+            _log?.Info("Events",
+                $"Connection dropped with event '{Label(run.Event)}' at {run.Step} and {_queue.Count} waiting: kept for the way back in.");
+        else if (_queue.Count > 0)
+            _log?.Info("Events", $"Connection dropped with {_queue.Count} event(s) waiting: kept for the way back in.");
+    }
+
+    // The first prompt back in the game (EventScheduler, ahead of the Logon events,
+    // which then take their place behind what was already waiting). What ended
+    // during the outage is finished now, an event past its wait limit is dropped,
+    // and the next one starts if nothing is running.
+    public void NoteEnteredGame()
+    {
+        if (!_offline) return;
+        _offline = false;
+        if (_run is { } run) run.IdleSince = null;
+        if (_run is not null || _queue.Count > 0)
+            _log?.Info("Events", $"Back in the game: running {RunSummary}; waiting {QueueSummary}.");
+        Action[] ended = _whenBackInGame.ToArray();
+        _whenBackInGame.Clear();
+        foreach (Action act in ended) act();
+        DropExpired();
+        StartNextQueued();
     }
 
     private void RunThen(EventRun run)
@@ -765,6 +899,13 @@ public sealed class EventManager : IDisposable
                         $"Event '{label}': not firing '{Label(next)}' — {MaxChainDepth} events in a row, the chain looks like a cycle.");
                 else
                 {
+                    // Run as the chain, it has had its turn.
+                    int waiting = _queue.FindIndex(q => ReferenceEquals(q.Event, next));
+                    if (waiting >= 0)
+                    {
+                        RemoveQueuedAt(waiting);
+                        _log?.Info("Events", $"Event '{Label(next)}' was also waiting: it runs now, as '{label}' fires it, and leaves the queue.");
+                    }
                     StartRun(next, run.Resume, run.Depth + 1, run.Origin);
                     return;
                 }
@@ -807,9 +948,7 @@ public sealed class EventManager : IDisposable
                     _log?.Warn("Events", $"Event '{Label(e)}': Then auto-lair '{e.ThenAutoLairSetupName}' doesn't exist.");
                     return null;
                 }
-                Dictionary<RoomKey, int?> markers = new();
-                foreach (LairMarker m in setup.Markers) markers[new RoomKey(m.Map, m.Room)] = m.OverrideRespawnSeconds;
-                return new EventResumePlan.AutoLair(markers);
+                return PlanFor(setup);
         }
         return null;
     }
@@ -861,6 +1000,11 @@ public sealed class EventManager : IDisposable
     // teleport on the only way back that Settings → Teleports doesn't allow), which
     // left the character standing in the event's room with nothing said in the
     // terminal (report paradigm-20261009-220128).
+    //
+    // Only a loop still walking to its start, or a walk still walking, is watched.
+    // A loop started while standing on it has arrived already, and a watch left
+    // armed blamed the event for the loop failing of its own accord laps later.
+    // Auto-Lair reports no arrival at all and is not watched once it has started.
     private enum ThenWatchKind { Loop, Walk, AutoLair }
     private sealed record ThenWatch(string EventLabel, string What, ThenWatchKind Kind, RoomKey? WalkDestination);
     private ThenWatch? _thenWatch;
@@ -892,8 +1036,14 @@ public sealed class EventManager : IDisposable
               + (runner.State == LoopState.Approaching ? " once it has walked there" : "")
             : "";
         _log?.Info("Events", $"Event '{label}' finished; {verb} {what}{step}{note}.");
-        LastThenSummary = $"'{label}' → {what}: started {Stamp()}";
-        _thenWatch = new ThenWatch(label, what, kind, walkDestination);
+        bool stillArriving = kind switch
+        {
+            ThenWatchKind.Loop => _loopRunner?.State == LoopState.Approaching,
+            ThenWatchKind.Walk => _walker?.State == WalkState.Walking,
+            _ => false,
+        };
+        LastThenSummary = $"'{label}' → {what}: {(stillArriving ? "started" : "under way")} {Stamp()}";
+        _thenWatch = stillArriving ? new ThenWatch(label, what, kind, walkDestination) : null;
     }
 
     private void ThenFailed(string label, string what, string why)
@@ -1027,20 +1177,33 @@ public sealed class EventManager : IDisposable
         // running for good, its Then never reached.
         bool arrived = w.Kind == WalkEventKind.Finished
                        && (Equals(w.Destination, run.WalkTarget) || Equals(w.Requested, run.WalkTarget));
-        if (run.OnThenWalk)
+        if (run.OnThenWalk || run.Action == EventActionType.WalkTo)
         {
-            if (arrived) EndThenWalk(run, failure: null);
-            else if (w.Kind == WalkEventKind.Failed) EndThenWalk(run, w.Detail);
-            else if (w.Kind == WalkEventKind.Stopped) Abort(run, "its walk was stopped");
+            if (run.Suspended)
+            {
+                // A detour walks too (to its shop, away from a player), and its walk
+                // is stopped when the run's own is taken up again. Only the walk to
+                // this run's room starting is the run's; what the detour's walks
+                // come to is the detour's business, and the user's Stop arrives by
+                // NoteUserStop.
+                if (w.Kind == WalkEventKind.Started && Equals(_walker?.Journey?.Destination, run.WalkTarget)) Resumed(run);
+            }
+            else if (w.Kind == WalkEventKind.Stopped)
+            {
+                if (w.WillResume) Suspend(run, $"its walk was stopped by something that takes it up again ({w.Detail})");
+                else Abort(run, "its walk was stopped");
+            }
+            else if (run.OnThenWalk)
+            {
+                if (arrived) Later(() => EndThenWalk(run, failure: null));
+                else if (w.Kind == WalkEventKind.Failed) Later(() => EndThenWalk(run, w.Detail));
+            }
+            else if (arrived) Later(() => Complete(run, finished: true));
+            else if (w.Kind == WalkEventKind.Failed) Later(() => Complete(run, finished: false));
             return;
         }
         switch (run.Action)
         {
-            case EventActionType.WalkTo:
-                if (arrived) Complete(run, finished: true);
-                else if (w.Kind == WalkEventKind.Failed) Complete(run, finished: false);
-                else if (w.Kind == WalkEventKind.Stopped) Abort(run, "its walk was stopped");
-                break;
             case EventActionType.Wait:
             case EventActionType.RestUp:
                 if (w.Kind == WalkEventKind.Started) Abort(run, "a walk started");
@@ -1071,8 +1234,19 @@ public sealed class EventManager : IDisposable
                     if (run.Event.StopAfterLaps is { } laps && laps > 0 && run.Laps >= laps)
                         StopAndComplete(run, $"{run.Laps} lap(s)");
                 }
-                else if (l.Kind == LoopEventKind.Stopped) Abort(run, "its loop was stopped");
-                else if (l.Kind == LoopEventKind.Failed) Complete(run, finished: false);
+                else if (l.Kind == LoopEventKind.Stopped)
+                {
+                    if (l.WillResume) Suspend(run, $"its loop was stopped by something that restarts it ({l.Detail})");
+                    else Abort(run, "its loop was stopped");
+                }
+                else if (l.Kind == LoopEventKind.Started && run.Suspended)
+                {
+                    if (string.Equals(_loopRunner?.CurrentLoop?.Name, run.Event.LoopName, StringComparison.OrdinalIgnoreCase))
+                        Resumed(run);
+                    else
+                        Abort(run, "another loop was started while its own was away");
+                }
+                else if (l.Kind == LoopEventKind.Failed) Later(() => Complete(run, finished: false));
                 break;
             case EventActionType.Wait:
             case EventActionType.RestUp:
@@ -1083,11 +1257,13 @@ public sealed class EventManager : IDisposable
 
     private void OnAutoLairActiveChanged(bool active)
     {
-        if (_driving) return;
-        // Auto-Lair reports no arrival, only that it stopped: nothing more to watch.
-        if (!active && _thenWatch is { Kind: ThenWatchKind.AutoLair }) _thenWatch = null;
-        if (_run is not { } run) return;
-        if (run.Action == EventActionType.AutoLair && !active) Abort(run, "its auto-lair was stopped");
+        if (_driving || _run is not { } run) return;
+        if (run.Action == EventActionType.AutoLair)
+        {
+            if (active) Resumed(run);
+            else if (_autoLair?.StoppedForResume == true) Suspend(run, "its auto-lair was stopped by something that brings it back");
+            else Abort(run, "its auto-lair was stopped");
+        }
         else if (run.Action is EventActionType.Wait or EventActionType.RestUp && active)
             Abort(run, "an auto-lair started");
     }
@@ -1101,20 +1277,26 @@ public sealed class EventManager : IDisposable
             StopAndComplete(run, $"{bossName} was killed");
     }
 
+    // The three errand signals below are ignored while this manager is stopping or
+    // starting engines: a Logoff bank trip that jumps a running bank-trip event
+    // stops the engines for its own start, the old trip reports Stopped from inside
+    // that, and the run by then is the new one — which aborted itself.
+
     // A Roomba sweep ended (GhSweepManager.SweepCompleted).
     public void NoteRoombaFinished()
     {
-        if (_run is { Action: EventActionType.Roomba } run) Complete(run, finished: true);
+        if (_driving) return;
+        if (_run is { Action: EventActionType.Roomba } run) Later(() => Complete(run, finished: true));
     }
 
     // A bank / stash trip ended (AutoDepositManager.EventTripEnded).
     public void NoteBankTripEnded(Game.Cash.AutoDepositManager.EventTripOutcome outcome)
     {
-        if (_run is not { Action: EventActionType.BankTrip } run) return;
+        if (_driving || _run is not { Action: EventActionType.BankTrip } run) return;
         switch (outcome)
         {
-            case Game.Cash.AutoDepositManager.EventTripOutcome.Done: Complete(run, finished: true); break;
-            case Game.Cash.AutoDepositManager.EventTripOutcome.Failed: Complete(run, finished: false); break;
+            case Game.Cash.AutoDepositManager.EventTripOutcome.Done: Later(() => Complete(run, finished: true)); break;
+            case Game.Cash.AutoDepositManager.EventTripOutcome.Failed: Later(() => Complete(run, finished: false)); break;
             default: Abort(run, "its trip was stopped"); break;
         }
     }
@@ -1123,18 +1305,51 @@ public sealed class EventManager : IDisposable
     // map menu ends here too; it only counts while a transfer event is running.
     public void NoteStashTransferEnded(Game.Cash.StashTransferOutcome outcome)
     {
-        if (_run is not { Action: EventActionType.StashTransfer } run) return;
+        if (_driving || _run is not { Action: EventActionType.StashTransfer } run) return;
         switch (outcome)
         {
-            case Game.Cash.StashTransferOutcome.Done: Complete(run, finished: true); break;
-            case Game.Cash.StashTransferOutcome.Failed: Complete(run, finished: false); break;
+            case Game.Cash.StashTransferOutcome.Done: Later(() => Complete(run, finished: true)); break;
+            case Game.Cash.StashTransferOutcome.Failed: Later(() => Complete(run, finished: false)); break;
             default: Abort(run, "its transfer was stopped"); break;
         }
     }
 
+    // ----- Suspended runs ------------------------------------------------
+
+    private void Suspend(EventRun run, string why)
+    {
+        if (run.Suspended) return;
+        run.Suspended = true;
+        run.IdleSince = null;
+        _log?.Info("Events",
+            $"Event '{Label(run.Event)}' suspended at {run.Step} — {why}; it goes on when that is back"
+            + (run.Laps > 0 ? $" ({run.Laps} lap(s) so far)." : "."));
+    }
+
+    // The engine a suspended run was waiting for has started again.
+    private void Resumed(EventRun run)
+    {
+        if (!run.Suspended) return;
+        run.Suspended = false;
+        run.IdleSince = null;
+        _log?.Info("Events", $"Event '{Label(run.Event)}' goes on: its {run.Step} is back.");
+        if (run.StopWhenBack is not { } why) return;
+        run.StopWhenBack = null;
+        // Posted: this is the engine's own Started raise.
+        Later(() => { if (ReferenceEquals(_run, run)) StopAndComplete(run, why); });
+    }
+
     // A stop-after rule ended the loop / auto-lair: stop it ourselves, then Then.
+    // Under a suspended run the engine is in a detour's hands, and a Then started
+    // now would run into the detour and be run over by its resume: the rule is
+    // applied when the engine is back.
     private void StopAndComplete(EventRun run, string why)
     {
+        if (run.Suspended)
+        {
+            run.StopWhenBack ??= why;
+            return;
+        }
         _log?.Info("Events", $"Event '{Label(run.Event)}': stopping its {run.Event.ActionType} — {why}.");
         _driving = true;
         try
@@ -1143,7 +1358,8 @@ public sealed class EventManager : IDisposable
             else _autoLair?.Stop("event stop-after");
         }
         finally { _driving = false; }
-        Complete(run, finished: true);
+        // Posted: a lap rule is met inside the loop runner's own raise.
+        Later(() => Complete(run, finished: true));
     }
 
     // The once-a-second check for what no engine event reports: a wait's time, a
@@ -1151,8 +1367,9 @@ public sealed class EventManager : IDisposable
     // that has waited too long.
     internal void Tick()
     {
-        if (_run is not { } run) return;
+        if (_offline || _run is not { } run) return;
         DropExpired();
+        if (run.Suspended && SuspendedTooLong(run)) return;
         ScheduledEvent e = run.Event;
         TimeSpan elapsed = Now() - run.StartedAt;
         switch (run.Action)
@@ -1174,6 +1391,29 @@ public sealed class EventManager : IDisposable
                     StopAndComplete(run, $"{e.StopBossName}'s {e.StopBossMoment} moment came");
                 break;
         }
+    }
+
+    // A detour that never brought the engine back (it was cancelled, or gave up)
+    // would leave the run suspended for good, holding the queue. With every engine
+    // idle for SuspendedIdleLimit nothing is coming: the run ends as a failed
+    // action does, its Then run anyway.
+    private bool SuspendedTooLong(EventRun run)
+    {
+        bool idle = _walker is not { State: not WalkState.Idle }
+                    && _loopRunner is not { State: not LoopState.Idle }
+                    && _autoLair is not { IsActive: true };
+        if (!idle)
+        {
+            run.IdleSince = null;
+            return false;
+        }
+        run.IdleSince ??= Now();
+        if (Now() - run.IdleSince < SuspendedIdleLimit) return false;
+        _log?.Warn("Events",
+            $"Event '{Label(run.Event)}': what stopped its {run.Step} never brought it back ({SuspendedIdleLimit.TotalMinutes:0} minutes with nothing moving).");
+        run.Suspended = false;
+        Complete(run, finished: false);
+        return true;
     }
 
     private void StartTicker()
@@ -1282,6 +1522,8 @@ public sealed class EventManager : IDisposable
     {
         EndRun();
         _queue.Clear();
+        _toldFull.Clear();
+        _whenBackInGame.Clear();
         _thenWatch = null;
         LastThenSummary = "(none)";
         Events.Clear();
@@ -1316,6 +1558,8 @@ public sealed class EventManager : IDisposable
     {
         EndRun();
         _queue.Clear();
+        _toldFull.Clear();
+        _whenBackInGame.Clear();
         _thenWatch = null;
         LastThenSummary = "(none)";
         Events.Clear();

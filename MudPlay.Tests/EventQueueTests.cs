@@ -542,31 +542,6 @@ public sealed class EventQueueTests : IDisposable
         Assert.DoesNotContain(h.EventLog, l => l.Contains("'relog' jumps the queue"));
     }
 
-    // A drop empties the queue (Logon and Re-log fire afresh on the way back in) and
-    // leaves the run to the engines, no longer holding later events back.
-    [Fact]
-    public void ADisconnect_EmptiesTheQueue_AndTheRunStopsHoldingIt()
-    {
-        using Harness h = NewHarness();
-        Loop loop = RunUserLoop(h);
-        h.Events.Fire(Add(h, WalkTo("one", C)));
-        h.Events.Fire(Add(h, WalkTo("two", B)));
-
-        h.Events.NoteDisconnected();
-
-        Assert.Equal("(empty)", h.Events.QueueSummary);
-        Assert.Contains("'one' WalkTo", h.Events.RunSummary);
-        Assert.Contains("not holding the queue", h.Events.RunSummary);
-
-        // After the reconnect a Logon event takes over, as it did before events
-        // queued, and still goes back to what the first interrupted.
-        ScheduledEvent logon = Add(h, WalkTo("logon", B));
-        h.Events.Fire(logon);
-        Assert.Contains("'logon' WalkTo", h.Events.RunSummary);
-        Arrive(h, B);
-        Assert.Same(loop, h.Runner.CurrentLoop);
-    }
-
     // The engines halt in the graveyard; a wait their stop doesn't reach, and the
     // event behind it, must not carry on from there.
     [Fact]

@@ -9315,6 +9315,10 @@ public sealed class AppServices
         // Posted: the engine event that reports a refused walk back can arrive from
         // inside the message pump, where a terminal write re-feeds the emulator.
         Events.SetNotice(msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)));
+        // Stop with no engine running to report it (an event waiting or resting, or
+        // suspended behind a detour) still ends the event and its queue. Wired here,
+        // after Events exists; MovementControl is built further up.
+        MovementControl.Stopping += Events.NoteUserStop;
         Events.SetStatsReader(ReadEventReadings);
         GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
         BossTimers.BossKilled += def => Events.NoteBossKilled(def.Name);

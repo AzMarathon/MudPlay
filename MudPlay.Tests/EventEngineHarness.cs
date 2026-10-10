@@ -47,6 +47,20 @@ internal sealed class EventEngineHarness : IDisposable
     // What the event manager told the terminal.
     public List<string> Notices { get; } = new();
 
+    // What the event manager posted past the engine raise it was called from, when
+    // the harness was made with deferPosts: the app's dispatcher, by hand.
+    private List<Action>? Posted { get; init; }
+
+    public void Pump()
+    {
+        while (Posted is { Count: > 0 } posted)
+        {
+            Action next = posted[0];
+            posted.RemoveAt(0);
+            next();
+        }
+    }
+
     // The event manager's own program-log lines.
     public IEnumerable<string> EventLog =>
         Log.Snapshot().Where(e => e.Source == "Events").Select(e => e.Message);
@@ -57,12 +71,15 @@ internal sealed class EventEngineHarness : IDisposable
         Timers.Dispose();
     }
 
+    // deferPosts: what the event manager posts waits for Pump, as it waits for the
+    // dispatcher in the app. Off, it runs at once, which suits a test that feeds
+    // the manager its engine events by hand.
     // loopWalksItself: the loop runner gets the walker, so a loop started off its
     // rooms walks to them (and that walk can be refused). Off, a loop started
     // anywhere begins at once.
     public static EventEngineHarness Create(
         string root, string bbs, string graphJson = StripGraphJson, string? tbinfoJson = null,
-        bool loopWalksItself = false)
+        bool loopWalksItself = false, bool deferPosts = false)
     {
         Directory.CreateDirectory(Path.Combine(root, "alpha"));
         File.WriteAllText(Path.Combine(root, "alpha", "Rooms.json"), graphJson);
@@ -94,12 +111,15 @@ internal sealed class EventEngineHarness : IDisposable
         ProfileService profile = new();
         profile.LoadBlank();
         LogService log = new();
-        EventManager events = new(profile, loops, lairs, runner, autoLair, walker, log);
+        List<Action>? posted = deferPosts ? new List<Action>() : null;
+        EventManager events = new(profile, loops, lairs, runner, autoLair, walker, log,
+            post: act => { if (posted is null) act(); else posted.Add(act); });
 
         EventEngineHarness h = new()
         {
             Tracker = tracker, Coordinator = coord, Walker = walker, Runner = runner, AutoLair = autoLair,
             Loops = loops, Lairs = lairs, Events = events, Timers = timers, Log = log, Profile = profile,
+            Posted = posted,
         };
         walker.SetWireSender(b => h.Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         runner.SetWireSender(b => h.Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
