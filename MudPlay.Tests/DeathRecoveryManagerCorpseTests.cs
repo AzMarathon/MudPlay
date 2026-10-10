@@ -361,6 +361,68 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Equal(new[] { "rusty dagger" }, h.Latest.UnrecoveredItems);
     }
 
+    // The room display as the app delivers it: the tracker takes the observation,
+    // recovery then reads the exits line.
+    private static void ShowDeathRoomAgain(GraphHarness h)
+    {
+        h.EnterGates();
+        h.Recovery.FeedTestLine("Obvious exits: north");
+    }
+
+    // A hand-back typed by hand, a give at a time, with the follower standing in
+    // the death room and a Missing pile. The first give settles to Partial.
+    private static GraphHarness HandedTheTorchInTheDeathRoom()
+    {
+        GraphHarness h = DiedAtTheGates();
+        h.Recovery.AutoEquip = true;
+        h.Party.Add("Leader");
+        h.Tracker.NoteMoveSentByObserver(Direction.S);
+        ShowDeathRoomAgain(h);
+        Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
+        h.Sent.Clear();
+
+        h.Recovery.OnItemReceived("torch", "Leader");
+        h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+        Assert.Equal(new[] { "rusty dagger" }, h.Latest.UnrecoveredItems);
+        return h;
+    }
+
+    [Fact]
+    public void HandBack_InTheDeathRoom_TheRoomShownAgainBetweenGives_KeepsTheCount()
+    {
+        using GraphHarness h = HandedTheTorchInTheDeathRoom();
+
+        ShowDeathRoomAgain(h);
+        Assert.Equal(new[] { "rusty dagger" }, h.Latest.UnrecoveredItems);
+        ShowDeathRoomAgain(h);
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+        Assert.Equal(new[] { "rusty dagger" }, h.Latest.UnrecoveredItems);
+
+        h.Recovery.OnItemReceived("rusty dagger", "Leader");
+        h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        Assert.Null(h.Latest.UnrecoveredItems);
+        Assert.False(h.Latest.HandedBack);
+        Assert.DoesNotContain(h.Sent, s => s.StartsWith("recover corpse"));
+    }
+
+    [Fact]
+    public void HandBack_InTheDeathRoom_ThenTheCorpseIsPutDown_IsRecoveredOnce()
+    {
+        using GraphHarness h = HandedTheTorchInTheDeathRoom();
+
+        ShowDeathRoomAgain(h);
+        ShowDeathRoomAgain(h);                // a bare floor twice does not write the pile off
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+
+        h.FeedSurvey("corpse of Ermias");
+        ShowDeathRoomAgain(h);
+
+        Assert.Equal(1, h.Sent.Count(s => s == "recover corpse Ermias"));
+    }
+
     // ----- over the real walker ------------------------------------------
 
     [Fact]

@@ -2,15 +2,15 @@
 
 <!-- current-version:start -->
 > **Version 3.165.8**
-> - Paradigm: the corpse is recovered, or found gone, only off a display confirmed as the death room's; the next room's floor, a `look` through an exit or a teleport no longer marks the pile Missing
-> - Paradigm: Recover Now inside the room marks the pile Missing when its look shows no corpse
-> - Recover Now on a pile marked Missing walks there and looks again
-> - Gear a party member hands back reopens a pile marked Missing, for half an hour after it was marked
-> - A single spare of a worn item is recorded in the deathpile and recovered with it
-> - The lit light and the keys are recorded in the deathpile, also for a death worked out after a hang-up; the light is not lit again
-> - A light that burns out comes off what you hold at once, so a death doesn't record it as lost
-> - Stock: being placed in a death room without the game showing it no longer counts as an empty floor
-> - Bug report: where the death-room pickup stands
+> - Paradigm: a pile is marked Missing only off a confirmed death-room display
+> - Paradigm: Recover Now marks Missing when the look shows no corpse
+> - Recover Now on a Missing pile walks there and looks again
+> - A party member's hand-back reopens a Missing pile
+> - A single spare of a worn item is recorded in the deathpile
+> - The lit light and keys are recorded in the deathpile
+> - A light that burns out comes off what you hold at once
+> - Stock: being placed in a death room is not an empty floor
+> - Bug report shows where the death-room pickup stands
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

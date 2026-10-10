@@ -1279,6 +1279,7 @@ public sealed partial class InventoryManager : IDisposable
         {
             ClearLitLight();
             if (stays) AddCarried(listedApart);
+            else AdjustItemWeight(listedApart, -1);
         });
         _log?.Info(LogCategory, $"The lit {listedApart} burned out — "
             + (stays ? "no longer lit, kept in the pack, spent." : "no longer lit, and gone from what is held."));

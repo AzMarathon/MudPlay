@@ -1212,6 +1212,46 @@ public sealed class InventoryManagerTests
     }
 
     [Fact]
+    public void TheLitLightBurningOut_LowersTheTrackedWeight_ByTheOneThatLeft()
+    {
+        using Harness h = new(name => name == "torch" ? 40 : null);
+        h.Feed("You are carrying torch (Readied/1), torch, 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    90/2880  -  Light  [3%]");
+
+        h.Inv.NoteLitLightBurnedOut();
+
+        Assert.Equal(50, h.Inv.Snapshot.Encumbrance.CurrentWeight);
+    }
+
+    [Fact]
+    public void ALightLitSinceTheRead_BurningOut_LowersTheTrackedWeight_ByTheOneThatLeft()
+    {
+        using Harness h = new(name => name == "torch" ? 40 : null);
+        h.Feed("You are carrying torch, torch, 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    90/2880  -  Light  [3%]");
+        h.Feed("You lit the torch.");
+
+        h.Inv.NoteLitLightBurnedOut();
+
+        Assert.Equal(50, h.Inv.Snapshot.Encumbrance.CurrentWeight);
+    }
+
+    [Fact]
+    public void ALightKeptWhenSpent_BurningOut_LeavesTheTrackedWeightAlone()
+    {
+        using Harness h = new(name => name == "glow stone" ? 40 : null, staysWhenSpent: name => name == "glow stone");
+        h.Feed("You are carrying glow stone (Readied/1), 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    90/2880  -  Light  [3%]");
+
+        h.Inv.NoteLitLightBurnedOut();
+
+        Assert.Equal(90, h.Inv.Snapshot.Encumbrance.CurrentWeight);
+    }
+
+    [Fact]
     public void ASpareLitAfterTheFirstBurnedOut_IsCountedOnce_AndLeavesWhenItBurnsOutToo()
     {
         // The whole of the case: read with a torch lit and one spare; the lit one

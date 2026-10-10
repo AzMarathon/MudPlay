@@ -693,6 +693,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (record.Status == DeathRecoveryStatus.Recovered) return;
         record.Status = DeathRecoveryStatus.Recovered;
         record.RecoveryMessage = "Marked recovered by user.";
+        record.HandedBack = false;
         _profile.Save();
         OnPropertyChanged(nameof(Records));
     }
@@ -1052,10 +1053,12 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // Only what stays on the character is taken off it again (asking twice
         // changes nothing); the returned items came off when it was first built, and
         // taking them off a second time would strike units that are still out.
-        if (IsStock && record.Status == DeathRecoveryStatus.Partial
-            && record.UnrecoveredItems is { Count: > 0 } counted)
+        // A list a hand-back has counted down is kept on either realm: rebuilt from
+        // the full loot, it would list what is already back.
+        if (record.UnrecoveredItems is { Count: > 0 } counted
+            && ((IsStock && record.Status == DeathRecoveryStatus.Partial) || record.HandedBack))
         {
-            DropWhatStays(counted, record);
+            if (IsStock) DropWhatStays(counted, record);
             pile = counted;
         }
         record.UnrecoveredItems = pile.Count > 0 ? pile : null;   // corpse contents, for the detail panel
@@ -1291,6 +1294,15 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (_floorSinceExits && FindOurCorpse() is { } corpse)
         {
             RecoverCorpse(corpse);
+            return;
+        }
+        // The corpse is known to be gone: a party member has it and is handing the
+        // gear back. Bare floors say nothing new, so the pile stays as counted and
+        // the grab stays armed for a corpse that is put down after all.
+        if (record.HandedBack)
+        {
+            _log?.Info(LogCategory,
+                $"auto-recover: no corpse in the death room, but {record.UnrecoveredItems?.Count ?? 0} item(s) have been handed back — pile left as it is");
             return;
         }
         MarkCorpseMissing(record, _floorSinceExits
@@ -2849,6 +2861,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
             rec.UnrecoveredItems = listed;
             rec.UnrecoveredItems.RemoveAt(idx);
+            rec.HandedBack = true;
             _handedBack = rec;
             _handedBackBy = giver;
             _handedBackSettleTicks = HandBackSettleTicks;
@@ -2914,6 +2927,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (record.Status == status) return;
         record.Status = status;
         record.RecoveryMessage = message;
+        if (status == DeathRecoveryStatus.Recovered) record.HandedBack = false;
         _profile.Save();
         OnPropertyChanged(nameof(Records));
     }

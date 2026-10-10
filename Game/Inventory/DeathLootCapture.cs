@@ -26,7 +26,8 @@ public static class DeathLootCapture
     // A pack entry named like a worn piece is a spare, and is lost with the rest:
     // InventoryManager takes a piece out of the pack as it is worn and puts it back
     // as it comes off, so the two lists never hold the same copy and nothing here
-    // is dropped by name.
+    // is dropped by name. So a single spare of a worn piece is recorded like any
+    // pack copy (user, 2026-10-09).
     //
     // The keys and the lit light drop at a death too (GAME_MECHANICS "Death
     // threshold & consequences"). The inventory read lists both apart from the
