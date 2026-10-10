@@ -6502,9 +6502,11 @@ public sealed class AppServices
         Combat.SetWeaponActuator(Equipment.SwapWeapon, () => Equipment.ApplyBackstabArmor(),
             () => Equipment.WornWeapon);
         // Carried or worn, by name — unknown until the inventory's first read.
-        Combat.SetCarriedCheck(name => Inventory.Snapshot.LastUpdated == default
-            ? null
-            : HeldItemNames().Any(n => n.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        Combat.SetCarriedCheck(name =>
+        {
+            Game.Inventory.InventorySnapshot pack = Inventory.Snapshot;
+            return pack.LastUpdated == default ? null : pack.IsCarriedOrWorn(name);
+        });
         // The class's and race's own hit magic (a Mystic's strikes, a Witchunter's
         // swings). Stock adds a weapon's magic to it; Paradigm takes the higher.
         Combat.SetInnateHitMagic(InnateHitMagic, () => GameData.ActiveRealm != Game.RealmType.ParaMud);
@@ -11917,12 +11919,6 @@ public sealed class AppServices
         return $"{room.DisplayName} ({room.Key.Map}/{room.Key.Room})";
     }
 
-    // How many copies of itemId the current snapshot holds
-    // (carried + worn). The carried list stores one entry per copy, so gives /
-    // receives accumulate as distinct entries; matching each display-name back
-    // to its Number and counting yields the live copy count the leader's
-    // party-provisioning redistribution needs. Backs
-    // Game.Map.PartyPathItemGate's self-count seam.
     // How many of an item are in the pack, told by its name rather than its record
     // number. Two item records can share a name — "scroll of resist lightning" is
     // both #149 and #1993 — and the pack shows only the name, which resolves back to
@@ -11943,6 +11939,10 @@ public sealed class AppServices
         return count;
     }
 
+    // How many copies of itemId the current snapshot holds (carried + worn), each
+    // name matched back to its Number: the live copy count the leader's
+    // party-provisioning redistribution needs. Backs Game.Map.PartyPathItemGate's
+    // self-count seam.
     private int CountItemCarried(int itemId)
     {
         Game.Inventory.InventorySnapshot snap = Inventory.Snapshot;
@@ -11955,12 +11955,9 @@ public sealed class AppServices
     private int CountInPack(Game.Inventory.InventorySnapshot snap, int itemId)
     {
         int count = 0;
-        // A stacked pack entry is stored two ways: the full-inventory parse keeps it
-        // as one count-prefixed token ("50 orc-head"), while the live `You took N`
-        // path appends N singular entries. Split the leading count so both forms
-        // count their true quantity — otherwise a parse collapses a stack to 1,
-        // under-reading the held total and letting the auto-get MaxToGet cap collect
-        // past its limit after any inventory refresh.
+        // A pile is one pack entry under its count ("50 orc-head"), so each entry
+        // counts for its copies. Read as one item it under-reads the held total and
+        // lets the auto-get MaxToGet cap collect past its limit.
         foreach (string entry in snap.CarriedItems)
         {
             (int qty, string name) = Game.Inventory.CountedCommand.SplitLeadingCount(entry);
