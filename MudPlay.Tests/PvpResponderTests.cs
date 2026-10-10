@@ -65,6 +65,7 @@ public sealed class PvpResponderTests
                 },
                 hangUp: reason => { MonsterHangUps.Add(reason); return Game.Health.EscapeOutcome.Jumped; },
                 flee: (reason, _) => { MonsterFlees.Add(reason); return Game.Health.FleeOutcome.Started; },
+                fleeInFlight: () => false,
                 masterSwitchOff: () => false,
                 hangupsDisabled: () => false,
                 pvpHandles: roster => Responder!.IsAnswering(roster),

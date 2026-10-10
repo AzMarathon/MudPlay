@@ -2043,7 +2043,12 @@ public sealed class HealthManager : IDisposable
         // Asked of this flee only: the low-HP, hit-and-run and player flees take a
         // paused engine over as they always have.
         if (IsNavigationPausedByUser?.Invoke() == true) return FleeOutcome.Paused;
-        return TryFlee(reason, stillWanted: stillHere) ? FleeOutcome.Started : FleeOutcome.NoRoute;
+        // A player's flee that has landed and is staying away still holds its own
+        // run length. This run is the Combat tab's; the stay-away itself stands.
+        int? playersDistance = _fleeDistanceOverride;
+        _fleeDistanceOverride = null;
+        try { return TryFlee(reason, stillWanted: stillHere) ? FleeOutcome.Started : FleeOutcome.NoRoute; }
+        finally { _fleeDistanceOverride = playersDistance; }
     }
 
     // The PvP response's flee: the retreat a low-HP run makes, but `rooms` long, and

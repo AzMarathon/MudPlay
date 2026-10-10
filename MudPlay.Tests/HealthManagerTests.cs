@@ -2759,6 +2759,68 @@ public sealed class HealthManagerTests
         Assert.Equal(new Game.Map.RoomKey(1, 52), h.Engine.ResumedAtRoom);
     }
 
+    // A low-HP run has landed and waits for HP with the engine still paused. A Flee
+    // monster seen there is run from: another leg, on the same engine.
+    [Fact]
+    public void FleeFromMonster_AfterALowHpRunHasLanded_RunsAgainFromThere()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.State.InCombat = true;
+        h.State.Hp = 30;                                             // under the 20% run trigger
+        Assert.Single(h.Engine!.SentBacktrackMoves);
+        h.HostileInRoom = false;                                     // nothing followed
+        h.State.InCombat = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));       // landed, still low
+        Assert.Null(h.Engine.ResumedAtRoom);
+        Assert.False(h.Health.IsFleeInFlight);
+
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
+        Assert.True(h.Health.IsFleeInFlight);
+    }
+
+    // The game refuses the run's first move: the retreat stops where it stands and
+    // the run is no longer in flight, which is what the monster watch asks before
+    // it lets self-defence fight the monster back.
+    [Fact]
+    public void FleeFromMonster_FirstMoveRefused_TheRunIsOver()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+        Assert.True(h.Health.IsFleeInFlight);
+
+        h.Health.NoteMoveBlocked();
+
+        Assert.False(h.Health.IsFleeInFlight);
+        Assert.Single(h.Engine!.SentBacktrackMoves);                 // and no second run is chained
+    }
+
+    // A player's flee has landed and is staying away, still holding its own run
+    // length. A Flee monster seen there is run from by the Combat tab's distance,
+    // and the stay-away stands.
+    [Fact]
+    public void FleeFromMonster_DuringAPlayersStayAway_RunsTheCombatTabsDistance()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Clock = new DateTimeOffset(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        h.ReversePath = (_, _) => new[]
+        {
+            Game.Map.Direction.S, Game.Map.Direction.W, Game.Map.Direction.U,
+        };
+        h.Health.FleeFromPlayer("Bob attacked us", rooms: 2, stayAway: TimeSpan.FromSeconds(60));
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 48));       // landed; staying away
+        Assert.Equal(2, h.Engine!.SentBacktrackMoves.Count);
+
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+        Assert.Equal(3, h.Engine.SentBacktrackMoves.Count);
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 47));       // RunDistance 1: landed
+        Assert.Equal(3, h.Engine.SentBacktrackMoves.Count);
+        Assert.Null(h.Engine.ResumedAtRoom);                         // the stay-away is not over
+    }
+
     // Which runs tell the engine to carry on from where they landed (user,
     // 2026-10-10): the ones that ran forward to get away from something. A
     // hit-and-run or a failed backstab's run comes back for the monster, a player's

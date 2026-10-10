@@ -52,6 +52,10 @@ public sealed class MonsterRelationshipWatcherTests
         // Auto-All has switched every auto off.
         public bool MasterSwitchOff { get; set; }
 
+        // HealthManager.IsFleeInFlight: a run is moving or held for a move to land.
+        // True by default, as it is right after a run starts.
+        public bool FleeInFlight { get; set; } = true;
+
         public DateTimeOffset Clock { get; set; } = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
         public List<Action> Scheduled { get; } = new();
         public List<string> Notices { get; } = new();
@@ -60,7 +64,8 @@ public sealed class MonsterRelationshipWatcherTests
 
         public Harness(
             Func<string, EscapeOutcome>? hangUp = null,
-            Func<string, Func<bool>, FleeOutcome>? flee = null)
+            Func<string, Func<bool>, FleeOutcome>? flee = null,
+            Func<bool>? fleeInFlight = null)
         {
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(Router, Monsters, new PlayerDatabase(), Log);
@@ -74,6 +79,7 @@ public sealed class MonsterRelationshipWatcherTests
                     StillHere = stillHere;
                     return FleeOutcome;
                 }),
+                fleeInFlight: fleeInFlight ?? (() => FleeInFlight),
                 masterSwitchOff: () => MasterSwitchOff,
                 hangupsDisabled: () => HangupsDisabled,
                 pvpHandles: _ => PvpFightActive,
@@ -1078,7 +1084,6 @@ public sealed class MonsterRelationshipWatcherTests
     [InlineData(FleeOutcome.Paused, "the walk or loop is paused, which counts as idle")]
     [InlineData(FleeOutcome.NoRoute, "no way out of the room could be found")]
     [InlineData(FleeOutcome.Follower, "a follower does not run off alone")]
-    [InlineData(FleeOutcome.Down, "the character is down")]
     public void ARunThatCouldNotStart_IsSaid_AndNotTriedAgainThisSighting(FleeOutcome outcome, string why)
     {
         using Harness h = new() { FleeOutcome = outcome };
@@ -1201,6 +1206,129 @@ public sealed class MonsterRelationshipWatcherTests
         Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Hangup));
     }
 
+    // A run that is over with a Flee monster still on the roster: its first move
+    // was refused, or a second Flee monster stood where it landed (seen while the
+    // run was still in flight). No other run is coming in this sighting, so the
+    // monster is fought back. An escape is not asked after: it ends the stay.
+    [Theory]
+    [InlineData(FleeOutcome.Started, true)]
+    [InlineData(FleeOutcome.AlreadyRunning, true)]
+    [InlineData(FleeOutcome.Escaping, false)]
+    public void OnceTheRunIsOver_AFleeMonsterStillHere_IsFoughtBack(FleeOutcome outcome, bool foughtBack)
+    {
+        using Harness h = new() { FleeOutcome = outcome };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+        h.Feed("Also here: ogre.");
+        Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));   // in flight
+
+        h.FleeInFlight = false;                                             // landed, or refused
+
+        Assert.Equal(foughtBack, h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+        // No second run is chained from here.
+        h.Classifier.ReemitCurrent();
+        Assert.Single(h.Flees);
+
+        // Away from the monster there is nothing to fight.
+        h.Feed("Also here: giant rat.");
+        Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+    }
+
+    // Down, nothing can be done. Back on its feet the character is asked again at
+    // the next roster, and runs or defends itself.
+    [Fact]
+    public void WhileDown_NothingIsSaidToBeComing_AndTheSightingStaysOpen()
+    {
+        using Harness h = new() { FleeOutcome = FleeOutcome.Down };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+
+        Assert.Contains("the character is down", Assert.Single(h.FleeLines));
+        Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+
+        h.FleeOutcome = FleeOutcome.NoEngine;
+        h.Classifier.ReemitCurrent();
+
+        Assert.True(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+    }
+
+    [Fact]
+    public void ADroppedConnection_EndsWhatWasSaidOfTheFleeMonster()
+    {
+        using Harness h = new() { FleeOutcome = FleeOutcome.NoEngine };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+        h.Feed("Also here: ogre.");
+        Assert.True(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+
+        h.Classifier.NoteGameLeft();
+        h.Watcher.NoteDisconnected();
+
+        Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+    }
+
+    // A Hangup monster beside the Flee one, and the hang-up neither went out nor is
+    // owed: the all-off rule held it, or no exit command is set. The Flee monster is
+    // answered as if alone, and is not said to have been left to the hang-up.
+    [Theory]
+    [InlineData(EscapeOutcome.AllOff, FleeOutcome.Started)]
+    [InlineData(EscapeOutcome.NotSent, FleeOutcome.Started)]
+    [InlineData(EscapeOutcome.AllOff, FleeOutcome.NoEngine)]
+    [InlineData(EscapeOutcome.NotSent, FleeOutcome.NoEngine)]
+    public void HangupAndFleeMonster_WhenNoHangUpWentOut_TheFleeMonsterIsAnsweredAsIfAlone(
+        EscapeOutcome hangUp, FleeOutcome flee)
+    {
+        using Harness h = new() { Outcome = hangUp, FleeOutcome = flee };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Relationships[Troll] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: troll, ogre.");
+        h.Classifier.ReemitCurrent();
+
+        Assert.Equal("troll (#9) is here, relationship Flee", Assert.Single(h.Flees));
+        Assert.DoesNotContain(h.FleeLines, line => line.Contains("the hang-up is the answer"));
+        Assert.Equal(flee == FleeOutcome.NoEngine, h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+    }
+
+    // A hang-up owed (held for the board's menu or the PvP side) is still this
+    // room's answer: the Flee monster is not run from ahead of it.
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void HangupAndFleeMonster_WhileTheHangUpIsOwed_NoRunStarts(bool atBoardMenu, bool pvp)
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.HungUp, AtBoardMenu = atBoardMenu, PvpFightActive = pvp };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Relationships[Troll] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: troll, ogre.");
+
+        Assert.Empty(h.Flees);
+        Assert.Contains("the hang-up is the answer", Assert.Single(h.FleeLines));
+    }
+
+    // The minute after a reconnect held back hang-ups only. When it ends the roster
+    // is read again for the Hangup monster; a Flee monster answered in that display
+    // is not run from a second time.
+    [Fact]
+    public void WhenTheMinuteEnds_AnAnsweredFleeSightingIsNotRunAgain()
+    {
+        using Harness h = new();
+        h.Relationships[Troll] = MonsterRelationship.Flee;
+        h.HangUpAndDrop();
+        h.Watcher.NoteInGamePrompt();
+        h.HangUps.Clear();
+
+        h.Feed("Also here: ogre, troll.");
+        Assert.Single(h.Flees);                                    // no hang-up is coming: run
+        Assert.Empty(h.HangUps);
+
+        h.Tick(60);
+
+        Assert.Single(h.HangUps);                                  // the Hangup monster, now
+        Assert.Single(h.Flees);
+    }
+
     // The holds that are someone else's to answer do not turn self-defence on: the
     // PvP actions' roster, the board's menu, and a room the hang-up answers.
     [Theory]
@@ -1305,6 +1433,40 @@ public sealed class MonsterRelationshipWatcherTests
         public void PauseForRecovery(string reason) => PausedFor = reason;
         public void ResumeAfterRecovery(RoomKey recoveredAnchor) => ResumedAt = recoveredAnchor;
         public void AbortFromRecoveryFailure(string detail) { }
+    }
+
+    // The game refuses the run's first move, so the character is still beside the
+    // monster with no run in flight: self-defence is told to fight it back.
+    [Fact]
+    public void ARefusedFirstMove_LeavesTheMonsterToBeFoughtBack()
+    {
+        LogService log = new();
+        RecordingEngine loop = new() { JourneyOrigin = new RoomKey(1, 1) };
+        using HealthManager health = new(
+            new PlayerState(), new MovementCoordinator(log),
+            readSettings: () => new HealthSettings(),
+            isEnabled: () => true,
+            readHangupCommand: null,
+            getActiveMovementEngine: () => loop,
+            getLastSentDirection: () => Direction.N,
+            readCombatSettings: () => new CombatSettings { RunDistance = 1, BreakBeforeFleeing = false },
+            readGeneralSettings: null,
+            hasEngageableHostiles: null,
+            log: log,
+            findReversePath: (_, _) => new[] { Direction.S });
+        health.NoteRoomChanged(new RoomKey(1, 5));
+        using Harness h = new(flee: health.FleeFromMonster, fleeInFlight: () => health.IsFleeInFlight);
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: ogre.");
+        Assert.Equal(new[] { Direction.S }, loop.Moves);
+        Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));   // running
+
+        health.NoteMoveBlocked();                                            // "There is no exit in that direction!"
+
+        Assert.True(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+        h.Classifier.ReemitCurrent();
+        Assert.Single(loop.Moves);                                           // no second run from the same sighting
     }
 
     // The sight sends what the health settings' own flee sends: `break` when a fight

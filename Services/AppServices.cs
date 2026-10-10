@@ -4144,6 +4144,7 @@ public sealed class AppServices
             resolveOverlay: ResolveMonsterOverlay,
             hangUp: reason => Health.HangUpForMonster(reason),
             flee: (reason, stillHere) => Health.FleeFromMonster(reason, stillHere),
+            fleeInFlight: () => Health.IsFleeInFlight,
             masterSwitchOff: () => AutoModeController.KillSwitchEngaged,
             hangupsDisabled: () =>
                 ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups,

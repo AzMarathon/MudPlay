@@ -2648,6 +2648,7 @@ public sealed class CombatManagerSpellsTests
                 runs.Add(reason);
                 return engineRunning ? Game.Health.FleeOutcome.Started : Game.Health.FleeOutcome.NoEngine;
             },
+            fleeInFlight: () => engineRunning,
             masterSwitchOff: () => false,
             hangupsDisabled: () => true,
             pvpHandles: _ => false,
