@@ -335,7 +335,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         if (count < 1 || _path is null) return Array.Empty<Direction>();
         var dirs = new List<Direction>(count);
-        for (int i = _index; i < _path.Count && dirs.Count < count; i++)
+        // See LoopRunner.PeekPlannedDirections: a step whose move landed while we
+        // were paused has been walked, though the index still points at it.
+        bool landed = _stepInFlight
+            && _index < _path.Count
+            && _path[_index] is MoveStep { ExpectedTarget: var target }
+            && _tracker.State.CurrentRoom?.Key.Equals(target) == true;
+        for (int i = _index + (landed ? 1 : 0); i < _path.Count && dirs.Count < count; i++)
         {
             // Stop at the first command / action step — a forward flee sends
             // plain cardinals only, so we can't cross a lever / door step here.

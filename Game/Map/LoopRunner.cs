@@ -428,6 +428,11 @@ public sealed class LoopRunner : IRecoverableEngine
         int n = _expandedSteps.Count;
         if (count < 1 || _loop is null || n == 0) return Array.Empty<Direction>();
         var dirs = new List<Direction>(count);
+        // The step at _index has already been walked when its move landed while we
+        // were paused: the pause (a fight, or the flee asking this) keeps the arrival
+        // from advancing the index. Counting it sent a forward flee off with the
+        // direction it had just come in by.
+        int from = _index + (InFlightStepHasLanded() ? 1 : 0);
         // Loops are circular — wrap around the circuit to fill the count. Stop at
         // the first command / delay step: a forward flee sends plain cardinals
         // only and can't run a custom-command step mid-escape.
@@ -436,12 +441,21 @@ public sealed class LoopRunner : IRecoverableEngine
             // A teleport step counts as a custom command too — LoopExpander turns a
             // BFS path straight into MoveLoopSteps, so a circuit that crosses a CMD
             // teleport carries one, and it can't go out as a bare direction.
-            if (_expandedSteps[(_index + k) % n] is not MoveLoopStep move
+            if (_expandedSteps[(from + k) % n] is not MoveLoopStep move
                 || !move.Direction.IsCardinal()) break;
             dirs.Add(move.Direction);
         }
         return dirs;
     }
+
+    // The move of the step at _index has been sent and the tracker stands in the
+    // room it was headed for, though the index has not been advanced yet.
+    private bool InFlightStepHasLanded() =>
+        _stepInFlight
+        && _index < _expandedSteps.Count
+        && _expandedSteps[_index] is MoveLoopStep
+        && _expectedMoveTarget is { } target
+        && _tracker.State.CurrentRoom?.Key.Equals(target) == true;
 
     public void SendBacktrackMove(Direction direction)
     {

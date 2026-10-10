@@ -1433,6 +1433,44 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
+    // A forward flee walks the loop's next steps. Asked in a room the loop came into
+    // while paused (a fight there, or the flee itself pausing it as the move
+    // confirms), the step that carried it in is still the one at the index: counted,
+    // it sent the flee off with the direction just walked, into a wall or off the
+    // loop.
+    [Theory]
+    [InlineData(true)]    // paused by a fight before the move landed
+    [InlineData(false)]   // paused by the flee before the loop saw the arrival
+    public void ForwardPeek_InARoomEnteredWhilePaused_LeavesOutTheStepJustWalked(bool pausedByAFight)
+    {
+        Harness h = NewHarness(withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();                                                    // step 2 (N into C) is in flight
+
+        if (pausedByAFight) h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        else h.Runner.PauseForFlee("a Flee monster");
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+
+        Assert.Equal(new RoomKey(1, 3), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(new[] { Direction.S, Direction.S }, h.Runner.PeekPlannedDirections(2));
+    }
+
+    // The other ordering: the loop saw the arrival, advanced and sent the next step.
+    // That step has not landed, so it is still the first one ahead.
+    [Fact]
+    public void ForwardPeek_WithTheNextStepInFlight_StartsWithThatStep()
+    {
+        Harness h = NewHarness(withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();
+
+        Assert.Equal(new[] { Direction.N, Direction.S }, h.Runner.PeekPlannedDirections(2));
+    }
+
     [Fact]
     public void RepeatedGenuineDesyncs_StillExhaustTheRecoveryBudget()
     {

@@ -729,6 +729,45 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(WalkState.Paused, h.Walker.State);
     }
 
+    // A forward flee walks the walk's next steps. Asked in a room the walk came into
+    // while paused (a fight there, or the flee itself pausing it as the move
+    // confirms), the step that carried it in is still the one at the index: counted,
+    // it sent the flee off with the direction just walked.
+    [Theory]
+    [InlineData(true)]    // paused by a gate before the move landed
+    [InlineData(false)]   // paused by the flee before the walker saw the arrival
+    public void ForwardPeek_InARoomEnteredWhilePaused_LeavesOutTheStepJustWalked(bool pausedByAGate)
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));                           // N, N; the first is in flight
+
+        if (pausedByAGate) h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        else h.Walker.PauseForFlee("a Flee monster");
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+
+        Assert.Equal(new RoomKey(1, 2), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(WalkState.Paused, h.Walker.State);
+        Assert.Equal(new[] { Direction.N }, h.Walker.PeekPlannedDirections(2));   // only B → C is left
+    }
+
+    // The other ordering: the walker saw the arrival, advanced and sent the next
+    // step. That step has not landed, so it is still the one ahead.
+    [Fact]
+    public void ForwardPeek_WithTheNextStepInFlight_StartsWithThatStep()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        Assert.Equal(new[] { Direction.N, Direction.N }, h.Walker.PeekPlannedDirections(2));
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+
+        Assert.Equal(new[] { Direction.N }, h.Walker.PeekPlannedDirections(2));
+    }
+
     [Fact]
     public void CoordinatorResume_AfterPause_ResumesWalk()
     {
