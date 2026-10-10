@@ -61,6 +61,11 @@ public sealed class ComebackRequesterTests : IDisposable
         public required PartyState Party { get; init; }
         public required ComebackRequester Requester { get; init; }
 
+        // The two things that move the map on these lines in the app: the follow
+        // line books a drag, and a refusal the detector knows takes a move back.
+        public required FollowMoveObserver FollowObserver { get; init; }
+        public required MovementRefusalDetector RefusalDetector { get; init; }
+
         public bool MasterSwitchOn { get; set; } = true;
         public bool SelfDown { get; set; }
         public string? SendBlocked { get; set; }
@@ -82,13 +87,23 @@ public sealed class ComebackRequesterTests : IDisposable
             ? null
             : Encoding.Latin1.GetString(Requester.LastSentForTests[^1]).TrimEnd('\r');
 
-        public void Feed(string text) =>
+        // The router first and the refusal detector after it, the order the app
+        // hands a line on in.
+        public void Feed(string text)
+        {
             Router.Dispatch(new LineExtractor.EmittedLine(
                 text, new CellAttributes[text.Length], _clock, IsPromptLine: false));
+            RefusalDetector.FeedTestLine(text, _clock);
+        }
 
         public void Type(string line) => Requester.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"));
 
-        public void Dispose() => Requester.Dispose();
+        public void Dispose()
+        {
+            Requester.Dispose();
+            FollowObserver.Dispose();
+            RefusalDetector.Dispose();
+        }
     }
 
     // Solo, and not yet located: the state the "no longer following" line alone
@@ -107,6 +122,8 @@ public sealed class ComebackRequesterTests : IDisposable
         graph.OnActiveSetChanged("alpha");
         RoomTracker tracker = new(graph);
         PartyState party = new();
+        FollowMoveObserver followObserver = new(router, tracker);
+        MovementRefusalDetector refusalDetector = new(new LineExtractor(new TerminalEmulator(80, 24)), tracker);
 
         Harness? h = null;
         ComebackRequester requester = new(router, tracker,
@@ -121,6 +138,8 @@ public sealed class ComebackRequesterTests : IDisposable
             Tracker = tracker,
             Party = party,
             Requester = requester,
+            FollowObserver = followObserver,
+            RefusalDetector = refusalDetector,
         };
         requester.NowProvider = () => h.Now;
         requester.MasterSwitchOff = () => !h.MasterSwitchOn;
@@ -208,11 +227,11 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void RoomOnlyPredicted_SendsBareComeback()
     {
-        using Harness h = NewFollower();
-        // A drag in flight: the room is a prediction, not a place to send the leader.
+        using Harness h = NewFollower(isMovementPrevented: () => true);
+        // A drag still in flight when a hold ends the follow: the room is a
+        // prediction, not a place to send the leader.
         h.Tracker.NoteFollowMove(Direction.N, h.Now);
 
-        h.Feed("You can't seem to move anywhere!");
         h.Feed("You are no longer following Boss.");
 
         Assert.Equal("/Boss @comeback", h.LastWire);
@@ -289,9 +308,7 @@ public sealed class ComebackRequesterTests : IDisposable
 
         h.Feed("Other just left to the east.");
         h.Feed("-- Following your Party leader east --");
-        h.Tracker.NoteFollowMove(Direction.E, h.Now);       // what the follow line does to the map
         h.Feed("You don't have a mine pass, so you can't enter the mines.");
-        h.Tracker.NoteMoveBlocked(h.Now);                   // and what the refusal does
         h.Feed("You are no longer following Boss.");
         h.Requester.FireSettleForTests();
 
@@ -299,7 +316,9 @@ public sealed class ComebackRequesterTests : IDisposable
     }
 
     // The same shape with a refusal the client has never seen: the follow line,
-    // no arrival, and the follow ends. The wording is the exit's own.
+    // no arrival, and the follow ends. The wording is the exit's own. The map had
+    // booked the drag off the follow line and no refusal it knows took it back:
+    // the request still names the room we stand in.
     [Fact]
     public void Screen_GatedAtAnExit_WithWordingNobodyKnows_SendsOneComeback()
     {
@@ -307,6 +326,7 @@ public sealed class ComebackRequesterTests : IDisposable
 
         h.Feed("Other just left to the north.");
         h.Feed("-- Following your Party leader north --");
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
         h.Feed("The doorman looks you up and down and shakes his head.");
         h.Feed("You are no longer following Boss.");
         Assert.Null(h.LastWire);                            // waits for the prompt
@@ -314,6 +334,88 @@ public sealed class ComebackRequesterTests : IDisposable
 
         Assert.Equal(new[] { "/Boss @comeback 1/1" }, h.Wire);
         Assert.Contains("never arrived", h.Requester.LastIncidentSummary);
+        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
+    }
+
+    // Followed into a room that shows nothing, then uninvited two seconds on: the
+    // dark line was the arrival.
+    [Theory]
+    [InlineData("The room is pitch black - you can't see anything!")]
+    [InlineData("The room is very dark - you can't see anything.")]
+    [InlineData("You are blind.")]
+    public void FollowedIntoARoomThatShowsNothing_ThenUninvited_SendsNothing(string arrival)
+    {
+        using Harness h = NewFollower();
+
+        h.Feed(" -- Following your Party leader north --");
+        h.Feed(arrival);
+        h.Advance(TimeSpan.FromSeconds(2));
+        h.Feed("You are no longer following Boss.");
+        h.Requester.FireSettleForTests();
+
+        Assert.Null(h.LastWire);
+    }
+
+    // `set follow blind` shows no room at all for a follow move. With nothing said
+    // between the follow line and the end of the follow, no follow failed.
+    [Fact]
+    public void FollowLine_ThenNothing_ThenUninvited_SendsNothing()
+    {
+        using Harness h = NewFollower();
+
+        h.Feed(" -- Following your Party leader north --");
+        h.Advance(TimeSpan.FromSeconds(1));
+        h.Feed("You are no longer following Boss.");
+        h.Requester.FireSettleForTests();
+
+        Assert.Null(h.LastWire);
+    }
+
+    // A room the map couldn't place is still a room: its exits line is the arrival.
+    [Fact]
+    public void FollowLine_ARoomIsShown_ThenUninvited_SendsNothing()
+    {
+        using Harness h = NewFollower();
+
+        h.Feed(" -- Following your Party leader north --");
+        h.Feed("Somewhere The Map Has Never Seen");
+        h.Feed("Obvious exits: up, down.");
+        h.Advance(TimeSpan.FromSeconds(1));
+        h.Feed("You are no longer following Boss.");
+        h.Requester.FireSettleForTests();
+
+        Assert.Null(h.LastWire);
+    }
+
+    // The leader relayed a teleport keyword, a follow line and a line came, and the
+    // follow ended: that is the leader's teleport, not an exit that turned us away.
+    [Fact]
+    public void FollowShape_BehindARelayedTeleport_IsTheLeadersSplit()
+    {
+        using Harness h = NewFollower();
+
+        h.Requester.StampPartyTeleportForTests();
+        h.Advance(TimeSpan.FromSeconds(4));
+        h.Feed(" -- Following your Party leader north --");
+        h.Feed("The chime's note hangs in the air.");
+        h.Feed("You are no longer following Boss.");
+        h.Requester.FireSettleForTests();
+
+        Assert.Null(h.LastWire);
+        Assert.Contains("party teleport", h.Requester.LastIncidentSummary);
+    }
+
+    [Fact]
+    public void FollowLine_ThenTypedLeave_SendsNothing()
+    {
+        using Harness h = NewFollower();
+
+        h.Feed(" -- Following your Party leader north --");
+        h.Type("leave party");
+        h.Feed("You are no longer following Boss.");
+        h.Requester.FireSettleForTests();
+
+        Assert.Null(h.LastWire);
     }
 
     // A follow line whose move was made is no failed follow, however soon after
@@ -754,12 +856,16 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Null(h.LastWire);
     }
 
-    // `leave` (alone or with one more word) and a bare `follow` end our own follow.
+    // `leave` (alone or with one more word) and a bare `follow` end our own follow,
+    // in every spelling the game takes: `le` … `leave`, `fo` … `follow`.
     [Theory]
     [InlineData("leave")]
     [InlineData("leave party")]
+    [InlineData("le")]
     [InlineData("lea")]
+    [InlineData("leav")]
     [InlineData("follow")]
+    [InlineData("fo")]
     [InlineData("fol")]
     public void TypedLeave_IsTheUserLeaving(string typed)
     {
@@ -772,6 +878,39 @@ public sealed class ComebackRequesterTests : IDisposable
 
         Assert.Null(h.LastWire);
         Assert.Contains("left the party by command", h.Requester.LastIncidentSummary);
+    }
+
+    // With three words or more the game does nothing for `leave`, so the hold in
+    // force when the follow ends is what ended it.
+    [Fact]
+    public void LeaveWithThreeWords_IsNotACommandTheGameTakes()
+    {
+        using Harness h = NewFollower(isMovementPrevented: () => true);
+
+        h.Type("leave the party");
+        h.Feed("You are no longer following Boss.");
+
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+    }
+
+    // The consent to take the invite of the leader we asked holds for that leader
+    // alone, through an answer that is no decline, and lapses after ten minutes.
+    [Fact]
+    public void TheLeaderWeAsked_IsThatLeaderOnly_AndOnlyForAWhile()
+    {
+        using Harness h = NewFollower();
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+
+        h.Feed("Boss telepaths: {follow timed out — resuming anyway}");
+        h.Feed("Boss telepaths: {I can't yet, I'm on a train trip. I'll come for you when the training is done}");
+        h.Advance(TimeSpan.FromMinutes(9));
+        Assert.True(h.Requester.IsLeaderWeAsked("Boss"));
+        Assert.False(h.Requester.IsLeaderWeAsked("Bossy"));
+        Assert.False(h.Requester.IsLeaderWeAsked("Bos"));
+
+        h.Advance(TimeSpan.FromMinutes(2));
+        Assert.False(h.Requester.IsLeaderWeAsked("Boss"));
     }
 
     // `join <leader>` / `follow <leader>` is how a member rejoins: being left

@@ -1435,6 +1435,18 @@ public sealed class RoomTracker
         MoveBlocked?.Invoke();
     }
 
+    // The follow move a party leader's drag promised was refused: the game printed
+    // the follow line, then the exit's own refusal in words the refusal detector
+    // doesn't know, and the follow ended. Un-counts that drag, and only a drag: a
+    // move of our own queued behind it has its own answer coming. False when the
+    // newest queued move isn't a drag.
+    public bool NoteFollowDragRefused(DateTimeOffset? whenUtc = null)
+    {
+        if (MostRecentPending() is not { IsFollowDrag: true }) return false;
+        NoteMoveBlocked(whenUtc);
+        return true;
+    }
+
     // How recently the most-recent move must have been sent for a "command
     // ignored" drop to be attributed to it. A fast loop or Roomba sweep floods
     // commands far tighter than this; a move still Pending from longer ago is

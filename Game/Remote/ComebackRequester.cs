@@ -16,8 +16,10 @@ namespace MudPlay.Game.Remote;
 // How the client knows it was left behind (GAME_MECHANICS "@comeback (follower →
 // leader)"):
 //   - "You are no longer following X." right behind a follow move we couldn't
-//     make: a move refusal just before it, a hold in force, or the leader seen
-//     walking out with no follow move of ours after it.
+//     make: a move refusal just before it, a hold in force, the leader seen
+//     walking out with no follow move of ours after it, or the follow line itself
+//     with something said after it and no arrival (Paradigm prints the follow line
+//     ahead of an exit's refusal, whose wording is the exit's own).
 //   - A move refusal nobody asked for. A follower sends no moves, so an exit
 //     refusal with no move or command of ours unanswered answers the follow move
 //     the game made for us. Stock ends the follow there without another word (a
@@ -74,6 +76,7 @@ public sealed partial class ComebackRequester : IDisposable
     // How often a request that couldn't be sent is looked at again.
     private static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(2);
 
+    private readonly MessageRouter _router;
     private readonly RoomTracker _tracker;
     private readonly PartyState? _party;
     private readonly LogService? _log;
@@ -97,6 +100,7 @@ public sealed partial class ComebackRequester : IDisposable
     private string _leaderLeftWord = string.Empty;
     private DateTimeOffset _followAttemptAt = DateTimeOffset.MinValue;
     private string _followAttemptWord = string.Empty;
+    private int _linesSinceFollowLine;
     private DateTimeOffset _ownMoveRefusedAt = DateTimeOffset.MinValue;
     private DateTimeOffset _manualMoveAt = DateTimeOffset.MinValue;
     private DateTimeOffset _typedCommandAt = DateTimeOffset.MinValue;
@@ -199,6 +203,7 @@ public sealed partial class ComebackRequester : IDisposable
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(tracker);
+        _router = router;
         _tracker = tracker;
         _party = party;
         _log = log;
@@ -206,6 +211,14 @@ public sealed partial class ComebackRequester : IDisposable
         _isSelfDown = isSelfDown;
         _sendBlocked = sendBlocked;
         _inTrainTrip = inTrainTrip;
+
+        // Every line, to know whether the game said anything between a follow line
+        // and the end of the follow, and the lines a room that shows nothing is
+        // entered with: each of those is an arrival all the same.
+        _router.LineDispatched += OnAnyLine;
+        _subs.Add(router.Subscribe(KnownPatterns.RoomPitchBlack, _ => OnArrived()));
+        _subs.Add(router.Subscribe(KnownPatterns.RoomVeryDark, _ => OnArrived()));
+        _subs.Add(router.Subscribe(KnownPatterns.BlindMoveStarved, _ => OnArrived()));
 
         _subs.Add(router.Subscribe(KnownPatterns.MovementFailedStuck, OnCantMove));
         _subs.Add(router.Subscribe(KnownPatterns.MovementFailedHeavy, OnCantMove));
@@ -248,6 +261,7 @@ public sealed partial class ComebackRequester : IDisposable
         _tracker.PlayerDeathObserved -= OnSelfDied;
         _tracker.MoveConfirmed -= OnArrived;
         _tracker.StateChanged -= OnRoomStateChanged;
+        _router.LineDispatched -= OnAnyLine;
         if (_party is not null) _party.PropertyChanged -= OnPartyChanged;
         _settleTimer.Stop();
         _retryTimer.Stop();
@@ -289,6 +303,10 @@ public sealed partial class ComebackRequester : IDisposable
             }
         }
     }
+
+    // Test seam — a teleport edge takes a room command chain to build, which the
+    // test graph doesn't carry.
+    internal void StampPartyTeleportForTests() => _partyTeleportAt = NowProvider();
 
     // The link dropped. Whatever split there is now is the reconnect's:
     // PartyRejoinCoordinator sends that request, once and inside its own window,
@@ -367,18 +385,38 @@ public sealed partial class ComebackRequester : IDisposable
     // " -- Following your Party leader east --". We were following when it was
     // printed, so whatever split came before is over. It is not proof the move was
     // made: Paradigm prints it ahead of the exit's own refusal, and the follow then
-    // ends on the next line. A follow line with no arrival behind it is that shape,
-    // whatever the exit's refusal is worded as.
+    // ends on the line after that. The shape of a follow that failed is this line,
+    // then something the game says that is no arrival (the refusal, in whatever
+    // words the exit has), then the end of the follow. With nothing at all between
+    // the two it is an uninvite that happened to come soon after a move.
     private void OnFollowLine(MatchResult result)
     {
         OnFollowingAgain();
         _followAttemptAt = NowProvider();
         _followAttemptWord = result.Groups.Count > 0 ? result.Groups[0].Trim() : string.Empty;
+        _linesSinceFollowLine = 0;
     }
 
-    // The room the follow line promised was shown, or we stand somewhere new: the
-    // move was made.
+    // The move the follow line promised was made: its room was confirmed, we stand
+    // somewhere new, a room's exits were shown, or the game said the room is too
+    // dark to show or that we are blind. A refused move shows no room.
     private void OnArrived() => _followAttemptAt = DateTimeOffset.MinValue;
+
+    // Runs ahead of the pattern handlers for the same line.
+    private void OnAnyLine(Terminal.LineExtractor.EmittedLine line)
+    {
+        if (_followAttemptAt == DateTimeOffset.MinValue || line.IsPromptLine) return;
+        string text = line.Text.Trim();
+        if (text.Length == 0) return;
+        if (text.StartsWith("Obvious exits:", StringComparison.Ordinal))
+        {
+            OnArrived();
+            return;
+        }
+        // The line that ends the follow is not what came between.
+        if (text.StartsWith("You are no longer following ", StringComparison.Ordinal)) return;
+        _linesSinceFollowLine++;
+    }
 
     private void OnRoomStateChanged(RoomTransition transition)
     {
@@ -495,12 +533,15 @@ public sealed partial class ComebackRequester : IDisposable
             cause = "held when the leader moved";
         else if (now - _exitRefusedAt <= LeftBehindWindow)
             cause = $"a follow move was refused: {_exitRefusedText}";
-        else if (now - _followAttemptAt <= LeftBehindWindow)
+        else if (now - _followAttemptAt <= LeftBehindWindow && _linesSinceFollowLine > 0)
         {
             // The shape of a follow move that failed, whatever the exit said.
             cause = $"the follow move {_followAttemptWord} never arrived";
             exitWord = _followAttemptWord;
             noRefusalSeen = true;
+            // The map booked the drag off the follow line, and no refusal it knows
+            // took it back: it never happened, and we stand where we stood.
+            _tracker.NoteFollowDragRefused(now);
         }
         else if (now - _leaderLeftAt <= LeftBehindWindow)
         {
@@ -644,6 +685,11 @@ public sealed partial class ComebackRequester : IDisposable
         if (ManualMoveStands(now)) return "a move of your own took you out of the party";
         if (now - _selfDiedAt <= DeathWindow || _isSelfDown?.Invoke() == true) return "we died or dropped";
         if (now - _leaderDownAt <= DeathWindow) return $"{leader} died or dropped";
+        // A verdict with no refusal the client knows behind it rests on timing, and
+        // the leader's own teleport ends a follow with the same line: relayed just
+        // before, that is what this was.
+        if (leaderExitWord is not null && now - _partyTeleportAt <= TeleportWindow)
+            return $"{leader} relayed a party teleport: everyone crosses by themselves and is re-invited where it lands";
         if (LeaderExitCasts(leaderExitWord))
             return $"the exit {leader} took casts a spell on whoever walks it, so the follow ended on a teleport and not on a move we couldn't make";
         if (!Enabled) return "\"Auto-request @comeback when left behind\" is off";
@@ -750,11 +796,11 @@ public sealed partial class ComebackRequester : IDisposable
     private static partial Regex ClosedDoorLookReply();
 
     // What ends our own follow: `leave`, alone or with one more word (`leave
-    // gang` leaves the gang instead), and `follow` with nobody named. `follow
-    // <name>` and `join <name>` join someone, which is how a member rejoins. The
-    // shortened spellings of `follow` are the game's; those of `leave` are read
-    // here by what the user meant (GAME_MECHANICS "Party commands").
-    [GeneratedRegex(@"^(?:lea(?:ve?)?(?:\s+(?!gang\s*$)\S+)?|fo(?:l(?:l(?:ow?)?)?)?)$",
+    // gang` leaves the gang instead; with three words or more the game does
+    // nothing), and `follow` with nobody named. `follow <name>` and `join <name>`
+    // join someone, which is how a member rejoins. The shortened spellings are the
+    // game's own: `le` … `leave`, `fo` … `follow` (GAME_MECHANICS "Party commands").
+    [GeneratedRegex(@"^(?:le(?:a(?:ve?)?)?(?:\s+(?!gang\s*$)\S+)?|fo(?:l(?:l(?:ow?)?)?)?)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TypedLeave();
 
@@ -764,8 +810,9 @@ public sealed partial class ComebackRequester : IDisposable
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TypedTalk();
 
-    // The answers PartyComebackManager gives when it is not coming.
-    [GeneratedRegex(@"I can't|my party is full|can't find a path|can't come|forget me|going idle",
+    // The answers PartyComebackManager gives when it is not coming. "I can't yet"
+    // is a train trip's: it comes when the training is done.
+    [GeneratedRegex(@"I can't(?! yet)|my party is full|can't find a path|can't come|forget me|going idle",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex LeaderDeclined();
 }
