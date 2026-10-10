@@ -884,6 +884,10 @@ public sealed class RoomTracker
     // it booked us into: its exits and doors aren't that room's.
     private bool _bookedOffAnotherRoomsDisplay;
 
+    // A room display is being reconciled: a transition raised now was decided by
+    // that display (RoomTransition.Displayed).
+    private bool _reconcilingDisplay;
+
     private Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private Action? _requestRedisplay;
 
@@ -1209,42 +1213,52 @@ public sealed class RoomTracker
         State.OpenDoorDirections = observation.OpenDoorDirections;
         State.ClosedDoorDirections = observation.ClosedDoorDirections;
 
-        VerifyCastLanding(observation, when);
-
-        bool afterDrop = _connectionLostMidMove;
-        _connectionLostMidMove = false;
-        // Unsure of the room already: there is no in-flight move to settle, only dead
-        // ones to forget before the display is judged.
-        if (afterDrop && State.Confidence != RoomConfidence.Pending)
-            while (_pending.TryDequeue(out _)) { /* drain */ }
-
-        switch (State.Confidence)
+        // From here on a room the tracker settles on is the one this display shows:
+        // a booked landing it corrects, as much as the reconcile that follows.
+        _reconcilingDisplay = true;
+        try
         {
-            case RoomConfidence.Unknown:
-                LandFromCandidateSearch(observation, when);
-                break;
+            VerifyCastLanding(observation, when);
 
-            case RoomConfidence.Confirmed:
-                ReconcileFromConfirmed(observation, when);
-                break;
+            bool afterDrop = _connectionLostMidMove;
+            _connectionLostMidMove = false;
+            // Unsure of the room already: there is no in-flight move to settle, only
+            // dead ones to forget before the display is judged.
+            if (afterDrop && State.Confidence != RoomConfidence.Pending)
+                while (_pending.TryDequeue(out _)) { /* drain */ }
 
-            case RoomConfidence.Pending:
-                if (afterDrop) ReconcileAfterReconnect(observation, when);
-                else ReconcileFromPending(observation, when);
-                break;
+            switch (State.Confidence)
+            {
+                case RoomConfidence.Unknown:
+                    LandFromCandidateSearch(observation, when);
+                    break;
 
-            case RoomConfidence.Suspect:
-                ReconcileFromSuspect(observation, when);
-                break;
+                case RoomConfidence.Confirmed:
+                    ReconcileFromConfirmed(observation, when);
+                    break;
 
-            case RoomConfidence.Lost:
-            case RoomConfidence.PendingRespawn:
-                // Lost / PendingRespawn → observation is authoritative;
-                // land via candidate search. PendingRespawn arrives via
-                // the same code path because the recovery semantics are
-                // identical: the next obs is wherever we are now.
-                LandFromCandidateSearch(observation, when);
-                break;
+                case RoomConfidence.Pending:
+                    if (afterDrop) ReconcileAfterReconnect(observation, when);
+                    else ReconcileFromPending(observation, when);
+                    break;
+
+                case RoomConfidence.Suspect:
+                    ReconcileFromSuspect(observation, when);
+                    break;
+
+                case RoomConfidence.Lost:
+                case RoomConfidence.PendingRespawn:
+                    // Lost / PendingRespawn → observation is authoritative;
+                    // land via candidate search. PendingRespawn arrives via
+                    // the same code path because the recovery semantics are
+                    // identical: the next obs is wherever we are now.
+                    LandFromCandidateSearch(observation, when);
+                    break;
+            }
+        }
+        finally
+        {
+            _reconcilingDisplay = false;
         }
 
         // The display was of a room we were only passed through, and we are booked
@@ -1395,7 +1409,7 @@ public sealed class RoomTracker
         profile.DeathHistory.Add(record);
         _log?.Log(LogSeverity.Info, "RoomTracker",
             $"Death recorded at {(room is null ? "(unknown room)" : $"{room.Map}/{room.Room}")}; {livesRemaining} lives remaining; " +
-            $"deathpile worn={equipped?.Count ?? 0}, carried={lost?.Count ?? 0}.");
+            $"deathpile worn={equipped?.Count ?? 0}, lost (pack, lit light, keys)={lost?.Count ?? 0}.");
         return record;
     }
 
@@ -2672,7 +2686,8 @@ public sealed class RoomTracker
         Room? newRoom)
     {
         StateChanged?.Invoke(new RoomTransition(
-            previousConfidence, newConfidence, previousRoom, newRoom, State.LastUpdatedAt));
+            previousConfidence, newConfidence, previousRoom, newRoom, State.LastUpdatedAt,
+            Displayed: _reconcilingDisplay && !_bookedOffAnotherRoomsDisplay));
     }
 
     // ----- queue / step / history housekeeping ------------------------
@@ -2792,12 +2807,22 @@ internal readonly record struct HistoryEntry(RoomKey Room, DateTimeOffset Confir
 // PreviousRoom/NewRoom are surfaced so handlers can branch on what actually
 // changed without re-querying RoomState (which would race with the next
 // transition).
+//
+// Displayed is true when a room display decided the transition and NewRoom is the
+// room that display showed: an arrival, a re-display of the room we stand in (raised
+// with both rooms the same), the first display after a reconnect, a booked landing
+// its own display corrects. It is false for every other way the tracker settles on
+// a room: a dark or blind move, a manual locate, a profile's saved room, a move the
+// game refused, a landing booked ahead of its own display. A consumer that reads
+// what a room's display did or didn't show (death recovery: "no corpse on this
+// floor") needs to know the room was shown at all.
 public readonly record struct RoomTransition(
     RoomConfidence PreviousConfidence,
     RoomConfidence NewConfidence,
     Room? PreviousRoom,
     Room? NewRoom,
-    DateTimeOffset At);
+    DateTimeOffset At,
+    bool Displayed = false);
 
 // Payload of RoomTracker.NameLearned. Carries the room the tracker just adopted
 // by ExitMask + the verbatim observed name it learned. The main window's

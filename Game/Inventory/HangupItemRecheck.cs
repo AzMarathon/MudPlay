@@ -395,7 +395,7 @@ public sealed class HangupItemRecheck
             PvpFight = couldKill ? _dropPvp : _pvpFight?.Invoke() ?? false,
             InCombat = couldKill ? _dropFight : _monsterFight?.Invoke() ?? false,
             Worn = held is { } worn ? DeathLootCapture.FromSnapshot(worn).Equipped : carriedItems?.Worn,
-            Carried = held is { } carried ? Recovery.HangupDeath.CarriedOf(carried) : carriedItems?.Carried,
+            Carried = held is { } carried ? DeathLootCapture.LostOf(carried) : carriedItems?.Carried,
             Coins = held?.Currency ?? carriedItems?.Coins,
         };
         if (profile.HeldAtDisconnect.CleanExit) _cleanExitMarked = true;

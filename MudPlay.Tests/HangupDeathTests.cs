@@ -235,7 +235,7 @@ public sealed class HangupDeathTests
         Room = Left,
         Items = HangupItemPlan.Held(held),
         Worn = DeathLootCapture.FromSnapshot(held).Equipped,
-        Carried = HangupDeath.CarriedOf(held),
+        Carried = DeathLootCapture.LostOf(held),
     };
 
     [Fact]
@@ -274,6 +274,44 @@ public sealed class HangupDeathTests
         // Three torches in all: the two carried and the lit one. The brass key is
         // still held (in the pack now), so it isn't on it.
         Assert.Equal(new[] { "2 torch", "rope", "2 black star key", "torch" }, lost!.Select(i => i.Name).ToArray());
+    }
+
+    // A death that is seen and one worked out afterwards record the same pile for
+    // the same inventory: the worn pieces, every pack copy (a spare of a worn piece
+    // among them), the keys marked as keys, and the lit light.
+    [Fact]
+    public void Pile_OfADeathWorkedOutAfterwards_IsThePileADeathThatWasSeenRecords()
+    {
+        InventorySnapshot held = new(CurrencyHoldings.Empty, EncumbranceReading.Empty,
+            [new EquippedItem("longsword", "Weapon Hand"), new EquippedItem("gold ring", "Finger")],
+            ["longsword", "3 torch", "rope"], DateTimeOffset.Now,
+            new ReadiedLight("torch", 40), ["2 black star key", "brass key"]);
+
+        (List<DeathItem> seenWorn, List<DeathItem> seenLost) = DeathLootCapture.FromSnapshot(held);
+        (List<DeathItem>? laterWorn, List<DeathItem>? laterLost) = HangupDeath.Pile(ListOf(held), Snap(null));
+
+        static (string, string?, bool)[] Shape(List<DeathItem> items) =>
+            items.Select(i => (i.Name, i.Slot, i.OnKeyRing)).ToArray();
+        Assert.Equal(Shape(seenWorn), Shape(laterWorn!));
+        Assert.Equal(Shape(seenLost), Shape(laterLost!));
+        Assert.Contains(seenLost, i => i is { Name: "longsword", OnKeyRing: false });   // the spare
+        Assert.Equal(new[] { "2 black star key", "brass key" },
+            laterLost!.Where(i => i.OnKeyRing).Select(i => i.Name).ToArray());
+    }
+
+    // The key-ring mark is kept by the list a disconnect saves, which is where a
+    // pile worked out afterwards gets it from.
+    [Fact]
+    public void TheListKeptAtADisconnect_KeepsWhichEntriesWereKeys()
+    {
+        HeldAtDisconnect before = ListOf(new InventorySnapshot(CurrencyHoldings.Empty, EncumbranceReading.Empty,
+            [], ["rope"], DateTimeOffset.Now, null, ["brass key"]));
+
+        string json = System.Text.Json.JsonSerializer.Serialize(before);
+        HeldAtDisconnect back = System.Text.Json.JsonSerializer.Deserialize<HeldAtDisconnect>(json)!;
+
+        Assert.Equal(new[] { ("rope", false), ("brass key", true) },
+            back.Carried!.Select(i => (i.Name, i.OnKeyRing)).ToArray());
     }
 
     // No inventory was read on the connection the list was written on: what was
