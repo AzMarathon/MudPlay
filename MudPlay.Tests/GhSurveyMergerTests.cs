@@ -60,11 +60,9 @@ public sealed class GhSurveyMergerTests
         Assert.Equal(new[] { "4 torches" }, observed[new RoomKey(6, 3469)]);
     }
 
-    // Mirrors GhSweepManager.OnSurveyUpdated's actual hidden-item path: each
-    // search round's `incoming` is the WHOLE floor (visible + whatever hidden
-    // stock that round revealed), diffed against the room's pre-search visible
-    // baseline, then folded into the hidden ledger via Merge — same
-    // fluctuating-count scenario, but through the delta step recon really uses.
+    // The path recon takes for a list it can't tell from a redisplay: names the
+    // display already showed are left out, and the rest fold into the hidden
+    // ledger via Merge — the same fluctuating-count scenario through that step.
     [Fact]
     public void MergeHiddenDelta_FluctuatingRevealAcrossSearchRounds_SettlesOnMax()
     {
@@ -78,6 +76,73 @@ public sealed class GhSurveyMergerTests
         GhSurveyMerger.MergeHiddenDelta(hidden, room, new[] { "a torch", "3 gold coins" }, visible, names);
 
         Assert.Equal(new[] { "7 gold coins" }, hidden[room]);
+    }
+
+    // The numbers of report paradigm-20261009-164508: a room whose display showed 34
+    // rope and grapple, 10 pulsating heart and a scorpion tail answered its searches
+    // with hidden stacks of the same three and two more, the black diamonds as 10, 8
+    // and 9 and one reply without the heart. The hidden stacks are their own copies,
+    // so each ledger keeps its highest count and the room holds the two added.
+    [Fact]
+    public void Total_AddsTheHiddenStacksToTheVisibleOnes_EachAtItsHighestCount()
+    {
+        ItemNameStore names = NoGameData();
+        RoomKey room = new(6, 3468);
+        var visible = new Dictionary<RoomKey, List<string>>();
+        var hidden = new Dictionary<RoomKey, List<string>>();
+
+        GhSurveyMerger.Merge(visible, room,
+            new[] { "34 rope and grapple", "10 pulsating heart", "scorpion tail" }, names);
+        GhSurveyMerger.Merge(hidden, room, new[]
+            { "2 wooden skiff", "2 rope and grapple", "scorpion tail", "pulsating heart", "10 black diamond" }, names);
+        GhSurveyMerger.Merge(hidden, room, new[]
+            { "2 wooden skiff", "2 rope and grapple", "scorpion tail", "8 black diamond" }, names);
+        GhSurveyMerger.Merge(hidden, room, new[]
+            { "2 wooden skiff", "2 rope and grapple", "scorpion tail", "pulsating heart", "9 black diamond" }, names);
+
+        Assert.Equal(
+            new[] { "2 wooden skiff", "2 rope and grapple", "scorpion tail", "pulsating heart", "10 black diamond" },
+            hidden[room]);
+        Assert.Equal(
+            new[] { "36 rope and grapple", "11 pulsating heart", "2 scorpion tail", "2 wooden skiff", "10 black diamond" },
+            GhSurveyMerger.Total(visible, hidden, room, names));
+    }
+
+    // A second display of the room is the same visible stacks again, not more of them.
+    [Fact]
+    public void Total_ARedisplayAddsNothing()
+    {
+        ItemNameStore names = NoGameData();
+        RoomKey room = new(6, 3468);
+        var visible = new Dictionary<RoomKey, List<string>>();
+        var hidden = new Dictionary<RoomKey, List<string>>();
+
+        GhSurveyMerger.Merge(visible, room, new[] { "34 rope and grapple" }, names);
+        GhSurveyMerger.Merge(hidden, room, new[] { "2 rope and grapple" }, names);
+        GhSurveyMerger.Merge(visible, room, new[] { "34 rope and grapple" }, names);
+
+        Assert.Equal(new[] { "36 rope and grapple" }, GhSurveyMerger.Total(visible, hidden, room, names));
+    }
+
+    // A list that can't be told from a redisplay adds nothing to a stack the display
+    // showed: the higher count stands, as it did before the two were told apart.
+    [Fact]
+    public void MergeUnattributed_KeepsTheHigherCountOfAVisibleStack_AndTakesNewNamesAsHidden()
+    {
+        ItemNameStore names = NoGameData();
+        RoomKey room = new(6, 3468);
+        var visible = new Dictionary<RoomKey, List<string>>
+            { [room] = new() { "34 rope and grapple", "2 log raft" } };
+        var hidden = new Dictionary<RoomKey, List<string>>();
+
+        GhSurveyMerger.MergeUnattributed(visible, hidden, room,
+            new[] { "2 rope and grapple", "5 log raft", "10 black diamond" }, names);
+
+        Assert.Equal(new[] { "34 rope and grapple", "5 log raft" }, visible[room]);
+        Assert.Equal(new[] { "10 black diamond" }, hidden[room]);
+        Assert.Equal(
+            new[] { "34 rope and grapple", "5 log raft", "10 black diamond" },
+            GhSurveyMerger.Total(visible, hidden, room, names));
     }
 
     [Fact]

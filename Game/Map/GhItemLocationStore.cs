@@ -67,16 +67,28 @@ public sealed class GhItemLocationStore
     // hold but that isn't in this fresh list anymore has its sighting for THIS
     // room dropped — a room's entry always reflects the last survey actually
     // taken of it, not everything ever seen there. Other rooms' sightings of
-    // the same item name are untouched either way. Called by GhSweepManager
-    // right after it merges a fresh survey into its own _observedByRoom ledger
-    // for `room` — `items` is that room's full accumulated floor list
-    // (count-prefixed entries allowed; the count becomes Quantity).
-    public void RecordRoom(RoomKey room, IReadOnlyList<string> items)
+    // the same item name are untouched either way. Called by GhSweepManager once
+    // its reads of `room` on a visit are done (after the last search, or at once
+    // where it isn't searching) — `items` is what the room holds, its visible
+    // stacks and its hidden ones added (count-prefixed entries allowed; the
+    // count becomes Quantity).
+    public void RecordRoom(RoomKey room, IReadOnlyList<string> items) =>
+        RecordRooms(new[] { (room, items) });
+
+    // Several rooms at once, for one write of the file between them.
+    public void RecordRooms(IReadOnlyList<(RoomKey Room, IReadOnlyList<string> Items)> rooms)
     {
-        if (_realmFolder is null) return;
+        if (_realmFolder is null || rooms.Count == 0) return;
         TakeInOutsideChanges();
 
         DateTimeOffset now = DateTimeOffset.Now;
+        foreach ((RoomKey room, IReadOnlyList<string> items) in rooms) Apply(room, items, now);
+        Persist();
+        Changed?.Invoke();
+    }
+
+    private void Apply(RoomKey room, IReadOnlyList<string> items, DateTimeOffset now)
+    {
         HashSet<string> freshNames = new(StringComparer.OrdinalIgnoreCase);
 
         foreach (string entry in items)
@@ -112,9 +124,6 @@ public sealed class GhItemLocationStore
             if (byRoom.Remove(room) && byRoom.Count == 0) emptied.Add(name);
         }
         foreach (string name in emptied) _sightings.Remove(name);
-
-        Persist();
-        Changed?.Invoke();
     }
 
     // Resolve query (a player-typed item name, possibly partial or differently

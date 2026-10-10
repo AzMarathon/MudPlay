@@ -1709,13 +1709,32 @@ public static class BugReportBuilder
         // A room with no item cap can hold a floor list hundreds of stacks long, and
         // a "client locks up in the vault" report turns on how long that list is and
         // what reading it cost.
+        // The last list is a room display's (the visible floor) or a search reply's
+        // (the hidden stacks that search found), never both.
         Kv(sb, "Floor of this room (last list read)",
             $"{svc.GroundItems.Items.Count} stack(s), "
             + $"{svc.GroundItems.Items.Sum(i => CountedCommand.SplitLeadingCount(i).Count)} item(s); "
+            + $"from {svc.GroundItems.LastSurveySource}; "
             + $"read in {svc.GroundItems.LastSurveyReadTime.TotalMilliseconds:F1} ms");
+        // A "Roomba miscounted this room" report turns on the two counts it adds.
+        Kv(sb, "Roomba record of this room (on display / hidden)",
+            svc.RoomTracker.State.CurrentRoom?.Key is { } sweepRoom
+                && svc.GhSweep.FloorLedgerAt(sweepRoom) is var ledger
+                && ledger.VisibleStacks + ledger.HiddenStacks > 0
+                ? $"{ledger.VisibleItems} item(s) in {ledger.VisibleStacks} stack(s) / "
+                  + $"{ledger.HiddenItems} item(s) in {ledger.HiddenStacks} stack(s)"
+                : "(none)");
+        Kv(sb, "Roomba rooms not as the sort left them (final lap)",
+            svc.GhSweep.RoomsChangedAfterSort is { Count: > 0 } changed
+                ? string.Join(", ", changed.Select(r => $"{r.Map}/{r.Room}"))
+                : "(none)");
         Kv(sb, "Roomba slowest floor read (this sweep or the last)",
             svc.GhSweep.SlowestSurvey is { } slowest
-                ? $"{slowest.Room.Map}/{slowest.Room.Room}: {slowest.Stacks} stack(s), {slowest.Items} item(s); {slowest.StagesText}"
+                ? $"{slowest.Room.Map}/{slowest.Room.Room}: {slowest.Items} item(s) of {slowest.Stacks} kind(s); {slowest.StagesText}"
+                : "(none)");
+        Kv(sb, "Roomba slowest item-location log write (this sweep or the last)",
+            svc.GhSweep.SlowestItemLogWrite is { } write
+                ? $"{write.Room.Map}/{write.Room.Room}: {write.Took.TotalMilliseconds:F1} ms"
                 : "(none)");
 
         // Default-task startup state — a "my loop / Auto-Lair didn't start on

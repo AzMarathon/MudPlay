@@ -8,6 +8,9 @@ public enum GhLeftReason
     NoMatchingRoom,
     // A `get` for it failed because it was gone by sort time (decayed / taken).
     GoneBySortTime,
+    // A hidden stack recon's searches found, which the sort's own search did not:
+    // each search rolls for each hidden stack again. It is still where it was.
+    NotFoundBySearch,
     // The game refused the `get` outright ("A strange force stops you from getting
     // this item."). It will refuse it every time, so the item stays where it lies.
     RefusedByGame,
