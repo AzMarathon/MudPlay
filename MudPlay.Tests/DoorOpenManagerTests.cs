@@ -32,6 +32,8 @@ public sealed class DoorOpenManagerTests
         // at rest-max (resume). Defaults never pause — bash proceeds uncapped.
         public bool BashRestNeeded { get; set; }
         public bool BashRestRecovered { get; set; } = true;
+        // Whether a stat screen has been read; false leaves Strength and Picklocks at 0.
+        public bool StatsRead { get; set; } = true;
 
         public Harness(Func<int, bool>? holdsKeyItem = null)
         {
@@ -48,7 +50,8 @@ public sealed class DoorOpenManagerTests
                 holdsKeyItem: holdsKeyItem,
                 bashRestNeeded: () => BashRestNeeded,
                 bashRestRecovered: () => BashRestRecovered,
-                scheduleDelay: Schedule);
+                scheduleDelay: Schedule,
+                statsRead: () => StatsRead);
             Mgr.SetWireSender(Sent.Add);
         }
 
@@ -349,8 +352,144 @@ public sealed class DoorOpenManagerTests
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.N, 100, canBash: true, "walker", r => result = r);
 
-        Assert.IsType<DoorOpenResult.Failed>(result);
+        Assert.True(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
         Assert.Empty(h.Sent);
+    }
+
+    // Before a stat screen is read Strength and Picklocks are 0, so any numbered door
+    // has no viable verb: that is not the door beating the character, and the walk
+    // must fail as it always did, not give the door up for good.
+    [Fact]
+    public void NoViableVerb_BeforeAnyStatScreenIsRead_IsAnOrdinaryFailure()
+    {
+        using Harness h = new() { StatsRead = false };
+        h.Stats.Strength = 0;
+        h.Stats.Picklocks = 0;
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.N, 100, canBash: true, "walker", r => result = r);
+
+        Assert.False(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
+        Assert.Empty(h.Sent);
+    }
+
+    // Ten picks that drew no reply are a lost reply, not the lock winning.
+    [Fact]
+    public void PickCapHit_ByTimeoutsAlone_IsAnOrdinaryFailure()
+    {
+        using Harness h = new() { MaxPick = 3 };
+        h.Stats.Strength = 120;
+        h.Stats.Picklocks = 303;
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.D, 301, canBash: true, "walker", r => result = r);
+
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Null(result);
+            h.FireTimeout();
+        }
+
+        Assert.False(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
+        Assert.Equal(3, h.Sent.Count);
+    }
+
+    // The Ancient Coliseum's door down: Picklocks just over the lock, so a pick is
+    // the only verb, and all of the tries miss. That is the door beating the
+    // character, which the walker goes round; a key that turns out missing is not.
+    [Fact]
+    public void PickCapHit_WithNoOtherVerb_FailsAsUnopenable()
+    {
+        using Harness h = new() { MaxPick = 3 };
+        h.Stats.Strength = 120;
+        h.Stats.Picklocks = 303;
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.D, 301, canBash: true, "walker", r => result = r);
+
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Equal("pick d", h.LastSent);
+            Assert.Null(result);
+            h.Line("Your skill fails you this time.");
+        }
+
+        Assert.True(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal(DoorOpenManager.DoorState.Idle, h.Mgr.CurrentState);
+    }
+
+    [Fact]
+    public void KeyMissing_FailsWithoutCallingTheDoorUnopenable()
+    {
+        using Harness h = new();
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.N, 0, canBash: true, keyItemId: 172, "walker", r => result = r);
+        Assert.Equal("use black star key n", h.LastSent);
+
+        h.Line("You don't have black star key.");
+
+        Assert.False(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
+    }
+
+    // A keyed door the character tried to pick: the picks ran out, the key was the
+    // last thing left to try, and it isn't held. That is the door beating the
+    // character, the same as a keyless one.
+    [Fact]
+    public void KeyedDoor_PicksRunOut_ThenKeyNotHeld_FailsAsUnopenable()
+    {
+        using Harness h = new() { MaxPick = 2 };
+        h.Stats.Strength = 120;
+        h.Stats.Picklocks = 303;
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.D, 301, canBash: true, keyItemId: 172, "walker", r => result = r);
+
+        h.Line("Your skill fails you this time.");
+        h.Line("Your skill fails you this time.");
+        Assert.Equal("use black star key d", h.LastSent);
+        Assert.Null(result);
+
+        h.Line("You don't have black star key.");
+
+        Assert.True(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
+    }
+
+    // A failed door re-asked for at once (a walk failing and being issued again from
+    // inside the reply) starts afresh. Still standing as the request in flight, it
+    // was swallowed as a duplicate and its caller left waiting for good.
+    [Fact]
+    public void Failed_ThenTheSameDoorAskedForAgainFromInsideTheReply_IsStarted()
+    {
+        using Harness h = new() { MaxPick = 1 };
+        h.Stats.Strength = 120;
+        h.Stats.Picklocks = 303;
+        DoorOpenResult? second = null;
+        h.Mgr.Enqueue(Direction.D, 301, canBash: true, "walker",
+            _ => h.Mgr.Enqueue(Direction.D, 301, canBash: true, "walker", r => second = r));
+        Assert.Single(h.Sent);
+
+        h.Line("Your skill fails you this time.");
+
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("pick d", h.LastSent);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingPick, h.Mgr.CurrentState);
+        h.Line("Your skill fails you this time.");
+        Assert.True(Assert.IsType<DoorOpenResult.Failed>(second).Unopenable);
+    }
+
+    // The caller re-plans from inside the reply and may ask for another door out of
+    // the same room at once: the failed request must be gone by then.
+    [Fact]
+    public void Failed_IsClearedBeforeTheCallerHearsOfIt_SoItCanAskForAnotherDoorAtOnce()
+    {
+        using Harness h = new();
+        h.Stats.Strength = 120;
+        h.Stats.Picklocks = 0;
+        DoorOpenResult? second = null;
+        h.Mgr.Enqueue(Direction.D, 301, canBash: true, "walker",
+            _ => h.Mgr.Enqueue(Direction.E, 21, canBash: true, "walker", r => second = r));
+
+        Assert.Equal("bash e", h.LastSent);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBash, h.Mgr.CurrentState);
+        h.Line("You bashed the door open.");
+        Assert.IsType<DoorOpenResult.Opened>(second);
     }
 
     [Fact]

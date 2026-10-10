@@ -21,6 +21,11 @@ public sealed class LevelIgnoringFilter(IRoomFilter inner, int? atLevel = null) 
 
     public bool IsExitBlocked(in RoomExit exit) => DescribeExitBlock(in exit) != ExitBlockReason.None;
 
+    public bool IsPoorOddsDoor(in RoomExit exit) => inner.IsPoorOddsDoor(in exit);
+
+    public string? DescribeDoorRefusal(in RoomExit exit) => inner.DescribeDoorRefusal(in exit);
+    public int DoorRuleStamp => inner.DoorRuleStamp;
+
     public ExitBlockReason DescribeExitBlock(in RoomExit exit)
     {
         ExitBlockReason reasons = inner.DescribeExitBlock(in exit) & ~ExitBlockReason.Level;

@@ -775,9 +775,8 @@ public static class RoomTooltipBuilder
     private static string PickChance(RoomExit exit, int picklocks)
     {
         if (picklocks <= 0) return string.Empty;
-        return exit.StatRequirement > 0
-            ? $", pick ~{Math.Clamp(picklocks - exit.StatRequirement + 1, 0, 100)}%"
-            : $", pick ≥{Math.Min(picklocks + 1, 100)}%";
+        int chance = DoorPolicy.PickChancePercent(exit.StatRequirement, picklocks);
+        return exit.StatRequirement > 0 ? $", pick ~{chance}%" : $", pick ≥{chance}%";
     }
 
     // Like FormatDoorRequirement but never blank: a zero requirement renders "any"

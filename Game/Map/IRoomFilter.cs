@@ -51,12 +51,27 @@ public interface IRoomFilter
     // "graph-disconnected".
     bool IsExitBlocked(in RoomExit exit) => false;
 
-    // A teleport out of `from` this route may not use. Unlike an exit gate it isn't
+    // An exit out of `from` this route may not use. Unlike an exit gate it isn't
     // something the crosser could satisfy, so the search skips it even when exit
-    // gates are being ignored. Only the filter of an automatic walk refuses any
-    // (AutomaticWalkTeleportFilter); the exit alone doesn't say where it leaves from,
-    // which is why this takes the room.
-    bool IsTeleportRefused(RoomKey from, in RoomExit exit) => false;
+    // gates are being ignored. The filter of an automatic walk refuses the teleports
+    // it wasn't allowed (AutomaticWalkTeleportFilter), and a walk refuses a door it
+    // already gave up on (AbandonedDoorsFilter); the exit alone doesn't say where it
+    // leaves from, which is why this takes the room.
+    bool IsExitRefused(RoomKey from, in RoomExit exit) => false;
+
+    // A door the crosser can open only by picking it, at a poor chance per try
+    // (DoorPolicy.IsPoorOddsPick). Not a gate: the search goes round it when a short
+    // way round exists and through it otherwise. Default never; only the stat-aware
+    // Services.MovementFilter says so.
+    bool IsPoorOddsDoor(in RoomExit exit) => false;
+
+    // Why the crosser's routes keep off this door, in words for the log: it can't be
+    // opened at all, or only at poor odds. Null for any exit routes use freely.
+    string? DescribeDoorRefusal(in RoomExit exit) => null;
+
+    // Changes whenever the stats the door rule reads change, so a caller that
+    // remembers "no route from here" can tell when the answer may have changed.
+    int DoorRuleStamp => 0;
 
     // Classifies WHY an exit is non-traversable — the union of gate kinds
     // blocking it — so a failed walk can name the real obstacle instead of a
