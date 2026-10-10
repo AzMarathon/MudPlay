@@ -4,8 +4,33 @@
 
 - A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
 - Only on a life lost: Death Recovery gets the room, time and pile; loops, walks and a waiting default task are stopped
+- A life lost on another client, or after a clean exit, is not recorded here
 - The item pickup stands down for it, and nothing is recorded when it can't be told
+- Lives are read again after a life is given back or a level trained
 - Settings → BBS: a box for boards that penalise every hang-up, not only one made in a fight
+
+## 3.161.10
+
+- Locks under 25% a pick are gone round when the way round is short
+- A door the picks run out on is gone round, not stood at
+- Auto-Lair waits one step short of the lair, on its own route
+- Auto-Lair leaves out a lair it can't reach, and retries a failed entry slower each time
+- Auto-Lair keeps a door only if you can't open it; a fair-odds door is retried next visit
+- Log and bug report name the doors gone round and the lairs left out
+
+## 3.161.9
+
+- Exp/Hr estimator and loop simulator: room-spell summons now read in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
+- One-at-a-time bosses with a regen wait a room spell summons are no longer counted: lowers estimates through the Ancient Fortress (Angelic Hunter)
+- A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
+- Every monster a summon roll brings is counted, and an empty-room-only summon line only in an empty room
+- Program log lists the summoning room spells and each summon left out
+
+## 3.161.8
+
+- Party window: a member's level is the one they state, no longer the level their exp could train to
+- MegaMUD `@level` replies that count past the next level (`Needed: N (L60)  Will level in: +2 in 2-3 days`) are now read
+- Party window: a member's exp line names the level their figure counts toward
 
 ## 3.161.7
 

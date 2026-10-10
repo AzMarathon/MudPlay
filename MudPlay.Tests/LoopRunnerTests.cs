@@ -3125,6 +3125,74 @@ public sealed class LoopRunnerTests : IDisposable
             e => e.Kind == LoopEventKind.Failed && e.Detail.Contains("door open failed"));
     }
 
+    // The Ancient Coliseum, as in AutoWalkManagerTests: the Arena is one step down
+    // from the Viewing Stands through a door needing 301, or three steps round.
+    private static string ColiseumJson(bool wayRound = true) => $$"""
+        [
+          { "Map Number": 3, "Room Number": 592, "Name": "Viewing Stands",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "{{(wayRound ? "3/593 (Door [21 picklocks/strength])" : "0")}}", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "3/595 (Door [301 picklocks/strength])" },
+          { "Map Number": 3, "Room Number": 593, "Name": "Wide Passage",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "3/592 (Door [21 picklocks/strength])",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "3/594" },
+          { "Map Number": 3, "Room Number": 594, "Name": "Preparation Chamber",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "3/595",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "3/593", "D": "0" },
+          { "Map Number": 3, "Room Number": 595, "Name": "Arena",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "3/594", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "3/592 (Door [201 picklocks/strength])", "D": "0" }
+        ]
+        """;
+
+    // The walker's rule, for a circuit: the door that beat the character is given up
+    // on for the run and the loop goes round it, where it used to end the run.
+    [Fact]
+    public void Circuit_DoorBeatsTheCharacter_RoutesTheLoopRoundIt_ForTheRestOfTheRun()
+    {
+        Harness h = NewHarness(ColiseumJson());
+        h.Tracker.SetLocated(new RoomKey(3, 592));
+        List<(Direction Dir, Action<DoorOpenResult> Reply)> doors = new();
+        h.Runner.SetDoorEnqueuer((dir, _, _, _, _, reply) => doors.Add((dir, reply)));
+        h.Runner.SetDoorStopper(() => { });
+
+        h.Runner.Start(new Loop("arena", new[] { new RoomKey(3, 592), new RoomKey(3, 595) }));
+        Assert.Equal(Direction.D, Assert.Single(doors).Dir);
+
+        doors[0].Reply(new DoorOpenResult.Failed("pick exhausted; no viable fallback verb", Unopenable: true));
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Contains((new RoomKey(3, 592), new RoomKey(3, 595)), h.Runner.AbandonedDoors);
+        Assert.Equal(2, doors.Count);
+        Assert.Equal(Direction.E, doors[1].Dir);
+
+        // A fresh run of the loop tries the door again.
+        h.Runner.Stop("test");
+        Assert.Empty(h.Runner.AbandonedDoors);
+    }
+
+    [Fact]
+    public void Circuit_DoorBeatsTheCharacter_WithNoWayRound_FailsNamingTheDoor()
+    {
+        Harness h = NewHarness(ColiseumJson(wayRound: false));
+        h.Tracker.SetLocated(new RoomKey(3, 592));
+        Action<DoorOpenResult>? doorReply = null;
+        h.Runner.SetDoorEnqueuer((_, _, _, _, _, reply) => doorReply = reply);
+        h.Runner.SetDoorStopper(() => { });
+        h.Runner.Start(new Loop("arena", new[] { new RoomKey(3, 592), new RoomKey(3, 595) }));
+
+        doorReply!(new DoorOpenResult.Failed("pick exhausted; no viable fallback verb", Unopenable: true));
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed
+            && e.Detail.Contains("couldn't open the door down from 3/592 (Viewing Stands)")
+            && e.Detail.Contains("the loop has no way round it"));
+    }
+
     [Fact]
     public void Circuit_ClosedDoor_NotHere_RecoversInsteadOfFailingTheLap()
     {

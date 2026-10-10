@@ -3365,6 +3365,7 @@ public sealed class AppServices
             picklocksOverBashProvider:     () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").PicklocksOverBash,
             itemNameLookup:                id => ItemNames.GetName(id),
             maxBashableStrengthProvider:   () => MaxStrength.MaxAchievableStrength,
+            statsRead:                     () => Stats.HasParsed,
             // Read lazily at door-open time — Inventory is constructed after Door.
             holdsKeyItem:                  HoldsKeyItem,
             // Rest-interleave for bashing (bashing drains HP): pause a bash once HP
@@ -7826,7 +7827,7 @@ public sealed class AppServices
         Lairs = new Game.Map.LairManager(Log);
         LairTimers = new Game.Map.LairTimerStore(GameData, RoomGraph, RoomTracker, Log);
         MonsterDeath.MonsterDied += evt => LairTimers.NoteKill(evt.At);
-        ExpResolver = new Game.Map.RouteExpResolver(RoomGraph, Bfs, LairTimers, GameData);
+        ExpResolver = new Game.Map.RouteExpResolver(RoomGraph, Bfs, LairTimers, GameData, Log);
 
         // Loops + lairs are per-game-data-set and share one on-disk tree,
         // so they reload together on every active-set change. Mirrors the

@@ -62,7 +62,7 @@ public static class SimFreeze
         var queue = new Queue<int>(lap.SelectMany(r => r.LairMonsters
             .Append(r.NpcMonster)
             .Concat(r.Bosses ?? Array.Empty<int>())
-            .Concat(r.Summon?.Entries.Select(e => e.Monster) ?? Enumerable.Empty<int>())));
+            .Concat(r.Summon?.Entries.SelectMany(e => e.Monsters) ?? Enumerable.Empty<int>())));
         while (queue.Count > 0)
         {
             int id = queue.Dequeue();

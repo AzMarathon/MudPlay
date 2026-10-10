@@ -457,4 +457,358 @@ public sealed class AutoLairManagerTests : IDisposable
         Assert.Equal(TimeSpan.FromSeconds(h.Roam.EngageTimeoutSeconds), h.Roam.EngageWindowForTests);
         Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
     }
+
+    // ----- doors: the wait room and a lair no walk can get into -----------
+
+    // The Ancient Coliseum with the street south of it. From Outside (3/589) the
+    // Arena (3/595) is north then one step down through a door needing 301, or
+    // north, east (a door needing 21), down and west. A second marker far down
+    // the street (3/584) keeps the run at two lairs.
+    private static string ColiseumJson(bool wayRound)
+    {
+        static string Room(int number, string name, params (string Dir, string Cell)[] exits)
+        {
+            string cells = string.Join(", ", new[] { "N", "S", "E", "W", "NE", "NW", "SE", "SW", "U", "D" }
+                .Select(d => $"\"{d}\": \"{exits.FirstOrDefault(e => e.Dir == d).Cell ?? "0"}\""));
+            return $"{{ \"Map Number\": 3, \"Room Number\": {number}, \"Name\": \"{name}\", "
+                + $"\"Light\": 0, \"Shop\": 0, \"Lair\": \"\", \"Delay\": 0, {cells} }}";
+        }
+
+        List<string> rooms = new()
+        {
+            Room(589, "Outside Coliseum", ("N", "3/592"), ("S", "3/588")),
+            Room(592, "Viewing Stands", ("S", "3/589"), ("D", "3/595 (Door [301 picklocks/strength])"),
+                ("E", wayRound ? "3/593 (Door [21 picklocks/strength])" : "0")),
+            Room(593, "Wide Passage", ("W", "3/592 (Door [21 picklocks/strength])"), ("D", "3/594")),
+            Room(594, "Preparation Chamber", ("W", "3/595"), ("U", "3/593")),
+            Room(595, "Arena", ("E", "3/594"), ("U", "3/592 (Door [201 picklocks/strength])")),
+        };
+        for (int n = 588; n >= 584; n--)
+            rooms.Add(Room(n, $"Street {n}", ("N", $"3/{n + 1}"), ("S", n > 584 ? $"3/{n - 1}" : "0")));
+        return "[" + string.Join(",\n", rooms) + "]";
+    }
+
+    private sealed class DoorCalls
+    {
+        public List<(Direction Dir, Action<DoorOpenResult> Reply)> Calls { get; } = new();
+    }
+
+    // Stats the movement filter reads that a test can change mid-run; null for
+    // either is a stat screen not yet read.
+    private sealed class LiveStats
+    {
+        public int? Strength { get; set; }
+        public int? Picklocks { get; set; }
+    }
+
+    // stats: the character's Strength and Picklocks as the movement filter reads
+    // them; null leaves the walker with no filter, as before any stat screen. live
+    // gives a filter whose stats the test sets later instead. marked: the lairs,
+    // the Arena and the far street by default.
+    private (Harness H, DoorCalls Doors) NewColiseumHarness(
+        bool wayRound, (int Strength, int Picklocks)? stats, LiveStats? live = null, RoomKey[]? marked = null)
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), ColiseumJson(wayRound));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Lairs.json"), "[]");
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        BfsMapper bfs = new(graph);
+        RoomTracker tracker = new(graph);
+        MovementCoordinator coord = new();
+        MovementFilter? filter = null;
+        if (stats is { } s)
+        {
+            ProfileService profile = new();
+            profile.LoadBlank();
+            filter = new MovementFilter(profile)
+            {
+                StrengthProvider = () => s.Strength,
+                PicklocksProvider = () => s.Picklocks,
+                MaxBashableStrengthProvider = () => 200,
+            };
+        }
+        else if (live is not null)
+        {
+            ProfileService profile = new();
+            profile.LoadBlank();
+            filter = new MovementFilter(profile)
+            {
+                StrengthProvider = () => live.Strength,
+                PicklocksProvider = () => live.Picklocks,
+                MaxBashableStrengthProvider = () => 200,
+            };
+        }
+        AutoWalkManager walker = new(graph, bfs, tracker, coord, filter: filter);
+        walker.SetWireSender(_ => { });
+        DoorCalls doors = new();
+        walker.SetDoorEnqueuer((dir, _, _, _, _, reply) => doors.Calls.Add((dir, reply)));
+        LairTimerStore timers = new(cache, graph, tracker);
+        AutoLairManager roam = new(walker, tracker, graph, bfs, timers, coordinator: coord);
+        foreach (RoomKey lair in marked ?? new[] { new RoomKey(3, 595), new RoomKey(3, 584) })
+            roam.Mark(lair);
+        tracker.SetLocated(new RoomKey(3, 589));
+        return (new Harness { Tracker = tracker, Walker = walker, Roam = roam, Timers = timers, Coordinator = coord }, doors);
+    }
+
+    // User, 2026-10-10: a wait room can be any room that isn't the lair, ideally the
+    // one a step away. A step away on the route the walk will take: with the door
+    // down closed to this character, that is the Preparation Chamber on the way
+    // round, where the search with no filter chose the Viewing Stands above the door.
+    [Theory]
+    [InlineData(120, 0)]     // can't open the door down at all
+    [InlineData(120, 303)]   // could only pick it, at 3% a try
+    public void WaitRoom_IsTheLastRoomOnTheRouteTheWalkWillTake(int strength, int picklocks)
+    {
+        (Harness h, _) = NewColiseumHarness(wayRound: true, (strength, picklocks));
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+
+            Assert.Equal(new RoomKey(3, 595), h.Roam.CurrentTarget);
+            Assert.Equal(new RoomKey(3, 594), h.Roam.CurrentWaitRoom);
+            Assert.Equal(new RoomKey(3, 594), h.Walker.Destination);
+        }
+    }
+
+    [Fact]
+    public void WaitRoom_BesideADoorTheCharacterOpens_IsStillTheRoomAtTheDoor()
+    {
+        // Picklocks 400 against 301: a pick that can't miss.
+        (Harness h, _) = NewColiseumHarness(wayRound: true, (120, 400));
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+            Assert.Equal(new RoomKey(3, 592), h.Roam.CurrentWaitRoom);
+        }
+    }
+
+    [Fact]
+    public void Lair_NoRouteLeadsTo_IsLeftOutOfTheRun_NotWalkedAtAndFailed()
+    {
+        (Harness h, DoorCalls doors) = NewColiseumHarness(wayRound: false, (120, 0));
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+
+            Assert.Equal(new RoomKey(3, 584), h.Roam.CurrentTarget);
+            Assert.Empty(doors.Calls);
+        }
+    }
+
+    // The report (user, 2026-10-10): the picks at the door were sent, failed, and
+    // the character then stood there. The walk into the lair failed with the run in
+    // Entering, where its retry dispatched nothing. Now the run takes the door the
+    // walk gave up on, leaves the lair only that door leads to, and goes on to the
+    // next one. A door the character cannot realistically open (no pick or bash can
+    // work, or a pick under 25% a try) is out for the whole run.
+    [Theory]
+    [InlineData(120, 0)]     // can't open the door down at all
+    [InlineData(120, 303)]   // could only pick it, at 3% a try
+    public void WalkIntoTheLairFails_AtADoorTheCharacterCannotOpen_TheRunMovesOn_AndNeverAsksForThatDoorAgain(
+        int strength, int picklocks)
+    {
+        LiveStats stats = new();
+        (Harness h, DoorCalls doors) = NewColiseumHarness(wayRound: false, stats: null, live: stats);
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+            Assert.Equal(new RoomKey(3, 595), h.Roam.CurrentTarget);
+            Assert.Equal(new RoomKey(3, 592), h.Roam.CurrentWaitRoom);
+
+            // Arriving at the wait room with the lair due goes straight in, to the door.
+            h.Tracker.NoteRoomObserved(new RoomObservation("Viewing Stands",
+                new HashSet<Direction> { Direction.S, Direction.D }));
+            Assert.Equal(AutoLairPhase.Entering, h.Roam.Phase);
+            Assert.Equal(Direction.D, Assert.Single(doors.Calls).Dir);
+
+            // The stat screen is read while the picks are going.
+            stats.Strength = strength;
+            stats.Picklocks = picklocks;
+            doors.Calls[0].Reply(new DoorOpenResult.Failed("pick exhausted; no viable fallback verb", Unopenable: true));
+
+            Assert.Equal(AutoLairPhase.Approaching, h.Roam.Phase);
+            Assert.Contains((new RoomKey(3, 592), new RoomKey(3, 595)), h.Roam.AbandonedDoors);
+            Assert.Contains("couldn't open the door down", h.Roam.LastWalkerFailure);
+
+            h.Roam.FireRetryForTests();
+
+            Assert.Equal(new RoomKey(3, 584), h.Roam.CurrentTarget);
+            Assert.Equal(WalkState.Walking, h.Walker.State);
+            Assert.Equal(new RoomKey(3, 585), h.Walker.Destination);
+            Assert.Single(doors.Calls);
+        }
+    }
+
+    // User, 2026-10-10: "try again on next visit". A door the picks ran out on at fair
+    // odds (25% or better) was bad luck, and so was one failed with the stats unread
+    // (no chance to compute): it is out for the walk that failed only, and the lair's
+    // next visit tries it again.
+    [Theory]
+    [InlineData(120, 400)]   // a pick that opens it every time
+    [InlineData(120, 326)]   // exactly 26%
+    [InlineData(null, null)] // stat screen never read
+    public void WalkIntoTheLairFails_AtAFairOddsDoor_TheDoorIsAskedForAgainOnTheNextVisit(
+        int? strength, int? picklocks)
+    {
+        LiveStats stats = new();
+        (Harness h, DoorCalls doors) = NewColiseumHarness(wayRound: false, stats: null, live: stats);
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+            h.Tracker.NoteRoomObserved(new RoomObservation("Viewing Stands",
+                new HashSet<Direction> { Direction.S, Direction.D }));
+            Assert.Equal(Direction.D, Assert.Single(doors.Calls).Dir);
+
+            stats.Strength = strength;
+            stats.Picklocks = picklocks;
+            doors.Calls[0].Reply(new DoorOpenResult.Failed("pick exhausted; no viable fallback verb", Unopenable: true));
+
+            Assert.Equal(AutoLairPhase.Approaching, h.Roam.Phase);
+            Assert.Empty(h.Roam.AbandonedDoors);
+
+            h.Roam.FireRetryForTests();
+
+            Assert.Equal(new RoomKey(3, 595), h.Roam.CurrentTarget);
+            Assert.Equal(new RoomKey(3, 592), h.Roam.CurrentWaitRoom);
+            Assert.Equal(AutoLairPhase.Waiting, h.Roam.Phase);
+            h.Roam.FireEntryTimerForTests();
+            Assert.Equal(AutoLairPhase.Entering, h.Roam.Phase);
+            Assert.Equal(2, doors.Calls.Count);
+            Assert.Equal(Direction.D, doors.Calls[1].Dir);
+        }
+    }
+
+    // The scheduler asks once a second for every marker, and a search that finds no
+    // route floods the whole graph: the verdict stands until the room, the doors
+    // given up on, or the stats the door rule reads change.
+    [Fact]
+    public void LairNoRouteLeadsTo_IsSearchedForOnce_NotOnEveryTick()
+    {
+        LiveStats stats = new() { Strength = 120, Picklocks = 0 };
+        (Harness h, _) = NewColiseumHarness(wayRound: false, stats: null, live: stats);
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+            Assert.Equal(1, h.Roam.NoRouteSearchesForTests);
+
+            for (int i = 0; i < 10; i++) h.Roam.FireRetryForTests();
+            Assert.Equal(1, h.Roam.NoRouteSearchesForTests);
+
+            // The stats the door rule reads change (still no way in): looked at again.
+            stats.Strength = 121;
+            h.Roam.FireRetryForTests();
+            Assert.Equal(2, h.Roam.NoRouteSearchesForTests);
+            h.Roam.FireRetryForTests();
+            Assert.Equal(2, h.Roam.NoRouteSearchesForTests);
+
+            // So is a different room.
+            h.Tracker.SetLocated(new RoomKey(3, 588));
+            h.Roam.FireRetryForTests();
+            Assert.Equal(3, h.Roam.NoRouteSearchesForTests);
+            h.Roam.FireRetryForTests();
+            Assert.Equal(3, h.Roam.NoRouteSearchesForTests);
+        }
+    }
+
+    // The way in to the Arena is 3/592 → east, 3/593 → down, 3/594 → west, with the
+    // door from 3/592 straight down impossible for this character. With 3/593, 3/594
+    // and 3/595 all lairs, the nearest room on the route that isn't one is 3/592,
+    // the start of the way round (the walk in then goes east, down, west), where the
+    // lair's own neighbour rule chose it from behind the door that can't be opened.
+    [Fact]
+    public void WaitRoom_WhenTheNaturalOneIsAMarkedLair_IsTheNearestUnmarkedRoomOnTheRoute()
+    {
+        RoomKey[] lairs = { new(3, 593), new(3, 594), new(3, 595) };
+        (Harness h, _) = NewColiseumHarness(wayRound: true, (120, 0), marked: lairs);
+        using (h)
+        {
+            (RoomKey? waitRoom, int? hops) =
+                h.Roam.PickWaitRoom(new RoomKey(3, 589), new RoomKey(3, 595), h.Walker.AutomaticWalkFilter());
+
+            Assert.Equal(new RoomKey(3, 592), waitRoom);
+            Assert.Equal(1, hops);
+        }
+    }
+
+    [Fact]
+    public void WaitRoom_WhenTheNaturalOneIsAMarkedLair_IsAnUnmarkedRoomBetweenOnTheRoute()
+    {
+        RoomKey[] lairs = { new(3, 594), new(3, 595) };
+        (Harness h, _) = NewColiseumHarness(wayRound: true, (120, 0), marked: lairs);
+        using (h)
+        {
+            (RoomKey? waitRoom, int? hops) =
+                h.Roam.PickWaitRoom(new RoomKey(3, 589), new RoomKey(3, 595), h.Walker.AutomaticWalkFilter());
+
+            // 3/593, a step before the lair at 3/594, not 3/592 beside the lair.
+            Assert.Equal(new RoomKey(3, 593), waitRoom);
+            Assert.Equal(2, hops);
+        }
+    }
+
+    // A failed entry for a reason that may pass is retried without end, and each
+    // further failure at the same lair waits twice as long, from 2 s to a cap of
+    // 60 s; an entry that works starts the count again.
+    [Fact]
+    public void FailedEntries_ToTheSameLair_BackOffToTheCap_AndASuccessResets()
+    {
+        (Harness h, DoorCalls doors) = NewColiseumHarness(wayRound: false, stats: null);
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+            h.Tracker.NoteRoomObserved(new RoomObservation("Viewing Stands",
+                new HashSet<Direction> { Direction.S, Direction.D }));
+
+            int[] expected = { 2, 4, 8, 16, 32, 60, 60 };
+            for (int i = 0; i < expected.Length; i++)
+            {
+                Assert.Equal(AutoLairPhase.Entering, h.Roam.Phase);
+                Assert.Equal(i + 1, doors.Calls.Count);
+                doors.Calls[i].Reply(new DoorOpenResult.Failed("waitingopen timed out with no response"));
+
+                Assert.Equal(TimeSpan.FromSeconds(expected[i]), h.Roam.RetryDelayForTests);
+                Assert.Equal(i + 1, h.Roam.FailedEntriesForTests);
+                h.Roam.FireRetryForTests();
+                h.Roam.FireEntryTimerForTests();
+            }
+
+            // This entry works: the door opens and the character steps into the Arena.
+            Assert.Equal(AutoLairPhase.Entering, h.Roam.Phase);
+            doors.Calls[^1].Reply(DoorOpenResult.Opened.Instance);
+            h.Tracker.NoteRoomObserved(new RoomObservation("Arena",
+                new HashSet<Direction> { Direction.E, Direction.U }));
+
+            Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
+            Assert.Equal(0, h.Roam.FailedEntriesForTests);
+        }
+    }
+
+    // A walk into the lair that fails for a reason that may pass (not a door that
+    // beat the character) has the retry set the entry up again, where it used to
+    // leave the run in Entering with nothing to wake it.
+    [Fact]
+    public void WalkIntoTheLairFails_ForAPassingReason_TheRetrySetsTheEntryUpAgain()
+    {
+        (Harness h, DoorCalls doors) = NewColiseumHarness(wayRound: false, stats: null);
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+            h.Tracker.NoteRoomObserved(new RoomObservation("Viewing Stands",
+                new HashSet<Direction> { Direction.S, Direction.D }));
+            doors.Calls[0].Reply(new DoorOpenResult.Failed("waitingopen timed out with no response"));
+            Assert.Equal(AutoLairPhase.Approaching, h.Roam.Phase);
+            Assert.Empty(h.Roam.AbandonedDoors);
+
+            h.Roam.FireRetryForTests();
+
+            // Standing in the wait room already, so it waits out the entry step
+            // there and goes in on the entry timer.
+            Assert.Equal(new RoomKey(3, 595), h.Roam.CurrentTarget);
+            Assert.Equal(new RoomKey(3, 592), h.Roam.CurrentWaitRoom);
+            Assert.Equal(AutoLairPhase.Waiting, h.Roam.Phase);
+        }
+    }
 }
