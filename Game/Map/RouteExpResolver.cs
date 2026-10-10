@@ -180,7 +180,8 @@ public sealed class RouteExpResolver : IDisposable
         RoomSummon? result = null;
         if (SummonTableForSpell(room.Spell) is { } table
             && SpellTextBlocks().TryGetValue(room.Spell, out (int TextBlock, string Name) tb))
-            result = new RoomSummon(tb.Name, table.ExpPerRoll, table.SummonChance, table.NoMonstersGate);
+            result = new RoomSummon(
+                tb.Name, table.ExpPerRoll, table.SummonChance, table.NoMonstersGate, table.EmptyRoomExpPerRoll);
         cache[room.Spell] = result;
         return result;
     }
@@ -202,6 +203,7 @@ public sealed class RouteExpResolver : IDisposable
 
         var tables = new Dictionary<int, RoomSummonTable?>();
         var summoning = new List<string>();
+        var leftOut = new List<string>();
         int rooms = 0;
         foreach ((int spell, int count) in roomsBySpell)
         {
@@ -210,22 +212,37 @@ public sealed class RouteExpResolver : IDisposable
                 tables[spell] = null;
                 continue;
             }
+            var skipped = new List<RoomSummonLeftOut>();
             RoomSummonTable? table = RoomSummonParser.Resolve(
                 tb.TextBlock,
                 n => TbActions().TryGetValue(n, out string? a) ? a : null,
-                id => (Math.Max(0, Monster(id).Exp), Monster(id).Name));
+                id => (Math.Max(0, Monster(id).Exp), Monster(id).IsBoss),
+                skipped);
             if (table is not { ExpPerRoll: > 0 }) table = null;
             tables[spell] = table;
+            foreach (RoomSummonLeftOut line in skipped)
+                leftOut.Add($"{spell} {tb.Name} line {line.Threshold}: "
+                    + $"{string.Join(", ", line.Monsters.Select(id => $"{id} {Monster(id).Name}"))} ({line.Reason})");
             if (table is null) continue;
             rooms += count;
+            string gate = table.NoMonstersGate ? ", empty room only"
+                : table.EmptyRoomExpPerRoll > 0
+                    ? string.Create(CultureInfo.InvariantCulture, $", {table.EmptyRoomExpPerRoll:0} of it in an empty room only")
+                    : string.Empty;
             summoning.Add(string.Create(CultureInfo.InvariantCulture,
-                $"{spell} {tb.Name} (textblock {tb.TextBlock}, {count} room(s), {table.ExpPerRoll:0} exp a roll, {table.SummonChance * 100:0.#}% summon{(table.NoMonstersGate ? ", empty room only" : "")})"));
+                $"{spell} {tb.Name} (textblock {tb.TextBlock}, {count} room(s), {table.ExpPerRoll:0} exp a roll, {table.SummonChance * 100:0.#}% summon{gate})"));
         }
 
         if (roomsBySpell.Count > 0)
+        {
             _log?.Info("RouteExpResolver",
                 $"Room-spell summons in '{_cache.ActiveSet}': {summoning.Count} of {roomsBySpell.Count} placed room spell(s) summon monsters, "
                 + $"over {rooms} room(s){(summoning.Count > 0 ? ": " + string.Join("; ", summoning) : string.Empty)}.");
+            // Said here because a room that shows no summon in the estimate is
+            // otherwise indistinguishable from one whose table was never read.
+            if (leftOut.Count > 0)
+                _log?.Info("RouteExpResolver", $"Summon line(s) not counted: {string.Join("; ", leftOut)}.");
+        }
         return _summonTables = tables;
     }
 

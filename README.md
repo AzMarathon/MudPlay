@@ -2,8 +2,11 @@
 
 <!-- current-version:start -->
 > **Version 3.161.6**
-> - Exp/Hr estimator and loop simulator: room-spell summons now counted in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
+> - Exp/Hr estimator and loop simulator: room-spell summons now read in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
+> - One-at-a-time bosses a room spell summons are no longer counted: lowers estimates through the Ancient Fortress (Angelic Hunter) and Paradigm's dinosaur forest (tyrannosaurs)
 > - A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
+> - Every monster a summon roll brings is counted, and an empty-room-only summon line only in an empty room
+> - Program log lists the summoning room spells and each summon left out
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

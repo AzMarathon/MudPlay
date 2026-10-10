@@ -411,6 +411,23 @@ public sealed class LoopExpSimulatorTests
     }
 
     [Fact]
+    public void SummonExp_CountsEmptyRoomLinesApartFromTheRest()
+    {
+        // A table worth 300 a roll, 100 of it on lines with their own `nomonsters`
+        // (the shape of the graveyard's table). Walking into an empty room, both parts
+        // roll once. Fighting 12 s in an occupied one, the open 200 rolls on entry and
+        // twice more on a 6 s tick; the empty-room 100 not at all.
+        var mixed = new RoomSummon("s", 300, 0.2, EmptyRoomExpPerRoll: 100);
+        Assert.Equal(300.0, LoopExpSimulator.SummonExp(mixed, roomOccupiedOnEntry: false, roomCombatSeconds: 0, roomSpellTick: 6), 6);
+        Assert.Equal(600.0, LoopExpSimulator.SummonExp(mixed, roomOccupiedOnEntry: true, roomCombatSeconds: 12, roomSpellTick: 6), 6);
+
+        // A spell gated as a whole is all empty-room, whatever the share says.
+        var gated = new RoomSummon("s", 300, 0.2, NoMonstersGated: true);
+        Assert.Equal(0.0, LoopExpSimulator.SummonExp(gated, roomOccupiedOnEntry: true, roomCombatSeconds: 12, roomSpellTick: 6), 6);
+        Assert.Equal(300.0, LoopExpSimulator.SummonExp(gated, roomOccupiedOnEntry: false, roomCombatSeconds: 0, roomSpellTick: 6), 6);
+    }
+
+    [Fact]
     public void RoomSummon_AddsOnTopOfLair()
     {
         // The same room with a placed lair AND a summon spell yields strictly more

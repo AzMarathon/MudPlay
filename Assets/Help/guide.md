@@ -396,7 +396,12 @@ The estimate's assumptions live in the **⚙ Estimate Settings** flyout at the t
 
 Click **Start estimating**, then **click the rooms** on the map to sketch the circuit (**Alt+click** a room to take it back out, or **drag** a numbered chip onto another room to move it); the panel shows a running **exp/hr** figure as you add rooms. **Save as loop** turns the sketch into a real loop, **Load loop…** pulls an existing loop in to evaluate it, **Clear rooms** starts over, and **Stop Estimating** exits the mode.
 
-**Room summons** lists the rooms on the circuit whose room spell can summon a monster, with the exp those rolls are expected to add. A summon that needs an item in the room isn't counted, because the item is only in some of the spell's rooms: the graveyard's Death Shrieker appears only where a weeping statue stands, so the graveyard counts its vampire fledglings and weeping apparitions alone.
+**Room summons** lists the rooms on the circuit whose room spell can summon monsters, with the exp those rolls are expected to add. Every monster a roll brings is counted, and a summon that only happens in a room with no monsters in it is counted only when you walk into the room empty. Two kinds of summon are left out, in the estimate and in the loop simulator alike:
+
+- **A boss only one of which can be alive in the game** (Lord Skorne from the Farnholme portal, the Angelic Hunter in the Ancient Fortress, the tyrannosaurs on Paradigm's dinosaur forest trails). There is never more than one of it however many rooms could summon it, so counting it on every roll would wildly overstate the loop. A room spell that summons nothing else, like the Ancient Fortress's, shows no summon at all.
+- **A summon that needs an item in the room.** The graveyard's Death Shrieker appears only where a weeping statue stands, in 7 of the graveyard's 110 rooms, and takes the statue until the next cleanup. The graveyard counts its vampire fledglings and weeping apparitions alone.
+
+The program log names each summon left out, the first time a set's room spells are read.
 
 A small **Realm:** line under the headline notes which game-data realm is active — it never changes your kill rate, but it changes two things:
 
