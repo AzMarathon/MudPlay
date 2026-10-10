@@ -1,12 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.29**
-> - A room's own damage (the volcano's *You are seared by the flames*) is no longer read as a combat round: heals and buffs stop going out mid-round into `You have already cast a spell this round!`
-> - The round countdown and the regen countdowns no longer jump when such a line arrives
-> - A fight stopped right after the attack went out (a typed `eq`, for one) is picked up again on the next round line instead of standing a full round, so a heal cast in between is followed by an attack
-> - Program log: says when `*Combat Off*` arrives with nothing of the client's behind it, and when a re-attack is skipped and why
-> - Bug report: the last re-attack decision, and Tick timing lists damage nobody dealt with its place in the round
+> **Version 3.160.4**
+> - Room heat (*You are seared by the flames*) no longer counts as a combat round
+> - Heals and buffs no longer go out mid-round into `You have already cast a spell this round!`
+> - A fight stopped just after an attack is re-attacked on the next round line
+> - Program log and bug report show re-attack decisions
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
