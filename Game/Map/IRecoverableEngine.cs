@@ -69,7 +69,11 @@ public interface IRecoverableEngine
     // Resume after a flee landed us somewhere on purpose (HealthManager). By default
     // the same as a recovery; an engine whose recovery counts failed attempts
     // overrides it so a deliberate retreat isn't charged as a desync.
-    void ResumeAfterFlee(RoomKey landedAt) => ResumeAfterRecovery(landedAt);
+    //
+    // carryOnFromHere: the run went forward along the route and the route is to go
+    // on from where it landed (user, 2026-10-10), not back to the room it left. It
+    // only matters to an engine that would otherwise go back: the loop.
+    void ResumeAfterFlee(RoomKey landedAt, bool carryOnFromHere = false) => ResumeAfterRecovery(landedAt);
 
     // A flee (HealthManager) takes over movement. Unlike a recovery pause this holds
     // even when the engine is already paused by another gate (combat), so a gate

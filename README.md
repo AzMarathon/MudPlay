@@ -1,8 +1,17 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.162.4**
-> - Hang-up death check: on Paradigm anything still worn rules a death out, as on Stock
+> **Version 3.163.0**
+> - A monster set to **Flee** is run from on sight, while a walk or loop is running
+> - It is the Health tab's flee: the Combat tab's run distance and direction
+> - With no run coming (idle, paused, no way out, a follower) it is fought back if it attacks
+> - Go backwards if running unticked: the run goes on past it, and a loop carries on from there
+> - Ticked: a monster on your route is run from on every return
+> - A low-HP or low-mana flee set to run forwards now carries a loop on too, instead of returning to the fight room
+> - A forward flee no longer starts with the step just walked
+> - A flee ends when you die, disconnect or load another character
+> - Two monsters ship set to Flee; set Neutral or Enemy to turn it off
+> - A flee stops short of Crystal Lake's teleporting rooms
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
