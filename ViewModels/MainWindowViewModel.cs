@@ -558,6 +558,10 @@ public partial class MainWindowViewModel : ObservableObject
     private bool               _loopRunning;
     private bool               _autoLairOn;
 
+    // Route cards up for a Recover Now's walk, and whether any was picked from.
+    private int  _recoverNowCardsOpen;
+    private bool _recoverNowWalkPicked;
+
     // Label inside the chip — short upper-case state tag. PAUSED while the user's
     // own pause holds a running engine, so a paused loop doesn't go on reading
     // LOOPING.
@@ -565,11 +569,16 @@ public partial class MainWindowViewModel : ObservableObject
         !EngineActionIsIdle && AppServices.Current.MovementControl.IsUserPaused ? "PAUSED"
         : _autoLairOn                                   ? "AUTO-LAIR"
         : _loopRunning                                  ? "LOOPING"
+        : SpillSweepRunning                             ? "RECOVERING"
         : (_walkerState != Game.Map.WalkState.Idle)     ? "WALKING"
         :                                                 "IDLE";
 
-    public bool EngineActionIsIdle    => !_autoLairOn && !_loopRunning && _walkerState == Game.Map.WalkState.Idle;
-    public bool EngineActionIsWalking => !_autoLairOn && !_loopRunning && _walkerState != Game.Map.WalkState.Idle;
+    // A Stock spill sweep stands in rooms looking, getting and searching with the
+    // walker idle. Stop and Pause are live for it then, so the chip mustn't read IDLE.
+    private static bool SpillSweepRunning => AppServices.Current.DeathRecovery.SpillSweepActive;
+
+    public bool EngineActionIsIdle    => !_autoLairOn && !_loopRunning && _walkerState == Game.Map.WalkState.Idle && !SpillSweepRunning;
+    public bool EngineActionIsWalking => !_autoLairOn && !_loopRunning && (_walkerState != Game.Map.WalkState.Idle || SpillSweepRunning);
     public bool EngineActionIsLooping => !_autoLairOn &&  _loopRunning;
     public bool EngineActionIsLair    =>  _autoLairOn;
 
@@ -665,7 +674,9 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 if (row.IsButton) ApplyToolbarRowState(row);
             }
-            OnPropertyChanged(nameof(EngineActionBadge));
+            // The whole chip, not only its label: a solver starting or ending (the
+            // spill sweep) changes which state it shows with no walker event.
+            RefreshEngineActionChip();
         });
 
     private void RefreshEngineActionChip()
@@ -1613,9 +1624,23 @@ public partial class MainWindowViewModel : ObservableObject
         // the route cards like any other.
         AppServices.Current.DeathRecovery.SetDemandedWalk(room =>
         {
-            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
+            _ = WalkForRecoverNowAsync(room);
             return true;
         });
+
+        // The cards closed without a pick: no walk went out, so the Recover Now that
+        // asked for one isn't left waiting for an arrival. Pressed twice, two sets of
+        // cards are up for the one request: it is forgotten only when the last of
+        // them has closed and none was picked from. (Nor then, if an earlier press's
+        // walk is still under way: the recovery manager checks that.)
+        async Task WalkForRecoverNowAsync(Game.Map.RoomKey room)
+        {
+            if (_recoverNowCardsOpen++ == 0) _recoverNowWalkPicked = false;
+            bool picked = await MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
+            _recoverNowWalkPicked |= picked;
+            if (--_recoverNowCardsOpen == 0 && !_recoverNowWalkPicked)
+                AppServices.Current.DeathRecovery.RecoverNowCardsClosed();
+        }
         // A party-splitting CMD teleport (chime-style, Darkwood's `go vortex`)
         // dissolves the follow chain even though the `.@party <kw>` relay sent
         // everyone through, so the party must be re-invited on landing. Both
@@ -3393,6 +3418,9 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.LoopRunner.NotifyDisconnected();
                 // A move still awaiting its room display will never get one now.
                 AppServices.Current.RoomTracker.NoteConnectionLost();
+                // A Stock spill sweep would time out stop after stop against the dead
+                // wire, or set off again on reconnect.
+                AppServices.Current.DeathRecovery.NotifyDisconnected();
                 // A trade agreed to on a route card is not made after a drop: where
                 // the character stands and how far the trade had got can't be vouched
                 // for. A walk still standing fetches as before, and trades nothing.

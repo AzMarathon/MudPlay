@@ -1,10 +1,22 @@
 # Version history
 
-## 3.160.5
+## 3.161.1
 
 - Stock: a lock under 25% a pick is gone round when that costs at most 10 extra steps
 - A door the picks run out on is gone round for the rest of the walk or loop run, where the walk used to stop at it
 - Log and bug report name the doors a route went round
+
+## 3.161.0
+
+- Stock death recovery follows the game's spill order: up to five rooms out, behind doors and hidden exits
+- With items still missing, it searches the rooms walked before the death (never a stash room)
+- The sweep runs for Recover Now or your own walk-to; a loop's or Auto-Lair's arrival only looks next door
+- It walks to 12 rooms at most and returns; Stop and Pause reach it
+- It gives way to other engines, following and any other walk; silent during a rest, a pause or Auto-All off
+- Stock: loyal, major-cursed and "returned to its rightful place" items no longer waited for
+- Stock: a partly recovered pile keeps its count; an empty death-room floor no longer stalls recovery
+- Stop calls off a Recover Now that was still walking (both realms)
+- Bug report: the pile's missing items and the sweep's plan, state and blockers
 
 ## 3.160.4
 

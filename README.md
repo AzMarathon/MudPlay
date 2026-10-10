@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.5**
+> **Version 3.161.1**
 > - Stock: a lock under 25% a pick is gone round when that costs at most 10 extra steps
 > - A door the picks run out on is gone round for the rest of the walk or loop run, where the walk used to stop at it
 > - Log and bug report name the doors a route went round
