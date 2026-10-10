@@ -407,21 +407,24 @@ public sealed partial class InventoryManager : IDisposable
             // instead of vanishing until the next full 'i' dump. Skip an item that
             // matches the incoming name (a re-confirm of the same weapon).
             var displaced = new List<string>();
-            PatchEquipped(list =>
+            AsOneChange(() =>
             {
-                foreach (EquippedItem e in list)
-                    if (e.Slot == "Weapon Hand"
-                        && !string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase))
-                        displaced.Add(e.Name);
-                list.RemoveAll(e => e.Slot == "Weapon Hand");
-                list.Add(new EquippedItem(name, "Weapon Hand"));
-                return true;
+                PatchEquipped(list =>
+                {
+                    foreach (EquippedItem e in list)
+                        if (e.Slot == "Weapon Hand"
+                            && !string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase))
+                            displaced.Add(e.Name);
+                    list.RemoveAll(e => e.Slot == "Weapon Hand");
+                    list.Add(new EquippedItem(name, "Weapon Hand"));
+                    return true;
+                });
+                // The newly-held weapon leaves the pack for the hand; the displaced
+                // one returns to it.
+                RemoveCarried(name);
+                foreach (string old in displaced)
+                    AddCarried(old);
             });
-            // The newly-held weapon leaves the pack for the hand; the displaced one
-            // returns to it.
-            RemoveCarried(name);
-            foreach (string old in displaced)
-                AddCarried(old);
             return;
         }
 
@@ -437,22 +440,38 @@ public sealed partial class InventoryManager : IDisposable
             string slot = _slotResolver?.Invoke(name) ?? "Worn";
             (int Index, string Family)? filled = _lastRemovedPaired;
             _lastRemovedPaired = null;   // consumed — correlate only the immediately-following wear
-            PatchEquipped(list =>
+            AsOneChange(() =>
             {
-                // A finger/wrist item worn right after removing a same-family slot-mate
-                // took THAT physical slot (the game's `eq <ring>` remove-then-wear
-                // pair) — insert it at the freed index so the snapshot keeps the game's
-                // slot order. Only when the family still has a surviving slot-mate (so
-                // we're filling a pair, not seeding one). Otherwise append, unchanged.
-                if (filled is { } f && PairedFamily(slot) is { } fam && fam == f.Family
-                    && f.Index <= list.Count
-                    && list.Exists(e => PairedFamily(e.Slot) == fam))
-                    list.Insert(f.Index, new EquippedItem(name, slot));
-                else
-                    list.Add(new EquippedItem(name, slot));
-                return true;
+                PatchEquipped(list =>
+                {
+                    // A finger/wrist item worn right after removing a same-family
+                    // slot-mate took THAT physical slot (the game's `eq <ring>`
+                    // remove-then-wear pair) — insert it at the freed index so the
+                    // snapshot keeps the game's slot order. Only when the family still
+                    // has a surviving slot-mate (so we're filling a pair, not seeding
+                    // one). Otherwise append, unchanged.
+                    if (filled is { } f && PairedFamily(slot) is { } fam && fam == f.Family
+                        && f.Index <= list.Count
+                        && list.Exists(e => PairedFamily(e.Slot) == fam))
+                        list.Insert(f.Index, new EquippedItem(name, slot));
+                    else
+                        list.Add(new EquippedItem(name, slot));
+                    return true;
+                });
+                RemoveCarried(name);
             });
-            RemoveCarried(name);
+            return;
+        }
+
+        // Stock's line for taking off the lit light. It has to be read ahead of the
+        // plain removal, whose pattern would take "torch and extinguished it" for
+        // the item's name.
+        Match putOut = RemovedLitLightRegex().Match(line);
+        if (putOut.Success)
+        {
+            string name = putOut.Groups[1].Value.TrimEnd();
+            _lastRemovedPaired = null;
+            AsOneChange(() => UnreadyLight(name));
             return;
         }
 
@@ -461,16 +480,25 @@ public sealed partial class InventoryManager : IDisposable
         {
             string name = removed.Groups[1].Value.TrimEnd();
             _lastRemovedPaired = null;
-            PatchEquipped(list =>
+            AsOneChange(() =>
             {
-                int idx = list.FindIndex(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
-                // Remember a vacated finger/wrist slot for the wear line that follows.
-                if (idx >= 0 && PairedFamily(list[idx].Slot) is { } fam)
-                    _lastRemovedPaired = (idx, fam);
-                return list.RemoveAll(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase)) > 0;
+                bool wasWorn = false;
+                PatchEquipped(list =>
+                {
+                    int idx = list.FindIndex(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+                    // Remember a vacated finger/wrist slot for the wear line that follows.
+                    if (idx >= 0 && PairedFamily(list[idx].Slot) is { } fam)
+                        _lastRemovedPaired = (idx, fam);
+                    wasWorn = list.RemoveAll(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase)) > 0;
+                    return wasWorn;
+                });
+                // Nothing worn by that name, and it is the light listed as lit: the
+                // light is what came off. Adding a pack entry beside the lit one
+                // would count the one light twice.
+                if (!wasWorn && IsLitLight(name)) UnreadyLight(name);
+                // A removed piece returns to the pack (unworn) until re-equipped.
+                else AddCarried(name);
             });
-            // A removed piece returns to the pack (unworn) until re-equipped.
-            AddCarried(name);
             return;
         }
 
@@ -481,14 +509,17 @@ public sealed partial class InventoryManager : IDisposable
             // weapon's name from the worn set as it leaves so it can return to
             // the pack (unworn) just like removed armor.
             var unreadied = new List<string>();
-            PatchEquipped(list =>
+            AsOneChange(() =>
             {
-                foreach (EquippedItem e in list)
-                    if (e.Slot == "Weapon Hand") unreadied.Add(e.Name);
-                return list.RemoveAll(e => e.Slot == "Weapon Hand") > 0;
+                PatchEquipped(list =>
+                {
+                    foreach (EquippedItem e in list)
+                        if (e.Slot == "Weapon Hand") unreadied.Add(e.Name);
+                    return list.RemoveAll(e => e.Slot == "Weapon Hand") > 0;
+                });
+                foreach (string name in unreadied)
+                    AddCarried(name);
             });
-            foreach (string name in unreadied)
-                AddCarried(name);
             return;
         }
 
@@ -1002,6 +1033,39 @@ public sealed partial class InventoryManager : IDisposable
         return null;
     }
 
+    // One game line can move a piece between the pack and the worn set (a wear, a
+    // wield, a remove) or between the pack and the lit light. Both sides are
+    // patched before anyone is told, and Changed is raised once: a listener called
+    // in between would see the piece in both places and count it twice, or in
+    // neither and take it for lost. Lines are read on one thread, so the two
+    // fields need no lock.
+    private int _movesUnderWay;
+    private bool _changedDuringMove;
+
+    private void AsOneChange(Action patch)
+    {
+        _movesUnderWay++;
+        try
+        {
+            patch();
+        }
+        finally
+        {
+            if (--_movesUnderWay == 0 && _changedDuringMove)
+            {
+                _changedDuringMove = false;
+                Changed?.Invoke();
+            }
+        }
+    }
+
+    // What a patch of the pack or the worn set raises in place of Changed itself.
+    private void NotifyChanged()
+    {
+        if (_movesUnderWay > 0) _changedDuringMove = true;
+        else Changed?.Invoke();
+    }
+
     // Apply an in-place edit to the worn set, publishing only if it changed.
     // Gated on a loaded baseline: patching an empty set would imply the
     // character wears nothing but the piece just equipped — misleading until
@@ -1021,7 +1085,7 @@ public sealed partial class InventoryManager : IDisposable
                 }
             }
         }
-        if (changed) Changed?.Invoke();
+        if (changed) NotifyChanged();
     }
 
     // Establish the loaded baseline from an acquisition when no full 'i' has run
@@ -1067,7 +1131,7 @@ public sealed partial class InventoryManager : IDisposable
                 }
             }
         }
-        if (changed) Changed?.Invoke();
+        if (changed) NotifyChanged();
     }
 
     // A give / receive of coins ("... 30 gold crowns ...") adjusts currency, not
@@ -1111,8 +1175,48 @@ public sealed partial class InventoryManager : IDisposable
             int inPack = idx < 0 ? 0 : CountedCommand.SplitLeadingCount(_carried[idx]).Count;
             fromPack = Math.Min(count, inPack);
         }
-        RemoveCarried(name, fromPack);
-        PatchKeyRing(name, -(count - fromPack));
+        AsOneChange(() =>
+        {
+            RemoveCarried(name, fromPack);
+            int rest = count - fromPack;
+            // The lit light is listed apart from the pack, so a copy that left with
+            // no pack entry to take it from was the lit one. With both a spare and
+            // the lit one held, which of them the game took can't be told (Stock
+            // takes the lower slot): the spare is taken off first, and the total
+            // is right either way until the next read says which is lit.
+            if (rest > 0 && IsLitLight(name))
+            {
+                ClearLitLight();
+                rest--;
+            }
+            PatchKeyRing(name, -rest);
+        });
+    }
+
+    private bool IsLitLight(string name)
+    {
+        lock (_lock)
+            return _readiedLight is { } lit && string.Equals(lit.Name, name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ClearLitLight()
+    {
+        lock (_lock)
+        {
+            if (_readiedLight is null) return;
+            _readiedLight = null;
+        }
+        NotifyChanged();
+    }
+
+    // The lit light was taken off and put out: it is an ordinary pack copy again.
+    // A light lit since the last full read was never listed apart, so its pack
+    // entry is still there and nothing is added for it.
+    private void UnreadyLight(string name)
+    {
+        bool listedApart = IsLitLight(name);
+        ClearLitLight();
+        if (listedApart) AddCarried(name);
     }
 
     private bool IsKey(string name)
@@ -1145,7 +1249,7 @@ public sealed partial class InventoryManager : IDisposable
                 }
             }
         }
-        if (changed) Changed?.Invoke();
+        if (changed) NotifyChanged();
     }
 
     // "<Player> gives you <item>." is a player's hand-over only when the item is a
@@ -1388,7 +1492,7 @@ public sealed partial class InventoryManager : IDisposable
                 changed = true;
             }
         }
-        if (changed) Changed?.Invoke();
+        if (changed) NotifyChanged();
     }
 
     private static long ComputeWealth(int copper, int silver, int gold, int platinum, int runic)
@@ -1574,6 +1678,9 @@ public sealed partial class InventoryManager : IDisposable
 
     [GeneratedRegex(@"^You have removed (.+)\.$")]
     private static partial Regex RemovedItemRegex();
+
+    [GeneratedRegex(@"^You have removed (.+) and extinguished it\.$")]
+    private static partial Regex RemovedLitLightRegex();
 
     [GeneratedRegex(@"^You now have no weapon readied\.$")]
     private static partial Regex NoWeaponReadiedRegex();

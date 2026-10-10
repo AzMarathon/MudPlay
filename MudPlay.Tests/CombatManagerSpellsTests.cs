@@ -2563,15 +2563,17 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("a grumpy badger", h.LastSent);
     }
 
-    // A Flee monster is kept out of the fight, self-defense included, whatever the
-    // Hangup watch is doing.
+    // A Flee monster is run from on sight, so while a run is under way or on its
+    // way it is not fought, whatever the Hangup watch is doing.
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void SelfDefense_FleeMonsterAttacksUs_NotEngaged(bool hangupWatchOff)
+    [InlineData(false)]   // the run is coming
+    [InlineData(true)]    // and no hang-up is, which is not its business
+    [InlineData(null)]    // nothing wired
+    public void SelfDefense_FleeMonsterAttacksUs_NotEngagedWhileARunIsComing(bool? hangupWatchOff)
     {
         using Harness h = new();
-        h.Combat.SetHangupWatchOffProbe(() => hangupWatchOff);
+        if (hangupWatchOff is { } off)
+            h.Combat.SetNoAnswerComingProbe(rel => rel == MonsterRelationship.Hangup && off);
         h.AddMonster(1, "fierce dragon");
         h.SetOverlay(1, relationship: MonsterRelationship.Flee);
 
@@ -2579,6 +2581,94 @@ public sealed class CombatManagerSpellsTests
         h.Feed("The fierce dragon hits you for 50 damage!");
 
         Assert.DoesNotContain(h.AllSent, s => s.Contains("dragon"));
+    }
+
+    // With no run coming for it (nothing to run along, no way out, a follower, the
+    // flee's switches off), a Flee monster that attacks is fought back (user,
+    // 2026-10-09). Like a Neutral, it is still never picked on sight.
+    [Fact]
+    public void SelfDefense_FleeMonsterAttacksUs_FoughtBackWhenNoRunIsComing()
+    {
+        using Harness h = new();
+        h.Combat.SetNoAnswerComingProbe(rel => rel == MonsterRelationship.Flee);
+        h.AddMonster(1, "fierce dragon");
+        h.SetOverlay(1, relationship: MonsterRelationship.Flee);
+
+        h.Feed("Also here: fierce dragon.");
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("dragon"));
+
+        h.Feed("The fierce dragon hits you for 50 damage!");
+
+        Assert.Equal("a fierce dragon", h.LastSent);
+    }
+
+    // The Auto-All master switch turns Auto-Combat off with every other auto, and
+    // self-defence is gated on it for every relationship: a Flee monster no run is
+    // coming for is not fought back then, exactly as a Neutral is not.
+    [Theory]
+    [InlineData(MonsterRelationship.Flee)]
+    [InlineData(MonsterRelationship.Neutral)]
+    public void SelfDefense_MasterSwitchOff_NothingIsFoughtBack(MonsterRelationship relationship)
+    {
+        using Harness h = new();
+        h.AutoCombatEnabled = false;
+        h.Combat.SetNoAnswerComingProbe(_ => true);
+        h.AddMonster(1, "fierce dragon");
+        h.SetOverlay(1, relationship: relationship);
+
+        h.Feed("Also here: fierce dragon.");
+        h.Feed("The fierce dragon hits you for 50 damage!");
+
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("dragon"));
+    }
+
+    // The watcher and the engine together, as the app wires them. A Hangup and a
+    // Flee monster in the room with Disable Hangups on (user, 2026-10-09): with a
+    // walk or loop running the Flee monster is run from; idle, neither is touched
+    // on sight and both are fought back when they attack.
+    [Theory]
+    [InlineData(true, "fierce dragon", false)]    // running from it, not fighting it
+    [InlineData(true, "ogre", true)]
+    [InlineData(false, "fierce dragon", true)]
+    [InlineData(false, "ogre", true)]
+    public void SelfDefense_HangupAndFleeMonster_WithDisableHangupsOn(bool engineRunning, string attacker, bool foughtBack)
+    {
+        using Harness h = new();
+        h.AddMonster(1, "fierce dragon");
+        h.AddMonster(2, "ogre");
+        h.SetOverlay(1, relationship: MonsterRelationship.Flee);
+        h.SetOverlay(2, relationship: MonsterRelationship.Hangup);
+        List<string> runs = new();
+        using MonsterRelationshipWatcher watcher = new(
+            h.Classifier,
+            resolveOverlay: number => h.Overlays.TryGetValue(number, out MonsterOverlay? overlay) ? overlay : new MonsterOverlay(),
+            hangUp: _ => Game.Health.EscapeOutcome.HangupsDisabled,
+            flee: (reason, _) =>
+            {
+                runs.Add(reason);
+                return engineRunning ? Game.Health.FleeOutcome.Started : Game.Health.FleeOutcome.NoEngine;
+            },
+            fleeInFlight: () => engineRunning,
+            masterSwitchOff: () => false,
+            hangupsDisabled: () => true,
+            pvpHandles: _ => false,
+            atBoardMenu: () => false,
+            describeRoom: () => "in Town Square",
+            schedule: (_, _) => { });
+        h.Combat.SetNoAnswerComingProbe(watcher.NoAnswerComing);
+
+        h.Feed("Also here: fierce dragon, ogre.");
+
+        Assert.Equal("fierce dragon (#1) is here, relationship Flee", Assert.Single(runs));
+        // Neither is picked on sight.
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("dragon") || s.Contains("ogre"));
+
+        h.Feed($"The {attacker} hits you for 50 damage!");
+
+        if (foughtBack)
+            Assert.Equal($"a {attacker}", h.LastSent);
+        else
+            Assert.DoesNotContain(h.AllSent, s => s.Contains(attacker));
     }
 
     // A Hangup monster is answered with a hang-up on sight, so it is not fought:
@@ -2589,7 +2679,8 @@ public sealed class CombatManagerSpellsTests
     public void SelfDefense_HangupMonsterAttacksUs_NotEngagedWhileTheWatchIsOn(bool? hangupWatchOff)
     {
         using Harness h = new();
-        if (hangupWatchOff is { } off) h.Combat.SetHangupWatchOffProbe(() => off);
+        if (hangupWatchOff is { } off)
+            h.Combat.SetNoAnswerComingProbe(rel => rel == MonsterRelationship.Hangup && off);
         h.AddMonster(1, "fierce dragon");
         h.SetOverlay(1, relationship: MonsterRelationship.Hangup);
 
@@ -2606,7 +2697,7 @@ public sealed class CombatManagerSpellsTests
     public void SelfDefense_HangupMonsterAttacksUs_FoughtBackWhileTheWatchIsOff()
     {
         using Harness h = new();
-        h.Combat.SetHangupWatchOffProbe(() => true);
+        h.Combat.SetNoAnswerComingProbe(rel => rel == MonsterRelationship.Hangup);
         h.AddMonster(1, "fierce dragon");
         h.SetOverlay(1, relationship: MonsterRelationship.Hangup);
 

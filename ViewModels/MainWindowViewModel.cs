@@ -522,7 +522,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     // "Hangup watch off 0:59" beside the connection light, for the minute after a
     // reconnect that follows a hang-up for a Hangup-relationship monster. Empty
-    // otherwise. MonsterHangupWatcher owns the countdown; this mirrors its text.
+    // otherwise. MonsterRelationshipWatcher owns the countdown; this mirrors its text.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsHangupWatchHoldVisible))]
     private string _hangupWatchHoldText = string.Empty;
@@ -1473,8 +1473,8 @@ public partial class MainWindowViewModel : ObservableObject
         // After the exit command goes out, close the carrier ourselves rather
         // than waiting on the server to notice — see RequestHangupDisconnect.
         AppServices.Current.Health.SetHangupDisconnect(RequestHangupDisconnect);
-        AppServices.Current.MonsterHangup.HoldChanged += () =>
-            HangupWatchHoldText = AppServices.Current.MonsterHangup.HoldText ?? string.Empty;
+        AppServices.Current.MonsterWatch.HoldChanged += () =>
+            HangupWatchHoldText = AppServices.Current.MonsterWatch.HoldText ?? string.Empty;
         // The raw, gate-piercing wire for `sys goto` (SysopGotoManager). Sys commands
         // are honoured at any HP — mortally-wounded included — so the jump (and the
         // wimpy escape built on it) must survive the EngineSendGate hold, exactly like
@@ -3383,6 +3383,21 @@ public partial class MainWindowViewModel : ObservableObject
                 // failed connect attempt fires Disconnected with
                 // wasConnected=false and must NOT arm this.
                 if (wasConnected) _hadDisconnectThisSession = true;
+                // Ahead of everything below that tears the fight down (the PvP
+                // fight, combat, the room's occupants): the list of what was held
+                // also says what fight the character left the game in.
+                // Guarded: ending a check clears a movement gate, whose subscribers run
+                // here and now, and a throw this early would skip the whole handler,
+                // the reconnect scheduling included.
+                if (wasConnected)
+                {
+                    try { AppServices.Current.HangupItems.NoteLinkDropping(); }
+                    catch (Exception ex)
+                    {
+                        AppServices.Current.Log.Warn(Game.Inventory.HangupItemRecheck.LogCategory,
+                            $"Couldn't note the link dropping ({ex.GetType().Name}: {ex.Message}).");
+                    }
+                }
                 // Snapshot the followers we were leading while PartyState is still
                 // intact — par reconciliation after the reconnect wipes the roster,
                 // so the leader-side reform must capture them now. Only on a real
@@ -3449,6 +3464,11 @@ public partial class MainWindowViewModel : ObservableObject
                 // latch here silently stops the character from ever resuming the
                 // fight after reconnect (report paradigm-20260827-203548).
                 AppServices.Current.Combat.OnDisconnected();
+                // A flee does not run on offline. The loop was stopped above and
+                // restarts by its own reconnect resume; a walk lives through the
+                // drop, so one the flee had paused is handed back at the first
+                // game prompt of the next stay.
+                AppServices.Current.Health.EndFlee("disconnected", handBackLiveEngine: true);
                 // The replies to discards still on the wire went with the connection.
                 // Hides a full room refused stay held: the pack is as it was.
                 AppServices.Current.AutoDiscard.Reset("disconnected", keepHeld: true);
@@ -3458,7 +3478,7 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.RoomClassifier.NoteGameLeft();
                 // A drop with a Hangup monster in sight turns the watch off for the
                 // first minute back in the game.
-                AppServices.Current.MonsterHangup.NoteDisconnected();
+                AppServices.Current.MonsterWatch.NoteDisconnected();
 
                 // Categorise: if the user clicked Disconnect, the flag was
                 // set in DisconnectInternalAsync. Otherwise check for a
@@ -3522,8 +3542,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // The reconnect's splash and login menu ride the same line extractor.
                 AppServices.Current.MessageCandidateWatcher.NotifyLeftGame();
                 AppServices.Current.InGameCapture.NotifyDisconnected();
-                // After the line above: leaving the game is what saves the list of
-                // what was held, and that has to see a check still under way.
+                // The list of what was held was saved at the top of this handler,
+                // or by the line above when the link was never counted as up; only
+                // after that may a check still under way be dropped.
                 AppServices.Current.HangupItems.NoteDisconnected();
                 // A drop we didn't ask for plays the Disconnected sound, and arms the
                 // Reconnected one for when the link comes back.
@@ -3549,7 +3570,7 @@ public partial class MainWindowViewModel : ObservableObject
                     // The Hangup-monster watch's minute off is for a reconnect the
                     // user makes. This one dials and enters on its own, and would
                     // stand the character beside the monster with nobody watching.
-                    AppServices.Current.MonsterHangup.CancelHold();
+                    AppServices.Current.MonsterWatch.CancelHold();
                     SchedulePvpReconnect(pvp.Delay, pvp.EnterRealm);
                 }
                 else
@@ -6536,8 +6557,9 @@ public partial class MainWindowViewModel : ObservableObject
     partial void OnIsAutoGetItemsActiveChanged(bool value)
     {
         PersistAutoModeFlag("AutoGetItems", value, d => d.AutoGetItems = value);
-        // The auto-discard engine's held hides waited for its switch.
-        if (value) AppServices.Current.AutoDiscard.RecheckHeldHides();
+        // The auto-discard engine's held hides waited for its switch; switched off,
+        // its piles still waiting to be sent come back.
+        AppServices.Current.AutoDiscard.OnRulesChanged();
         if (!_climbDrivingEngines) _climbTurnedOffGetItems = false;
         MaybeEndSprintOnManualEngineEnable(value);
     }

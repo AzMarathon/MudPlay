@@ -29,9 +29,11 @@ public sealed class PvpResponderTests
         // responder, so its handler reads each roster first and has to ask the
         // responder whether the roster is its to answer.
         public MonsterMessageStore Monsters { get; } = new();
-        public MonsterHangupWatcher MonsterWatch { get; }
+        public MonsterRelationshipWatcher MonsterWatch { get; }
         public HashSet<int> HangupMonsters { get; } = new();
         public List<string> MonsterHangUps { get; } = new();
+        public HashSet<int> FleeMonsters { get; } = new();
+        public List<string> MonsterFlees { get; } = new();
 
         public bool PvpEnabled { get; set; } = true;
         public PvpSettings Settings { get; set; } = new();
@@ -53,13 +55,18 @@ public sealed class PvpResponderTests
         {
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, new LogService());
-            MonsterWatch = new MonsterHangupWatcher(
+            MonsterWatch = new MonsterRelationshipWatcher(
                 Classifier,
                 resolveOverlay: number => new MonsterOverlay
                 {
-                    Relationship = HangupMonsters.Contains(number) ? MonsterRelationship.Hangup : null,
+                    Relationship = HangupMonsters.Contains(number) ? MonsterRelationship.Hangup
+                        : FleeMonsters.Contains(number) ? MonsterRelationship.Flee
+                        : null,
                 },
                 hangUp: reason => { MonsterHangUps.Add(reason); return Game.Health.EscapeOutcome.Jumped; },
+                flee: (reason, _) => { MonsterFlees.Add(reason); return Game.Health.FleeOutcome.Started; },
+                fleeInFlight: () => false,
+                masterSwitchOff: () => false,
                 hangupsDisabled: () => false,
                 pvpHandles: roster => Responder!.IsAnswering(roster),
                 atBoardMenu: () => false,
@@ -110,6 +117,13 @@ public sealed class PvpResponderTests
             Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}", Name: name, Links: new[] { new GameDataLink("Monsters", number) }));
             HangupMonsters.Add(number);
+        }
+
+        public void AddFleeMonster(int number, string name)
+        {
+            Monsters.Messages.Add(new MonsterMessageRecord(
+                Id: $"M{number}", Name: name, Links: new[] { new GameDataLink("Monsters", number) }));
+            FleeMonsters.Add(number);
         }
 
         public void Dispose()
@@ -205,6 +219,28 @@ public sealed class PvpResponderTests
         h.Classifier.RemoveDepartedPlayer("Bob");
 
         Assert.Equal("ogre (#7) is here, relationship Hangup", Assert.Single(h.MonsterHangUps));
+    }
+
+    // The same ruling covers a Flee monster: the Enemy's room is the PvP response's,
+    // and the monster is run from once the Enemy has gone.
+    [Theory]
+    [InlineData(PvpAction.HangUp)]
+    [InlineData(PvpAction.Flee)]
+    [InlineData(PvpAction.Attack)]
+    public void EnemyAndFleeMonsterOnOneDisplay_ThePvpActionAnswers_ThenTheMonsterIsRunFrom(PvpAction action)
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = action } };
+        h.MarkEnemy("Bob");
+        h.AddFleeMonster(7, "ogre");
+
+        h.Feed("Also here: Bob, ogre.");
+
+        Assert.Empty(h.MonsterFlees);
+        Assert.Equal(1, h.HangUps.Count + h.RoomFlees.Count + h.Fights.Count);
+
+        h.Classifier.RemoveDepartedPlayer("Bob");
+
+        Assert.Equal("ogre (#7) is here, relationship Flee", Assert.Single(h.MonsterFlees));
     }
 
     [Theory]

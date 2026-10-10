@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.11**
+> **Version 3.163.4**
 > - Roomba's final lap records what it sees: each room's entry in the item-location log is rewritten as the room is after the sort
 > - A room someone changed between the sort and that lap is named once in the program log, with what is extra and what is missing; nothing is re-sorted
 > - Hidden items the scan found and the sort didn't take stay on the room's record (the final lap doesn't search)

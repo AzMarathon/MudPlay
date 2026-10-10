@@ -24,16 +24,24 @@ public sealed class RouteStepWarning
     // required item, or both — each opening its item record.
     public IReadOnlyList<RoomDetailLink> Items { get; }
 
+    // True for a hazard no item makes safe (Crystal Lake's sea rooms): its counter
+    // items would only mislead, so they are not listed and the line says so.
+    public bool NoProtection { get; }
+
     public bool HasSpell => Spell is not null;
     public bool HasItems => Items.Count > 0;
+    public bool HasLabel => HasItems || NoProtection;
 
     // "cross with a raft" for a named hazard; "needs rope & grapple" for a bare
     // item gate.
-    public string Label => HasSpell ? "— cross with" : "needs";
+    public string Label => NoProtection
+        ? (HasItems ? "— nothing protects from it; needs" : "— nothing protects from it")
+        : HasSpell ? "— cross with" : "needs";
 
-    public RouteStepWarning(RoomDetailLink? spell, IReadOnlyList<RoomDetailLink> items)
+    public RouteStepWarning(RoomDetailLink? spell, IReadOnlyList<RoomDetailLink> items, bool noProtection = false)
     {
         Spell = spell;
         Items = items ?? Array.Empty<RoomDetailLink>();
+        NoProtection = noProtection;
     }
 }

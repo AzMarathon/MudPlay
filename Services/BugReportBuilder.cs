@@ -212,7 +212,16 @@ public static class BugReportBuilder
               + $"on {heldList.Realm ?? "(no realm)"}, "
               + (heldList.Room is { } heldRoom ? $"room {heldRoom.Map}/{heldRoom.Room}" : "room not known")
               + (heldList.PenaltiesSpanned > 1 ? $", covering {heldList.PenaltiesSpanned} drops of the link" : "")
+              // What a death by the hang-up penalty is told by on the next entry.
+              + $"; HP {(heldList.Hp is { } heldHp ? $"{heldHp}" : "not known")}"
+              + $" of {(heldList.MaxHp is { } heldMax ? $"{heldMax}" : "not known")}"
+              + $", lives {(heldList.Lives is { } heldLives ? $"{heldLives}" : "not known")}"
+              + (heldList.PvpFight ? ", in a fight with a player" : heldList.InCombat ? ", in a fight with a monster" : ", in no fight")
+              + $", {heldList.Worn?.Count ?? 0} worn, {heldList.Coins?.TotalCoinCount ?? 0} coin(s)"
             : "(none)");
+        // Whether the last hang-up the penalty could have killed for was taken
+        // for a death, and on what.
+        Kv(sb, "Hang-up death check", svc.HangupItems.LastDeathCheck);
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
             + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));
@@ -221,9 +230,11 @@ public static class BugReportBuilder
         Kv(sb, "PvP fight", $"{svc.PvpFight.Describe()}; last: {svc.PvpFight.LastReport}");
         // The last monster with the Hangup relationship seen in the room, where,
         // and what came of it; then the minute's hold after a reconnect, which
-        // explains one that was seen and not hung up on.
-        Kv(sb, "Hangup-relationship monster", svc.MonsterHangup.LastSighting);
-        Kv(sb, "Hangup watch hold", svc.MonsterHangup.DescribeHold());
+        // explains one that was seen and not hung up on. The same for the last
+        // Flee monster: whether a run was started, or why none was.
+        Kv(sb, "Hangup-relationship monster", svc.MonsterWatch.LastHangupSighting);
+        Kv(sb, "Hangup watch hold", svc.MonsterWatch.DescribeHold());
+        Kv(sb, "Flee-relationship monster", svc.MonsterWatch.LastFleeSighting);
         Kv(sb, "PvP attacks on us", svc.PvpAttacks.Recent.Count == 0
             ? "(none this session)"
             : string.Join("; ", svc.PvpAttacks.Recent.Select(a =>
@@ -1426,7 +1437,8 @@ public static class BugReportBuilder
         var heldHides = svc.AutoDiscard.HeldHides;
         sb.Append("\n**Discard hides held for the next room** (").Append(heldHides.Count)
           .Append("; ").Append(svc.AutoDiscard.UnansweredHides).Append(" hides and ")
-          .Append(svc.AutoDiscard.UnansweredDrops).Append(" drops sent and unanswered")
+          .Append(svc.AutoDiscard.UnansweredDrops).Append(" drops counted and unanswered, ")
+          .Append(svc.AutoDiscard.QueuedCopies).Append(" of them still waiting to be sent")
           .Append(svc.AutoDiscard.AwaitingInventoryRead ? "; waiting for an inventory read" : "")
           .Append(")\n\n");
         if (heldHides.Count == 0)
@@ -1687,6 +1699,7 @@ public static class BugReportBuilder
         // behind the party-reform hold and whether that hold is still counting.
         Kv(sb, "Default task party-hold armed", svc.DefaultTaskRunner.PendingPartyRebuildHold.ToString());
         Kv(sb, "Default task holding now", svc.DefaultTaskRunner.IsHoldingForParty.ToString());
+        Kv(sb, "Default task stood down for a hang-up death", svc.DefaultTaskRunner.StoodDownForDeath.ToString());
 
         // Recovery gate + Paradigm rm re-sync — a "walker got lost / stuck
         // mid-walk" report needs the tier the gate climbed to, the anchor it
@@ -1855,8 +1868,14 @@ public static class BugReportBuilder
         MovementFilter filter = svc.Movement;
         Game.Map.RoomGraphManager graph = svc.RoomGraph;
 
-        bool direct = bfs.FindPath(here, target, filter) is { Count: > 0 };
-        Kv(sb, "Direct route (gates honoured)", direct ? "reachable" : "none — blocked");
+        IReadOnlyList<Game.Map.Direction>? honoured = bfs.FindPath(here, target, filter);
+        bool direct = honoured is { Count: > 0 };
+        Kv(sb, "Direct route (gates honoured)", direct ? $"reachable, {honoured!.Count} step(s)" : "none — blocked");
+        // A "why did it go the long way" / "why through the lake" report turns on this.
+        Kv(sb, "Hazard rooms the direct route goes round",
+            RouteChoicePlanner.HazardDetour(bfs, filter, graph, here, target, () => honoured) is { } detour
+                ? $"{detour.HazardRooms} with no working counter held, on the shortest way through every gate ({detour.ThroughSteps} step(s))"
+                : direct ? "none" : "(no direct route)");
         if (direct) return;
 
         IReadOnlyList<Game.Map.Direction>? physical =
@@ -1866,13 +1885,18 @@ public static class BugReportBuilder
 
         // The gates the route card named, and what the client makes of each: whether
         // a pick of the card would fetch a door key, and any trade that yields it.
-        if (RouteChoicePlanner.Evaluate(bfs, filter, graph, here, target) is { Requirements: { Count: > 0 } reqs })
+        if (RouteChoicePlanner.Evaluate(bfs, filter, graph, here, target) is { Requirements: { Count: > 0 } reqs } gatedChoice)
         {
+            IReadOnlyList<Game.Map.RoomKey> entered = RouteChoicePlanner.UncounteredHazardRooms(filter, gatedChoice.GatedPath);
+            Kv(sb, "Hazard rooms on the route through gates",
+                $"{entered.Count} walked into with no working counter held"
+                + (entered.Count > 0 ? $" ({string.Join(", ", entered.Take(20).Select(k => $"{k.Map}/{k.Room}"))})" : string.Empty));
             IReadOnlyList<int> fetchable = svc.SourceableGateItems(reqs);
             Kv(sb, "Gate items on the route through gates", string.Join("; ", reqs.Select(r =>
             {
                 string items = string.Join("/", r.ItemIds.Select(id => $"{id} {svc.ItemNames.GetName(id) ?? "?"}"));
                 if (r.Carried) return $"{r.Kind} {items} (carried)";
+                if (r.NoProtection) return $"{r.Kind} {items} (no protection: its holders are teleported too; nothing is fetched)";
                 if (r.Kind != RouteRequirementKind.DoorKey) return $"{r.Kind} {items}";
                 string source = fetchable.Contains(r.ItemIds[0])
                     ? " — a route card's pick fetches it" : " — nothing fetches it";
@@ -1934,6 +1958,24 @@ public static class BugReportBuilder
         Kv(sb, "Stop-before boss rooms on this walk", walker.BossRoomRuleSummary);
         Kv(sb, "Paused before a boss room", walker.HaltedBeforeBossRoom is { } bossRoom
             ? $"{bossRoom.Map}/{bossRoom.Room} ({svc.BossInRoom(bossRoom) ?? "boss"}) — Resume walks through" : "no");
+        // A route that walks round a door it could have stepped through looks like a
+        // planning mistake unless the capture says the door was weighed and why.
+        Kv(sb, "Door planning reads", svc.Stats.HasParsed
+            ? $"Strength {svc.PlayerStats.Strength}, Picklocks {svc.PlayerStats.Picklocks} (last stat screen); "
+              + $"bash ceiling {svc.MaxStrength.MaxAchievableStrength}; "
+              + $"a lock under {Game.Map.DoorPolicy.PoorPickChancePercent}% a try is gone round when that costs at most "
+              + $"{Game.Map.DoorPolicy.PoorPickDetourSteps} extra steps"
+            : "no stat screen read yet: every door is planned through and left to the door handler");
+        Kv(sb, "Doors the last plan went round", walker.DoorsWalkedRound.Count == 0
+            ? "none" : string.Join(" | ", walker.DoorsWalkedRound));
+        Kv(sb, "Doors given up on (walk)", walker.AbandonedDoors.Count == 0
+            ? "none" : string.Join(", ", walker.AbandonedDoors.Select(d => $"{d.From} → {d.To}")));
+        Kv(sb, "Doors given up on (loop run)", svc.LoopRunner.AbandonedDoors.Count == 0
+            ? "none" : string.Join(", ", svc.LoopRunner.AbandonedDoors.Select(d => $"{d.From} → {d.To}")));
+        Kv(sb, "Doors given up on (Auto-Lair run)", svc.AutoLair.AbandonedDoors.Count == 0
+            ? "none" : string.Join(", ", svc.AutoLair.AbandonedDoors.Select(d => $"{d.From} → {d.To}")));
+        Kv(sb, "Lairs left out of the Auto-Lair run", svc.AutoLair.LairsLeftOut.Count == 0
+            ? "(none)" : string.Join(", ", svc.AutoLair.LairsLeftOut));
         // The retained last event carries the failure/stop reason (Detail) — the
         // single most useful line for "why did the walk quit".
         Kv(sb, "Last walk event",
@@ -2055,6 +2097,15 @@ public static class BugReportBuilder
         Game.Map.Room? here = svc.RoomTracker.State.CurrentRoom;
         RoomHazardIndex.RoomHazard? hazard = here is { Spell: > 0 }
             ? svc.RoomHazards.HazardForSpell(here.Spell) : null;
+        // A "stuck on the lake" / "why did it walk off that way" report turns on this:
+        // from such a room every plan starts with the shortest way out.
+        Kv(sb, "Room no route enters (teleports its counter's holders too)",
+            here is not null && svc.Movement.IsClosedToRoutes(here.Key)
+                ? "yes — routes from here take the nearest way out first" : "no");
+        // The few walks taken across such rooms (where the map has no other way) ask
+        // a level and a boat: whether this character has both decides "no route".
+        Kv(sb, "Meets the terms to be walked across such rooms (level and boat)",
+            svc.Movement.MayCrossClosedRooms() ? "yes" : "no");
         if (hazard is null || hazard.BuffCounters.Count == 0)
             Kv(sb, "Checkspell hazard", "(none — current room needs no buff counter)");
         else foreach (RoomHazardIndex.BuffCounter bc in hazard.BuffCounters)
