@@ -606,14 +606,14 @@ public sealed partial class PartyManager : IDisposable
         if (!wasInParty) SendRankPreferenceCommand();
     }
 
-    // Send the rerank command (`frontrank` / `backrank`) to the server iff
-    // LocalRankPreference is non-Mid and a wire-sender is bound. Mid is the
-    // server-side default rank — no command needed when that's the preference.
     // The master switch (true = off): off, no rank command and no re-invite of a
     // returning member goes out. Invite and Uninvite themselves are not gated
     // here: their callers are.
     public Func<bool>? MasterSwitchOff { get; set; }
 
+    // Send the rerank command (`frontrank` / `backrank`) to the server iff
+    // LocalRankPreference is non-Mid and a wire-sender is bound. Mid is the
+    // server-side default rank — no command needed when that's the preference.
     private void SendRankPreferenceCommand()
     {
         if (_wireSender is null) return;

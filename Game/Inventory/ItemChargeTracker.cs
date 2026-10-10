@@ -141,16 +141,16 @@ public sealed class ItemChargeTracker : IDisposable
     // drop — follows the top as copies deplete and the next surfaces.)
     private static string Singular(string name) => CountedCommand.SplitLeadingCount(name).Name;
 
-    // Look up (and dispatch) the charges of any held charged item we don't yet know.
-    // Called on inventory-settle. No-op off Paradigm. Each unknown item gets one paced
-    // `look`; a persisted count (or a rechargeable that cleanup-resolves to max) needs
-    // no look, so this stays quiet after the first encounter with each item. A one-use
-    // consumable (a learn-spell scroll) is never looked: held, it has its one charge.
     // The master switch (true = off): off, no item is looked at to read its
     // charges. An unknown count stays unknown until the next inventory change
     // after the switch is back on.
     public Func<bool>? MasterSwitchOff { get; set; }
 
+    // Look up (and dispatch) the charges of any held charged item we don't yet know.
+    // Called on inventory-settle. No-op off Paradigm. Each unknown item gets one paced
+    // `look`; a persisted count (or a rechargeable that cleanup-resolves to max) needs
+    // no look, so this stays quiet after the first encounter with each item. A one-use
+    // consumable (a learn-spell scroll) is never looked: held, it has its one charge.
     public void EnsureChargesKnown()
     {
         if (_disposed || !_onParadigm()) return;

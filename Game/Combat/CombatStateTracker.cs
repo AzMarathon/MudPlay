@@ -501,6 +501,9 @@ public sealed class CombatStateTracker : IDisposable
         if (_classifier.Current is { } obs) OnEntitiesObserved(obs);
     }
 
+    // The master switch (true = off).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // Idle-stall watchdog, driven by the 1s heartbeat (TickEngine's
     // HeartbeatElapsed). Rescues two stall shapes after IdleStallThreshold of
     // zero combat activity — a live fight emits a line every 5s round, so total
@@ -520,9 +523,6 @@ public sealed class CombatStateTracker : IDisposable
     // — a laggy >6s round — the CR's re-displayed "Also here:" re-observes a beat
     // later, so the optimistic clear self-heals. Running on the 1s heartbeat
     // lands this in ~6s total.
-    // The master switch (true = off).
-    public Func<bool>? MasterSwitchOff { get; set; }
-
     public void OnCombatTick()
     {
         if (_disposed) return;

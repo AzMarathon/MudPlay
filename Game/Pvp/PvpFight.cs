@@ -182,16 +182,16 @@ public sealed class PvpFight : IDisposable
         _subs.Add(router.Subscribe(KnownPatterns.TrackFailed, OnTrackFailed));
     }
 
-    // Start (or, for the same player, carry on) a fight. False when it can't be:
-    // PvP is off, they are in our party, or another fight is under way.
-    // byOrder is a fight a leader's @kill started: evil warnings go off before the
-    // first attack when our setting for that says so, and the order isn't passed on.
     // The master switch (true = off): off, no fight is started. The PvP response
     // and a leader's @kill are both stopped before they reach here; this is the
     // backstop. A fight under way when the switch goes off is ended by the switch
     // (AppServices calls Stop).
     public Func<bool>? MasterSwitchOff { get; set; }
 
+    // Start (or, for the same player, carry on) a fight. False when it can't be:
+    // PvP is off, they are in our party, or another fight is under way.
+    // byOrder is a fight a leader's @kill started: evil warnings go off before the
+    // first attack when our setting for that says so, and the order isn't passed on.
     public bool Engage(string given, bool chase, string why, bool byOrder = false)
     {
         if (!_pvpEnabled() || given.Length == 0 || _inParty(given)) return false;

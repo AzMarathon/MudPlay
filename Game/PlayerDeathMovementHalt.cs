@@ -114,13 +114,13 @@ public sealed class PlayerDeathMovementHalt : IDisposable
         _resyncTimer.Start();
     }
 
+    // The master switch (true = off).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // ResyncDelay after death: if the tracker still hasn't anchored the graveyard
     // (a slow / missed respawn display), send a bare CR to re-display it now so the
     // PendingRespawn candidate search lands the room. A tick where we've already
     // anchored is a no-op.
-    // The master switch (true = off).
-    public Func<bool>? MasterSwitchOff { get; set; }
-
     private void FireGraveyardResync()
     {
         _resyncTimer.Stop();

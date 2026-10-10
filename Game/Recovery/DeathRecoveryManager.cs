@@ -589,15 +589,15 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // trail rooms marked. Empty when no sweep has run this session.
     public string SpillSweepPlan => _sweepStops.Count == 0 ? "" : DescribeStops(0);
 
-    // Auto-grab a deathpile's lost items (ignoring per-item auto-get policy) when
-    // re-entering the death room. Persisted per-character. The grab itself is
-    // inert until inventory tracking records lost items; the preference is stored
-    // now.
     // The automatic grab on walking into the death room, or past a pile: the
     // setting, and the master switch being on. Recover Now forces it and is not
     // read through here.
     private bool AutoGrabAllowed => AutoRecover && _isAutoEnabled?.Invoke() != false;
 
+    // Auto-grab a deathpile's lost items (ignoring per-item auto-get policy) when
+    // re-entering the death room. Persisted per-character. The grab itself is
+    // inert until inventory tracking records lost items; the preference is stored
+    // now.
     public bool AutoRecover
     {
         get => _profile.Current?.DeathAutoRecover ?? false;

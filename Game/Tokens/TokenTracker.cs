@@ -131,13 +131,13 @@ public sealed class TokenTracker : IDisposable
         _lines.LineEmitted += OnLine;
     }
 
-    // Read the charges of every held token — one paced `look` each, then a settle
-    // window. Called once on login (Paradigm only). No-op with no tokens held.
     // The master switch (true = off): off, no token is looked at, at login or
     // after a use. Using a token by hand still arms and clears its buff pause;
     // only the look that reads the charges is skipped.
     public Func<bool>? MasterSwitchOff { get; set; }
 
+    // Read the charges of every held token — one paced `look` each, then a settle
+    // window. Called once on login (Paradigm only). No-op with no tokens held.
     public async Task RefreshAsync(CancellationToken ct = default)
     {
         if (_disposed || !_onParadigm()) return;

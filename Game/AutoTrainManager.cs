@@ -333,6 +333,10 @@ public sealed class AutoTrainManager : IDisposable
         StartReplay();
     }
 
+    // The master switch (true = off): off, a stat form the user opens by hand is
+    // theirs to fill in.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // The user opened the in-game `train stats` screen themselves (InputMenuEntered is the
     // realm-independent signal, armed off their outbound `train stats`). With Auto-train
     // stats ON and an unapplied plan for the current level, drive the SAME CP replay Train
@@ -346,10 +350,6 @@ public sealed class AutoTrainManager : IDisposable
     //
     // A Stock hold is not consulted: it rests on the last `stat`, and a form that
     // opens is the game's own word that no stat is altered now.
-    // The master switch (true = off): off, a stat form the user opens by hand is
-    // theirs to fill in.
-    public Func<bool>? MasterSwitchOff { get; set; }
-
     private void OnManualTrainStatsEntered()
     {
         if (IsBusy) return;                                      // our own flow already drives it

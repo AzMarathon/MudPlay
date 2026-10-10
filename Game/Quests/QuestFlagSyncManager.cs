@@ -110,15 +110,15 @@ public sealed class QuestFlagSyncManager
         finally { _running = false; }
     }
 
-    // Read the flags, mark newly-complete quests, persist. Returns the number marked. Must
-    // be awaited on the UI thread (the probe collects on the line-emit thread and paces its
-    // sends off the dispatcher).
     // The master switch (true = off): off, the login sync does not run. Checked
     // before the once-a-day stamp, so the sync is still owed at the next login.
     // The sync started by ticking the setting comes through here too and waits
     // the same way.
     public Func<bool>? MasterSwitchOff { get; set; }
 
+    // Read the flags, mark newly-complete quests, persist. Returns the number marked. Must
+    // be awaited on the UI thread (the probe collects on the line-emit thread and paces its
+    // sends off the dispatcher).
     public async Task<int> SyncAsync(CancellationToken ct = default)
     {
         if (_profile.Current is not { } prof) return 0;

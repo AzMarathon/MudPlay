@@ -87,11 +87,11 @@ public sealed class LeaderBossTravelProbe : IDisposable
     // True when there's a leader to ask.
     public bool HasLeader => _leaderGivenName() is { Length: > 0 };
 
-    // Ask the leader where it's going. False when there's nobody to ask. A question
-    // already out is left to run.
     // The master switch (true = off): off, the leader is not asked.
     public Func<bool>? MasterSwitchOff { get; set; }
 
+    // Ask the leader where it's going. False when there's nobody to ask. A question
+    // already out is left to run.
     public bool Ask()
     {
         if (_disposed || _leaderGivenName() is not { Length: > 0 } leader) return false;

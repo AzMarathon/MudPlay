@@ -1287,13 +1287,13 @@ public sealed class TrainerWalkManager : IDisposable
         PlanApplied?.Invoke();
     }
 
+    // The master switch (true = off).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // PlayerStats.Exp is the live experience total — StatParser re-anchors it on
     // every stat/exp poll and accrues each "You gain N experience." line. We react
     // to its change so the armed run fires the instant a kill crosses the next-level
     // threshold (no exp poll), and so CanTrainNow refreshes for the UI.
-    // The master switch (true = off).
-    public Func<bool>? MasterSwitchOff { get; set; }
-
     private void OnStatsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(PlayerStats.Exp)) return;

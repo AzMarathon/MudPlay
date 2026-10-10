@@ -121,17 +121,17 @@ public sealed class PartyWealthTracker
         return min;
     }
 
+    // The master switch (true = off): off, no @wealth round-trip is started. The
+    // route cards' own count (PartyWealthProbe.QueryAsync) is a hand action and is
+    // not gated here.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // Fire an @wealth probe when the last one is older than the freshness window.
     // Fire-and-forget on the UI thread; the replies land via Record for the next
     // plan. Debounced so one route expansion (a multi-segment loop can hit
     // several toll legs) fires at most one round-trip. Called route-scoped from
     // MovementFilter.WarmForRoute — only when the tolls-permitted shortest route
     // actually crosses a toll — so nothing polls on an off-path toll edge.
-    // The master switch (true = off): off, no @wealth round-trip is started. The
-    // route cards' own count (PartyWealthProbe.QueryAsync) is a hand action and is
-    // not gated here.
-    public Func<bool>? MasterSwitchOff { get; set; }
-
     public void Probe()
     {
         if (MasterSwitchOff?.Invoke() == true) return;
