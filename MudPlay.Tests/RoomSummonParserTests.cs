@@ -204,6 +204,40 @@ public sealed class RoomSummonParserTests
         Assert.Equal(RoomSummonParser.OneAtATimeBoss, line.Reason);
     }
 
+    [Theory]
+    [InlineData(3354, 79410.0)]    // "Dino trigger" (spell 5081, table 3355)
+    [InlineData(3357, 86860.0)]    // "Dino trigger 2" (spell 5082, table 3356)
+    public void Resolve_DinosaurForest_CountsTheTyrannosaursLikeAnyOtherMonster(int block, double expPerRoll)
+    {
+        // Both tables verbatim from data-Paradigm-1.9.1. The young tyrannosaur (508)
+        // and the Tyrannosaur (514) are GameLimit 1 with RegenTime 0, so they can be
+        // summoned again as soon as they are dead and the lookup flags neither
+        // (user, 2026-10-10); every line summons, so each roll brings a monster.
+        var d = new Dictionary<int, string>
+        {
+            [3354] = "roomitem 3390:nomonsters:random 3355\n",
+            [3355] = "3:summon 509:summon 509:summon 509\n20:summon 511\n30:summon 512\n42:summon 523\n60:summon 515\n"
+                   + "72:summon 520\n81:summon 521\n94:summon 508\n100:summon 511\n",
+            [3357] = "roomitem 3390:nomonsters:random 3356\n",
+            [3356] = "03:summon 509:summon 509:summon 509\n11:summon 511\n19:summon 512\n29:summon 523\n39:summon 515\n"
+                   + "49:summon 944\n59:summon 520\n69:summon 521\n84:summon 508\n89:summon 514\n100:summon 523\n",
+        };
+        static (int, bool) Dinosaurs(int id) => (id switch
+        {
+            509 => 42000, 511 => 68000, 512 => 57000, 523 => 58000, 515 => 82000, 944 => 95000,
+            520 => 74000, 521 => 74000, 508 => 131000, 514 => 175000, _ => 0,
+        }, false);
+        var leftOut = new List<RoomSummonLeftOut>();
+
+        RoomSummonTable? summon = RoomSummonParser.Resolve(block, n => Tb(d, n), Dinosaurs, leftOut);
+
+        Assert.NotNull(summon);
+        Assert.Equal(expPerRoll, summon!.ExpPerRoll, 3);
+        Assert.Equal(1.0, summon.SummonChance, 5);
+        Assert.Empty(leftOut);
+        Assert.Contains(summon.Entries, e => e.Monsters.Contains(508));
+    }
+
     [Fact]
     public void Resolve_TableWhoseOnlySummonIsABoss_SummonsNothing()
     {

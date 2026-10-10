@@ -67,8 +67,9 @@ public sealed class RouteExpResolverSummonTests : IDisposable
         ]
         """;
 
-    // GameLimit 1 marks the three one-at-a-time bosses: the Death Shrieker, Lord
-    // Skorne and the Angelic Hunter.
+    // GameLimit 1 marks the three one-at-a-time monsters: the Death Shrieker (regen 0,
+    // kept out by the room item its line asks for), Lord Skorne and the Angelic Hunter
+    // (regen waits, kept out as bosses).
     private const string Monsters = """
         [
           { "Number": 806, "Name": "weeping apparition", "EXP": 4800, "ExpMulti": 1, "GameLimit": 0, "RegenTime": 0 },
@@ -86,14 +87,18 @@ public sealed class RouteExpResolverSummonTests : IDisposable
     private static readonly LoopWaypoint[] Loop =
         { new(Graveyard), new(Fortress) };
 
-    private (RouteExpResolver Resolver, LairTimerStore Timers, LogService Log) Build()
+    private (RouteExpResolver Resolver, LairTimerStore Timers, LogService Log) Build() =>
+        Build(Rooms, Spells, TBInfo, Monsters);
+
+    private (RouteExpResolver Resolver, LairTimerStore Timers, LogService Log) Build(
+        string rooms, string spells, string tbInfo, string monsters)
     {
         string set = Path.Combine(_root, "alpha");
         Directory.CreateDirectory(set);
-        File.WriteAllText(Path.Combine(set, "Rooms.json"), Rooms);
-        File.WriteAllText(Path.Combine(set, "Spells.json"), Spells);
-        File.WriteAllText(Path.Combine(set, "TBInfo.json"), TBInfo);
-        File.WriteAllText(Path.Combine(set, "Monsters.json"), Monsters);
+        File.WriteAllText(Path.Combine(set, "Rooms.json"), rooms);
+        File.WriteAllText(Path.Combine(set, "Spells.json"), spells);
+        File.WriteAllText(Path.Combine(set, "TBInfo.json"), tbInfo);
+        File.WriteAllText(Path.Combine(set, "Monsters.json"), monsters);
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
         RoomGraphManager graph = new(cache);
@@ -170,6 +175,49 @@ public sealed class RouteExpResolverSummonTests : IDisposable
             Assert.Equal(0.30, portal.Value.SummonChance, 5);
             // The fortress summons the Angelic Hunter and nothing else.
             Assert.Null(SummonAt(route, Fortress));
+        }
+    }
+
+    [Fact]
+    public void OneAtATimeMonsterWithNoRegenWait_IsCountedLikeAnyOther()
+    {
+        // "Dino trigger" (Paradigm spell 5081 → TBInfo 3354 → 3355) cut to its last two
+        // lines: the young tyrannosaur (508) is GameLimit 1 with RegenTime 0, so it can
+        // be summoned again as soon as it is dead and counts (user, 2026-10-10); the
+        // zapsalis (511) beside it is ordinary. Lord Skorne, with a regen wait, stays out.
+        const string rooms = """
+            [
+              { "Map Number": 18, "Room Number": 41, "Name": "Forest", "Spell": 5081, "N": "18/42" },
+              { "Map Number": 18, "Room Number": 42, "Name": "Clearing", "S": "18/41" }
+            ]
+            """;
+        const string spells = """
+            [ { "Number": 5081, "Name": "Dino trigger", "MinBase": 3354, "MaxBase": 3354, "Abil-0": 148, "AbilVal-0": 3354 } ]
+            """;
+        const string tbInfo = """
+            [
+              { "Number": 3354, "LinkTo": 0, "Action": "roomitem 3390:nomonsters:random 3355\n" },
+              { "Number": 3355, "LinkTo": 0, "Action": "50:addevil 0\n94:summon 508\n98:summon 511\n100:summon 2738\n" }
+            ]
+            """;
+        const string monsters = """
+            [
+              { "Number": 508, "Name": "young tyrannosaur", "EXP": 131000, "ExpMulti": 1, "GameLimit": 1, "RegenTime": 0 },
+              { "Number": 511, "Name": "zapsalis", "EXP": 68000, "ExpMulti": 1, "GameLimit": 0, "RegenTime": 0 },
+              { "Number": 2738, "Name": "Lord Skorne", "EXP": 2000000, "ExpMulti": 1, "GameLimit": 1, "RegenTime": 2 }
+            ]
+            """;
+        (RouteExpResolver resolver, LairTimerStore timers, _) = Build(rooms, spells, tbInfo, monsters);
+        using (timers)
+        using (resolver)
+        {
+            RoomSummon? summon = SummonAt(resolver.Resolve(new[] { new LoopWaypoint(new RoomKey(18, 41)), new LoopWaypoint(new RoomKey(18, 42)) }),
+                new RoomKey(18, 41));
+
+            Assert.NotNull(summon);
+            // 0.44 × 131000 + 0.04 × 68000; the 2% of Lord Skorne's line is left out.
+            Assert.Equal(60360.0, summon!.Value.ExpPerRoll, 3);
+            Assert.Equal(0.48, summon.Value.SummonChance, 5);
         }
     }
 

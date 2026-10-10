@@ -50,7 +50,7 @@ public static class RoomSummonParser
     // whether only one of it can be alive in the game. leftOut, when given, receives
     // each summon line that wasn't counted.
     public static RoomSummonTable? Resolve(
-        int textBlock, Func<int, string?> tbAction, Func<int, (int Exp, bool OneAtATime)> monster,
+        int textBlock, Func<int, string?> tbAction, Func<int, (int Exp, bool BossWithRegenWait)> monster,
         ICollection<RoomSummonLeftOut>? leftOut = null)
     {
         ArgumentNullException.ThrowIfNull(tbAction);
@@ -119,7 +119,7 @@ public static class RoomSummonParser
     // line's band probability is (threshold − prevThreshold) / lastThreshold, and the
     // band summons every monster its "summon <mon>" steps name.
     private static RoomSummonTable? ParseTable(
-        string table, bool noMonsters, Func<int, (int Exp, bool OneAtATime)> monster,
+        string table, bool noMonsters, Func<int, (int Exp, bool BossWithRegenWait)> monster,
         ICollection<RoomSummonLeftOut>? leftOut)
     {
         var lines = new List<(int Threshold, List<int> Monsters, bool EmptyRoomOnly)>();
@@ -147,11 +147,13 @@ public static class RoomSummonParser
             if (behindRoomItem.Count > 0)
                 leftOut?.Add(new RoomSummonLeftOut(threshold, behindRoomItem, NeedsRoomItem));
 
-            // There is never more than one of a one-at-a-time boss alive however many
-            // rooms roll its line, so crediting every roll would count kills that
-            // can't all happen. Lines with one are left out of estimates altogether
-            // (user, 2026-10-09), the whole line with it.
-            if (counted.Any(m => monster(m).OneAtATime))
+            // A one-at-a-time boss with a regen wait is gone for that wait once killed,
+            // so later rolls of its line bring nothing and crediting every roll would
+            // count kills that can't happen. Lines with one are left out of estimates
+            // altogether, the whole line with it (user, 2026-10-09). One with no regen
+            // wait can be summoned again as soon as it is dead, so it counts like any
+            // other (user, 2026-10-10; GAME_MECHANICS "Summoned monster key drop").
+            if (counted.Any(m => monster(m).BossWithRegenWait))
             {
                 leftOut?.Add(new RoomSummonLeftOut(threshold, counted, OneAtATimeBoss));
                 counted = new List<int>();

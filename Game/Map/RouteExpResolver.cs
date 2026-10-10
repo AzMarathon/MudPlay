@@ -44,7 +44,10 @@ public sealed class RouteExpResolver : IDisposable
     // GameLimit 1 (BossCatalog.IsBoss) — is killable only once per its
     // regen, so it's pulled out of the lair average and amortised over RegenHours.
     // DeathSpell is the spell fired when it dies (0 = none) — the summon-cascade root.
-    private readonly record struct MonsterInfo(int Exp, bool IsBoss, int RegenHours, string Name, int DeathSpell);
+    // HasRegenWait is the raw RegenTime > 0 (RegenHours is floored at 1 for the
+    // amortising maths and so can't tell a regen of 0).
+    private readonly record struct MonsterInfo(
+        int Exp, bool IsBoss, int RegenHours, string Name, int DeathSpell, bool HasRegenWait);
 
     public RouteExpResolver(
         RoomGraphManager graph, BfsMapper bfs, LairTimerStore timers, GameDataCache cache, LogService? log = null)
@@ -216,7 +219,7 @@ public sealed class RouteExpResolver : IDisposable
             RoomSummonTable? table = RoomSummonParser.Resolve(
                 tb.TextBlock,
                 n => TbActions().TryGetValue(n, out string? a) ? a : null,
-                id => (Math.Max(0, Monster(id).Exp), Monster(id).IsBoss),
+                id => (Math.Max(0, Monster(id).Exp), Monster(id).IsBoss && Monster(id).HasRegenWait),
                 skipped);
             if (table is not { ExpPerRoll: > 0 }) table = null;
             tables[spell] = table;
@@ -403,7 +406,7 @@ public sealed class RouteExpResolver : IDisposable
                     ? nm.GetString() ?? string.Empty : string.Empty;
                 int deathSpell = row.TryGetProperty("DeathSpell", out JsonElement ds) && ds.TryGetInt32(out int dv) ? dv : 0;
                 bool isBoss = Game.GameData.BossCatalog.IsBoss(limit);
-                map[id] = new MonsterInfo(baseExp * multi, isBoss, Math.Max(1, regen), name, deathSpell);
+                map[id] = new MonsterInfo(baseExp * multi, isBoss, Math.Max(1, regen), name, deathSpell, regen > 0);
             }
         }
         return _monsters = map;
