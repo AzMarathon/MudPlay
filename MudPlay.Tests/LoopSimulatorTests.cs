@@ -252,6 +252,40 @@ public sealed class LoopSimulatorTests
         Assert.Equal(120, run.Exp);
     }
 
+    // A room whose spell summons on every roll, by one line of its table.
+    private static SimRoom Summoning(int room, bool emptyRoomOnly, params int[] monsters) =>
+        new(new RoomKey(1, room), 0, 0, Array.Empty<int>(), 0,
+            Summon: new RoomSummonTable(100, emptyRoomOnly ? 100 : 0, 1.0, NoMonstersGate: false,
+                new[] { new RoomSummonEntry(monsters, 1.0, 100, emptyRoomOnly) }));
+
+    [Fact]
+    public void RoomSummonLineBringsEveryMonsterItNames()
+    {
+        // One line, two monsters: both arrive on a roll, so both get killed.
+        LoopSimRun run = LoopSimulator.Run(Character(), new[] { Summoning(1, emptyRoomOnly: false, 40, 41), Empty(2) },
+            World(Mob(40, hp: 10, exp: 100), Mob(41, hp: 10, exp: 1)), secondsPerStep: 1, hours: 0.05, seed: 1);
+
+        Assert.True(run.Exp >= 100);
+        Assert.InRange(run.Exp % 100, 1, 99);
+    }
+
+    [Fact]
+    public void RoomSummonLineWithItsOwnNoMonstersBringsNothingIntoAnOccupiedRoom()
+    {
+        // A monster that takes ten rounds to kill and hits back. A line that rolls
+        // whatever is in the room keeps adding to the fight; one with its own
+        // `nomonsters` waits for the room to empty, so far fewer are ever swinging.
+        SimWorld world = World(Mob(40, hp: 1000, exp: 100, align: 1, Hit(1, 1)));
+        LoopSimRun Run(bool emptyRoomOnly) => LoopSimulator.Run(Character(maxHp: 100000, damage: 100),
+            new[] { Summoning(1, emptyRoomOnly, 40), Empty(2) }, world, secondsPerStep: 1, hours: 0.1, seed: 1);
+
+        LoopSimRun open = Run(emptyRoomOnly: false);
+        LoopSimRun gated = Run(emptyRoomOnly: true);
+
+        Assert.True(gated.DamageTaken > 0);
+        Assert.True(gated.DamageTaken * 2 < open.DamageTaken, $"gated {gated.DamageTaken} vs open {open.DamageTaken}");
+    }
+
     [Fact]
     public void SingleTargetDebuffLandsBeforeTheKill()
     {

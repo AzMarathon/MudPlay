@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.9**
+> **Version 3.162.0**
 > - Events run one at a time, start to finish, in the order they fired: one that fires while another is running waits its turn
 > - A loop or Auto-Lair event with a Stop after rule finishes (its Then included) before the next starts; one with no rule is done once it has started
 > - With an event waiting, the finished one's "go back" or loop passes to it, so the loop is restarted once, after the last

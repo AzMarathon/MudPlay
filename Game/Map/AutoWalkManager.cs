@@ -46,6 +46,20 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action<Direction, int, bool, int, string, Action<DoorOpenResult>>? _doorEnqueuer;
     private Action? _doorStopAll;
     private bool _awaitingDoorOpen;
+    // Doors the trip under way tried and couldn't open, each by the room it leaves
+    // and the room it leads to. Every plan the trip makes from then on refuses them
+    // (AbandonedDoorsFilter); a new trip starts with none.
+    private readonly HashSet<(RoomKey From, RoomKey To)> _abandonedDoors = new();
+    // Doors the last plan walked round though one step through them was shorter,
+    // each with the reason, for the log line and the bug report.
+    private readonly List<string> _doorsWalkedRound = new();
+    public IReadOnlyCollection<(RoomKey From, RoomKey To)> AbandonedDoors => _abandonedDoors;
+    public IReadOnlyList<string> DoorsWalkedRound => _doorsWalkedRound;
+    // Doors a loop run gave up on, handed over for the approach walk it is about to
+    // start, which would otherwise plan through them afresh. Taken by the next walk.
+    private (RoomKey From, RoomKey To)[]? _carriedAbandonedDoors;
+    public void RefuseDoorsOnNextWalk(IReadOnlyCollection<(RoomKey From, RoomKey To)> doors) =>
+        _carriedAbandonedDoors = doors.ToArray();
     private Action<Direction, string, Action<HiddenSearchResult>>? _hiddenSearchEnqueuer;
     private Action? _hiddenSearchStopAll;
     private bool _awaitingHiddenReveal;
@@ -1066,6 +1080,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // The setting as it stands now, for the bug report. Null: nothing is refused.
     public IReadOnlySet<(RoomKey From, RoomKey To)>? AutomaticWalkTeleports => _automaticWalkTeleports?.Invoke();
 
+    // What a walk the client starts on its own is planned with: the movement filter
+    // and the automatic-walk teleport list on top. For an engine that has to know
+    // the route such a walk will take before it issues one: Auto-Lair waits in the
+    // last room before the lair on it.
+    public IRoomFilter? AutomaticWalkFilter() =>
+        _automaticWalkTeleports?.Invoke() is { } allowed ? new AutomaticWalkTeleportFilter(_filter, allowed) : _filter;
+
     private IReadOnlySet<(RoomKey From, RoomKey To)>? _deferredWalkAutomaticTeleports;
     private IReadOnlySet<(RoomKey From, RoomKey To)>? _activeAutomaticTeleports;
 
@@ -1223,6 +1244,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     fetch,
                     ownedLeg);
                 _journeyStopsAt = null;
+                _abandonedDoors.Clear();
+            }
+            if (_carriedAbandonedDoors is { } carried)
+            {
+                _abandonedDoors.UnionWith(carried);
+                _carriedAbandonedDoors = null;
             }
             _legToJourneyGoal = IsJourneyGoal(destination);
         }
@@ -1281,7 +1308,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // clean slate — Reset takes us to Idle and clears any stale
         // _destination so failures don't leave the walker stuck.
         Reset();
-        _walkFilter = automaticTeleports is null ? null : new AutomaticWalkTeleportFilter(_filter, automaticTeleports);
+        // Innermost, so the teleport and boss-room rules of the walk wrap it as they
+        // wrap the movement filter.
+        IRoomFilter? doorsRefused = _abandonedDoors.Count == 0 ? null : new AbandonedDoorsFilter(_filter, _abandonedDoors);
+        _walkFilter = automaticTeleports is null
+            ? doorsRefused
+            : new AutomaticWalkTeleportFilter(doorsRefused ?? _filter, automaticTeleports);
         _bossRuleActive = _bossRule is { } bossRule && bossRule.IsFor(destination);
         if (_bossRuleActive && _bossRule!.WalkAround is { } aroundRooms)
             _walkFilter = new WalkAroundRoomsFilter(_walkFilter ?? _filter, aroundRooms);
@@ -1538,6 +1570,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             ? $"{moveCount} move(s), {actionCount} action(s)"
             : $"{moveCount} step(s)";
         Raise(new WalkEvent(WalkEventKind.Started, detail, destination));
+        NoteDoorsWalkedRound(source.Key, boatPlan is null && sysGotoPlan is null ? path : null);
 
         // Announce the items this route demands so the demand-driven
         // auto-search can arm for anything we're not carrying, and the rooms it
@@ -1626,6 +1659,41 @@ public sealed class AutoWalkManager : IRecoverableEngine
         }
 
         if (required.Count > 0) _pathItemAnnouncer(required);
+    }
+
+    // Says which doors the plan steps round: a door out of a room on the route into
+    // a room further along it, which the filter keeps routes off (it can't be opened,
+    // or only at poor odds) or which this trip already gave up on. A route three
+    // steps long beside a one-step door otherwise looks like a planning mistake, in
+    // the log and to whoever reads a bug report. Doors off the route aren't looked
+    // at: a door nobody was going to use isn't one that was avoided.
+    private void NoteDoorsWalkedRound(RoomKey source, IReadOnlyList<Direction>? path)
+    {
+        _doorsWalkedRound.Clear();
+        if (path is null || Filter is not { } filter) return;
+
+        IReadOnlyList<RoomKey> route = ExpandRouteKeys(source, path);
+        Dictionary<RoomKey, int> lastVisit = new(route.Count);
+        for (int i = 0; i < route.Count; i++) lastVisit[route[i]] = i;
+
+        for (int i = 0; i < route.Count - 1; i++)
+        {
+            if (_graph.GetRoom(route[i]) is not { } room) continue;
+            foreach ((Direction dir, RoomExit exit) in room.Exits)
+            {
+                if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) continue;
+                if (exit.Target.Equals(route[i + 1])) continue;   // the step the plan takes
+                if (!lastVisit.TryGetValue(exit.Target, out int ahead) || ahead <= i) continue;
+                string? why = _abandonedDoors.Contains((room.Key, exit.Target))
+                    ? "couldn't be opened earlier on this trip"
+                    : filter.DescribeDoorRefusal(in exit);
+                if (why is null) continue;
+                _doorsWalkedRound.Add(
+                    $"the door {dir.ToLongName()} from {room.Key} ({room.Name}) to {exit.Target}: {why}");
+            }
+        }
+        foreach (string door in _doorsWalkedRound)
+            _log?.Info("Walker", $"walk to {_destination}: going round {door}");
     }
 
     // Announce the freshly-planned route to any bound listener (the auto-light
@@ -1788,7 +1856,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         foreach (Direction dir in open)
         {
             if (_graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
-            if (teleports.IsTeleportRefused(at, in exit) && !refused.Contains((at, exit.Target)))
+            if (AutomaticWalkTeleportFilter.IsTeleport(in exit) && teleports.IsExitRefused(at, in exit)
+                && !refused.Contains((at, exit.Target)))
                 refused.Add((at, exit.Target));
             at = exit.Target;
         }
@@ -1803,8 +1872,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return $"{Why}the way there uses a teleport it isn't allowed. Tick \"{title}\" on {Where} to open it.";
         }
         string all = string.Join("; ", refused.Select(exit => $"\"{TeleportLine(exit).Title}\"").Distinct());
-        return $"{Why}every way there uses teleports it isn't allowed. No single line on {Where} opens one; "
-            + $"the shortest way needs all of: {all}.";
+        // Only the teleports on that one route were tried, so that is all it claims.
+        return $"{Why}the shortest way there uses {refused.Count} teleports it isn't allowed; ticking any one of them "
+            + $"alone opens no route. It needs all of these on {Where}: {all}.";
     }
 
     // The teleport spots as Settings → Teleports lists them (AppServices.TeleportChoices).
@@ -2292,7 +2362,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // move bytes are sent from OnTrapReply.
         if (exit.Hint == RoomExitHint.Trap && _trapEnqueuer is not null)
         {
-            string dirWord = DirectionWord(step.Direction);
+            string dirWord = step.Direction.ToLongName();
             if (_shouldDisarmTrap?.Invoke() ?? true)
             {
                 // Local character has the Traps skill — disarm it ourselves.
@@ -2358,7 +2428,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 + (exit.StatRequirement > 0
                     ? $" (req {exit.StatRequirement}, canBash {exit.CanBash})"
                     : "")
-                + (exit.KeyItemId > 0 ? $" (key {exit.KeyItemId})" : ""));
+                + (exit.KeyItemId > 0 ? $" (key {exit.KeyItemId})" : "")
+                // A poor-odds lock is only on a plan that found no short way round it.
+                + (Filter?.IsPoorOddsDoor(in exit) == true && Filter.DescribeDoorRefusal(in exit) is { } odds
+                    ? $": no way round within {DoorPolicy.PoorPickDetourSteps} extra steps; {odds}" : ""));
             _doorEnqueuer(step.Direction, exit.StatRequirement, exit.CanBash, exit.KeyItemId, "walker", OnDoorReply);
             return;
         }
@@ -2556,6 +2629,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 return;
 
             case DoorOpenResult.Failed failed:
+                if (failed.Unopenable && TryGoRoundDoor(failed.Reason)) return;
                 Raise(new WalkEvent(WalkEventKind.Failed,
                     $"door open failed: {failed.Reason}", _destination));
                 Reset();
@@ -2573,6 +2647,49 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 TryReplanOrFail(RoomConfidence.Suspect);
                 return;
         }
+    }
+
+    // The door on the step in flight beat this character: every verb it had ran out
+    // (the pick cap), or it had none. Failing the walk there left whoever issued it
+    // to send the same walk again, through the same door, for as long as it kept
+    // trying (Auto-Lair retries every two seconds). The door is given up on for the
+    // rest of the trip and the walk re-planned from here, which goes round it. The
+    // re-plan is not charged to the walk's desync budget: each one closes a door for
+    // good, so they can't ping-pong. False when the walk has to fail as before (the
+    // step can't be read back); true when it went round, or failed here because the
+    // door was the only way.
+    private bool TryGoRoundDoor(string reason)
+    {
+        if (_destination is not { } dest || _path is null || _index >= _path.Count
+            || _path[_index] is not MoveStep step
+            || _tracker.State.CurrentRoom is not { } here
+            || !here.Exits.TryGetValue(step.Direction, out RoomExit exit))
+            return false;
+
+        _abandonedDoors.Add((here.Key, exit.Target));
+        string door = $"the door {step.Direction.ToLongName()} from {here.Key} ({here.Name})";
+        IRoomFilter roundIt = new AbandonedDoorsFilter(_filter, _abandonedDoors);
+        IReadOnlyList<Direction>? round;
+        using (_activeThroughGates ? roundIt.SuspendAcquirableGates() : null)
+            round = _bfs.FindPath(here.Key, dest, roundIt, ignoreAvoids: _activeIgnoreAvoids);
+        if (round is null)
+        {
+            _log?.Info("Walker", $"walk to {dest}: gave up on {door} ({reason}), and there is no other way");
+            Raise(new WalkEvent(WalkEventKind.Failed,
+                $"couldn't open {door} ({reason}), and there is no other way to {dest}", _destination));
+            Reset();
+            return true;
+        }
+
+        _log?.Info("Walker",
+            $"walk to {dest}: gave up on {door} ({reason}); going round it, {round.Count} step(s) from here, "
+            + "and not planning through it again this trip");
+        DisarmStallWatchdog();
+        _stepInFlight = false;
+        Raise(new WalkEvent(WalkEventKind.Retrying,
+            $"couldn't open {door}; going round it", _destination));
+        ReplanInPlace(dest);
+        return true;
     }
 
     private void OnWinchReply(WinchResult result)
@@ -2687,21 +2804,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
         byte[] bytes = EncodeMove(step.Direction);
         EmitMoveBytes(bytes, $"move {step.Direction} (post-disarm)");
     }
-
-    private static string DirectionWord(Direction dir) => dir switch
-    {
-        Direction.N  => "north",
-        Direction.S  => "south",
-        Direction.E  => "east",
-        Direction.W  => "west",
-        Direction.NE => "northeast",
-        Direction.NW => "northwest",
-        Direction.SE => "southeast",
-        Direction.SW => "southwest",
-        Direction.U  => "up",
-        Direction.D  => "down",
-        _ => "?",
-    };
 
     private void SendCommandStep(CommandStep step)
     {
@@ -3104,7 +3206,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // paradigm-20260901-100523). _stepInFlight is already false above, so
         // rm's own reentrant tracker relocate can't be mistaken for an in-flight
         // step's arrival by OnTrackerStateChanged — it's a clean no-op there,
-        // leaving DoReplan as the only thing that actually replans. Stock realms /
+        // leaving ReplanInPlace as the only thing that actually replans. Stock realms /
         // no rm reply fall through to exactly the prior behavior.
         //
         // The ask is marked before it goes out, as an answer can come back inside
@@ -3130,7 +3232,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return false;
         }
 
-        DoReplan();
+        ReplanInPlace(dest);
         return true;
 
         // The answer belongs to the walk that asked. A stop, or another walk begun
@@ -3141,51 +3243,49 @@ public sealed class AutoWalkManager : IRecoverableEngine
         {
             if (!ReferenceEquals(_locateAsk, ask)) return;
             _locateAsk = null;
-            DoReplan();
+            ReplanInPlace(dest);
         }
+    }
 
-        void DoReplan()
+    // Re-source the path from the tracker's best-guess current room. WalkTo
+    // handles the existing Walking state by clearing it — silently, since
+    // _replanningInPlace suppresses the supersede Stopped that would otherwise
+    // abort a driving reroute.
+    //
+    // WalkTo's own Reset() zeroes _replanCount as part of that clear — it has no
+    // way to distinguish "a fresh user-initiated walk" from "this walk replanning
+    // itself", and the latter must NOT lose the count that makes MaxReplansPerWalk
+    // mean anything. Capture it now and restore it after the call, or the cap never
+    // actually accumulates: every replan attempt walks in seeing _replanCount back
+    // at 0, so a persistently blocked exit (not just an unlucky fumble streak) would
+    // retry through this path forever instead of failing once the budget is
+    // genuinely spent. The rolled-reveal count is carried over for the same reason:
+    // a replan from the room the reveal is in leads straight back to that step, and
+    // a fresh count each time would multiply its cap by the replans.
+    private void ReplanInPlace(RoomKey dest)
+    {
+        int replanCount = _replanCount;
+        int revealRetries = _revealRetries;
+        _replanningInPlace = true;
+        try
         {
-            // Re-source the path from the tracker's best-guess current
-            // room. WalkTo handles the existing Walking state by clearing
-            // it — silently, since _replanningInPlace suppresses the
-            // supersede Stopped that would otherwise abort a driving reroute.
-            //
-            // WalkTo's own Reset() zeroes _replanCount as part of that clear —
-            // it has no way to distinguish "a fresh user-initiated walk" from
-            // "this walk replanning itself", and the latter must NOT lose the
-            // count that makes MaxReplansPerWalk mean anything. Capture it now
-            // and restore it after the call, or the cap never actually
-            // accumulates: every replan attempt walks in seeing _replanCount
-            // back at 0, so a persistently blocked exit (not just an unlucky
-            // fumble streak) would retry through this path forever instead of
-            // failing once the budget is genuinely spent. The rolled-reveal count
-            // is carried over for the same reason: a replan from the room the
-            // reveal is in leads straight back to that step, and a fresh count
-            // each time would multiply its cap by the replans.
-            int replanCount = _replanCount;
-            int revealRetries = _revealRetries;
-            _replanningInPlace = true;
-            try
-            {
-                // Preserve the walk's planning flags — a bare WalkTo(dest) reverts to
-                // defaults, so a no-teleport walk would replan through a teleport.
-                // (Args evaluate before WalkTo's internal Reset clears the fields.)
-                WalkTo(dest,
-                    planThroughAcquirableGates: _activeThroughGates,
-                    armItemAcquisition: _activeArmAcquisition,
-                    avoidTeleports: _activeAvoidTeleports,
-                    avoidTraps: _activeAvoidTraps,
-                    ignoreAvoids: _activeIgnoreAvoids,
-                    preferTeleportFree: _activePreferTeleportFree,
-                    pickedRoute: _activePickedRoute);
-            }
-            finally
-            {
-                _replanCount = replanCount;
-                _revealRetries = revealRetries;
-                _replanningInPlace = false;
-            }
+            // Preserve the walk's planning flags — a bare WalkTo(dest) reverts to
+            // defaults, so a no-teleport walk would replan through a teleport.
+            // (Args evaluate before WalkTo's internal Reset clears the fields.)
+            WalkTo(dest,
+                planThroughAcquirableGates: _activeThroughGates,
+                armItemAcquisition: _activeArmAcquisition,
+                avoidTeleports: _activeAvoidTeleports,
+                avoidTraps: _activeAvoidTraps,
+                ignoreAvoids: _activeIgnoreAvoids,
+                preferTeleportFree: _activePreferTeleportFree,
+                pickedRoute: _activePickedRoute);
+        }
+        finally
+        {
+            _replanCount = replanCount;
+            _revealRetries = revealRetries;
+            _replanningInPlace = false;
         }
     }
 
@@ -4128,11 +4228,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // it only on a leg to its destination: a side trip that arrives or fails
         // leaves the journey standing for the leg that follows. Read from the leg
         // itself, not the event's room, which a stop-before boss room re-points.
-        if (evt.Kind == WalkEventKind.Stopped
-            || (evt.Kind is WalkEventKind.Finished or WalkEventKind.Failed && _legToJourneyGoal))
-            EndJourney();
+        bool endsJourney = evt.Kind == WalkEventKind.Stopped
+            || (evt.Kind is WalkEventKind.Finished or WalkEventKind.Failed && _legToJourneyGoal);
+        if (endsJourney) EndJourney();
         LastEvent = evt;
         Event?.Invoke(evt);
+        // The doors this trip gave up on go with it, after the listeners had their
+        // look at them: a Shortcut journey's silent legs, begun with no walk of the
+        // walker's own to clear them, would otherwise inherit the last trip's.
+        // A listener that started a new journey from the event keeps its own.
+        if (endsJourney && _journey is null) _abandonedDoors.Clear();
     }
 
     internal static byte[] EncodeMove(Direction dir)

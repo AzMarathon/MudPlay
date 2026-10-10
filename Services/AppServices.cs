@@ -3365,6 +3365,7 @@ public sealed class AppServices
             picklocksOverBashProvider:     () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").PicklocksOverBash,
             itemNameLookup:                id => ItemNames.GetName(id),
             maxBashableStrengthProvider:   () => MaxStrength.MaxAchievableStrength,
+            statsRead:                     () => Stats.HasParsed,
             // Read lazily at door-open time — Inventory is constructed after Door.
             holdsKeyItem:                  HoldsKeyItem,
             // Rest-interleave for bashing (bashing drains HP): pause a bash once HP
@@ -6802,7 +6803,12 @@ public sealed class AppServices
             resolve: ResolveAutoDiscardItem,
             isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems),
             log: Log,
-            isParadigm: onParadigm);
+            isParadigm: onParadigm,
+            // Worn gear counts toward an item's keep amount. The lit light is a pack
+            // copy to the game, though the listing sets it apart; it is known from
+            // the last full read only.
+            wornItems: () => Inventory.Snapshot.EquippedItems.Select(e => e.Name),
+            litLight: () => Inventory.Snapshot.ReadiedLight?.Name);
         // Auto-discard re-evaluates the pack on every inventory change — the
         // seam that surfaces chest dumps and freshly collected loot.
         Inventory.Changed += AutoDiscard.OnInventoryChanged;
@@ -6815,7 +6821,13 @@ public sealed class AppServices
             if (t.NewConfidence == Game.Map.RoomConfidence.Confirmed && t.NewRoom is { } arrived)
                 AutoDiscard.OnRoomEntered(arrived.Key);
         };
-        AutoDiscard.PacedSender = cmds => InventoryAction.SendPaced(cmds);
+        // The engine's commands go into the pacer under its own tags and with its
+        // own last-moment check, so it can take back what is still waiting when
+        // the rules change under them; nothing else in the queue is its to take.
+        AutoDiscard.PacedSender = (cmds, owner, mayGo) => InventoryAction.SendPaced(cmds, owner, mayGo);
+        AutoDiscard.RecallQueued = (owner, take) => InventoryAction.RecallPaced(owner, take);
+        // An item's flag unticked or its keep amount raised while a pile waits.
+        Resolver.GameDataChanged += _ => AutoDiscard.OnRulesChanged();
         AutoDiscard.SendsQueued = () => InventoryAction.HasPacedCommandsQueued;
         AutoDiscard.CancelQueuedSends = () => InventoryAction.CancelPaced();
         // A discard sent while the send gate is up is dropped unsent. And on Stock
@@ -7828,7 +7840,7 @@ public sealed class AppServices
         Lairs = new Game.Map.LairManager(Log);
         LairTimers = new Game.Map.LairTimerStore(GameData, RoomGraph, RoomTracker, Log);
         MonsterDeath.MonsterDied += evt => LairTimers.NoteKill(evt.At);
-        ExpResolver = new Game.Map.RouteExpResolver(RoomGraph, Bfs, LairTimers, GameData);
+        ExpResolver = new Game.Map.RouteExpResolver(RoomGraph, Bfs, LairTimers, GameData, Log);
 
         // Loops + lairs are per-game-data-set and share one on-disk tree,
         // so they reload together on every active-set change. Mirrors the
@@ -8955,9 +8967,10 @@ public sealed class AppServices
         // moment the sweep ends.
         AutoGetItems.SuppressDuringSweep = () => GhSweep.IsActive;
         AutoDiscard.SuppressDuringSweep = () => GhSweep.IsActive;
-        // Hides a full room refused were kept back for the sweep; it may have left
-        // the character somewhere with room.
-        GhSweep.PhaseChanged += () => { if (!GhSweep.IsActive) AutoDiscard.RecheckHeldHides(); };
+        // A sweep starting takes back the engine's piles still waiting to be sent.
+        // One ending may have left the character somewhere with room for the hides
+        // a full room refused, and lets the engine's own discards go again.
+        GhSweep.PhaseChanged += AutoDiscard.OnInventoryChanged;
 
         // Shop-source routing (PR C). On a one-shot walk-to that needs an
         // uncarried Item/Ticket-gate item a shop sells, detour to the
