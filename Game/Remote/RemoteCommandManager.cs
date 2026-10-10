@@ -279,6 +279,9 @@ public sealed class RemoteCommandManager : IDisposable
         // A command that only means something coming from another player over
         // telepath / gangpath (@dupe), so it can't be driven locally.
         PathChannelOnly,
+        // The master switch is off: no remote command but MasterSwitchCommand is
+        // followed, by this route as by chat.
+        MasterSwitchOff,
     }
 
     // Run a registered @-command from the LOCAL machine rather than from a chat
@@ -325,6 +328,14 @@ public sealed class RemoteCommandManager : IDisposable
                 return LocalInvokeResult.UnknownCommand;
             argv = Prepend(suffix, argv);
         }
+
+        // The rule is about remote commands, not about who sends them ("no remote
+        // command except @auto-all on or off should work"; user, 2026-10-09), so
+        // it holds here too. Unlike chat, the caller is told why: it already has
+        // the machine, so there is nothing to keep from it.
+        if (!normalised.Equals(MasterSwitchCommand, StringComparison.OrdinalIgnoreCase)
+            && SkippedForMasterSwitch(LocalSenderName, normalised))
+            return LocalInvokeResult.MasterSwitchOff;
 
         // Sender is a literal rather than a player name: handlers use it for reply
         // addressing and logging, and naming the origin keeps a locally-driven
@@ -539,6 +550,11 @@ public sealed class RemoteCommandManager : IDisposable
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
                 $"Denied {command} from {entry.Speaker} (lacks {registration.RequiredCategory}).");
+            // The one command let through with the master switch off must not be
+            // the one command that answers a stranger then: no denial either.
+            if (command.Equals(MasterSwitchCommand, StringComparison.OrdinalIgnoreCase)
+                && BlockedByMasterSwitch?.Invoke($"{command} from {entry.Speaker} (not granted)") == true)
+                return;
             SendDenialReply(channel.Value, entry.Speaker);
             return;
         }

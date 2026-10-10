@@ -117,6 +117,9 @@ public static class LocalApiActions
                 "hard-blocked — denied by any route",
             RemoteCommandManager.LocalInvokeResult.PathChannelOnly =>
                 "telepath / gangpath only — not available through the local API",
+            RemoteCommandManager.LocalInvokeResult.MasterSwitchOff =>
+                "the master switch (Auto-All) is off — no remote command is followed until it is back on; "
+                + "send @auto-all on to switch it on",
             _ => "failed",
         };
         return new CommandOutcome(command,

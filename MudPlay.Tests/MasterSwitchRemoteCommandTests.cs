@@ -206,5 +206,21 @@ public sealed class MasterSwitchRemoteCommandTests
         s.Engine.DispatchForTests(stranger);
 
         Assert.True(s.Controller.KillSwitchEngaged);
+        // And unanswered: a denial would make @auto-all the one command that tells
+        // a stranger the client is there.
+        Assert.Empty(s.Engine.LastSentForTests);
+    }
+
+    [Fact]
+    public void SwitchOn_AutoAllFromSomeoneWithoutTheGrant_GetsTheUsualDenial()
+    {
+        using Setup s = new();
+        ChatLogEntry stranger = new(Now, ChatChannel.TelepathIncoming, "Stranger", "@auto-all off",
+            "Stranger telepaths: @auto-all off");
+
+        s.Engine.DispatchForTests(stranger);
+
+        Assert.False(s.Controller.KillSwitchEngaged);
+        Assert.Single(s.Engine.LastSentForTests);
     }
 }
