@@ -1,6 +1,6 @@
 # Version history
 
-## 3.160.4
+## 3.160.5
 
 - Crystal Lake's teleport rooms are never on a route, for any character, with or without a boat: walks, loop approaches, Auto-Lair travel and automatic trips go round them, and no raft or skiff is offered, fetched or bought for the lake
 - When those rooms are the only way, a walk you start shows one card to cross them on your pick (nothing fetched); a trip the client starts stops and logs why
@@ -8,6 +8,17 @@
 - A route whose only way there needs a key or other item goes round hazard rooms you hold no counter for when it can, and asks for the key alone (the walk to the Hidden Study no longer crossed the lake or sent for a log raft)
 - A loop recorded across the lake still runs as before
 - bug reports addressed: paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314
+
+## 3.160.2
+
+- Chest Offload Drop / Drop All hide when Hide items when discarding is on
+- Hidden items leave the Chest Offload list
+- A hide a full room refuses is retried in each new room
+- A sale, drop, ✕ or Clear list calls a waiting hide off
+- No hide sent for a copy not in the pack
+- Refused or unanswered auto-discard drops no longer stay counted all session
+- No discard after a death or reconnect until the inventory is read
+- Items named after a coin (iron crown) no longer read as coin
 
 ## 3.160.1
 
