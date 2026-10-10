@@ -46,7 +46,11 @@ public static class TBInfoCastTeleportResolver
     public static bool IsTeleportSpell(KnownSpellCatalog catalog, int spellNumber)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        if (catalog.GetFormulaByNumber(spellNumber) is not { } spell) return false;
+        return catalog.GetFormulaByNumber(spellNumber) is { } spell && IsTeleportSpell(spell);
+    }
+
+    public static bool IsTeleportSpell(SpellFormulaInput spell)
+    {
         foreach (SpellAbility ab in spell.Abilities)
             if (ab.Code == TeleportRoomCode) return true;
         return false;

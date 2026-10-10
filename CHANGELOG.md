@@ -1,11 +1,27 @@
 # Version history
 
-## 3.159.28
+## 3.160.2
 
-- Chest Offload's Drop and Drop All hide the items when Settings → Other → Hide items when discarding is ticked, and a hidden item leaves the list
-- A discard's hide that a full room refuses (Stock) keeps the item and is sent again in each new room entered until it lands; never dropped instead
-- No hide is sent for a copy that isn't in the pack or is already on its way, so a second Drop before the game answers sends nothing
-- An item named after a coin (iron crown, sack of coins) leaves the pack and the list when hidden
+- Chest Offload Drop / Drop All hide when Hide items when discarding is on
+- Hidden items leave the Chest Offload list
+- A hide a full room refuses is retried in each new room
+- A sale, drop, ✕ or Clear list calls a waiting hide off
+- No hide sent for a copy not in the pack
+- Refused or unanswered auto-discard drops no longer stay counted all session
+- Items named after a coin (iron crown) no longer read as coin
+
+## 3.160.1
+
+- Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
+- In that mode the room tooltip and the Legend name the colours
+
+## 3.160.0
+
+- Items a hang-up penalty dropped are picked up on re-entering the game
+- Only on a realm set to drop items, and never more than it drops
+- The gear set last equipped is applied again for pieces that came back
+- Loops and walks wait for the check
+- Never changes when the client hangs up
 
 ## 3.159.27
 

@@ -192,6 +192,27 @@ public static class BugReportBuilder
         // for this realm. It explains HP or items missing after a reconnect.
         Kv(sb, "Realm hang-up penalty",
             Game.Health.HangupPenaltyNotice.Describe(svc.ResolveActiveRealm()?.Realm));
+        // The check for what a penalised hang-up dropped: whether it runs on this
+        // realm, how the last one ended, and what it found short.
+        int hangupItemCap = Game.Health.HangupPenaltyNotice.MaxItemsDropped(svc.ResolveActiveRealm()?.Realm);
+        Kv(sb, "Hang-up item check",
+            (hangupItemCap > 0
+                ? $"on (the realm drops up to {hangupItemCap} item(s) for a hang-up)" : "off (the realm's settings drop no items)")
+            + $"; now: {svc.HangupItems.Status}; last: {svc.HangupItems.LastOutcome}");
+        static string HeldNames(IEnumerable<(string Name, int Count)> items) =>
+            string.Join(", ", items.Select(m => m.Count > 1 ? $"{m.Count} {m.Name}" : m.Name));
+        Kv(sb, "Missing after hang-up", svc.HangupItems.LastMissing.Count == 0
+            ? "(nothing)"
+            : HeldNames(svc.HangupItems.LastMissing)
+              + (svc.HangupItems.LastStillMissing.Count == 0
+                  ? "; all back"
+                  : "; still missing: " + HeldNames(svc.HangupItems.LastStillMissing)));
+        Kv(sb, "Held list on file", svc.Profile.Current?.HeldAtDisconnect is { } heldList
+            ? $"{heldList.Items.Count} kind(s) of item, written {heldList.At.ToLocalTime():yyyy-MM-dd HH:mm:ss} "
+              + $"on {heldList.Realm ?? "(no realm)"}, "
+              + (heldList.Room is { } heldRoom ? $"room {heldRoom.Map}/{heldRoom.Room}" : "room not known")
+              + (heldList.PenaltiesSpanned > 1 ? $", covering {heldList.PenaltiesSpanned} drops of the link" : "")
+            : "(none)");
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
             + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));
@@ -230,6 +251,9 @@ public static class BugReportBuilder
         Kv(sb, "Automatic update check", svc.Settings.Current.AutoCheckForUpdates ? "on" : "off");
         Kv(sb, "Map other floors", $"{svc.Settings.Current.MapOtherFloors}, {svc.Settings.Current.MapOtherFloorsLevels} floor(s), overlap limit {svc.Settings.Current.MapOtherFloorsMaxOverlapPercent}%");
         Kv(sb, "Map loop lines", svc.Profile.Current?.NavLoopLinesMode.ToString() ?? "(no profile)");
+        // Says what a red, yellow or green room in a map screenshot is.
+        Kv(sb, "Map room spells", svc.Profile.Current is { } mapProfile
+            ? Game.Map.SpellDisplayModes.Read(mapProfile).ToString() : "(no profile)");
         // What a colour in a screenshot or a "the red text" in a report really is.
         Kv(sb, "Terminal colours", svc.DescribeTerminalColors());
         Kv(sb, "Last update check", DescribeUpdate(svc));

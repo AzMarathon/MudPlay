@@ -63,6 +63,7 @@ public static class NavActivity
         (MovementCoordinator.PartyVitalsGate, "party member hurt", NavActivityKind.Waiting, false),
         (MovementCoordinator.MemberDisconnectGate, "member disconnected", NavActivityKind.Waiting, true),
         (MovementCoordinator.ReconnectReformGate, "re-forming the party", NavActivityKind.Waiting, false),
+        (MovementCoordinator.HangupItemCheckGate, "checking for items a hang-up dropped", NavActivityKind.Waiting, false),
         (MovementCoordinator.PartyInviteGate, "waiting on an invite", NavActivityKind.Waiting, true),
         // A walk that hasn't set off: the one hold that answers "why isn't it moving?"
         // at the very start, so it gets a chip though it lasts seconds.

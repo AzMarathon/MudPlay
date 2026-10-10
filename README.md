@@ -1,11 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.28**
-> - Chest Offload's Drop and Drop All hide the items when Settings → Other → Hide items when discarding is ticked, and a hidden item leaves the list
-> - A discard's hide that a full room refuses (Stock) keeps the item and is sent again in each new room entered until it lands; never dropped instead
-> - No hide is sent for a copy that isn't in the pack or is already on its way, so a second Drop before the game answers sends nothing
-> - An item named after a coin (iron crown, sack of coins) leaves the pack and the list when hidden
+> **Version 3.160.2**
+> - Chest Offload Drop / Drop All hide when Hide items when discarding is on
+> - Hidden items leave the Chest Offload list
+> - A hide a full room refuses is retried in each new room
+> - A sale, drop, ✕ or Clear list calls a waiting hide off
+> - No hide sent for a copy not in the pack
+> - Refused or unanswered auto-discard drops no longer stay counted all session
+> - Items named after a coin (iron crown) no longer read as coin
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
