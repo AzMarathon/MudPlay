@@ -361,6 +361,24 @@ public sealed class ChestOpenTracker : IDisposable
     private void SendOpen(InventorySnapshot before)
     {
         _beforeOverride = null;
+        // The master switch went off while the button's read before the open was
+        // out: the open is held back, as a press made now would be.
+        if (RefuseOpen?.Invoke(_buttonTarget) == true)
+        {
+            _queued.Clear();
+            _opened.Remove(_buttonTarget);
+            if (_opened.Count > 0)
+            {
+                // Opens typed meanwhile did go out. With no read after them they
+                // end as a typed open does with the switch off: not read.
+                _afterReadOut = false;
+                EndUnread();
+                return;
+            }
+            ++_generation;   // the before-read's timeout
+            _step = Step.Idle;
+            return;
+        }
         SendOwnOpen(_buttonTarget);
         PlayerOpened?.Invoke(_buttonTarget);
         StartAfterRead(before);

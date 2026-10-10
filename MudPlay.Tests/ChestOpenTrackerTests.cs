@@ -316,6 +316,40 @@ public sealed class ChestOpenTrackerTests : IDisposable
         Assert.True(_tracker.IsOpening);
     }
 
+    // Pressed with the switch on; it went off while the button's first `i` was
+    // still out. The `open` that read was for is held back like a press made now,
+    // whether the read comes back or times out, and the tracker is free again.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void OpenButton_SwitchGoesOffWhileItsFirstReadIsOut_TheOpenIsHeldBack(bool readComesBack)
+    {
+        bool off = false;
+        List<string> asked = new();
+        _tracker.RefuseOpen = name => { asked.Add(name); return off; };
+        List<bool> settled = new();
+        _tracker.OpenSettled += result => settled.Add(result.Read);
+        Inventory("oak chest, 2 rusty dagger", gold: 10);
+        _tracker.Open("oak chest");
+        Assert.Equal(new[] { "i" }, _sent);
+
+        off = true;
+        if (readComesBack) Inventory("oak chest, 2 rusty dagger", gold: 10);
+        else RunScheduled();                                 // the read's timeout
+
+        Assert.Equal(new[] { "i" }, _sent);                  // no `open oak chest`
+        Assert.Equal(new[] { "oak chest", "oak chest" }, asked);
+        Assert.False(_tracker.IsOpening);
+        Assert.Empty(settled);                               // no open was made to settle
+        RunScheduled();
+        Assert.Equal(new[] { "i" }, _sent);
+
+        off = false;
+        _tracker.Open("oak chest");
+        Inventory("oak chest, 2 rusty dagger", gold: 10);
+        Assert.Equal(new[] { "i", "i", "open oak chest" }, _sent);
+    }
+
     [Fact]
     public void TypedOpen_OfSomethingThatIsntACarriedChest_IsIgnored()
     {
