@@ -2619,33 +2619,61 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
-    // A loop's own legs are the user's path. They are judged as they were before the
-    // lake was closed to routes: with a boat the leg crosses, without one it doesn't.
+    // A loop has no boat exception (user, 2026-10-10: nobody loops the lake's teleport
+    // rooms). Its legs are planned like any route: shore to shore they go round, and
+    // a leg to a waypoint in a sea room doesn't expand, raft or no raft.
     [Fact]
-    public void LoopLeg_AcrossTheLake_IsJudgedByTheBoat_AsBefore()
+    public void LoopLegs_GoRoundTheLake_AndNeverIntoIt_BoatOrNoBoat()
     {
-        // West shore to the far side of the lake's last sea room and back.
-        LoopWaypoint[] loop = { new() { Room = "1/1" }, new() { Room = "1/4" } };
         WithLake(LakeCrossingJson, (bfs, graph, filter) =>
         {
-            bool boat = filter.ItemCarriedProbe!(690);
+            LoopWaypoint[] shoreToShore = { new() { Room = "1/1" }, new() { Room = "1/5" } };
             (IReadOnlyList<LoopStep> steps, IReadOnlyList<(RoomKey From, RoomKey To)> unreachable) =
-                LoopExpander.Expand(loop, bfs, filter);
+                LoopExpander.Expand(shoreToShore, bfs, filter);
+            Assert.Empty(unreachable);
+            Assert.Equal(8, steps.Count);   // four by the path each way, not four across
+            Assert.Equal(Direction.N, Assert.IsType<MoveLoopStep>(steps[0]).Direction);
+            Assert.DoesNotContain(
+                LoopExpander.ResolveCycleRoomKeys(shoreToShore, bfs, graph, filter), filter.IsClosedToRoutes);
 
-            if (boat)
-            {
-                // Three sea rooms out and three back, where a planned route has none.
-                Assert.Empty(unreachable);
-                Assert.Equal(6, steps.Count);
-                Assert.All(steps.Take(3), s => Assert.Equal(Direction.E, Assert.IsType<MoveLoopStep>(s).Direction));
-            }
-            else
-            {
-                // No boat: the leg into the lake doesn't expand, as it never did.
-                Assert.Equal(new[] { (new RoomKey(1, 1), new RoomKey(1, 4)) }, unreachable);
-            }
-            // The scope is gone once the legs are expanded.
-            Assert.True(filter.IsClosedToRoutes(new RoomKey(1, 2)));
+            LoopWaypoint[] intoTheLake = { new() { Room = "1/1" }, new() { Room = "1/4" } };
+            (_, unreachable) = LoopExpander.Expand(intoTheLake, bfs, filter);
+            Assert.Contains((new RoomKey(1, 1), new RoomKey(1, 4)), unreachable);
+        });
+    }
+
+    // The lake's rooms that carry no teleporting spell are ordinary ground whatever
+    // they are called: no raft is asked for, no card is shown and they are not
+    // avoided (user, 2026-10-10). Which room is which comes from its spell alone.
+    [Fact]
+    public void LakeRoomsWithoutTheSpell_AreOrdinaryGround_NeedingNoRaft()
+    {
+        string lane = LakeCrossingJson.Replace("\"Name\": \"Path\"", "\"Name\": \"Crystal Lake\"");
+        WithLake(lane, (bfs, graph, filter) =>
+        {
+            RoomKey shore = new(1, 1), bank = new(1, 9);
+            IReadOnlyList<Direction>? path = bfs.FindPath(shore, bank, filter);
+
+            Assert.Equal(
+                new[] { shore, new RoomKey(1, 6), new RoomKey(1, 7), new RoomKey(1, 8), new RoomKey(1, 5), bank },
+                RouteChoicePlanner.BuildKeyPath(graph, shore, path!));
+            Assert.Equal("Crystal Lake", graph.GetRoom(new RoomKey(1, 7))!.Name);
+            Assert.False(filter.IsClosedToRoutes(new RoomKey(1, 7)));
+            Assert.False(filter.IsUncounteredHazardRoom(new RoomKey(1, 7)));
+            Assert.Null(RouteChoicePlanner.Evaluate(bfs, filter, graph, shore, bank));
+        });
+    }
+
+    // The sea rooms are closed before the inventory has been read as well: nothing
+    // carried would open them, so there is nothing to wait for.
+    [Fact]
+    public void Lake_IsClosed_BeforeTheInventoryIsRead()
+    {
+        WithLake(HazardShortcutRoomsJson, (bfs, graph, filter) =>
+        {
+            filter.InventoryReadyProbe = () => false;
+            Assert.True(filter.IsClosedToRoutes(new RoomKey(1, 5)));
+            Assert.Equal(3, bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 9), filter)!.Count);
         });
     }
 

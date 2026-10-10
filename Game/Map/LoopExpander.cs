@@ -106,7 +106,7 @@ public static class LoopExpander
             RoomKey to = waypoints[(i + 1) % waypoints.Count].Key;
             if (from.Equals(to)) continue;
             RoomKey cursor = from;
-            if (LegPath(bfs, from, to, filter) is { Count: > 0 } path)
+            if (bfs.FindPath(from, to, filter) is { Count: > 0 } path)
             {
                 foreach (Direction d in path)
                 {
@@ -132,21 +132,12 @@ public static class LoopExpander
         // room (e.g. hand pies to the barmaid, then convert the coin, without leaving).
         if (from.Equals(to)) return;
 
-        IReadOnlyList<Direction>? path = LegPath(bfs, from, to, filter);
+        IReadOnlyList<Direction>? path = bfs.FindPath(from, to, filter);
         if (path is null || path.Count == 0)
         {
             unreachable.Add((from, to));
             return;
         }
         foreach (Direction d in path) steps.Add(new MoveLoopStep(d));
-    }
-
-    // One leg of a loop, waypoint to waypoint. A loop is the user's own path, so a
-    // room closed to planned routes (Crystal Lake's sea rooms) is not closed to it
-    // on that account: the leg is judged as it was before those rooms were closed.
-    private static IReadOnlyList<Direction>? LegPath(BfsMapper bfs, RoomKey from, RoomKey to, IRoomFilter? filter)
-    {
-        using (filter?.PlanningRecordedPath())
-            return bfs.FindPath(from, to, filter);
     }
 }

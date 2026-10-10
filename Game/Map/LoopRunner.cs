@@ -889,6 +889,20 @@ public sealed class LoopRunner : IRecoverableEngine
         return StartInternal(loop, isRecovery: false, gateFallback: true);
     }
 
+    // Why this loop can't be run at all, or null when it can: it has a waypoint in a
+    // room no route enters. Asked before the walk to the loop too, so nobody is
+    // walked to the lake to be told there.
+    public string? RefusalFor(Loop loop)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        if (_filter is null) return null;
+        List<RoomKey> closed = loop.Waypoints.Select(w => w.Key).Where(_filter.IsClosedToRoutes).Distinct().ToList();
+        if (closed.Count == 0) return null;
+        string first = _graph?.GetRoom(closed[0])?.Name is { Length: > 0 } name ? $"{closed[0]} ({name})" : closed[0].ToString();
+        return $"loop '{loop.Name}' has {closed.Count} waypoint(s) in rooms that teleport at random and that nothing "
+            + $"protects from, {first} the first: no loop or automatic walk enters them";
+    }
+
     // The walk to the loop is the user's: set by a user Start and dropped the moment
     // the loop is reached (BeginCircle). The user asked to go to the loop, not for
     // what the run does afterwards, so a walk back to it after a detour or a flee is
@@ -1025,6 +1039,17 @@ public sealed class LoopRunner : IRecoverableEngine
         // otherwise clear it) so the one-shot survives to BeginCircle.
         _suppressFirstWaypointEvent = suppressFirstWaypointEvent;
         _returningFromDetour = suppressFirstWaypointEvent;
+
+        // A waypoint in a room no route enters (Crystal Lake's teleporting sea
+        // rooms) can't be walked to, and a loop that stood in one would be thrown
+        // off it on most entries. Refused here, by name, rather than started with
+        // a leg missing.
+        if (RefusalFor(loop) is { } refusal)
+        {
+            _log?.Warn("LoopRunner", $"Start refused: {refusal}");
+            RaiseAfterReset(new LoopEvent(LoopEventKind.Failed, refusal));
+            return false;
+        }
 
         RoomKey? currentKey = _tracker.State.CurrentRoom?.Key;
 

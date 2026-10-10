@@ -48,6 +48,10 @@ public sealed class LoopRunnerTests : IDisposable
         public HashSet<RoomKey> Avoided { get; } = new();
         public bool IsAvoided(RoomKey key) => Avoided.Contains(key);
 
+        // Rooms no route enters (Crystal Lake's teleporting sea rooms). Empty by default.
+        public HashSet<RoomKey> ClosedToRoutes { get; } = new();
+        public bool IsClosedToRoutes(RoomKey room) => ClosedToRoutes.Contains(room);
+
         // Acquirable-gate model for the gate-aware resume test: an exit whose Target
         // is in GatedTargets is blocked UNLESS gates are suspended. Empty by default,
         // so existing tests stay fail-open.
@@ -161,6 +165,31 @@ public sealed class LoopRunnerTests : IDisposable
     // pair.
     private static Loop AbCycle() =>
         new("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) });
+
+    // A loop with a waypoint in one of Crystal Lake's teleport rooms is not started
+    // with a leg missing: it is refused, by name, and nothing is sent. There is no
+    // boat exception (user, 2026-10-10: nobody loops those rooms).
+    [Fact]
+    public void Start_LoopWithAWaypointInARoomNoRouteEnters_IsRefusedWithTheReason()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Filter.ClosedToRoutes.Add(new RoomKey(1, 2));
+
+        Assert.NotNull(h.Runner.RefusalFor(AbCycle()));
+        Assert.False(h.Runner.Start(AbCycle()));
+
+        LoopEvent failed = Assert.Single(h.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.Contains("1 waypoint(s) in rooms that teleport at random", failed.Detail);
+        Assert.Contains("1/2 (B)", failed.Detail);
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Empty(h.Sent);
+
+        // The same loop runs once the room is ordinary ground again.
+        h.Filter.ClosedToRoutes.Clear();
+        Assert.Null(h.Runner.RefusalFor(AbCycle()));
+        Assert.True(h.Runner.Start(AbCycle()));
+    }
 
     [Fact]
     public void Start_EmptyLoop_ReturnsFalse()

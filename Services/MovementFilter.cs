@@ -382,7 +382,6 @@ public sealed class MovementFilter : IRoomFilter
             if (!_keepUncounteredHazards && !_keepUnprotectableHazards) return false;
             if (_openHazardRooms?.Contains(exit.Target) == true) return false;
         }
-        if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
         if (Hazards is null || RoomEntrySpellProbe is not { } spellOf) return false;
 
         int spell = spellOf(exit.Target);
@@ -390,9 +389,11 @@ public sealed class MovementFilter : IRoomFilter
         RoomHazardIndex.RoomHazard? hazard = Hazards.HazardForSpell(spell);
         if (hazard is null) return false;
         // A room that teleports its counter's holders too opens to no plan: not with
-        // the item carried, arranged for or assumed in hand. A loop's own legs are
-        // the exception, judged by the item as they always were.
-        if (!HazardCounterProtects(hazard) && !_recordedPath) return true;
+        // the item carried, arranged for or assumed in hand, and not for a loop's
+        // own legs either (user, 2026-10-10: nobody loops those rooms). Nothing
+        // carried changes that, so it doesn't wait for the inventory to be read.
+        if (!HazardCounterProtects(hazard)) return true;
+        if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
         if (!_acquirableGateSuspended) return !hazard.IsSatisfiedBy(carries);
         if (!_keepUncounteredHazards) return false;
 
@@ -422,28 +423,6 @@ public sealed class MovementFilter : IRoomFilter
             && Hazards?.HazardForSpell(spell) is { } hazard
             && !HazardCounterProtects(hazard)
             && IsUncounteredHazardRoom(room);
-    }
-
-    // While set, a room that teleports its counter's holders is judged by the item
-    // like any other hazard room. Set/cleared through PlanningRecordedPath's scope.
-    private bool _recordedPath;
-
-    // The scope a loop's legs are planned in. A loop is a path the user laid out
-    // room by room; one that crosses the lake with a boat ran before the lake was
-    // closed to routes and still does (user, 2026-10-09).
-    public IDisposable PlanningRecordedPath() => new RecordedPathScope(this);
-
-    private sealed class RecordedPathScope : IDisposable
-    {
-        private readonly MovementFilter _filter;
-        private readonly bool _was;
-        public RecordedPathScope(MovementFilter filter)
-        {
-            _filter = filter;
-            _was = filter._recordedPath;
-            filter._recordedPath = true;
-        }
-        public void Dispose() => _filter._recordedPath = _was;
     }
 
     private bool InventoryKnown => InventoryReadyProbe?.Invoke() == true;

@@ -942,7 +942,10 @@ public static class RouteChoicePrompt
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(loop);
+        // A loop the runner will refuse is handed straight to it, to be refused there
+        // with its reason, instead of walking to the loop first.
         RoomKey? entry = services.RoomTracker.State.CurrentRoom is { } here
+            && services.LoopRunner.RefusalFor(loop) is null
             ? services.LoopRunner.NearestRoomOf(loop, here.Key)
             : null;
         if (entry is not { } loopRoom)

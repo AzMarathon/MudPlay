@@ -34,8 +34,6 @@ public sealed class WalkAroundRoomsFilter : IRoomFilter
         IReadOnlyCollection<RoomKey>? openHazardRooms = null) =>
         _inner?.SuspendAcquirableGatesExcept(keepClosed, keepUncounteredHazards, openHazardRooms) ?? NoSuspension.Instance;
     public bool IsClosedToRoutes(RoomKey room) => _inner?.IsClosedToRoutes(room) ?? false;
-    public IDisposable PlanningRecordedPath() => _inner?.PlanningRecordedPath() ?? NoSuspension.Instance;
-
     private sealed class NoSuspension : IDisposable
     {
         public static readonly NoSuspension Instance = new();

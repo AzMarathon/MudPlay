@@ -52,8 +52,6 @@ public sealed class LevelIgnoringFilter(IRoomFilter inner, int? atLevel = null) 
 
     public bool IsClosedToRoutes(RoomKey room) => inner.IsClosedToRoutes(room);
 
-    public IDisposable PlanningRecordedPath() => inner.PlanningRecordedPath();
-
     private bool Excluded(int minLevel, int maxLevel) =>
         atLevel is int level && OutsideLevelWindow(level, minLevel, maxLevel);
 
