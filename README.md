@@ -1,14 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.7**
-> - A gear command sent by a macro, alias, trigger or event mid-fight re-attacks at once, like a typed one
-> - A spell fight stopped by something other than your own cast is picked up on the next round tick, not only on a combat line
-> - No rest or meditate is started in a room whose own spell damages you every tick (volcano heat, swamp poison, a river with no raft)
+> **Version 3.161.10**
+> - No rest or meditate in a room whose own spell damages you every tick (volcano heat, swamp poison, a river with no raft)
 > - The walk carries on and the rest starts in the next room that doesn't hurt
 > - *Heal (rest)* is cast standing while that rest is owed
 > - With the room's counter worn or carried, resting is as normal
-> - A room's own damage no longer puts you in combat, swaps gear, sends an Enter, or counts as a round in Round Totals
+> - A room's own damage no longer puts you in combat, swaps gear, sends an Enter or counts in Round Totals
+> - A gear command from a macro, alias, trigger or event mid-fight re-attacks at once
+> - A stopped spell fight is picked up on the next round tick, not only on a combat line
 > - Bug report: a *Room spell and resting* line
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

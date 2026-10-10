@@ -1,15 +1,29 @@
 # Version history
 
-## 3.161.7
+## 3.161.10
 
-- A gear command sent by a macro, alias, trigger or event mid-fight re-attacks at once, like a typed one
-- A spell fight stopped by something other than your own cast is picked up on the next round tick, not only on a combat line
-- No rest or meditate is started in a room whose own spell damages you every tick (volcano heat, swamp poison, a river with no raft)
+- No rest or meditate in a room whose own spell damages you every tick (volcano heat, swamp poison, a river with no raft)
 - The walk carries on and the rest starts in the next room that doesn't hurt
 - *Heal (rest)* is cast standing while that rest is owed
 - With the room's counter worn or carried, resting is as normal
-- A room's own damage no longer puts you in combat, swaps gear, sends an Enter, or counts as a round in Round Totals
+- A room's own damage no longer puts you in combat, swaps gear, sends an Enter or counts in Round Totals
+- A gear command from a macro, alias, trigger or event mid-fight re-attacks at once
+- A stopped spell fight is picked up on the next round tick, not only on a combat line
 - Bug report: a *Room spell and resting* line
+
+## 3.161.7
+
+- Party item gates: after crossing, one `par` checks a member credited with a copy from memory
+- A member `par` no longer lists as following loses that credit, so the next trip fetches for them
+
+## 3.161.6
+
+- The client no longer stands still reading a very long line: a search in a room holding hundreds of items froze it for seconds each time
+- Every line from the game is read faster (a slowdown that came in with 3.157.8)
+- Roomba logs one line per room searched, with counts, in place of the full hidden list after every search
+- The program log warns when one line held the client up for a quarter of a second or more, with its length and how long it took
+- Bug report: how much is on the floor here and Roomba's slowest floor read
+- bug reports addressed: paradigm-20261009-164508
 
 ## 3.161.5
 
