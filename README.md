@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.6**
+> **Version 3.161.7**
 > - Party item gates: after crossing, one `par` checks a member credited with a copy from memory
 > - A member `par` no longer lists as following loses that credit, so the next trip fetches for them
 >
