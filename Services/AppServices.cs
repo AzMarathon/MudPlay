@@ -10023,6 +10023,14 @@ public sealed class AppServices
         LocationEquip.MasterSwitchOff = MasterSwitchOff("Location gear");
         PathItemFloor.MasterSwitchOff = MasterSwitchOff("Route item pickup");
         ChestOpens.MasterSwitchOff = MasterSwitchOff("Chest open read");
+        ChestOpens.RefuseOpen = name =>
+        {
+            if (!AutoModeController.Blocks("Chest open read", $"Open button ({name})")) return false;
+            Log.Info(Game.Inventory.ChestOpenTracker.LogCategory,
+                $"Open button for {name} refused: the master switch is off.");
+            WriteTerminalNotice("[Chest Offload cannot open and read a chest: the master switch (Auto-All) is off]");
+            return true;
+        };
         AutoDiscard.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
         AutoHazardCounterProvisioner.MasterSwitchOff = MasterSwitchOff("Hazard counter item");
         ManaRegen.MasterSwitchOff = MasterSwitchOff("Mana-regen reroll");

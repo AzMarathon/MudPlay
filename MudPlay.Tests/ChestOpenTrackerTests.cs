@@ -290,6 +290,32 @@ public sealed class ChestOpenTrackerTests : IDisposable
         Assert.Equal(new[] { false, true }, read);
     }
 
+    // The window's Open button with the master switch off sent `i` and
+    // `open oak chest`, then skipped the read after it and listed nothing. The
+    // press is refused before anything goes out; with the switch back on the
+    // button works as it did.
+    [Fact]
+    public void OpenButton_Refused_SendsNothing_AndLeavesTheTrackerFree()
+    {
+        bool off = true;
+        List<string> asked = new();
+        _tracker.RefuseOpen = name => { asked.Add(name); return off; };
+        Inventory("oak chest, 2 rusty dagger", gold: 10);
+
+        _tracker.Open("oak chest");
+
+        Assert.Equal(new[] { "oak chest" }, asked);
+        Assert.Empty(_sent);
+        Assert.Empty(_scheduled);
+        Assert.False(_tracker.IsOpening);
+
+        off = false;
+        _tracker.Open("oak chest");
+
+        Assert.Equal(new[] { "i" }, _sent);
+        Assert.True(_tracker.IsOpening);
+    }
+
     [Fact]
     public void TypedOpen_OfSomethingThatIsntACarriedChest_IsIgnored()
     {

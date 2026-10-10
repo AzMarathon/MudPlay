@@ -176,6 +176,15 @@ public sealed class ChestOpenTracker : IDisposable
     // really carried this moment rather than a cached copy, then open.
     public void Open(string name)
     {
+        // With the master switch off the read after the open is not sent, so the
+        // button would send `i` and `open` and then list nothing. The whole press
+        // is refused instead, and so are the opens still waiting behind an
+        // earlier one. A typed `open` is the player's own command and goes out.
+        if (RefuseOpen?.Invoke(name) == true)
+        {
+            _queued.Clear();
+            return;
+        }
         if (_step != Step.Idle)
         {
             _queued.Enqueue(name);
@@ -398,6 +407,11 @@ public sealed class ChestOpenTracker : IDisposable
     // The master switch (true = off). Asked only where the tracker would send by
     // itself: the read after an open, and the loot line said to the room.
     public Func<bool>? MasterSwitchOff { get; set; }
+
+    // Asked as the window's Open button is pressed, with the container's name:
+    // true means the press was refused (the master switch is off) and the user
+    // has been told, so nothing is sent.
+    public Func<string, bool>? RefuseOpen { get; set; }
 
     // Between an open and the read after it, whatever the pack is seen to gain or
     // lose line by line — a pickup, a sale, a piece put on — is not the chest's
