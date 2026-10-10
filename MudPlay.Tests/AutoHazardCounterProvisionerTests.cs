@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using MudPlay.Game;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 using Xunit;
@@ -60,6 +61,7 @@ public sealed class AutoHazardCounterProvisionerTests
         public bool Following = false;   // in a party, not the leader
         public string? Halted;    // reason from the halt callback, null until halted
         public AutoHazardCounterProvisioner Engine { get; }
+        public AutoModeController Controller { get; }
 
         public Harness(RoomHazardIndex.RoomHazard? hazard = null, Room? room = null)
         {
@@ -84,6 +86,10 @@ public sealed class AutoHazardCounterProvisionerTests
                 now:            () => Now,
                 followingLeader: () => Following);
             Engine.SetWireSender(_ => { });
+            ProfileService profile = new();
+            profile.LoadBlank();
+            Controller = new AutoModeController(profile);
+            Engine.MasterSwitchOff = () => Controller.Blocks("Hazard counter item");
         }
 
         public void Advance(int seconds) => Now = Now.AddSeconds(seconds);
@@ -308,5 +314,70 @@ public sealed class AutoHazardCounterProvisionerTests
         Harness h = new() { WalkActive = true, Following = true };
         h.Engine.OnArrivedInRoom(HazardRoom);
         Assert.Empty(h.Sent);
+    }
+
+    // ----- the master switch (user, 2026-10-10) -----------------------------
+
+    [Fact]
+    public void SwitchOff_ApproachingHazardRoom_SendsNothing_AndCountsTheSkip()
+    {
+        Harness h = new();
+        h.Controller.TurnOff();
+        h.Engine.OnApproachingRoom(HazardRoom);
+        Assert.Empty(h.Sent);
+        Assert.Equal(1, h.Controller.SkippedSinceOff["Hazard counter item"]);
+    }
+
+    [Fact]
+    public void SwitchOff_FollowerArriving_SendsNothing_AndCountsTheSkip()
+    {
+        Harness h = new() { WalkActive = false, Following = true };
+        h.Controller.TurnOff();
+        h.Engine.OnArrivedInRoom(HazardRoom);
+        Assert.Empty(h.Sent);
+        Assert.Equal(1, h.Controller.SkippedSinceOff["Hazard counter item"]);
+    }
+
+    // Off, a lapse prompt neither re-raises, nor tells the room, nor halts the walk.
+    [Fact]
+    public void SwitchOff_ThirstPrompt_NoUse_NoSay_NoHalt()
+    {
+        Harness h = new() { Carried = 0 };
+        h.Engine.OnApproachingRoom(HazardRoom);   // armed while on
+        h.Controller.TurnOff();
+        h.Engine.OnServerLine(ThirstLine);
+        Assert.Empty(h.Sent);
+        Assert.Null(h.Halted);
+        Assert.Equal(1, h.Controller.SkippedSinceOff["Hazard counter item"]);
+    }
+
+    // A skip stamps nothing: back on, the same arrival uses the item once, and the
+    // out-of-items say is announced afresh rather than believed already made.
+    [Fact]
+    public void SwitchOffThenOn_InTheRoom_UsesItOnce()
+    {
+        Harness h = new() { WalkActive = false, Following = true };
+        h.Controller.TurnOff();
+        h.Engine.OnArrivedInRoom(HazardRoom);
+        Assert.Empty(h.Sent);
+        h.Controller.TurnOn();
+        h.Engine.OnArrivedInRoom(HazardRoom);
+        Assert.Equal(new[] { "use waterskin" }, h.Sent);
+        h.Engine.OnArrivedInRoom(HazardRoom);     // timer now stamped: no second charge
+        Assert.Single(h.Sent);
+    }
+
+    [Fact]
+    public void SwitchOffThenOn_OutOfItems_SaysItOnceOnTheNextLapse()
+    {
+        Harness h = new() { Carried = 0 };
+        h.Engine.OnApproachingRoom(HazardRoom);
+        h.Controller.TurnOff();
+        h.Engine.OnServerLine(ThirstLine);
+        Assert.Empty(h.Sent);
+        h.Controller.TurnOn();
+        h.Engine.OnServerLine(ThirstLine);
+        Assert.Equal(new[] { ".I'm out of waterskins!" }, h.Sent);
+        Assert.NotNull(h.Halted);
     }
 }

@@ -18,6 +18,8 @@ namespace MudPlay.Game;
 //
 // The state is per-session and per-character: cleared on profile load, so a
 // freshly loaded character never inherits the previous one's switch or toggles.
+// Nor does "off" survive a client restart: it resets to on, by the user's choice
+// ("keep that", 2026-10-10).
 public sealed class AutoModeController
 {
     private const string TabKey = "General";

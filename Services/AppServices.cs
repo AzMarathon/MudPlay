@@ -7695,8 +7695,9 @@ public sealed class AppServices
         // committed step it resolves the room's hazard and, for a carried buff
         // source (the desert waterskin), `use`s it so the buff is up on arrival —
         // re-`use`ing only when the buff's own duration would have lapsed so a fast
-        // traverse spends one charge. No opt-in gate: a route the user chose to run
-        // through a hazard room must survive it.
+        // traverse spends one charge. No toggle of its own: a route the user chose to
+        // run through a hazard room must survive it. Only the master switch stops it
+        // (WireMasterSwitch).
         AutoHazardCounterProvisioner = new Game.Map.AutoHazardCounterProvisioner(
             resolveRoom:    RoomGraph.GetRoom,
             hazardForSpell: spell => RoomHazards.HazardForSpell(spell),
@@ -9848,6 +9849,7 @@ public sealed class AppServices
         Cash.MasterSwitchOff = MasterSwitchOff("Bank and stash trips");
         LocationEquip.MasterSwitchOff = MasterSwitchOff("Location gear");
         PathItemFloor.MasterSwitchOff = MasterSwitchOff("Route item pickup");
+        AutoHazardCounterProvisioner.MasterSwitchOff = MasterSwitchOff("Hazard counter item");
         ManaRegen.MasterSwitchOff = MasterSwitchOff("Mana-regen reroll");
         PvpFight.MasterSwitchOff = MasterSwitchOff("PvP response");
 
@@ -9899,6 +9901,11 @@ public sealed class AppServices
 
         MovementControl.RestoreHoldsBeforeAutoAllRelease();
         ReevaluateEnginesForMasterSwitch();
+        // A follower standing in a hazard room whose arrival was skipped while off
+        // raises the buff now; the per-item timer was never stamped by the skip, and
+        // an own walk is left to its next approach hook.
+        if (RoomTracker.State.CurrentRoom is { } hazardRoom)
+            AutoHazardCounterProvisioner.OnArrivedInRoom(hazardRoom.Key);
         AilmentSync.ReevaluateWaits();
         PartyRest.ResyncAfterMasterSwitch();
         MovementControl.ReleaseFromAutoAll();
