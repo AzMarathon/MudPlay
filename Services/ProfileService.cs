@@ -138,7 +138,7 @@ public sealed class ProfileService
         NormalizeForLoad(loaded);
         // Upgrade older profiles before ProfileLoaded fires so per-character
         // services (KeybindingStore, toolbar) rebind from the migrated shape.
-        bool migrated = ProfileMigrations.Apply(loaded);
+        bool migrated = ProfileMigrations.Apply(loaded, Log);
 
         string? outgoing = CurrentProfileName;
         if (Current is not null)
@@ -253,7 +253,7 @@ public sealed class ProfileService
 
         CharacterProfile profile = ReadDefaultProfileFile();
         NormalizeForLoad(profile);
-        ProfileMigrations.Apply(profile);
+        ProfileMigrations.Apply(profile, Log);
 
         Current = profile;
         CurrentProfileName = null;
@@ -659,7 +659,7 @@ public sealed class ProfileService
         // Upgrade the template now: a default-profile file from an older version
         // would otherwise mark the new character as older than per-character
         // favourites and triggers, and it would take the shared lists as its own.
-        ProfileMigrations.Apply(fresh);
+        ProfileMigrations.Apply(fresh, Log);
         fresh.PredatesOwnLists = false;
         // A new character's loop and auto-lair favourites are its own from the
         // start: with these left unset it would take the shared files' flags.
