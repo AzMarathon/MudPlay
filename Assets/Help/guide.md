@@ -394,6 +394,8 @@ The estimate's assumptions live in the **⚙ Estimate Settings** flyout at the t
 
 Click **Start estimating**, then **click the rooms** on the map to sketch the circuit (**Alt+click** a room to take it back out, or **drag** a numbered chip onto another room to move it); the panel shows a running **exp/hr** figure as you add rooms. **Save as loop** turns the sketch into a real loop, **Load loop…** pulls an existing loop in to evaluate it, **Clear rooms** starts over, and **Stop Estimating** exits the mode.
 
+**Room summons** lists the rooms on the circuit whose room spell can summon a monster, with the exp those rolls are expected to add. A summon that needs an item in the room isn't counted, because the item is only in some of the spell's rooms: the graveyard's Death Shrieker appears only where a weeping statue stands, so the graveyard counts its vampire fledglings and weeping apparitions alone.
+
 A small **Realm:** line under the headline notes which game-data realm is active — it never changes your kill rate, but it changes two things:
 
 - **How a lair respawns.** On **Stock** a lair room keeps one clock, restarted by every kill in it (its placed fixture's too), and the whole room comes back together **`Delay` to `Delay + 1` minutes after its last kill** — the estimate uses the middle of that window. Killing a room's fixture on every pass can hold its lair empty. On **Paradigm** each monster comes back on its own, **`(Delay − 1)` minutes + 30 s** after it was killed.

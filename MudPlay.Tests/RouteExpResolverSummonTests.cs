@@ -98,6 +98,10 @@ public sealed class RouteExpResolverSummonTests : IDisposable
 
             Assert.NotNull(summon);
             Assert.Equal("graveyard", summon!.Value.SpellName);
+            // The vampire fledgling and weeping apparition lines, 1% each. The Death
+            // Shrieker's asks for a statue only some graveyard rooms hold.
+            Assert.Equal(95.0, summon.Value.ExpPerRoll, 3);
+            Assert.Equal(0.02, summon.Value.SummonChance, 5);
             // The `nomonsters` here sits on single lines of the table, not on the
             // block that leads to it, so the spell as a whole isn't empty-room only.
             Assert.False(summon.Value.NoMonstersGated);
@@ -143,6 +147,7 @@ public sealed class RouteExpResolverSummonTests : IDisposable
             Assert.NotNull(graveyard);
             Assert.Contains(graveyard!.Entries, e => e.Monster == 808);
             Assert.Contains(graveyard.Entries, e => e.Monster == 806);
+            Assert.DoesNotContain(graveyard.Entries, e => e.Monster == 809);
             Assert.Equal(3, lap.First(r => r.Key == Crypt).Summon!.Entries.Count);
             Assert.Null(lap.First(r => r.Key == Blank).Summon);
         }
@@ -163,7 +168,7 @@ public sealed class RouteExpResolverSummonTests : IDisposable
 
             string line = Assert.Single(lines);
             Assert.Contains("2 of 3 placed room spell(s) summon monsters, over 2 room(s)", line);
-            Assert.Contains("1126 graveyard (textblock 9471, 1 room(s)", line);
+            Assert.Contains("1126 graveyard (textblock 9471, 1 room(s), 95 exp a roll, 2% summon)", line);
             Assert.Contains("5248 crypt summon 2 (textblock 3411, 1 room(s), 1850 exp a roll, 15% summon, empty room only)", line);
         }
     }

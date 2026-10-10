@@ -76,6 +76,54 @@ public sealed class RoomSummonParserTests
     }
 
     [Fact]
+    public void Resolve_LineAskingAboutARoomItem_IsNotCredited()
+    {
+        // "graveyard" (spell 1126 → TBInfo 9471 → 9515), verbatim from data-v1.11p. The
+        // Death Shrieker line needs the weeping statue (item 1684) in the room, and 7
+        // of the spell's 110 rooms hold one.
+        var d = new Dictionary<int, string>
+        {
+            [9471] = "random 9515\n\n",
+            [9515] = "96:addevil 0\n97:roomitem 1684:clearitem 1684:summon 809\n98:nomonsters:message 2956:summon 808\n"
+                   + "99:nomonsters:message 2956:summon 806:summon 806\n100:random 9355\n\n",
+        };
+        static (int, string) Undead(int id) => id switch
+        {
+            806 => (4800, "weeping apparition"),
+            808 => (4700, "vampire fledgling"),
+            809 => (150000, "Death Shrieker"),
+            _ => (0, ""),
+        };
+
+        RoomSummonTable? table = RoomSummonParser.Resolve(9471, n => Tb(d, n), Undead);
+
+        Assert.NotNull(table);
+        Assert.DoesNotContain(table!.Entries, e => e.Monster == 809);
+        Assert.Equal(0.02, table.SummonChance, 5);
+        Assert.Equal(95.0, table.ExpPerRoll, 3);          // 0.01 × 4700 + 0.01 × 4800
+    }
+
+    [Fact]
+    public void Resolve_RoomItemOnTheBlockLeadingToTheTable_StillReads()
+    {
+        // "bone dock" (spell 1152 → TBInfo 9655 → 9656), verbatim from
+        // data-Paradigm-1.9.1: the portal the block asks for is in the spell's one room.
+        var d = new Dictionary<int, string>
+        {
+            [9655] = "roomitem 1807:random 9656\n\n",
+            [9656] = "10:summon 925\n20:summon 926:summon 927\n30:summon 926:summon 927:summon 2395\n"
+                   + "40:summon 925:summon 926:summon 2395:summon 2395\n100:addevil 0\n\n",
+        };
+        static (int, string) Bone(int id) => id is 925 or 926 ? (5000, "bone warrior") : (0, "");
+
+        RoomSummonTable? table = RoomSummonParser.Resolve(9655, n => Tb(d, n), Bone);
+
+        Assert.NotNull(table);
+        Assert.Equal(0.40, table!.SummonChance, 5);
+        Assert.Equal(2000.0, table.ExpPerRoll, 3);        // 4 × 0.1 × 5000, a line's first summon
+    }
+
+    [Fact]
     public void Resolve_ZeroOrMissingTextBlock_IsNull()
     {
         Assert.Null(RoomSummonParser.Resolve(0, n => Tb(CryptSummon, n), Mon));

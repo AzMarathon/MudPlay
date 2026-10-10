@@ -102,8 +102,8 @@ public static class RoomSummonParser
     }
 
     // Parse a d100 roll table. Each line is "<cumulativeThreshold>:<act>[:<act>…]"; a
-    // line's band probability is (threshold − prevThreshold) / lastThreshold, and if any
-    // of its actions is "summon <mon>", that band summons the monster.
+    // line's band probability is (threshold − prevThreshold) / lastThreshold, and the
+    // band summons the monster of its first "summon <mon>".
     private static RoomSummonTable? ParseTable(
         string table, bool noMonsters, Func<int, (int Exp, string Name)> monster)
     {
@@ -112,12 +112,20 @@ public static class RoomSummonParser
         {
             int summon = 0;
             foreach (string step in steps)
+            {
+                // The table is read once for the spell, and which of its rooms hold
+                // an item differs room to room: the graveyard's Death Shrieker line
+                // needs the weeping statue 7 of its 110 rooms have, and takes it.
+                // Crediting that line to every room would swamp the estimate, so a
+                // line asking about a room item ahead of its summon counts as a miss.
+                if (IsRoomItemStep(step)) break;
                 if (step.StartsWith("summon ", StringComparison.OrdinalIgnoreCase)
                     && int.TryParse(step.AsSpan("summon ".Length).Trim(), out int m) && m > 0)
                 {
                     summon = m;
                     break;
                 }
+            }
             lines.Add((threshold, summon));
         }
         if (lines.Count == 0) return null;
@@ -140,4 +148,9 @@ public static class RoomSummonParser
         }
         return entries.Count > 0 ? new RoomSummonTable(expPerRoll, chance, noMonsters, entries) : null;
     }
+
+    private static bool IsRoomItemStep(string step) =>
+        step.StartsWith("roomitem ", StringComparison.OrdinalIgnoreCase)
+        || step.StartsWith("failroomitem ", StringComparison.OrdinalIgnoreCase)
+        || step.StartsWith("clearitem ", StringComparison.OrdinalIgnoreCase);
 }

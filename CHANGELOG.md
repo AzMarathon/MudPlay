@@ -3,6 +3,7 @@
 ## 3.160.2
 
 - Exp/Hr estimator and loop simulator: room-spell summons now counted in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
+- A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
 
 ## 3.160.1
 
