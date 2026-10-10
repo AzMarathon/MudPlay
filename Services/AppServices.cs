@@ -4574,6 +4574,8 @@ public sealed class AppServices
         // suppressed while blind.
         Combat.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
         CombatTracker.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
+        // Tells a roster emptied where we stand from a move out of a fight.
+        CombatTracker.SetCurrentRoomProbe(() => RoomTracker.State.CurrentRoom?.Key);
 
         // The Combat → Min/Max Monsters window only makes sense while a
         // walker / loop / auto-lair is actively trying to move us past a
