@@ -202,21 +202,10 @@ public static class MegaMudProfileImporter
                 + "the Equipment Manager's Pre-rest sets do that in MudPlay.", Strong: false);
     }
 
-    // GAME_MECHANICS "Equip / remove verbs": the verbs that put gear on or take it
-    // off, each down to the shortest form players type.
-    private static readonly (string Verb, int Shortest)[] GearVerbs =
-    {
-        ("remove", 3), ("equip", 2), ("wear", 3), ("wield", 5),
-    };
-
     private static bool SwapsGear(string command)
     {
         foreach (string step in command.Split(new[] { "^M", ";", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries))
-        {
-            string word = step.Trim().Split(' ', 2)[0];
-            foreach ((string verb, int shortest) in GearVerbs)
-                if (word.Length >= shortest && verb.StartsWith(word, StringComparison.OrdinalIgnoreCase)) return true;
-        }
+            if (Game.Inventory.GearCommandVerbs.IsGearVerb(step.Trim().Split(' ', 2)[0])) return true;
         return false;
     }
 
