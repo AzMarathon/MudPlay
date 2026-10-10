@@ -1571,13 +1571,46 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(LoopState.Paused, h.Runner.State);
 
         // The game says we are in B after all. Nothing was in flight, so that is
-        // no landing to count: the loop carries on south from B, with A's step.
+        // no landing to count, and nothing to recover from either: the step that
+        // was waiting in B goes out, with no reroute and no recovery attempt spent.
         h.Tracker.SetLocated(new RoomKey(1, 2));
         h.Gate!.NoteAuthoritativePosition(new RoomKey(1, 2));
 
         Assert.Equal(LoopState.Running, h.Runner.State);
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+    }
+
+    // The report's shape: the game names another room than the one the loop stood
+    // in. The loop re-plans from there (here, a walk back onto the circuit) instead
+    // of sending the step planned from B.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]   // another gate comes and goes while the answer is still out
+    public void SuspectWhilePausedBetweenSteps_GameNamesAnotherRoom_ReroutesFromIt(bool gateFlapsDuringTheWait)
+    {
+        Harness h = NewHarness(wireRecovery: true, withWalker: true);
+        Action heldAtB = PauseBetweenStepsAtB_ThenGoSuspect(h);
+        heldAtB();
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+
+        if (gateFlapsDuringTheWait)
+        {
+            h.Coordinator.AssertGate(MovementCoordinator.PartyWaitGate);
+            h.Coordinator.ClearGate(MovementCoordinator.PartyWaitGate);
+            // Still the gate's: left Running, the answer would only re-drive the step.
+            Assert.Equal(LoopState.Paused, h.Runner.State);
+        }
+        Assert.Single(h.Sent);
+
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        h.Gate!.NoteAuthoritativePosition(new RoomKey(1, 3));
+
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+        Assert.Equal(LoopState.Approaching, h.Runner.State);
+        Assert.Equal(new RoomKey(1, 2), h.Walker!.Destination);
+        Assert.Single(h.ResyncReasons);
     }
 
     // On a realm with nothing to ask, the same resume has to keep the loop moving:
@@ -1595,6 +1628,83 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(TierLevel.Tier2, h.Gate!.CurrentTier);
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    // That step, sent from a room the tracker wasn't sure of, is refused. From
+    // Suspect a refusal changes nothing, and the stall watchdog used to look only at
+    // a Pending move. With nobody to ask it still changes nothing (no reverse-walk
+    // on the strength of a timer): it waits once more and then lets be.
+    [Fact]
+    public void StallWatchdog_MoveSentWhileUnsure_NobodyToAsk_LeavesTheLoopAsItWas()
+    {
+        Harness h = NewHarness(wireRecovery: true);
+        h.Gate!.TryResync = _ => false;
+        PauseBetweenStepsAtB_ThenGoSuspect(h)();
+        Assert.Equal(2, h.Sent.Count);
+        h.Tracker.NoteMoveBlocked();
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        h.Runner.FireStallWatchdogForTests();
+        Assert.True(h.Runner.IsStallWatchdogArmedForTests);
+        h.Runner.FireStallWatchdogForTests();
+        Assert.False(h.Runner.IsStallWatchdogArmedForTests);
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(TierLevel.Tier2, h.Gate!.CurrentTier);
+        Assert.Equal(2, h.Sent.Count);
+    }
+
+    // Where the game can be asked, the watchdog asks it, once. The answer naming
+    // the step's target means the move did land: the loop goes on from there.
+    [Fact]
+    public void StallWatchdog_MoveSentWhileUnsure_AsksTheGameOnce_AndAdvancesOnItsTarget()
+    {
+        Harness h = NewHarness(wireRecovery: true);
+        h.Gate!.TryResync = _ => false;   // the ask at the resume didn't come off
+        PauseBetweenStepsAtB_ThenGoSuspect(h)();
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[1]));
+        List<Action<RoomKey>> asked = new();
+        h.Gate!.TryResyncOnce = (_, onResolved, _) => { asked.Add(onResolved); return true; };
+
+        h.Runner.FireStallWatchdogForTests();
+
+        Assert.Single(asked);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        asked[0](new RoomKey(1, 1));
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[2]));
+    }
+
+    // The answer naming a room that is neither the step's target nor the room it
+    // was sent from: the loop re-plans from it.
+    [Fact]
+    public void StallWatchdog_MoveSentWhileUnsure_GameNamesAnotherRoom_ReroutesFromIt()
+    {
+        Harness h = NewHarness(wireRecovery: true, withWalker: true);
+        h.Gate!.TryResync = _ => false;
+        PauseBetweenStepsAtB_ThenGoSuspect(h)();
+        Action<RoomKey>? answer = null;
+        // One `rm` per two seconds: the reroute's own ask right behind it is refused.
+        h.Gate!.TryResyncOnce = (_, onResolved, _) =>
+        {
+            if (answer is not null) return false;
+            answer = onResolved;
+            return true;
+        };
+        h.Runner.FireStallWatchdogForTests();
+        Assert.NotNull(answer);
+
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        answer!(new RoomKey(1, 3));
+
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+        Assert.Equal(LoopState.Approaching, h.Runner.State);
+        Assert.Equal(new RoomKey(1, 2), h.Walker!.Destination);
     }
 
     // Walks the a-b cycle to B, holds the next step there (a monster in the room),
