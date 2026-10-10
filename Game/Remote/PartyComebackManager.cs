@@ -415,7 +415,7 @@ public sealed class PartyComebackManager : IDisposable
 
     private void OnMemberLeftBehind(string given)
     {
-        if (string.IsNullOrEmpty(given) || _busy) return;
+        if (string.IsNullOrEmpty(given)) return;
         if (_ownTeleportAt is { } at && NowProvider() - at <= OwnTeleportWindow)
         {
             _log?.Info(LogCategory, $"{given} was dropped by our own teleport — not going back for them.");
@@ -430,6 +430,14 @@ public sealed class PartyComebackManager : IDisposable
         if (_tracker.LastMoveSentAt is not { } moved || NowProvider() - moved > OwnMoveWindow)
         {
             _log?.Info(LogCategory, $"{given} stopped following, but not behind a move of ours — not going back for them.");
+            return;
+        }
+        // One step can leave several behind (an exit that turns away more than one
+        // follower prints the line for each): the others wait their turn.
+        if (_busy)
+        {
+            if (!string.Equals(given, _senderGiven, StringComparison.OrdinalIgnoreCase) && !_tracker.LastMoveWasManual)
+                QueueRecovery(given, null, TelepathReply(given));
             return;
         }
         if (SnapshotRunningEngine().Kind == ResumeKind.None)
@@ -463,7 +471,7 @@ public sealed class PartyComebackManager : IDisposable
 
     // Single funnel for both entry paths: gate on party-full + return-distance,
     // decline via @forget if we can't come, else snapshot / stop / walk.
-    private void BeginRecovery(string senderGiven, RoomKey? target, Action<string> reply)
+    private void BeginRecovery(string senderGiven, RoomKey? target, Action<string> reply, ResumeTarget? carried = null)
     {
         if (string.IsNullOrEmpty(senderGiven)) return;
         if (_busy)
@@ -482,6 +490,15 @@ public sealed class PartyComebackManager : IDisposable
                 _walker.Stop("comeback: member gave their room");
                 reply("coming to your location for pickup");
                 BeginWalk(there, ComebackPhase.WalkingToRoom);
+                return;
+            }
+            // Somebody else is being fetched: this one is next, with the room they
+            // name. Without the queue the second of two followers an exit turned
+            // away was answered and then never gone back for.
+            if (!string.Equals(senderGiven, _senderGiven, StringComparison.OrdinalIgnoreCase))
+            {
+                QueueRecovery(senderGiven, target, reply);
+                reply($"comeback already in progress — fetching {_senderGiven} first, then you");
                 return;
             }
             reply("comeback already in progress");
@@ -531,8 +548,9 @@ public sealed class PartyComebackManager : IDisposable
         }
 
         // Snapshot BEFORE stopping anything — Stop() clears the engine's
-        // run-state, so the resume target must be captured first.
-        ResumeTarget resume = SnapshotRunningEngine();
+        // run-state, so the resume target must be captured first. A recovery taken
+        // off the queue carries the engine the one before it stopped.
+        ResumeTarget resume = carried ?? SnapshotRunningEngine();
         if (resume.Kind == ResumeKind.None && TakeParkedResume(senderGiven) is { } parked)
             resume = parked;
         if (resume.Kind == ResumeKind.None)
@@ -647,10 +665,45 @@ public sealed class PartyComebackManager : IDisposable
         if (_walker.State is not WalkState.Idle) _walker.Stop(reason, willResume: true);
     }
 
+    // Members waiting for the recovery in flight to end, oldest first: who, the
+    // room they named (none: backtrack) and how to answer them.
+    private readonly List<(string Given, RoomKey? Target, Action<string> Reply)> _queued = new();
+
+    // For the bug report: who is waiting behind the recovery in flight.
+    public IReadOnlyList<string> QueuedRecoveries => _queued.Select(q => q.Given).ToList();
+
+    private void QueueRecovery(string given, RoomKey? target, Action<string> reply)
+    {
+        int at = _queued.FindIndex(q => string.Equals(q.Given, given, StringComparison.OrdinalIgnoreCase));
+        if (at >= 0)
+        {
+            // Asked again, perhaps with a room this time: the newer word stands.
+            _queued[at] = (given, target ?? _queued[at].Target, reply);
+            return;
+        }
+        _queued.Add((given, target, reply));
+        _log?.Info(LogCategory, $"{given} is left behind too — fetching them after {_senderGiven}");
+    }
+
+    // The next member waiting is fetched before the stopped engine is put back,
+    // and inherits it. False when nobody is waiting or none of them can be fetched.
+    private bool StartNextQueued(ResumeTarget resume)
+    {
+        while (_queued.Count > 0)
+        {
+            (string given, RoomKey? target, Action<string> reply) = _queued[0];
+            _queued.RemoveAt(0);
+            BeginRecovery(given, target, reply, resume);
+            if (_busy) return true;
+        }
+        return false;
+    }
+
     private void Resume()
     {
         ResumeTarget r = _resume;
         GoIdle();
+        if (r.Kind != ResumeKind.None && StartNextQueued(r)) return;
         switch (r.Kind)
         {
             case ResumeKind.Lair:
@@ -670,13 +723,18 @@ public sealed class PartyComebackManager : IDisposable
 
     private void ParkAndGoIdle()
     {
-        if (_resume.Kind != ResumeKind.None && !string.IsNullOrEmpty(_senderGiven))
-        {
-            _parkedResume = (_senderGiven, _resume, NowProvider());
-            _log?.Info(LogCategory,
-                $"gave up on {_senderGiven}; keeping {_resume.Kind} to resume if they @comeback within {ComebackWindow.TotalMinutes:0} min");
-        }
+        ResumeTarget r = _resume;
+        string gaveUpOn = _senderGiven;
         GoIdle();
+        // Someone else is waiting: the search goes on for them, and the engine is
+        // theirs to put back.
+        if (r.Kind != ResumeKind.None && StartNextQueued(r)) return;
+        if (r.Kind != ResumeKind.None && !string.IsNullOrEmpty(gaveUpOn))
+        {
+            _parkedResume = (gaveUpOn, r, NowProvider());
+            _log?.Info(LogCategory,
+                $"gave up on {gaveUpOn}; keeping {r.Kind} to resume if they @comeback within {ComebackWindow.TotalMinutes:0} min");
+        }
     }
 
     private ResumeTarget? TakeParkedResume(string given)
@@ -697,6 +755,7 @@ public sealed class PartyComebackManager : IDisposable
         _crPendingName = null;
         _crFallbackTimer.Stop();
         _pendingProbes.Clear();
+        _queued.Clear();
         GoIdle();
         if (had) _log?.Info(LogCategory, $"recovery state cleared ({reason})");
     }
@@ -762,6 +821,7 @@ public sealed class PartyComebackManager : IDisposable
             _log?.Info(LogCategory,
                 $"recovery of {_senderGiven} called off — our walk was replaced ({e.Kind}: {e.Detail})");
             _parkedResume = null;
+            _queued.Clear();
             GoIdle();
             return;
         }
@@ -835,12 +895,16 @@ public sealed class PartyComebackManager : IDisposable
         _reply($"found you — re-inviting {_senderGiven}");
         _party.Invite(_senderGiven);
         _followTimer.Stop();
-        if (FollowWaitWindow > TimeSpan.Zero)
-        {
-            _followTimer.Interval = FollowWaitWindow;
-            _followTimer.Start();
-        }
+        // "If leading, wait only" at 0 means no limit, which suits a wait on a
+        // member who is with us. One who never answers the re-invite is not (on
+        // Stock a member still on our list is told nothing by it), and the walk or
+        // loop this recovery stopped must not wait on them for good.
+        _followTimer.Interval = FollowWaitWindow > TimeSpan.Zero ? FollowWaitWindow : UnlimitedFollowWait;
+        _followTimer.Start();
     }
+
+    // What stands in for "no limit" on the wait for a re-invited member to follow.
+    private static readonly TimeSpan UnlimitedFollowWait = TimeSpan.FromSeconds(90);
 
     private void OnMemberFollowConfirmed(string name)
     {
@@ -849,6 +913,8 @@ public sealed class PartyComebackManager : IDisposable
         // fresh. Runs even outside an active recovery (e.g. a manual re-invite that
         // succeeds), un-stranding a member we'd previously given up on.
         _failedRecoveries.Remove(GivenName(name));
+        // Back with us before their turn came: nobody left to fetch.
+        _queued.RemoveAll(q => string.Equals(q.Given, GivenName(name), StringComparison.OrdinalIgnoreCase));
 
         if (!_busy || _phase == ComebackPhase.Idle) return;
         if (!string.Equals(GivenName(name), _senderGiven, StringComparison.OrdinalIgnoreCase)) return;
@@ -893,6 +959,10 @@ public sealed class PartyComebackManager : IDisposable
         }
         Resume();
     }
+
+    // Test seams — the DispatcherTimer doesn't tick under headless xUnit.
+    internal bool FollowTimerRunning => _followTimer.IsEnabled;
+    internal void FireFollowTimeoutForTests() => OnFollowTimeout(null, EventArgs.Empty);
 
     private void OnFollowTimeout(object? sender, EventArgs e)
     {

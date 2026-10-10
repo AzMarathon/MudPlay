@@ -1058,6 +1058,111 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal(WalkState.Walking, h.Walker.State);
     }
 
+    // ----- followers an exit turned away (leader's screen, Paradigm 2026-10-10) -----
+
+    // One step through a gated exit left both followers behind, and with nobody
+    // following the party is gone. Each asks to be fetched from outside any party
+    // of ours; both are, one after the other, and then the engine is put back.
+    [Fact]
+    public void AllFollowersGated_PartyDisbanded_BothAreFetchedInTurn()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));   // where they are left
+        StartLair(h);                               // we've moved on to 1/1
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Healer started to follow you."));
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Router.Dispatch(Line("Healer is no longer following you."));
+        h.Router.Dispatch(Line("Your party has been disbanded."));
+        h.Router.Dispatch(Line("You are not in a party at the present time."));
+
+        Assert.False(h.PartyState.IsInParty);
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Equal(new[] { "Healer" }, h.Comeback.QueuedRecoveries);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
+        Assert.Contains("coming to your location", h.LastReply);
+        h.Engine.DispatchForTests(Telepath("Healer", "@comeback 1/2"));
+        Assert.Contains("fetching Tank first, then you", h.LastReply);
+        Assert.Equal(new[] { "Healer" }, h.Comeback.QueuedRecoveries);
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));   // reached the room they stand in
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        Assert.Equal("Healer", h.Comeback.RecoveringMember);
+        Assert.Empty(h.Comeback.QueuedRecoveries);
+        Assert.False(h.Lair.IsActive);              // not put back until both are along
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Router.Dispatch(Line("Healer started to follow you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+    }
+
+    // With one of two turned away the party stays; the one left asks and is fetched.
+    [Fact]
+    public void OneOfTwoFollowersGated_PartyStays_TheirComebackIsHonoured()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Healer started to follow you."));
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.True(h.PartyState.IsInParty);
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Empty(h.Comeback.QueuedRecoveries);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
+
+        Assert.Contains("coming to your location", h.LastReply);
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
+    }
+
+    // A follower who rejoins before their turn is nobody's to fetch.
+    [Fact]
+    public void QueuedFollower_BackBeforeTheirTurn_IsNotFetched()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Healer started to follow you."));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Router.Dispatch(Line("Healer is no longer following you."));
+
+        h.Router.Dispatch(Line("Healer started to follow you."));
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Empty(h.Comeback.QueuedRecoveries);
+    }
+
+    // "If leading, wait only" at 0 means no limit. A re-invited follower who never
+    // answers must still not hold the stopped engine for good.
+    [Fact]
+    public void FollowWaitSetToNoLimit_StillEndsForAFollowerWhoNeverAnswers()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.FollowWaitWindow = TimeSpan.Zero;
+        SeatFollower(h, "Tank");
+        StartLair(h);
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/1"));
+        h.Tracker.SetLocated(new RoomKey(1, 1));   // there, and re-invited
+
+        Assert.True(h.Comeback.FollowTimerRunning);
+        h.Comeback.FireFollowTimeoutForTests();
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+    }
+
     // ----- registration shape ----------------------------------------
 
     [Fact]
