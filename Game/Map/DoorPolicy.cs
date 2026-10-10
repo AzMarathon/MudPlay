@@ -20,6 +20,55 @@ public static class DoorPolicy
     // marks them (picklocks/strength).
     public const int UnbashableStrengthThreshold = 200;
 
+    // Below this chance per try, a lock this character can only pick is a poor bet,
+    // and a route goes round it when a short way round exists. At 25% a run of the
+    // default ten tries (OtherSettings.MaxPickAttempts) still opens the door 94
+    // times in 100; at 10% it is 65, and every run that fails has cost its ten
+    // picks and then needs the way round anyway.
+    public const int PoorPickChancePercent = 25;
+
+    // How many steps longer the way round a poor-odds lock may be and still be
+    // taken. Ten is the default number of tries the door would get: a detour longer
+    // than that isn't clearly cheaper than trying, so the door is tried first and
+    // the walk goes round only if the picks run out.
+    public const int PoorPickDetourSteps = 10;
+
+    // Chance in 100 that one `pick` opens a lock (GAME_MECHANICS "Locked doors —
+    // picking, opening and bashing": read from the Stock engine, and the same on
+    // Paradigm as far as the user knows): one roll under Picklocks less the lock's
+    // N − 1, and an "any" lock adds to the skill instead. No Picklocks never opens
+    // anything.
+    public static int PickChancePercent(int statRequirement, int playerPicklocks)
+    {
+        if (playerPicklocks <= 0) return 0;
+        return statRequirement > 0
+            ? Math.Clamp(playerPicklocks - statRequirement + 1, 0, 100)
+            : Math.Min(playerPicklocks + 1, 100);
+    }
+
+    // True when picking is this character's only way through the door and each try
+    // has a poor chance. A door it can bash is never one: bashing has no attempt
+    // cap, so it opens in the end.
+    public static bool IsPoorOddsPick(
+        int statRequirement, bool canBash, int playerStrength, int playerPicklocks,
+        int maxBashableStrength = UnbashableStrengthThreshold) =>
+        ChooseVerb(statRequirement, canBash, playerStrength, playerPicklocks,
+            preferPickOverBash: false, maxBashableStrength) == "pick"
+        && PickChancePercent(statRequirement, playerPicklocks) < PoorPickChancePercent;
+
+    // Why a route keeps off this door, for the log and the bug report: "bash needs
+    // 301 Strength, you have 120; pick chance 3% (Picklocks 303)".
+    public static string DescribeOdds(
+        int statRequirement, bool canBash, int playerStrength, int playerPicklocks,
+        int maxBashableStrength)
+    {
+        string bash = !canBash ? "can't be bashed"
+            : statRequirement > maxBashableStrength
+                ? $"bash needs {statRequirement} Strength, more than any character can reach"
+            : $"bash needs {statRequirement} Strength, you have {playerStrength}";
+        return $"{bash}; pick chance {PickChancePercent(statRequirement, playerPicklocks)}% (Picklocks {playerPicklocks})";
+    }
+
     // True when the door has at least one viable opening path for the
     // current character — bash, pick, or "no req at all". Consulted by the
     // walker before sending the first verb so an impossible door fails fast
