@@ -83,6 +83,16 @@ public sealed class DoorOpenManager : IDisposable
     private string? _verb;                                // "bash" / "pick"
     private int _verbAttempts;
     private bool _triedFallbackVerb;
+    // The key is being tried as the last resort, after bash and pick ran out. When
+    // it then turns out not to be held, the door has beaten the character like any
+    // other it couldn't force, which a key tried first (a walk that went to fetch
+    // one) is not.
+    private bool _keyIsLastResort;
+    // Whether a stat screen has been read, the same test the movement filter's door
+    // providers use. Unread, a door with no viable verb is not the door winning.
+    private readonly Func<bool> _statsRead;
+    // Picks of the current verb run that drew no reply at all within the watchdog.
+    private int _pickTimeouts;
 
     // Response watchdog. The FSM is event-driven on server result lines with no
     // timer of its own, so a bash/pick/open/use that draws a response matching
@@ -121,7 +131,8 @@ public sealed class DoorOpenManager : IDisposable
         Func<bool>? bashRestNeeded = null,
         Func<bool>? bashRestRecovered = null,
         LogService? log = null,
-        Func<TimeSpan, Action, IDisposable>? scheduleDelay = null)
+        Func<TimeSpan, Action, IDisposable>? scheduleDelay = null,
+        Func<bool>? statsRead = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(stats);
@@ -145,8 +156,9 @@ public sealed class DoorOpenManager : IDisposable
         _holdsKeyItem = holdsKeyItem ?? (_ => true);
         _log = log;
         _scheduleDelay = scheduleDelay;
+        _statsRead = statsRead ?? (() => true);
 
-        _bashOkSub      = _router.Subscribe(KnownPatterns.DoorBashSuccess,      OnBashSuccess);
+        _bashOkSub     = _router.Subscribe(KnownPatterns.DoorBashSuccess,      OnBashSuccess);
         _bashFailSub    = _router.Subscribe(KnownPatterns.DoorBashFailure,      OnBashFailure);
         _bashRefusedSub = _router.Subscribe(KnownPatterns.DoorBashRefused,      OnBashRefused);
         _pickOkSub      = _router.Subscribe(KnownPatterns.DoorPickSuccess,      OnPickSuccess);
@@ -258,6 +270,7 @@ public sealed class DoorOpenManager : IDisposable
         _verb = null;
         _verbAttempts = 0;
         _triedFallbackVerb = false;
+        _keyIsLastResort = false;
         _log?.Info("Door", "Door flow stopped — queue drained.");
     }
 
@@ -272,6 +285,7 @@ public sealed class DoorOpenManager : IDisposable
         _state = DoorState.SelectingVerb;
         _verbAttempts = 0;
         _triedFallbackVerb = false;
+        _keyIsLastResort = false;
         StartChosenVerb();
     }
 
@@ -307,7 +321,11 @@ public sealed class DoorOpenManager : IDisposable
                 StartUseKey();
                 return;
             }
-            FailCurrent($"no viable open verb (req {cur.StatRequirement}, str {_stats.Strength}, picks {_stats.Picklocks}, canBash {cur.CanBash})");
+            // Before a stat screen is read the numbers are 0, so any numbered door has
+            // no viable verb: that says nothing about the door, and it must not be
+            // given up on for good.
+            FailCurrent($"no viable open verb (req {cur.StatRequirement}, str {_stats.Strength}, picks {_stats.Picklocks}, canBash {cur.CanBash})",
+                unopenable: _statsRead());
             return;
         }
         StartVerb(verb);
@@ -347,6 +365,7 @@ public sealed class DoorOpenManager : IDisposable
         if (_current is not { } cur) return;
         _verb = verb;
         _verbAttempts = 0;
+        _pickTimeouts = 0;
         _state = verb == "bash" ? DoorState.WaitingBash : DoorState.WaitingPick;
         SendVerb();
     }
@@ -487,8 +506,10 @@ public sealed class DoorOpenManager : IDisposable
                 _log?.Info("Door",
                     $"pick {cur.DirectionShort}: no response in {VerbResponseTimeout.TotalSeconds:0}s " +
                     $"(attempt {_verbAttempts}/{cap}) — treating as a miss.");
+                _pickTimeouts++;
                 if (_verbAttempts < cap) { SendVerb(); return; }   // re-arms
-                TryFallbackOrFail("pick timed out with no response");
+                // Every pick unanswered is a lost reply, not the lock winning.
+                TryFallbackOrFail("pick timed out with no response", lostReplies: _pickTimeouts == _verbAttempts);
                 return;
             case DoorState.WaitingOpen:
             case DoorState.WaitingUseKey:
@@ -645,7 +666,7 @@ public sealed class DoorOpenManager : IDisposable
         // reason is what the walk fails with, and it is all the user is told about
         // why a walk that went to fetch a key stopped at the door.
         string key = _itemNameLookup(_current.KeyItemId) is { Length: > 0 } name ? name : $"item #{_current.KeyItemId}";
-        FailCurrent($"use-key failed (the {key} is missing or wrong)");
+        FailCurrent($"use-key failed (the {key} is missing or wrong)", unopenable: _keyIsLastResort);
     }
 
     private void OnIsLocked(MatchResult _)
@@ -669,7 +690,7 @@ public sealed class DoorOpenManager : IDisposable
 
     // ----- terminal transitions ---------------------------------------
 
-    private void TryFallbackOrFail(string reason)
+    private void TryFallbackOrFail(string reason, bool lostReplies = false)
     {
         if (_current is not { } cur) return;
         if (_triedFallbackVerb)
@@ -680,10 +701,11 @@ public sealed class DoorOpenManager : IDisposable
             {
                 _log?.Info("Door",
                     $"{reason}; falling back to key for door {cur.DirectionShort}.");
+                _keyIsLastResort = true;
                 StartUseKey();
                 return;
             }
-            FailCurrent($"{reason}; fallback verb also exhausted");
+            FailCurrent($"{reason}; fallback verb also exhausted", unopenable: !lostReplies);
             return;
         }
         _triedFallbackVerb = true;
@@ -701,10 +723,11 @@ public sealed class DoorOpenManager : IDisposable
             {
                 _log?.Info("Door",
                     $"{reason}; alt verb unviable, falling back to key for door {cur.DirectionShort}.");
+                _keyIsLastResort = true;
                 StartUseKey();
                 return;
             }
-            FailCurrent($"{reason}; no viable fallback verb");
+            FailCurrent($"{reason}; no viable fallback verb", unopenable: !lostReplies);
             return;
         }
         _log?.Info("Door", $"falling back from {_verb} to {other}.");
@@ -719,13 +742,18 @@ public sealed class DoorOpenManager : IDisposable
         Reset();
     }
 
-    private void FailCurrent(string reason)
+    // unopenable: bash and pick are both out for this character (DoorOpenResult.Failed).
+    // The request is cleared before the caller hears of it for the reason
+    // AbandonCurrent gives: the caller may re-plan from inside the reply and ask for
+    // another door at once.
+    private void FailCurrent(string reason, bool unopenable = false)
     {
         if (_current is not { } cur) return;
         if (AbandonIfLeftRoom()) return;
         _log?.Warn("Door", $"door {cur.DirectionShort} failed: {reason}.");
-        cur.Reply(new DoorOpenResult.Failed(reason));
-        Reset();
+        ClearCurrent();
+        cur.Reply(new DoorOpenResult.Failed(reason, unopenable));
+        TryStartNext();
     }
 
     // The tracker has confirmed another room than the one this door is in: a move
@@ -774,6 +802,7 @@ public sealed class DoorOpenManager : IDisposable
         _verb = null;
         _verbAttempts = 0;
         _triedFallbackVerb = false;
+        _keyIsLastResort = false;
     }
 
     // ----- helpers ----------------------------------------------------

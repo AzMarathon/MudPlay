@@ -1,5 +1,14 @@
 # Version history
 
+## 3.161.10
+
+- Locks under 25% a pick are gone round when the way round is short
+- A door the picks run out on is gone round, not stood at
+- Auto-Lair waits one step short of the lair, on its own route
+- Auto-Lair leaves out a lair it can't reach, and retries a failed entry slower each time
+- Auto-Lair keeps a door only if you can't open it; a fair-odds door is retried next visit
+- Log and bug report name the doors gone round and the lairs left out
+
 ## 3.161.9
 
 - Exp/Hr estimator and loop simulator: room-spell summons now read in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals

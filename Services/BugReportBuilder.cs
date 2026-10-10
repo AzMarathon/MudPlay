@@ -1915,6 +1915,24 @@ public static class BugReportBuilder
         Kv(sb, "Stop-before boss rooms on this walk", walker.BossRoomRuleSummary);
         Kv(sb, "Paused before a boss room", walker.HaltedBeforeBossRoom is { } bossRoom
             ? $"{bossRoom.Map}/{bossRoom.Room} ({svc.BossInRoom(bossRoom) ?? "boss"}) — Resume walks through" : "no");
+        // A route that walks round a door it could have stepped through looks like a
+        // planning mistake unless the capture says the door was weighed and why.
+        Kv(sb, "Door planning reads", svc.Stats.HasParsed
+            ? $"Strength {svc.PlayerStats.Strength}, Picklocks {svc.PlayerStats.Picklocks} (last stat screen); "
+              + $"bash ceiling {svc.MaxStrength.MaxAchievableStrength}; "
+              + $"a lock under {Game.Map.DoorPolicy.PoorPickChancePercent}% a try is gone round when that costs at most "
+              + $"{Game.Map.DoorPolicy.PoorPickDetourSteps} extra steps"
+            : "no stat screen read yet: every door is planned through and left to the door handler");
+        Kv(sb, "Doors the last plan went round", walker.DoorsWalkedRound.Count == 0
+            ? "none" : string.Join(" | ", walker.DoorsWalkedRound));
+        Kv(sb, "Doors given up on (walk)", walker.AbandonedDoors.Count == 0
+            ? "none" : string.Join(", ", walker.AbandonedDoors.Select(d => $"{d.From} → {d.To}")));
+        Kv(sb, "Doors given up on (loop run)", svc.LoopRunner.AbandonedDoors.Count == 0
+            ? "none" : string.Join(", ", svc.LoopRunner.AbandonedDoors.Select(d => $"{d.From} → {d.To}")));
+        Kv(sb, "Doors given up on (Auto-Lair run)", svc.AutoLair.AbandonedDoors.Count == 0
+            ? "none" : string.Join(", ", svc.AutoLair.AbandonedDoors.Select(d => $"{d.From} → {d.To}")));
+        Kv(sb, "Lairs left out of the Auto-Lair run", svc.AutoLair.LairsLeftOut.Count == 0
+            ? "(none)" : string.Join(", ", svc.AutoLair.LairsLeftOut));
         // The retained last event carries the failure/stop reason (Detail) — the
         // single most useful line for "why did the walk quit".
         Kv(sb, "Last walk event",

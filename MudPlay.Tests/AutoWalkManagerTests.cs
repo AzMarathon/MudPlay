@@ -1636,6 +1636,101 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
     }
 
+    // The Ancient Coliseum: from the Viewing Stands the Arena is one step down
+    // through a door needing 301 Strength or Picklocks, or three steps east (a door
+    // anyone bashes), down and west. wayRound: whether that east door exists.
+    private static string ColiseumJson(bool wayRound = true) => $$"""
+        [
+          { "Map Number": 3, "Room Number": 592, "Name": "Viewing Stands",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "{{(wayRound ? "3/593 (Door [21 picklocks/strength])" : "0")}}", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "3/595 (Door [301 picklocks/strength])" },
+          { "Map Number": 3, "Room Number": 593, "Name": "Wide Passage",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "3/592 (Door [21 picklocks/strength])",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "3/594" },
+          { "Map Number": 3, "Room Number": 594, "Name": "Preparation Chamber",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "3/595",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "3/593", "D": "0" },
+          { "Map Number": 3, "Room Number": 595, "Name": "Arena",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "3/594", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "3/592 (Door [201 picklocks/strength])", "D": "0" }
+        ]
+        """;
+
+    // The picks ran out on the door down. The walk used to fail there, and whatever
+    // sent it (Auto-Lair, every two seconds) sent it again through the same door. It
+    // now gives the door up for the trip and goes round, east first.
+    [Fact]
+    public void Walker_DoorBeatsTheCharacter_GoesRound_AndNeverPlansThroughItAgain()
+    {
+        Harness h = NewHarness(ColiseumJson());
+        FakeDoorEnqueuer door = new();
+        h.Walker.SetDoorEnqueuer(door.Enqueue);
+        h.Tracker.SetLocated(new RoomKey(3, 592));
+        h.Walker.WalkTo(new RoomKey(3, 595));
+        Assert.Equal(Direction.D, Assert.Single(door.Calls).Direction);
+
+        door.Calls[0].Reply(new DoorOpenResult.Failed("pick exhausted; no viable fallback verb", Unopenable: true));
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Contains((new RoomKey(3, 592), new RoomKey(3, 595)), h.Walker.AbandonedDoors);
+        Assert.Equal(2, door.Calls.Count);
+        Assert.Equal(Direction.E, door.Calls[1].Direction);
+        Assert.Contains(h.Walker.DoorsWalkedRound, d => d.Contains("3/595") && d.Contains("couldn't be opened earlier"));
+
+        // A re-plan from the same room later in the trip (the east door turned out
+        // not to be where the walk thought) still keeps off the door down.
+        door.Calls[1].Reply(new DoorOpenResult.NotHere("'bash e' had no effect"));
+        Assert.Equal(3, door.Calls.Count);
+        Assert.Equal(Direction.E, door.Calls[2].Direction);
+
+        // The next trip starts with no door given up on.
+        h.Walker.Stop("test");
+        h.Walker.WalkTo(new RoomKey(3, 595));
+        Assert.Empty(h.Walker.AbandonedDoors);
+        Assert.Equal(Direction.D, door.Calls[^1].Direction);
+    }
+
+    [Fact]
+    public void Walker_DoorBeatsTheCharacter_WithNoOtherWay_FailsNamingTheDoor()
+    {
+        Harness h = NewHarness(ColiseumJson(wayRound: false));
+        FakeDoorEnqueuer door = new();
+        h.Walker.SetDoorEnqueuer(door.Enqueue);
+        h.Tracker.SetLocated(new RoomKey(3, 592));
+        h.Walker.WalkTo(new RoomKey(3, 595));
+
+        door.Calls[0].Reply(new DoorOpenResult.Failed("pick exhausted; no viable fallback verb", Unopenable: true));
+
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Single(door.Calls);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed
+            && e.Detail.Contains("couldn't open the door down from 3/592 (Viewing Stands)")
+            && e.Detail.Contains("no other way to 3/595"));
+        // The trip is over, and its doors go with it, so silent legs of a journey
+        // begun afterwards don't inherit them.
+        Assert.Empty(h.Walker.AbandonedDoors);
+    }
+
+    // A loop hands its approach walk the doors its run gave up on.
+    [Fact]
+    public void Walker_RefuseDoorsOnNextWalk_KeepsThatWalkOffThem()
+    {
+        Harness h = NewHarness(ColiseumJson());
+        FakeDoorEnqueuer door = new();
+        h.Walker.SetDoorEnqueuer(door.Enqueue);
+        h.Tracker.SetLocated(new RoomKey(3, 592));
+
+        h.Walker.RefuseDoorsOnNextWalk(new[] { (new RoomKey(3, 592), new RoomKey(3, 595)) });
+        h.Walker.WalkTo(new RoomKey(3, 595));
+
+        Assert.Equal(Direction.E, Assert.Single(door.Calls).Direction);
+    }
+
     // The gaol of report paradigm-20260924-053941: a door southeast out of the
     // first room, and a plain southeast exit out of the room behind it.
     private const string DoorThenPlainGraphJson = """
