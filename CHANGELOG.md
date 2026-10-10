@@ -1,5 +1,11 @@
 # Version history
 
+## 3.160.5
+
+- Stock: a lock under 25% a pick is gone round when that costs at most 10 extra steps
+- A door the picks run out on is gone round for the rest of the walk or loop run, where the walk used to stop at it
+- Log and bug report name the doors a route went round
+
 ## 3.160.4
 
 - Gear sets, backstab armour, location gear and weapon swaps equip a piece the pack holds two or more of
