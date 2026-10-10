@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.7**
+> **Version 3.161.5**
 > - A room's heat (*You are seared by the flames*) no longer counts as a combat round
 > - No more heals or buffs sent mid-round into `You have already cast a spell this round!`
 > - A fight stopped just after an attack is re-attacked on the next round line

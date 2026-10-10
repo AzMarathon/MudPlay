@@ -2108,6 +2108,11 @@ public sealed class AppServices
     // "defer to party inventory".
     public Game.Map.PartyPathItemGate PartyPathItemGate { get; private set; } = null!;
 
+    // The gate items this leader handed to party members and the game confirmed,
+    // so a member who never answers an @have count isn't fetched another copy on
+    // every trip. In memory only, and gone when the party changes.
+    public Game.Map.PartyHandOverMemory PartyHandOvers { get; private set; } = null!;
+
     // On-demand party-level probe — broadcasts @level and records
     // each member's exact level into Players. Fired by
     // PartyLevel on roster change so the players table stays
@@ -6931,6 +6936,13 @@ public sealed class AppServices
         // self-subscribes to ChatRouter for replies; the give hand-off's
         // wire-sender is bound by MainWindowViewModel after connect.
         PartyInventory = new Game.Remote.PartyInventoryProbe(PartyBroadcaster, Chat, PartyState, Log);
+        PartyHandOvers = new Game.Map.PartyHandOverMemory(
+            // Only an item the data says has unlimited uses is kept for good. One
+            // with a charge count, or with no record to read, may be used up.
+            hasLimitedUses: id => Game.Inventory.ItemChargeMeta.Read(GameData, id) is not { MaxUses: <= 0 },
+            journey: () => Walker.Journey,
+            log: Log);
+        Inventory.ItemGivenAway += PartyHandOvers.OnItemGivenAway;
         PartyPathItemGate = new Game.Map.PartyPathItemGate(
             isCarried: IsItemCarried,
             selfCount: CountItemCarried,
@@ -6963,20 +6975,48 @@ public sealed class AppServices
             canTurnWalkAside: () => JourneyHasFetchOrder && !ErrandOwnsWalk()
                 && (LoopRunner.State == Game.Map.LoopState.Idle || LoopRunner.IsApproachInFlight),
             armHoldCap: expired => ScheduleOnce(PartyInventory.QueryWindow + TimeSpan.FromSeconds(2), expired),
-            journey: () => Walker.Journey);
+            journey: () => Walker.Journey,
+            handOvers: PartyHandOvers);
         // The leader coordinates redistribution once acquisition makes the
         // party whole — re-check on every inventory change.
         Inventory.Changed += PartyPathItemGate.OnInventoryChanged;
         // Another character: the counts and the hold belong to the one that left.
-        Profile.ProfileLoaded += _ => PartyPathItemGate.Clear();
+        Profile.ProfileLoaded += _ =>
+        {
+            PartyPathItemGate.Clear();
+            PartyHandOvers.Clear("another character was loaded");
+        };
         // Handed out: the gate the party was short for is open again.
         PartyPathItemGate.Provisioned += ClearPartyShortGateItem;
-        // A count is about one roster; a member joining or leaving voids it.
+        // A count is about one roster; a member joining or leaving voids it. What
+        // was handed to a member is theirs alone, so it goes only when they do.
         PartyState.Members.CollectionChanged += (_, _) =>
         {
             ClearPartyShortGateItems("the party changed");
             PartyPathItemGate.ForgetCounts();
+            PartyHandOvers.KeepOnly(PartyState.Members
+                .Where(m => !m.IsSelf && GivenNameOf(m.Name) is { Length: > 0 })
+                .Select(m => GivenNameOf(m.Name)!)
+                .ToArray());
         };
+        // The hand-overs were this leader's. Under another leader the party is not
+        // the one they were made in.
+        PartyState.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Game.PartyState.SelfIsLeader) && !PartyState.SelfIsLeader)
+                PartyHandOvers.Clear("this character no longer leads the party");
+        };
+        // A copy with a limited number of uses may be used up by the gate it was
+        // fetched for, in every pack that crossed with the leader's move.
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.PreviousRoom is not { } from || t.NewRoom is not { } to || from.Key.Equals(to.Key)) return;
+            foreach (Game.Map.RoomExit exit in from.Exits.Values)
+                if (exit.KeyItemId > 0 && exit.Target.Equals(to.Key))
+                    PartyPathItemGate.OnGateCrossed(exit.KeyItemId);
+        };
+        // The line that refuses a give ends the wait for the one that confirms it.
+        Inventory.GiveRefused += PartyHandOvers.OnGiveRefused;
 
         // Per-walk forced-obtain (the route picker's "obtain then cross" choice):
         // drop an item from the override once it's covered — the item itself or
@@ -7290,6 +7330,39 @@ public sealed class AppServices
         // through the walker — attached here since the walker is built
         // after the manager.
         DeathRecovery.AttachWalker(Walker);
+        // The Stock spill sweep plans from the room graph, tells a leg a movement gate
+        // is holding from one that has stalled, and never searches a stash room. The
+        // pile list leaves out what a death doesn't drop.
+        DeathRecovery.AttachSpillSweep(
+            roomLookup: RoomGraph.GetRoom,
+            movementHeld: () => MovementCoordinator.IsPaused,
+            isStashRoom: Movement.IsStash,
+            // The sweep the user asked for gives way to whatever else drives the
+            // character: a loop, Auto-Lair or an errand's walk, any other errand or
+            // solver that has the walker, and a party leader being followed.
+            // A loop being walked to (its handoff pending) is a loop for this purpose:
+            // the walker's arrival hands over to it a moment later.
+            // A fight with a player and a flee from one are engines too: neither
+            // stops a sweep's leg when it takes over (the leg isn't a walk it can save
+            // and resume), so the sweep has to see them and stand down.
+            otherEngineDrives: () =>
+                ErrandOwnsWalk() || ErrandHasTheWalker
+                || LoopRunner.State != Game.Map.LoopState.Idle || LoopHandoff.Pending is not null
+                || PvpFight.IsActive || PvpFlee.IsActive
+                || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.FollowerGate),
+            // A flee, or the walk back from one, that ended here was an engine's walk
+            // though it is over by the time anyone asks.
+            engineWalkEndedAt: room => PvpFlee.WalkJustEndedAt(room),
+            // It sends nothing during a rest (helper actions wait one out) or while
+            // the user has paused; Auto-All is its own probe below.
+            restHeld: RestHeld,
+            userPaused: () => MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate),
+            autoSearchesRooms: () => ReadAutoModeFlag(d => d.AutoSearch)
+                || PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
+            noteRoomSearched: room => AutoSearch.NoteSearchedByOther(room));
+        DeathRecovery.SetStaysOnDeathProbe(EveryItemOfThisNameStaysOnDeath);
+        // The walker's abandoned-combat halt: the sweep ends in place on it.
+        CombatTracker.EngagedTargetAbandoned += _ => DeathRecovery.NoteEngagedTargetAbandoned();
         // Combat-aware re-equip interleaving: recovering a corpse in a room with a
         // live hostile paces the wear/eq burst across combat rounds (each equip
         // breaks the round, same as a between-round cast) instead of firing it all
@@ -7398,7 +7471,11 @@ public sealed class AppServices
         {
             if (e.Kind is Game.Map.WalkEventKind.Stopped or Game.Map.WalkEventKind.Failed
                 or Game.Map.WalkEventKind.Finished)
+            {
                 PartyPathItemGate.OnWalkEnded();
+                // The walker ends a journey before it raises the event that ended it.
+                PartyHandOvers.ForgetEndedTrips();
+            }
             // A card's count is for the walk that card starts. Not on Stopped: the
             // walk a card replaces stops just before the card's own walk announces.
             if (e.Kind is Game.Map.WalkEventKind.Failed or Game.Map.WalkEventKind.Finished)
@@ -8065,6 +8142,12 @@ public sealed class AppServices
             log: Log);
         PvpFight.Reported += what => WriteTerminalNotice($"[PvP: {what}]");
         PvpFight.Started += given => PvpResponse.NoteWeAttack(given);
+        // A sweep's leg is not a walk the fight's suspend can see and stop, and a
+        // neighbours-only sweep doesn't give way to engines by itself: the fight
+        // ends either at once, before the walker takes another step out of the room.
+        // The sweep only: a Recover Now still walking to the death room is a journey
+        // the fight suspends and resumes, and stays the Recover Now's.
+        PvpFight.Started += _ => DeathRecovery.EndSpillSweep("a fight with a player began");
         PvpStrangers = new Game.Pvp.PvpStrangerLookup(
             Router, RoomClassifier, Players,
             pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
@@ -8126,6 +8209,16 @@ public sealed class AppServices
         MovementControl.AddSolver(
             active: () => MazeSolver.Active, held: () => MazeSolver.IsHeld, stop: MazeSolver.Cancel);
         MazeSolver.StateChanged += MovementControl.NoteSolverStateChanged;
+        // So does a Stock spill sweep: the walker is idle while it looks through
+        // exits, gets and searches, and Stop and Pause must reach those stretches too.
+        MovementControl.AddSolver(
+            active: () => DeathRecovery.SpillSweepActive,
+            held: () => DeathRecovery.SpillSweepHeld,
+            stop: DeathRecovery.StopSpillSweep);
+        DeathRecovery.SpillSweepStateChanged += MovementControl.NoteSolverStateChanged;
+        // A sweep still waiting to start isn't running, so the solver list doesn't
+        // reach it; Stop calls it off here.
+        MovementControl.Stopping += DeathRecovery.DropDeferredSweep;
 
         // Gear driven by movement + room, for the While Moving / Bossing sets. Both
         // no-op unless the user enabled + filled the set (AutoEquipCoordinator guards).
@@ -8750,7 +8843,10 @@ public sealed class AppServices
                 || PathItemShopRouter.DetourActive || PathItemGiveRouter.DetourActive
                 || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive
                 || AutoLightShopRouter.DetourActive
-                || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive,
+                || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive
+                // A spill sweep's leg is not a walk to pick back up: the sweep ends when
+                // its walk is taken, and the detour would walk on to a stop nobody wants.
+                || DeathRecovery.SpillSweepActive,
             nearestLoopRoom: NearestLoopRoom,
             nearBankSteps: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").SellOnBankRunWithinSteps,
             log: Log);
@@ -12973,13 +13069,21 @@ public sealed class AppServices
             {
                 counted.Add(id);
                 if (ItemNames.GetName(id) is not { Length: > 0 } name) continue;
-                Game.Remote.PartyInventoryProbe.PartyItemResult r = await PartyInventory.QueryAsync(id, name);
+                Game.Remote.PartyInventoryProbe.PartyItemResult asked = await PartyInventory.QueryAsync(id, name);
+                // The card counts one each, so a silent member the leader handed
+                // a copy to is credited with one. The walk is given the answers
+                // as they came and reads them against the hand-overs itself; it
+                // logs the credit then, and the line below names it for the card.
+                Game.Remote.PartyInventoryProbe.PartyItemResult r =
+                    PartyHandOvers.Reconcile(asked, perPerson: 1, noteCredits: false);
                 int need = 1 + r.Expected;
                 int own = CountItemCarried(id);
                 next[id] = (need, r.TotalCount);
-                _cardCounts[id] = (r, DateTimeOffset.UtcNow);
+                _cardCounts[id] = (asked, DateTimeOffset.UtcNow);
                 string members = r.CountsByMember.Count == 0 ? "nobody answered"
-                    : string.Join(", ", r.CountsByMember.Select(kv => $"{kv.Key} {kv.Value}"));
+                    : string.Join(", ", r.CountsByMember.Select(kv => asked.CountsByMember.ContainsKey(kv.Key)
+                        ? $"{kv.Key} {kv.Value}"
+                        : $"{kv.Key} {kv.Value} (didn't answer: handed over earlier)"));
                 if (r.Unanswered.Count > 0)
                     members += $"; {string.Join(", ", r.Unanswered)} didn't answer: counted as holding none";
                 Log.Info(Game.Map.AutoSearchManager.LogCategory,
@@ -13084,6 +13188,10 @@ public sealed class AppServices
 
     private Game.Map.RoomKey? LightDetourWalkDestination()
     {
+        // A spill sweep's leg reports no journey, and its bare destination is a stop
+        // that means nothing once the detour has taken the walk and ended the sweep.
+        // No destination, no detour: the light is left to the other provisioning.
+        if (DeathRecovery.SpillSweepActive) return null;
         _lightDetourJourney = Walker.State != Game.Map.WalkState.Idle ? Walker.Journey : null;
         return _lightDetourJourney?.Destination ?? Walker.Destination;
     }
@@ -13402,6 +13510,7 @@ public sealed class AppServices
         // Outstanding needs and deferred pickups / searches.
         Needs.Clear();
         PartyPathItemGate.Clear();
+        PartyHandOvers.Clear(reason);
         ClearPartyShortGateItems(reason);
         Cash.CancelDeferredCollect(reason);
         AutoGetItems.CancelDeferredCollect(reason);
@@ -14028,6 +14137,23 @@ public sealed class AppServices
         bool notDroppable = row.TryGetProperty("Not Droppable", out System.Text.Json.JsonElement nd)
             && nd.ValueKind == System.Text.Json.JsonValueKind.Number && nd.GetInt32() != 0;
         return Game.Inventory.ItemDropRule.Refused(notDroppable, ItemAbilityCodes(row), worn);
+    }
+
+    // Whether an item of this name stays on the character through a death: every
+    // item that bears the name must (DeathPileRules.EveryItemOfTheNameStays). The
+    // indexed lookup answers for nearly every name; the table is only walked for a
+    // name whose first item does stay.
+    private bool EveryItemOfThisNameStaysOnDeath(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || GameData.FindRowByName("Items", name) is not { } first) return false;
+        if (!Game.Recovery.DeathPileRules.StaysWithCharacter(ItemAbilityCodes(first))) return false;
+        if (GameData.GetRawTable("Items") is not { } items) return true;
+        string wanted = name.Trim();
+        return Game.Recovery.DeathPileRules.EveryItemOfTheNameStays(items.RootElement.EnumerateArray()
+            .Where(row => row.TryGetProperty("Name", out System.Text.Json.JsonElement n)
+                && n.ValueKind == System.Text.Json.JsonValueKind.String
+                && string.Equals(n.GetString()?.Trim(), wanted, StringComparison.OrdinalIgnoreCase))
+            .Select(ItemAbilityCodes));
     }
 
     // The ability codes an item carries, by name; empty for an item the game data
