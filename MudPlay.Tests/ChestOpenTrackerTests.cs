@@ -246,6 +246,29 @@ public sealed class ChestOpenTrackerTests : IDisposable
         Assert.Contains(".oak chest dropped: sapphire", _sent);
     }
 
+    // With the master switch off a typed open draws no `i` and no loot line from
+    // the client ("stop those too"; user, 2026-10-10). The open is not settled as
+    // having given nothing: the user's own next `i` lists what it gave.
+    [Fact]
+    public void TypedOpen_MasterSwitchOff_SendsNothing_AndIsReadByTheUsersNextInventory()
+    {
+        bool off = true;
+        _tracker.MasterSwitchOff = () => off;
+        Inventory("oak chest, 2 rusty dagger", gold: 10);
+
+        _typed.ObserveOutbound(Encoding.Latin1.GetBytes("open chest\r\n"));
+        RunScheduled();
+
+        Assert.Empty(_sent);
+        Assert.Empty(_scheduled);                                   // no timeout to settle it on stale data
+        Assert.Empty(_tracker.Loot(_inv.Snapshot.CarriedItems));    // not read, not "gave nothing"
+
+        Inventory("2 rusty dagger, sapphire", gold: 10);            // the user types `i`
+
+        Assert.Equal(new[] { ("sapphire", 1) }, _tracker.Loot(_inv.Snapshot.CarriedItems));
+        Assert.Empty(_sent);                                        // and still nothing said to the room
+    }
+
     [Fact]
     public void TypedOpen_OfSomethingThatIsntACarriedChest_IsIgnored()
     {

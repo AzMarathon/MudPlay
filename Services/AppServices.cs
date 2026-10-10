@@ -9860,6 +9860,7 @@ public sealed class AppServices
         Cash.MasterSwitchOff = MasterSwitchOff("Bank and stash trips");
         LocationEquip.MasterSwitchOff = MasterSwitchOff("Location gear");
         PathItemFloor.MasterSwitchOff = MasterSwitchOff("Route item pickup");
+        ChestOpens.MasterSwitchOff = MasterSwitchOff("Chest open read");
         AutoHazardCounterProvisioner.MasterSwitchOff = MasterSwitchOff("Hazard counter item");
         ManaRegen.MasterSwitchOff = MasterSwitchOff("Mana-regen reroll");
         PvpFight.MasterSwitchOff = MasterSwitchOff("PvP response");

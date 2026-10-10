@@ -222,11 +222,26 @@ public sealed class ChestOpenTracker : IDisposable
         {
             if (gen != _generation) return;
             _afterReadSent = true;
+            // With the master switch off the open's own follow-up read is not
+            // sent ("stop those too"; user, 2026-10-10). The before snapshot is
+            // kept and no timeout is armed, so the open is neither settled on the
+            // cached inventory as having given nothing nor dropped: the next
+            // inventory read, the user's own `i`, shows what it gave.
+            if (MasterSwitchOff?.Invoke() == true)
+            {
+                _log?.Info(LogCategory,
+                    $"{Label(_opened)} opened but not read — the master switch is off, so no `i` is sent; the next inventory read lists what it gave");
+                return;
+            }
             _send("i");
             int readGen = ++_generation;
             _schedule(ReadTimeoutMs, () => OnReadTimeout(readGen));
         });
     }
+
+    // The master switch (true = off). Asked only where the tracker would send by
+    // itself: the read after an open, and the loot line said to the room.
+    public Func<bool>? MasterSwitchOff { get; set; }
 
     private void OnFullInventoryParsed() => _post(() =>
     {
@@ -275,6 +290,7 @@ public sealed class ChestOpenTracker : IDisposable
     private void Announce(string label, IReadOnlyList<(string Name, int Count)> items, CurrencyHoldings coin)
     {
         if (!SayLootToRoom) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         var coins = new List<string>();
         if (coin.Runic > 0) coins.Add($"{coin.Runic:N0} {_runicName()}");
         if (coin.Platinum > 0) coins.Add($"{coin.Platinum:N0} platinum");
