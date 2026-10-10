@@ -514,7 +514,7 @@ public sealed class EventQueueTests : IDisposable
 
         off = true;
         h.Events.NoteMasterSwitchChanged();
-        now += TimeSpan.FromHours(8);
+        now += TimeSpan.FromMinutes(4);     // short enough that switch-on asks nothing
         h.Events.Tick();
         Assert.Contains("'kept'", h.Events.QueueSummary);
 
@@ -526,6 +526,289 @@ public sealed class EventQueueTests : IDisposable
         now += TimeSpan.FromSeconds(2);     // the second it had left, and one more
         h.Events.Tick();
         Assert.DoesNotContain("'kept'", h.Events.QueueSummary);
+    }
+
+    // ----- The choice after a long spell with the master switch off ---------
+    // "if we swap back on and have had events in queue for longer than 5 minutes
+    // because of this, it should pop up with a menu for the user to pick which
+    // ones to execute and which ones to drop" (user, 2026-10-10).
+
+    private sealed class HeldQueue
+    {
+        public required Harness H { get; init; }
+        public DateTimeOffset Now = new(2026, 10, 10, 18, 0, 0, TimeSpan.Zero);
+        public bool Off;
+        public int Asked;
+        public int Withdrawn;
+
+        public void SwitchOff()
+        {
+            Off = true;
+            H.Events.NoteMasterSwitchChanged();
+        }
+
+        public void SwitchOn()
+        {
+            Off = false;
+            H.Events.NoteMasterSwitchChanged();
+        }
+    }
+
+    // A run under way with `waiting` events behind it, on a clock the test moves.
+    private HeldQueue WithWaiting(Harness h, params string[] waiting)
+    {
+        HeldQueue q = new() { H = h };
+        h.Events.Now = () => q.Now;
+        h.Events.IsMasterSwitchOff = () => q.Off;
+        h.Events.BlockedByMasterSwitch = _ => q.Off;
+        h.Events.QueueChoiceNeeded += () => q.Asked++;
+        h.Events.QueueChoiceWithdrawn += () => q.Withdrawn++;
+        h.Tracker.SetLocated(A);
+        h.Events.Fire(Add(h, WalkTo("running", C, EventThenType.Nothing)));
+        foreach (string name in waiting)
+            h.Events.Fire(Add(h, WalkTo(name, B, EventThenType.Nothing)));
+        return q;
+    }
+
+    private static ScheduledEvent Named(Harness h, string name) => h.Events.Events.Single(e => e.Name == name);
+
+    [Fact]
+    public void HeldFiveMinutesOrLess_TheWaitingEventsCarryOn_WithNoPrompt()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first", "second");
+
+        q.SwitchOff();
+        q.Now += EventManager.HeldQueuePromptAfter;
+        Arrive(h, C);
+        q.SwitchOn();
+
+        Assert.Equal(0, q.Asked);
+        Assert.False(h.Events.QueueChoicePending);
+        Assert.Contains("'first' WalkTo", h.Events.RunSummary);
+        Assert.Contains("'second'", h.Events.QueueSummary);
+    }
+
+    [Fact]
+    public void HeldLongerThanFiveMinutes_NothingWaitingStartsUntilTheUserAnswers()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first", "second");
+        q.Now += TimeSpan.FromMinutes(2);
+
+        q.SwitchOff();
+        q.Now += TimeSpan.FromMinutes(6);
+        Arrive(h, C);                           // the run ahead of them ends while it is off
+        q.SwitchOn();
+
+        Assert.Equal(1, q.Asked);
+        Assert.True(h.Events.QueueChoicePending);
+        Assert.Equal("(none)", h.Events.RunSummary);     // the kept completion ran; nothing took its place
+        Assert.Contains("'first'", h.Events.QueueSummary);
+        Assert.Contains("waiting for your choice (held 6 min by the master switch)", h.Events.QueueSummary);
+        Assert.Contains(h.EventLog, l => l.Contains("asking which to run"));
+
+        // Not by a tick, and not for the wait limit either, however long the answer takes.
+        q.Now += h.Events.MaxQueueWait + TimeSpan.FromHours(1);
+        h.Events.Tick();
+        Assert.Equal("(none)", h.Events.RunSummary);
+        Assert.Contains("'second'", h.Events.QueueSummary);
+
+        IReadOnlyList<EventManager.HeldQueueEntry> offered = h.Events.OfferQueueChoice();
+        Assert.Equal(new[] { "first", "second" }, offered.Select(o => o.Event.Name));
+        Assert.Equal(TimeSpan.FromMinutes(6), offered[0].HeldBySwitch);
+        Assert.Equal(TimeSpan.FromMinutes(8) + h.Events.MaxQueueWait + TimeSpan.FromHours(1), offered[0].Waiting);
+    }
+
+    [Fact]
+    public void Answered_TheTickedEventsRunInTheirOrder_AndTheRestAreDropped()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first", "second", "third");
+        q.SwitchOff();
+        q.Now += TimeSpan.FromMinutes(30);
+        Arrive(h, C);
+        q.SwitchOn();
+        h.Events.OfferQueueChoice();
+        q.Now += h.Events.MaxQueueWait + TimeSpan.FromMinutes(1);   // the user took their time
+
+        h.Events.ResolveQueueChoice(new[] { Named(h, "third"), Named(h, "first") });
+
+        Assert.False(h.Events.QueueChoicePending);
+        Assert.Contains("'first' WalkTo", h.Events.RunSummary);
+        Assert.Contains("'third'", h.Events.QueueSummary);
+        Assert.DoesNotContain("'second'", h.Events.QueueSummary);
+        Assert.Contains(h.EventLog, l => l.Contains("'second' dropped by the user's choice"));
+        Assert.Contains(h.EventLog, l => l.Contains("'first' kept by the user's choice"));
+        Assert.Equal("[1 waiting event(s) dropped by your choice; 2 will run]", Assert.Single(h.Notices));
+
+        // The time spent on the question is not held against the one still waiting.
+        h.Events.Tick();
+        Arrive(h, B);
+        Assert.Contains("'third' WalkTo", h.Events.RunSummary);
+    }
+
+    [Fact]
+    public void AnsweredWithNoneTicked_AllAreDropped_WithOneNotice()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first", "second");
+        q.SwitchOff();
+        q.Now += TimeSpan.FromMinutes(10);
+        Arrive(h, C);
+        q.SwitchOn();
+        h.Events.OfferQueueChoice();
+
+        h.Events.ResolveQueueChoice(Array.Empty<ScheduledEvent>());
+
+        Assert.Equal("(none)", h.Events.RunSummary);
+        Assert.Equal("(empty)", h.Events.QueueSummary);
+        Assert.Equal(2, h.EventLog.Count(l => l.Contains("dropped by the user's choice")));
+        Assert.Equal("[2 waiting event(s) dropped by your choice; none will run]", Assert.Single(h.Notices));
+        Assert.Equal(0, q.Withdrawn);           // answered, not taken back
+    }
+
+    // The switch goes off again with the prompt up: the prompt is taken back, the
+    // events stay waiting, and the question is put again at the next switch-on.
+    [Fact]
+    public void SwitchOffAgainWhileTheChoiceIsAwaited_TakesThePromptBack_AndAsksAgainNextTime()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first");
+        q.SwitchOff();
+        q.Now += TimeSpan.FromMinutes(10);
+        Arrive(h, C);
+        q.SwitchOn();
+        h.Events.OfferQueueChoice();
+
+        q.SwitchOff();
+        Assert.Equal(1, q.Withdrawn);
+        Assert.Contains("'first'", h.Events.QueueSummary);
+
+        q.Now += TimeSpan.FromSeconds(30);
+        q.SwitchOn();
+        Assert.Equal(2, q.Asked);
+        Assert.Equal("(none)", h.Events.RunSummary);
+
+        h.Events.OfferQueueChoice();
+        h.Events.ResolveQueueChoice(new[] { Named(h, "first") });
+        Assert.Contains("'first' WalkTo", h.Events.RunSummary);
+    }
+
+    // Closed without an answer: the events stay waiting, one notice says how to
+    // be asked again, and the next switch-on asks.
+    [Fact]
+    public void ChoicePutOff_KeepsTheEventsWaiting_AndIsAskedAgainAtTheNextSwitchOn()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first");
+        q.SwitchOff();
+        q.Now += TimeSpan.FromMinutes(10);
+        Arrive(h, C);
+        q.SwitchOn();
+        h.Events.OfferQueueChoice();
+
+        h.Events.NoteQueueChoicePutOff();
+
+        Assert.True(h.Events.QueueChoicePending);
+        Assert.Contains("still wait for your choice", Assert.Single(h.Notices));
+        h.Events.Tick();
+        Assert.Equal("(none)", h.Events.RunSummary);
+
+        q.SwitchOff();
+        q.SwitchOn();
+        Assert.Equal(2, q.Asked);
+    }
+
+    // The link is down at switch-on: the question can be asked and answered, but
+    // nothing starts until the character is back in the game.
+    [Fact]
+    public void ConnectionDownAtSwitchOn_TheChoiceIsAsked_ButNothingStartsUntilBackInTheGame()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first");
+        q.SwitchOff();
+        q.Now += TimeSpan.FromMinutes(10);
+        Arrive(h, C);
+        h.Events.NoteDisconnected();
+        q.SwitchOn();
+
+        Assert.Equal(1, q.Asked);
+        h.Events.OfferQueueChoice();
+        h.Events.ResolveQueueChoice(new[] { Named(h, "first") });
+        Assert.DoesNotContain("'first' WalkTo", h.Events.RunSummary);
+
+        h.Events.NoteEnteredGame();
+        Assert.Contains("'first' WalkTo", h.Events.RunSummary);
+    }
+
+    // An event that fires with the prompt up queues behind the others as usual.
+    // It was not on the list, so the answer neither drops it nor runs it early.
+    [Fact]
+    public void EventFiringWhileTheChoiceIsAwaited_QueuesBehind_AndIsNotPartOfTheAnswer()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first");
+        q.SwitchOff();
+        q.Now += TimeSpan.FromMinutes(10);
+        Arrive(h, C);
+        q.SwitchOn();
+        IReadOnlyList<EventManager.HeldQueueEntry> offered = h.Events.OfferQueueChoice();
+
+        h.Events.Fire(Add(h, WalkTo("late", C, EventThenType.Nothing)));
+
+        Assert.Equal("(none)", h.Events.RunSummary);
+        Assert.Contains("'late'", h.Events.QueueSummary);
+        Assert.Single(offered);
+
+        h.Events.ResolveQueueChoice(Array.Empty<ScheduledEvent>());
+
+        Assert.Contains("'late' WalkTo", h.Events.RunSummary);
+        Assert.Contains("[1 waiting event(s) dropped by your choice; none will run]", h.Notices);
+    }
+
+    // A Stop empties the queue as it always does; the prompt about it goes too.
+    [Fact]
+    public void QueueEmptiedWhileTheChoiceIsAwaited_TakesThePromptBack()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first");
+        q.SwitchOff();
+        q.Now += TimeSpan.FromMinutes(10);
+        q.SwitchOn();                           // 'running' still walks; 'first' awaits the choice
+        Assert.True(h.Events.QueueChoicePending);
+
+        h.Walker.Stop("user stop from toolbar");
+
+        Assert.False(h.Events.QueueChoicePending);
+        Assert.Equal(1, q.Withdrawn);
+        Assert.Equal("(empty)", h.Events.QueueSummary);
+    }
+
+    // A Logoff event already waiting when the switch went off is listed with the
+    // rest. (One that fires while the switch is off is skipped, never queued.)
+    [Fact]
+    public void ALogoffEventAlreadyWaiting_IsListedLikeTheOthers()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = new() { H = h };
+        h.Events.Now = () => q.Now;
+        h.Events.IsMasterSwitchOff = () => q.Off;
+        h.Events.QueueChoiceNeeded += () => q.Asked++;
+        h.Tracker.SetLocated(A);
+        ScheduledEvent ahead = WalkTo("logoff walk", C, EventThenType.Nothing);
+        ahead.TriggerType = EventTriggerType.Logoff;
+        ScheduledEvent behind = WalkTo("logoff bank", B, EventThenType.Nothing);
+        behind.TriggerType = EventTriggerType.Logoff;
+        h.Events.Fire(Add(h, ahead));
+        h.Events.Fire(Add(h, behind));          // waits behind another Logoff run
+
+        q.SwitchOff();
+        q.Now += TimeSpan.FromMinutes(10);
+        q.SwitchOn();
+
+        Assert.Equal(1, q.Asked);
+        Assert.Equal("logoff bank", Assert.Single(h.Events.OfferQueueChoice()).Event.Name);
     }
 
     // A run that doesn't end (a walk left paused) must not set off hours-old events

@@ -10133,13 +10133,20 @@ public sealed class AppServices
             _masterSwitchSettleOwed = true;
             Log.Info("AutoMode",
                 "Master switch back on outside the game: movement stays frozen and nothing is sent or started until the first game prompt.");
-            // Its clocks restart now; it starts nothing while the link is down.
+            // Its clocks restart now and it may ask which waiting events to run;
+            // it starts nothing while the link is down.
             Events.NoteMasterSwitchChanged();
             return;
         }
         SettleAfterMasterSwitchOn();
+        // Last, with movement free again: an event's Then that landed meanwhile
+        // runs, and with nothing running the next waiting event starts.
+        Events.NoteMasterSwitchChanged();
     }
 
+    // Everything the switch-on sends or starts, run at once in the game and at the
+    // first game prompt otherwise. The events are not told from here: they hear of
+    // the switch when it is switched and of the way back in from the scheduler.
     private void SettleAfterMasterSwitchOn()
     {
         _masterSwitchSettleOwed = false;
@@ -10172,9 +10179,6 @@ public sealed class AppServices
         LoopRunner.ResumeAfterMasterSwitch();
         MovementControl.ReleaseFromAutoAll();
         DeathRecovery.OnAutoAllRestored();
-        // Last, with movement free again: an event's Then that landed meanwhile
-        // runs, and with nothing running the next waiting event starts.
-        Events.NoteMasterSwitchChanged();
     }
 
     // The switch moves the toggles through a profile reseed, which is not a

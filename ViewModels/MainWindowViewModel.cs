@@ -411,6 +411,50 @@ public partial class MainWindowViewModel : ObservableObject
     // A Sprint start turned Sprint Mode on and it hasn't ended yet.
     private bool _tripStartedSprint;
 
+    // The open "which waiting events should run?" prompt, so a second ask brings
+    // it forward instead of opening another.
+    private HeldEventsPromptViewModel? _heldEventsPrompt;
+
+    // The events manager asks which waiting events should still run: the master
+    // switch held them for a long spell (EventManager's queue choice). Ticked
+    // ones run in their order and the rest are dropped. Closed without an answer,
+    // the events stay waiting and the manager asks again at the next switch-on.
+    private async Task ShowHeldEventsPromptAsync()
+    {
+        AppServices services = AppServices.Current;
+        if (_heldEventsPrompt is { Withdrawn: false } open && services.Dialogs.RaiseIfOpen(open)) return;
+        IReadOnlyList<Game.Events.EventManager.HeldQueueEntry> waiting = services.Events.OfferQueueChoice();
+        if (waiting.Count == 0) return;
+
+        HeldEventsPromptViewModel prompt = new(waiting);
+        _heldEventsPrompt = prompt;
+        IReadOnlyList<Models.GameData.ScheduledEvent>? run;
+        try
+        {
+            run = await services.Dialogs
+                .OpenWindowAsync<HeldEventsPromptViewModel, IReadOnlyList<Models.GameData.ScheduledEvent>>(prompt);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // No main window to own it (startup or shutdown): the events stay
+            // waiting and the next switch-on asks again.
+            services.Log.Warn("Events", $"Couldn't open the waiting-events prompt ({ex.Message}).");
+            return;
+        }
+        finally
+        {
+            if (ReferenceEquals(_heldEventsPrompt, prompt)) _heldEventsPrompt = null;
+        }
+
+        if (run is not null) services.Events.ResolveQueueChoice(run);
+        // Closed by its X: put off. Not when the manager took the question back,
+        // nor when the whole client is closing and took the window with it.
+        else if (!prompt.Withdrawn && MainWindowIsOpen()) services.Events.NoteQueueChoicePutOff();
+    }
+
+    private static bool MainWindowIsOpen() =>
+        Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow.IsVisible: true };
+
     // Movement was stopped on purpose: the Stop button or its hotkey, the Navigation
     // window's Stop, or a remote @stop (which pauses, so endsTheRun is false). The
     // live auto toggles go back to the character's base modes, as they do when a
@@ -932,6 +976,12 @@ public partial class MainWindowViewModel : ObservableObject
             Dispatcher.UIThread.Post(() => IsMasterSwitchOn = !off);
         AppServices.Current.AutoModeController.ResetByProfileLoad += () =>
             Dispatcher.UIThread.Post(() => IsMasterSwitchOn = true);
+        // Posted: the switch can be switched by a remote `@auto-all` from inside
+        // the chat pump, and a window is not opened (nor a notice written) there.
+        AppServices.Current.Events.QueueChoiceNeeded += () =>
+            Dispatcher.UIThread.Post(() => _ = ShowHeldEventsPromptAsync());
+        AppServices.Current.Events.QueueChoiceWithdrawn += () =>
+            Dispatcher.UIThread.Post(() => _heldEventsPrompt?.Withdraw());
         AppServices.Current.Profile.ProfileLoaded += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileMutated += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileSaving  += _ => SyncAutoEngineTogglesFromProfile();
