@@ -6,9 +6,9 @@ namespace MudPlay.Game.Health;
 // places that show it: the program log when a hang-up goes out, and the bug
 // report. The penalty is the board's own (GAME_MECHANICS
 // "Hang-up / lost carrier"); the client reports it, and after one looks for the
-// items it dropped (MaxItemsDropped). When it hangs up, and whether, is decided by
-// Disable Hangups, the health settings, the PvP actions and @panic, and nothing
-// here feeds back into any of them.
+// items it dropped (MaxItemsDropped) and for a death it caused (HpShareTop). When
+// it hangs up, and whether, is decided by Disable Hangups, the health settings,
+// the PvP actions and @panic, and nothing here feeds back into any of them.
 public static class HangupPenaltyNotice
 {
     public const string LogCategory = "Hangup";
@@ -40,11 +40,35 @@ public static class HangupPenaltyNotice
         return realm.HangupPvePenaltyEnabled ? Math.Max(pvp, Items(realm.HangupPveItemsDropped)) : pvp;
     }
 
+    // The largest share of max HP (percent) the realm's settings say that hang-up
+    // costs, or null when they don't penalise it: in a fight with a player the PvP
+    // side's, by the master switch; otherwise the monster side's, with that side
+    // ticked, when the character was in a fight with a monster, or in none and the
+    // realm is set as penalising every hang-up (the board's three levels: only
+    // PvP, only while attacked, every hang-up). Read by
+    // Game.Inventory.HangupItemRecheck to tell whether a hang-up can have been a
+    // death: a penalised one kills a dropped character whatever the share (0
+    // included), and a standing one when the share takes its HP that low.
+    //   pvp     — a fight with a player was on, or one had just attacked.
+    //   inFight — in combat with a monster, or a hostile one in the room.
+    public static int? HpShareTop(RealmProfile? realm, bool pvp, bool inFight)
+    {
+        if (realm is not { HangupPenaltyEnabled: true }) return null;
+        if (pvp) return HpRange(realm.HangupPvpHpFromPercent, realm.HangupPvpHpToPercent).To;
+        if (!realm.HangupPvePenaltyEnabled) return null;
+        return inFight || realm.HangupOutsideFightPenaltyEnabled
+            ? HpRange(realm.HangupPveHpFromPercent, realm.HangupPveHpToPercent).To
+            : null;
+    }
+
     // The realm's penalties in one phrase, for the bug report.
     public static string Describe(RealmProfile? realm)
     {
         if (realm is not { HangupPenaltyEnabled: true }) return "none";
-        return $"PvP: {Pvp(realm)}; PvE: {(realm.HangupPvePenaltyEnabled ? Pve(realm) : "not penalised")}";
+        return $"PvP: {Pvp(realm)}; PvE: {(realm.HangupPvePenaltyEnabled ? Pve(realm) : "not penalised")}"
+               + (realm is { HangupPvePenaltyEnabled: true, HangupOutsideFightPenaltyEnabled: true }
+                   ? "; outside a fight too, as PvE"
+                   : "");
     }
 
     // The log line for a hang-up going out now, or null when the realm's settings
@@ -63,9 +87,10 @@ public static class HangupPenaltyNotice
             return realm.HangupPvePenaltyEnabled
                 ? $"This realm penalises a hang-up in combat with monsters: {Pve(realm)}."
                 : null;
-        return realm.HangupPvePenaltyEnabled
-            ? $"This realm penalises a hang-up in PvP ({Pvp(realm)}) and in combat with monsters ({Pve(realm)})."
-            : $"This realm penalises a hang-up in PvP only: {Pvp(realm)}.";
+        if (!realm.HangupPvePenaltyEnabled) return $"This realm penalises a hang-up in PvP only: {Pvp(realm)}.";
+        return realm.HangupOutsideFightPenaltyEnabled
+            ? $"This realm penalises every hang-up: in PvP {Pvp(realm)}, otherwise {Pve(realm)}."
+            : $"This realm penalises a hang-up in PvP ({Pvp(realm)}) and in combat with monsters ({Pve(realm)}).";
     }
 
     private static string Pvp(RealmProfile realm) =>

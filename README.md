@@ -1,13 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.16**
-> - Auto-discard counts copies, not pack entries: an item with Min. to keep of 1 or more is now discarded down to that amount (it never was before)
-> - Worn copies count toward Min. to keep and are never the copy discarded
-> - A flagged light is discarded lit or not; the lit one counts as a pack copy
-> - A discard waiting to be sent is checked again before it goes, and taken back on a Roomba sweep, the switch going off, an unticked flag or a raised keep
-> - An inventory read landing before a pile's answers no longer has the pile sent twice
-> - Taking off a lit light on Stock no longer adds a pack item named `<light> and extinguished it` or leaves the light listed as lit
+> **Version 3.162.0**
+> - A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
+> - Only on a life lost: Death Recovery gets the room, time and pile; loops, walks and a waiting default task are stopped
+> - A life lost on another client, or after a clean exit, is not recorded here
+> - The item pickup stands down for it, and nothing is recorded when it can't be told
+> - Lives are read again after a life is given back or a level trained
+> - Settings → BBS: a box for boards that penalise every hang-up, not only one made in a fight
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

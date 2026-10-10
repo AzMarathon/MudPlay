@@ -923,5 +923,28 @@ public sealed class StatParserTests
 
         Assert.True(p.LastCaptureReadHits);
         Assert.True(p.LastCaptureReadPool);
+        Assert.False(p.LastCaptureReadLives);
+    }
+
+    // The lives a reconnect is judged on must be this connection's: a capture
+    // says whether its screen gave them, since the count itself is also carried
+    // over from the profile.
+    [Fact]
+    public void StatScreen_SaysWhetherItGaveTheLives()
+    {
+        var (p, s) = Setup();
+        p.FeedTestLine("Name: MudPlay WuzHere                  Lives/CP:           6/0");
+        p.FeedTestLine("Hits:    86/86    Armour Class:  30/3  Thievery:       62");
+        p.FeedTestLine("[HP=86/MA=38]:", isPromptLine: true);
+
+        Assert.True(p.LastCaptureReadLives);
+        Assert.Equal(6, s.Lives);
+
+        // The next capture is an `exp` screen: no lives on it.
+        p.TestArm();
+        p.FeedTestLine("Exp: 12345  Level: 3  Exp needed for next level: 10 (20) [50%]");
+        p.FeedTestLine("[HP=86/MA=38]:", isPromptLine: true);
+
+        Assert.False(p.LastCaptureReadLives);
     }
 }
