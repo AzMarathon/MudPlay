@@ -3314,6 +3314,9 @@ public sealed class AppServices
         // loaded character doesn't restore the previous one's state.
         AutoModeController = new Game.AutoModeController(Profile, Log);
         Profile.ProfileLoaded += _ => AutoModeController.ResetSnapshot();
+        // A `par` asked for to check who is in the party isn't a health read, so
+        // the auto-heal toggle doesn't hold it. The master switch does.
+        PartyPoller.IsAutomationEnabled = () => !AutoModeController.KillSwitchEngaged;
         AutoMode = new Game.Remote.AutoModeRemoteHandler(
             RemoteCommands, Profile, AutoModeController, Log);
         // @atkprio / @atkorder — party member retunes our Target Priority /
@@ -7001,7 +7004,15 @@ public sealed class AppServices
                 && (LoopRunner.State == Game.Map.LoopState.Idle || LoopRunner.IsApproachInFlight),
             armHoldCap: expired => ScheduleOnce(PartyInventory.QueryWindow + TimeSpan.FromSeconds(2), expired),
             journey: () => Walker.Journey,
-            handOvers: PartyHandOvers);
+            handOvers: PartyHandOvers,
+            askPartyList: PartyPoller.RequestPar,
+            // An `[Invited]` row is on the list and not following: not with us.
+            followingMembers: () => PartyState.Members
+                .Where(m => !m.IsSelf && !m.IsInvited && GivenNameOf(m.Name) is { Length: > 0 })
+                .Select(m => GivenNameOf(m.Name)!)
+                .ToArray());
+        // The answer to the `par` the gate asks after a crossing.
+        Party.ParReplyRead += PartyPathItemGate.OnPartyListRead;
         // The leader coordinates redistribution once acquisition makes the
         // party whole — re-check on every inventory change.
         Inventory.Changed += PartyPathItemGate.OnInventoryChanged;
@@ -7032,7 +7043,9 @@ public sealed class AppServices
                 PartyHandOvers.Clear("this character no longer leads the party");
         };
         // A copy with a limited number of uses may be used up by the gate it was
-        // fetched for, in every pack that crossed with the leader's move.
+        // fetched for, in every pack that crossed with the leader's move. A kept
+        // one has the party list asked instead. The room changes here only on the
+        // display that confirms the move, never on the move being sent.
         RoomTracker.StateChanged += t =>
         {
             if (t.PreviousRoom is not { } from || t.NewRoom is not { } to || from.Key.Equals(to.Key)) return;
