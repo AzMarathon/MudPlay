@@ -622,6 +622,8 @@ public sealed class CashManager : IDisposable
     {
         (string? currency, int count) = ParseCashLine(m);
         if (currency is null) return;
+        // As for a hide: "You dropped 3 iron crown." is an item, not coin.
+        if (!IsCashWord(currency)) return;
 
         AdjustHeld(currency, -count);
         DecayInFlight(currency, -count);
@@ -668,6 +670,9 @@ public sealed class CashManager : IDisposable
     {
         (string? currency, int count) = ParseCashLine(m);
         if (currency is null) return;
+        // Paradigm's counted echo of an item named after a coin ("You hid 3 iron
+        // crown.") has the shape of a coin line and none of its metals.
+        if (!IsCashWord(currency)) return;
 
         _log?.Debug(LogCategory, $"hidden currency={currency} count={count}");
         AdjustHeld(currency, -count);

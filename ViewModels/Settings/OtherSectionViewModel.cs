@@ -125,10 +125,11 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // per-room `sea` for a route item is now the master Auto-Search toggle's job,
     // and the route picker's "Search en route" card turns it on for the leg.)
 
-    // When checked, the auto-discard engine conceals each excess flagged item
-    // with hide <item> instead of drop <item>. Engine hides are kept out of the
-    // Transaction ledger (a discard isn't a stash); manual / stash-room hides
-    // still record. Read live by AutoDiscardManager.HideMode.
+    // When checked, a discard (the auto-discard engine's offload of an excess
+    // flagged item, Chest Offload's Drop / Drop All) goes out as hide <item>
+    // instead of drop <item>. Those hides are kept out of the Transaction ledger
+    // (a discard isn't a stash); manual / stash-room hides still record. Read
+    // live by AutoDiscardManager.HideMode.
     [ObservableProperty] private bool _hideWhenDiscarding;
 
     // Note: the former Buy/Hunt/Defer path-item toggles moved to a single per-item

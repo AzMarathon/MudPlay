@@ -1,12 +1,32 @@
 # Version history
 
-## 3.160.4
+## 3.160.7
 
-- Room heat (*You are seared by the flames*) no longer counts as a combat round
-- Heals and buffs no longer go out mid-round into `You have already cast a spell this round!`
+- A room's heat (*You are seared by the flames*) no longer counts as a combat round
+- No more heals or buffs sent mid-round into `You have already cast a spell this round!`
 - A fight stopped just after an attack is re-attacked on the next round line
+- A typed `eq` / `wear` / `wield` / `rem` mid-fight re-attacks at once
+- A refused cast no longer leaves a re-attack armed
+- Exp/Hr and the loop simulator: Paradigm room spells roll every 6.05 s, not every round
+- The giant hellhound's death line is recognised
 - Program log and bug report show re-attack decisions
 - bug reports addressed: paradigm-20261009-120757, paradigm-20261009-122342
+
+## 3.160.4
+
+- Gear sets, backstab armour, location gear and weapon swaps equip a piece the pack holds two or more of
+- Combat no longer counts out an alternate weapon the pack holds two or more of
+
+## 3.160.2
+
+- Chest Offload Drop / Drop All hide when Hide items when discarding is on
+- Hidden items leave the Chest Offload list
+- A hide a full room refuses is retried in each new room
+- A sale, drop, ✕ or Clear list calls a waiting hide off
+- No hide sent for a copy not in the pack
+- Refused or unanswered auto-discard drops no longer stay counted all session
+- No discard after a death or reconnect until the inventory is read
+- Items named after a coin (iron crown) no longer read as coin
 
 ## 3.160.1
 

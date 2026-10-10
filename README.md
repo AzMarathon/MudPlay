@@ -1,10 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.4**
-> - Room heat (*You are seared by the flames*) no longer counts as a combat round
-> - Heals and buffs no longer go out mid-round into `You have already cast a spell this round!`
+> **Version 3.160.7**
+> - A room's heat (*You are seared by the flames*) no longer counts as a combat round
+> - No more heals or buffs sent mid-round into `You have already cast a spell this round!`
 > - A fight stopped just after an attack is re-attacked on the next round line
+> - A typed `eq` / `wear` / `wield` / `rem` mid-fight re-attacks at once
+> - A refused cast no longer leaves a re-attack armed
+> - Exp/Hr and the loop simulator: Paradigm room spells roll every 6.05 s, not every round
+> - The giant hellhound's death line is recognised
 > - Program log and bug report show re-attack decisions
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
