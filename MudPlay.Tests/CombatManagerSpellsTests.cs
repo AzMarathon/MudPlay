@@ -81,9 +81,10 @@ public sealed class CombatManagerSpellsTests
             foreach (Action a in due) a();
         }
 
-        // The exp + *Combat Off* death watcher, wired as AppServices wires it: built
-        // ahead of the combat manager, each death routed to NoteUnattributedDeath.
-        // Only with wireDeathWatcher; other tests call NoteUnattributedDeath themselves.
+        // The death watcher, wired as AppServices wires it: built ahead of the combat
+        // manager, a room spell's kill raised through it from the combat manager, and
+        // every other death routed to NoteUnattributedDeath. Only with
+        // wireDeathWatcher; other tests call NoteUnattributedDeath themselves.
         public MonsterDeathWatcher? Deaths { get; }
         public List<MonsterDeathEvent> DeathEvents { get; } = new();
 
@@ -98,7 +99,7 @@ public sealed class CombatManagerSpellsTests
                 Deaths.MonsterDied += evt =>
                 {
                     DeathEvents.Add(evt);
-                    Combat!.NoteUnattributedDeath();
+                    if (evt.RoomSpellRoster is null) Combat!.NoteUnattributedDeath();
                 };
             }
             Cast = new CastCoordinator(Router, Log);
@@ -114,6 +115,7 @@ public sealed class CombatManagerSpellsTests
                 log: Log,
                 resolveSpellByCode: c => SpellsByCode.TryGetValue(c, out KnownSpell s) ? s : null);
             Combat.SetWireSender(b => Sent.Add(b));
+            if (Deaths is not null) Combat.RoomSpellKill += Deaths.NoteRoomSpellKill;
             Combat.SetClock(() => _clock);
             // Production counts MaxCasts off RoundDamageTracker.RoundCount; mirror it.
             Combat.ReadRoundCount = () => _roundCount;
@@ -2486,20 +2488,32 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("nebo dark sprite", h.LastSent);
     }
 
+    // The room spell's own damage line, as the caster reads it. With its wording on
+    // record the client knows the spell landed this round and counts each kill on
+    // its exp line; without it (landingLineRead false) a kill waits for a *Combat
+    // Off*, as every kill did before.
+    private const string HstoLanding = "A hellish storm of fire and brimstone scorches your foes for 664 damage!";
+
+    private static void KnowTheRoomSpellsLandingLine(Harness h)
+        => h.Combat.ResolveAttackSpellMatchers = _ => Lines(
+            "A hellish storm of fire and brimstone scorches your foes for {damage} damage!");
+
     // Four of one monster under a room spell, three of them killed, and the room read
     // again with the survivor attacked by name: where report paradigm-20261010-145330
     // stood when the game printed the *Combat Off* of that attack.
-    private static void RoomSpellKillsThreeOfFour_SurvivorAttacked(Harness h)
+    private static void RoomSpellKillsThreeOfFour_SurvivorAttacked(Harness h, bool landingLineRead)
     {
         h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
         h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "aslt" };
         h.AddMonster(1, "brute zombie");
+        if (landingLineRead) KnowTheRoomSpellsLandingLine(h);
 
         h.Feed("Also here: brute zombie, brute zombie, brute zombie, brute zombie.");
         Assert.Equal("hsto", h.LastSent);
         h.Feed("*Combat Engaged*");
 
         // The survivor keeps the room spell running, so the kills print no *Combat Off*.
+        h.Feed(HstoLanding);
         h.Feed("You gain 16250 experience.");
         h.Feed("You gain 16250 experience.");
         h.Feed("You gain 16250 experience.");
@@ -2513,9 +2527,13 @@ public sealed class CombatManagerSpellsTests
     // three exp lines, that Off was read as a kill: the survivor was dropped,
     // three kills were counted against a roster already re-read down to one and the
     // roster emptied, the Combat gate cleared, and the buff cast next had no attack to
-    // bring back. The Off answers the echoed attack; nothing died.
-    [Fact]
-    public void AttackOnARoomSpellsSurvivor_ItsCombatOffIsNotAKill_AndTheBuffsOffResumesIt()
+    // bring back. The Off answers the echoed attack; nothing died at it. The three
+    // kills before it are deaths of their own, counted as they happen when the
+    // spell's line is known and left uncounted otherwise.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AttackOnARoomSpellsSurvivor_ItsCombatOffIsNotAKill_AndTheBuffsOffResumesIt(bool landingLineRead)
     {
         using Harness h = new(wireDeathWatcher: true);
         MovementCoordinator coordinator = new(h.Log);
@@ -2528,14 +2546,17 @@ public sealed class CombatManagerSpellsTests
             if (!o.Entities.Any(e => e.Kind == EntityKind.Monster)) emptyRosters++;
         };
 
-        RoomSpellKillsThreeOfFour_SurvivorAttacked(h);
+        RoomSpellKillsThreeOfFour_SurvivorAttacked(h, landingLineRead);
+        int roomSpellKills = landingLineRead ? 3 : 0;
+        Assert.Equal(roomSpellKills, h.DeathEvents.Count);
+        Assert.All(h.DeathEvents, d => Assert.Equal("brute zombie", Assert.Single(d.RoomSpellRoster!).Name));
         Assert.True(GateHeld());
 
         h.FeedEchoed("aslt brute zombie");
         h.Feed("*Combat Off*");
         h.Feed("*Combat Engaged*");
 
-        Assert.Empty(h.DeathEvents);                             // no death: no lair-timer kill either
+        Assert.Equal(roomSpellKills, h.DeathEvents.Count);       // the Off is no death: no lair-timer kill either
         Assert.Equal("brute zombie", h.Combat.CurrentTarget);    // the survivor is still the target
         Assert.True(h.Classifier.Current is { Entities.Count: 1 });
         Assert.Equal(0, emptyRosters);                           // the room was never read as cleared
@@ -2550,7 +2571,7 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Equal(sentBeforeBuff + 1, h.Sent.Count);
         Assert.Equal("aslt brute zombie", h.LastSent);
-        Assert.Empty(h.DeathEvents);
+        Assert.Equal(roomSpellKills, h.DeathEvents.Count);
         Assert.Equal(0, emptyRosters);
         Assert.True(GateHeld());
 
@@ -2561,42 +2582,99 @@ public sealed class CombatManagerSpellsTests
         h.Feed("You gain 16250 experience.");
         h.Feed("*Combat Off*");
 
-        Assert.Single(h.DeathEvents);
+        Assert.Equal(roomSpellKills + 1, h.DeathEvents.Count);
+        Assert.Null(h.DeathEvents[^1].RoomSpellRoster);
         Assert.Null(h.Combat.CurrentTarget);
         Assert.False(GateHeld());
     }
 
     // A typed `break` right after a room spell's kills answers the same way: its Off
     // is the command's, and the monster it was typed at is alive.
-    [Fact]
-    public void TypedBreakAfterARoomSpellsKills_IsNotAKill()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TypedBreakAfterARoomSpellsKills_IsNotAKill(bool landingLineRead)
     {
         using Harness h = new(wireDeathWatcher: true);
-        RoomSpellKillsThreeOfFour_SurvivorAttacked(h);
+        RoomSpellKillsThreeOfFour_SurvivorAttacked(h, landingLineRead);
         h.FeedEchoed("aslt brute zombie");
         h.Feed("*Combat Off*");
         h.Feed("*Combat Engaged*");
+        int deaths = h.DeathEvents.Count;
 
         h.FeedEchoed("break");
         h.Feed("*Combat Off*");
 
-        Assert.Empty(h.DeathEvents);
+        Assert.Equal(deaths, h.DeathEvents.Count);
         Assert.Equal("brute zombie", h.Combat.CurrentTarget);
         Assert.True(h.Classifier.Current is { Entities.Count: 1 });
     }
 
-    // With a statline the extractor can't split no echo is read, so the attack's Off
-    // keeps its old reading as a death. What it may no longer do is empty the roster:
-    // the three kills came before the room was read again, and the one monster that
-    // read lists is the one that outlived them.
+    // The command's Off need not be the line after its echo: a `break` typed ahead
+    // is echoed at once and answered only after the lines of the round it waited for.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TypedAheadBreak_AnsweredAfterTheRoundsLines_IsNotAKill(bool landingLineRead)
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        RoomSpellKillsThreeOfFour_SurvivorAttacked(h, landingLineRead);
+        int deaths = h.DeathEvents.Count;
+
+        h.FeedEchoed("break");
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.Feed("The brute zombie swings at you, but you dodge out of the way!");
+        h.Feed("*Combat Off*");
+
+        Assert.Equal(deaths, h.DeathEvents.Count);
+        Assert.Equal("brute zombie", h.Combat.CurrentTarget);
+        Assert.True(h.Classifier.Current is { Entities.Count: 1 });
+    }
+
+    // The roster tally starts again at each read of the room, and still releases a
+    // room emptied in two halves of one round: two die, the room is read again with
+    // two left, and those two die. The fourth exp line empties the roster and clears
+    // the Combat gate, with no wait for the idle watchdog.
     [Fact]
-    public void UnsplitStatline_AttackOffStillReadsAsADeath_ButTheReReadRosterIsKept()
+    public void RoomReadAgainBetweenKillsOfOneRound_ReleasesAtTheLastKill()
+    {
+        using Harness h = new();
+        MovementCoordinator coordinator = new(h.Log);
+        using CombatStateTracker tracker = new(
+            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true, h.Log);
+        bool GateHeld() => coordinator.AssertedGates.Contains(MovementCoordinator.CombatGate);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.AddMonster(1, "brute zombie");
+
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie, brute zombie.");
+        h.Feed("*Combat Engaged*");
+        h.Feed("You gain 16250 experience.");
+        h.Feed("You gain 16250 experience.");
+        h.Feed("Also here: brute zombie, brute zombie.");
+        Assert.True(GateHeld());
+
+        h.Feed("You gain 16250 experience.");
+        Assert.True(h.Classifier.Current is { Entities.Count: 2 });   // one of the two still stands
+        Assert.True(GateHeld());
+
+        h.Feed("You gain 16250 experience.");
+        Assert.True(h.Classifier.Current is { Entities.Count: 0 });
+        Assert.False(GateHeld());
+    }
+
+    // With a statline the extractor can't split no echo is read. Where the room
+    // spell's kills went uncounted (its line not known), the attack's Off keeps its
+    // old reading as a death. What it may no longer do is empty the roster: the three
+    // kills came before the room was read again, and the one monster that read lists
+    // is the one that outlived them.
+    [Fact]
+    public void UnsplitStatline_KillsUncounted_AttackOffStillReadsAsADeath_ButTheReReadRosterIsKept()
     {
         using Harness h = new(wireDeathWatcher: true);
         MovementCoordinator coordinator = new(h.Log);
         using CombatStateTracker tracker = new(
             h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true, h.Log);
-        RoomSpellKillsThreeOfFour_SurvivorAttacked(h);
+        RoomSpellKillsThreeOfFour_SurvivorAttacked(h, landingLineRead: false);
 
         h.Feed("<724hp 343ma> aslt brute zombie");
         h.Feed("*Combat Off*");
@@ -2605,6 +2683,199 @@ public sealed class CombatManagerSpellsTests
         Assert.Single(h.DeathEvents);
         Assert.True(h.Classifier.Current is { Entities.Count: 1 });
         Assert.Contains(MovementCoordinator.CombatGate, coordinator.AssertedGates);
+    }
+
+    // The same unsplit statline with the kills counted on their exp lines: those exp
+    // lines are spent, so the attack's Off has nothing to pair with. It is no death,
+    // the survivor stays the target, and the buff's Off brings the attack back with
+    // no echo read at all.
+    [Fact]
+    public void UnsplitStatline_KillsCounted_AttackOffIsNoDeath_AndTheBuffsOffResumesIt()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        RoomSpellKillsThreeOfFour_SurvivorAttacked(h, landingLineRead: true);
+        Assert.Equal(3, h.DeathEvents.Count);
+
+        h.Feed("<724hp 343ma> aslt brute zombie");
+        h.Feed("*Combat Off*");
+        h.Feed("*Combat Engaged*");
+
+        Assert.Equal(3, h.DeathEvents.Count);
+        Assert.Equal("brute zombie", h.Combat.CurrentTarget);
+        Assert.True(h.Classifier.Current is { Entities.Count: 1 });
+
+        int sentBeforeBuff = h.Sent.Count;
+        h.Cast.NotifyExternalCastSent();
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("<724hp 343ma> blsh");
+        h.Feed("*Combat Off*");
+
+        Assert.Equal(sentBeforeBuff + 1, h.Sent.Count);
+        Assert.Equal("aslt brute zombie", h.LastSent);
+    }
+
+    // ----- a room spell's kills are deaths on their exp lines -----------------
+
+    // Paradigm's shape for a room emptied by a room spell: a pair per monster, then one
+    // *Combat Off*. Four kills are four deaths, each raised at its exp line, and the
+    // Off after the last adds none. Until this, the four were one death, on that Off.
+    [Fact]
+    public void RoomSpellEmptiesTheRoom_OneDeathPerExpLine_AndTheClosingOffAddsNone()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        MovementCoordinator coordinator = new(h.Log);
+        using CombatStateTracker tracker = new(
+            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true, h.Log);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.AddMonster(1, "brute zombie");
+        KnowTheRoomSpellsLandingLine(h);
+
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie, brute zombie.");
+        h.Feed("*Combat Engaged*");
+        h.Feed(HstoLanding);
+        for (int kill = 1; kill <= 4; kill++)
+        {
+            h.Feed("The brute zombie keels over like a hewn tree!");
+            h.Feed("You gain 16250 experience.");
+            Assert.Equal(kill, h.DeathEvents.Count);
+        }
+        h.Feed("*Combat Off*");
+
+        Assert.Equal(4, h.DeathEvents.Count);
+        Assert.All(h.DeathEvents, d =>
+        {
+            Assert.Equal(16250, d.ExperienceGained);
+            Assert.Empty(d.Candidates);
+            Assert.Equal("brute zombie", Assert.Single(d.RoomSpellRoster!).Name);
+        });
+        Assert.DoesNotContain(MovementCoordinator.CombatGate, coordinator.AssertedGates);
+    }
+
+    // A kill that leaves a survivor prints no *Combat Off* on Paradigm, and used to be
+    // counted only if some later Off happened to fall within five seconds of it. It is
+    // a death when it happens, and so is each kill of the rounds after it.
+    [Fact]
+    public void RoomSpellKillWithSurvivors_IsADeathAtOnce_WithNoCombatOff()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.AddMonster(1, "brute zombie");
+        h.AddMonster(2, "wandering cadaver");
+        KnowTheRoomSpellsLandingLine(h);
+
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie, wandering cadaver.");
+        h.Feed("*Combat Engaged*");
+        h.Feed(HstoLanding);
+        h.Feed("The wandering cadaver falls with a rotten splat.");
+        h.Feed("You gain 10250 experience.");
+
+        // One death, and it names nobody: either kind the room listed could be it.
+        MonsterDeathEvent first = Assert.Single(h.DeathEvents);
+        Assert.Equal(10250, first.ExperienceGained);
+        Assert.Equal(new[] { "brute zombie", "wandering cadaver" },
+            first.RoomSpellRoster!.Select(k => k.Name).OrderBy(n => n).ToArray());
+
+        // The room is read again, the spell runs on, and next round kills two more.
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie.");
+        h.Tick();
+        h.Feed(HstoLanding);
+        h.Feed("You gain 16250 experience.");
+        h.Feed("You gain 16250 experience.");
+
+        Assert.Equal(3, h.DeathEvents.Count);
+        Assert.Equal("brute zombie", Assert.Single(h.DeathEvents[^1].RoomSpellRoster!).Name);
+    }
+
+    // Stock prints a *Combat Off* after every kill, a room spell's included. Each
+    // kill is counted once: on its exp line, with the Off after it adding nothing.
+    [Fact]
+    public void RoomSpellKillsEachFollowedByCombatOff_CountOncePerKill()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.AddMonster(1, "brute zombie");
+        KnowTheRoomSpellsLandingLine(h);
+
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie.");
+        h.Feed("*Combat Engaged*");
+        h.Feed(HstoLanding);
+        h.Feed("You gain 16250 experience.");
+        h.Feed("*Combat Off*");
+        Assert.Single(h.DeathEvents);
+        h.Feed("You gain 16250 experience.");
+        h.Feed("*Combat Off*");
+
+        Assert.Equal(2, h.DeathEvents.Count);
+    }
+
+    // Never more deaths on exp lines than the room listed: an exp line past that is a
+    // monster the roster never held, and is left to the *Combat Off* that follows it,
+    // which counts it the old way. Three kills, three deaths, none of them twice.
+    [Fact]
+    public void MoreExpLinesThanTheRoomListed_TheExtraOneIsLeftToItsCombatOff()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.AddMonster(1, "brute zombie");
+        KnowTheRoomSpellsLandingLine(h);
+
+        h.Feed("Also here: brute zombie, brute zombie.");
+        h.Feed("*Combat Engaged*");
+        h.Feed(HstoLanding);
+        h.Feed("You gain 16250 experience.");
+        h.Feed("You gain 16250 experience.");
+        Assert.Equal(2, h.DeathEvents.Count);
+
+        h.Feed("You gain 16250 experience.");
+        Assert.Equal(2, h.DeathEvents.Count);
+        h.Feed("*Combat Off*");
+
+        Assert.Equal(3, h.DeathEvents.Count);
+        Assert.NotNull(h.DeathEvents[1].RoomSpellRoster);
+        Assert.Null(h.DeathEvents[2].RoomSpellRoster);
+    }
+
+    // An exp line in a round our room spell's own line wasn't read in is not taken
+    // for that spell's kill. It waits for a *Combat Off*, as before.
+    [Fact]
+    public void ExpLineWithNoRoomSpellLandingAheadOfIt_IsNotCountedOnTheExpLine()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.AddMonster(1, "brute zombie");
+        KnowTheRoomSpellsLandingLine(h);
+
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie.");
+        h.Feed("*Combat Engaged*");
+        h.Feed(HstoLanding);          // round 1 lands and kills nothing
+        h.Tick();                     // five seconds on: round 2's landing line never shows
+
+        h.Feed("You gain 16250 experience.");
+        Assert.Empty(h.DeathEvents);
+
+        h.Feed("*Combat Off*");
+        Assert.Null(Assert.Single(h.DeathEvents).RoomSpellRoster);
+    }
+
+    // A single-target kill is untouched: no room spell runs, so the exp line raises
+    // nothing and the kill's own *Combat Off* is its one death.
+    [Fact]
+    public void SingleTargetKill_IsStillOneDeathOnItsCombatOff()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "aslt" };
+        h.AddMonster(1, "brute zombie");
+        h.Combat.ResolveAttackSpellMatchers = _ => Lines(
+            "Pure energy rips through {target}, ravaging them for {damage} damage!");
+
+        h.Feed("Also here: brute zombie.");
+        h.Feed("*Combat Engaged*");
+        h.Feed("Pure energy rips through brute zombie, ravaging them for 207 damage!");
+        h.Feed("You gain 16250 experience.");
+        Assert.Empty(h.DeathEvents);
+        h.Feed("*Combat Off*");
+
+        Assert.Null(Assert.Single(h.DeathEvents).RoomSpellRoster);
     }
 
     [Fact]

@@ -4392,9 +4392,14 @@ public sealed class AppServices
         {
             if (t.NewRoom?.Key != t.PreviousRoom?.Key) RecentFoes.Clear();
         };
+        // A room spell's kill names nobody: the engaged target is only the monster the
+        // round was anchored to, which may be the boss while an add is the one that
+        // died. It goes in unnamed, and is the boss's only on the exp it paid or the
+        // roster re-read finding the boss gone.
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key,
-                Combat.DeathAttributionTarget, RecentFoes.Within(TimeSpan.FromSeconds(12)));
+                evt.RoomSpellRoster is null ? Combat.DeathAttributionTarget : null,
+                RecentFoes.Within(TimeSpan.FromSeconds(12)));
         // What the boss is worth, and what everything else in its room is: an unnamed
         // death there is told apart by the exp it paid.
         BossTimers.SetRoomExpResolver((def, room) =>
@@ -4478,6 +4483,11 @@ public sealed class AppServices
             // is re-picked a beat later, instead of sitting through the ~5s idle-stall
             // tick that would otherwise re-pick the corpse, no-op it, and only then
             // force the re-display.
+            //
+            // Not for a room spell's kill: the combat manager raised that one itself,
+            // from the exp line it is still handling, and asks for the re-display
+            // there. What it was fighting is no guide to which monster died.
+            if (evt.RoomSpellRoster is not null) return;
             Log.Info(Game.Combat.MonsterDeathWatcher.LogCategory,
                 "death — forcing roster resync");
             Combat.NoteUnattributedDeath();
@@ -4512,6 +4522,10 @@ public sealed class AppServices
             // Resolve a debuff slot's cast-code to its catalog row (energy cost +
             // targeting scope) so a mis-slotted spell is rejected before it casts.
             resolveSpellByCode: code => Spellbook.FindByCastCode(code));
+        // A kill of our own room spell is a death like any other, raised on its exp
+        // line: the watcher's exp + *Combat Off* pairing can't see one that leaves a
+        // survivor, since the game prints no *Combat Off* for it (Paradigm).
+        Combat.RoomSpellKill += (experience, roster) => MonsterDeath.NoteRoomSpellKill(experience, roster);
 
         // Dark-room combat. A room too dark to show "Also here:" hides any
         // hostile sharing it — the only evidence is the mob's dark-cyan attack
@@ -11372,6 +11386,14 @@ public sealed class AppServices
         HashSet<int> numbers = new();
         foreach (Game.Combat.MonsterDeathIdentity id in evt.Candidates)
             if (id.Number is { } n) numbers.Add(n);
+        // A room spell's kill is one of the kinds the room listed, and the monster we
+        // were fighting is only the one the round was anchored to.
+        if (evt.RoomSpellRoster is { } listed)
+        {
+            foreach (Game.Combat.MonsterDeathIdentity id in listed)
+                if (id.Number is { } n) numbers.Add(n);
+            return numbers;
+        }
         if (Combat.DeathAttributionTarget is not { Length: > 0 } dying) return numbers;
 
         if (RoomClassifier.Current is { } roster)
@@ -11409,6 +11431,10 @@ public sealed class AppServices
     private void FireTempDeathResponse(Game.Combat.MonsterDeathEvent evt)
     {
         if (_engineWireSend is null) return;
+        // The response and the coin hold are for a death that did stall the room. A
+        // room spell's kill among several kinds may not be the one with the death
+        // spell, so it is answered only when the room listed a single kind.
+        if (evt.RoomSpellRoster is { Count: > 1 }) return;
         foreach (int num in DyingMonsterNumbers(evt))
         {
             int deathSpell = MonsterCatalog.Get(num)?.DeathSpell ?? 0;

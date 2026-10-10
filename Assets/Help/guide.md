@@ -1130,7 +1130,7 @@ MudPlay collects coin and loot, banks your wealth, and manages your gear.
 
 With the collection engines on, MudPlay picks up coin and flagged items off the ground after a fight, following your per-currency rules (Settings → Cash) and the per-item flags in Game Data. It can skip a pickup that would push you into a heavier encumbrance band, and drop smaller coin to make room for larger. Between inventory reads MudPlay keeps its own running count of your coins and weight (pickups, drops, stashes, deposits, purchases, training fees). When the game shows that count is off — it refuses a coin stash or drop, or a pickup is skipped because you look full — MudPlay sends one `i` to re-read the real figures.
 
-**Monster drops.** The game doesn't announce an item a monster drops; it just lands on the floor. So when you kill a monster whose drop list (Game Data → Monsters) holds an item you've flagged **Auto-collect**, MudPlay re-displays the room (a bare Enter) to see whether it dropped, and a loop or walk waits for that display before moving on. Both halves are needed: **Auto-Get Items** on, and the item flagged Auto-collect in Game Data → Items. Kills of monsters that can't drop a flagged item send nothing extra.
+**Monster drops.** The game doesn't announce an item a monster drops; it just lands on the floor. So when you kill a monster whose drop list (Game Data → Monsters) holds an item you've flagged **Auto-collect**, MudPlay re-displays the room (a bare Enter) to see whether it dropped, and a loop or walk waits for that display before moving on. Both halves are needed: **Auto-Get Items** on, and the item flagged Auto-collect in Game Data → Items. Kills of monsters that can't drop a flagged item send nothing extra. A room spell's kill doesn't say which monster died, so the room is re-displayed when any kind of monster it listed could have dropped one.
 
 In a **stash room** the client stashes your excess coin (and any auto-stash items) as you pass through. An **Auto-stash** item goes a whole stack at a time (`hide 9 green dragon hide`), keys on your key ring included; with **Must have minimum** ticked, **Min. to keep** copies stay with you and only the rest are hidden. Having just hidden it, the client deliberately does **not** re-grab that pile — but only the coin a `search` *re-reveals* is skipped. Coin that's plainly visible when you walk in, or that a kill drops on the floor, is still collected there (and, of course, in every ordinary room, including the room right after a stash room).
 
@@ -2325,7 +2325,7 @@ Each panel's **Reset** clears everything under it and nothing else: Time Analysi
 The **Session Statistics** panel, modelled on MegaMUD's statistics screen, is in three groups:
 
 - **Kills & experience:**
-  - **Kills**, **Kills / hour**, **Experience** and **Exp / hour**: this session's totals and their per-hour rates.
+  - **Kills**, **Kills / hour**, **Experience** and **Exp / hour**: this session's totals and their per-hour rates. A room spell's kills count one each, as they happen.
   - **Exp needed**: the experience still to earn for the level the countdown is heading for, with that level in brackets. It counts banked levels, so it's the first level your exp hasn't reached, not merely the next one to train.
   - **Will level in**: the time to get there at this session's exp rate, the same countdown as the status bar's TNL and your Party-window row.
 - **Coin**, as denominations with the number of coins in brackets. Hover a value for the exact amount.

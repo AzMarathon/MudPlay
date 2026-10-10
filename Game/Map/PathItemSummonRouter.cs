@@ -108,6 +108,11 @@ public sealed class PathItemSummonRouter : IDisposable
     private int _itemId;
     private int _targetCount = 1;
     private int _reSurveys;
+    // When the last room-spell kill was re-surveyed for. A room spell's kills arrive
+    // as one burst, each a death of its own, and one look at the floor covers them
+    // all: counted singly, two such rounds would spend the whole allowance.
+    private DateTimeOffset _roomSpellSurveyAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan RoomSpellBurst = TimeSpan.FromSeconds(1);
     private RoomKey _origDest;
     private SummonSource _source;
 
@@ -279,6 +284,11 @@ public sealed class PathItemSummonRouter : IDisposable
     {
         if (_phase != Phase.AwaitingKill) return;
         if (_reSurveys >= MaxReSurveys) return;
+        if (evt.RoomSpellRoster is not null)
+        {
+            if (evt.At - _roomSpellSurveyAt < RoomSpellBurst) return;
+            _roomSpellSurveyAt = evt.At;
+        }
 
         _reSurveys++;
         _log?.Info(LogCategory,

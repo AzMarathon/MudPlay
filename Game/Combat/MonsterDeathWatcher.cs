@@ -11,10 +11,15 @@ namespace MudPlay.Game.Combat;
 // consumers attribute the kill to whatever they were fighting
 // (CombatManager.CurrentTarget) and force a roster re-display to pick the survivor.
 //
-// Not every *Combat Off* inside the window is the kill's. A room spell that leaves a
-// survivor prints its kills' exp lines and no Off at all, and the next Off is then
-// whatever command stops that spell: the attack sent at the survivor, a cast, a
-// `break`. CommandOffProbe names those, and they are not deaths.
+// Not every *Combat Off* inside the window is the kill's. On Paradigm a room spell
+// that leaves a survivor prints its kills' exp lines and no Off at all, and the next
+// Off is then whatever command stops that spell: the attack sent at the survivor, a
+// cast, a `break`. CommandOffProbe names those, and they are not deaths.
+//
+// Those kills are deaths all the same, and are raised on their exp lines by the one
+// party that knows a room spell of ours made them: CombatManager, through
+// NoteRoomSpellKill. A kill is then counted when it happens, not when the last
+// monster of the room dies or some later Off happens to fall inside the window.
 //
 // Per-monster death MESSAGES were retired: they're arbitrary per-monster flavor with
 // no shared keyword and no distinctive colour, so a generic wording/colour matcher is
@@ -49,7 +54,11 @@ public sealed class MonsterDeathWatcher : IDisposable
         ArgumentNullException.ThrowIfNull(router);
         _log = log;
         _offProbe = new CommandOffProbe(router);
-        _expSub          = router.Subscribe(KnownPatterns.UserGainExperience, OnExp);
+        // Ahead of CombatManager's handler of the same exp line (tieBreak 0): that one
+        // may count the kill there and then (NoteRoomSpellKill), and the exp it spends
+        // has to be held already, or this handler would hold it again afterwards and
+        // the kill's own *Combat Off* would count it twice.
+        _expSub          = router.Subscribe(KnownPatterns.UserGainExperience, OnExp, tieBreak: 100);
         _combatStatusSub = router.Subscribe(KnownPatterns.CombatStatus,        OnCombatStatus);
     }
 
@@ -59,6 +68,31 @@ public sealed class MonsterDeathWatcher : IDisposable
         if (!int.TryParse(m.Groups[0], out int exp)) return;
         _lastExpAt = NowProvider();
         _lastExpAmount = exp;
+    }
+
+    // A kill made under our own room-attack spell, counted on its exp line: such a
+    // kill has no *Combat Off* of its own while anything in the room survives
+    // (Paradigm), so there is nothing later to count it on. roster is the kinds of
+    // monster the room listed, one of which died.
+    //
+    // The exp line is spent here. Where the game does print a *Combat Off* after it
+    // (Stock after every kill, Paradigm after the kill that empties the room), that
+    // Off finds no exp held and raises nothing more for the same kill.
+    public void NoteRoomSpellKill(int? experience, IReadOnlyList<MonsterDeathIdentity> roster)
+    {
+        ArgumentNullException.ThrowIfNull(roster);
+        if (_disposed) return;
+        _lastExpAt = null;
+        _lastExpAmount = null;
+
+        _log?.Info(LogCategory,
+            $"death — exp={experience} under a room spell; one of {roster.Count} kind(s) of monster the room listed");
+        MonsterDied?.Invoke(new MonsterDeathEvent(
+            Candidates:       Array.Empty<MonsterDeathIdentity>(),
+            ExperienceGained: experience,
+            At:               NowProvider(),
+            IsFallback:       true,
+            RoomSpellRoster:  roster));
     }
 
     private void OnCombatStatus(MatchResult m)

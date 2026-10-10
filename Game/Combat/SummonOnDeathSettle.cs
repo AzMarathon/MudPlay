@@ -110,6 +110,16 @@ public sealed class SummonOnDeathSettle : IDisposable
             if (id.Number is { } n && _summonIndex.SummonsOnDeath(n))
                 return true;
 
+        // A room spell's kill is one of the kinds the room listed, whichever the
+        // round was anchored to. Any of them that summons is worth the one re-scan.
+        if (evt.RoomSpellRoster is { } listed)
+        {
+            foreach (MonsterDeathIdentity id in listed)
+                if (id.Number is { } n && _summonIndex.SummonsOnDeath(n))
+                    return true;
+            return false;
+        }
+
         if (_currentTargetName() is { } target
             && _classifier.Current is { } obs)
         {

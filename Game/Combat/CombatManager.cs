@@ -734,6 +734,29 @@ public sealed partial class CombatManager : IDisposable
     // Whether the *Combat Off* being handled is a command's and not a kill's.
     private readonly CommandOffProbe _offProbe;
 
+    // A kill made by our own room-attack spell, raised on its exp line with the exp
+    // gained and the kinds of monster the room listed (one of them is the dead one).
+    // Such a kill is counted here because nothing later can count it: on Paradigm a
+    // room spell's kill prints no *Combat Off* while anything in the room survives,
+    // so the exp + Off pairing MonsterDeathWatcher runs on never completes for it.
+    // Wired (AppServices) to MonsterDeathWatcher.NoteRoomSpellKill, which raises the
+    // death every other kill raises and spends the exp line, so the *Combat Off* the
+    // game does print (Stock after each kill, Paradigm after the last of a room)
+    // counts nothing twice.
+    //
+    // Raised before this class touches its own state for the kill, as the death
+    // subscribers need: the summon and drop holds have to be up before a cleared
+    // roster releases the walker.
+    public event Action<int?, IReadOnlyList<MonsterDeathIdentity>>? RoomSpellKill;
+
+    // When our room spell's own damage line was last read. An exp line is taken for
+    // that spell's kill only inside RoomSpellKillWindow of it: the kills of a round
+    // arrive in one burst behind the line that made them. That keeps the count to
+    // rounds our spell landed in, whatever else may print an exp line (GAME_MECHANICS
+    // doesn't record whether a kill elsewhere ever does).
+    private DateTimeOffset _roomSpellLandedAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan RoomSpellKillWindow = TimeSpan.FromSeconds(2);
+
     // The target a prompt exp-inferred kill just dropped, remembered so the kill's
     // *Combat Off* can still drop it from the live roster. The exp line lands BEFORE
     // *Combat Off* and nulls _currentTarget (so the round's alternate can't corpse-cast)
@@ -3351,6 +3374,7 @@ public sealed partial class CombatManager : IDisposable
         if (!physicalShape && !spellShape) return;
 
         DateTimeOffset now = _now();
+        if (roomSpell) _roomSpellLandedAt = now;
         bool grouped = now - _lastConfirmedAttackCastAt < ConfirmedCastGroupWindow
             && string.Equals(_lastConfirmedAttackCastTarget, target, StringComparison.OrdinalIgnoreCase);
         _lastConfirmedAttackCastAt = now;
@@ -4283,11 +4307,12 @@ public sealed partial class CombatManager : IDisposable
     // identical for every monster, so no per-monster death message is needed. Skip
     // when a specific death line already dropped this kill (avoid a double-drop of a
     // freshly re-picked target).
-    private void OnUserGainExperience(MatchResult _)
+    private void OnUserGainExperience(MatchResult match)
     {
         _lastExpGainAt = DateTimeOffset.Now;
         _expGainsThisRound++;
         _expGainsSinceRosterRead++;
+        NoteRoomSpellKill(match);
         if (_currentTarget is not null
             && _attackSentSinceDeath
             && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)
@@ -4317,6 +4342,83 @@ public sealed partial class CombatManager : IDisposable
         else if (_roomChannelSpell is not null)
             ForceAoeMultiKillReparse("kill under a room spell");
     }
+
+    // Count an exp line as a kill of our room spell (RoomSpellKill) when all of this
+    // holds, and leave it to its *Combat Off* otherwise, as before:
+    //   - a room attack of ours is running in this room (_roomChannelSpell);
+    //   - its damage line was read just ahead of the exp line (RoomSpellKillWindow),
+    //     so the exp belongs to a round the spell landed in;
+    //   - the room still lists a monster the exp can be: this round's exp lines since
+    //     the room was read don't outnumber the monsters it listed. An exp line past
+    //     that is some monster the roster never held, and is not counted here.
+    private void NoteRoomSpellKill(MatchResult exp)
+    {
+        if (RoomSpellKill is not { } raise) return;
+        if (_roomChannelSpell is not { } spell) return;
+        if (_now() - _roomSpellLandedAt >= RoomSpellKillWindow)
+        {
+            LeaveRoomSpellExp($"exp line under room spell '{spell}' with no damage line of the spell read ahead of it");
+            return;
+        }
+        if (_classifier.Current is not { } roster) return;
+
+        int listed = CountEngageable(roster);
+        if (_expGainsSinceRosterRead > listed)
+        {
+            LeaveRoomSpellExp(
+                $"exp line {_expGainsSinceRosterRead} under room spell '{spell}' with {listed} hostile(s) listed");
+            return;
+        }
+
+        // Every monster the room lists, not only the ones we would attack: the spell
+        // hits the room, and the dead one is whichever of them it killed.
+        List<MonsterDeathIdentity> kinds = new();
+        foreach (RoomEntity e in roster.Entities)
+        {
+            if (e.Kind != EntityKind.Monster) continue;
+            bool seen = false;
+            foreach (MonsterDeathIdentity k in kinds)
+                if (e.MonsterNumber is { } n ? k.Number == n
+                    : k.Number is null && string.Equals(k.Name, e.ResolvedName, StringComparison.OrdinalIgnoreCase))
+                {
+                    seen = true;
+                    break;
+                }
+            if (!seen) kinds.Add(new MonsterDeathIdentity(e.MonsterNumber, e.ResolvedName));
+        }
+
+        int? gained = exp.Groups.Count > 0 && int.TryParse(exp.Groups[0], out int amount) ? amount : null;
+        _roomSpellKillsCounted++;
+        _lastRoomSpellExp = (DateTimeOffset.Now,
+            $"counted: kill under room spell '{spell}' ({_expGainsSinceRosterRead} of {listed} listed)");
+        _log?.Combat(LogCategory,
+            $"kill under room spell '{spell}' — counted on its exp line ({_expGainsSinceRosterRead} of {listed} listed)");
+        raise(gained, kinds);
+
+        // Counted, so spent: this exp line no longer explains a *Combat Off* to come.
+        // The caller drops the target and re-reads the room for the kill; an Off
+        // inside ExpKillWindow of it would otherwise be taken for a second kill, of
+        // whatever survivor that re-read had just made the target.
+        _lastExpGainAt = DateTimeOffset.MinValue;
+    }
+
+    // An exp line that came while a room spell of ours ran and was not counted on the
+    // spot. It is no loss: the *Combat Off* after it counts it as every kill was
+    // counted before. Logged so a kill count that looks short can be traced.
+    private void LeaveRoomSpellExp(string what)
+    {
+        _lastRoomSpellExp = (DateTimeOffset.Now, $"left to its *Combat Off*: {what}");
+        _log?.Combat(LogCategory, $"{what} — not counted as a kill here; left to its *Combat Off*");
+    }
+
+    private int _roomSpellKillsCounted;
+    private (DateTimeOffset At, string Text)? _lastRoomSpellExp;
+
+    // Diagnostics for the bug report: how many kills were counted on their exp lines
+    // this session, and what became of the last exp line read under a room spell.
+    public string RoomSpellKillSummary => _lastRoomSpellExp is { } last
+        ? $"{_roomSpellKillsCounted} this session; last exp line {last.At:HH:mm:ss.fff} {last.Text}"
+        : "(no exp line read under a room spell this session)";
 
     // AoE room-wipe recovery: drop all combat state and force ONE debounced CR
     // re-parse so the next observation is the TRUE roster, re-picking from what's
