@@ -9387,6 +9387,14 @@ public sealed class AppServices
         // Stock's word, on the way in, that the last exit was a hang-up it didn't
         // let go free. Without it a life lost isn't taken as lost to that hang-up.
         Router.Subscribe(Services.Patterns.KnownPatterns.HangupLoginNotice, _ => HangupItems.NoteHangupLoginLine());
+        // Two things change the game's lives count with no screen telling the
+        // client: a life asked back after a death, and a level trained (which
+        // gives lives). The count the list carries must not be the stale one.
+        SysopGodLife.LifeRequested += () => HangupItems.NoteLivesChangedUnread("a life was asked back");
+        Router.Subscribe(Services.Patterns.KnownPatterns.TrainAttainLevel,
+            _ => HangupItems.NoteLivesChangedUnread("a level was trained"));
+        Router.Subscribe(Services.Patterns.KnownPatterns.TrainAttainNextLevel,
+            _ => HangupItems.NoteLivesChangedUnread("a level was trained"));
         // A death the check works out after the fact (RoomTracker.NoteUnwitnessedDeath)
         // reaches only the handlers that still make sense minutes later, in the room
         // the character woke in: the engine stop (PlayerDeathMovementHalt), Death

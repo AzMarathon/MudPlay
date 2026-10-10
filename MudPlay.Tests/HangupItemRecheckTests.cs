@@ -2092,6 +2092,98 @@ public sealed class HangupItemRecheckTests
         Assert.Single(h.Deaths);
     }
 
+    // A life given back after a death (Sysop god lives sends `sys god <name> add
+    // life`; a level trained gives lives) changes the game's count with no screen
+    // telling the client. The count it holds is then one under the real one, and a
+    // list carrying it read the next death by a hang-up as "no life lost": nothing
+    // recorded, nothing said. The count is unknown until a `stat` gives it, and
+    // one is sent for it.
+    [Fact]
+    public void ALifeGivenBackAfterADeath_IsReadAgain_SoTheNextHangUpDeathIsRecorded()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
+        h.ComeBack(hp: 200, lives: 6, Snap());
+        Assert.Single(h.Deaths);
+
+        // The life is asked back: the game has 7, the client still holds 6.
+        h.Check.NoteLivesChangedUnread("a life was asked back");
+        h.Check.StampForSave(h.Profile);
+        Assert.Null(h.Profile.HeldAtDisconnect!.Lives);
+
+        h.Heartbeats(5);
+        Assert.Equal("stat\r", h.Sent[^1]);
+        h.Lives = 7;
+        h.ReadLives(7);
+
+        // Same connection: gear recovered, back in a fight, dropped, link down.
+        h.ReadInventory(Geared);
+        h.Room = new RoomKey(1, 40);
+        h.Vitals = (-8, 200);
+        h.MonsterFight = true;
+        h.Now = h.Now.AddMinutes(30);
+        h.Check.NoteLinkDropping();
+        h.Check.NoteDisconnected();
+        h.MonsterFight = false;
+        Assert.Equal(7, h.Profile.HeldAtDisconnect!.Lives);
+
+        // The second death by a hang-up: 7 to 6 again.
+        h.ComeBack(hp: 200, lives: 6, Snap());
+
+        Assert.Equal(2, h.Deaths.Count);
+        Assert.Equal(40, h.Deaths[1].Room!.Room);
+    }
+
+    // With Auto-All off no `stat` goes out for it. The list then carries no count,
+    // and the next entry says it can't tell where it used to say nothing.
+    [Fact]
+    public void ALifeGivenBack_WithNoStatReadAfter_TheNextEntryIsToldItCantTell()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
+        h.ComeBack(hp: 200, lives: 6, Snap());
+        Assert.Single(h.Deaths);
+
+        h.AutoAll = false;
+        h.Check.NoteLivesChangedUnread("a level was trained");
+        h.Heartbeats(10);
+        Assert.DoesNotContain("stat\r", h.Sent);
+
+        h.ReadInventory(Geared);
+        h.Vitals = (-8, 200);
+        h.MonsterFight = true;
+        h.Check.NoteLinkDropping();
+        h.Check.NoteDisconnected();
+        h.MonsterFight = false;
+        Assert.Null(h.Profile.HeldAtDisconnect!.Lives);
+
+        int said = h.Notices.Count;
+        h.ComeBack(hp: 200, lives: 6, Snap());
+
+        Assert.Single(h.Deaths);
+        Assert.Contains("No death was recorded: its lives weren't read", Assert.Single(h.Notices.Skip(said)));
+    }
+
+    // A death that was seen gives the lives in its own readout, but not when the
+    // life is asked back in the same breath: the readout doesn't count that one.
+    [Fact]
+    public void AWitnessedDeathWithTheLifeAskedBack_LeavesTheCountUnknown()
+    {
+        Harness h = new() { Vitals = (200, 200), Lives = 7 };
+        h.ConnectAndEnter();
+        h.ReadLives(7);
+        h.ReadInventory(Geared);
+
+        // The order the app raises them in: the life is asked back first.
+        h.Check.NoteLivesChangedUnread("a life was asked back");
+        h.Check.OnPlayerDied();
+        h.Lives = 6;
+        h.ReadInventory(Snap());
+        h.Check.StampForSave(h.Profile);
+
+        Assert.Null(h.Profile.HeldAtDisconnect!.Lives);
+    }
+
     // What the record claims: where this client last had the character, and that
     // the pile is elsewhere if it was played from another client since. Nothing
     // on the connection tells a death by this hang-up from one by a hang-up made

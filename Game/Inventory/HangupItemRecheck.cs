@@ -79,6 +79,10 @@ public sealed class HangupItemRecheck
     private const int EntryWaitTicks = 180;
     // A `stat` answers within the second.
     private const int LivesWaitTicks = 3;
+    // How long after the lives changed unread a `stat` goes out for them: long
+    // enough for the command that changed them to have been answered, and for a
+    // `stat` someone else sends for the same reason to have made this one needless.
+    private const int LivesRereadTicks = 5;
 
     // The line a death record shows where a witnessed death has the game's own.
     // It claims no more than is known: the room and time are where this client
@@ -156,6 +160,9 @@ public sealed class HangupItemRecheck
     // nobody saw in between, and the next comparison would pin it on the wrong
     // hang-up.
     private bool _livesKnownThisLink;
+    // Heartbeats until a `stat` is sent to read the lives again, after something
+    // changed them with no screen saying so. 0: none owed.
+    private int _livesRereadTicks;
     // The character's name off a `stat` read on this connection.
     private string? _nameReadThisLink;
     // A game prompt was read on this connection, so the HP the client holds is
@@ -378,6 +385,7 @@ public sealed class HangupItemRecheck
         _moveSentSinceEntry = false;
         _livesReadThisLink = null;
         _livesKnownThisLink = false;
+        _livesRereadTicks = 0;
         _nameReadThisLink = null;
         _promptThisLink = false;
         _askedLives = false;
@@ -463,6 +471,30 @@ public sealed class HangupItemRecheck
         EnterGame();
     }
 
+    // The game's lives count changed, or is about to, with no screen telling the
+    // client the new one: a life asked back after a death (Sysop god lives), or a
+    // level trained, which gives lives. The count the client holds is then one
+    // off, and a list carrying it would read the next death by a hang-up as "no
+    // life lost" and say nothing. So it is not known again until a `stat` gives
+    // it, and one is sent for it shortly, under Auto-All.
+    public void NoteLivesChangedUnread(string why)
+    {
+        if (!_linkUp) return;
+        _livesKnownThisLink = false;
+        _livesRereadTicks = LivesRereadTicks;
+        _log?.Info(LogCategory, $"The lives count is no longer known ({why}): a `stat` will read it again.");
+    }
+
+    // Not sent with Auto-All off or out of the game: the count then stays unknown,
+    // and the next list says so, until a `stat` is read some other way.
+    private void RereadLivesWhenDue()
+    {
+        if (_livesRereadTicks <= 0 || --_livesRereadTicks > 0) return;
+        if (_livesKnownThisLink || !_inGame || !_isAutoEnabled()) return;
+        _log?.Info(LogCategory, "Sending `stat` to read the lives again.");
+        _wire.Send("stat");
+    }
+
     // The board's `Last time you were on, you disconnected while playing.`
     public void NoteHangupLoginLine()
     {
@@ -476,6 +508,7 @@ public sealed class HangupItemRecheck
         if (!_linkUp) return;
         _livesReadThisLink = lives;
         _livesKnownThisLink = true;
+        _livesRereadTicks = 0;
         if (!string.IsNullOrWhiteSpace(name)) _nameReadThisLink = name.Trim();
         if (_before is { } before && _phase == Phase.AwaitingLives)
             CompareAndSave(before);
@@ -547,10 +580,11 @@ public sealed class HangupItemRecheck
     // of it as dropped by a hang-up. The list is void until that read arrives.
     public void OnPlayerDied()
     {
-        // The death's own readout gave the lives, and a death seen on this
+        // The death's own readout gave the lives (unless a life has just been
+        // asked back, which that readout doesn't count), and a death seen on this
         // connection has its own record: an open question about the hang-up before
         // it could no longer be told apart from it.
-        _livesKnownThisLink = _linkUp;
+        _livesKnownThisLink = _linkUp && _livesRereadTicks == 0;
         _deathBefore = null;
         if (!_inGame) return;
         _inventoryReadThisLink = false;
@@ -1009,6 +1043,7 @@ public sealed class HangupItemRecheck
     // TickEngine.HeartbeatElapsed.
     public void OnHeartbeat()
     {
+        RereadLivesWhenDue();
         switch (_phase)
         {
             case Phase.AwaitingEntry:
