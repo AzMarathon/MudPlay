@@ -1,16 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.0**
-> - Stock death recovery follows the game's spill order: up to five rooms out, behind doors and hidden exits
-> - With items still missing, it searches the rooms walked before the death (never a stash room)
-> - The sweep runs for Recover Now or your own walk-to; a loop's or Auto-Lair's arrival only looks next door
-> - It walks to 12 rooms at most and returns; Stop and Pause reach it
-> - It gives way to other engines, following and any other walk; silent during a rest, a pause or Auto-All off
-> - Stock: loyal, major-cursed and "returned to its rightful place" items no longer waited for
-> - Stock: a partly recovered pile keeps its count; an empty death-room floor no longer stalls recovery
-> - Stop calls off a Recover Now that was still walking (both realms)
-> - Bug report: the pile's missing items and the sweep's plan, state and blockers
+> **Version 3.161.2**
+> - Events run one at a time, start to finish: one that fires while another is walking, waiting, resting, sweeping or on a bank trip or stash transfer waits its turn
+> - With an event waiting, the finished one's "go back" or loop passes to it, so the loop is restarted once, after the last
+> - An event isn't queued twice; at most 10 wait; one that waited 30 minutes is dropped
+> - Stopping an event's walk, dying or Reset States drops the waiting events; so does a lost connection
+> - A loop or Auto-Lair action still gives way at once, and Logoff events don't wait
+> - A Then that can't get going (a loop behind a teleport Settings → Teleports doesn't allow) says why in the terminal
+> - Bug report: the events waiting and what the last Then came to
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
