@@ -1,10 +1,15 @@
 # Version history
 
-## 3.161.1
+## 3.161.2
 
 - Stock: a lock under 25% a pick is gone round when that costs at most 10 extra steps
 - A door the picks run out on is gone round for the rest of the walk or loop run, where the walk used to stop at it
 - Log and bug report name the doors a route went round
+
+## 3.161.1
+
+- Party item gates: a member who never answers the `@have` count is no longer fetched another copy on every trip
+- A copy you handed them and the game confirmed is remembered until the party changes
 
 ## 3.161.0
 
