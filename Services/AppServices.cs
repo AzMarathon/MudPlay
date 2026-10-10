@@ -2359,6 +2359,10 @@ public sealed class AppServices
     // (holds the auto attack until next round). Hooked from SendUserInput.
     public Game.Combat.OutboundAttackObserver OutboundAttack { get; private set; } = null!;
 
+    // Sniffs a hand-typed gear command (eq / wear / wield / rem) so Combat re-attacks
+    // on the *Combat Off* it draws mid-fight. Hooked from SendUserInput, typed lines only.
+    public Game.Combat.OutboundGearObserver OutboundGear { get; private set; } = null!;
+
     // Classifies a cast-code as a combat spell (round energy 1–1000) vs an in-between
     // spell — drives whether a hand-typed cast is a user override or keeps the resume.
     public Game.Combat.CombatSpellIndex CombatSpells { get; private set; } = null!;
@@ -2831,6 +2835,7 @@ public sealed class AppServices
             TickTiming.NoteRound(seen);
             if (seen && Tick.LastCombatTick is { } at) Regen.NoteRound(at);
         };
+        Tick.DamageOffTheRound += TickTiming.NoteDamageOffTheRound;
         // The game pays passive regen on a round boundary, so a gain keeps the round
         // grid true while no fight is printing damage lines. A meditate tick is
         // counted from the command on Stock and untimed on Paradigm: left out.
@@ -5303,6 +5308,9 @@ public sealed class AppServices
         // Combat drops its own swing's echo via a one-shot claim.
         OutboundAttack = new Game.Combat.OutboundAttackObserver(
             (verb, target) => Combat.NoteAttackCommandObserved(verb, target));
+        // A hand-typed eq / wear / wield / rem mid-fight stops the fight like a cast:
+        // arm the re-attack for the *Combat Off* it draws.
+        OutboundGear = new Game.Combat.OutboundGearObserver(Combat.NoteTypedGearCommand);
         Tick.CombatTickElapsed += Combat.OnCombatTick;
         // Count attack-spell MaxCasts off Combat's own ConfirmedAttackCastCount —
         // incremented directly off each observed cast-result line — instead of
@@ -5493,6 +5501,13 @@ public sealed class AppServices
         MonsterCatalog = new Game.Combat.MonsterCatalog(GameData, RoomGraph.GetRoom);
         // Room tooltips and room panels leave out what the Unobtainable list holds.
         MonsterSpawns.OutOfPlay = MonsterCatalog.IsOutOfPlay;
+        // The round clock leaves out a room spell's damage, told by the spell on the
+        // room we stand in and by which wordings are a monster's attack spell
+        // (OffRoundDamageLines). Until here TickEngine goes by the wording alone.
+        Tick.SetOffRoundDamageProbe(line =>
+            OffRoundDamage().IsOffRound(line, RoomTracker.State.CurrentRoom?.Spell ?? 0));
+        GameData.ActiveSetChanged += _ => _offRoundDamage = null;
+        Messages.Messages.CollectionChanged += (_, _) => _offRoundDamage = null;
 
         // Drain-life eligibility — a drain spell can only affect a living, non-undead
         // target; the index tells the chooser which mobs to skip (fall back to the
@@ -11632,6 +11647,24 @@ public sealed class AppServices
             ? Game.Spells.HealLineReader.InstantHeals(doc.RootElement)
             : Array.Empty<Game.Spells.HealSpell>();
         return new Game.Spells.HealLineReader(heals, Messages.Messages);
+    }
+
+    // Built on the first damage line after a set switch or a message edit: the
+    // monster catalogue it reads is itself built on first use.
+    private Game.Combat.OffRoundDamageLines? _offRoundDamage;
+
+    private Game.Combat.OffRoundDamageLines OffRoundDamage()
+    {
+        if (_offRoundDamage is { } built) return built;
+        built = new Game.Combat.OffRoundDamageLines(
+            MonsterCatalog.All
+                .SelectMany(static m => m.Attacks)
+                .Where(static a => a.Type == 2 && a.Percent > 0 && a.Accuracy > 0)
+                .Select(static a => a.Accuracy),
+            Messages.Messages);
+        Log.Debug("RoundClock",
+            $"Room-spell damage rule built: {built.MonsterAttackTextCount} monster attack text(s) with no dealer named stay on the round.");
+        return _offRoundDamage = built;
     }
 
     // Find the active set's Models.GameData.MessageRecord

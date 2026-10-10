@@ -100,7 +100,7 @@ public sealed class EngineSendGate
                 ? null
                 : System.Text.Encoding.Latin1.GetString(bytes).TrimEnd('\r', '\n');
             if (!routeSteps && command is not null && _takeForLater?.Invoke(command) == true) return;
-            rawSender(bytes);
+            SendAsClient(rawSender, bytes);
             if (command is not null) _sent?.Invoke(command);
             // Remember the just-sent client command so a confusion fumble can re-fire
             // it. The replay goes back through THIS sender (they all funnel to the same
@@ -108,6 +108,23 @@ public sealed class EngineSendGate
             _lastClientCommand = bytes;
             _replaySender = rawSender;
         };
+    }
+
+    // True while a wrapped sender is putting a command on the wire: the command is
+    // the client's own, an engine's or a macro's, trigger's or event's. What the user
+    // types at the terminal never comes through the wrapper, and the few engine
+    // senders that go round it to get past a hold (the trainer form, the hang-up,
+    // `sys goto`) send no gear, so an outbound observer that must act on typed gear
+    // commands only (a typed `eq` mid-fight, as against the Equipment Manager's own)
+    // reads this as the line goes by.
+    public bool SendingClientCommand { get; private set; }
+
+    private void SendAsClient(Action<byte[]> sender, byte[] bytes)
+    {
+        bool outer = SendingClientCommand;
+        SendingClientCommand = true;
+        try { sender(bytes); }
+        finally { SendingClientCommand = outer; }
     }
 
     // The last client command as text, for a caller that has to judge it before
@@ -132,7 +149,7 @@ public sealed class EngineSendGate
         if (_lastClientCommand is not { Length: > 0 } cmd) return;
         if (_replaySender is not { } send) return;
         if (IsBareMovementCommand(cmd)) return;
-        send(cmd);
+        SendAsClient(send, cmd);
     }
 
     // True when the bytes are just a bare movement direction (with its trailing CR) —
