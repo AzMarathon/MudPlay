@@ -1,5 +1,10 @@
 # Version history
 
+## 3.161.7
+
+- Party item gates: after crossing, one `par` checks a member credited with a copy from memory
+- A member `par` no longer lists as following loses that credit, so the next trip fetches for them
+
 ## 3.161.6
 
 - The client no longer stands still reading a very long line: a search in a room holding hundreds of items froze it for seconds each time
