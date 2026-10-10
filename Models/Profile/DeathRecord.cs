@@ -76,10 +76,10 @@ public sealed class DeathRecord
     // wording quirk). null / empty once everything has been seen recovered.
     public List<string>? UnrecoveredItems { get; set; }
 
-    // A party member's hand-back has struck an item off UnrecoveredItems. Such a
+    // Another player's hand-back has struck an item off UnrecoveredItems. Such a
     // list is a count kept item by item, so it is not rebuilt from the full loot
     // when the death room is entered again, and a room shown without the corpse
-    // (the member has it) does not write the pile off. Cleared once the pile is
+    // (they have it) does not write the pile off. Cleared once the pile is
     // Recovered; false on records written before it existed.
     public bool HandedBack { get; set; }
 

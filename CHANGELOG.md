@@ -15,6 +15,10 @@
 - Paradigm: freezing cold, ocean drowning, bog poison and murky drown lines recognised
 - Bug report: the room's spell and whether it bars resting, and the spells changed from the default
 
+## 3.165.10
+
+- A handed-back item counts toward a Missing deathpile from anyone, at any time
+
 ## 3.165.9
 
 - Paradigm: a pile is marked Missing only off a confirmed death-room display
