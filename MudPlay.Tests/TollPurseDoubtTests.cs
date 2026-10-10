@@ -1,5 +1,8 @@
 using System.Text;
+using MudPlay.Game.Inventory;
 using MudPlay.Game.Map;
+using MudPlay.Game.Recovery;
+using MudPlay.Game.Spells;
 using MudPlay.Services;
 using MudPlay.Terminal;
 using Xunit;
@@ -9,12 +12,14 @@ namespace MudPlay.Tests;
 // Report paradigm-20261010-145529: a walk started from the graveyard after a death
 // went through the town's toll gate on the coin carried before the death, was refused
 // there six times and gave up. A death takes the coin carried, so from a death until
-// the inventory is read again the toll gate takes the purse as empty; and a toll the
-// game refuses although the record covered it proves the record wrong.
+// the inventory is read again the toll gate takes the purse as empty; and a toll or
+// fare the game refuses is closed to routes, whatever the record and the data said.
+// The loop runner's side of the same refusals is in LoopUnpaidCrossingTests.
 public sealed class TollPurseDoubtTests : IDisposable
 {
     private const long CoinBeforeTheDeath = 2_059_900;
     private const string Refusal = "You do not have enough to cover the toll of 5 gold crowns.";
+    private const string PriceRefusal = "He says, \"I may be old, but I count quite well and you are short!\"";
 
     private readonly string _root;
 
@@ -35,7 +40,7 @@ public sealed class TollPurseDoubtTests : IDisposable
     //   1/3 Lane ──E── 1/4 Bridge
     //    │S             │S
     //   1/1 Bailey ─E (Toll: 5)─ 1/2 Road
-    private const string TollWithAWayRoundJson = """
+    internal const string TollWithAWayRoundJson = """
         [
           { "Map Number": 1, "Room Number": 1, "Name": "Bailey",
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
@@ -59,7 +64,7 @@ public sealed class TollPurseDoubtTests : IDisposable
     // The report's shape: the toll is the only way out, one room on from the start.
     //
     //   1/1 Gates ──E── 1/2 Bailey ─E (Toll: 5)─ 1/3 Road
-    private const string TollTheOnlyWayJson = """
+    internal const string TollTheOnlyWayJson = """
         [
           { "Map Number": 1, "Room Number": 1, "Name": "Gates",
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
@@ -76,6 +81,80 @@ public sealed class TollPurseDoubtTests : IDisposable
         ]
         """;
 
+    // An NPC in the tavern takes whoever asks to the guild, for 10 gold: the only
+    // way there.
+    //
+    //   1/1 Home ──N── 1/2 Tavern ~ask barmaid adventure (10 gold)~ 1/391 Guild
+    private const string FareRoomsJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Home", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "NPC": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Tavern", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "NPC": 248,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 391, "Name": "Guild", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "NPC": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "1/2", "D": "0" }
+        ]
+        """;
+
+    private const string FareMonstersJson = """
+        [ { "Number": 248, "Name": "the barmaid", "GreetTXT": 40 } ]
+        """;
+
+    private const string FareTbInfoJson = """
+        [
+          { "Number": 40, "LinkTo": 0, "Action": "adventure:41\n", "Called From": "Monster #248" },
+          { "Number": 41, "LinkTo": 0, "Action": "price 1000 318:teleport 391 1:message 1\n", "Called From": "" }
+        ]
+        """;
+
+    // A pier whose sailing (1 gold) is the only way to the island.
+    //
+    //   1/1 Home ──N── 1/2 Pier ~secure passage to islea~ 1/10 Isle Port ──N── 1/11 Isle Town
+    private const string BoatRoomsJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Home", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Pier", "CMD": 100,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 10, "Name": "Isle Port", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/11", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 11, "Name": "Isle Town", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/10", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private const string BoatTbInfoJson = """
+        [
+          { "Number": 100, "LinkTo": 0,
+            "Action": "secure passage to islea:minlevel 1 0:price 100 0:random 200:text 0\n",
+            "Called From": "Room 1/2" },
+          { "Number": 200, "LinkTo": 0, "Action": "100:cast 600\n", "Called From": "rndm" }
+        ]
+        """;
+
+    private const string BoatSpellsJson = """
+        [
+          { "Number": 600, "Name": "isle trip", "MinBase": 0, "MaxBase": 0, "Dur": 20,
+            "Abil-0": 151, "AbilVal-0": 601 },
+          { "Number": 601, "Name": "disembark isle a", "MinBase": 0, "MaxBase": 0,
+            "Abil-0": 140, "AbilVal-0": 10 }
+        ]
+        """;
+
     private static RoomExit TollExit(int tollGold) =>
         new(new RoomKey(1, 2), RoomExitHint.Toll, RawHint: null, TollGold: tollGold);
 
@@ -87,7 +166,8 @@ public sealed class TollPurseDoubtTests : IDisposable
         new(new ProfileService()) { WealthProvider = () => copper };
 
     // A walker over one of the graphs above, with the toll gate's filter, the line
-    // detector that reads the game's refusal, and everything it sent as text.
+    // detector that reads the game's refusal, and everything it sent as text. The
+    // refusal and the trip's end are wired as AppServices wires them.
     private sealed class Rig
     {
         public required RoomGraphManager Graph { get; init; }
@@ -96,42 +176,73 @@ public sealed class TollPurseDoubtTests : IDisposable
         public required MovementFilter Filter { get; init; }
         public required AutoWalkManager Walker { get; init; }
         public required MovementRefusalDetector Detector { get; init; }
+        public EngineRecoveryGate? Gate { get; init; }
         public List<string> Sent { get; } = new();
         public List<WalkEvent> Events { get; } = new();
         public List<(RoomKey Destination, string Reason)> Unpaid { get; } = new();
-        // What AppServices.OnTollRefused sends when a refusal contradicts the record.
+        public List<(RoomExit? Crossing, long? Named)> Refusals { get; } = new();
+        // The `i` AppServices.OnPaidCrossingRefused asks for.
         public int InventoryAsked { get; set; }
         public long? Purse { get; set; }
     }
 
-    private Rig NewRig(string roomsJson, long? purse)
+    private Rig NewRig(string roomsJson, long? purse, bool recovery = false,
+        string? monstersJson = null, string? tbInfoJson = null, string? spellsJson = null)
     {
-        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), roomsJson);
+        string set = Path.Combine(_root, "alpha");
+        Directory.CreateDirectory(set);
+        File.WriteAllText(Path.Combine(set, "Rooms.json"), roomsJson);
+        if (monstersJson is not null) File.WriteAllText(Path.Combine(set, "Monsters.json"), monstersJson);
+        if (tbInfoJson is not null) File.WriteAllText(Path.Combine(set, "TBInfo.json"), tbInfoJson);
+        if (spellsJson is not null) File.WriteAllText(Path.Combine(set, "Spells.json"), spellsJson);
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
-        RoomGraphManager graph = new(cache);
+        TBInfoStore? tbInfo = null;
+        if (tbInfoJson is not null)
+        {
+            tbInfo = new TBInfoStore(cache);
+            tbInfo.OnActiveSetChanged("alpha");
+        }
+        RoomGraphManager graph = new(cache, log: null, tbinfo: tbInfo,
+            spellCatalog: spellsJson is null ? null : new KnownSpellCatalog(cache));
         graph.OnActiveSetChanged("alpha");
         BfsMapper bfs = new(graph);
         RoomTracker tracker = new(graph);
         MovementFilter filter = new(new ProfileService());
-        AutoWalkManager walker = new(graph, bfs, tracker, new MovementCoordinator(), filter);
+        EngineRecoveryGate? gate = recovery ? new EngineRecoveryGate(graph, tracker) : null;
+        AutoWalkManager walker = new(graph, bfs, tracker, new MovementCoordinator(), filter, recovery: gate);
+        if (spellsJson is not null) walker.SetBoatPlanner(new BoatRoutePlanner(graph, bfs));
         MovementRefusalDetector detector = new(new LineExtractor(new TerminalEmulator(80, 25)), tracker);
         Rig rig = new()
         {
             Graph = graph, Bfs = bfs, Tracker = tracker, Filter = filter, Walker = walker, Detector = detector,
-            Purse = purse,
+            Gate = gate, Purse = purse,
         };
         filter.WealthProvider = () => rig.Purse;
-        walker.SetWireSender(bytes => rig.Sent.Add(Encoding.ASCII.GetString(bytes).Trim()));
-        walker.Event += rig.Events.Add;
-        walker.SetUnpaidCrossingHandler((destination, reason) => rig.Unpaid.Add((destination, reason)));
-        detector.TollRefused += cost =>
+        filter.TripUnderWayProbe = () => walker.State != WalkState.Idle;
+        walker.SetWireSender(bytes => rig.Sent.Add(Encoding.Latin1.GetString(bytes).Trim()));
+        walker.SetVoyageScheduler((_, _) => new NoTimer());
+        walker.Event += evt =>
         {
-            if (filter.NoteTollRefused(cost)) rig.InventoryAsked++;
+            rig.Events.Add(evt);
+            if (evt.Kind is WalkEventKind.Finished or WalkEventKind.Failed or WalkEventKind.Stopped)
+                filter.NoteTripEnded();
+        };
+        walker.SetUnpaidCrossingHandler((destination, reason) => rig.Unpaid.Add((destination, reason)));
+        detector.PaidCrossingRefused += (crossing, named) =>
+        {
+            rig.Refusals.Add((crossing, named));
+            if (filter.NoteCrossingRefused(crossing, named)) rig.InventoryAsked++;
         };
         return rig;
     }
+
+    private sealed class NoTimer : IDisposable
+    {
+        public void Dispose() { }
+    }
+
+    private static RoomObservation Obs(string name, params Direction[] exits) => new(name, new HashSet<Direction>(exits));
 
     // ----- the toll gate after a death ------------------------------------------
 
@@ -194,6 +305,7 @@ public sealed class TollPurseDoubtTests : IDisposable
 
         purse = 0;                       // what the `i` at the graveyard reads
         filter.NotePurseRead();
+        Assert.Equal("you carry 0 copper", filter.DescribePurse());
         Assert.True(filter.IsExitBlocked(TollExit(5)));
 
         purse = 500;                     // the corpse recovered, read again
@@ -207,10 +319,12 @@ public sealed class TollPurseDoubtTests : IDisposable
         ProfileService profile = new();
         MovementFilter filter = new(profile) { WealthProvider = () => CoinBeforeTheDeath };
         filter.NotePurseLostAtDeath();
+        filter.NoteCrossingRefused(FareExit(1_000), 1_000);
 
         profile.LoadBlank();
 
         Assert.False(filter.IsExitBlocked(TollExit(5)));
+        Assert.False(filter.IsExitBlocked(FareExit(1_000)));
     }
 
     // A trip is priced with the tolls it would pay once the money is fetched, so
@@ -225,40 +339,199 @@ public sealed class TollPurseDoubtTests : IDisposable
         Assert.Null(rig.Bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 3), rig.Filter));
     }
 
-    // ----- a toll the game refuses ---------------------------------------------
+    // ----- a death in an arena room ---------------------------------------------
+
+    // A death in an arena room takes no item, coin or key (user, 2026-10-10), so
+    // the purse on record stands. The room is the one died in, not the graveyard.
+    [Fact]
+    public void ADeathInAnArenaRoom_LeavesThePurseOnRecordStanding()
+    {
+        MovementFilter filter = FilterWithPurse(CoinBeforeTheDeath);
+
+        filter.NoteDeath(new RoomKey(16, 500));          // Training Grounds
+        Assert.Equal("you carry 2 runic 5 platinum 99 gold", filter.DescribePurse());
+        Assert.False(filter.IsExitBlocked(TollExit(5)));
+
+        filter.NoteDeath(new RoomKey(17, 25));           // anywhere else
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+    }
+
+    [Fact]
+    public void ADeathInARoomNobodyKnows_EmptiesThePurse()
+    {
+        MovementFilter filter = FilterWithPurse(CoinBeforeTheDeath);
+
+        filter.NoteDeath(diedIn: null);
+
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+    }
+
+    [Theory]
+    [InlineData(1, 206, true)]
+    [InlineData(1, 2519, true)]
+    [InlineData(6, 1351, true)]
+    [InlineData(11, 1, true)]
+    [InlineData(11, 34, true)]
+    [InlineData(11, 35, false)]
+    [InlineData(11, 36, true)]
+    [InlineData(11, 43, true)]
+    [InlineData(11, 44, false)]
+    [InlineData(16, 478, false)]
+    [InlineData(16, 479, true)]
+    [InlineData(16, 542, true)]
+    [InlineData(16, 543, false)]
+    [InlineData(17, 2426, true)]
+    [InlineData(17, 2432, true)]
+    [InlineData(17, 2433, false)]
+    [InlineData(17, 2572, true)]
+    [InlineData(17, 2573, true)]
+    [InlineData(1, 2150, false)]     // Newhaven's Arena is the engine's other room type
+    [InlineData(1, 2189, false)]     // the graveyard
+    public void TheArenaRooms_AreTheEnginesColliseumRooms(int map, int room, bool safe) =>
+        Assert.Equal(safe, ArenaDeathRooms.Contains(new RoomKey(map, room)));
+
+    [Fact]
+    public void TheArenaRooms_NumberOneHundredAndEighteen()
+    {
+        int count = 0;
+        for (int map = 1; map <= 20; map++)
+            for (int room = 1; room <= 3000; room++)
+                if (ArenaDeathRooms.Contains(new RoomKey(map, room))) count++;
+
+        Assert.Equal(118, count);
+    }
+
+    [Fact]
+    public void TheTracker_HandsADeathsListenersTheRoomDiedIn()
+    {
+        Rig rig = NewRig(TollWithAWayRoundJson, CoinBeforeTheDeath);
+        rig.Tracker.SetLocated(new RoomKey(1, 4));
+        RoomKey? heard = null;
+        Room? heldWhenRaised = rig.Tracker.State.CurrentRoom;
+        rig.Tracker.PlayerDeathObserved += () =>
+        {
+            heard = rig.Tracker.LastDeathRoom;
+            heldWhenRaised = rig.Tracker.State.CurrentRoom;
+        };
+
+        rig.Tracker.NoteDeath(6, "You have 6 lives left.");
+
+        Assert.Equal(new RoomKey(1, 4), heard);
+        Assert.Null(heldWhenRaised);          // why the event can't be asked for it
+    }
+
+    // ----- a crossing the game refuses -----------------------------------------
 
     [Fact]
     public void ARefusedToll_TheRecordCovered_ClosesEveryTollUntilTheInventoryIsRead()
     {
         MovementFilter filter = FilterWithPurse(CoinBeforeTheDeath);
 
-        Assert.True(filter.NoteTollRefused(500));
+        Assert.True(filter.NoteCrossingRefused(TollExit(5), 500));
 
         Assert.True(filter.IsExitBlocked(TollExit(5)));
         Assert.True(filter.IsExitBlocked(TollExit(1)));
-        Assert.False(filter.NoteTollRefused(500));          // one re-read is asked for, not two
+        Assert.False(filter.NoteCrossingRefused(TollExit(5), 500));    // one re-read per refusal, not two
 
-        filter.NotePurseRead();
+        filter.NotePurseRead();                                        // the record did cover it
         Assert.False(filter.IsExitBlocked(TollExit(5)));
     }
 
-    // Walking into a toll by hand with an empty purse tells the client nothing new.
+    // Walking into a toll by hand with an empty purse tells the client nothing new
+    // about the purse; the exit is closed all the same.
     [Fact]
     public void ARefusedToll_TheRecordAlreadyShort_IsNoContradiction()
     {
         MovementFilter filter = FilterWithPurse(499);
 
-        Assert.False(filter.NoteTollRefused(500));
+        Assert.False(filter.NoteCrossingRefused(TollExit(5), 500));
+
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
         Assert.False(filter.IsExitBlocked(TollExit(4)));     // 400 is still affordable
     }
 
+    // The game's word outranks the data: a toll the data has at 5 gold and the
+    // game refuses for 50 stays closed until a full read shows 50, whatever the
+    // record says of 5.
     [Fact]
-    public void ARefusedToll_InACoinNothingValues_IsTakenAsAContradiction()
+    public void ARefusedToll_TheGamePricesAboveTheData_StaysClosedUntilAReadShowsTheGamesPrice()
+    {
+        long? purse = 1_000;
+        MovementFilter filter = new(new ProfileService()) { WealthProvider = () => purse };
+
+        Assert.False(filter.NoteCrossingRefused(TollExit(5), 5_000));   // the record agrees it is short
+
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+        Assert.False(filter.IsExitBlocked(TollExit(4)));                // another toll goes by the record
+        Assert.Contains("naming 50 gold", filter.DescribePurseFor(TollExit(5)));
+        Assert.Contains("you carry 10 gold", filter.DescribePurseFor(TollExit(5)));
+
+        purse = 4_999;                    // coin picked up since: not a full read
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+        filter.NotePurseRead();           // a full read, still short of the game's price
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+
+        purse = 5_000;
+        filter.NotePurseRead();
+        Assert.False(filter.IsExitBlocked(TollExit(5)));
+    }
+
+    // A wording that names no price leaves nothing to compare a read with: the
+    // exit opens again on the data's price, but not before the trip is over.
+    [Fact]
+    public void ARefusedToll_InAWordingWithNoPrice_StaysClosedForTheTrip()
+    {
+        bool tripUnderWay = true;
+        MovementFilter filter = FilterWithPurse(CoinBeforeTheDeath);
+        filter.TripUnderWayProbe = () => tripUnderWay;
+
+        Assert.True(filter.NoteCrossingRefused(TollExit(5), namedCopper: null));
+        filter.NotePurseRead();
+
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+        Assert.False(filter.IsExitBlocked(TollExit(4)));     // the doubt went with the read
+        Assert.Contains("isn't tried again on this trip", filter.DescribePurseFor(TollExit(5)));
+
+        tripUnderWay = false;
+        filter.NoteTripEnded();
+        Assert.False(filter.IsExitBlocked(TollExit(5)));
+    }
+
+    [Fact]
+    public void ARefusedToll_InAWordingWithNoPrice_WithNoTripUnderWay_OpensAtTheRead()
     {
         MovementFilter filter = FilterWithPurse(CoinBeforeTheDeath);
 
-        Assert.True(filter.NoteTollRefused(costCopper: null));
+        filter.NoteCrossingRefused(TollExit(5), namedCopper: null);
         Assert.True(filter.IsExitBlocked(TollExit(5)));
+
+        filter.NotePurseRead();
+        Assert.False(filter.IsExitBlocked(TollExit(5)));
+    }
+
+    [Fact]
+    public void ARefusedFare_ClosesTheTransport_AndDoubtsThePurse()
+    {
+        MovementFilter filter = FilterWithPurse(CoinBeforeTheDeath);
+
+        Assert.True(filter.NoteCrossingRefused(FareExit(1_000), 1_000));
+
+        Assert.Equal(ExitBlockReason.Fare, filter.DescribeExitBlock(FareExit(1_000)));
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+    }
+
+    // More than one move queued: the refusal can't be tied to an exit, and still
+    // says the purse is wrong.
+    [Fact]
+    public void ARefusal_TiedToNoExit_StillDoubtsThePurse()
+    {
+        MovementFilter filter = FilterWithPurse(CoinBeforeTheDeath);
+
+        Assert.True(filter.NoteCrossingRefused(crossing: null, 500));
+
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+        filter.NotePurseRead();
+        Assert.False(filter.IsExitBlocked(TollExit(5)));
     }
 
     // ----- what the walk says ---------------------------------------------------
@@ -290,67 +563,73 @@ public sealed class TollPurseDoubtTests : IDisposable
         Assert.Contains("went with the deathpile", filter.DescribePurse());
 
         filter.NotePurseRead();
-        filter.NoteTollRefused(200);     // the 3 gold on record covered it
-        Assert.Contains("the game refused a toll", filter.DescribePurseFor(TollExit(5)));
+        filter.NoteCrossingRefused(TollExit(2), 200);     // the 3 gold on record covered it
+        Assert.Contains("the game refused a toll or fare the client took the purse to cover", filter.DescribePurseFor(TollExit(5)));
+        Assert.Contains("closed after a refusal: into 1/2 (named 2 gold)", filter.DescribePurse());
 
         Assert.Contains("isn't known", FilterWithPurse(null).DescribePurse());
     }
 
-    // ----- the game's refusal line ---------------------------------------------
+    // ----- the game's refusal lines --------------------------------------------
 
-    private (RoomTracker Tracker, MovementRefusalDetector Detector) NewDetector()
+    [Fact]
+    public void TheTollLine_ReportsTheExitAndItsPrice_BeforeTheMoveIsReverted()
     {
         Rig rig = NewRig(TollWithAWayRoundJson, purse: null);
-        return (rig.Tracker, rig.Detector);
-    }
-
-    [Fact]
-    public void TheRefusalLine_ReportsTheTollInCopper_BeforeTheMoveIsReverted()
-    {
-        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
-        tracker.SetLocated(new RoomKey(1, 1));
-        tracker.NoteMoveSent(Direction.E);
-        long? cost = null;
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Tracker.NoteMoveSent(Direction.E);
         RoomConfidence? whenRaised = null;
-        detector.TollRefused += copper =>
-        {
-            cost = copper;
-            whenRaised = tracker.State.Confidence;
-        };
+        rig.Detector.PaidCrossingRefused += (_, _) => whenRaised = rig.Tracker.State.Confidence;
 
-        detector.FeedTestLine(Refusal);
+        rig.Detector.FeedTestLine(Refusal);
 
-        Assert.Equal(500, cost);
+        (RoomExit? crossing, long? named) = Assert.Single(rig.Refusals);
+        Assert.Equal(new RoomKey(1, 2), crossing!.Value.Target);
+        Assert.Equal(5, crossing.Value.TollGold);
+        Assert.Equal(500, named);
         // The walker re-plans off the revert, so the gate has to hear first.
         Assert.Equal(RoomConfidence.Pending, whenRaised);
-        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(RoomConfidence.Confirmed, rig.Tracker.State.Confidence);
     }
 
     [Fact]
-    public void TheRefusalLine_WithNoMoveInFlight_ReportsNothing()
+    public void TheTollLine_WithNoMoveInFlight_ReportsNothing()
     {
-        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
-        tracker.SetLocated(new RoomKey(1, 1));
-        int raised = 0;
-        detector.TollRefused += _ => raised++;
+        Rig rig = NewRig(TollWithAWayRoundJson, purse: null);
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
 
-        detector.FeedTestLine(Refusal);
+        rig.Detector.FeedTestLine(Refusal);
 
-        Assert.Equal(0, raised);
+        Assert.Empty(rig.Refusals);
     }
 
     [Fact]
-    public void TheRefusalLine_InAnotherCoin_CarriesNoValue()
+    public void TheTollLine_InAnotherCoin_NamesNoPrice()
     {
-        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
-        tracker.SetLocated(new RoomKey(1, 1));
-        tracker.NoteMoveSent(Direction.E);
-        long? cost = -1;
-        detector.TollRefused += copper => cost = copper;
+        Rig rig = NewRig(TollWithAWayRoundJson, purse: null);
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Tracker.NoteMoveSent(Direction.E);
 
-        detector.FeedTestLine("You do not have enough to cover the toll of 5 platinum pieces.");
+        rig.Detector.FeedTestLine("You do not have enough to cover the toll of 5 platinum pieces.");
 
-        Assert.Null(cost);
+        (RoomExit? crossing, long? named) = Assert.Single(rig.Refusals);
+        Assert.NotNull(crossing);
+        Assert.Null(named);
+    }
+
+    // The NPC's line also answers a `price` on a command that goes nowhere, and a
+    // cardinal in flight is not what it refused.
+    [Fact]
+    public void ThePriceLine_WithACardinalInFlight_ReportsNothing()
+    {
+        Rig rig = NewRig(TollWithAWayRoundJson, purse: null);
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Tracker.NoteMoveSent(Direction.N);
+
+        rig.Detector.FeedTestLine(PriceRefusal);
+
+        Assert.Empty(rig.Refusals);
+        Assert.Equal(RoomConfidence.Pending, rig.Tracker.State.Confidence);
     }
 
     // ----- the walk --------------------------------------------------------------
@@ -438,8 +717,7 @@ public sealed class TollPurseDoubtTests : IDisposable
         Rig rig = NewRig(TollTheOnlyWayJson, CoinBeforeTheDeath);
         rig.Tracker.SetLocated(new RoomKey(1, 1));
         rig.Walker.WalkTo(new RoomKey(1, 3));
-        rig.Tracker.NoteRoomObserved(new RoomObservation("Bailey",
-            new HashSet<Direction> { Direction.E, Direction.W }));
+        rig.Tracker.NoteRoomObserved(Obs("Bailey", Direction.E, Direction.W));
         Assert.Equal(new[] { "e", "e" }, rig.Sent);
 
         rig.Detector.FeedTestLine(Refusal);
@@ -448,7 +726,151 @@ public sealed class TollPurseDoubtTests : IDisposable
         Assert.Equal(WalkState.Idle, rig.Walker.State);
         WalkEvent failed = Assert.Single(rig.Events, e => e.Kind == WalkEventKind.Failed);
         Assert.Contains("a toll east from 1/2 (Bailey) (5 gold) you can't pay", failed.Detail);
-        Assert.Contains("the game refused a toll the purse on record covered", failed.Detail);
+        Assert.Contains("the game refused a toll or fare the client took the purse to cover", failed.Detail);
+        Assert.Single(rig.Unpaid);
+    }
+
+    // The game charges more than the data says (50 gold where the data has 5) and
+    // the record holds 10: nothing contradicts the record, so no `i`, and the step
+    // went out six times before the walk gave up. Now once; and the next walk
+    // doesn't plan through the toll either, until a read shows the game's price.
+    [Fact]
+    public void AWalk_RefusedAtATollTheGamePricesAboveTheData_IsNotSentThereAgain_NorIsTheNextWalk()
+    {
+        Rig rig = NewRig(TollWithAWayRoundJson, purse: 1_000);
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Walker.WalkTo(new RoomKey(1, 2));
+
+        rig.Detector.FeedTestLine("You do not have enough to cover the toll of 50 gold crowns.");
+
+        Assert.Equal(new[] { "e", "n" }, rig.Sent);
+        Assert.Equal(0, rig.InventoryAsked);
+        Assert.DoesNotContain(rig.Events, e => e.Kind == WalkEventKind.Failed);
+
+        rig.Walker.Stop("test");
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Sent.Clear();
+        rig.Walker.WalkTo(new RoomKey(1, 2));
+        Assert.Equal(new[] { "n" }, rig.Sent);
+
+        rig.Walker.Stop("test");
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Purse = 5_000;
+        rig.Filter.NotePurseRead();
+        rig.Sent.Clear();
+        rig.Walker.WalkTo(new RoomKey(1, 2));
+        Assert.Equal(new[] { "e" }, rig.Sent);
+    }
+
+    // A wording that names no price, a record that covers the data's price, and
+    // Paradigm's `rm` between the refusal and the re-plan: the `i` answer came back
+    // first and re-opened the toll, so the re-plan went straight back into it
+    // (three sends, three `i`). The exit stays closed for the walk, on one `i`.
+    [Fact]
+    public void AWalk_RefusedInAWordingWithNoPrice_DoesNotGoBackOnTheSameWalk()
+    {
+        Rig rig = NewRig(TollWithAWayRoundJson, CoinBeforeTheDeath, recovery: true);
+        List<Action> locateAnswers = new();
+        rig.Gate!.TryResyncOnce = (_, onResolved, _) =>
+        {
+            locateAnswers.Add(() =>
+            {
+                rig.Tracker.SetLocated(new RoomKey(1, 1));
+                onResolved(new RoomKey(1, 1));
+            });
+            return true;
+        };
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Walker.WalkTo(new RoomKey(1, 2));
+
+        rig.Detector.FeedTestLine("You do not have enough to cover the toll of 5 platinum pieces.");
+        Assert.Equal(new[] { "e" }, rig.Sent);             // waiting on the locate
+        rig.Filter.NotePurseRead();                         // the `i` answer: the record unchanged
+        foreach (Action answer in locateAnswers.ToArray()) answer();
+
+        Assert.Equal(new[] { "e", "n" }, rig.Sent);
+        Assert.Equal(1, rig.InventoryAsked);
+
+        // The walk over, the toll is judged on the data again.
+        rig.Walker.Stop("test");
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Sent.Clear();
+        rig.Walker.WalkTo(new RoomKey(1, 2));
+        Assert.Equal(new[] { "e" }, rig.Sent);
+    }
+
+    // ----- an NPC's fare ----------------------------------------------------------
+
+    [Fact]
+    public void AWalk_WhoseOnlyWayIsAFareItCantPay_DoesNotStart_AndNamesTheFare()
+    {
+        Rig rig = NewRig(FareRoomsJson, purse: 300, monstersJson: FareMonstersJson, tbInfoJson: FareTbInfoJson);
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Assert.False(rig.Walker.WalkTo(new RoomKey(1, 391)));
+
+        Assert.Empty(rig.Sent);
+        WalkEvent failed = Assert.Single(rig.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Equal(
+            "all routes blocked by a paid transport from 1/2 (Tavern) (10 gold per person) you can't pay: "
+            + "you carry 3 gold, 7 gold short",
+            failed.Detail);
+        Assert.Single(rig.Unpaid);
+    }
+
+    [Fact]
+    public void AWalk_RefusedByAnNpcForItsFare_AsksOnce_AndStopsNamingTheFare()
+    {
+        Rig rig = NewRig(FareRoomsJson, CoinBeforeTheDeath, monstersJson: FareMonstersJson, tbInfoJson: FareTbInfoJson);
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(rig.Walker.WalkTo(new RoomKey(1, 391)));
+        rig.Tracker.NoteRoomObserved(Obs("Tavern", Direction.S));
+        Assert.Equal(new[] { "n", "ask barmaid adventure" }, rig.Sent);
+
+        rig.Detector.FeedTestLine(PriceRefusal);
+
+        (RoomExit? crossing, long? named) = Assert.Single(rig.Refusals);
+        Assert.Equal(new RoomKey(1, 391), crossing!.Value.Target);
+        Assert.Equal(1_000, named);
+        Assert.Equal(1, rig.InventoryAsked);
+        Assert.Equal(new[] { "n", "ask barmaid adventure" }, rig.Sent);     // not asked twice
+        Assert.Equal(WalkState.Idle, rig.Walker.State);
+        WalkEvent failed = Assert.Single(rig.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Contains("a paid transport from 1/2 (Tavern) (10 gold per person) you can't pay", failed.Detail);
+        Assert.Single(rig.Unpaid);
+    }
+
+    // ----- a sailing's fare -------------------------------------------------------
+
+    [Fact]
+    public void AWalk_WhoseOnlyWayIsASailingItCanPay_Sails()
+    {
+        Rig rig = NewRig(BoatRoomsJson, CoinBeforeTheDeath, tbInfoJson: BoatTbInfoJson, spellsJson: BoatSpellsJson);
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Assert.True(rig.Walker.WalkTo(new RoomKey(1, 11)));
+        rig.Tracker.NoteRoomObserved(Obs("Pier", Direction.S));
+
+        Assert.Equal(new[] { "n", "secure passage to islea" }, rig.Sent);
+    }
+
+    // The captain leaves whoever can't pay on the dock, so a walk whose only way is
+    // a sailing it can't pay for doesn't go and stand there.
+    [Fact]
+    public void AWalk_WhoseOnlyWayIsASailingItCantPay_DoesNotSetOut_AndNamesTheFare()
+    {
+        Rig rig = NewRig(BoatRoomsJson, CoinBeforeTheDeath, tbInfoJson: BoatTbInfoJson, spellsJson: BoatSpellsJson);
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Filter.NotePurseLostAtDeath();
+
+        Assert.False(rig.Walker.WalkTo(new RoomKey(1, 11)));
+
+        Assert.Empty(rig.Sent);
+        WalkEvent failed = Assert.Single(rig.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Equal(
+            "all routes blocked by the boat 'secure passage to islea' from 1/2 (Pier) (1 gold per person) you can't pay: "
+            + "your coin went with the deathpile and the inventory hasn't been read since (type i)",
+            failed.Detail);
         Assert.Single(rig.Unpaid);
     }
 
@@ -485,5 +907,81 @@ public sealed class TollPurseDoubtTests : IDisposable
         RoomExit toll = plan.BlockExit;
         Assert.Equal(ExitBlockReason.Toll, rig.Filter.DescribeExitBlock(in toll));
         Assert.Contains("went with the deathpile", rig.Filter.DescribePurseFor(in toll));
+    }
+
+    // ----- the inventory read a refusal asks for --------------------------------
+
+    // With Auto-All off the move was the user's own and nothing is sent (user,
+    // 2026-10-10), but nothing sent the read when the switch came back on either,
+    // and every toll stayed closed until an `i` was typed.
+    [Fact]
+    public void TheReadARefusalAsksFor_HeldByTheMasterSwitch_GoesOutWhenItIsBackOn()
+    {
+        bool held = true;
+        int sent = 0;
+        OwedPurseRead read = new(() => held, () => sent++);
+
+        read.Ask();
+        Assert.Equal(0, sent);
+        Assert.True(read.Owed);
+
+        read.Retry();                    // the send gate let go, the switch still off
+        Assert.Equal(0, sent);
+
+        held = false;
+        read.Retry();
+        Assert.Equal(1, sent);
+        Assert.False(read.Owed);
+
+        read.Retry();                    // one `i` for the refusal
+        Assert.Equal(1, sent);
+    }
+
+    [Fact]
+    public void TheReadARefusalAsksFor_IsNotSent_OnceAReadHasComeAnotherWay()
+    {
+        bool held = true;
+        int sent = 0;
+        OwedPurseRead read = new(() => held, () => sent++);
+        read.Ask();
+
+        read.Settle();                   // the user typed `i`
+        held = false;
+        read.Retry();
+
+        Assert.Equal(0, sent);
+    }
+
+    [Fact]
+    public void TheReadARefusalAsksFor_WithNothingHoldingIt_GoesOutAtOnce()
+    {
+        int sent = 0;
+        OwedPurseRead read = new(() => false, () => sent++);
+
+        read.Ask();
+
+        Assert.Equal(1, sent);
+        Assert.False(read.Owed);
+    }
+
+    // The post-death `i` went through the engine send gate, which drops what it is
+    // handed while held: dropped there it was never asked again.
+    [Fact]
+    public void TheReadAfterADeath_StaysOwed_WhileTheSendGateIsHeld()
+    {
+        bool gateHeld = true;
+        int asked = 0;
+        PostDeathInventoryRefresh refresh = new(() => { }, () => asked++) { SendHeld = () => gateHeld };
+        refresh.OnDeath();
+
+        refresh.OnRoomKnown();
+        Assert.Equal(0, asked);
+        Assert.True(refresh.Due);
+
+        gateHeld = false;
+        refresh.OnRoomKnown();           // asked again when the gate lets go
+        refresh.OnRoomKnown();
+        Assert.Equal(1, asked);
+        Assert.False(refresh.Due);
     }
 }

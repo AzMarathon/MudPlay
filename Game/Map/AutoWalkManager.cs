@@ -1446,6 +1446,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // sole crossing.
             int? landHops = path is { Count: > 0 } ? path.Count : (int?)null;
             boatPlan = ChooseBoatRoute(source.Key, destination, landHops);
+            // A sailing whose fare can't be paid is not set out for, sole crossing or
+            // not: the captain leaves whoever can't pay on the dock, so the walk
+            // would only stand there. Kept to name it if nothing else gets there. One
+            // gated on level alone still sails, with its warning.
+            BoatRoutePlan? unpaidBoat = null;
+            if (boatPlan is { } gatedBoat && gatedBoat.Block.HasFlag(ExitBlockReason.Fare))
+            {
+                unpaidBoat = gatedBoat;
+                boatPlan = null;
+            }
 
             // A sys-goto jump can also beat (or replace) the land route — weigh it
             // the same way. When BOTH a boat and a jump qualify, keep the one with
@@ -1459,6 +1469,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
             if (boatPlan is { } chosen)
             {
+                LogPaidCrossings(source.Key, chosen.ToDock, destination);
+                LogBoatFare(chosen.Passage, destination);
+                LogPaidCrossings(chosen.Passage.ArrivalRoom, chosen.FromArrival, destination);
                 expanded = BuildBoatWalk(source.Key, chosen);
             }
             else if (sysGotoPlan is { } chosenGoto)
@@ -1484,6 +1497,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     && DescribeRefusedTeleport(source.Key, destination, teleports) is { } refused)
                 {
                     Raise(new WalkEvent(WalkEventKind.Failed, refused, destination));
+                    return false;
+                }
+
+                if (unpaidBoat is { } sail)
+                {
+                    BoatPassage passage = sail.Passage;
+                    string cantSail = "all routes blocked by "
+                        + PaidCrossingDescriber.DescribeBoat(in passage, RoomNameOf) + " you can't pay"
+                        + (PaidCrossingDescriber.PurseForFare(Filter, passage.ArrivalRoom, passage.FareCopper) is { } purse
+                            ? $": {purse}" : string.Empty);
+                    FailUnpaid(destination, cantSail);
                     return false;
                 }
 
@@ -1522,15 +1546,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 string reason = describePath is { Count: > 0 }
                     ? DescribeBlockedRoute(source.Key, describePath, out unpaid)
                     : DescribeNoPlainRoute(source.Key, destination);
-                // A walk that can't pay its way says so where the user is looking,
-                // not only on the Navigation window's chip, and in the log from
-                // here: that window writes a failed walk's reason, and it may be shut.
-                if (unpaid)
-                {
-                    _log?.Info("Walker", $"walk to {destination}: {reason}");
-                    _unpaidCrossingHandler?.Invoke(destination, reason);
-                }
-                Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
+                if (unpaid) FailUnpaid(destination, reason);
+                else Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
                 return false;
             }
             else
@@ -1796,10 +1813,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (_boatPlanner is null) return null;
 
         // Accept a fare- / level-gated sailing ONLY when there's no land route —
-        // the sail is then the sole crossing, so surfacing it (and warning the
-        // user a member may be refused at the dock) beats a bare "no path". With a
-        // land route in hand, a gated boat is skipped so we never split the party
-        // for a crossing a member can't make.
+        // the sail is then the sole crossing, so surfacing it beats a bare "no
+        // path": the caller sails one gated on level with a warning that a member
+        // may be refused at the dock, and names one gated on its fare in the walk's
+        // failure. With a land route in hand, a gated boat is skipped so we never
+        // split the party for a crossing a member can't make.
         if (_boatPlanner.TryPlan(source, destination, Filter, allowGated: landHops is null)
             is not { } plan)
             return null;
@@ -2109,15 +2127,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         if (gate is not { } g) return null;
         RoomExit exit = g.Exit;
-        return Filter?.DescribePurseFor(in exit) is { } purse
-            ? $"{DescribePaidCrossing(g.From, g.Dir, in exit)} you can't pay: {purse}"
-            : null;
+        return PaidCrossingDescriber.DescribeUnpaid(g.From, g.Dir, in exit, Filter, RoomNameOf);
     }
 
-    private string DescribePaidCrossing(RoomKey from, Direction dir, in RoomExit exit) =>
-        exit.Hint == RoomExitHint.Toll && exit.TollGold > 0
-            ? $"a toll {RoomTooltipBuilder.DirectionLabel(dir)} from {NameRoom(from)} ({exit.TollGold} gold)"
-            : $"a paid transport from {NameRoom(from)} ({Cash.CurrencyFormat.Full(exit.FareCopper)} per person)";
+    private string? RoomNameOf(RoomKey key) => _graph.GetRoom(key)?.Name;
 
     // The tolls and fares a planned route pays, with the purse they were allowed on:
     // the line that shows a walk went through a toll on a coin count that was wrong
@@ -2133,7 +2146,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             if (_graph.GetRoom(cur) is not { } room || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
             if (filter.DescribePurseFor(in exit) is { } purse)
             {
-                first ??= $"{DescribePaidCrossing(cur, dir, in exit)}: {purse}";
+                first ??= $"{PaidCrossingDescriber.Describe(cur, dir, in exit, RoomNameOf)}: {purse}";
                 crossings++;
             }
             cur = exit.Target;
@@ -2141,6 +2154,24 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (first is null) return;
         _log.Info("Walker", $"walk to {destination} pays {first}"
             + (crossings > 1 ? $" (and {crossings - 1} more toll(s) or fare(s) further on)" : string.Empty));
+    }
+
+    // The same line for a sailing the route boards.
+    private void LogBoatFare(in BoatPassage passage, RoomKey destination)
+    {
+        if (_log is null || passage.FareCopper <= 0) return;
+        if (PaidCrossingDescriber.PurseForFare(Filter, passage.ArrivalRoom, passage.FareCopper) is not { } purse) return;
+        _log.Info("Walker", $"walk to {destination} pays {PaidCrossingDescriber.DescribeBoat(in passage, RoomNameOf)}: {purse}");
+    }
+
+    // A walk with no route for want of a toll or fare says so where the user is
+    // looking, not only on the Navigation window's chip, and in the log from here:
+    // that window writes a failed walk's reason, and it may be shut.
+    private void FailUnpaid(RoomKey destination, string reason)
+    {
+        _log?.Info("Walker", $"walk to {destination}: {reason}");
+        _unpaidCrossingHandler?.Invoke(destination, reason);
+        Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
     }
 
     // Told when a walk has no route for want of a toll or fare, with the walk's
@@ -3029,10 +3060,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _sailingPlace = passage.Place;
         _sailingEta = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(voyageSeconds);
 
-        // A gated sole-crossing sail still boards — the captain refuses only the
-        // under-level / too-poor members at the dock and leaves them behind. Warn
-        // so the user knows a member may not make the crossing, rather than the
-        // walk silently splitting the party a head short.
+        // A sole-crossing sail gated on level still boards — the captain refuses
+        // only the under-level members at the dock and leaves them behind. Warn so
+        // the user knows a member may not make the crossing, rather than the walk
+        // silently splitting the party a head short. (One gated on its fare never
+        // gets here: WalkToImmediate fails the walk naming it.)
         ExitBlockReason gate = Filter?.DescribeBoatBlock(passage) ?? ExitBlockReason.None;
         if (gate != ExitBlockReason.None)
             _log?.Warn("Walker",
@@ -3283,7 +3315,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 && (gates.DescribeExitBlock(in refusedExit) & (ExitBlockReason.Toll | ExitBlockReason.Fare)) != 0)
             {
                 _log?.Info("Walker",
-                    $"step {_index + 1} refused at {DescribePaidCrossing(sourceForCurrentStep.Key, refused.Direction, in refusedExit)}; "
+                    $"step {_index + 1} refused at {PaidCrossingDescriber.Describe(sourceForCurrentStep.Key, refused.Direction, in refusedExit, RoomNameOf)}; "
                     + "re-planning without it");
                 TryReplanOrFail(RoomConfidence.Confirmed);
                 return;

@@ -620,6 +620,9 @@ public sealed class AppServices
 
     // Sends one `i` after a death, when the character stands in a room again.
     public Game.Inventory.PostDeathInventoryRefresh InventoryAfterDeath { get; private set; } = null!;
+
+    // The `i` a refused toll or fare asks for, kept owed while it can't be sent.
+    public Game.Inventory.OwedPurseRead PurseRead { get; private set; } = null!;
     public Game.Remote.PathReplyTracker PathReply { get; private set; } = null!;
     public Game.Remote.LeaderBossTravelProbe LeaderBossTravel { get; private set; } = null!;
 
@@ -8592,28 +8595,54 @@ public sealed class AppServices
             if (RoomTracker.State.CurrentRoom is not null) InventoryAfterDeath.OnRoomKnown();
         };
         Profile.ProfileLoaded += _ => InventoryAfterDeath.Reset();
+        // Sent into a held send gate the `i` was dropped and never asked again.
+        InventoryAfterDeath.SendHeld = () => EngineGate.IsLocked;
 
-        // The toll gate hears of the death too. The stale record above reads as "purse
-        // unknown", which a toll is not refused on, and the coin is known gone: until
-        // the re-read lands (or if its `i` never goes out) a walk from the graveyard
-        // would head for a toll it can't pay (report paradigm-20261010-145529).
-        RoomTracker.PlayerDeathObserved += Movement.NotePurseLostAtDeath;
+        // The toll gate hears of the death too, with the room died in (an arena
+        // death takes nothing). The stale record above reads as "purse unknown",
+        // which a toll is not refused on, and the coin is known gone: until the
+        // re-read lands a walk from the graveyard would head for a toll it can't pay
+        // (report paradigm-20261010-145529).
+        RoomTracker.PlayerDeathObserved += () => Movement.NoteDeath(RoomTracker.LastDeathRoom);
         Inventory.FullInventoryParsed += Movement.NotePurseRead;
-
-        // A walk with no route for want of a toll or fare says so on the terminal.
-        // Once per reason until a walk gets going: an engine that keeps asking for
-        // the same walk would otherwise repeat it.
-        string? lastUnpaidNotice = null;
-        Walker.SetUnpaidCrossingHandler((destination, reason) =>
+        Movement.TripUnderWayProbe = () => MovementControl.IsActive;
+        MovementControl.StateChanged += () =>
         {
-            string where = RoomGraph.GetRoom(destination)?.Name is { Length: > 0 } name
-                ? $"{destination} ({name})" : destination.ToString();
-            string notice = $"[Navigation: no walk to {where} - {reason}]";
+            if (MovementControl.IsIdle) Movement.NoteTripEnded();
+        };
+
+        // The read a refused toll asks for: owed while the master switch is off or
+        // the send gate is held, and sent when that ends (SendOwedInventoryReads).
+        PurseRead = new Game.Inventory.OwedPurseRead(
+            held: () => AutoModeController.Blocks("Info polls") || EngineGate.IsLocked,
+            send: () =>
+            {
+                Log.Info(Game.Inventory.InventoryManager.LogCategory,
+                    "Re-reading the inventory: the game refused a toll or fare the purse on record covered.");
+                SendGameCommand("i");
+            });
+        Inventory.FullInventoryParsed += PurseRead.Settle;
+        Profile.ProfileLoaded += _ => PurseRead.Settle();
+        EngineGate.Released += SendOwedInventoryReads;
+
+        // A walk or loop with no route for want of a toll or fare says so on the
+        // terminal. Once per reason until a walk gets going: an engine that keeps
+        // asking for the same trip would otherwise repeat it.
+        string? lastUnpaidNotice = null;
+        void NoticeUnpaid(string notice)
+        {
             if (notice == lastUnpaidNotice) return;
             lastUnpaidNotice = notice;
             // Posted: a re-plan can fail from inside the emulator's message pump.
             Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(notice));
+        }
+        Walker.SetUnpaidCrossingHandler((destination, reason) =>
+        {
+            string where = RoomGraph.GetRoom(destination)?.Name is { Length: > 0 } name
+                ? $"{destination} ({name})" : destination.ToString();
+            NoticeUnpaid($"[Navigation: no walk to {where} - {reason}]");
         });
+        LoopRunner.SetUnpaidCrossingHandler(reason => NoticeUnpaid($"[Navigation: {reason}]"));
         Walker.Event += e =>
         {
             if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;
@@ -10272,6 +10301,9 @@ public sealed class AppServices
         // A loop the last reconnect set aside, not restarted while the switch was
         // off. Behind the freeze still, so its first step waits for the holds.
         LoopRunner.ResumeAfterMasterSwitch();
+        // Ahead of the release: the walk it frees plans on a purse that is being
+        // read, with its tolls closed, not on one known to be wrong.
+        SendOwedInventoryReads();
         MovementControl.ReleaseFromAutoAll();
         DeathRecovery.OnAutoAllRestored();
     }
@@ -11640,16 +11672,28 @@ public sealed class AppServices
         return true;
     }
 
-    // MovementRefusalDetector.TollRefused. A toll the purse on record covered was
-    // refused, so the record is wrong (coin can go with nothing printed, as a room
-    // script's price does: GAME_MECHANICS "How a charge takes coins, and when the
-    // purse is re-bucketed"). The toll gate stops believing it at once, and the
-    // inventory is read again so that it can. Nothing is sent with Auto-All off,
-    // where the move was the user's own.
-    public void OnTollRefused(long? costCopper)
+    // MovementRefusalDetector.PaidCrossingRefused. The exit is closed to routes from
+    // here on, and when the purse on record covered the price the record is wrong
+    // (coin can go with nothing printed, as a room script's price does:
+    // GAME_MECHANICS "How a charge takes coins, and when the purse is re-bucketed"):
+    // the toll gate stops believing it at once and the inventory is read again, one
+    // `i` for the refusal. With Auto-All off the move was the user's own and nothing
+    // is sent (user, 2026-10-10); the read is owed until the switch is back on.
+    public void OnPaidCrossingRefused(Game.Map.RoomExit? crossing, long? namedCopper)
     {
-        if (!Movement.NoteTollRefused(costCopper)) return;
-        if (!AutoModeController.KillSwitchEngaged) SendGameCommand("i");
+        if (!Movement.NoteCrossingRefused(crossing, namedCopper)) return;
+        PurseRead.Ask();
+    }
+
+    // The inventory reads still owed (after a death, after a refused toll) go out
+    // now if they may: the master switch is back on, or the send gate has let go.
+    // One `i` serves both.
+    private void SendOwedInventoryReads()
+    {
+        bool deathReadDue = InventoryAfterDeath.Due;
+        if (deathReadDue && RoomTracker.State.CurrentRoom is not null) InventoryAfterDeath.OnRoomKnown();
+        if (deathReadDue && !InventoryAfterDeath.Due) PurseRead.Settle();
+        else PurseRead.Retry();
     }
 
     // A Grab-All boss's loot just hit the floor: fire a blind `get <item>` for every

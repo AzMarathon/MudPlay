@@ -19,8 +19,9 @@ public readonly record struct BoatRoutePlan(
 
     // A gated plan is one the crosser can't currently board (a member falls under
     // the level floor or can't cover the fare). It's only ever returned when the
-    // sail is the SOLE crossing — the walker warns and lets the captain refuse,
-    // which is more useful than hiding the only route behind a bare "no path".
+    // sail is the SOLE crossing, which is more useful than hiding the only route
+    // behind a bare "no path": the walker sails one gated on level with a warning
+    // and lets the captain refuse, and fails naming one gated on its fare.
     public bool IsGated => Block != ExitBlockReason.None;
 }
 
@@ -55,9 +56,10 @@ public sealed class BoatRoutePlanner
     //
     // A boardable sailing always wins over a gated one. allowGated lets the caller
     // still accept a gated sailing (a member under-level / too-poor to board) when
-    // it's the ONLY crossing — the walker warns and lets the captain refuse rather
-    // than the route vanishing into a bare "no path". With allowGated false a gated
-    // sailing is skipped, so a land route (or a boardable boat) is preferred.
+    // it's the ONLY crossing, rather than the route vanishing into a bare "no path"
+    // (what the walker does with one is on BoatRoutePlan.IsGated). With allowGated
+    // false a gated sailing is skipped, so a land route (or a boardable boat) is
+    // preferred.
     public BoatRoutePlan? TryPlan(
         RoomKey source, RoomKey destination, IRoomFilter? filter, bool allowGated = false)
     {
@@ -98,7 +100,7 @@ public sealed class BoatRoutePlanner
                 $"Boat route {source}→{destination} via '{plan.Passage.Keyword}' "
                 + $"(dock {plan.Passage.DockRoom}, arrive {plan.Passage.ArrivalRoom}): "
                 + $"{plan.ToDock.Count} hop(s) to dock + {plan.FromArrival.Count} from port"
-                + (plan.IsGated ? $"; GATED ({plan.Block}) — sole crossing, will warn." : "."));
+                + (plan.IsGated ? $"; GATED ({plan.Block}) — sole crossing." : "."));
         return best;
     }
 

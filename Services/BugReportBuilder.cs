@@ -1562,7 +1562,8 @@ public static class BugReportBuilder
             : "any teleport (not wired)");
         // What a toll or fare is allowed or refused on: a walk through a toll the
         // character couldn't pay turns on what the client took the purse to be.
-        Kv(sb, "Purse for tolls and fares", svc.Movement.DescribePurse());
+        Kv(sb, "Purse for tolls and fares", svc.Movement.DescribePurse()
+            + (svc.PurseRead.Owed ? "; its re-read is owed and not yet sent (master switch off, or the send gate held)" : string.Empty));
         // Whether the Auto-All kill switch is the one holding navigation — it
         // suspends an in-flight nav on engage and resumes it on restore.
         Kv(sb, "Auto-All suspended nav", svc.MovementControl.IsAutoAllSuspended.ToString());

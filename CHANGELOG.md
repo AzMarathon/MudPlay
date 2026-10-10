@@ -2,9 +2,12 @@
 
 ## 3.167.1
 
-- After a death no walk takes a toll or paid transport until the inventory is read again (your coin went with the pile)
-- A toll the game refuses is not tried again: the inventory is re-read and the walk goes round it
-- A walk with no way round a toll you can't pay says so on the terminal, naming the toll and how short you are
+- After a death no walk or loop takes a toll, fare or sailing until the inventory is read again (your coin went with the pile); a death in an arena room takes nothing
+- A toll or fare the game refuses is never sent twice, and stays closed until an inventory read shows its price
+- A walk with no way round one you can't pay says so on the terminal, naming it and how short you are
+- A loop over a toll you can't pay is not started, and stops if refused mid-lap; such a loop could crash the client
+- A sailing you can't pay for is not walked to
+- The re-read a refusal asks for waits for Auto-All to come back on; the one after a death is no longer lost to a held send
 - Program log and bug report show the purse a toll was judged on
 - bug reports addressed: paradigm-20261010-145529
 
