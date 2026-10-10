@@ -63,10 +63,18 @@ public sealed class PartyPathItemGateTests
         public bool CapThrows;
         public DateTimeOffset Now = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
         public int ChipRefreshes;
+        // Items with a limited number of uses; every other item is kept for good.
+        public readonly HashSet<int> LimitedUse = new();
+        public readonly PartyHandOverMemory HandOvers;
         public readonly PartyPathItemGate Gate;
 
         public Harness(bool bindWire = true)
         {
+            HandOvers = new PartyHandOverMemory(
+                hasLimitedUses: id => LimitedUse.Contains(id),
+                journey: () => Journey,
+                log: null,
+                now: () => Now);
             Gate = new PartyPathItemGate(
                 isCarried: id => Carried.Contains(id),
                 selfCount: id => SelfCounts.TryGetValue(id, out int v) ? v : (Carried.Contains(id) ? 1 : 0),
@@ -114,7 +122,8 @@ public sealed class PartyPathItemGateTests
                     return new Cancel(() => CapsCancelled++);
                 },
                 journey: () => Journey,
-                now: () => Now);
+                now: () => Now,
+                handOvers: HandOvers);
             Gate.HoldingWalkForChanged += () => ChipRefreshes++;
             if (bindWire)
                 Gate.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b)));
@@ -1694,5 +1703,462 @@ public sealed class PartyPathItemGateTests
         none.Gate.OnPathItemsRequired(new[] { 1 });
         Assert.Empty(none.Sent);
         Assert.Equal((1, 1), Assert.Single(none.ForwardedReq));
+    }
+
+    // ----- A hand-over the game confirmed is remembered -------------------------
+    //
+    // A member who never answers was fetched a copy on every trip through the
+    // gate, though they held the one from the trip before. The user's ruling
+    // (2026-10-09), asked whether to remember "already gave them one" until the
+    // party changes, at the cost that a failed hand-over isn't retried: "yes".
+
+    private const int Ring = 474;     // unlimited uses: kept for good
+    private const int Ticket = 924;   // one use: a gate can use it up
+
+    // A leader with a spare and one member, Sil, who never answers: the spare
+    // goes to Sil. confirmed is the game's line coming back for that give.
+    private static Harness LeaderHandsSilACopy(int item, string name, bool confirmed = true, bool limitedUse = false)
+    {
+        var h = new Harness { IsLeader = true, SearchEnabled = false, Journey = new object() };
+        h.Names[item] = name;
+        if (limitedUse) h.LimitedUse.Add(item);
+        h.SelfCounts[item] = 2;
+        h.Results[item] = Answer(item, new[] { "Sil" });
+
+        h.Gate.OnPathItemsRequired(new[] { item });
+        Assert.Equal($"give {name} to Sil\r", Assert.Single(h.Sent));
+
+        if (confirmed)
+        {
+            h.HandOvers.OnItemGivenAway(name, 1, "Sil");
+            h.SelfCounts[item] = 1;
+        }
+        h.Sent.Clear();
+        return h;
+    }
+
+    // The next trip through the gate: another journey, counted afresh.
+    private static void NextTrip(Harness h, int item)
+    {
+        h.Journey = new object();
+        h.Gate.OnPathItemsRequired(new[] { item });
+    }
+
+    [Fact]
+    public void ConfirmedHandOver_TheSilentMemberIsCreditedOnTheNextTrip_AndNothingIsFetched()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+        Assert.Equal("Sil: darkwood ring x1", h.HandOvers.Summary);
+
+        NextTrip(h, Ring);
+
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+        Assert.DoesNotContain("no answer from", h.Gate.JourneyCountsSummary);
+    }
+
+    // A give the game refused leaves the copy with the leader, and the line that
+    // confirms a give never comes. Nothing is remembered, so the next trip hands
+    // it over again.
+    [Fact]
+    public void UnconfirmedHandOver_IsNotRemembered_AndIsMadeAgain()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring", confirmed: false);
+        Assert.Contains("not confirmed", h.HandOvers.Summary);
+
+        NextTrip(h, Ring);
+
+        Assert.Equal("give darkwood ring to Sil\r", Assert.Single(h.Sent));
+    }
+
+    [Fact]
+    public void OnlyTheLineForThatItemAndThatMember_InTime_ConfirmsTheHandOver()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring", confirmed: false);
+
+        h.HandOvers.OnItemGivenAway("darkwood ring", 1, "Bob");      // another member
+        h.HandOvers.OnItemGivenAway("rope and grapple", 1, "Sil");   // another item
+        h.Now += TimeSpan.FromSeconds(31);
+        h.HandOvers.OnItemGivenAway("darkwood ring", 1, "Sil");      // too late to be this give
+
+        Assert.Equal("(none)", h.HandOvers.Summary);
+    }
+
+    // A give the user typed is theirs: the client sent nothing for a gate.
+    [Fact]
+    public void AGiveTheClientDidNotSend_IsNotRemembered()
+    {
+        var h = new Harness { IsLeader = true };
+
+        h.HandOvers.OnItemGivenAway("darkwood ring", 1, "Sil");
+
+        Assert.Equal("(none)", h.HandOvers.Summary);
+    }
+
+    // The line for a give a member was told to make goes to that member. The
+    // leader never sees it, so that hand-over is not one it can remember.
+    [Fact]
+    public void AGiveAMemberWasToldToMake_IsNotRemembered()
+    {
+        var h = new Harness { IsLeader = true };
+        h.Names[Ring] = "darkwood ring";
+        h.SelfCounts[Ring] = 1;
+        h.Results[Ring] = Answer(Ring, new[] { "Sil" }, ("Bob", 2));
+
+        h.Gate.OnPathItemsRequired(new[] { Ring });
+        Assert.Equal("/Bob @do give darkwood ring to Sil\r", Assert.Single(h.Sent));
+        h.HandOvers.OnItemGivenAway("darkwood ring", 1, "Sil");
+
+        Assert.Equal("(none)", h.HandOvers.Summary);
+    }
+
+    [Fact]
+    public void AnAnswerOfNone_OverridesTheMemory_AndACopyIsFetched()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+        h.Results[Ring] = Answer(Ring, ("Sil", 0));
+
+        NextTrip(h, Ring);
+
+        Assert.Equal((Ring, 2), Assert.Single(h.ForwardedReq));
+        Assert.Equal("(none)", h.HandOvers.Summary);
+
+        // Silent again on the trip after: their answer was the last word.
+        h.Results[Ring] = Answer(Ring, new[] { "Sil" });
+        h.ForwardedReq.Clear();
+        NextTrip(h, Ring);
+        Assert.Equal((Ring, 2), Assert.Single(h.ForwardedReq));
+    }
+
+    [Fact]
+    public void AnAnswerOfMore_OverridesTheMemory_AndIsWhatALaterSilenceIsCreditedWith()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+        h.PerPerson[Ring] = 2;                            // each member is now to hold two
+        h.SelfCounts[Ring] = 2;
+        h.Results[Ring] = Answer(Ring, ("Sil", 2));
+
+        NextTrip(h, Ring);
+
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+        Assert.Equal("Sil: darkwood ring x2", h.HandOvers.Summary);
+
+        h.Results[Ring] = Answer(Ring, new[] { "Sil" });
+        NextTrip(h, Ring);
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+    }
+
+    // Nothing can be asked of a silent member, so a copy above their own quota
+    // could never be sent on: they are credited with their quota and no more.
+    [Fact]
+    public void ASilentMember_IsNeverCreditedWithASpareToPassOn()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+        h.Results[Ring] = Answer(Ring, ("Sil", 3));
+        NextTrip(h, Ring);
+        Assert.Equal("Sil: darkwood ring x3", h.HandOvers.Summary);
+
+        h.SelfCounts[Ring] = 0;                           // the leader's own is gone
+        h.Results[Ring] = Answer(Ring, new[] { "Sil" });
+        NextTrip(h, Ring);
+
+        Assert.Empty(h.Sent);
+        Assert.Equal((Ring, 1), Assert.Single(h.ForwardedReq));
+    }
+
+    [Fact]
+    public void AMemberLeaving_TakesTheirHandOverWithThem_AndLeavesTheOthers()
+    {
+        var h = new Harness { IsLeader = true, SearchEnabled = false, Journey = new object() };
+        h.Names[Ring] = "darkwood ring";
+        h.SelfCounts[Ring] = 3;
+        h.Results[Ring] = Answer(Ring, new[] { "Sil", "Al" });
+        h.Gate.OnPathItemsRequired(new[] { Ring });
+        Assert.Equal(new[] { "give darkwood ring to Sil\r", "give darkwood ring to Al\r" }, h.Sent);
+        h.HandOvers.OnItemGivenAway("darkwood ring", 1, "Sil");
+        h.HandOvers.OnItemGivenAway("darkwood ring", 1, "Al");
+        h.SelfCounts[Ring] = 1;
+
+        h.HandOvers.KeepOnly(new[] { "Al" });             // Sil left the party
+
+        Assert.Equal("Al: darkwood ring x1", h.HandOvers.Summary);
+        // Sil joins again and still doesn't answer: holding none, as any silent member.
+        NextTrip(h, Ring);
+        Assert.Equal((Ring, 2), Assert.Single(h.ForwardedReq));
+    }
+
+    [Fact]
+    public void AMemberJoining_ForgetsNothing()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+
+        h.HandOvers.KeepOnly(new[] { "Sil", "Newcomer" });
+        h.Results[Ring] = Answer(Ring, new[] { "Sil" }, ("Newcomer", 1));
+        NextTrip(h, Ring);
+
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void ThePartyDisbanding_ForgetsEveryHandOver()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+
+        h.HandOvers.KeepOnly(Array.Empty<string>());
+        NextTrip(h, Ring);
+
+        Assert.Equal((Ring, 2), Assert.Single(h.ForwardedReq));
+    }
+
+    [Theory]
+    [InlineData("this character no longer leads the party")]
+    [InlineData("disconnected")]
+    [InlineData("another character was loaded")]
+    public void APartyThatIsNotTheSameOne_ForgetsEveryHandOver(string why)
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+
+        h.HandOvers.Clear(why);
+        Assert.Equal("(none)", h.HandOvers.Summary);
+        NextTrip(h, Ring);
+
+        Assert.Equal((Ring, 2), Assert.Single(h.ForwardedReq));
+    }
+
+    // An item a gate can use up. That the member held it on the last trip says
+    // nothing about this one, so its hand-over stands for its own trip only.
+    [Fact]
+    public void LimitedUseItem_IsRememberedForTheTripItWasHandedOverOn_AndNoFurther()
+    {
+        Harness h = LeaderHandsSilACopy(Ticket, "room ticket", limitedUse: true);
+        Assert.Equal("Sil: room ticket x1 (this trip only)", h.HandOvers.Summary);
+
+        // A later leg of the same trip asks again, since the hand-off moved the numbers.
+        h.Gate.OnPathItemsRequired(new[] { Ticket });
+        Assert.Equal(2, h.QueryCount);
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+
+        NextTrip(h, Ticket);
+        Assert.Equal((Ticket, 2), Assert.Single(h.ForwardedReq));
+        Assert.Equal("(none)", h.HandOvers.Summary);
+    }
+
+    // The trip can cross more than one gate that takes the item.
+    [Fact]
+    public void LimitedUseItem_IsForgottenOnceAnExitThatNeedsItIsCrossed()
+    {
+        Harness h = LeaderHandsSilACopy(Ticket, "room ticket", limitedUse: true);
+
+        h.Gate.OnGateCrossed(Ticket);
+        h.Gate.OnPathItemsRequired(new[] { Ticket });     // the same trip, at its next gate
+
+        Assert.Equal((Ticket, 2), Assert.Single(h.ForwardedReq));
+    }
+
+    // Leg 1 hands the ticket over; leg 2 asks, credits it, and its count stands
+    // for the trip as "the party holds enough". The leader then crosses. Left
+    // standing, that count answered leg 3 without asking, and nothing was fetched
+    // for the trip's next gate.
+    [Fact]
+    public void LimitedUseItem_CrossingItsGate_AlsoDropsTheCountThatCreditedIt()
+    {
+        Harness h = LeaderHandsSilACopy(Ticket, "room ticket", limitedUse: true);
+        h.Gate.OnPathItemsRequired(new[] { Ticket });
+        Assert.Equal(2, h.QueryCount);
+        Assert.Contains("the party holds enough", h.Gate.JourneyCountsSummary);
+
+        h.Gate.OnGateCrossed(Ticket);
+        Assert.Equal("(none)", h.Gate.JourneyCountsSummary);
+        h.Gate.OnPathItemsRequired(new[] { Ticket });
+
+        Assert.Equal(3, h.QueryCount);
+        Assert.Equal((Ticket, 2), Assert.Single(h.ForwardedReq));
+    }
+
+    [Fact]
+    public void KeptItem_IsStillRememberedAfterItsGateIsCrossed_AndItsCountStands()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+        h.Gate.OnPathItemsRequired(new[] { Ring });
+        Assert.Equal(2, h.QueryCount);
+
+        h.Gate.OnGateCrossed(Ring);
+        h.Gate.OnPathItemsRequired(new[] { Ring });       // a later leg: the count still stands
+        Assert.Equal(2, h.QueryCount);
+        NextTrip(h, Ring);
+
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+    }
+
+    // The bug report listed a ticket as held "this trip only" long after the trip.
+    [Fact]
+    public void LimitedUseItem_IsDroppedWhenItsTripEnds_AndKeptWhileALegEnds()
+    {
+        Harness h = LeaderHandsSilACopy(Ticket, "room ticket", limitedUse: true);
+
+        h.HandOvers.ForgetEndedTrips();                   // a leg ended, the trip stands
+        Assert.Equal("Sil: room ticket x1 (this trip only)", h.HandOvers.Summary);
+
+        h.Journey = null;                                 // the walker ended the trip
+        h.HandOvers.ForgetEndedTrips();
+        Assert.Equal("(none)", h.HandOvers.Summary);
+    }
+
+    [Fact]
+    public void KeptItem_OutlivesItsTrip()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+
+        h.Journey = null;
+        h.HandOvers.ForgetEndedTrips();
+
+        Assert.Equal("Sil: darkwood ring x1", h.HandOvers.Summary);
+    }
+
+    // A silent member credited with a copy they have since lost is refused at the
+    // gate and drops out of the leader's party there. That is a roster change, so
+    // what was remembered for them goes, and the next trip fetches for them.
+    [Fact]
+    public void ACreditedMemberWhoDropsOutOfTheParty_IsFetchedForOnceTheyAreBack()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+        NextTrip(h, Ring);
+        Assert.Empty(h.Forwarded);                        // credited: nothing fetched
+
+        h.HandOvers.KeepOnly(Array.Empty<string>());      // left behind at the gate
+        h.HandOvers.KeepOnly(new[] { "Sil" });            // invited again
+        NextTrip(h, Ring);
+
+        Assert.Equal((Ring, 2), Assert.Single(h.ForwardedReq));
+    }
+
+    [Fact]
+    public void TwoConfirmedHandOversToOneMember_AddUp()
+    {
+        var h = new Harness { IsLeader = true, SearchEnabled = false, Journey = new object() };
+        h.Names[Ring] = "darkwood ring";
+        h.PerPerson[Ring] = 2;
+        h.SelfCounts[Ring] = 4;
+        h.Results[Ring] = Answer(Ring, new[] { "Sil" });
+
+        h.Gate.OnPathItemsRequired(new[] { Ring });
+        Assert.Equal(new[] { "give darkwood ring to Sil\r", "give darkwood ring to Sil\r" }, h.Sent);
+        h.HandOvers.OnItemGivenAway("darkwood ring", 1, "Sil");
+        Assert.Equal(
+            "Sil: darkwood ring x1; Sil: darkwood ring (sent 0s ago, not confirmed)", h.HandOvers.Summary);
+        h.HandOvers.OnItemGivenAway("darkwood ring", 1, "Sil");
+        Assert.Equal("Sil: darkwood ring x2", h.HandOvers.Summary);
+
+        h.SelfCounts[Ring] = 2;
+        h.Sent.Clear();
+        NextTrip(h, Ring);
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+    }
+
+    // What the route card decides from: the credited member is among the holders
+    // and out of the unanswered, and nobody is counted as having replied for them.
+    [Fact]
+    public void Reconcile_ReturnsTheCountWithTheCreditInIt()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+
+        PartyInventoryProbe.PartyItemResult counted =
+            h.HandOvers.Reconcile(Answer(Ring, new[] { "Sil", "Al" }, ("Bob", 1)), perPerson: 1, noteCredits: false);
+
+        Assert.Equal(2, counted.TotalCount);
+        Assert.Equal(1, counted.CountsByMember["Sil"]);
+        Assert.Equal(1, counted.CountsByMember["Bob"]);
+        Assert.Equal(new[] { "Al" }, counted.Unanswered);
+        Assert.Equal(3, counted.Expected);
+        Assert.Equal(1, counted.Replied);
+    }
+
+    // The game prints names its own way; a member is the same member in any case.
+    [Fact]
+    public void TheConfirmingLine_AndTheCount_MatchWhateverTheCase()
+    {
+        var h = new Harness { IsLeader = true };
+        h.HandOvers.NoteGiveSent(Ring, "darkwood ring", "Sil");
+
+        h.HandOvers.OnItemGivenAway("Darkwood Ring", 1, "SIL");
+        PartyInventoryProbe.PartyItemResult counted =
+            h.HandOvers.Reconcile(Answer(Ring, new[] { "sil" }), perPerson: 1);
+
+        Assert.Equal(1, counted.TotalCount);
+        Assert.Empty(counted.Unanswered);
+    }
+
+    // A river needs any boat. The leader's spare canoe goes to the silent member,
+    // and it is the canoe they are credited with when the party is asked about a raft.
+    [Fact]
+    public void ASubstituteHandedOver_IsCreditedAsTheItemItIs()
+    {
+        var h = BoatHarness(leader: true);
+        h.SearchEnabled = false;
+        h.Journey = new object();
+        h.SelfCounts[Canoe] = 2;
+        foreach (int boat in new[] { Raft, Skiff, Canoe }) h.Results[boat] = Answer(boat, new[] { "Sil" });
+
+        h.Gate.OnPathItemsRequired(new[] { Raft });
+        Assert.Equal("give silverbark canoe to Sil\r", Assert.Single(h.Sent));
+        h.HandOvers.OnItemGivenAway("silverbark canoe", 1, "Sil");
+        Assert.Equal("Sil: silverbark canoe x1", h.HandOvers.Summary);
+
+        h.SelfCounts[Canoe] = 1;
+        h.Sent.Clear();
+        NextTrip(h, Raft);
+
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+    }
+
+    // The game's refusal ends the wait at once, so a give somebody types to that
+    // member a moment later isn't taken for the one that was refused.
+    [Fact]
+    public void ARefusedGive_StopsWaitingForItsLine()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring", confirmed: false);
+
+        h.HandOvers.OnGiveRefused("Sil");
+        Assert.Equal("(none)", h.HandOvers.Summary);
+        h.HandOvers.OnItemGivenAway("darkwood ring", 1, "Sil");
+
+        Assert.Equal("(none)", h.HandOvers.Summary);
+    }
+
+    // "You may not give that item away!" names nobody: the oldest give is the one.
+    [Fact]
+    public void ARefusalThatNamesNobody_EndsTheOldestWait_AndOneForAnotherPlayerEndsNone()
+    {
+        var h = new Harness { IsLeader = true };
+        h.HandOvers.NoteGiveSent(Ring, "darkwood ring", "Sil");
+        h.HandOvers.NoteGiveSent(Ring, "darkwood ring", "Al");
+
+        h.HandOvers.OnGiveRefused("Bob");
+        Assert.Contains("Sil: darkwood ring", h.HandOvers.Summary);
+        Assert.Contains("Al: darkwood ring", h.HandOvers.Summary);
+
+        h.HandOvers.OnGiveRefused(null);
+        Assert.DoesNotContain("Sil", h.HandOvers.Summary);
+        Assert.Contains("Al: darkwood ring", h.HandOvers.Summary);
+    }
+
+    // With no trip to tie it to there is no telling when it has been used up.
+    [Fact]
+    public void LimitedUseItem_HandedOverWithNoTripUnderWay_IsNotRemembered()
+    {
+        var h = new Harness { IsLeader = true };
+        h.LimitedUse.Add(Ticket);
+
+        h.HandOvers.NoteGiveSent(Ticket, "room ticket", "Sil");
+        h.HandOvers.OnItemGivenAway("room ticket", 1, "Sil");
+
+        Assert.Equal("(none)", h.HandOvers.Summary);
     }
 }
