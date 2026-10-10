@@ -324,7 +324,7 @@ public sealed class BfsMapper
                 if (exit.Hint == RoomExitHint.MultiActionHidden
                     && exit.MultiAction is not { IsSatisfiable: true }) continue;
                 if (refuseTeleports && exit.Hint == RoomExitHint.Teleport) continue;
-                if (filter.IsTeleportRefused(here, in exit)) continue;
+                if (filter.IsExitRefused(here, in exit)) continue;
                 if (!ignoreAvoids && filter.IsAvoided(next)) continue;
 
                 bool closed = filter.IsClosedToRoutes(next);
@@ -384,7 +384,7 @@ public sealed class BfsMapper
                 if (exit.Hint == RoomExitHint.MultiActionHidden
                     && exit.MultiAction is not { IsSatisfiable: true }) continue;
                 if (refuseTeleports && exit.Hint == RoomExitHint.Teleport) continue;
-                if (filter.IsTeleportRefused(here, in exit)) continue;
+                if (filter.IsExitRefused(here, in exit)) continue;
                 if (!ignoreAvoids && filter.IsAvoided(next)) continue;
 
                 // Between two closed rooms the room itself is the one gate set aside;

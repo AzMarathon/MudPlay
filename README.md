@@ -1,13 +1,16 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.16**
-> - Auto-discard counts copies, not pack entries: an item with Min. to keep of 1 or more is now discarded down to that amount (it never was before)
-> - Worn copies count toward Min. to keep and are never the copy discarded
-> - A flagged light is discarded lit or not; the lit one counts as a pack copy
-> - A discard waiting to be sent is checked again before it goes, and taken back on a Roomba sweep, the switch going off, an unticked flag or a raised keep
-> - An inventory read landing before a pile's answers no longer has the pile sent twice
-> - Taking off a lit light on Stock no longer adds a pack item named `<light> and extinguished it` or leaves the light listed as lit
+> **Version 3.161.19**
+> - Only moves you type go into Crystal Lake's teleport rooms: no walk, loop, Auto-Lair trip or errand is routed into them, with or without a boat, and no raft or skiff is offered, fetched or bought for the lake
+> - A walk whose way there crosses them has no route and says why in one line
+> - Stock: walks to White Forest are taken along the coast (fewest teleport rooms) at level 50 or over with a raft or skiff
+> - Paradigm: a walk you start to the lake room that teleports to the Bloodwood Weald gets one card to cross, at level 50 or over with a raft or skiff
+> - The Isle of Bones is never reached across the lake
+> - The lake's rooms without the teleport are ordinary ground and need no raft
+> - Standing in a teleport room, you are always planned out by the nearest way that leads on
+> - A loop with a waypoint in a teleport room is refused at start, with the reason
+> - A route whose only way there needs a key goes round the lake and asks for the key alone (the walk to the Hidden Study no longer crossed the lake or sent for a log raft)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
