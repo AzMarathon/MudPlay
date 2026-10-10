@@ -313,7 +313,7 @@ public sealed partial class AllyDroppedHandler : IDisposable
         if (!a.HpKnown && !a.Up)
             ScheduleCheck(a, NowProvider() + WorstCaseStand());
         _log?.Info(LogCategory,
-            $"Ally {given} aided — healing by name; checking on them at {a.CheckAt:HH:mm:ss}.");
+            $"Ally {given} aided — healing by name; checking on them at {a.CheckAt.ToLocalTime():HH:mm:ss}.");
     }
 
     // The longest an aided ally can take to stand: from the deepest living HP
