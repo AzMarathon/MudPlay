@@ -1071,19 +1071,27 @@ public sealed class CastingDirector : IDisposable
     // nothing casts on them again, so theirs sat in the store, and in every bug
     // report as "expired, not yet cleared", until the profile was reloaded (report
     // paradigm-20261010-145330). A timer still running is kept: whoever comes back
-    // inside it is still buffed.
+    // inside it is still buffed. So is one inside a negative margin's wait after the
+    // run-out: a member off the roster for one pass (dropped and back, a party
+    // re-formed) would otherwise be recast on the moment they returned, with the
+    // wait the user set thrown away.
     private void DropExpiredTimersOfDeparted()
     {
         if (_activeUntil.Count == 0) return;
         DateTime now = _now();
         List<(string Target, string Short)>? doomed = null;
         foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
-            if (kv.Key.Target.Length > 0 && kv.Value.Until <= now && !IsInPartyGiven(kv.Key.Target))
+        {
+            if (kv.Key.Target.Length == 0 || IsInPartyGiven(kv.Key.Target)) continue;
+            int waitAfter = Math.Max(0, -EffectiveMargin(kv.Key.Target, kv.Key.Short, kv.Value.MarginSec));
+            if (now >= kv.Value.Until.AddSeconds(waitAfter))
                 (doomed ??= new()).Add(kv.Key);
+        }
         if (doomed is null) return;
         foreach ((string, string) key in doomed) _activeUntil.Remove(key);
         _log?.Info(LogCategory,
-            $"dropped {doomed.Count} expired buff timer(s) on target(s) no longer in the party.");
+            $"dropped {doomed.Count} expired buff timer(s) on target(s) no longer in the party: "
+            + string.Join(", ", doomed.Select(k => $"{k.Short} on {k.Target}")) + ".");
     }
 
     // Anyone on the roster, ourselves included: a slot aimed at our own name keys its

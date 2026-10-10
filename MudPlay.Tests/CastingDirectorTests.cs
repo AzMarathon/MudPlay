@@ -4473,6 +4473,82 @@ public sealed class CastingDirectorTests
         Assert.Contains(h.Director.SnapshotActiveBuffs(), t => t.Target == "raijin");
     }
 
+    // The roster carries the long par-row form; the timer is keyed by the given name.
+    [Fact]
+    public void PartyBless_MemberListedByLongName_TheirRunOutTimerIsKept()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("RAIJIN WuzHere");
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Raijin!");
+        Assert.Single(h.Director.SnapshotActiveBuffs());
+
+        h.InRoom.Remove("RAIJIN");
+        h.Now = h.Now.AddSeconds(400);
+        h.Director.Evaluate();
+
+        Assert.Contains(h.Director.SnapshotActiveBuffs(), t => t.Target == "raijin");
+    }
+
+    // Invited back and not yet joined: they are on the roster.
+    [Fact]
+    public void PartyBless_MemberInvitedNotYetJoined_TheirRunOutTimerIsKept()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        PartyMember m = h.AddMember("Raijin");
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Raijin!");
+        h.Party.Members.Remove(m);
+        h.Party.Members.Add(new PartyMember { Name = "Raijin", IsInvited = true });
+        h.InRoom.Remove("Raijin");
+
+        h.Now = h.Now.AddSeconds(400);
+        h.Director.Evaluate();
+
+        Assert.Contains(h.Director.SnapshotActiveBuffs(), t => t.Target == "raijin");
+    }
+
+    // A negative recast margin counts from the run-out entry. A member off the
+    // roster for a moment after the run-out (dropped and back, a party re-formed)
+    // must not lose it, or the recast no longer waits.
+    [Fact]
+    public void PartyBless_NegativeMargin_MemberBrieflyOffRoster_RecastStillWaits()
+    {
+        using PartyBlessHarness h = new();
+        h.SlotsCarryTheirOwnGates = true;
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddTargetSlot("bles", "Raijin");
+        slot.RecastMarginSec = -120;                 // recast two minutes after it runs out
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        PartyMember m = h.AddMember("Raijin");
+        Assert.Equal("bles", h.Director.Evaluate());
+        h.Confirm("You cast bless on Raijin!");
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+
+        h.Now = h.Now.AddSeconds(310);               // ran out 10 s ago; due at +420
+        Assert.Null(h.Director.Evaluate());          // the margin holds it
+
+        h.Party.Members.Remove(m);                   // off the roster for a moment
+        h.Director.Evaluate();
+        Assert.Single(h.Director.SnapshotActiveBuffs());
+        h.Party.Members.Add(m);                      // and back
+        h.Now = h.Now.AddSeconds(20);
+        Assert.Null(h.Director.Evaluate());
+        Assert.Empty(h.CastsSent);
+
+        h.Party.Members.Remove(m);                   // gone for good: dropped once the wait is over
+        h.Now = h.Now.AddSeconds(100);               // +430, past the +420 the recast was due at
+        h.Director.Evaluate();
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
     // A spell strips what it removes off its own target only. Smite on one member and
     // greater smite on another (each removes the other) cleared each other's timers
     // and were recast every few seconds (report paradigm-20261002-012234).
