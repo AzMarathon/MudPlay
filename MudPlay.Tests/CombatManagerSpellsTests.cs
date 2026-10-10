@@ -1519,6 +1519,51 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(afterFirst, h.Sent.Count);   // no second re-announce within the window
     }
 
+    // A *Combat Off* nothing of ours explains, in spell mode: the round tick doesn't
+    // bring the spell back (the heartbeat stands down while combat is off), a combat
+    // line does. Pinned as it is, since the program log says so.
+    [Fact]
+    public void SpellMode_UnexplainedCombatOff_TickAloneDoesNotResume_ACombatLineDoes()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "small zombie");
+
+        h.Feed("Also here: small zombie.");
+        Assert.Equal("turn small zombie", h.LastSent);
+        h.Feed("*Combat Engaged*");
+        int announced = h.Sent.Count;
+
+        h.Feed("*Combat Off*");
+        h.Combat.OnCombatTick();
+        Assert.Equal(announced, h.Sent.Count);
+
+        h.Feed("The small zombie claws you for 5 damage!");
+        Assert.Equal(announced + 1, h.Sent.Count);
+        Assert.Equal("turn small zombie", h.LastSent);
+    }
+
+    // Report paradigm-20261009-120757, 12:07:17: the heal's latch was armed, the game
+    // refused the heal (which draws no *Combat Off*), and the Off of the attack the
+    // engine sent next was taken for the cast's.
+    [Fact]
+    public void RefusedBetweenRoundCast_DisarmsTheResume_TheNextCombatOffIsNotItsOwn()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("a giant rat", h.LastSent);
+        int sent = h.Sent.Count;
+
+        h.Cast.NotifyExternalCastSent();
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("You have already cast a spell this round!");
+        h.Feed("*Combat Off*");
+
+        Assert.Equal(sent, h.Sent.Count);
+    }
+
     // Report paradigm-20260921-074300: with SpellsFirst, once the attack-spell cascade
     // lapsed to the weapon (mana under the per-cast floor), the heartbeat returned early
     // in weapon mode and never re-evaluated — so a mana regen back over the floor went

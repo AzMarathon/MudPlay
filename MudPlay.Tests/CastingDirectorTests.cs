@@ -1390,6 +1390,62 @@ public sealed class CastingDirectorTests
         Assert.False(h.Director.BetweenRoundSlotUsed);
     }
 
+    // Report paradigm-20261009-120757, 12:07:51 to 12:07:56, the director on a real
+    // TickEngine wired as AppServices wires them. A heal went out just after the
+    // round at 12:07:51.486. The room's heat hit at 12:07:53.451 and was read as a
+    // new round: the slot came free, the heal went again and drew `You have already
+    // cast a spell this round!`. It belongs to the round the game starts at about
+    // 12:07:56.5.
+    [Fact]
+    public void RoomHeatBetweenRounds_FreesNoCastSlot_TheHealWaitsForTheRealRound()
+    {
+        using CureHarness h = new();
+        h.EnableBurstSettle();
+        DateTimeOffset start = new(2026, 10, 9, 12, 7, 51, 486, TimeSpan.Zero);
+        h.Now = start.UtcDateTime;
+        using TickEngine tick = new(h.Router, () => new DateTimeOffset(h.Now, TimeSpan.Zero));
+        tick.CombatTickElapsed += () => h.Cast.OnCombatTick(tick.LastCombatTickWasPlaced);
+        tick.CombatTickElapsed += h.Director.NotifyRoundComplete;
+        h.Director.SetCombatTickSource(() => tick.LastCombatTickWasDamageDriven);
+        h.Director.SetCombatTickPlacement(() => tick.LastCombatTickWasPlaced);
+        tick.CombatTickElapsed += h.Director.OnCombatTick;
+
+        h.Spells.MinorHealSpell = "grhe";
+        h.Health.MinorHealCombatTrigger = 80;
+        h.AutoHealRestEnabled = false;                  // no heal off the setup's own HP writes
+        h.State.InCombat = true;
+        h.State.MaxHp = 522;
+        h.State.Hp = 418;
+        h.State.HasPromptData = true;
+        h.AutoHealRestEnabled = true;
+
+        // 12:07:51.486, the round: a party member's hit, then ours taken.
+        h.Router.Dispatch(RoundLine("Forged punches giant hellhound for 57 damage!"));
+        h.State.Hp = 397;
+        Assert.Empty(h.CastsSent);                      // held while the burst lands
+        h.RunSettledPass();
+        Assert.Equal(new[] { "grhe" }, h.CastsSent);
+        h.State.Hp = 432;                               // "healing 35 damage!"
+
+        // 12:07:53.451, the heat, 1.965 s into the round.
+        h.Now = start.UtcDateTime.AddSeconds(1.965);
+        h.Router.Dispatch(RoundLine("You are seared by the flames for 28 damage!"));
+        h.State.Hp = 408;
+        h.Now = h.Now.AddSeconds(0.45);                 // HP has settled
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "grhe" }, h.CastsSent);    // the round's cast is spent
+        Assert.True(h.Director.BetweenRoundSlotUsed);
+
+        // The next round, projected from the one seen.
+        h.Now = start.UtcDateTime + TickEngine.CombatTickInterval;
+        tick.PollTimersForTests();
+        h.RunSettledPass();
+        Assert.Equal(new[] { "grhe", "grhe" }, h.CastsSent);
+    }
+
+    private static LineExtractor.EmittedLine RoundLine(string text) =>
+        new(text, new CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
+
     // ProfileMigrations' v4 → v5 and v5 → v6 steps, for the harnesses: the
     // once-shared bless gates go onto every slot, and the party pair is folded into
     // the slots that cast on the party.

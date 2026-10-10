@@ -1,5 +1,6 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MudPlay.Game.Combat;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 
@@ -175,8 +176,17 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         // broad regex matches mob-on-player lines too, plus we'll see
         // separate Hit and Miss lines in the same round if you're
         // fighting multiple mobs).
-        _patternSubs.Add(router.Subscribe(KnownPatterns.UserHits,  _ => RecordCombatTick()));
-        _patternSubs.Add(router.Subscribe(KnownPatterns.MobHits,   _ => RecordCombatTick()));
+        _patternSubs.Add(router.Subscribe(KnownPatterns.UserHits, match =>
+        {
+            if (_isOffRoundDamage(match.Text)) DamageOffTheRound?.Invoke();
+            else RecordCombatTick();
+        }));
+        // A line worded "The <thing> <verb> you for N damage!" matches the pattern
+        // above as well, which has already reported it if it is off the round.
+        _patternSubs.Add(router.Subscribe(KnownPatterns.MobHits, match =>
+        {
+            if (!_isOffRoundDamage(match.Text)) RecordCombatTick();
+        }));
         _patternSubs.Add(router.Subscribe(KnownPatterns.MobMisses, _ => RecordCombatTick()));
 
         _timer = new DispatcherTimer(DispatcherPriority.Background)
@@ -186,6 +196,31 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         _timer.Tick += (_, _) => OnTimerTick();
         _timer.Start();
     }
+
+    // Whether a damage line is no part of the combat round. A room's own spell is
+    // re-cast every second spell round (GAME_MECHANICS "Room-spell monster summons"),
+    // so its damage ("You are seared by the flames for 46 damage!") falls one to four
+    // seconds into the combat round in wording the hit pattern matches all the same.
+    // Read as a round it moved the round clock to wherever the line fell and handed
+    // the casting engines a new round inside the old one: nine heals and buffs in
+    // 70 s drew `You have already cast a spell this round!`, each right behind a
+    // flames line (report paradigm-20261009-120757).
+    //
+    // OffRoundDamageLines holds the rule. Until AppServices hands over the one built
+    // from the game data (SetOffRoundDamageProbe), the wording alone decides: damage
+    // on us with no dealer named is left out. That also leaves out the few monster
+    // attack spells worded that way, which the probe steps around.
+    private Func<string, bool> _isOffRoundDamage = OffRoundDamageLines.NobodyDealtIt;
+
+    public void SetOffRoundDamageProbe(Func<string, bool> isOffRoundDamage)
+    {
+        ArgumentNullException.ThrowIfNull(isOffRoundDamage);
+        _isOffRoundDamage = isOffRoundDamage;
+    }
+
+    // Raised for a damage line left out of the round clock, so the tick timing
+    // record can show where it fell against the rounds.
+    public event Action? DamageOffTheRound;
 
     // Ensure the timer fallback has a combat-cycle anchor even when no generic
     // hit/miss pattern has matched yet. CombatManager uses this after a fresh
