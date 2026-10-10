@@ -19,6 +19,12 @@ namespace MudPlay.Game.Map;
 //
 // Fetch is what the journey was told to fetch on its way and the trades a route
 // card named for it (JourneyFetch). Being on the journey is its whole lifetime.
+//
+// OwnedLeg marks a walk that is one leg of something which ends the moment its walk
+// is taken away (a Stock spill sweep's walk to its next stop). The walker runs it
+// like any journey but doesn't report it through AutoWalkManager.Journey: everything
+// that saves "the walk under way" to pick it back up after an errand reads that, and
+// such a leg's destination is a room nobody waits at once its owner has ended.
 public sealed record WalkJourney(
     RoomKey Destination,
     bool ThroughGates = false,
@@ -30,7 +36,8 @@ public sealed record WalkJourney(
     bool PickedRoute = false,
     IReadOnlyCollection<int>? ClosedGates = null,
     IReadOnlyCollection<RoomKey>? AgreedHazardRooms = null,
-    JourneyFetch? Fetch = null)
+    JourneyFetch? Fetch = null,
+    bool OwnedLeg = false)
 {
     // "on foot unless walking is impossible, going round the gates that need
     // item(s) 815", for the program log and the bug report.

@@ -1,9 +1,60 @@
 # Version history
 
-## 3.160.2
+## 3.161.6
 
 - Exp/Hr estimator and loop simulator: room-spell summons now counted in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
 - A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
+
+## 3.161.5
+
+- A room's heat (*You are seared by the flames*) no longer counts as a combat round
+- No more heals or buffs sent mid-round into `You have already cast a spell this round!`
+- A fight stopped just after an attack is re-attacked on the next round line
+- A typed `eq` / `wear` / `wield` / `rem` mid-fight re-attacks at once
+- A refused cast no longer leaves a re-attack armed
+- Exp/Hr and the loop simulator: Paradigm room spells roll every 6.05 s, not every round
+- The giant hellhound's death line is recognised
+- Program log and bug report show re-attack decisions
+- bug reports addressed: paradigm-20261009-120757, paradigm-20261009-122342
+
+## 3.161.2
+
+- A walk or loop held by a fight asks the game where you are before stepping on when the map lost its place during the fight (Paradigm: `rm`), instead of walking into a wall and standing there
+- A step sent while the map was unsure of its room and left unanswered for 10 seconds now asks too, instead of waiting for good
+- bug reports addressed: paradigm-20261009-082958
+
+## 3.161.1
+
+- Party item gates: a member who never answers the `@have` count is no longer fetched another copy on every trip
+- A copy you handed them and the game confirmed is remembered until the party changes
+
+## 3.161.0
+
+- Stock death recovery follows the game's spill order: up to five rooms out, behind doors and hidden exits
+- With items still missing, it searches the rooms walked before the death (never a stash room)
+- The sweep runs for Recover Now or your own walk-to; a loop's or Auto-Lair's arrival only looks next door
+- It walks to 12 rooms at most and returns; Stop and Pause reach it
+- It gives way to other engines, following and any other walk; silent during a rest, a pause or Auto-All off
+- Stock: loyal, major-cursed and "returned to its rightful place" items no longer waited for
+- Stock: a partly recovered pile keeps its count; an empty death-room floor no longer stalls recovery
+- Stop calls off a Recover Now that was still walking (both realms)
+- Bug report: the pile's missing items and the sweep's plan, state and blockers
+
+## 3.160.4
+
+- Gear sets, backstab armour, location gear and weapon swaps equip a piece the pack holds two or more of
+- Combat no longer counts out an alternate weapon the pack holds two or more of
+
+## 3.160.2
+
+- Chest Offload Drop / Drop All hide when Hide items when discarding is on
+- Hidden items leave the Chest Offload list
+- A hide a full room refuses is retried in each new room
+- A sale, drop, ✕ or Clear list calls a waiting hide off
+- No hide sent for a copy not in the pack
+- Refused or unanswered auto-discard drops no longer stay counted all session
+- No discard after a death or reconnect until the inventory is read
+- Items named after a coin (iron crown) no longer read as coin
 
 ## 3.160.1
 

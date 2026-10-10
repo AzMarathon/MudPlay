@@ -10,8 +10,9 @@ namespace MudPlay.Game.Inventory;
 // waiting; then the command joins a per-character queue. With 8 waiting it warns
 // "Why don't you slow down for a few seconds?", and from 12 it drops the newest
 // with "You are typing too quickly - command ignored" (wccmmud.dll 1.11p
-// _execute_input / _add_delayed_command). drop, get, sell and buy add no delay of
-// their own, but hide adds one, so a hide sweep queues behind itself.
+// _execute_input / _add_delayed_command). drop, get, sell, buy and `hide <item>`
+// add no delay of their own (only the bare `hide` does), so a sweep queues only
+// behind a delay that was already running.
 //
 // So at most Window commands are left unanswered — two short of the warning — and
 // each prompt the game sends back answers one. A small gap between sends keeps a

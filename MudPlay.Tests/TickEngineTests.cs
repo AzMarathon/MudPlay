@@ -171,6 +171,77 @@ public sealed class TickEngineTests
         Assert.False(tick.LastCombatTickWasDamageDriven);
     }
 
+    // Report paradigm-20261009-120757, 12:07:46 to 12:07:51, at the capture's own
+    // millisecond times. The room's heat hit 0.977 s into the round; read as a round
+    // it freed the cast slot a party heal had just spent and the heal that followed
+    // drew `You have already cast a spell this round!`.
+    [Fact]
+    public void RoomHeatOnUs_IsNotARound_AndLeavesTheRoundClockWhereItWas()
+    {
+        var (router, tick, now, advance) = SetupClocked();
+        List<DateTimeOffset> rounds = new();
+        int offRound = 0;
+        tick.CombatTickElapsed += () => rounds.Add(now());
+        tick.DamageOffTheRound += () => offRound++;
+
+        router.Dispatch(Line("Forged critically punches giant hellhound for 188 damage!"));   // 12:07:46.431
+        DateTimeOffset round = now();
+        advance(0.977);
+        router.Dispatch(Line("You are seared by the flames for 46 damage!"));                 // 12:07:47.408
+
+        Assert.Equal(new[] { round }, rounds);
+        Assert.Equal(round, tick.LastCombatTick);
+        Assert.Equal(1, offRound);
+
+        advance(4.078);
+        router.Dispatch(Line("The giant hellhound breathes a cone of fire on you for 21 damage!"));   // 12:07:51.486
+        Assert.Equal(new[] { round, now() }, rounds);
+        tick.Dispose();
+    }
+
+    // Out of a fight the same line used to start a round of its own: 12:07:53.451,
+    // 1.96 s after the last round seen, with the next real one due at 12:07:56.53.
+    [Fact]
+    public void RoomHeatOnUs_DoesNotMoveTheProjectedRound()
+    {
+        var (router, tick, now, advance) = SetupClocked();
+        router.Dispatch(Line("Forged punches giant hellhound for 57 damage!"));               // 12:07:51.486
+        DateTimeOffset round = now();
+        List<DateTimeOffset> projected = new();
+        tick.CombatTickElapsed += () => projected.Add(now());
+
+        advance(1.965);
+        router.Dispatch(Line("You are seared by the flames for 28 damage!"));                 // 12:07:53.451
+        tick.PollTimersForTests();
+        Assert.Empty(projected);
+
+        advance(TickEngine.CombatTickInterval.TotalSeconds - 1.965);
+        tick.PollTimersForTests();
+        Assert.Equal(new[] { round + TickEngine.CombatTickInterval }, projected);
+        Assert.False(tick.LastCombatTickWasDamageDriven);
+        tick.Dispose();
+    }
+
+    // What we deal and what a monster deals are the round; only damage nobody dealt
+    // is left out.
+    [Theory]
+    [InlineData("You punch giant hellhound for 51 damage!")]
+    [InlineData("The giant hellhound savagely bites you for 29 damage!")]
+    [InlineData("Forged punches giant hellhound for 51 damage!")]
+    public void DamageSomebodyDealt_IsStillARound(string line)
+    {
+        var (router, tick) = Setup();
+        int fires = 0, offRound = 0;
+        tick.CombatTickElapsed += () => fires++;
+        tick.DamageOffTheRound += () => offRound++;
+
+        router.Dispatch(Line(line));
+
+        Assert.Equal(1, fires);
+        Assert.Equal(0, offRound);
+        tick.Dispose();
+    }
+
     [Fact]
     public void NonDamageLines_DontFireCombatTick()
     {

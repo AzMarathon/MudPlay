@@ -121,7 +121,12 @@ public static class LoopSimulator
         // Fine enough that a 1.1 s walk isn't rounded up to the next step.
         private const double Step = 0.05;
         private const int RoundSteps = 100;            // 5 s combat round
-        private const int StockRoomSpellSteps = 120;   // Stock's 6 s medium tick
+        // The room spell's own tick, every second spell round on both realms
+        // (GAME_MECHANICS "Room-spell monster summons"): Stock's 6 s medium tick, and
+        // 6.05 s measured on Paradigm (reports paradigm-20261009-120757,
+        // paradigm-20261009-122342).
+        private const int StockRoomSpellSteps = 120;
+        private const int ParadigmRoomSpellSteps = 121;
         private const int DotTickSteps = 60;           // the 3 s update an effect slot's damage ticks on
         // The engine's monster-create pass, which refills the lair a player stands
         // in, runs every 5 s by default (GAME_MECHANICS "Lair respawn timers").
@@ -211,7 +216,8 @@ public static class LoopSimulator
                     Spawn(Here(), entering: false);
                 if (_step % RoundSteps == 0) Round();
                 if (Ended) break;
-                if (_moveDoneAt is null && !_isAway && _ch.Realm != RealmType.ParaMud && _step % StockRoomSpellSteps == 0)
+                if (_moveDoneAt is null && !_isAway
+                    && _step % (_ch.Realm == RealmType.ParaMud ? ParadigmRoomSpellSteps : StockRoomSpellSteps) == 0)
                     RoomSummon();
                 Burn();
                 if (Ended) break;
@@ -278,8 +284,8 @@ public static class LoopSimulator
             }
         }
 
-        // The room's entry spell rolls its d100 table: on entry, then every combat
-        // round on Paradigm or every 6 s medium tick on Stock while we're here; a
+        // The room's entry spell rolls its d100 table: on entry, then on the realm's
+        // room-spell tick (6.05 s on Paradigm, 6 s on Stock) while we're here; a
         // `nomonsters:` table only rolls in an empty room (GAME_MECHANICS "Room-spell
         // monster summons").
         private void RoomSummon()
@@ -367,7 +373,6 @@ public static class LoopSimulator
             if (present && HealthTriggers()) return;
             BetweenRoundCast(combat && Fighting);
             Here().Mobs.RemoveAll(m => !m.Alive);
-            if (present && !_isAway && _ch.Realm == RealmType.ParaMud) RoomSummon();
         }
 
         // The Health tab's run / hang-up triggers, read after the round lands with
