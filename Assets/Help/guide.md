@@ -2542,7 +2542,7 @@ Every tab makes this visible: its controls sit under **banner-headed sections** 
 
 All of this is stored under a single MudPlay data folder (`~/.local/share/MudPlay/` on Linux, `%AppData%\MudPlay\` on Windows, `~/Library/Application Support/MudPlay/` on macOS) as JSON files that only record *deltas* from the tier below them — so an unmodified setting isn't written to disk at all.
 
-**Does MudPlay save automatically?** No — the Settings window uses an explicit **OK / Apply / Cancel** model. Edits are staged in memory; **OK** applies every changed tab and closes the window, **Apply** applies without closing, and **Cancel** (or the window's X button) discards everything you changed since opening it. **Closing MudPlay or running an update with Settings still open saves your changes**, as OK would, without asking: you never pressed Cancel. The one exception is a change Settings would have warned you about first (a custom statline missing the HP, mana or resting field): nobody can answer "Save anyway?" on the way out, so that tab is left as it was saved and the program log names it. A few things outside the main Settings tabs are the exception and save the instant you change them: keybind rebinds, macro edits, the Events tab's list, and the "Disable all events" toggle.
+**Does MudPlay save automatically?** No — the Settings window uses an explicit **OK / Apply / Cancel** model. Edits are staged in memory; **OK** applies every changed tab and closes the window, **Apply** applies without closing, and **Cancel** (or the window's X button) discards everything you changed since opening it. **Closing MudPlay or running an update with Settings still open saves your changes**, as OK would, without asking: you never pressed Cancel. The one exception is a change Settings would have warned you about first (a custom statline missing the HP, mana or resting field): nobody can answer "Save anyway?" on the way out, so that tab is left as it was saved and the program log names it. A few things outside the main Settings tabs are the exception and save the instant you change them: keybind rebinds, macro edits, and everything on the Events tab: its list, the "Disable all events" toggle, and the three event limits ("Events waiting at most", "Drop a waiting event after" and "Give up a paused event after").
 
 **Before you start changing things — a few things worth knowing:**
 - Nearly every setting documented here takes effect **live**, with no restart or reconnect required — this guide calls out the exceptions explicitly (e.g. terminal scrollback size, a handful of BBS-connection fields that only apply on the *next* connect).
@@ -4466,7 +4466,7 @@ Settings → Teleports. One list, saved for the loaded character: which of the g
 ### Allow automatic walks to use the following teleports
 
 **Default:** none ticked
-**What it does:** Decides which teleports a walk the client starts by itself may use. A teleport here is anything the game moves you with by command: a vortex or portal, but also a hatch onto a roof, a book you read, a panel you push. To the route planner each is a single step, so it is nearly always on the shortest route, and nothing checks where it lands you. An automatic walk uses only the ones you tick. If the trip needs one that isn't ticked, the walk stops and tells you which, so you can tick it or make the trip yourself.
+**What it does:** Decides which teleports a walk the client starts by itself may use. A teleport here is anything the game moves you with by command: a vortex or portal, but also a hatch onto a roof, a book you read, a panel you push. To the route planner each is a single step, so it is nearly always on the shortest route, and nothing checks where it lands you. An automatic walk uses only the ones you tick. If the trip needs one that isn't ticked, the walk stops and says it was refused as an automatic walk, naming the line here that would open a route (or, when no single line would, every line the shortest way needs), so you can tick it or make the trip yourself.
 
 The walks it covers are the ones nobody is there to approve: bank and sell trips, training and spell-buying trips, Auto-Lair's walks between lairs, events, and a walk-to or loop another player starts for you with a remote command.
 
@@ -4474,7 +4474,7 @@ The walks it covers are the ones nobody is there to approve: bank and sell trips
 
 The **filter** box narrows the list to lines holding what you type: a room name, a map/room number, or a command such as `go hatch`. **Allow all** and **Allow none** tick or clear the lines the filter is showing.
 
-**Important notes:** Walks **you** start aren't affected: they ask you on the route cards (**Walk it** or **Teleport**) whenever the shortest way there teleports and it could also be walked, and any other card whose route teleports names the teleport. That holds for the whole walk: a side trip it makes to fetch an item its route needs (to an NPC who hands it over, or a shop) isn't held to this list either. It goes on foot when it can and takes a teleport only when it can't, and the leg from there on to where you were going is the route you picked again. The same goes for the walk picking up after a sell trip or a flee, and for a Shortcut card's trip to the shortcut item's source. That covers a walk-to, a **loop you start** from off the loop (getting to it is a walk-to like any other, with every route card a walk-to shows; the loop begins when you arrive), and **Recover Now** on a death. Only that first walk to the loop is yours: once the loop is reached, a walk back to it after a bank or sell trip or a flee is automatic and uses this list. So is a loop started by an event or by another player's remote command. A sailing isn't a teleport and is always allowed. Saved for this character; a change applies from the next automatic walk on, never to one already under way.
+**Important notes:** Walks **you** start aren't affected: they ask you on the route cards (**Walk it** or **Teleport**) whenever the shortest way there teleports and it could also be walked, and any other card whose route teleports names the teleport. That holds for the whole walk: a side trip it makes to fetch an item its route needs (to an NPC who hands it over, or a shop) isn't held to this list either. It goes on foot when it can and takes a teleport only when it can't, and the leg from there on to where you were going is the route you picked again. The same goes for the walk picking up after a sell trip or a flee, and for a Shortcut card's trip to the shortcut item's source. That covers a walk-to, a **loop you start** from off the loop (getting to it is a walk-to like any other, with every route card a walk-to shows; the loop begins when you arrive), and **Recover Now** on a death. Only that first walk to the loop is yours: once the loop is reached, a walk back to it after a bank or sell trip or a flee is automatic and uses this list. So is a loop started by an event or by another player's remote command, and the walk back to your loop after an event. A sailing isn't a teleport and is always allowed. Saved for this character; a change applies from the next automatic walk on, never to one already under way.
 
 ## Other
 
@@ -4621,6 +4621,24 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 **What it does:** A single master pause switch for every scheduled event on this character, without deleting or individually disabling each one.
 **Important notes:** Saves immediately on toggle — no separate Apply step.
 
+### Events waiting at most
+
+**Default:** `10` (1–100)
+**What it does:** Events run one at a time (see [When events overlap](#when-events-overlap)). This is how many may wait behind the one running. An event that fires with that many already waiting is dropped: it doesn't run, the Program Log says so and the terminal prints `[Event '<name>' dropped: …]`.
+**Important notes:** An event never waits twice, so the limit only matters when more events than this fire behind one long run. Logoff events are never turned away. Saved for this character, immediately.
+
+### Drop a waiting event after … minutes
+
+**Default:** `30` (1–1440)
+**What it does:** How long an event may wait for the running one. One that has waited longer is dropped, with the same Program Log line and terminal notice, so a walk you left paused for an hour doesn't set off an hour's worth of events when you resume it.
+**Important notes:** A loop or Auto-Lair event with a **Stop after** rule makes the events behind it wait until the rule is met. If yours run longer than this (a 60-minute loop, say), raise it or the events that fire meanwhile are dropped. Saved for this character, immediately.
+
+### Give up a paused event after … minutes standing still
+
+**Default:** `5` (1–120)
+**What it does:** A bank or sell trip, a trainer detour, a party comeback or a reconnect can pause the running event while it does its own job, and the event goes on when its loop or walk is back. If the trip never brings it back (it was cancelled, or ended by a plain stop), the event is given up after this many minutes with **nothing moving**, together with the events waiting behind it. Its Then step is skipped, the Program Log says so, and the terminal prints `[Event '<name>' given up: …]`.
+**Important notes:** Only standing still counts. Time spent walking, however long, never does, and a walk held by a fight or a rest is not standing still either. Saved for this character, immediately.
+
 ### Event list (New… / Modify… / Remove)
 
 **What it does:** Shows every scheduled event you've defined, with its **Name**, its trigger (**When**), a live countdown to its next fire (**Next**), and its action, its stop rule and its Then step (**What**, e.g. `Loop "Sewer" (until 3 laps) → go back`). **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
@@ -4666,8 +4684,8 @@ Settings → Events. Lets you define per-character events. Each has three parts,
       - Then set to Walk to the same room with its box unticked stops short a second time and does nothing more; the Then block points that out.
     - **Ticked**, this event's walk goes into the boss room. It doesn't change the Bosses tab setting, so your own walks to that room still stop one room short.
     - The note shows for a coordinate or a picked row. A name typed without picking from the list isn't checked until you pick it.
-- **Start loop** — starts a saved Loop by name. Done only by a **Stop after** rule (below).
-- **Auto-lair** — starts a saved Auto-Lair setup by name. Done only by a **Stop after** rule.
+- **Start loop** — starts a saved Loop by name. With a **Stop after** rule (below) the event is done when the rule ends the loop; with none it is done as soon as the loop has started.
+- **Auto-lair** — starts a saved Auto-Lair setup by name. Done the same way as a loop.
 - **Command** — sends free-form text to the game; an empty command is valid (useful for paging through a prompt). Done as soon as it's sent. A command with **Nothing** after it doesn't interrupt anything — handy for a periodic `stat`.
 - **Roomba** — starts a Roomba sweep of your actively-managed rooms: **Sort** (a full sweep) or **Inventory only** (walks the circuit and refreshes the item log without moving anything). Done when the sweep finishes. If the sweep can't start (fewer than 2 rooms set to Actively Manage, or a sweep already running), the reason is written to the Program Log.
 - **Wait** — stand still for that many seconds.
@@ -4675,7 +4693,7 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 - **Bank trip** — walk to your Settings → Cash bank or stash room and deposit / stash there, then stop (the Then step decides where to go next).
 - **Stash transfer** — carry one of your stash rooms' coin to a bank you pick, trip by trip, until the stash is empty: the same run as the map's **Transfer Stash to Bank** (see [Banking](#banking)). Pick the stash room and the bank from the two dropdowns. Done when the transfer ends, in the bank; if it gives up (no route, nothing could be picked up) the Then step still runs, and if you stop it yourself the Then step is dropped.
 
-Every action except a plain command stops whatever walk, loop or Auto-Lair was running first.
+Every action except a plain command stops whatever walk, loop or Auto-Lair was running first. If another event is still running, the new one waits for it: see [When events overlap](#when-events-overlap).
 
 ### Event editor — Stop after (loop / Auto-Lair)
 
@@ -4685,7 +4703,9 @@ A loop or Auto-Lair never ends by itself, so its **Then** only runs once one of 
 - **when a boss's timer moment comes** — the same choices as the Boss trigger: one of its timer columns hitting 0, the kill, or a cleanup reset, optionally minutes early (e.g. camp a boss's lair until it dies, or loop elsewhere until its −10% column hits 0). It defaults to the event's own boss. A timer moment that's already behind you stops the loop straight away,
 - **when all of these hold** — money / encumbrance / experience / level conditions, e.g. encumbrance ≥ 80% to go sell.
 
-With none set, the loop runs until you stop it — and stopping it yourself skips Then. The editor warns when a Then can never run.
+With a rule set, the event isn't finished until the rule ends the loop and the Then after it is done, and events that fire meanwhile wait for it. Stopping the loop yourself skips Then.
+
+With none set, nothing ever ends the loop, so the event is **finished the moment the loop has started** and its Then never runs (the editor warns about that). From then on the loop is simply what you are doing: a later event takes over from it and its **Go back** returns to it, exactly as with a loop you started by hand.
 
 ### Event editor — Then
 
@@ -4697,7 +4717,31 @@ What happens once the action is done:
 - **Fire event** — run another event by name; its own Then carries on from there, and its **Go back** still returns to what the first event interrupted. A chain of more than 10 events in a row is stopped as a loop.
 - **Nothing** — stop there.
 
-A walk or trip that can't be finished (no path, a leg fails) still runs its Then, so you aren't left standing. If **you** take over — stop the event's walk / loop / Auto-Lair, or start one of your own while it waits or rests — the event ends without its Then. A second event firing while one runs takes over (the first one's Then is dropped), but its **Go back** still means what the first event interrupted. Events you made before Then existed are converted the first time the character loads: a walk-to gets **Go back**, anything else **Nothing** — what they did before — so edit them to choose something else.
+A walk or trip that can't be finished (no path, a leg fails) still runs its Then, so you aren't left standing. If **you** take over — stop the event's walk / loop / Auto-Lair, or start one of your own while it waits or rests — the event ends without its Then. Events you made before Then existed are converted the first time the character loads: a walk-to gets **Go back**, anything else **Nothing** — what they did before — so edit them to choose something else.
+
+**Going back is an automatic walk.** The walk back to a loop or Auto-Lair (**Go back**, or a **Start loop** / **Auto-lair** Then) is one the client starts by itself, so it uses only the teleports ticked on **Settings → Teleports**. An event can walk you out of a place whose only way back in is a teleport: a room you enter by a command, say. If that teleport isn't ticked, the loop can't walk back and ends where the event did. The terminal then says the walk was refused because it is an automatic walk with no route open to it, and names the line to tick, as that tab lists it: `[Event 'Boss walk' finished, but loop 'Farm' didn't get going: approach failed: no route: this is an automatic walk, and the way there uses a teleport it isn't allowed. Tick "Library (17/1927) → Dusty Stair, Landing (17/9777)" on Settings → Teleports (Allow automatic walks to use the following teleports) to open it.]` When the shortest way back uses more than one unticked teleport and none of them alone would open a route, it says so and lists them all. The same kind of line is written for a Then loop or walk that can't start (a loop that no longer exists, a walk with no route), and for a Then Auto-Lair that refuses to start. An Auto-Lair that does start isn't watched after that: it reports no arrival to watch for.
+
+### When events overlap
+
+Events run one at a time, each from start to finish, **in the order they fired**. An event that fires while another is still running **waits its turn** and starts when that one is done. "Done" means the whole event: its action, a **Stop after** rule being met, its Then walk-to, and any events its Then fires.
+
+- **A loop event with a Stop after rule is one event.** "Loop 3 laps, then walk to the bank" finishes its laps and its walk before anything that fired meanwhile starts; those then run in the order they fired.
+- **A loop or Auto-Lair event with no Stop after rule is done once the loop has started.** It can't make others wait, since it would never finish. An event that fires later takes over from the loop and goes back to it. With another event already waiting behind it, the loop isn't started just to be stopped: the waiting event starts instead and takes the loop as what it goes back to, so the loop starts once, after it.
+- **Go back happens once.** When the event that just finished would only go back or start a loop or Auto-Lair, and another event is waiting, the waiting event starts straight away and takes that loop as what **it** goes back to. Two boss events that both end in the same loop walk to the first boss, then the second, then start the loop.
+- **A plain command** (Nothing after it) is sent the moment it fires and waits for nothing.
+- **Logoff events jump the queue.** Only an event whose **When** is **Logoff** (fired by a cleanup warning or your own disconnect) starts at once: the event it interrupts is abandoned without its Then, and the events already waiting keep their places behind it. A second Logoff event waits for the first, ahead of the others. Every other event waits its turn, boss events and events whose command logs off (`;o`, `=x`, the realm's exit command) included.
+- **The same event isn't queued twice.** An **Every 5 minutes** event whose run takes seven fires again while it is still going: that firing is skipped. One that fires again while it waits stays queued once.
+- **Limits.** How many events may wait, and for how long, are two of the settings above ([Events waiting at most](#events-waiting-at-most), 10 and 30 minutes by default). An event turned away at either is dropped, and the terminal says so. An event that keeps firing into a full queue is named in the terminal once, not on every firing, and again only after the queue has had room. An event you remove, edit or disable while it waits doesn't run.
+- **Stopping the running event empties the queue.** Press **Stop** (the toolbar's or the Navigation window's) while an event is walking, looping, waiting or resting, or take over as above, and the event ends without its Then and the waiting events are dropped with it. So does dying and **Reset States**.
+- **A trip of the client's own doesn't end the event.** A bank or sell trip, a flee, a trainer or comeback detour stops the event's loop or walk only to start it again afterwards. The event waits for it and goes on when its loop or walk is back, with the laps it had counted and its Stop after rule intact, and the events behind it keep their places. A Stop after rule met in the meantime is applied when the loop is back. If the trip never brings the loop back (it was cancelled, or ended by a plain stop) and nothing has moved for five minutes, something called the detour off, so the event is given up the way a Stop ends it: no Then, the waiting events dropped, and one notice in the terminal. The five minutes is the **Give up a paused event after** setting, and only standing still counts: a walk, however long, never does, and a walk held by a fight or a rest is not standing still either. A walk or loop you start yourself while an event is paused takes over at once: the event and the ones waiting end then, not minutes later. Only loop, Auto-Lair and walk events survive a detour: a flee or a party comeback that stops the walker under a bank-trip or stash-transfer event still ends that event and its waiting events.
+- **A hazard item's "halt walk"** ends the running event and its queue, as a Stop does.
+- **A lost connection keeps the waiting events.** They are still waiting when you are back in the game, in the same order, and nothing is finished or started while the link is down. Their waiting time keeps counting through the outage, so one past the limit is dropped (with its terminal notice) as you come back in. The Logon and Re-log events fired by the reconnect take their places behind them. The event that was running goes by what its engine does: a loop restarts itself after a reconnect and the event goes on with it; a walk the drop didn't stop carries on; a wait's clock kept running; and one whose walk or trip was stopped by the drop ends without its Then, the next waiting event starting once you are back in. Closing MudPlay or switching character clears everything.
+- **A chained event runs once.** If an event's Then fires another event that was already waiting, that event runs then, as the chain, and leaves the queue.
+- **Your own walk or loop** is not an event: an event that fires over it takes over at once, as always, and goes back to it if its Then says so.
+- **Pause** holds an event's walk like any other, and the loop it goes back to stays paused until you resume.
+- **Auto-All off** freezes an event's walk where it stands, like any other walk. The event stays the running one, the events behind it keep waiting (up to the wait limit), and it carries on when Auto-All is back on. A loop an event goes back to while Auto-All is off starts only then.
+
+The Program Log names each event as it is queued, started, finished, skipped, dropped or abandoned, and a bug report lists the running event (and whether it is suspended behind a trip or the connection is down), the ones waiting, the three limits and what the last Then came to.
 
 ---
 
@@ -5186,6 +5230,9 @@ This section is a compact, technical lookup table for every setting documented a
 | Navigation map: hold a browsed view | `15` s | 0–300 (Global) | `GlobalSettings.MapRecenterHoldSeconds` | Models/Settings/GlobalSettings.cs |
 | Cleanup Player DB after N days | `90` | 0–3650 (Global) | `GlobalSettings.PlayerCleanupDays` | Models/Settings/GlobalSettings.cs |
 | Disable all events | `false` | bool | `CharacterProfile.EventsGloballyDisabled` | Models/Profile/CharacterProfile.cs |
+| Events waiting at most | `10` | 1–100 | `CharacterProfile.EventQueueLimit` | Models/Profile/CharacterProfile.cs |
+| Drop a waiting event after (minutes) | `30` | 1–1440 | `CharacterProfile.EventQueueWaitMinutes` | Models/Profile/CharacterProfile.cs |
+| Give up a paused event after (minutes standing still) | `5` | 1–120 | `CharacterProfile.EventSuspendedIdleMinutes` | Models/Profile/CharacterProfile.cs |
 | Event (Name/Disabled/Sound/Trigger/Action fields) | see above | see above | `ScheduledEvent.*` | Models/GameData/ScheduledEvent.cs |
 | Sounds enabled / Master volume | true / 80 | bool / 0–100 | `SoundSettings.Enabled` / `MasterVolume` | Models/Profile/SoundSettings.cs |
 | Sound cue (on / sound / volume / every) | off / per cue, see **Sounds** / 100 / per cue | bool / built-in tone or file path / 0–100 / ≥1 | `SoundSettings.Cues[<cue>].Enabled` / `Sound` / `Volume` / `Every` | Models/Profile/SoundSettings.cs |
