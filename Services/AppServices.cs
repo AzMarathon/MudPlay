@@ -4635,6 +4635,8 @@ public sealed class AppServices
         // suppressed while blind.
         Combat.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
         CombatTracker.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
+        // Tells a roster emptied where we stand from a move out of a fight.
+        CombatTracker.SetCurrentRoomProbe(() => RoomTracker.State.CurrentRoom?.Key);
 
         // The Combat → Min/Max Monsters window only makes sense while a
         // walker / loop / auto-lair is actively trying to move us past a
@@ -4935,7 +4937,13 @@ public sealed class AppServices
         // TickEngine.CombatTickElapsed so the next round can cast.
         Cast = new Game.Spells.CastCoordinator(Router, Log);
         Tick.CombatTickElapsed += () => Cast.OnCombatTick(Tick.LastCombatTickWasPlaced);
-        Cast.CastSent += _ => RoundDamage.NoteOwnCast();
+        // The line is "<cast code>[ <target>]"; only a spell that costs round energy
+        // is an attack cast.
+        Cast.CastSent += line =>
+        {
+            int space = line.IndexOf(' ');
+            RoundDamage.NoteOwnCast(attack: CombatSpells.IsCombatSpell(space < 0 ? line : line[..space]));
+        };
 
         // ConditionTracker reads MessageStore +
         // line-side patterns to surface ActiveFlags. CastingDirector
@@ -5404,7 +5412,7 @@ public sealed class AppServices
             // A hand cast ends a sneak like an engine one, so it re-sneaks the same way.
             onManualCast: (c, target) =>
             {
-                RoundDamage.NoteOwnCast();
+                RoundDamage.NoteOwnCast(attack: CombatSpells.IsCombatSpell(c));
                 Combat.OnManualCastObserved(c, target);
                 CastDirector.NoteManualBuffCast(c, target);
                 Stealth.ReSneakAfterCast();
@@ -6436,20 +6444,16 @@ public sealed class AppServices
                 Profile.Save();
             });
         CombatProfiles.EnsureSeeded();
-        Profile.ProfileLoaded += _ => CombatProfiles.EnsureSeeded();
+        Profile.ProfileLoaded += _ => CombatProfiles.OnProfileLoaded();
         ProfileSwap = new Game.Remote.ProfileSwapHandler(RemoteCommands, CombatProfiles);
 
-        // Anchor each fight to the combat profile driving it: on the InCombat
-        // false→true edge, drop a Combat-channel line naming the active profile and
-        // its full config, so a combat-diagnostics log read pins which profile — and
-        // how it was configured — fought, without waiting for a swap. Gated on the
-        // Combat toggle (off in a normal session), so no per-engage noise; switches
-        // themselves already log at Info.
+        // Anchor each fight to the combat profile driving it, on the InCombat
+        // false→true edge, so a log read pins which profile fought and how it was
+        // configured without waiting for a swap.
         PlayerState.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName != nameof(Game.PlayerState.InCombat) || !PlayerState.InCombat) return;
-            if (Log.IsCombatEnabled && CombatProfiles.CurrentConfigLine() is { } cfg)
-                Log.Combat("CombatProfiles", "engaged — " + cfg);
+            if (e.PropertyName == nameof(Game.PlayerState.InCombat) && PlayerState.InCombat)
+                CombatProfiles.NoteCombatEngaged();
         };
 
         // Unwearable-slot blocks: keep the Equipment tab's block set in sync with
@@ -7080,6 +7084,9 @@ public sealed class AppServices
         // monster instead of session-wide; persists on the loaded profile.
         MonsterObservations = new Game.Combat.MonsterObservationTracker(
             Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log);
+        // One judge of what was a swing: a miss the session figures take back as a
+        // spell's cast line comes off the monster's record too.
+        CombatSession.CastLineMissRetracted += () => MonsterObservations.RetractLastMiss();
         // Demand-driven auto-search (PR B). Posts a PathItem need when the
         // walker plans a route through an Item/Ticket exit whose item we
         // don't carry; resolves it when the item enters inventory. The

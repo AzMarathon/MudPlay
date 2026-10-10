@@ -548,6 +548,52 @@ public sealed class CombatSessionTrackerTests
         Assert.Equal(1, blast.Casts);
     }
 
+    // The per-monster record counts the same miss line. It is told only when a
+    // spell landing proves the miss was a cast line, never on the guess made when a
+    // fight ends: that guess took a weapon user's real whiff off the monster.
+    [Fact]
+    public void CastLineMissRetracted_FiresOnlyWhenTheSpellLands()
+    {
+        using Harness h = new(
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) });
+        int retracted = 0;
+        h.Tracker.CastLineMissRetracted += () => retracted++;
+
+        h.Feed("*Combat Engaged*");
+        h.Feed("You scatter some ashes in a sweeping motion!");
+        h.Feed("You cast blast at the kobold for 809 damage!");   // landed: the miss was the cast line
+        Assert.Equal(1, retracted);
+
+        h.Rounds.NoteOwnCast();
+        h.Feed("You scatter some ashes in a sweeping motion!");   // nothing lands
+        h.Feed("*Combat Off*");                                   // the session moves it to the spell's resists
+        Assert.Equal(1, h.Stats.Spells.Single().Misses);
+        Assert.Equal(1, retracted);                               // and says nothing to the monster's record
+
+        h.Feed("*Combat Engaged*");
+        h.Feed("You punch acid slime for 8 damage!");
+        h.Feed("You punch acid slime!");                          // a real whiff
+        h.Feed("*Combat Off*");
+        Assert.Equal(1, retracted);
+    }
+
+    // A heal or buff going out between rounds is not an attack cast: the round's
+    // only swing, a whiff, stays a weapon miss.
+    [Fact]
+    public void Whiff_ThenABetweenRoundCast_StaysAPhysicalMiss()
+    {
+        using Harness h = new(
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) });
+        h.Feed("*Combat Engaged*");
+        h.Feed("You punch acid slime!");
+        h.Rounds.NoteOwnCast(attack: false);
+        h.Feed("*Combat Off*");
+
+        CombatSessionStats s = h.Stats;
+        Assert.Equal(1, s.Misses);
+        Assert.Empty(s.Spells);
+    }
+
     [Fact]
     public void WeaponWhiff_AfterAHit_StaysPhysical_NotReattributed()
     {

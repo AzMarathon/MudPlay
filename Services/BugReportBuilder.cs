@@ -719,6 +719,12 @@ public static class BugReportBuilder
         // (HP still above the flee trigger) — the engine is force-engaging to clear it
         // so recovery can proceed (report paradigm-20260901-093301).
         Kv(sb, "Engaging to clear a rest-blocker", svc.Health.ForceClearForRest.ToString());
+        // The room the Combat gate was last held in decides what a roster wiped clean
+        // means: still standing there, a room cleared; anywhere else, a fight walked
+        // out on, which halts the walker (the AbandonedCombat gate).
+        Kv(sb, "Combat gate",
+            $"{(svc.CombatTracker.HasEngageableHostiles ? "held" : "not held")}; last held in "
+            + (svc.CombatTracker.GateRoom?.ToString() ?? "(no room known)"));
         // No rest is started in a room whose own spell damages the character; a "why
         // won't it rest" report turns on this line.
         Kv(sb, "Room spell and resting", RoomSpellRestLine(svc));
@@ -839,7 +845,7 @@ public static class BugReportBuilder
         List<Models.Profile.MonsterObservation> rows = svc.MonsterObservations.Snapshot()
             .OrderByDescending(o => o.LastObservedAt).ToList();
 
-        sb.Append("Combat outcomes THIS character has observed per monster — landed-hit damage, hit rate, and confirmed physical/spell no-effect discoveries (")
+        sb.Append("Combat outcomes THIS character has observed per monster — its WEAPON swings (landed damage, and swings landed of swings made; a spell is not a swing), and confirmed physical/spell no-effect discoveries (")
           .Append(rows.Count).Append(")\n\n");
         if (rows.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }
 
@@ -849,11 +855,11 @@ public static class BugReportBuilder
             List<string> parts = new();
             if (o.HitCount > 0)
                 parts.Add($"hits {o.HitCount} (dmg {o.HitDamageMin}-{o.HitDamageMax}, avg {o.AvgHitDamage:0.#})");
-            if (o.SwingCount > 0)
-                parts.Add($"hit-rate {o.HitRatePercent:0}% ({o.HitCount}/{o.SwingCount})");
+            parts.Add(o.SwingCount > 0
+                ? $"weapon hit-rate {o.HitRatePercent:0}% ({o.HitCount}/{o.SwingCount} swings)"
+                : "no weapon swings");
             if (o.PhysicalNoEffectCount > 0) parts.Add($"physical-no-effect x{o.PhysicalNoEffectCount}");
             if (o.SpellNoEffectCount > 0) parts.Add($"spell-no-effect x{o.SpellNoEffectCount}");
-            if (parts.Count == 0) parts.Add("(no outcomes recorded)");
 
             sb.Append("- #").Append(o.MonsterNumber).Append(' ').Append(name)
               .Append(" — ").Append(string.Join(", ", parts)).Append('\n');

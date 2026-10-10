@@ -13,7 +13,8 @@ public static class ProfileMigrations
 {
     // Bring profile up to CharacterProfile.CurrentSchemaVersion. Returns true
     // when anything changed, so the caller can persist the upgraded profile.
-    public static bool Apply(CharacterProfile profile)
+    // log hears of a step that throws saved figures away.
+    public static bool Apply(CharacterProfile profile, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         bool changed = false;
@@ -109,7 +110,45 @@ public static class ProfileMigrations
             changed = true;
         }
 
+        // v9 → v10: Monster Intel's observations counted every spell cast as a
+        // missed weapon swing (the cast line has the shape of a miss), so a caster's
+        // saved records read 0 landed of thousands of swings never made. The saved
+        // swing counts can't be told apart from real ones, so they start over (user,
+        // 2026-10-10).
+        if (profile.SchemaVersion < 10)
+        {
+            int reset = ResetWeaponSwingTallies(profile);
+            if (reset > 0)
+                log?.Info("ProfileMigrations",
+                    $"Monster observations: weapon swing counts reset on {reset} record(s); "
+                    + "older versions counted spell casts as missed swings.");
+            profile.SchemaVersion = 10;
+            changed = true;
+        }
+
         return changed;
+    }
+
+    // Zero what the weapon hit rate is worked out from, hits and misses together:
+    // old hits left beside zeroed misses would read as never missing. Everything
+    // else on a record (the no-effect discoveries, when it was first and last seen)
+    // was not derived from the miscounted line and stays. Returns how many records
+    // had something to reset.
+    private static int ResetWeaponSwingTallies(CharacterProfile profile)
+    {
+        if (profile.MonsterObservations is not { } records) return 0;
+        int reset = 0;
+        foreach (MonsterObservation o in records)
+        {
+            if (o.HitCount == 0 && o.MissCount == 0) continue;
+            o.HitCount = 0;
+            o.HitDamageMin = 0;
+            o.HitDamageMax = 0;
+            o.HitDamageSum = 0;
+            o.MissCount = 0;
+            reset++;
+        }
+        return reset;
     }
 
     // Place Priority buffs in the stored spell-type priority lists: the character's
