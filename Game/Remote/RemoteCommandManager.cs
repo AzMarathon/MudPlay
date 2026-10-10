@@ -460,6 +460,7 @@ public sealed class RemoteCommandManager : IDisposable
         bool known = _handlers.ContainsKey(command) || TryMatchPrefixHandler(command, out _, out _);
         if (known
             && !command.Equals(MasterSwitchCommand, StringComparison.OrdinalIgnoreCase)
+            && !IsRecordedWhileMasterSwitchOff(command)
             && SkippedForMasterSwitch(entry.Speaker, command))
             return;
 
@@ -550,10 +551,10 @@ public sealed class RemoteCommandManager : IDisposable
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
                 $"Denied {command} from {entry.Speaker} (lacks {registration.RequiredCategory}).");
-            // The one command let through with the master switch off must not be
-            // the one command that answers a stranger then: no denial either.
-            if (command.Equals(MasterSwitchCommand, StringComparison.OrdinalIgnoreCase)
-                && BlockedByMasterSwitch?.Invoke($"{command} from {entry.Speaker} (not granted)") == true)
+            // Only the commands let through with the master switch off reach here
+            // then, and they must not be the ones that answer a stranger: no
+            // denial either.
+            if (BlockedByMasterSwitch?.Invoke($"{command} from {entry.Speaker} (not granted)") == true)
                 return;
             SendDenialReply(channel.Value, entry.Speaker);
             return;
@@ -621,6 +622,16 @@ public sealed class RemoteCommandManager : IDisposable
             $"Relaying {payload} back to {sender} on {channel} (&@ request).");
         SendLine(channel, sender, payload);
     }
+
+    // `@wait` and `@ok` are not followed with the master switch off, but what a
+    // follower last said is still taken down: their handlers only update who is
+    // waiting, answer nothing, and the hold that set would raise is parked. If
+    // they were dropped, a leader switching back on would walk off from a
+    // follower who had asked to wait, or stand out the whole wait limit for one
+    // who had since said `@ok`.
+    private static bool IsRecordedWhileMasterSwitchOff(string command) =>
+        command.Equals("@wait", StringComparison.OrdinalIgnoreCase)
+        || command.Equals("@ok", StringComparison.OrdinalIgnoreCase);
 
     // True when the master switch is off and this command is therefore dropped,
     // silently. The first one from each sender is logged at Info; the rest only

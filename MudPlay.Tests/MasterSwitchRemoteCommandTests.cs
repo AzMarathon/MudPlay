@@ -81,11 +81,15 @@ public sealed class MasterSwitchRemoteCommandTests
         AutoGetCash = false, AutoSneak = false, AutoHide = false, AutoSearch = false,
     };
 
-    // Every catalog command but the switch's own. @auto-all is driven by the real
-    // handler in the tests below.
+    // Every catalog command but the switch's own (driven by the real handler in
+    // the tests below) and @wait / @ok, which are still taken down while it is
+    // off so a leader knows where its followers stand when it comes back on
+    // (PartyWaitMovementGateTests).
     public static IEnumerable<object[]> CatalogCommands() =>
         RemoteCommandCatalog.Map.Keys
-            .Where(c => !c.Equals(RemoteCommandManager.MasterSwitchCommand, StringComparison.OrdinalIgnoreCase))
+            .Where(c => !c.Equals(RemoteCommandManager.MasterSwitchCommand, StringComparison.OrdinalIgnoreCase)
+                        && !c.Equals("@wait", StringComparison.OrdinalIgnoreCase)
+                        && !c.Equals("@ok", StringComparison.OrdinalIgnoreCase))
             .Select(c => new object[] { c });
 
     [Theory]

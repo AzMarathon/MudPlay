@@ -147,26 +147,75 @@ public sealed class MasterSwitchGateTests
         Assert.Equal($"/Tank @wait {PartyRestSync.HeldNote}", Assert.Single(wire));
     }
 
-    // "a pending @wait we sent: send nothing more" while off; the @ok it owes
-    // goes out when the switch is back on.
+    // A wait already out is released as the switch goes off (a release is not a
+    // hold), so the leader isn't left standing; after that nothing is sent.
     [Fact]
-    public void PartyWait_SentBeforeOff_ClearedWhileOff_OkGoesOutAfterwards()
+    public void PartyWait_OutWhenTheSwitchGoesOff_IsReleased_ThenQuiet()
     {
         var (sync, wire, setOff) = FollowerRestSync();
         sync.RequestWait(WaitReason.Held);
-        Assert.Single(wire);
 
         setOff(true);
+        sync.ReleaseForMasterSwitch();
+        Assert.Equal(new[] { $"/Tank @wait {PartyRestSync.HeldNote}", "/Tank @ok" }, wire);
+
+        // Cleared while off: nothing more to say, then or afterwards.
         sync.RequestOk(WaitReason.Held);
-        Assert.Single(wire);
+        setOff(false);
+        sync.ResyncAfterMasterSwitch();
+        Assert.Equal(2, wire.Count);
+    }
+
+    [Fact]
+    public void PartyWait_StillHeldWhenTheSwitchComesOn_IsAskedOnce_WithItsReason()
+    {
+        var (sync, wire, setOff) = FollowerRestSync();
+        sync.RequestWait(WaitReason.Blindness);
+        setOff(true);
+        sync.ReleaseForMasterSwitch();
 
         setOff(false);
         sync.ResyncAfterMasterSwitch();
-        Assert.Equal("/Tank @ok", wire[^1]);
-
-        // Settled: nothing more is owed.
         sync.ResyncAfterMasterSwitch();
-        Assert.Equal(2, wire.Count);
+
+        Assert.Equal(new[]
+        {
+            $"/Tank @wait {PartyRestSync.BlindNote}", "/Tank @ok", $"/Tank @wait {PartyRestSync.BlindNote}",
+        }, wire);
+    }
+
+    // The health engine re-asks for itself as it is re-run, with the pool's note;
+    // the resync that follows must not add a second, bare @wait.
+    [Fact]
+    public void PartyWait_HealthReasksOnSwitchOn_NoSecondBareWait()
+    {
+        var (sync, wire, setOff) = FollowerRestSync();
+        sync.RequestWait(WaitReason.Health, resend: true, note: PartyRestSync.ManaNote);
+        setOff(true);
+        sync.ReleaseForMasterSwitch();
+        wire.Clear();
+
+        setOff(false);
+        sync.RequestWait(WaitReason.Health, resend: true, note: PartyRestSync.ManaNote);
+        sync.ResyncAfterMasterSwitch();
+
+        Assert.Equal($"/Tank @wait {PartyRestSync.ManaNote}", Assert.Single(wire));
+    }
+
+    // An @ok owed to one leader is not owed to the next.
+    [Fact]
+    public void PartyWait_LeaderChanges_NothingIsReleasedToTheNewOne()
+    {
+        PartyState party = new() { IsInParty = true, SelfIsLeader = false, LeaderName = "Tank" };
+        PartyRestSync sync = new(party);
+        List<string> wire = new();
+        sync.SetWireSender(bytes => wire.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
+        sync.RequestWait(WaitReason.Held);
+
+        party.LeaderName = "Cleric";
+        sync.ReleaseForMasterSwitch();
+
+        Assert.Equal($"/Tank @wait {PartyRestSync.HeldNote}", Assert.Single(wire));
     }
 
     [Fact]

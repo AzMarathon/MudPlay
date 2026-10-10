@@ -9820,6 +9820,8 @@ public sealed class AppServices
     {
         // Party signals and party upkeep.
         PartyRest.MasterSwitchOff = MasterSwitchOff("Party wait signals");
+        Profile.ProfileLoaded += _ => PartyRest.ForgetLeaderHold();
+        PartyWaitMovement.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
         AilmentSync.MasterSwitchOff = MasterSwitchOff("Ailment announces");
         TooHeavyWait.MasterSwitchOff = MasterSwitchOff("Info polls");
         PartyPoller.MasterSwitchOff = MasterSwitchOff("Party polls");
@@ -9895,6 +9897,9 @@ public sealed class AppServices
     {
         if (off)
         {
+            // Ahead of everything else: the leader is let go before this client
+            // goes quiet.
+            PartyRest.ReleaseForMasterSwitch();
             MovementControl.SuspendForAutoAll();
             // Auto Sneak now reads off, so the sneak hold would lift and send
             // everything it was keeping back.
