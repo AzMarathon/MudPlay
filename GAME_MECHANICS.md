@@ -6471,6 +6471,21 @@ A `get <item>` that can't succeed replies with one of these shapes:
 - **`You don't see <echo> here.`**: the item isn't on the floor (gone: decayed, or another player took it).
   - `<echo>` is whatever text followed `get`, echoed back verbatim, so it can be a bare word rather than the item's full name.
   - Examples: `get rod` → `You don't see rod here.`; `get warhorn` → `You don't see warhorn here.`
+  - **Paradigm: a counted `get` for more than is there is refused outright and takes nothing**
+    *([CONFIRMED] 2026-10-10, user, live test; Realm: Paradigm)*. With the room display showing
+    `5 blackwood longbow`, `get 10 blackwood long` answered `You don't see 10 blackwood long here.`: the
+    count and the name as typed are echoed back, and none of the five was taken. So the line does not
+    always mean the item is gone; after a counted `get` it can mean the stack is smaller than asked for.
+    Stock has no counted `get` (*Item batching: Paradigm counted commands vs Stock one-per-command*): a
+    stack there is taken one `get` a copy, and the copies that are there are taken before the first
+    refusal.
+  - **Client use:** `GhSweepManager.OnGetRefusedAsNotHere`. The echo is matched to the pickup by name
+    with the count read past (`SameItem`). On Paradigm a refused counted pickup has the room read once
+    more (`l`, or `sea` for a hidden stack) and is asked again for what is there (`RecountFrom`); a
+    second refusal, or a second read that doesn't list the item, leaves it. On Stock the copies already
+    taken when a stack runs out go on as a carried move of their own (`KeepWhatWasTaken`) and only the
+    rest is left. A hidden stack left this way is recorded as not found by the search
+    (`GhLeftReason.NotFoundBySearch`), not as gone.
 - **`Syntax: GET {Amount} {Currency}`**: the game misparsed the item name as a **currency** get.
   - Observed for some multi-word names, e.g. `get silk cape`, and for gem/stone names like `piece of amber`.
   - No item name is echoed, and retrying the same name can't help.
@@ -6584,40 +6599,57 @@ A `get <item>` that can't succeed replies with one of these shapes:
     (*Movement & navigation → Room-wide search during and after combat*); the call itself is the BBS
     library's and was not followed.
 - **Paradigm reveals items the same way** *([CONFIRMED] 2026-10-10, user: "search reveals items the same
-  way as it does on stock")*. Report `paradigm-20261009-164508` shows it: a room displaying
-  `34 rope and grapple` answered `sea` with `2 rope and grapple`. Those are 2 hidden copies beside 34
-  visible ones: 36 in the room.
+  way as it does on stock")*.
+  - What follows from that statement and the Stock reading above, taken together, not confirmed apart
+    from them: report `paradigm-20261009-164508` has a room displaying `34 rope and grapple` that answered
+    `sea` with `2 rope and grapple`. Read the Stock way those are 2 hidden copies beside 34 visible ones,
+    36 in the room.
+- **Paradigm: a stack once found stays gettable** *([CONFIRMED] 2026-10-10, user: "yes" to "do the stacks
+  found by several searches in a row all stay gettable, and do they stay gettable after leaving the room
+  and coming back?"; Realm: Paradigm)*. The realms differ here: on Stock the found mask is dropped as the
+  searchers leave (the `_clear_search_flags` bullet above, `[OBSERVED]`, Stock), so a hidden stack has to
+  be found again on the visit that picks it up.
 - **Client policy** (user, 2026-10-10: "we should record the highest number seen for each item on each
   search.. not every search is going to reveal the same items or the same count"): over the searches of
   one room, an item's hidden count is the highest any one reply showed for it. Never the last reply's,
-  and never the replies added up.
+  and never the replies added up. A room display rolls nothing, so the count in plain sight is the
+  latest display's, not the highest seen.
 - Coin stashes: see *Money, banks & shops → Hiding coin in a room (stashing)*.
 
 **Client use:**
 - **Telling a search reply from a room display.** The two lists read alike, so
-  `GroundItemTracker.LastSurveySource` (`FloorSurveySource`) goes by what the list's first row follows:
-  the echo of `sea`…`search` with nothing after it (`MessageRouter.CommandEchoedBeforeLine`,
-  `FloorListLine.IsRoomSearch`) makes it a search reply; any other list, once an echo has been read
-  this session, is a room display. On a statline the client can't split no echo is ever read and the
-  source is unknown.
+  `GroundItemTracker.LastSurveySource` (`FloorSurveySource`) names a source only on proof. The echo of
+  `sea`…`search` with nothing after it, directly ahead of the list (`MessageRouter.CommandEchoedBeforeLine`,
+  `FloorListLine.IsRoomSearch`), proves a search reply. A room's name ahead of the list, with no prompt
+  or exits line between, proves a room display. A list with neither is unknown: a line landing between a
+  search's echo and its reply, or a statline that puts text of its own after the prompt, takes the echo
+  away without making the list a display.
 - **Roomba adds a room's hidden stacks to its visible ones** (`GhSweepManager`, `GhSurveyMerger`; user
-  rulings 2026-10-10). Recon keeps two records per room, the stacks its displays showed and the stacks
-  its search replies named, each item at the highest count any one read showed. Their sum
-  (`GhSurveyMerger.Total`) is what the room holds: the item-location log, the room's shown inventory and
-  the inventoried total read it. The item-location log is written once per room, when its searches end.
+  rulings 2026-10-10). Recon keeps two records per room: the stacks its latest display showed
+  (`GhSurveyMerger.Replace`), and the stacks its search replies named, each at the highest count any one
+  reply showed (`GhSurveyMerger.Merge`). Their sum (`GhSurveyMerger.Total`) is what the room holds: the
+  item-location log, the room's shown inventory and the inventoried total read it. The item-location log
+  is written once per room, when its searches end.
 - **Roomba queues a visible stack and a hidden stack of the same item as two moves**
   (`GhSweepManager.BuildSortQueue`): the visible one needs no search, the hidden one is searched for
-  first. The game takes from the visible stack before a found hidden one.
+  first. Because the game takes from the visible stack before a found hidden one, the hidden move is not
+  sent while a visible copy of the item still lies in that room (`FittingGetsAt`, `PickupsOnOffer`), and
+  a `You took` is credited to the visible move first (`ResolveConfirm`).
+- **Roomba searches before every hidden pickup, on both realms.** Paradigm keeps a found stack gettable,
+  so its sort could skip the search for a stack recon found; that saving isn't built.
 - **Roomba's final lap doesn't search, so it rereads only the visible set** (`GhSweepManager`
-  `CarryRecordsIntoFinalLap`, `NoteFinalLapRead`; **Client policy**, user 2026-10-10). Each room's visible
-  record is rebuilt from the lap's displays, a display with no floor list being an empty floor. The hidden
-  record stands as recon left it, less the hidden stacks the sort took. A room whose display differs from
-  what the sort should have left is logged once and written to the item-location log as it is; nothing is
-  re-sorted.
-- **A list Roomba can't place** (source unknown, read while a search of its own is out) adds nothing to
-  a stack the display showed: the higher of the two counts stands, and only a name the display never
-  showed is taken as hidden (`GhSurveyMerger.MergeUnattributed`). A redisplay misread as a reply would
-  otherwise double the room.
+  `CarryRecordsIntoFinalLap`, `NoteFinalLapRead`, `WriteRoomsTheFinalLapMissed`; **Client policy**, user
+  2026-10-10). Each room's visible record is rebuilt from the lap's displays, a display with no floor
+  list being an empty floor. The hidden record stands as recon left it, less the copies the sort took
+  out of hidden stacks. A room whose display differs from what the sort should have left (recon's visible
+  record, kept in step with every copy the game confirmed taken or dropped, `GhFloorCounts`) is logged
+  once and written to the item-location log as it is; nothing is re-sorted. A room recon never read is
+  written as seen and compared with nothing; a room recon read that the lap didn't show again is written
+  from the sort's own account.
+- **A list Roomba can't place** (source unknown, read while a search of its own is out in that room) is
+  most likely the search's reply, but adds nothing to a stack the display showed: the higher of the two
+  counts stands, and only a name the display never showed is taken as hidden
+  (`GhSurveyMerger.MergeUnattributed`). A redisplay misread as a reply would otherwise double the room.
 - `@hide-all [full|coins|keys]` and the Hide All / Hide Everything / Hide Coins / Hide Keys actions
   (`InventoryActionHandler.HideAll`) run the Drop All sweeps with `hide`, always naming the item or coin
   — never a bare `hide`, which would hide the character instead.

@@ -6,7 +6,8 @@
 - A hidden item is recorded at the highest count any one search showed; what is in plain sight is the latest room display
 - The item-location log is written once per room, after its last search
 - Sorting picks up the copies in plain sight first, then searches for the hidden ones as a pickup of their own
-- A pickup that comes up short keeps the copies it took: they are delivered and reported, and only the rest is left
+- A pickup refused for asking more than is there (Paradigm) has the room read once more and takes what is there
+- A stack that runs out part-way (Stock) keeps the copies it took: they are delivered and reported, and only the rest is left
 - A hidden stack the sort's search missed is reported as not found, not as gone
 - Roomba's final lap records what it sees: each room's item-location entry is rewritten as the room is after the sort
 - A room someone changed between the sort and that lap is named once in the program log; nothing is re-sorted
