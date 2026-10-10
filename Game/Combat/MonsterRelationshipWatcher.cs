@@ -40,31 +40,38 @@ namespace MudPlay.Game.Combat;
 // just as nothing does after a low-HP jump.
 //
 // For Flee, what is asked for is HealthManager's flee, the retreat a low-HP run
-// makes, so it needs what that needs (a walk or loop to run back along, the health
+// makes, so it needs what that needs (a walk or loop to run along, the health
 // engine on, a character that is not a party follower) and ends as that ends: the
-// walk or loop is picked up again once the run has landed, and it walks back. A
-// monster that stands on the route is therefore met again, and run from again, for
-// as long as it stands there, and nothing here stops that (user, 2026-10-09:
-// "thats the users problem to figure out, leave it as is"). No run starts while
-// Auto-All, the master switch, is off (user, 2026-10-09: "when i say all auto's
-// off, i mean the master switch is off"; "none of our auto systems should
-// respond"). The board's menu, the PvP side, the master switch and the health
-// engine being off leave the sighting open, as the first two do for Hangup. A run
-// that could not start (no walk or loop, no way out, a follower) is not tried again
-// inside the same sighting: a walk started beside the monster would otherwise be
-// turned round by the next roster. No hang-up is sent in a run's place.
+// walk or loop is picked up again once the run has landed. A walk or loop the user
+// has paused is idle and is not run with (user, 2026-10-10). Run backwards, the
+// route still leads through the monster's room, so a monster that stands there is
+// met again and run from again for as long as it does; run forwards, the route
+// goes on from where the run landed. No guard is built for the first (user,
+// 2026-10-10: "if we have it on we will just keep bouncing and its something the
+// user needs to fix themselves"). No run starts while Auto-All, the master switch,
+// is off (user, 2026-10-09: "when i say all auto's off, i mean the master switch
+// is off"; "none of our auto systems should respond"). The board's menu, the PvP
+// side, the master switch, the health engine being off and a character that is
+// down leave the sighting open, as the first two do for Hangup. A run that could
+// not start (no walk or loop, a paused one, no way out, a follower) is not tried
+// again inside the same sighting: a walk started beside the monster would
+// otherwise be turned round by the next roster. No hang-up is sent in a run's
+// place.
 //
 // A Flee monster no run is coming for is fought back when it attacks (user,
 // 2026-10-09: "fight back"), as a Hangup monster is when no hang-up is coming:
-// NoAnswerComing says so to self-defence. It is still never picked on sight.
+// NoAnswerComing says so to self-defence. That covers a run that is over with the
+// monster still there: its first move refused, or a second Flee monster where it
+// landed. It is still never picked on sight.
 //
 // Hangup outranks Flee. With both on the roster the hang-up is the answer and no
 // run is started, unless no hang-up went out and none is owed (Disable Hangups,
 // the all-off rule, the minute after a reconnect, no exit command): then the Flee
 // monster is answered as if alone, run from if a walk or loop is running, and
-// otherwise both are left alone until they attack (user, 2026-10-09: "it would only run from the flee
-// monster if a navigation engine was running ... otherwise it'd fight, and if it
-// was idle, and disable hangups was on, it would fight both").
+// otherwise both are left alone until they attack (user, 2026-10-09: "it would
+// only run from the flee monster if a navigation engine was running ... otherwise
+// it'd fight, and if it was idle, and disable hangups was on, it would fight
+// both").
 //
 // After a hang-up for a monster seen here, the watch is off for a minute once the
 // character is back in the game (user, 2026-10-09: "if a user manually reconnects
