@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.16**
-> - Using, eating or drinking an item that casts a spell now counts as ending your sneak, so the next move re-sneaks
-> - Commands that end a sneak, and a direction you send, now drop a hide too
+> **Version 3.167.17**
+> - An item whose use, eat or drink casts a spell ends the sneak; the next move re-sneaks
+> - Sneak-ending commands and a sent direction drop a hide too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
