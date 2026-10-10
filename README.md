@@ -8,6 +8,7 @@
 > - A sale, drop, ✕ or Clear list calls a waiting hide off
 > - No hide sent for a copy not in the pack
 > - Refused or unanswered auto-discard drops no longer stay counted all session
+> - No discard after a death or reconnect until the inventory is read
 > - Items named after a coin (iron crown) no longer read as coin
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

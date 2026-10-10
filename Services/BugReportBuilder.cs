@@ -1403,7 +1403,10 @@ public static class BugReportBuilder
         // it is waiting on, and how many hides are out with no answer yet.
         var heldHides = svc.AutoDiscard.HeldHides;
         sb.Append("\n**Discard hides held for the next room** (").Append(heldHides.Count)
-          .Append("; ").Append(svc.AutoDiscard.UnansweredHides).Append(" sent and unanswered)\n\n");
+          .Append("; ").Append(svc.AutoDiscard.UnansweredHides).Append(" hides and ")
+          .Append(svc.AutoDiscard.UnansweredDrops).Append(" drops sent and unanswered")
+          .Append(svc.AutoDiscard.AwaitingInventoryRead ? "; waiting for an inventory read" : "")
+          .Append(")\n\n");
         if (heldHides.Count == 0)
             sb.Append("_(none)_\n");
         else
