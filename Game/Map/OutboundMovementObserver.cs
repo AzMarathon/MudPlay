@@ -42,6 +42,11 @@ public sealed partial class OutboundMovementObserver
     // nav engine alike; a consumer that cares which checks whether an engine is running.
     public event Action? MoveSent;
 
+    // A direction went out, raised just ahead of MoveSent. The game's move command
+    // takes directions only; a text exit (`go path`) reaches a move another way, so
+    // what that command does on being accepted can't be assumed of one.
+    public event Action? DirectionalMoveSent;
+
     public OutboundMovementObserver(RoomTracker tracker, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
@@ -123,6 +128,7 @@ public sealed partial class OutboundMovementObserver
         {
             _tracker.NoteMoveSentByObserver(d);
             _log?.Info("OutboundMovement", $"Cardinal move announced: '{cmd}' → {d}.");
+            DirectionalMoveSent?.Invoke();
             MoveSent?.Invoke();
         }
     }

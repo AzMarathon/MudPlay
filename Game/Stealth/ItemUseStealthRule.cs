@@ -12,10 +12,13 @@ namespace MudPlay.Game.Stealth;
 // learn-spell scroll cast nothing and the sneak holds; a waterskin, a potion and food
 // cast, and it ends.
 //
-// Where the client can't tell (an item it can't place in the pack or the game data, or
-// a refusal only the game sees: not worn, no charges left, a protected room) the sneak
-// counts as ended. A needless `sn` is cheap; a sneak believed in after it has gone
-// sends the next move out unsneaked and lets a backstab be planned from nothing.
+// Where the client can't tell (an item it can't place in the pack or the game data,
+// words that could name more than one held item, or a refusal only the game sees: not
+// worn, no charges left, a protected room) the sneak counts as ended. Both mistakes
+// cost something. Counted as ended when it wasn't, the `sn` that follows throws away
+// the sneak the character still had and rolls again, and can be refused. Believed in
+// after it has gone, the next move goes out with no `sn` at all and a backstab is
+// planned from nothing, which is the worse of the two.
 public sealed class ItemUseStealthRule
 {
     public enum Verb { Use, Read, Eat, Drink, Light }
@@ -43,16 +46,22 @@ public sealed class ItemUseStealthRule
     private const int LightItemType = 6;
 
     private readonly Func<IReadOnlyList<string>> _heldItems;
-    private readonly Func<string, Facts?> _factsOf;
+    private readonly Func<string, IReadOnlyList<Facts>> _factsOf;
+    private readonly Action<string>? _debug;
 
     // heldItems: the names of everything carried, worn and on the key ring. factsOf:
-    // the game data's word on an item by name, null for one it doesn't know.
-    public ItemUseStealthRule(Func<IReadOnlyList<string>> heldItems, Func<string, Facts?> factsOf)
+    // the game data's word on every item of a name (several items can share one), empty
+    // for a name it doesn't know. debug: where each verdict is written.
+    public ItemUseStealthRule(
+        Func<IReadOnlyList<string>> heldItems,
+        Func<string, IReadOnlyList<Facts>> factsOf,
+        Action<string>? debug = null)
     {
         ArgumentNullException.ThrowIfNull(heldItems);
         ArgumentNullException.ThrowIfNull(factsOf);
         _heldItems = heldItems;
         _factsOf = factsOf;
+        _debug = debug;
     }
 
     // The item command a first word is, by the spellings the game takes (GAME_MECHANICS
@@ -70,15 +79,74 @@ public sealed class ItemUseStealthRule
     // True when sending `<verb> <args>` ends a sneak and a hide.
     public bool EndsStealth(Verb verb, string args)
     {
-        // The bare word is a syntax line, or for `light` the light level.
-        if (args.Length == 0) return false;
+        bool ends = Decide(verb, args, out string why);
+        string command = $"{verb.ToString().ToLowerInvariant()} {args}".TrimEnd();
+        _debug?.Invoke($"'{command}': {why}: sneak {(ends ? "ended" : "intact")}");
+        return ends;
+    }
 
-        string? name = ItemChargeTracker.ResolveHeld(_heldItems(), args, out bool wholeArg);
-        // Nothing held by that name. A `read` then looks at the thing instead (a sign,
-        // a plaque), which ends nothing. For the others the pack may simply be unread.
-        if (name is null) return verb != Verb.Read;
-        if (_factsOf(name) is not { } facts) return true;
+    private bool Decide(Verb verb, string args, out string why)
+    {
+        string[] words = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0)
+        {
+            why = "no item named (a syntax line, or the light level)";
+            return false;
+        }
 
+        // The item is the longest run of leading words that names something held:
+        // "iron key n" before "iron key" before "iron". Taking only the first word
+        // read `use iron key n` as the iron ration carried beside the key, and `use
+        // healing potion <name>` as the healing herbs.
+        IReadOnlyList<string> held = _heldItems();
+        List<string> named = new();
+        int itemWords = words.Length;
+        for (; itemWords >= 1; itemWords--)
+        {
+            string run = string.Join(' ', words, 0, itemWords);
+            if (run.Length < 2) break;
+            foreach (string name in ItemChargeTracker.HeldMatching(held, run))
+                if (!named.Contains(name, StringComparer.OrdinalIgnoreCase)) named.Add(name);
+            if (named.Count > 0) break;
+        }
+
+        if (named.Count == 0)
+        {
+            // Nothing held by that name. A `read` then looks at the thing instead (a
+            // sign, a plaque), which ends nothing. For the others the pack may simply
+            // be unread.
+            why = verb == Verb.Read ? "nothing held by that name, so a look" : "nothing held by that name";
+            return verb != Verb.Read;
+        }
+
+        string? targetWord = itemWords < words.Length ? words[itemWords] : null;
+        // Words that fit several held items, or a name several items share: which one
+        // the game takes isn't known, so one that ends the sneak is enough.
+        string? intact = null;
+        foreach (string name in named)
+        {
+            IReadOnlyList<Facts> items = _factsOf(name);
+            if (items.Count == 0)
+            {
+                why = $"{name} isn't in the game data";
+                return true;
+            }
+            foreach (Facts facts in items)
+            {
+                if (EndsWith(verb, facts, targetWord, out string detail))
+                {
+                    why = $"{name} {detail}";
+                    return true;
+                }
+                intact ??= $"{name} {detail}";
+            }
+        }
+        why = named.Count > 1 ? $"{intact} (and none of the {named.Count} items it could name casts)" : intact!;
+        return false;
+    }
+
+    private static bool EndsWith(Verb verb, Facts facts, string? targetWord, out string detail)
+    {
         // `eat` finds only food, `drink` only drinks and `light` only lights.
         int? needs = verb switch
         {
@@ -87,13 +155,34 @@ public sealed class ItemUseStealthRule
             Verb.Light => LightItemType,
             _ => null,
         };
-        if (needs is int kind && facts.ItemType != kind) return false;
-        if (!facts.Casts) return false;
+        if (needs is int kind && facts.ItemType != kind)
+        {
+            detail = $"is item type {facts.ItemType}, which `{verb.ToString().ToLowerInvariant()}` doesn't find";
+            return false;
+        }
+        if (!facts.Casts)
+        {
+            detail = "casts nothing on use";
+            return false;
+        }
 
         // A word after the item can name a player or a monster, and a cast on either
         // clears both as well. What the word turns out to name only the game knows.
-        if (!wholeArg && (verb is Verb.Use or Verb.Read)) return true;
-        return facts.CastTargets is not int targets || CastsWithNoTarget(targets);
+        if (targetWord is not null && (verb is Verb.Use or Verb.Read))
+        {
+            detail = $"casts, and '{targetWord}' after it may name a target";
+            return true;
+        }
+        if (facts.CastTargets is not int targets)
+        {
+            detail = "casts a spell the game data doesn't have";
+            return true;
+        }
+        bool cast = CastsWithNoTarget(targets);
+        detail = cast
+            ? $"casts with no target (Targets {targets})"
+            : $"casts a spell that needs a target (Targets {targets}), so the use is refused";
+        return cast;
     }
 
     // A spell used with no target is cast only for these Targets; any other is turned

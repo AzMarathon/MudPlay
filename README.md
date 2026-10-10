@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.165.10**
 > - Using, eating or drinking an item that casts a spell now counts as ending your sneak, so the next move re-sneaks
-> - Stock: commands that end a sneak, and a move you send, now drop a hide too
+> - Commands that end a sneak, and a direction you send, now drop a hide too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

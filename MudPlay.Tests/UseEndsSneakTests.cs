@@ -51,12 +51,23 @@ public sealed class UseEndsSneakTests : IDisposable
         ["salve"]                = Row(0, (18, 20)),
         ["odd charm"]            = Row(0, (43, 999)),
         ["glowing token"]        = Row(10, (43, 72)),
+        ["iron key"]             = Row(7, (119, 0)),
+        ["healing herbs"]        = Row(0, (18, 20)),
+        ["healing potion"]       = Row(0, (43, 800)),
+        ["poisoned shuriken"]    = Row(1, (114, 10), (43, 304)),
+    };
+
+    // A second item record under a name already in Items: the game data has two
+    // poisoned shurikens, one a swing proc and one that casts on use.
+    private static readonly Dictionary<string, string> Namesakes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["poisoned shuriken"]    = Row(1, (43, 304)),
     };
 
     // Spell Targets: 1 is cast with no target; 8 needs one named; 999 isn't on record.
     private static int? TargetsOf(int spell) => spell switch
     {
-        711 or 316 or 118 or 500 or 72 => 1,
+        711 or 316 or 118 or 500 or 72 or 304 => 1,
         800 or 801 or 431 => 8,
         _ => null,
     };
@@ -69,11 +80,19 @@ public sealed class UseEndsSneakTests : IDisposable
         return sb.Append('}').ToString();
     }
 
-    private static ItemUseStealthRule Rule(params string[] held) => new(
+    private static ItemUseStealthRule Rule(params string[] held) => Rule(null, held);
+
+    private static ItemUseStealthRule Rule(List<string>? debug, params string[] held) => new(
         () => held,
-        name => Items.TryGetValue(name, out string? json)
-            ? ItemUseStealthRule.Facts.Read(JsonDocument.Parse(json).RootElement, TargetsOf)
-            : null);
+        name =>
+        {
+            List<ItemUseStealthRule.Facts> records = new();
+            foreach (Dictionary<string, string> table in new[] { Items, Namesakes })
+                if (table.TryGetValue(name, out string? json))
+                    records.Add(ItemUseStealthRule.Facts.Read(JsonDocument.Parse(json).RootElement, TargetsOf));
+            return records;
+        },
+        debug is null ? null : debug.Add);
 
     private static readonly string[] Pack =
     {
@@ -141,6 +160,61 @@ public sealed class UseEndsSneakTests : IDisposable
         Assert.False(SneakBreakingCommands.EndsSneak("read scroll of warding", items: nothingHeld));
     }
 
+    // The item is the longest run of leading words that names something held, not
+    // the first word alone. With an iron ration carried beside the key, `use iron key
+    // n` is the key, and the sneak stands.
+    [Fact]
+    public void ItemWords_TheLongestRunThatNamesSomethingHeld_IsTheItem()
+    {
+        Assert.False(SneakBreakingCommands.EndsSneak("use iron key n", items: Rule("iron key")));
+        Assert.False(SneakBreakingCommands.EndsSneak("use iron key n", items: Rule("iron ration", "iron key")));
+        Assert.False(SneakBreakingCommands.EndsSneak("use iron key", items: Rule("iron ration", "iron key")));
+        // The other way round: herbs that cast nothing held ahead of a potion that casts.
+        Assert.True(SneakBreakingCommands.EndsSneak("use healing potion bob", items: Rule("healing herbs", "healing potion")));
+        Assert.True(SneakBreakingCommands.EndsSneak("use healing potion bob", items: Rule("healing potion")));
+        // The key isn't held at all (it is being picked up as the command goes out).
+        Assert.True(SneakBreakingCommands.EndsSneak("use iron key n", items: Rule("torch")));
+    }
+
+    // Words that fit more than one held item: which one the game takes isn't known,
+    // so the sneak counts as ended when any of them would end it.
+    [Fact]
+    public void ItemWords_FittingSeveralHeldItems_EndTheSneakIfAnyWould()
+    {
+        Assert.True(SneakBreakingCommands.EndsSneak("use iron", items: Rule("iron key", "iron ration")));
+        Assert.True(SneakBreakingCommands.EndsSneak("use iron", items: Rule("iron ration", "iron key")));
+        Assert.True(SneakBreakingCommands.EndsSneak("use healing bob", items: Rule("healing herbs", "healing potion")));
+        // None of them casts with no target: intact.
+        Assert.False(SneakBreakingCommands.EndsSneak("use healing", items: Rule("healing herbs", "healing potion")));
+    }
+
+    // Two item records under one name: the held name doesn't say which it is.
+    [Fact]
+    public void ItemName_SharedByTwoRecords_EndsTheSneakIfEitherWould()
+    {
+        Assert.True(SneakBreakingCommands.EndsSneak("use poisoned shuriken", items: Rule("poisoned shuriken")));
+        Assert.False(SneakBreakingCommands.EndsSneak("use flame blade", items: Rule("flame blade", "poisoned shuriken")));
+    }
+
+    // Each verdict is written out, the ones that leave the sneak alone included.
+    [Fact]
+    public void EachVerdict_IsLogged_WithTheItemAndTheReason()
+    {
+        List<string> log = new();
+        ItemUseStealthRule rule = Rule(log, "iron ration", "iron key", "waterskin");
+
+        SneakBreakingCommands.EndsSneak("use iron key n", items: rule);
+        SneakBreakingCommands.EndsSneak("use waterskin", items: rule);
+        SneakBreakingCommands.EndsSneak("read plaque", items: rule);
+
+        Assert.Equal(new[]
+        {
+            "'use iron key n': iron key casts nothing on use: sneak intact",
+            "'use waterskin': waterskin casts with no target (Targets 1): sneak ended",
+            "'read plaque': nothing held by that name, so a look: sneak intact",
+        }, log);
+    }
+
     // ----- hide ----------------------------------------------------------
 
     [Theory]
@@ -165,13 +239,15 @@ public sealed class UseEndsSneakTests : IDisposable
         public StealthManager Stealth { get; }
         public List<string> Wire { get; } = new();
         public bool EngineDriving;
+        public bool AutoSneak = true;
+        public bool AutoHide;
         private readonly ItemUseStealthRule _items = Rule(Pack);
 
         public World()
         {
             DefaultPatterns.Seed(Router);
             Stealth = new StealthManager(Router, State, new LogService());
-            Stealth.SetAutoToggles(() => true, () => false);
+            Stealth.SetAutoToggles(() => AutoSneak, () => AutoHide);
             Stealth.SetEngineDrivingCheck(() => EngineDriving);
             Stealth.SetWireSender(SendBytes);
         }
@@ -238,15 +314,121 @@ public sealed class UseEndsSneakTests : IDisposable
     // The game drops a hide as it takes the move command, so a move that goes nowhere
     // ends it without any room change to say so.
     [Fact]
-    public void Hidden_AMoveSent_DropsTheHide_BeforeAnyRoomChange()
+    public void Hidden_ADirectionSent_DropsTheHide_BeforeAnyRoomChange()
     {
         using World w = new() { EngineDriving = true };
         w.Feed("Attempting to hide...");
 
-        w.Stealth.NoteTypedMove();
+        w.Stealth.NoteDirectionalMoveSent();
 
         Assert.False(w.State.IsHidden);
         Assert.Equal(StealthState.Idle, w.Stealth.State);
+    }
+
+    // A text exit (`go path`) isn't the move command, so what that command does on
+    // being taken isn't assumed of it. The hide goes when the room changes.
+    [Fact]
+    public void Hidden_ATextExitSent_KeepsTheHide_UntilTheRoomChanges()
+    {
+        using World w = new();
+        w.Feed("Attempting to hide...");
+
+        w.Stealth.NoteTypedMove();                  // MoveSent alone: no direction went out
+        Assert.True(w.State.IsHidden);
+        Assert.Empty(w.Wire);
+
+        w.Stealth.NoteRoomChanged();
+        Assert.False(w.State.IsHidden);
+    }
+
+    // `hid` sent, then a command that ends a hide: the game runs the hide and then
+    // ends it, and the answer to the `hid` arrives after. It isn't read as hidden.
+    [Fact]
+    public void HideStillBeingAttempted_ThenAHideEndingCommand_ItsAnswerIsNotReadAsHidden()
+    {
+        using World w = new() { AutoSneak = false, AutoHide = true };
+        w.Stealth.NoteIdleOpportunity();            // `hid`
+        Assert.Equal(StealthState.AttemptingHide, w.Stealth.State);
+
+        w.Send("sea");
+        w.Feed("Attempting to hide...");
+
+        Assert.Equal(new[] { "hid", "sea" }, w.Wire);
+        Assert.False(w.State.IsHidden);
+        Assert.False(w.Stealth.IsStealthedHere);
+
+        // The next hide's answer counts again.
+        w.Stealth.NoteIdleOpportunity();
+        w.Feed("Attempting to hide...");
+        Assert.True(w.State.IsHidden);
+    }
+
+    // A direction sent while the hide is still being attempted ends it the same way.
+    [Fact]
+    public void HideStillBeingAttempted_ThenADirection_ItsAnswerIsNotReadAsHidden()
+    {
+        using World w = new() { AutoSneak = false, AutoHide = true };
+        w.Stealth.NoteIdleOpportunity();
+
+        w.Stealth.NoteDirectionalMoveSent();
+        w.Feed("Attempting to hide...");
+
+        Assert.False(w.State.IsHidden);
+    }
+
+    // With Auto-Sneak off there is no sneak to take back after a cast, but the hide is
+    // ended all the same, by a spell cast as by an item's.
+    [Fact]
+    public void AutoSneakOff_ASpellCastAndAnItemCast_BothDropTheHide()
+    {
+        using World spell = new() { AutoSneak = false };
+        spell.Feed("Attempting to hide...");
+        spell.Stealth.ReSneakAfterCast();
+        Assert.False(spell.State.IsHidden);
+
+        using World item = new() { AutoSneak = false };
+        item.Feed("Attempting to hide...");
+        item.Send("use waterskin");
+        Assert.False(item.State.IsHidden);
+
+        Assert.Empty(spell.Wire);                   // and nothing is sent for either
+        Assert.Equal(new[] { "use waterskin" }, item.Wire);
+    }
+
+    // A step out of a hide: the move ends the hide and sets no sneak, so with
+    // Auto-Sneak on an `sn` goes out first, for a step an engine takes as for one typed.
+    [Fact]
+    public void StepOutOfAHide_SneaksFirst_TypedOrEngine()
+    {
+        using World typed = new();
+        typed.Feed("Attempting to hide...");
+        typed.Stealth.NoteDirectionalMoveSent();    // the observer raises this ahead of MoveSent
+        typed.Stealth.NoteTypedMove();
+        Assert.Equal(new[] { "sn" }, typed.Wire);
+
+        using World engine = new() { EngineDriving = true };
+        engine.Stealth.SetMovementCoordinator(new MovementCoordinator());
+        engine.Feed("Attempting to hide...");
+        Assert.False(engine.Stealth.ReadyToMoveSneaking());   // held for the `sn` answer
+        Assert.Equal(new[] { "sn" }, engine.Wire);
+        engine.Feed("Attempting to sneak...");
+        Assert.True(engine.Stealth.ReadyToMoveSneaking());
+        Assert.Equal(new[] { "sn" }, engine.Wire);
+    }
+
+    // A monster in the room: an `sn` can't take, so the hide isn't given up for one.
+    [Fact]
+    public void StepOutOfAHide_WithAMonsterHere_GoesAsItStands()
+    {
+        using World w = new() { EngineDriving = true };
+        w.Stealth.SetMovementCoordinator(new MovementCoordinator());
+        w.Stealth.SetSneakBlockCheck(() => true);
+        w.Feed("Attempting to hide...");
+
+        Assert.True(w.Stealth.ReadyToMoveSneaking());
+
+        Assert.Empty(w.Wire);
+        Assert.True(w.State.IsHidden);
     }
 
     // ----- sneak ---------------------------------------------------------

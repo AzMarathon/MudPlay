@@ -2364,6 +2364,27 @@ public sealed class AppServices
 
     private Game.Stealth.ItemUseStealthRule? _itemUseStealth;
 
+    // Every Items record of a name, as the item-use rule reads one. Names repeat in
+    // the game data (one poisoned shuriken casts on use, another doesn't) and a held
+    // name doesn't say which it is, so the rule is handed them all.
+    private IReadOnlyList<Game.Stealth.ItemUseStealthRule.Facts> ItemUseFactsByName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)
+            || GameData.FindRowByName("Items", name) is not { } first
+            || !first.TryGetProperty("Name", out System.Text.Json.JsonElement firstName)
+            || firstName.GetString()?.Trim() is not { } recordName
+            || GameData.GetRawTable("Items") is not { } items)
+            return Array.Empty<Game.Stealth.ItemUseStealthRule.Facts>();
+        List<Game.Stealth.ItemUseStealthRule.Facts> found = new();
+        foreach (System.Text.Json.JsonElement row in items.RootElement.EnumerateArray())
+            if (row.ValueKind == System.Text.Json.JsonValueKind.Object
+                && row.TryGetProperty("Name", out System.Text.Json.JsonElement n)
+                && n.ValueKind == System.Text.Json.JsonValueKind.String
+                && string.Equals(n.GetString()?.Trim(), recordName, StringComparison.OrdinalIgnoreCase))
+                found.Add(Game.Stealth.ItemUseStealthRule.Facts.Read(row, SpellCatalog.GetTargetsByNumber));
+        return found;
+    }
+
     // Sniffs a hand-typed PHYSICAL attack verb so Combat treats it as a user override
     // (holds the auto attack until next round). Hooked from SendUserInput.
     public Game.Combat.OutboundAttackObserver OutboundAttack { get; private set; } = null!;
@@ -5375,10 +5396,7 @@ public sealed class AppServices
         // `hide` per AutoMode toggles.
         Stealth = new Game.Stealth.StealthManager(Router, PlayerState, Log);
         _itemUseStealth = new Game.Stealth.ItemUseStealthRule(
-            HeldItemNames,
-            name => GameData.FindRowByName("Items", name) is { } row
-                ? Game.Stealth.ItemUseStealthRule.Facts.Read(row, SpellCatalog.GetTargetsByNumber)
-                : null);
+            HeldItemNames, ItemUseFactsByName, debug: line => Log.Debug(Game.Stealth.StealthManager.LogCategory, line));
         Stealth.SetSneakHoldForHeal(() => Health.IsGateFleeing && CastDirector.IsEmergencyHealDue);
         // A buff cast mid-rest doesn't re-sneak unless ShadowRest keeps it through the rest.
         Stealth.SetReSneakSkipForRest(() => (Health.IsRecoveringRest || Health.RestInFlight) && !Health.UsesShadowRest);
@@ -7922,6 +7940,7 @@ public sealed class AppServices
         // runs before the typed bytes go out, so the `sn` leaves ahead of them). After
         // the gear hook above: equipping ends a sneak, so any swap goes out first.
         OutboundMovement.MoveSent += Stealth.NoteTypedMove;
+        OutboundMovement.DirectionalMoveSent += Stealth.NoteDirectionalMoveSent;
         // Every move re-opens the backstab surprise round, typed moves included.
         OutboundMovement.MoveSent += Combat.NoteMoveSent;
         OutboundMovement.MoveSent += CombatTracker.NoteMoveSent;
