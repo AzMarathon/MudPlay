@@ -1074,6 +1074,8 @@ public sealed class GhSweepManager : IDisposable
         int workingBudget = WorkingBudget();
         if (workingBudget == int.MaxValue) return;
 
+        List<PendingSortMove> split = new();
+        int trips = 0;
         foreach (PendingSortMove move in _pending.ToList())
         {
             if (move.IsCarried || move.Delivered) continue;
@@ -1096,10 +1098,16 @@ public sealed class GhSweepManager : IDisposable
                     RequiresSearch = move.RequiresSearch,
                 });
             }
-            _log?.Info(LogCategory,
+            split.Add(move);
+            trips += loads.Count;
+            _log?.Debug(LogCategory,
                 $"split {move.Count}x {move.ItemName} ({move.Count * unitWeight} > budget {workingBudget}) "
                 + $"into {loads.Count} trips of up to {perTrip}: {move.From} -> {move.To}");
         }
+        if (split.Count > 0)
+            _log?.Info(LogCategory,
+                $"split {split.Count} stack(s) too heavy for one trip (budget {workingBudget}) "
+                + $"into {trips} trips: {NameStacks(split)}");
     }
 
     // Strand any not-yet-carried queued item whose SINGLE unit is too heavy to ever
@@ -1119,16 +1127,21 @@ public sealed class GhSweepManager : IDisposable
         // the pack clears.
         int bestBudget = BestCaseBudget();
         if (bestBudget == int.MaxValue) return;
-        foreach (PendingSortMove move in _pending
+        List<PendingSortMove> tooHeavy = _pending
             .Where(m => !m.Delivered && !m.IsCarried
-                        && (_itemNames.WeightOf(m.ItemName) ?? 0) > bestBudget).ToList())
+                        && (_itemNames.WeightOf(m.ItemName) ?? 0) > bestBudget).ToList();
+        foreach (PendingSortMove move in tooHeavy)
         {
             _pending.Remove(move);
             _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.TooHeavy));
-            _log?.Info(LogCategory,
+            _log?.Debug(LogCategory,
                 $"too heavy to carry (unit weight {_itemNames.WeightOf(move.ItemName)} > best-case budget "
                 + $"{bestBudget}): leaving {move.Count}x {move.ItemName} at {move.From}");
         }
+        if (tooHeavy.Count > 0)
+            _log?.Info(LogCategory,
+                $"too heavy to carry at any time (best-case budget {bestBudget}): leaving "
+                + $"{tooHeavy.Count} stack(s) where they are: {NameStacks(tooHeavy)}");
     }
 
     // Build the sort queue from what recon observed. Delegates the actual
@@ -1152,8 +1165,10 @@ public sealed class GhSweepManager : IDisposable
         // copies in plain sight.
         foreach (RoomKey room in _observedByRoom.Keys)
         {
+            int first = _pending.Count, leftBefore = _leftInPlace.Count;
             QueueFrom(room, _visibleByRoom, requiresSearch: false);
             QueueFrom(room, _hiddenByRoom, requiresSearch: true);
+            LogQueuedFrom(room, _pending.Skip(first).ToList(), _leftInPlace.Count - leftBefore);
         }
         RestoreCarriedManifest();
     }
@@ -1177,11 +1192,48 @@ public sealed class GhSweepManager : IDisposable
                 Count = move.Count,
                 RequiresSearch = requiresSearch,
             });
-            _log?.Info(LogCategory,
+            _log?.Debug(LogCategory,
                 $"queued {move.Count}x {move.ItemName}: {move.From} -> {move.To}"
                 + (requiresSearch ? " (hidden)" : string.Empty));
         }
         _leftInPlace.AddRange(leftInPlace);
+    }
+
+    // How many of a pass's stacks an Info line names before it only counts them. A
+    // vault queues hundreds of stacks; a line each pushed everything else out of
+    // the program log, and the Debug lines still carry every one.
+    private const int StacksNamedPerLogLine = 5;
+    private const int DestinationsNamedPerLogLine = 6;
+
+    // One line for what a room contributes to the sort queue: how much leaves it and
+    // for which rooms.
+    private void LogQueuedFrom(RoomKey room, List<PendingSortMove> queued, int leftInPlace)
+    {
+        if (_log is null || (queued.Count == 0 && leftInPlace == 0)) return;
+
+        StringBuilder line = new($"queued from {room}: {queued.Count} stack(s), {queued.Sum(m => m.Count)} item(s)");
+        int hidden = queued.Count(m => m.RequiresSearch);
+        if (hidden > 0) line.Append($", {hidden} of the stacks hidden");
+        if (queued.Count > 0)
+        {
+            var destinations = queued.GroupBy(m => m.To).OrderByDescending(g => g.Count()).ToList();
+            line.Append(" -> " + string.Join(", ", destinations
+                .Take(DestinationsNamedPerLogLine).Select(g => $"{g.Key} ({g.Count()})")));
+            if (destinations.Count > DestinationsNamedPerLogLine)
+                line.Append($" and {destinations.Count - DestinationsNamedPerLogLine} more room(s)");
+        }
+        if (leftInPlace > 0) line.Append($"; {leftInPlace} stack(s) left in place");
+        _log.Info(LogCategory, line.ToString());
+    }
+
+    // "3x torch, mace" for the first few of a pass's stacks, then how many more.
+    private static string NameStacks(IReadOnlyList<PendingSortMove> stacks)
+    {
+        string named = string.Join(", ", stacks.Take(StacksNamedPerLogLine)
+            .Select(m => m.Count > 1 ? $"{m.Count}x {m.ItemName}" : m.ItemName));
+        return stacks.Count > StacksNamedPerLogLine
+            ? $"{named} (+{stacks.Count - StacksNamedPerLogLine} more)"
+            : named;
     }
 
     // Re-adopt what a previous sweep left in the pack. These enter already
@@ -1943,6 +1995,7 @@ public sealed class GhSweepManager : IDisposable
     // wall every lap, which is exactly what used to run forever.
     private void RetargetAwayFromFullRooms()
     {
+        List<PendingSortMove> retargeted = new(), keptInPack = new(), leftBehind = new();
         foreach (PendingSortMove move in _pending
                      .Where(p => !p.Delivered && _fullRooms.Contains(p.To)).ToList())
         {
@@ -1969,25 +2022,37 @@ public sealed class GhSweepManager : IDisposable
                 if (move.IsCarried)
                 {
                     NoteSaturatedCategory(move.ItemName, cls);
-                    _log?.Warn(LogCategory,
-                        $"nowhere left for {move.ItemName} and it's in the pack — still carrying it; "
-                        + "the next sweep delivers it once a room has space");
+                    keptInPack.Add(move);
+                    _log?.Debug(LogCategory, $"nowhere left for {move.ItemName} and it's in the pack");
                     continue;
                 }
 
                 NoteSaturatedCategory(move.ItemName, cls);
-                _log?.Warn(LogCategory,
-                    $"nowhere left for {move.ItemName}: every matching room and the catch-all are full "
-                    + $"— leaving it at {move.From}");
+                leftBehind.Add(move);
+                _log?.Debug(LogCategory, $"nowhere left for {move.ItemName} — leaving it at {move.From}");
                 _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.AllDestinationsFull));
                 _pending.Remove(move);
                 continue;
             }
 
-            _log?.Info(LogCategory,
+            retargeted.Add(move);
+            _log?.Debug(LogCategory,
                 $"re-targeting {move.Count}x {move.ItemName}: {move.To} (full) -> {target}");
             move.To = target;
         }
+
+        // One line per outcome: a full room turns away every stack bound for it.
+        if (retargeted.Count > 0)
+            _log?.Info(LogCategory,
+                $"re-targeted {retargeted.Count} stack(s) away from full rooms: {NameStacks(retargeted)}");
+        if (keptInPack.Count > 0)
+            _log?.Warn(LogCategory,
+                $"nowhere left for {keptInPack.Count} stack(s) in the pack — still carrying them; the next "
+                + $"sweep delivers them once a room has space: {NameStacks(keptInPack)}");
+        if (leftBehind.Count > 0)
+            _log?.Warn(LogCategory,
+                $"nowhere left for {leftBehind.Count} stack(s): every matching room and the catch-all are "
+                + $"full — left where they are: {NameStacks(leftBehind)}");
     }
 
     private void ResolveConfirm(string token, bool isDrop)

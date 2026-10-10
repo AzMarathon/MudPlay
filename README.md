@@ -1,12 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.9**
-> - Roomba counts a room's hidden copies of an item on top of the ones in plain sight (34 on the floor and 2 from a search is 36), not the larger of the two
-> - A hidden item is recorded at the highest count any one search showed, and the item-location log is written once per room, after its last search
-> - A redisplay of the room between searches is no longer read as a search's reply
-> - Sorting picks up the copies in plain sight and the hidden ones as two pickups, the hidden ones after the search
-> - Bug report: where the last floor list came from, and Roomba's on-display and hidden counts for the room
+> **Version 3.161.10**
+> - Roomba's program log: the sort queue is one line per room (stacks, items, where they are bound), not one per stack
+> - Stacks split for carry weight, too heavy to carry, or turned away by a full room are one line each as well; the per-stack lines are at Debug
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

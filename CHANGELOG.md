@@ -1,5 +1,10 @@
 # Version history
 
+## 3.161.10
+
+- Roomba's program log: the sort queue is one line per room (stacks, items, where they are bound), not one per stack
+- Stacks split for carry weight, too heavy to carry, or turned away by a full room are one line each as well; the per-stack lines are at Debug
+
 ## 3.161.9
 
 - Roomba counts a room's hidden copies of an item on top of the ones in plain sight (34 on the floor and 2 from a search is 36), not the larger of the two

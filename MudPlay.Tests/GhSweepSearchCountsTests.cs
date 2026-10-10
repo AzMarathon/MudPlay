@@ -264,6 +264,16 @@ public sealed class GhSweepSearchCountsTests : IDisposable
             ("black diamond", 10, Weapons, true),
         };
         Assert.Equal(expected, Queue());
+
+        // The queue is logged a room at a time, not a stack at a time.
+        List<string> queued = _log.Snapshot()
+            .Where(e => e.Source == GhSweepManager.LogCategory
+                        && e.Message.StartsWith("queued ", StringComparison.Ordinal))
+            .Select(e => e.Message)
+            .ToList();
+        Assert.Equal(
+            new[] { "queued from 1/3: 8 stack(s), 61 item(s), 5 of the stacks hidden -> 1/1 (5), 1/2 (3)" },
+            queued);
     }
 
     // Sorting searches the room, then asks for the visible copies before the hidden
