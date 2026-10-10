@@ -34,6 +34,8 @@ public sealed class PartyHandOverMemory
 
     // How long a give that went out waits for the game's line. Past it, a line
     // naming the same item and member is a give somebody typed, not this one.
+    // Inside it the two can't be told apart, and needn't be: either way the game
+    // has said that member was handed that item.
     private static readonly TimeSpan ConfirmWithin = TimeSpan.FromSeconds(30);
 
     private sealed record Awaited(int ItemId, string ItemName, string Recipient, object? Trip, DateTimeOffset SentAt);
@@ -139,8 +141,11 @@ public sealed class PartyHandOverMemory
     // for them. A member who didn't is credited with what they were handed, in
     // place of none, and is no longer among the unanswered. The credit stops at the
     // per-person quota: nothing can be asked of a silent member, so a copy above
-    // their own could never be sent on to anyone.
-    public PartyInventoryProbe.PartyItemResult Reconcile(PartyInventoryProbe.PartyItemResult counted, int perPerson)
+    // their own could never be sent on to anyone. A route card reads the answers
+    // its walk will read again a moment later, and names the credited members in
+    // its own line, so it passes noteCredits false and the credit is logged once.
+    public PartyInventoryProbe.PartyItemResult Reconcile(
+        PartyInventoryProbe.PartyItemResult counted, int perPerson, bool noteCredits = true)
     {
         // A default result has no members in it at all, and a null Unanswered.
         if (counted.CountsByMember is null) return counted;
@@ -177,6 +182,7 @@ public sealed class PartyHandOverMemory
                 }
                 int credit = Math.Min(known.Copies, quota);
                 (credited ??= new(StringComparer.OrdinalIgnoreCase))[silent] = credit;
+                if (!noteCredits) continue;
                 (notes ??= new()).Add(
                     $"path item {id} ('{known.ItemName}'): {silent} didn't answer — credited with the {credit} "
                     + "handed over earlier, so none is fetched for them");
@@ -201,22 +207,67 @@ public sealed class PartyHandOverMemory
     }
 
     // The leader went through an exit that needs this item. A copy with a limited
-    // number of uses may have been used up by it, in every pack that crossed.
-    public void OnGateCrossed(int itemId)
+    // number of uses may have been used up by it, in every pack that crossed. True
+    // when a hand-over was forgotten for it: a count that credited it is then wrong.
+    public bool OnGateCrossed(int itemId)
     {
         List<string>? spent = null;
         lock (_gate)
         {
-            if (_byMember.Count == 0) return;
+            if (_byMember.Count == 0) return false;
             foreach (KeyValuePair<string, Dictionary<int, Remembered>> kv in _byMember)
                 if (kv.Value.TryGetValue(itemId, out Remembered? known) && known.Trip is not null)
                     (spent ??= new()).Add(kv.Key);
-            if (spent is null) return;
+            if (spent is null) return false;
             foreach (string member in spent) Forget(member, itemId);
         }
         _log?.Info(LogCategory,
             $"path item {itemId}: an exit that needs it was crossed, and it has a limited number of uses — "
             + $"its hand-over to {string.Join(", ", spent)} is no longer remembered");
+        return true;
+    }
+
+    // A walk ended. A limited-use hand-over made on a trip that is now over would
+    // not be credited again, so it is dropped here rather than at the next count,
+    // and the bug report doesn't go on listing it. A leg ending leaves its trip
+    // standing, and its hand-overs with it.
+    public void ForgetEndedTrips()
+    {
+        object? trip = _journey();
+        List<(string Member, int ItemId, string ItemName)>? over = null;
+        lock (_gate)
+        {
+            foreach (KeyValuePair<string, Dictionary<int, Remembered>> member in _byMember)
+                foreach (KeyValuePair<int, Remembered> kv in member.Value)
+                    if (kv.Value.Trip is not null && !ReferenceEquals(kv.Value.Trip, trip))
+                        (over ??= new()).Add((member.Key, kv.Key, kv.Value.ItemName));
+            if (over is null) return;
+            foreach ((string member, int itemId, _) in over) Forget(member, itemId);
+        }
+        _log?.Info(LogCategory,
+            $"the trip is over: the hand-over of {string.Join(", ", over.Select(o => $"{o.ItemName} to {o.Member}"))} "
+            + "is no longer remembered (a limited number of uses)");
+    }
+
+    // The game refused a give, naming the player it was for when its line does. The
+    // give still waiting for that player's line (the oldest, when the line names
+    // nobody) is the one refused; with none waiting, the give was somebody's own.
+    public void OnGiveRefused(string? recipient)
+    {
+        Awaited? refused = null;
+        lock (_gate)
+        {
+            // A two-word name is matched on its first, as the give was addressed.
+            string? given = recipient?.Split(' ', 2)[0];
+            int at = given is null ? (_awaited.Count > 0 ? 0 : -1)
+                : _awaited.FindIndex(a => a.Recipient.Equals(given, StringComparison.OrdinalIgnoreCase));
+            if (at < 0) return;
+            refused = _awaited[at];
+            _awaited.RemoveAt(at);
+        }
+        _log?.Info(LogCategory,
+            $"path item {refused.ItemId} ('{refused.ItemName}'): the game refused the hand-over to {refused.Recipient} — "
+            + "not remembered");
     }
 
     // The roster changed: what was handed to a member who is no longer in it goes

@@ -408,6 +408,15 @@ public sealed class PartyPathItemGate
         lock (_gate) _counted.Clear();
     }
 
+    // The leader went through an exit that needs this item. A limited-use copy a
+    // silent member was credited with may be used up by it, and a count taken
+    // before the crossing still says the party holds enough: the trip's next leg
+    // would decide from it without asking, and fetch nothing for a later gate.
+    public void OnGateCrossed(int itemId)
+    {
+        if (_handOvers?.OnGateCrossed(itemId) == true) ForgetCounts();
+    }
+
     // The answers the trip under way is deciding from without asking again (bug report).
     public string JourneyCountsSummary
     {

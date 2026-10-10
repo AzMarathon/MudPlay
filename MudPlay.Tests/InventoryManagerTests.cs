@@ -1243,6 +1243,24 @@ public sealed class InventoryManagerTests
             new[] { ("lantern", 1, "Member"), ("darkwood ring", 2, "Member"), ("torch", 1, "Member") }, gave);
     }
 
+    // The Stock engine's three refusals of a give: two name the player it was for,
+    // one names nobody. Nothing leaves the pack.
+    [Fact]
+    public void GiveRefused_IsRaisedWithThePlayerTheLineNames()
+    {
+        using Harness h = new();
+        FeedCarriedBaseline(h);
+        List<string?> refused = new();
+        h.Inv.GiveRefused += refused.Add;
+
+        h.Feed("Member refuses your offer.");
+        h.Feed("Member cannot accept your offer.");
+        h.Feed("You may not give that item away!");
+
+        Assert.Equal(new string?[] { "Member", "Member", null }, refused);
+        Assert.Contains("lantern", Carried(h));
+    }
+
     // Keys sit on their own ring in the dump. A key given away must leave it, or the
     // character still "holds" the key and a door it opens stays passable to the planner.
     [Fact]

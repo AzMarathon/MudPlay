@@ -6967,8 +6967,10 @@ public sealed class AppServices
             if (t.PreviousRoom is not { } from || t.NewRoom is not { } to || from.Key.Equals(to.Key)) return;
             foreach (Game.Map.RoomExit exit in from.Exits.Values)
                 if (exit.KeyItemId > 0 && exit.Target.Equals(to.Key))
-                    PartyHandOvers.OnGateCrossed(exit.KeyItemId);
+                    PartyPathItemGate.OnGateCrossed(exit.KeyItemId);
         };
+        // The line that refuses a give ends the wait for the one that confirms it.
+        Inventory.GiveRefused += PartyHandOvers.OnGiveRefused;
 
         // Per-walk forced-obtain (the route picker's "obtain then cross" choice):
         // drop an item from the override once it's covered — the item itself or
@@ -7390,7 +7392,11 @@ public sealed class AppServices
         {
             if (e.Kind is Game.Map.WalkEventKind.Stopped or Game.Map.WalkEventKind.Failed
                 or Game.Map.WalkEventKind.Finished)
+            {
                 PartyPathItemGate.OnWalkEnded();
+                // The walker ends a journey before it raises the event that ended it.
+                PartyHandOvers.ForgetEndedTrips();
+            }
             // A card's count is for the walk that card starts. Not on Stopped: the
             // walk a card replaces stops just before the card's own walk announces.
             if (e.Kind is Game.Map.WalkEventKind.Failed or Game.Map.WalkEventKind.Finished)
@@ -12952,14 +12958,18 @@ public sealed class AppServices
                 Game.Remote.PartyInventoryProbe.PartyItemResult asked = await PartyInventory.QueryAsync(id, name);
                 // The card counts one each, so a silent member the leader handed
                 // a copy to is credited with one. The walk is given the answers
-                // as they came and reads them against the hand-overs itself.
-                Game.Remote.PartyInventoryProbe.PartyItemResult r = PartyHandOvers.Reconcile(asked, perPerson: 1);
+                // as they came and reads them against the hand-overs itself; it
+                // logs the credit then, and the line below names it for the card.
+                Game.Remote.PartyInventoryProbe.PartyItemResult r =
+                    PartyHandOvers.Reconcile(asked, perPerson: 1, noteCredits: false);
                 int need = 1 + r.Expected;
                 int own = CountItemCarried(id);
                 next[id] = (need, r.TotalCount);
                 _cardCounts[id] = (asked, DateTimeOffset.UtcNow);
                 string members = r.CountsByMember.Count == 0 ? "nobody answered"
-                    : string.Join(", ", r.CountsByMember.Select(kv => $"{kv.Key} {kv.Value}"));
+                    : string.Join(", ", r.CountsByMember.Select(kv => asked.CountsByMember.ContainsKey(kv.Key)
+                        ? $"{kv.Key} {kv.Value}"
+                        : $"{kv.Key} {kv.Value} (didn't answer: handed over earlier)"));
                 if (r.Unanswered.Count > 0)
                     members += $"; {string.Join(", ", r.Unanswered)} didn't answer: counted as holding none";
                 Log.Info(Game.Map.AutoSearchManager.LogCategory,

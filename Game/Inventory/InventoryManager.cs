@@ -194,6 +194,11 @@ public sealed partial class InventoryManager : IDisposable
     // what a party member was handed is remembered from it and not from the send.
     public event Action<string, int, string>? ItemGivenAway;
 
+    // The game refused a give of ours. Carries the player the line names, or null
+    // for the refusal that names nobody. A give waiting to be confirmed stops
+    // waiting on it rather than on a timer.
+    public event Action<string?>? GiveRefused;
+
     // True for another character's hand-over line this parser reads, item or
     // coins. It reads the wire directly and registers no router pattern, so the
     // unrecognized-line watcher asks here rather than restate the shapes.
@@ -759,6 +764,16 @@ public sealed partial class InventoryManager : IDisposable
         if (GiveFailedRegex().IsMatch(line))
         {
             _log?.Debug(LogCategory, "give bounced: item not held");
+            return;
+        }
+
+        // A give the other player's settings or pack turned down, or an item that
+        // can't be given: the Stock engine's three refusals. Nothing moved.
+        Match refusedBy = GiveRefusedByRegex().Match(line);
+        if (refusedBy.Success || line == GiveNotAllowedLine)
+        {
+            _log?.Debug(LogCategory, $"give refused: {line}");
+            GiveRefused?.Invoke(refusedBy.Success ? refusedBy.Groups[1].Value : null);
             return;
         }
 
@@ -1602,4 +1617,12 @@ public sealed partial class InventoryManager : IDisposable
 
     [GeneratedRegex(@"^You don't have (.+) to give\.$")]
     private static partial Regex GiveFailedRegex();
+
+    // "<Player> refuses your offer." (they have receiving switched off) and
+    // "<Player> cannot accept your offer." (no room for it), as the Stock engine
+    // prints them (GAME_MECHANICS "Giving items and coins to another player").
+    [GeneratedRegex(@"^(.+) (?:refuses|cannot accept) your offer\.$")]
+    private static partial Regex GiveRefusedByRegex();
+
+    private const string GiveNotAllowedLine = "You may not give that item away!";
 }
