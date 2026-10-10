@@ -59,6 +59,16 @@ public sealed class AutoModeController
     // back on.
     public event Action<bool>? KillSwitchToggled;
 
+    // The `by` the user's own press gives (the toolbar button, the Action-menu
+    // item, the hotkey). Every other caller names its own source.
+    public const string ByUserPress = "Auto-All button";
+
+    // Whether the last switch of the switch was the user's own press. Anything
+    // else (a party member's `@auto-all`, the local API) is taken as nobody being
+    // at the keyboard: read by KillSwitchToggled's listeners, which must not
+    // open a prompt for an unattended client.
+    public bool SwitchedByUserPress { get; private set; }
+
     // Fires when a profile load clears a switch that was off (ResetSnapshot), so
     // nothing stays frozen with no switch left to release it. Kept apart from
     // KillSwitchToggled: that one's listeners re-run engines and settle with the
@@ -166,6 +176,7 @@ public sealed class AutoModeController
         _log?.Log(LogSeverity.Info, LogCategory,
             $"Master switch OFF ({by}). Toggles switched off: {(wereOn.Count > 0 ? string.Join(", ", wereOn) : "none were on")}."
             + (inFlight.Length > 0 ? $" {inFlight}" : string.Empty));
+        SwitchedByUserPress = by == ByUserPress;
         KillSwitchToggled?.Invoke(true);
     }
 
@@ -223,6 +234,7 @@ public sealed class AutoModeController
 
         _log?.Log(LogSeverity.Info, LogCategory,
             $"Master switch ON ({by}). Toggles on ({source}): {on}. Skipped while off: {DescribeSkipped()}.");
+        SwitchedByUserPress = by == ByUserPress;
         KillSwitchToggled?.Invoke(false);
     }
 
@@ -236,6 +248,29 @@ public sealed class AutoModeController
         if (_snapshot is not { } snap) return;
         for (int i = 0; i < Wired.Length && i < snap.Length; i++)
             if (Wired[i].Get(ticked)) snap[i] = true;
+    }
+
+    // A feature that unticked toggles for a while is giving them back: a Run's
+    // "Combat off", Sprint Mode, a detour's combat hold, the pyramid climb. `owed`
+    // ticks the ones it owes on a blank set. True when the master switch took
+    // them: it is off, so nothing may show ticked now, and they come back with
+    // the switch (RememberForSwitchOn). False with the switch on, when the caller
+    // ticks them itself.
+    public bool KeepsForSwitchOn(string from, Action<AutoActionDefaults> owed)
+    {
+        ArgumentNullException.ThrowIfNull(owed);
+        if (!_killEngaged) return false;
+        AutoActionDefaults ticked = new();
+        foreach ((_, _, Action<AutoActionDefaults, bool> set) in Wired) set(ticked, false);
+        owed(ticked);
+        RememberForSwitchOn(ticked);
+        List<string> names = new();
+        foreach ((string name, Func<AutoActionDefaults, bool> get, _) in Wired)
+            if (get(ticked)) names.Add(name);
+        _log?.Log(LogSeverity.Info, LogCategory,
+            $"{from}: the master switch is off, so nothing is ticked now; "
+            + (names.Count > 0 ? $"{string.Join(", ", names)} come back with the switch." : "there was nothing to give back."));
+        return true;
     }
 
     // The Settings → General "re-enable on reconnect" boxes: switch each ticked

@@ -12,8 +12,8 @@ namespace MudPlay.ViewModels;
 // waiting events for more than EventManager.HeldQueuePromptAfter: every waiting
 // event with a tick box, so the user says which still run and which are dropped
 // (user, 2026-10-10). The answer is the ticked events, in their queue order.
-// Closing the window without answering returns nothing: the events stay waiting
-// and the question is asked again later.
+// Closing the window by its X returns nothing, which the opener takes as "drop
+// all of them" unless the manager withdrew the question.
 public sealed partial class HeldEventsPromptViewModel : ObservableObject, IDialogViewModel<IReadOnlyList<ScheduledEvent>>
 {
     public event Action<IReadOnlyList<ScheduledEvent>?>? CloseRequested;
@@ -23,7 +23,7 @@ public sealed partial class HeldEventsPromptViewModel : ObservableObject, IDialo
     public string Intro { get; }
 
     // The manager took the question back (the switch went off again, or the
-    // queue it asked about is gone), so the close is not the user putting it off.
+    // queue it asked about is gone), so the close is not the user's X.
     public bool Withdrawn { get; private set; }
 
     public HeldEventsPromptViewModel(IReadOnlyList<EventManager.HeldQueueEntry> waiting)
@@ -38,7 +38,7 @@ public sealed partial class HeldEventsPromptViewModel : ObservableObject, IDialo
         Intro = $"Auto-All was off for more than {EventManager.HeldQueuePromptAfter.TotalMinutes:0} minutes while "
             + (Rows.Count == 1 ? "this event was" : "these events were")
             + " waiting to run. Tick the ones that should still run, in this order; the rest are dropped."
-            + " Nothing waiting starts until you answer.";
+            + " Nothing waiting starts until you answer. Closing this window drops them all.";
     }
 
     private void OnRowChanged(object? sender, PropertyChangedEventArgs e)

@@ -10060,9 +10060,12 @@ public sealed class AppServices
         AutoModeController.ResetByProfileLoad += OnMasterSwitchResetByProfileLoad;
         // A switch-on that arrived outside the game is finished on the way back in.
         // Another character loaded first ends it as a profile load ends the switch.
-        EventScheduler.EnteredGame += () =>
+        // Posted: the prompt that says so is read off the wire ahead of the room it
+        // came with, and the engines re-run here decide on that room.
+        InGameCapture.InGameChanged += inGame =>
         {
-            if (_masterSwitchSettleOwed) SettleAfterMasterSwitchOn();
+            if (inGame && _masterSwitchSettleOwed)
+                Avalonia.Threading.Dispatcher.UIThread.Post(FinishSwitchOnOwedOutsideTheGame);
         };
         Profile.ProfileLoaded += _ =>
         {
@@ -10102,6 +10105,7 @@ public sealed class AppServices
     {
         _collectOwedInRoom = null;
         _masterSwitchSettleOwed = false;
+        _masterSwitchEventsOwed = false;
         LoopRunner.DropResumeHeldForMasterSwitch("another profile was loaded");
         MovementControl.ReleaseFromAutoAll();
     }
@@ -10110,6 +10114,20 @@ public sealed class AppServices
     // menus. Everything the switch-on does sends or starts something, so it waits
     // for the first game prompt, with movement still frozen until then.
     private bool _masterSwitchSettleOwed;
+    // Set with it when the events have yet to be told the switch is back on, and
+    // whether that switch-on was a remote one.
+    private bool _masterSwitchEventsOwed;
+    private bool _masterSwitchEventsOwedRemote;
+
+    // The first game prompt after a switch-on made outside the game.
+    private void FinishSwitchOnOwedOutsideTheGame()
+    {
+        if (!_masterSwitchSettleOwed || !InGameCapture.InGame) return;
+        SettleAfterMasterSwitchOn();
+        if (!_masterSwitchEventsOwed) return;
+        _masterSwitchEventsOwed = false;
+        Events.NoteMasterSwitchChanged(_masterSwitchEventsOwedRemote);
+    }
 
     // The master switch changed. Off: freeze movement and park the holds, then
     // drop what would otherwise go on sending by itself. On: put back every hold
@@ -10121,6 +10139,7 @@ public sealed class AppServices
         if (off)
         {
             _masterSwitchSettleOwed = false;
+            _masterSwitchEventsOwed = false;
             // Ahead of everything else: the leader is let go before this client
             // goes quiet.
             PartyRest.ReleaseForMasterSwitch();
@@ -10144,20 +10163,29 @@ public sealed class AppServices
             return;
         }
 
-        if (!EventScheduler.IsInGame)
+        // Not the user's own press (a party member's `@auto-all on`, the local
+        // API): nobody is taken to be at the keyboard, so the events ask nothing.
+        bool remote = !AutoModeController.SwitchedByUserPress;
+        // InGameCapture, not the event scheduler's latch: that one stays set at the
+        // board's menu after an `exit` with the link still up.
+        if (!InGameCapture.InGame)
         {
             _masterSwitchSettleOwed = true;
             Log.Info("AutoMode",
                 "Master switch back on outside the game: movement stays frozen and nothing is sent or started until the first game prompt.");
-            // Its clocks restart now and it may ask which waiting events to run;
-            // it starts nothing while the link is down.
-            Events.NoteMasterSwitchChanged();
+            // With the link down the events know it: their clocks restart now, they
+            // may ask which waiting events to run, and they start nothing. At the
+            // board's menu they do not know (to them the link is up), so they hear
+            // of the switch on the way back in.
+            _masterSwitchEventsOwed = InGameCapture.AtBoardMenu;
+            _masterSwitchEventsOwedRemote = remote;
+            if (!_masterSwitchEventsOwed) Events.NoteMasterSwitchChanged(remote);
             return;
         }
         SettleAfterMasterSwitchOn();
         // Last, with movement free again: an event's Then that landed meanwhile
         // runs, and with nothing running the next waiting event starts.
-        Events.NoteMasterSwitchChanged();
+        Events.NoteMasterSwitchChanged(remote);
     }
 
     // Everything the switch-on sends or starts, run at once in the game and at the

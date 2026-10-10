@@ -695,29 +695,138 @@ public sealed class EventQueueTests : IDisposable
         Assert.Contains("'first' WalkTo", h.Events.RunSummary);
     }
 
-    // Closed without an answer: the events stay waiting, one notice says how to
-    // be asked again, and the next switch-on asks.
+    // The prompt closed by its X: "drop all of them" (user, 2026-10-10). Every
+    // listed event goes, with a log line each and one notice, and no choice is
+    // left standing: an event that fires afterwards runs.
     [Fact]
-    public void ChoicePutOff_KeepsTheEventsWaiting_AndIsAskedAgainAtTheNextSwitchOn()
+    public void PromptClosedByItsX_DropsEveryListedEvent_AndTheNextEventToFireRuns()
     {
         using Harness h = NewHarness();
-        HeldQueue q = WithWaiting(h, "first");
+        HeldQueue q = WithWaiting(h, "first", "second");
         q.SwitchOff();
         q.Now += TimeSpan.FromMinutes(10);
         Arrive(h, C);
         q.SwitchOn();
         h.Events.OfferQueueChoice();
 
-        h.Events.NoteQueueChoicePutOff();
+        h.Events.DropQueueChoice(EventManager.PromptClosedUnanswered);
 
-        Assert.True(h.Events.QueueChoicePending);
-        Assert.Contains("still wait for your choice", Assert.Single(h.Notices));
-        h.Events.Tick();
-        Assert.Equal("(none)", h.Events.RunSummary);
+        Assert.False(h.Events.QueueChoicePending);
+        Assert.Equal("(empty)", h.Events.QueueSummary);
+        Assert.Equal(2, h.EventLog.Count(l => l.Contains("the Waiting Events window was closed without an answer")));
+        Assert.Equal("[2 waiting event(s) dropped: the Waiting Events window was closed without an answer]",
+            Assert.Single(h.Notices));
+        Assert.Equal(0, q.Withdrawn);
 
+        h.Events.Fire(Add(h, WalkTo("later", B, EventThenType.Nothing)));
+        Assert.Contains("'later' WalkTo", h.Events.RunSummary);
+    }
+
+    // An event that queued after the prompt opened was not on its list, so the X
+    // does not drop it: it runs.
+    [Fact]
+    public void PromptClosedByItsX_AnEventThatQueuedAfterItOpened_IsKeptAndRuns()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first");
         q.SwitchOff();
-        q.SwitchOn();
-        Assert.Equal(2, q.Asked);
+        q.Now += TimeSpan.FromMinutes(10);
+        q.SwitchOn();                           // 'running' still walks
+        h.Events.OfferQueueChoice();
+        h.Events.Fire(Add(h, WalkTo("late", B, EventThenType.Nothing)));
+
+        h.Events.DropQueueChoice(EventManager.PromptClosedUnanswered);
+        Arrive(h, C);
+
+        Assert.Contains("'late' WalkTo", h.Events.RunSummary);
+        Assert.DoesNotContain("'first'", h.Events.QueueSummary);
+    }
+
+    // "if it was triggered remotely the default should be to skip all the events,
+    // if it was auto all off for a long period of time" (user, 2026-10-10): a
+    // switch-on nobody is at the keyboard for asks nothing and drops what the
+    // prompt would have listed. The queue then runs on.
+    [Fact]
+    public void RemoteSwitchOnAfterALongHold_DropsTheWaitingEventsWithoutAsking_AndTheNextEventRuns()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first", "second");
+        q.SwitchOff();
+        q.Now += TimeSpan.FromMinutes(10);
+        Arrive(h, C);
+        q.Off = false;
+        h.Events.NoteMasterSwitchChanged(remote: true);
+
+        Assert.Equal(0, q.Asked);
+        Assert.False(h.Events.QueueChoicePending);
+        Assert.Equal("(none)", h.Events.RunSummary);
+        Assert.Equal("(empty)", h.Events.QueueSummary);
+        Assert.Equal(2, h.EventLog.Count(l => l.Contains("switched back on remotely after more than 5 minutes off")));
+        Assert.Equal("[2 waiting event(s) dropped: Auto-All was switched back on remotely after more than 5 minutes off]",
+            Assert.Single(h.Notices));
+
+        h.Events.Fire(Add(h, WalkTo("later", B, EventThenType.Nothing)));
+        Assert.Contains("'later' WalkTo", h.Events.RunSummary);
+    }
+
+    [Fact]
+    public void RemoteSwitchOnAfterAShortHold_TheWaitingEventsCarryOn()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first", "second");
+        q.SwitchOff();
+        q.Now += EventManager.HeldQueuePromptAfter;
+        Arrive(h, C);
+        q.Off = false;
+        h.Events.NoteMasterSwitchChanged(remote: true);
+
+        Assert.Contains("'first' WalkTo", h.Events.RunSummary);
+        Assert.Contains("'second'", h.Events.QueueSummary);
+        Assert.Empty(h.Notices);
+    }
+
+    // The unattended client that could not come back: a long hold, a switch-on
+    // nobody answers, then hours of events and a reconnect. Before, the choice
+    // stood for good, nothing started and the queue filled to its cap. Either
+    // way the switch-on is settled now, every event that fires afterwards has
+    // its run, and the queue never builds.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AfterAnUnansweredSwitchOn_EventsOverTheNextHoursStillRun_AndTheQueueNeverFills(bool remote)
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "first", "second");
+        q.SwitchOff();
+        q.Now += TimeSpan.FromHours(1);
+        Arrive(h, C);
+        q.Off = false;
+        h.Events.NoteMasterSwitchChanged(remote);
+        if (!remote)
+        {
+            h.Events.OfferQueueChoice();
+            h.Events.DropQueueChoice(EventManager.PromptClosedUnanswered);
+        }
+
+        for (int i = 0; i < 14; i++)
+        {
+            q.Now += TimeSpan.FromMinutes(30);
+            if (i == 7)
+            {
+                h.Events.NoteDisconnected();
+                h.Events.NoteEnteredGame();
+            }
+            RoomKey to = i % 2 == 0 ? B : C;
+            h.Events.Fire(Add(h, WalkTo($"e{i}", to, EventThenType.Nothing)));
+            h.Events.Tick();
+
+            Assert.Contains($"'e{i}' WalkTo", h.Events.RunSummary);
+            Assert.Equal("(empty)", h.Events.QueueSummary);
+            Arrive(h, to);
+        }
+
+        Assert.Equal(14, h.EventLog.Count(l => l.Contains("started: WalkTo") && l.Contains("Event 'e")));
+        Assert.DoesNotContain(h.Notices, n => n.Contains("the most Settings → Events lets wait"));
     }
 
     // The link is down at switch-on: the question can be asked and answered, but
@@ -783,6 +892,73 @@ public sealed class EventQueueTests : IDisposable
         Assert.False(h.Events.QueueChoicePending);
         Assert.Equal(1, q.Withdrawn);
         Assert.Equal("(empty)", h.Events.QueueSummary);
+    }
+
+    // The running event's Then names an event that is itself waiting. Normally
+    // it runs then, as the chain, and leaves the queue. Not while the user is
+    // being asked about it: it would start before the answer, and a "drop" could
+    // no longer reach it.
+    [Fact]
+    public void ThenEventThatIsWaitingOnTheChoice_IsLeftToTheChoice_AndRunsOnce()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = new() { H = h };
+        h.Events.Now = () => q.Now;
+        h.Events.IsMasterSwitchOff = () => q.Off;
+        h.Events.QueueChoiceNeeded += () => q.Asked++;
+        h.Tracker.SetLocated(A);
+        ScheduledEvent running = WalkTo("running", C, EventThenType.Event);
+        running.ThenEventName = "first";
+        h.Events.Fire(Add(h, running));
+        h.Events.Fire(Add(h, WalkTo("first", B, EventThenType.Nothing)));
+
+        q.SwitchOff();
+        q.Now += TimeSpan.FromMinutes(10);
+        q.SwitchOn();
+        Assert.Equal(1, q.Asked);
+        h.Events.OfferQueueChoice();
+
+        Arrive(h, C);                           // 'running' finishes with the choice still open
+
+        Assert.Equal("(none)", h.Events.RunSummary);
+        Assert.Contains("'first'", h.Events.QueueSummary);
+        Assert.True(h.Events.QueueChoicePending);
+        Assert.Contains(h.EventLog, l => l.Contains("its Then event 'first' is waiting for the user's choice"));
+
+        h.Events.ResolveQueueChoice(new[] { Named(h, "first") });
+
+        Assert.Contains("'first' WalkTo", h.Events.RunSummary);
+        Assert.Equal("(empty)", h.Events.QueueSummary);
+        Assert.Equal(1, h.EventLog.Count(l => l.Contains("Event 'first' started")));
+    }
+
+    // The wait limit picks up where it stood once the choice is made: an event
+    // with a second of its limit left when the switch went off is still there
+    // after a long hold and a long think, and is dropped two seconds after the
+    // answer that kept it.
+    [Fact]
+    public void WaitLimit_ResumesAfterTheAnswer_WithWhatWasLeftBeforeTheHold()
+    {
+        using Harness h = NewHarness();
+        HeldQueue q = WithWaiting(h, "kept");
+        q.Now += h.Events.MaxQueueWait - TimeSpan.FromSeconds(1);
+        h.Events.Tick();
+
+        q.SwitchOff();
+        q.Now += TimeSpan.FromHours(7);
+        q.SwitchOn();                           // 'running' still walks; 'kept' awaits the choice
+        h.Events.OfferQueueChoice();
+        q.Now += TimeSpan.FromMinutes(40);      // the time spent on the question
+        h.Events.Tick();
+        h.Events.ResolveQueueChoice(new[] { Named(h, "kept") });
+
+        h.Events.Tick();
+        Assert.Contains("'kept'", h.Events.QueueSummary);
+
+        q.Now += TimeSpan.FromSeconds(2);
+        h.Events.Tick();
+        Assert.DoesNotContain("'kept'", h.Events.QueueSummary);
+        Assert.Contains(h.EventLog, l => l.Contains("'kept' dropped — it waited"));
     }
 
     // A Logoff event already waiting when the switch went off is listed with the

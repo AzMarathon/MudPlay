@@ -417,8 +417,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     // The events manager asks which waiting events should still run: the master
     // switch held them for a long spell (EventManager's queue choice). Ticked
-    // ones run in their order and the rest are dropped. Closed without an answer,
-    // the events stay waiting and the manager asks again at the next switch-on.
+    // ones run in their order and the rest are dropped. Closed by its X, every
+    // listed event is dropped ("drop all of them"; user, 2026-10-10).
     private async Task ShowHeldEventsPromptAsync()
     {
         AppServices services = AppServices.Current;
@@ -436,9 +436,10 @@ public partial class MainWindowViewModel : ObservableObject
         }
         catch (InvalidOperationException ex)
         {
-            // No main window to own it (startup or shutdown): the events stay
-            // waiting and the next switch-on asks again.
+            // No main window to own it. Nobody can be asked, and a question left
+            // standing would hold every later event behind it.
             services.Log.Warn("Events", $"Couldn't open the waiting-events prompt ({ex.Message}).");
+            services.Events.DropQueueChoice("the Waiting Events window could not be shown");
             return;
         }
         finally
@@ -447,9 +448,11 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         if (run is not null) services.Events.ResolveQueueChoice(run);
-        // Closed by its X: put off. Not when the manager took the question back,
-        // nor when the whole client is closing and took the window with it.
-        else if (!prompt.Withdrawn && MainWindowIsOpen()) services.Events.NoteQueueChoicePutOff();
+        // Closed by its X. Not when the manager took the question back (the
+        // switch went off again, the queue is gone), nor when the whole client is
+        // closing and took the window with it.
+        else if (!prompt.Withdrawn && MainWindowIsOpen())
+            services.Events.DropQueueChoice(Game.Events.EventManager.PromptClosedUnanswered);
     }
 
     private static bool MainWindowIsOpen() =>
@@ -510,6 +513,8 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (!_tripTurnedOffCombat) return;
         _tripTurnedOffCombat = false;
+        // With the master switch off it is the switch's to give back.
+        if (AppServices.Current.AutoModeController.KeepsForSwitchOn("Run + Combat off", d => d.AutoCombat = true)) return;
         if (!IsAutoCombatActive) IsAutoCombatActive = true;
         AppServices.Current.Log.Info("AutoMode", "Run + Combat off: the run has begun — Auto-Combat back on.");
     }
@@ -6127,7 +6132,7 @@ public partial class MainWindowViewModel : ObservableObject
     // drive one switch. The controller's profile write fires ProfileSaving, which
     // reseeds the toggle observables; IsMasterSwitchOn follows KillSwitchToggled.
     [RelayCommand]
-    private void AllAutoOff() => AppServices.Current.AutoModeController.ToggleAll("Auto-All button");
+    private void AllAutoOff() => AppServices.Current.AutoModeController.ToggleAll(Game.AutoModeController.ByUserPress);
 
     // "Reset States" — the manual recovery escape hatch. First every engine goes
     // back to idle (AppServices.ResetEngineStates: walks, loops, lair, detours,
@@ -6489,26 +6494,18 @@ public partial class MainWindowViewModel : ObservableObject
             // switch remembered the toggles as the climb had left them, unticked,
             // so the ones the climb owes back are handed to it and return when it
             // is switched on, not as base modes and not never.
-            if (AppServices.Current.AutoModeController.KillSwitchEngaged)
-            {
-                AppServices.Current.AutoModeController.RememberForSwitchOn(new Models.Profile.AutoActionDefaults
+            if (AppServices.Current.AutoModeController.KeepsForSwitchOn("Pyramid run-through over", d =>
                 {
-                    AutoCombat   = _climbTurnedOffCombat,
-                    AutoNuke     = _climbTurnedOffNuke,
-                    AutoHeal     = false,
-                    AutoRest     = _climbTurnedOffRest,
-                    AutoBless    = false,
-                    AutoLight    = _climbTurnedOffLight,
-                    AutoGetItems = _climbTurnedOffGetItems,
-                    AutoGetCash  = _climbTurnedOffGetCash,
-                    AutoSneak    = false,
-                    AutoHide     = _climbTurnedOffHide,
-                    AutoSearch   = _climbTurnedOffSearch,
-                });
-                AppServices.Current.Log.Info("AutoMode",
-                    "Pyramid run-through over with the master switch off: the autos stay off, and the ones the climb switched off come back with the switch.");
+                    d.AutoCombat   = _climbTurnedOffCombat;
+                    d.AutoNuke     = _climbTurnedOffNuke;
+                    d.AutoRest     = _climbTurnedOffRest;
+                    d.AutoLight    = _climbTurnedOffLight;
+                    d.AutoGetItems = _climbTurnedOffGetItems;
+                    d.AutoGetCash  = _climbTurnedOffGetCash;
+                    d.AutoHide     = _climbTurnedOffHide;
+                    d.AutoSearch   = _climbTurnedOffSearch;
+                }))
                 return;
-            }
 
             // Sprint, switched on since, keeps its four off; turning one on here
             // would end it. They pass to Sprint, which gives them back when it ends.
@@ -6566,7 +6563,9 @@ public partial class MainWindowViewModel : ObservableObject
             else if (_detourTurnedOffCombat)
             {
                 _detourTurnedOffCombat = false;
-                IsAutoCombatActive = true;
+                // With the master switch off it is the switch's to give back.
+                if (!AppServices.Current.AutoModeController.KeepsForSwitchOn("Detour combat hold", d => d.AutoCombat = true))
+                    IsAutoCombatActive = true;
             }
         }
         finally { _detourDrivingCombat = false; }
@@ -6707,6 +6706,15 @@ public partial class MainWindowViewModel : ObservableObject
         _sprintDrivingEngines = true;
         try
         {
+            // With the master switch off they are the switch's to give back.
+            if (AppServices.Current.AutoModeController.KeepsForSwitchOn("Sprint Mode ended", d =>
+                {
+                    d.AutoCombat   = _sprintTurnedOffCombat;
+                    d.AutoGetItems = _sprintTurnedOffGetItems;
+                    d.AutoSearch   = _sprintTurnedOffSearch;
+                    d.AutoGetCash  = _sprintTurnedOffGetCash;
+                }))
+                return;
             if (_sprintTurnedOffCombat)   IsAutoCombatActive   = true;
             if (_sprintTurnedOffGetItems) IsAutoGetItemsActive = true;
             if (_sprintTurnedOffSearch)   IsAutoSearchActive   = true;

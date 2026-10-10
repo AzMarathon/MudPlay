@@ -419,7 +419,9 @@ public sealed class EventManager : IDisposable
     // on, what landed meanwhile is finished and, with nothing running, the next
     // waiting event starts, in its order: unless the switch held the waiting
     // events long enough that the user is asked first (the queue choice below).
-    public void NoteMasterSwitchChanged()
+    // remote: the switch was not switched by the user's own press (a party
+    // member's `@auto-all on`, the local API), so nobody is there to ask.
+    public void NoteMasterSwitchChanged(bool remote = false)
     {
         if (HoldsForMasterSwitch())
         {
@@ -437,10 +439,21 @@ public sealed class EventManager : IDisposable
         else foreach (Action act in landed) act();
         if (_choiceSince is not null)
         {
-            _log?.Info("Events",
-                $"Master switch back on with {_queue.Count} event(s) waiting, held by it for more than "
-                + $"{HeldQueuePromptAfter.TotalMinutes:0} minutes ({string.Join(", ", _queue.Select(q => $"'{Label(q.Event)}' {q.HeldBySwitch.TotalMinutes:0} min"))}): "
-                + "asking which to run; none of them starts until that is answered.");
+            string held = $"Master switch back on with {_queue.Count} event(s) waiting, held by it for more than "
+                + $"{HeldQueuePromptAfter.TotalMinutes:0} minutes ({string.Join(", ", _queue.Select(q => $"'{Label(q.Event)}' {q.HeldBySwitch.TotalMinutes:0} min"))})";
+            if (remote)
+            {
+                // "if it was triggered remotely the default should be to skip all
+                // the events, if it was auto all off for a long period of time"
+                // (user, 2026-10-10): a prompt on an unattended client would be
+                // answered by nobody, and the queue would stand behind it.
+                _log?.Info("Events", held + ": switched on remotely, so they are dropped without asking.");
+                _offered = _queue.Select(q => q.Event).ToList();
+                SettleQueueChoice(Array.Empty<ScheduledEvent>(),
+                    unanswered: $"Auto-All was switched back on remotely after more than {HeldQueuePromptAfter.TotalMinutes:0} minutes off");
+                return;
+            }
+            _log?.Info("Events", held + ": asking which to run; none of them starts until that is answered.");
             QueueChoiceNeeded?.Invoke();
         }
         StartNextQueued();
@@ -456,6 +469,12 @@ public sealed class EventManager : IDisposable
     // ones to drop" (user, 2026-10-10). Until the answer nothing waiting starts
     // and nothing is dropped for the wait limit; the running or suspended event
     // carries on, and events that fire queue behind as usual.
+    //
+    // The choice is never left standing, since every later event would wait
+    // behind it for good: closing the prompt drops the listed events
+    // (DropQueueChoice), and a switch-on nobody is at the keyboard for drops them
+    // without asking (NoteMasterSwitchChanged, remote). Only the switch going off
+    // again keeps it, and then the switch is what holds the queue.
     public static readonly TimeSpan HeldQueuePromptAfter = TimeSpan.FromMinutes(5);
 
     // One waiting event as the prompt lists it. Waiting: since it fired.
@@ -492,6 +511,26 @@ public sealed class EventManager : IDisposable
     public void ResolveQueueChoice(IReadOnlyCollection<ScheduledEvent> run)
     {
         ArgumentNullException.ThrowIfNull(run);
+        SettleQueueChoice(run, unanswered: null);
+    }
+
+    // No answer is coming: the user closed the prompt by its X ("drop all of
+    // them"; user, 2026-10-10), or it could not be shown. Every event it listed
+    // is dropped, and the queue runs on for whatever fires afterwards. A choice
+    // left standing would hold every later event behind it for good.
+    public void DropQueueChoice(string why)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(why);
+        SettleQueueChoice(Array.Empty<ScheduledEvent>(), unanswered: why);
+    }
+
+    // The wording for an X-close, shared by the opener and the tests.
+    public const string PromptClosedUnanswered = "the Waiting Events window was closed without an answer";
+
+    // unanswered: why nobody chose (every listed event is then dropped, with that
+    // as the reason given); null when `run` is the user's own answer.
+    private void SettleQueueChoice(IReadOnlyCollection<ScheduledEvent> run, string? unanswered)
+    {
         if (_choiceSince is not { } since) return;
         List<ScheduledEvent> offered = _offered ?? new List<ScheduledEvent>();
         DateTimeOffset now = Now();
@@ -506,8 +545,10 @@ public sealed class EventManager : IDisposable
             {
                 RemoveQueuedAt(i);
                 dropped++;
-                _log?.Info("Events",
-                    $"Event '{Label(q.Event)}' dropped by the user's choice after waiting {(now - q.FiredAt).TotalMinutes:0} min ({q.HeldBySwitch.TotalMinutes:0} min of it with the master switch off).");
+                string waited = $"after waiting {(now - q.FiredAt).TotalMinutes:0} min ({q.HeldBySwitch.TotalMinutes:0} min of it with the master switch off)";
+                _log?.Info("Events", unanswered is null
+                    ? $"Event '{Label(q.Event)}' dropped by the user's choice {waited}."
+                    : $"Event '{Label(q.Event)}' dropped {waited}: {unanswered}.");
                 continue;
             }
             if (asked)
@@ -521,23 +562,13 @@ public sealed class EventManager : IDisposable
         }
         if (dropped > 0)
         {
-            _notice?.Invoke(kept > 0
-                ? $"[{dropped} waiting event(s) dropped by your choice; {kept} will run]"
-                : $"[{dropped} waiting event(s) dropped by your choice; none will run]");
+            _notice?.Invoke(unanswered is not null
+                ? $"[{dropped} waiting event(s) dropped: {unanswered}]"
+                : kept > 0
+                    ? $"[{dropped} waiting event(s) dropped by your choice; {kept} will run]"
+                    : $"[{dropped} waiting event(s) dropped by your choice; none will run]");
         }
         StartNextQueued();
-    }
-
-    // The prompt was closed without an answer. The events stay waiting; the
-    // question comes back the next time the master switch is switched on.
-    public void NoteQueueChoicePutOff()
-    {
-        if (_choiceSince is null) return;
-        _offered = null;
-        _log?.Info("Events",
-            $"The choice over {_queue.Count} waiting event(s) was put off: they stay waiting until it is asked again, at the next switch-on of the master switch.");
-        _notice?.Invoke(
-            $"[{_queue.Count} event(s) still wait for your choice: switch Auto-All off and on to be asked again]");
     }
 
     // The queue the choice was about is gone.
@@ -1151,6 +1182,15 @@ public sealed class EventManager : IDisposable
                 {
                     // Run as the chain, it has had its turn.
                     int waiting = _queue.FindIndex(q => ReferenceEquals(q.Event, next));
+                    if (waiting >= 0 && _choiceSince is not null)
+                    {
+                        // The user is being asked whether that event still runs.
+                        // Taken out of the queue here it would start before the
+                        // answer, and a "drop" could no longer reach it.
+                        _log?.Info("Events",
+                            $"Event '{label}': its Then event '{Label(next)}' is waiting for the user's choice over the held events, so it is left to that choice and not started now.");
+                        break;
+                    }
                     if (waiting >= 0)
                     {
                         RemoveQueuedAt(waiting);

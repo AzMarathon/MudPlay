@@ -243,6 +243,94 @@ public sealed class AutoModeControllerTests
         Assert.False(mode.AutoNuke);
     }
 
+    // A feature giving toggles back under the switch (a Run's "Combat off" ending,
+    // a detour's combat hold: one toggle; Sprint Mode ending: its four; the
+    // pyramid climb: its eight). With the switch off nothing is ticked, so the
+    // toolbar shows nothing on, and exactly the owed ones come back with it.
+    public static IEnumerable<object[]> RestoresUnderTheSwitch() => new[]
+    {
+        new object[] { "Run + Combat off", new[] { "Combat" } },
+        new object[] { "Detour combat hold", new[] { "Combat" } },
+        new object[] { "Sprint Mode ended", new[] { "Combat", "GetItems", "Search", "GetCash" } },
+        new object[] { "Sprint Mode ended", new[] { "GetItems" } },
+        new object[] { "Pyramid run-through over",
+            new[] { "Combat", "Nuke", "Rest", "Light", "GetItems", "GetCash", "Hide", "Search" } },
+    };
+
+    private static void Tick(AutoActionDefaults mode, string[] names)
+    {
+        foreach (string name in names)
+            typeof(AutoActionDefaults).GetProperty("Auto" + name)!.SetValue(mode, true);
+    }
+
+    [Theory]
+    [MemberData(nameof(RestoresUnderTheSwitch))]
+    public void KeepsForSwitchOn_SwitchOff_TicksNothingNow_AndTheOwedOnesComeBackWithTheSwitch(string from, string[] owed)
+    {
+        ProfileService profile = BlankProfile();
+        // The feature had these unticked when the switch went off; Heal was on.
+        WriteAutoMode(profile, Only(m => m.AutoHeal = true), baseModes: Only(m => m.AutoBless = true));
+        AutoModeController controller = new(profile);
+        controller.TurnOff("test");
+
+        Assert.True(controller.KeepsForSwitchOn(from, m => Tick(m, owed)));
+        Assert.True(ReadAutoMode(profile).SameAs(AllOff()));
+
+        controller.TurnOn("test");
+
+        AutoActionDefaults expected = Only(m => { m.AutoHeal = true; Tick(m, owed); });
+        Assert.True(ReadAutoMode(profile).SameAs(expected));
+    }
+
+    [Fact]
+    public void KeepsForSwitchOn_SwitchOn_LeavesTheRestoreToTheCaller_AndRemembersNothing()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, AllOff(), baseModes: AllOff());
+        AutoModeController controller = new(profile);
+
+        Assert.False(controller.KeepsForSwitchOn("Sprint Mode ended", m => m.AutoCombat = true));
+        controller.TurnOff("test");
+        controller.TurnOn("test");
+
+        Assert.False(ReadAutoMode(profile).AutoCombat);
+    }
+
+    // Only the user's own press counts as someone being at the keyboard; a party
+    // member's `@auto-all` and the local API do not. Read by the listeners as the
+    // switch is switched, so it has to be set by then.
+    [Theory]
+    [InlineData(AutoModeController.ByUserPress, true)]
+    [InlineData("@auto-all from Tank", false)]
+    [InlineData("@auto-all from (local api)", false)]
+    public void SwitchedByUserPress_IsKnownToTheListeners_OnBothEdges(string by, bool expected)
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, Only(m => m.AutoCombat = true));
+        AutoModeController controller = new(profile);
+        List<bool> seen = new();
+        controller.KillSwitchToggled += _ => seen.Add(controller.SwitchedByUserPress);
+
+        controller.TurnOff(by);
+        controller.TurnOn(by);
+
+        Assert.Equal(new[] { expected, expected }, seen);
+    }
+
+    // Off by the user's press, back on by a party member: the switch-on is remote.
+    [Fact]
+    public void SwitchedByUserPress_FollowsTheLastSwitch()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, Only(m => m.AutoCombat = true));
+        AutoModeController controller = new(profile);
+
+        controller.ToggleAll(AutoModeController.ByUserPress);
+        Assert.True(controller.SwitchedByUserPress);
+        controller.TurnOn("@auto-all from Tank");
+        Assert.False(controller.SwitchedByUserPress);
+    }
+
     [Fact]
     public void RememberForSwitchOn_WithTheSwitchOn_DoesNothing()
     {

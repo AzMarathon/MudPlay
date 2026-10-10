@@ -8,7 +8,13 @@
         x:DataType="vm:HeldEventsPromptViewModel"
         Title="Waiting Events"
         Width="560" MinWidth="460" SizeToContent="Height"
+        ShowActivated="False"
         WindowStartupLocation="CenterOwner">
+
+    <!-- ShowActivated off: the window opens by itself, not on a press, and keys
+         being typed at the terminal must not land on it (Space would untick the
+         first row). -->
+
 
     <Border Padding="18" Background="{StaticResource ChromeBgBrush}">
         <!-- Auto rows throughout: with SizeToContent="Height" a star row is pinned to
