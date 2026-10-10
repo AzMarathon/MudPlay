@@ -1,10 +1,22 @@
 # Version history
 
-## 3.161.3
+## 3.161.6
 
 - A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
 - Only on a life lost: Death Recovery gets the room, time and pile; loops, walks and a waiting default task are stopped
 - The item pickup stands down for it, and nothing is recorded when it can't be told
+
+## 3.161.5
+
+- A room's heat (*You are seared by the flames*) no longer counts as a combat round
+- No more heals or buffs sent mid-round into `You have already cast a spell this round!`
+- A fight stopped just after an attack is re-attacked on the next round line
+- A typed `eq` / `wear` / `wield` / `rem` mid-fight re-attacks at once
+- A refused cast no longer leaves a re-attack armed
+- Exp/Hr and the loop simulator: Paradigm room spells roll every 6.05 s, not every round
+- The giant hellhound's death line is recognised
+- Program log and bug report show re-attack decisions
+- bug reports addressed: paradigm-20261009-120757, paradigm-20261009-122342
 
 ## 3.161.2
 

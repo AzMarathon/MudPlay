@@ -229,6 +229,7 @@ public sealed partial class CombatManager
     private void OnCombatCastFailed(CastFailureReason reason, string detail, string? spell)
     {
         if (reason is not (CastFailureReason.AlreadyCastThisRound or CastFailureReason.NoTargets)) return;
+        if (reason == CastFailureReason.AlreadyCastThisRound) DisarmCastResumeOnRefusal();
         if (TryRollBackRejectedDebuff(reason, spell)) return;
         if (reason == CastFailureReason.NoTargets) EndRoomChannelOnNoTargets();
     }
