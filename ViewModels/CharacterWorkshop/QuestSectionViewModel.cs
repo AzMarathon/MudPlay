@@ -379,6 +379,9 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     // the-counter / cross-unprotected routes.
     private static async Task WalkToAsync(RoomKey room)
     {
+        // Before the Stop: a run frozen by the master switch is not given up for
+        // a walk that won't start.
+        if (AppServices.Current.RefuseStartForMasterSwitch("Walk")) return;
         AppServices.Current.MovementControl.Stop();
         await Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
     }

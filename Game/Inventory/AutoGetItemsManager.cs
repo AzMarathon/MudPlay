@@ -221,12 +221,14 @@ public sealed class AutoGetItemsManager : IDisposable
     // to a room/session we're no longer collecting for. Shared by the room-change
     // path and the reconnect resume: a disconnect mid-defer strands the hold (no
     // self-heal), leaving the walker paused until it's dropped.
-    public void CancelDeferredCollect(string reason)
+    // True when gets were in fact deferred.
+    public bool CancelDeferredCollect(string reason)
     {
-        if (_deferred.Count == 0) return;
+        if (_deferred.Count == 0) return false;
         _log?.Debug(LogCategory, $"{reason} — dropping {_deferred.Count} deferred get(s)");
         _deferred.Clear();
         _gate?.NoteDeferredCleared();
+        return true;
     }
 
     // Re-survey the room after a kill whose monster could drop an

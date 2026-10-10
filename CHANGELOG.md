@@ -1,6 +1,6 @@
 # Version history
 
-## 3.166.7
+## 3.167.7
 
 - A room wiped clean by a room spell no longer holds the walker 1–2 s as a fight walked out on
 - A prompt that just matched is no longer reported as one the statline can't read
@@ -11,6 +11,16 @@
 - Lair timer log lines print local time
 - Paradigm: the farm fields' haze line is no longer logged as unrecognized
 - bug reports addressed: paradigm-20261010-145330
+
+## 3.167.0
+
+- Auto-All is a true master switch: off, nothing automatic acts
+- `@auto-all` is the only remote command followed while it is off
+- Switching it on gives back what was ticked when it went off
+- A walk, loop or Auto-Lair started with it off is refused, with a notice
+- Low-HP hang-up now needs Auto-Rest on
+- "Allow hangup in all-off mode" follows the master switch
+- Events held more than 5 minutes by it: you pick which still run
 
 ## 3.166.0
 

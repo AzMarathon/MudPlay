@@ -444,9 +444,18 @@ public sealed class AutoLairManager : IDisposable
 
     // ----- scheduler tick + dispatch -------------------------------
 
+    // The master switch froze the run. Movement is held by the coordinator, but
+    // this scheduler would go on deciding by itself: re-planning walks on its
+    // retry timer, calling a lair empty when its engage window runs out, and
+    // reading the Combat gate (parked while the switch is off) as the fight being
+    // over. Each of its timers and its gate handler stands down while frozen; the
+    // timers keep ticking, so it picks up where it was when the switch is back on.
+    private bool FrozenByMasterSwitch =>
+        _coordinator?.IsGateAsserted(MovementCoordinator.AutoAllGate) == true;
+
     private void OnSchedulerTick()
     {
-        if (!IsActive || IsPaused) return;
+        if (!IsActive || IsPaused || FrozenByMasterSwitch) return;
         // Engaging is its own phase — don't churn picks during combat.
         if (Phase == AutoLairPhase.Engaging) return;
         EvaluateAndDispatch();
@@ -455,6 +464,10 @@ public sealed class AutoLairManager : IDisposable
     private void EvaluateAndDispatch()
     {
         if (!IsActive) return;
+        // The retry timer lands here too. Outside a fight the scheduler tick asks
+        // again each second once the switch is back on; from inside one the gate
+        // handler does, when the freeze lifts.
+        if (FrozenByMasterSwitch) return;
         if (_tracker.State.CurrentRoom is not { } current)
         {
             // Locator dropped to Lost mid-run — wait for it to recover.
@@ -804,6 +817,7 @@ public sealed class AutoLairManager : IDisposable
     private void LatchAndScheduleEntry(DateTimeOffset entryArrival)
     {
         if (Phase != AutoLairPhase.Waiting) return;
+        _entryOwedAfterFreeze = false;
         CurrentEntryArrivalAt = entryArrival;
 
         TimeSpan wait = entryArrival - DateTimeOffset.UtcNow;
@@ -818,9 +832,20 @@ public sealed class AutoLairManager : IDisposable
         _entryTimer.Start();
     }
 
+    // The entry time came while the master switch had the run frozen. The timer's
+    // interval is the whole wait, so left running it would enter one more full
+    // wait after the switch came back on: the entry is owed instead, and made as
+    // the freeze lifts (OnGatesChanged).
+    private bool _entryOwedAfterFreeze;
+
     private void OnEntryTimerFired()
     {
         _entryTimer.Stop();
+        if (FrozenByMasterSwitch)
+        {
+            _entryOwedAfterFreeze = true;
+            return;
+        }
         if (!IsActive || IsPaused) return;
         EnterLairNow();
     }
@@ -863,9 +888,17 @@ public sealed class AutoLairManager : IDisposable
     // both matter. The timer is now only the upper bound.
     private void OnGatesChanged()
     {
+        if (_entryOwedAfterFreeze && !FrozenByMasterSwitch)
+        {
+            _entryOwedAfterFreeze = false;
+            if (Phase == AutoLairPhase.Waiting && IsActive && !IsPaused) EnterLairNow();
+            // No return: the user may have walked into the lair by hand while
+            // frozen, and then this change is also the fight's to read.
+        }
         if (Phase != AutoLairPhase.Engaging) return;
         if (!IsActive || IsPaused) return;
         if (_coordinator is null) return;
+        if (FrozenByMasterSwitch) return;
 
         // CombatStateTracker owns this gate and clears it authoritatively when a
         // room re-display shows no engageable monster left — the reliable
@@ -903,6 +936,7 @@ public sealed class AutoLairManager : IDisposable
 
     private void OnEngageTimerFired()
     {
+        if (FrozenByMasterSwitch) return;
         // Which window just expired depends on whether a fight ever started.
         FinishEngagement(_engageSawCombat
             // A fight that never resolves — unkillable, fled, or a missed

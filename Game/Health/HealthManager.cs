@@ -595,6 +595,32 @@ public sealed class HealthManager : IDisposable
 
     private bool RestSwitchedOff() => _isRestEnabled?.Invoke() == false;
 
+    // Wire the master switch: isOff reads it, noteHeld counts a hang-up it held
+    // back (AutoModeController.Blocks). Unwired, the switch reads as on.
+    public void SetMasterSwitch(Func<bool> isOff, Action<string?> noteHeld)
+    {
+        ArgumentNullException.ThrowIfNull(isOff);
+        ArgumentNullException.ThrowIfNull(noteHeld);
+        _masterSwitchOff = isOff;
+        _noteHeldByMasterSwitch = noteHeld;
+    }
+
+    private Func<bool>? _masterSwitchOff;
+    private Action<string?>? _noteHeldByMasterSwitch;
+
+    // The master-switch rule every hang-up of ours follows (user, 2026-10-09): with
+    // the switch off, "none of our auto systems should respond" unless Allow hangup
+    // in all-off mode is ticked, and then every hang-up is respected. what names
+    // the hang-up for the log; null for the low-HP check, which is asked on every
+    // prompt inside its window.
+    private bool HeldByMasterSwitch(GeneralSettings? general, string? what)
+    {
+        if (_masterSwitchOff?.Invoke() != true) return false;
+        if (general is { AllowHangupInAllOffMode: true }) return false;
+        _noteHeldByMasterSwitch?.Invoke(what);
+        return true;
+    }
+
     public void SetDoNotRestSelector(Func<bool> shouldSkipRestHere)
     {
         ArgumentNullException.ThrowIfNull(shouldSkipRestHere);
@@ -956,19 +982,12 @@ public sealed class HealthManager : IDisposable
                 _log?.Combat(LogCategory, "engage-to-clear released — auto-heal / rest engine disabled");
             }
 
-            // All-off carve-out: even with the engine disabled, honour the
-            // emergency hangup when the user opted in. An AFK character
-            // shouldn't be left dying just because auto-heal is off — but
-            // it stays opt-in (default off) since hanging up is a last
-            // resort. Only the hangup branch runs; everything else above
-            // already cleared. TryEmergencyHangup self-guards on MaxHp and the
-            // trigger/death-floor window, so we just need a prompt — the hangup
-            // stays live all the way through the bleeding-out zone.
-            if (_readGeneralSettings?.Invoke() is { AllowHangupInAllOffMode: true }
-                && _state.HasPromptData)
-            {
-                TryEmergencyHangup(_readSettings());
-            }
+            // The engine is off, but the low-HP hang-up has its own rule: with the
+            // master switch off it still runs when the user opted into Allow
+            // hangup in all-off mode, so an AFK character isn't left dying.
+            // TryEmergencyHangup decides; only that branch runs, everything else
+            // above already cleared.
+            if (_state.HasPromptData) TryEmergencyHangup(_readSettings());
             return;
         }
         if (!_state.HasPromptData) return;
@@ -1866,21 +1885,22 @@ public sealed class HealthManager : IDisposable
     // fires the disconnect, even though nothing about our own PlayerState changed
     // to drive the normal Evaluate. Deliberately narrow: it must not run the
     // rest / run / flee machinery, which a room change would otherwise re-trigger
-    // (e.g. spuriously re-issuing `rest`). Honours the same engine-off carve-out
-    // as Evaluate — the hangup evaluates while auto-heal is off only when the user
-    // opted into AllowHangupInAllOffMode.
+    // (e.g. spuriously re-issuing `rest`). TryEmergencyHangup applies the same
+    // switches as on the Evaluate path.
     public void ReevaluateEmergencyHangup()
     {
         if (!_state.HasPromptData) return;
-        if (HangupHeldByAllOff()) return;
         TryEmergencyHangup(_readSettings());
     }
 
-    // The all-off rule for a hang-up: with the health engine off (Auto-Heal and
-    // Auto-Rest both off) nothing hangs up on its own unless the user opted into
-    // AllowHangupInAllOffMode.
-    private bool HangupHeldByAllOff() =>
-        !_isEnabled() && _readGeneralSettings?.Invoke() is not { AllowHangupInAllOffMode: true };
+    // The low-HP hang-up's own switches. Master switch off: only with Allow hangup
+    // in all-off mode. Master switch on: it sits behind Auto-Rest, the engine that
+    // watches HP ("if auto-rest is off, it shouldnt work"; user, 2026-10-09). It
+    // used to run under Auto-Heal alone too.
+    private bool LowHpHangupHeld(GeneralSettings? general) =>
+        _masterSwitchOff?.Invoke() == true
+            ? HeldByMasterSwitch(general, what: null)
+            : RestSwitchedOff() || !_isEnabled();
 
     // Hangup-on-emergency: HP at or below HealthSettings.HangIfBelowHp WITH a
     // hostile in the room triggers a hard disconnect via the configured Game-Exit
@@ -1916,10 +1936,11 @@ public sealed class HealthManager : IDisposable
     // normal rest / flee run as a fallback.
     private bool TryEmergencyHangup(HealthSettings s)
     {
-        // Master kill-switch: the user has declared only an explicit local
-        // action may drop the carrier. Hard-overrides AllowHangupInAllOffMode —
-        // an opted-out character won't auto-disconnect even at low HP.
-        if (_readGeneralSettings?.Invoke() is { DisableHangups: true }) return false;
+        // Disable Hangups: the user has declared only an explicit local action
+        // may drop the carrier. Hard-overrides AllowHangupInAllOffMode — an
+        // opted-out character won't auto-disconnect even at low HP.
+        GeneralSettings? general = _readGeneralSettings?.Invoke();
+        if (general is { DisableHangups: true }) return false;
         if (_state.MaxHp <= 0) return false;
 
         int hangTrigger = ResolveHpThreshold(s.HpThresholdMode, s.HangIfBelowHp);
@@ -1942,6 +1963,9 @@ public sealed class HealthManager : IDisposable
             return false;
         }
         if (_hangFired) return false;
+        // After the window check, so a held hang-up is only counted while there
+        // is one to hold, and unlatched, so it fires the moment its switch allows.
+        if (LowHpHangupHeld(general)) return false;
 
         // Another escape has only just gone out (a Hangup monster or a PvP enemy in
         // the same room roster): the danger is answered, so no second exit command
@@ -2089,34 +2113,42 @@ public sealed class HealthManager : IDisposable
     // for the carrier-drop path (an opted-out character wimpy-jumps if configured
     // but is never force-dropped by someone else's panic). Returns true when it
     // acted. Wired to Game.Conditions.PanicResponder; the receive-side IgnorePanics
-    // gate is checked there before this is called.
+    // gate is checked there before this is called. With the master switch off it
+    // is held, jump included, unless Allow hangup in all-off mode is ticked.
     public bool RespondToReceivedPanic(string fromWhom)
     {
         HealthSettings s = _readSettings();
-        bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
+        GeneralSettings? general = _readGeneralSettings?.Invoke();
+        if (HeldByMasterSwitch(general, $"@panic from {fromWhom}")) return false;
+        bool allowDrop = general is not { DisableHangups: true };
         _log?.Warn(LogCategory, $"received @panic from {fromWhom} — bailing (wimpy-or-hang)");
         return Acted(ExecuteEscape(s, $"@panic from {fromWhom}", allowDrop, pvpResponse: false));
     }
 
     // The PvP response's hang-up: the same escape a received @panic takes, so the
-    // sysop wimpy jump stands in when it is set up, and DisableHangups is honoured.
+    // sysop wimpy jump stands in when it is set up, and DisableHangups and the
+    // master switch are honoured the same way.
     public bool HangUpForPvp(string reason)
     {
-        bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
+        GeneralSettings? general = _readGeneralSettings?.Invoke();
+        if (HeldByMasterSwitch(general, $"PvP hang-up ({reason})")) return false;
+        bool allowDrop = general is not { DisableHangups: true };
         _log?.Warn(LogCategory, $"PvP — bailing (wimpy-or-hang): {reason}");
         return Acted(ExecuteEscape(_readSettings(), $"PvP: {reason}", allowDrop, pvpResponse: true));
     }
 
     // A monster whose Game Data relationship is Hangup is in the room
     // (MonsterRelationshipWatcher). It takes the escape our own low-HP trigger takes, at
-    // any HP: the sight is the trigger. The two switches that stop the low-HP
-    // trigger stop this the same way, the wimpy jump included: Disable Hangups,
-    // and the all-off rule (user, 2026-10-09: with the autos off and Allow hangup
-    // in all-off mode not ticked, "none of our auto systems should respond").
+    // any HP: the sight is the trigger. Two switches stop it, the wimpy jump
+    // included: Disable Hangups, and the master switch being off without Allow
+    // hangup in all-off mode (user, 2026-10-09: "none of our auto systems should
+    // respond"). With the master switch on it needs no toggle: Auto-Rest gates
+    // the low-HP hang-up only.
     public EscapeOutcome HangUpForMonster(string reason)
     {
-        if (_readGeneralSettings?.Invoke() is { DisableHangups: true }) return EscapeOutcome.HangupsDisabled;
-        if (HangupHeldByAllOff()) return EscapeOutcome.AllOff;
+        GeneralSettings? general = _readGeneralSettings?.Invoke();
+        if (general is { DisableHangups: true }) return EscapeOutcome.HangupsDisabled;
+        if (HeldByMasterSwitch(general, $"monster hang-up ({reason})")) return EscapeOutcome.AllOff;
         return ExecuteEscape(_readSettings(), reason, allowCarrierDrop: true, pvpResponse: false);
     }
 

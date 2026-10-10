@@ -74,10 +74,15 @@ public sealed class GreetManager : IDisposable
         _classifier.EntitiesObserved -= OnEntitiesObserved;
     }
 
+    // The master switch (true = off): off, nobody is greeted. A greet is only
+    // recorded when sent, so one skipped here is made at the next sighting.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void OnEntitiesObserved(RoomEntitiesObservation obs)
     {
         if (!Enabled) return;
         if (_wireSender is null) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         if (obs.Entities is null || obs.Entities.Count == 0) return;
 
         foreach (RoomEntity e in obs.Entities)

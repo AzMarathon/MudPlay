@@ -133,6 +133,14 @@ public sealed class PvpResponder : IDisposable
         return null;
     }
 
+    // The master switch: IsMasterSwitchOff reads it, SkippedForMasterSwitch counts
+    // a response it held back. Unwired, the switch reads as on.
+    public Func<bool>? IsMasterSwitchOff { get; init; }
+    public Action<string>? SkippedForMasterSwitch { get; init; }
+
+    // Players whose held hang-up has been logged since the switch went off.
+    private readonly HashSet<string> _heldWarned = new(StringComparer.OrdinalIgnoreCase);
+
     private void Respond(string given, bool attacked)
     {
         if (!_pvpEnabled() || _hangupPending) return;
@@ -141,11 +149,32 @@ public sealed class PvpResponder : IDisposable
         if (_answeredAt.TryGetValue(given, out DateTimeOffset last)
             && now - last < (attacked ? AttackQuiet : SightQuiet))
             return;
-        _answeredAt[given] = now;
 
         PvpSettings settings = _readSettings();
         PvpAction action = _players.Find(given)?.PvpResponse ?? settings.Action;
         string why = attacked ? $"{given} attacked us" : $"{given} is here";
+
+        // Master switch off: no flee, no fight, no gang tell. A hang-up action
+        // still asks for its hang-up, which HealthManager lets out only with Allow
+        // hangup in all-off mode ticked (user, 2026-10-09). Nothing is stamped as
+        // answered unless a hang-up went out, so the Enemy still here when the
+        // switch comes back on is answered then.
+        if (IsMasterSwitchOff?.Invoke() == true)
+        {
+            if (action is PvpAction.HangUp or PvpAction.FleeThenHangUp)
+            {
+                // The room's list comes again every round of a fight. The hang-up
+                // is asked for each time (the option may have been ticked since),
+                // but said to have been held only once per player.
+                if (!HangUp(settings, why, warn: _heldWarned.Add(given))) return;
+                _answeredAt[given] = now;
+                Report($"{why}: hanging up (master switch off: no flee, no gang tell)");
+            }
+            else SkippedForMasterSwitch?.Invoke(why);
+            return;
+        }
+        _heldWarned.Clear();
+        _answeredAt[given] = now;
 
         switch (action)
         {
@@ -215,14 +244,16 @@ public sealed class PvpResponder : IDisposable
         return _fleeRooms(why, Math.Max(1, settings.RoomsToFlee), stayAway, onRoomsLanded);
     }
 
-    private void HangUp(PvpSettings settings, string why)
+    private bool HangUp(PvpSettings settings, string why, bool warn = true)
     {
         _reconnect = settings.ReconnectAfterPvp
             ? (TimeSpan.FromMinutes(Math.Max(1, settings.ReconnectAfterPvpMinutes)), settings.ReconnectEntersRealm)
             : null;
-        if (_hangUp(why)) return;
+        if (_hangUp(why)) return true;
         _reconnect = null;
-        _log?.Warn(LogCategory, $"{why}: the hang-up did not go out (hang-ups are disabled, or no exit command is set)");
+        if (warn) _log?.Warn(LogCategory,
+            $"{why}: the hang-up did not go out (hang-ups are disabled, the master switch is off without Allow hangup in all-off mode, or no exit command is set)");
+        return false;
     }
 
     private static string Sighting(bool attacked) => attacked ? "attacked me" : "is here";

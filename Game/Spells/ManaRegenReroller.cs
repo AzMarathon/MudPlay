@@ -159,6 +159,9 @@ public sealed class ManaRegenReroller : IDisposable
     // hidden by a full pool) read the roll as paying 0. A natural tick is every 30 s.
     private static readonly TimeSpan NoTickTimeout = TimeSpan.FromSeconds(40);
 
+    // The master switch (true = off).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // The roll spell spellShort was just CAST (from the CastingDirector's send path;
     // the cast is already on the wire, so the abil query below reads the fresh roll).
     // A cast while idle opens a new cycle with the reroll counter reset; a cast
@@ -170,10 +173,12 @@ public sealed class ManaRegenReroller : IDisposable
         if (string.IsNullOrWhiteSpace(spellShort)) return;
 
         ManaRegenRerollConfig cfg = _readConfig();
-        if (cfg.Threshold is null)
+        if (cfg.Threshold is null || MasterSwitchOff?.Invoke() == true)
         {
-            // Rerolling disabled — nothing to verify; the spell just rides the
-            // normal recast-on-expiry buff path. Ensure we hold no stale cycle.
+            // Rerolling disabled (or the master switch is off, and a roll spell
+            // the user cast by hand is theirs) — nothing to verify; the spell just
+            // rides the normal recast-on-expiry buff path. Ensure we hold no stale
+            // cycle.
             Reset();
             return;
         }

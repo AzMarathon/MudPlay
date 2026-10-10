@@ -122,14 +122,15 @@ public sealed class GeneralSettings
 
     // ----- Emergency hangup carve-out --------------------------------
 
-    // When true, the Game.Health.HealthManager emergency-hangup branch (HP below
-    // HealthSettings.HangIfBelowHp → send the configured Game-Exit command)
-    // still fires even when Auto-Heal/Rest — and every other auto-engine — is
-    // off. The rest of the health engine stays disabled; only the
-    // kill-the-connection safety net runs. Default false: hanging up is a
-    // deliberate last resort, so an all-engines-off character won't
-    // auto-disconnect unless the user opts in. Char-tier; surfaced in Settings →
-    // General next to the auto-engine switches.
+    // "All-off mode" is the master switch (Game.AutoModeController) being off,
+    // not the toggles being unticked one by one. With it off nothing automatic
+    // responds; when this is true the automatic hang-ups still do: the low-HP
+    // hang-up (HP below HealthSettings.HangIfBelowHp), a received @panic, the
+    // PvP hang-up actions and a Hangup-relationship monster. Nothing else of the
+    // health engine runs. Default false: hanging up is a deliberate last resort.
+    // With the master switch on this setting does nothing: the low-HP hang-up
+    // then sits behind Auto-Rest. Char-tier; surfaced in Settings → General next
+    // to the auto-engine switches.
     public bool AllowHangupInAllOffMode { get; set; }
 
     // ----- Master hangup kill-switch ---------------------------------

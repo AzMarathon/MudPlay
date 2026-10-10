@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.166.7**
+> **Version 3.167.7**
 > - A room wiped clean by a room spell no longer holds the walker 1–2 s as a fight walked out on
 > - A prompt that just matched is no longer reported as one the statline can't read
 > - Run-out buff timers of members who left the party are dropped

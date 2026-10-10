@@ -297,11 +297,18 @@ public sealed partial class PartyPoller : IDisposable
         TryFireOnJoinHealth(m);
     }
 
+    // The master switch (true = off). The par poll rides IsParPollEnabled, which
+    // already reads it; this covers the @health round-trip and its nags.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void TryFireOnJoinHealth(PartyMember m)
     {
         // Master gate — when the user turns off "send @health nags to party
         // members", skip both the initial round-trip and the retry nag.
         if (!HealthNagEnabled) return;
+        // Before the nag is registered, so nothing is left pending for a member
+        // who joined while the master switch was off.
+        if (MasterSwitchOff?.Invoke() == true) return;
         // Dropped / at the login menu — no telepaths onto the wire until we're
         // back in the realm.
         if (_suspended) return;
@@ -407,6 +414,9 @@ public sealed partial class PartyPoller : IDisposable
         // Pause resends while in the trainer menu — keep the timer and the
         // pending nag state alive so the retry cadence resumes on menu exit.
         if (InTrainerMenu) return;
+        // Held the same way with the master switch off: the nags wait and are
+        // resent or given up on the first tick after it is back on.
+        if (MasterSwitchOff?.Invoke() == true) return;
         DateTime now = NowProvider();
 
         foreach (string given in _activeNags.Keys.ToArray())

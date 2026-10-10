@@ -347,6 +347,45 @@ public sealed class EventManagerResumeTests : IDisposable
         Assert.Equal("(none)", h.Events.RunSummary);
     }
 
+    // An event already running when the master switch goes off is held: its Then,
+    // which starts an engine, waits for the switch to come back on.
+    [Fact]
+    public void Wait_MasterSwitchOff_ThenIsHeldUntilItIsBackOn()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 9, 29, 20, 0, 0, TimeSpan.Zero);
+        h.Events.Now = () => now;
+        bool off = false;
+        h.Events.IsMasterSwitchOff = () => off;
+        Loop loop = RunLoop(h);
+        h.Events.Fire(new ScheduledEvent
+        {
+            Name = "hold", ActionType = EventActionType.Wait, WaitSeconds = 30, Then = EventThenType.Resume,
+        });
+
+        // Ten seconds in, the switch goes off for ten minutes.
+        now = now.AddSeconds(10);
+        off = true;
+        h.Events.Tick();
+        now = now.AddMinutes(10);
+        h.Events.Tick();
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+
+        // Back on: the clock was held with the run, so the wait still has its
+        // other twenty seconds to go and does not end at once.
+        off = false;
+        h.Events.Tick();
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        now = now.AddSeconds(19);
+        h.Events.Tick();
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+
+        now = now.AddSeconds(2);
+        h.Events.Tick();
+        Assert.Same(loop, h.Runner.CurrentLoop);
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);
+    }
+
     [Fact]
     public void Wait_StandsStill_ThenGoesBack()
     {

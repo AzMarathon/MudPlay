@@ -49,6 +49,99 @@ public sealed class PartyWaitMovementGateTests
         Assert.DoesNotContain(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
     }
 
+    // ----- the master switch: recorded while off, never asserted, never answered -----
+
+    private static void SwitchOff(RemoteCommandManager engine, MovementCoordinator coord, PartyWaitMovementGate gate)
+    {
+        engine.BlockedByMasterSwitch = _ => true;
+        gate.MasterSwitchOff = () => true;
+        coord.AssertGate(MovementCoordinator.AutoAllGate);
+        coord.ParkHoldsForMasterSwitch();
+    }
+
+    private static void SwitchOn(RemoteCommandManager engine, MovementCoordinator coord, PartyWaitMovementGate gate)
+    {
+        engine.BlockedByMasterSwitch = _ => false;
+        gate.MasterSwitchOff = () => false;
+        coord.RestoreHoldsAfterMasterSwitch();
+        coord.ClearGate(MovementCoordinator.AutoAllGate);
+    }
+
+    // A @wait dropped outright would have the leader walk off from a held
+    // follower the moment the switch came back on.
+    [Fact]
+    public void WaitWhileSwitchOff_IsRecordedNotHeld_AndHoldsOnceItIsBackOn()
+    {
+        var (engine, handlers, party, coord, gate) = Setup();
+        SeedPartyMember(party, "Follower");
+        SwitchOff(engine, coord, gate);
+
+        engine.DispatchForTests(Telepath("Follower", "@wait"));
+
+        Assert.Contains("Follower", handlers.WaitingMembers);
+        Assert.False(coord.IsGateAsserted(MovementCoordinator.PartyWaitGate));
+        Assert.Empty(engine.LastSentForTests);
+
+        SwitchOn(engine, coord, gate);
+        Assert.True(coord.IsGateAsserted(MovementCoordinator.PartyWaitGate));
+    }
+
+    // And a dropped @ok would have the leader stand out the whole wait limit for
+    // a follower who had already said it could go.
+    [Fact]
+    public void OkWhileSwitchOff_IsRecorded_SoNothingHoldsOnceItIsBackOn()
+    {
+        var (engine, handlers, party, coord, gate) = Setup();
+        SeedPartyMember(party, "Follower");
+        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        Assert.True(coord.IsGateAsserted(MovementCoordinator.PartyWaitGate));
+        SwitchOff(engine, coord, gate);
+
+        engine.DispatchForTests(Telepath("Follower", "@ok"));
+
+        Assert.Empty(handlers.WaitingMembers);
+        SwitchOn(engine, coord, gate);
+        Assert.False(coord.IsPaused);
+    }
+
+    [Fact]
+    public void WaitFromOutsideTheParty_WhileSwitchOff_IsNeitherRecordedNorAnswered()
+    {
+        var (engine, handlers, _, coord, gate) = Setup();
+        SwitchOff(engine, coord, gate);
+
+        engine.DispatchForTests(Telepath("Stranger", "@wait"));
+
+        Assert.Empty(handlers.WaitingMembers);
+        Assert.Empty(engine.LastSentForTests);
+    }
+
+    // The leader's wait limit counts from the switch coming back on, so a
+    // follower still held then gets the whole of it.
+    [Fact]
+    public void WaitLimit_DoesNotRunWhileTheSwitchIsOff()
+    {
+        var (engine, handlers, party, coord, gate) = Setup();
+        DateTime t = Now;
+        gate.NowProvider = () => t;
+        gate.WaitWindow = TimeSpan.FromSeconds(30);
+        SeedPartyMember(party, "Follower");
+        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        SwitchOff(engine, coord, gate);
+
+        t = t.AddSeconds(120);
+        gate.TickForTests();
+        Assert.Contains("Follower", handlers.WaitingMembers);
+
+        SwitchOn(engine, coord, gate);
+        t = t.AddSeconds(29);
+        gate.TickForTests();
+        Assert.True(coord.IsGateAsserted(MovementCoordinator.PartyWaitGate));
+        t = t.AddSeconds(2);
+        gate.TickForTests();
+        Assert.False(coord.IsGateAsserted(MovementCoordinator.PartyWaitGate));
+    }
+
     [Fact]
     public void InboundWait_AssertsPartyWaitGate()
     {

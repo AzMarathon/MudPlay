@@ -528,6 +528,9 @@ public sealed class CombatStateTracker : IDisposable
         if (_classifier.Current is { } obs) OnEntitiesObserved(obs);
     }
 
+    // The master switch (true = off).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // Idle-stall watchdog, driven by the 1s heartbeat (TickEngine's
     // HeartbeatElapsed). Rescues two stall shapes after IdleStallThreshold of
     // zero combat activity — a live fight emits a line every 5s round, so total
@@ -587,7 +590,9 @@ public sealed class CombatStateTracker : IDisposable
             + (dark
                 ? "room empty; dark room, skipping resync CR and clearing stuck combat state"
                 : "room empty; resyncing and clearing stuck combat state"));
-        if (!dark)
+        // With the master switch off the stuck state is still cleared, but the
+        // redisplay is not sent: nothing automatic goes on the wire.
+        if (!dark && MasterSwitchOff?.Invoke() != true)
             _wireSender(Encoding.Latin1.GetBytes("\r"));
         ResetCombatState("idle-stall watchdog: no combat activity — room empty");
     }

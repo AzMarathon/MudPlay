@@ -277,14 +277,23 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     // Walk to the nearest allowed trainer and train + apply the plan.
     [RelayCommand(CanExecute = nameof(CanRunTrain))]
-    private void TrainNow() => _trainerWalk.TrainNow();
+    private void TrainNow()
+    {
+        // A trip started by hand is a walk started by hand.
+        if (Services.AppServices.Current.RefuseStartForMasterSwitch("Training trip")) return;
+        _trainerWalk.TrainNow();
+    }
 
     private bool CanRunTrain() => CanTrainNow && !AutoTrainBusy;
 
     // The shop leg of a train trip on its own: buy and read the scrolls for spells
     // this level can learn, whatever Auto-obtain spells from shops is set to.
     [RelayCommand(CanExecute = nameof(CanBuySpells))]
-    private void BuySpellsNow() => ActionMessage = _trainerWalk.BuySpellsNow();
+    private void BuySpellsNow()
+    {
+        if (Services.AppServices.Current.RefuseStartForMasterSwitch("Spell-buying trip")) return;
+        ActionMessage = _trainerWalk.BuySpellsNow();
+    }
 
     private bool CanBuySpells() => _trainerWalk.CanBuySpellsNow && !AutoTrainBusy;
 
