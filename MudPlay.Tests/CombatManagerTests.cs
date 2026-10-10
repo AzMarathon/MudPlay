@@ -2124,6 +2124,40 @@ public sealed class CombatManagerTests
         Assert.Equal("\r", Encoding.Latin1.GetString(h.Sent[^1]));
     }
 
+    // Report paradigm-20261009-120757, 12:07:41 and 12:07:53: the room's heat hit in
+    // an empty room and the Enter went out for a monster that wasn't there.
+    [Fact]
+    public void RoomSpellDamage_InAnEmptyRoom_SendsNoRefresh_AMonstersHitStillDoes()
+    {
+        using Harness h = new();
+        h.Combat.SetNotCombatLineProbe(OffRoundDamageLinesTests.ProbeIn(OffRoundDamageLinesTests.MagmaHeat));
+
+        h.Feed("You are seared by the flames for 28 damage!");
+        Assert.Empty(h.Sent);
+
+        h.Feed("The kobold thief bites you for 4 damage!");
+        Assert.Equal("\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+    }
+
+    [Fact]
+    public void RoomSpellDamage_WithCombatOff_WakesNoReAttack()
+    {
+        // The heat is no proof a fight is still on: with our attack stopped, only a
+        // real combat line (or the round tick) brings it back.
+        using Harness h = new();
+        h.Combat.SetNotCombatLineProbe(OffRoundDamageLinesTests.ProbeIn(OffRoundDamageLinesTests.MagmaHeat));
+        h.AddMonster(1, "giant rat", killable: false);
+        h.Feed("Also here: giant rat.");
+        BackdateLastAttack(h.Combat);
+        h.Feed("*Combat Off*");
+
+        h.Feed("You are seared by the flames for 28 damage!");
+        Assert.Single(h.Sent);
+
+        h.Feed("The giant rat bites you for 5 damage!");
+        Assert.Equal(2, h.Sent.Count);
+    }
+
     [Fact]
     public void CombatLine_WithEngageableInRoom_DoesNotRefresh()
     {

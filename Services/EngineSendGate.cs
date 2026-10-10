@@ -110,13 +110,11 @@ public sealed class EngineSendGate
         };
     }
 
-    // True while a wrapped sender is putting a command on the wire: the command is
-    // the client's own, an engine's or a macro's, trigger's or event's. What the user
-    // types at the terminal never comes through the wrapper, and the few engine
-    // senders that go round it to get past a hold (the trainer form, the hang-up,
-    // `sys goto`) send no gear, so an outbound observer that must act on typed gear
-    // commands only (a typed `eq` mid-fight, as against the Equipment Manager's own)
-    // reads this as the line goes by.
+    // True while a wrapped sender is putting a command on the wire: the command comes
+    // from the client, whether an engine decided it or the user set it up (see
+    // MarkUserCommands). What the user types at the terminal never comes through
+    // the wrapper, and the few engine senders that go round it to get past a hold
+    // (the trainer form, the hang-up, `sys goto`) send no gear.
     public bool SendingClientCommand { get; private set; }
 
     private void SendAsClient(Action<byte[]> sender, byte[] bytes)
@@ -126,6 +124,31 @@ public sealed class EngineSendGate
         try { sender(bytes); }
         finally { SendingClientCommand = outer; }
     }
+
+    // A wrapped sender for a source whose commands are the user's own, relayed by the
+    // client: a macro, a trigger's response, an event's Command action. They hold and
+    // drop like any wrapped send; the mark only says whose command it is.
+    public Action<byte[]> MarkUserCommands(Action<byte[]> wrappedSender)
+    {
+        ArgumentNullException.ThrowIfNull(wrappedSender);
+        return bytes =>
+        {
+            bool outer = _sendingUserCommand;
+            _sendingUserCommand = true;
+            try { wrappedSender(bytes); }
+            finally { _sendingUserCommand = outer; }
+        };
+    }
+
+    private bool _sendingUserCommand;
+
+    // The line going by is the user's own doing: typed (no wrapped sender is
+    // sending), or relayed from something they set up. False for what an engine
+    // decided to send. An outbound observer that must act only on the user's
+    // commands reads this as the line goes by: a gear command of theirs mid-fight
+    // is answered with a re-attack, while the Equipment Manager's own swap has its
+    // own (user, 2026-10-09).
+    public bool SendingUsersOwnCommand => !SendingClientCommand || _sendingUserCommand;
 
     // The last client command as text, for a caller that has to judge it before
     // asking for the replay. Null before any client send.

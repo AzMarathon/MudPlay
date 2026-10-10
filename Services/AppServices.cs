@@ -2079,6 +2079,11 @@ public sealed class AppServices
     // GameDataCache.ActiveSetChanged.
     public RoomSpellTeleportIndex RoomSpellTeleports { get; private set; } = null!;
 
+    // The active set's room-entry spells classed by whether they damage whoever
+    // stands in the room. Feeds the rule that no rest is started in such a room;
+    // rebuilt on GameDataCache.ActiveSetChanged.
+    public RoomSpellDamageIndex RoomSpellDamage { get; private set; } = null!;
+
     // Active fulfiller for NeedKind.PathItem needs no shop can
     // satisfy: on a one-shot walk-to that needs an uncarried item no shop
     // sells, prompts to reroute to the nearest room a monster that drops it
@@ -3792,6 +3797,13 @@ public sealed class AppServices
         if (GameData.ActiveSet is not null)
             RoomSpellTeleports.OnActiveSetChanged(GameData.ActiveSet);
 
+        // RoomSpellDamageIndex — room-entry Spell → damages whoever stands there, for
+        // the no-rest-in-a-damaging-room rule. Subscribed here for the same reason.
+        RoomSpellDamage = new RoomSpellDamageIndex(GameData, RoomGraph, SpellCatalog, TBInfo, Log);
+        GameData.ActiveSetChanged += RoomSpellDamage.OnActiveSetChanged;
+        if (GameData.ActiveSet is not null)
+            RoomSpellDamage.OnActiveSetChanged(GameData.ActiveSet);
+
         // Room tracker. Resets to Unknown on every
         // graph reload because per-room references are invalidated
         // when the active set rebuilds.
@@ -4816,6 +4828,10 @@ public sealed class AppServices
                 && RoomTracker.State.CurrentRoom is { } here
                 && LoopRunner.CurrentLoop?.Waypoints is { } wps
                 && wps.Any(w => w.DoNotRest && w.Key.Equals(here.Key))));
+        // A third source, the game's own: a room whose spell damages us (magma heat
+        // with no feather on) breaks every rest on its six-second tick.
+        Health.SetRoomSpellDamageProbe(() =>
+            RoomSpellHurtingUs() is { } spell ? $"{spell.Name} (#{spell.Number})" : null);
         // The loop's "rest up here" rooms: rest to rest-max there before moving on.
         // A Rest-up event makes wherever we stand one (Events is built later).
         Health.SetRestHereSelector(() =>
@@ -4835,8 +4851,15 @@ public sealed class AppServices
         // again instead of skipping it on a stale _restInFlight.
         RoomTracker.StateChanged += t =>
         {
-            if (t.PreviousRoom is null || t.NewRoom is null) return;
             if (ReferenceEquals(t.PreviousRoom, t.NewRoom)) return;
+            if (t.PreviousRoom is null || t.NewRoom is null)
+            {
+                // Out of a placed room into one the map doesn't hold, or back: no
+                // move to report, but a rest put off for the old room's spell is no
+                // longer owed "here".
+                Health.NoteRoomPlacementChanged(t.NewRoom?.Key);
+                return;
+            }
             if (t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;
             Health.NoteRoomChanged(t.NewRoom.Key);
             // A move retries any party-buff targets we'd backed off as hidden.
@@ -5040,6 +5063,9 @@ public sealed class AppServices
         // suppressed (no Bless / regen / when-full buff fires).
         CastDirector.SetAutoBlessGate(() => ReadAutoModeFlag(d => d.AutoBless));
         CastDirector.SetTriggeredRestGate(() => Health.IsRecoveringRest);
+        // In a room whose own spell does damage no rest is started, so the rest-time
+        // heal fires standing while an HP rest is owed there.
+        CastDirector.SetRestDeferredGate(() => Health.HpRestDeferredByRoomSpell);
         // Mana-rest lock for "cast before resting for mana" slots — held while the
         // mana-recovery gate is asserted (mana below target), durable across a combat
         // interruption, released when mana tops back up.
@@ -5532,11 +5558,16 @@ public sealed class AppServices
         MonsterCatalog = new Game.Combat.MonsterCatalog(GameData, RoomGraph.GetRoom);
         // Room tooltips and room panels leave out what the Unobtainable list holds.
         MonsterSpawns.OutOfPlay = MonsterCatalog.IsOutOfPlay;
-        // The round clock leaves out a room spell's damage, told by the spell on the
-        // room we stand in and by which wordings are a monster's attack spell
-        // (OffRoundDamageLines). Until here TickEngine goes by the wording alone.
-        Tick.SetOffRoundDamageProbe(line =>
-            OffRoundDamage().IsOffRound(line, RoomTracker.State.CurrentRoom?.Spell ?? 0));
+        // A room spell's damage is no part of a fight, told by the spell on the room
+        // we stand in and by which wordings are a monster's attack spell
+        // (OffRoundDamageLines). One test for everything that would otherwise take
+        // the line for a hit: the round clock (until here TickEngine goes by the
+        // wording alone), the in-combat flag, the engine's re-attack and "room
+        // appears empty" re-display, and Round Totals.
+        Tick.SetOffRoundDamageProbe(IsRoomOrEffectDamage);
+        CombatTracker.SetNotCombatLineProbe(IsRoomOrEffectDamage);
+        Combat.SetNotCombatLineProbe(IsRoomOrEffectDamage);
+        RoundDamage.SetOffRoundDamageCheck(IsRoomOrEffectDamage);
         GameData.ActiveSetChanged += _ => _offRoundDamage = null;
         Messages.Messages.CollectionChanged += (_, _) => _offRoundDamage = null;
 
@@ -11877,6 +11908,62 @@ public sealed class AppServices
         Log.Debug("RoundClock",
             $"Room-spell damage rule built: {built.MonsterAttackTextCount} monster attack text(s) with no dealer named stay on the round.");
         return _offRoundDamage = built;
+    }
+
+    // True when a "… for N damage!" line is a room spell's damage or an effect paying
+    // out, not a hit in a fight (OffRoundDamageLines). The one test the round clock,
+    // the in-combat flag, the combat engine and Round Totals are all given.
+    public bool IsRoomOrEffectDamage(string line) =>
+        OffRoundDamage().IsOffRound(line, RoomTracker.State.CurrentRoom?.Spell ?? 0, MonsterHereCasts);
+
+    // Whether a monster in the room we stand in casts the spell in an attack slot.
+    private bool MonsterHereCasts(int spell) =>
+        RoomClassifier.Current is { } here
+        && here.Entities.Any(e => e.MonsterNumber is { } number && MonsterCatalog.Get(number)?.CastLevelFor(spell) > 0);
+
+    // The spell on the room we stand in, when it keeps a rest from starting: it is
+    // set to bar resting (Settings → Periodic Damage Room Spells; by default the
+    // spells that damage on every tick) and nothing worn or held counters it
+    // (RoomHazardIndex). Null in a room that isn't placed, so an unknown room rests
+    // as it always did.
+    public (int Number, string Name)? RoomSpellHurtingUs()
+    {
+        if (RoomTracker.State.CurrentRoom is not { Spell: > 0 } here) return null;
+        if (!RoomSpellBarsResting(here.Spell)) return null;
+        if (RoomSpellCounteredNow(here.Spell)) return null;
+        return (here.Spell, SpellCatalog.GetSpellNameByNumber(here.Spell) ?? "room spell");
+    }
+
+    // The loaded character's choice for the spell, or the default for its class.
+    // Read off the character tier like the Health tab's rest settings, each time it
+    // is asked, so a save in Settings is in effect at the next rest decision.
+    public bool RoomSpellBarsResting(int spell) =>
+        RoomSpellDamage.BarsResting(spell, () => ReadSection<Models.Profile.PeriodicDamageRoomSpellSettings>(
+            Profile.Current, Models.Profile.PeriodicDamageRoomSpellSettings.TabKey).BarsResting);
+
+    public bool RoomSpellCounteredNow(int spell) =>
+        RoomHazards.HazardForSpell(spell) is { } hazard && hazard.IsCounteredNow(IsItemWorn, IsItemCarried);
+
+    // The damaging room spells of the loaded game data, for Settings → Periodic
+    // Damage Room Spells: every tick first, then by how many rooms carry each.
+    public IReadOnlyList<Game.Map.PeriodicDamageRoomSpell> PeriodicDamageRoomSpells() =>
+        RoomSpellDamage.Readings
+            .Select(entry => new Game.Map.PeriodicDamageRoomSpell(
+                entry.Key,
+                SpellCatalog.GetSpellNameByNumber(entry.Key) ?? "room spell",
+                entry.Value,
+                RoomHazards.HazardForSpell(entry.Key)?.DescribeCounters(ItemNames.GetName) ?? string.Empty,
+                RoomSpellDamage.RoomsOf(entry.Key)))
+            .OrderByDescending(static s => s.Reading.Kind)
+            .ThenByDescending(static s => s.Rooms.Count)
+            .ThenBy(static s => s.Number)
+            .ToList();
+
+    private bool IsItemWorn(int itemId)
+    {
+        foreach (Game.Inventory.EquippedItem e in Inventory.Snapshot.EquippedItems)
+            if (ItemNames.FindByName(e.Name) == itemId) return true;
+        return false;
     }
 
     // Find the active set's Models.GameData.MessageRecord

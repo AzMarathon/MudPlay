@@ -1,6 +1,6 @@
 # Version history
 
-## 3.165.17
+## 3.166.7
 
 - A follower left behind sends `@comeback`: a follow that failed at an exit, or the leader seen leaving without it
 - On Stock also when its own `par` shows the leader `[Invited]`
@@ -14,6 +14,21 @@
 - Leader: a re-invited follower who never answers is waited on 90 s when the wait is set to 0
 - Party train: members are told when a trip sets out and ends
 - The bug report shows the last left-behind incident
+
+## 3.166.0
+
+- New Settings tab **Periodic Damage Room Spells**: per room spell, whether it bars resting
+- Each spell's record, damage, how it comes, what counters it, and its rooms as map links
+- No rest or meditate in a barred room (by default: volcano heat, swamp poison, a river with no raft)
+- The walk carries on and the rest starts in the next room that isn't barred
+- *Heal (rest)* is cast standing while that rest is owed
+- A follower dragged into a barred room releases its `@wait` and asks again outside it
+- With the room's counter in effect, resting is as normal: a negating item worn, a raft or the sunstone wristband just held
+- A room's own damage no longer puts you in combat, swaps gear, sends an Enter or counts in Round Totals
+- A gear command from a macro, alias, trigger or event mid-fight re-attacks at once
+- A stopped spell fight is picked up on the next round tick, not only on a combat line
+- Paradigm: freezing cold, ocean drowning, bog poison and murky drown lines recognised
+- Bug report: the room's spell and whether it bars resting, and the spells changed from the default
 
 ## 3.165.10
 
