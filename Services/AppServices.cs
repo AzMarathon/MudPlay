@@ -9953,6 +9953,7 @@ public sealed class AppServices
         LocationEquip.MasterSwitchOff = MasterSwitchOff("Location gear");
         PathItemFloor.MasterSwitchOff = MasterSwitchOff("Route item pickup");
         ChestOpens.MasterSwitchOff = MasterSwitchOff("Chest open read");
+        AutoDiscard.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
         AutoHazardCounterProvisioner.MasterSwitchOff = MasterSwitchOff("Hazard counter item");
         ManaRegen.MasterSwitchOff = MasterSwitchOff("Mana-regen reroll");
         PvpFight.MasterSwitchOff = MasterSwitchOff("PvP response");
@@ -10030,6 +10031,9 @@ public sealed class AppServices
         MovementControl.RestoreHoldsBeforeAutoAllRelease();
         ReevaluateEnginesForMasterSwitch();
         AllyDropped.ResumeOwedRescues();
+        // A hide refused in one room and held for the next was not retried
+        // while the switch was off.
+        AutoDiscard.RecheckHeldHides();
         PartyComeback.SettleAfterMasterSwitch();
         RemoteCommands.ReplayHeldComebacks();
         // The collect cancelled on the way off: if we still stand in that room,

@@ -427,6 +427,28 @@ public sealed class AutoLairManagerTests : IDisposable
         Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
     }
 
+    // Frozen by the master switch, the scheduler stands down too: its engage
+    // window does not call the lair empty, and the Combat gate being parked is
+    // not read as the fight being over. It carries on when the freeze lifts.
+    [Fact]
+    public void Engaging_FrozenByTheMasterSwitch_DoesNotFinishOnItsTimerOrOnAParkedGate()
+    {
+        using Harness h = Engaging(NewHarness());
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "fight on");
+        h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test", "master switch off");
+        h.Coordinator.ParkHoldsForMasterSwitch();
+
+        h.Roam.FireEngageTimerForTests();
+        Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
+
+        h.Coordinator.RestoreHoldsAfterMasterSwitch();
+        h.Coordinator.ClearGate(MovementCoordinator.AutoAllGate, "test", "master switch on");
+        Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);   // the fight is still on
+
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "killed");
+        Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
+    }
+
     [Fact]
     public void Engaging_EmptyLair_UsesAShortWindowNotTheEngageTimeout()
     {
