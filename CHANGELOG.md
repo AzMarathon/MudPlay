@@ -12,6 +12,11 @@
 - Stop calls off a Recover Now that was still walking (both realms)
 - Bug report: the pile's missing items and the sweep's plan, state and blockers
 
+## 3.160.4
+
+- Gear sets, backstab armour, location gear and weapon swaps equip a piece the pack holds two or more of
+- Combat no longer counts out an alternate weapon the pack holds two or more of
+
 ## 3.160.2
 
 - Chest Offload Drop / Drop All hide when Hide items when discarding is on
