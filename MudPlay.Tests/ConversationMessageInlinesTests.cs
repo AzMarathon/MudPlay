@@ -71,4 +71,32 @@ public sealed class ConversationMessageInlinesTests
         var segs = ConversationMessageInlines.Segment("go to www.foo.com today");
         Assert.DoesNotContain(segs, s => s.IsLink);
     }
+
+    // The Conversation rows set LineHeight to 1.45 × the font size. A picture taller
+    // than that is drawn over the rows above and below it, so it is held to the line.
+    [Theory]
+    [InlineData(13, 18.85)]
+    [InlineData(15, 21.75)]
+    [InlineData(20, 29)]
+    public void PictureEmote_InARowWithASetLineHeight_IsNoTallerThanTheLine(double fontSize, double lineHeight)
+    {
+        double size = ConversationMessageInlines.EmoteImageSize(fontSize, lineHeight);
+        Assert.True(size <= lineHeight, $"{size} is taller than the {lineHeight} line");
+        Assert.Equal(lineHeight, size, 3);
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(0)]
+    [InlineData(double.PositiveInfinity)]
+    public void PictureEmote_WithNoLineHeightSet_KeepsItsFullSize(double lineHeight)
+    {
+        Assert.Equal(15 * 1.75, ConversationMessageInlines.EmoteImageSize(15, lineHeight), 3);
+    }
+
+    [Fact]
+    public void PictureEmote_InALineTallerThanItWants_IsNotStretched()
+    {
+        Assert.Equal(15 * 1.75, ConversationMessageInlines.EmoteImageSize(15, 40), 3);
+    }
 }

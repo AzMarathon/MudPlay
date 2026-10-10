@@ -1571,6 +1571,7 @@ public sealed partial class DeathRecoveryManagerTests
         w.H.Paradigm = true;
         w.Enter(1);
         w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Put(1, "corpse of Ermias");
         w.Enter(4);
         Assert.True(w.Recovery.RecoverNow(w.H.Latest));
         WalkJourney journey = w.H.Walker!.Journey!;
@@ -1579,10 +1580,9 @@ public sealed partial class DeathRecoveryManagerTests
         w.Settle();
         Assert.True(w.H.Walker.ResumeJourney(journey, planThroughAcquirableGates: true));
         w.Run(8);
-        Assert.Equal(new RoomKey(1, 1), w.Here);
 
-        w.H.FeedSurvey("corpse of Ermias");                  // the room's next display
-        Assert.Contains("recover corpse Ermias", w.H.Sent);
+        Assert.Equal(new RoomKey(1, 1), w.Here);
+        Assert.Contains("recover corpse Ermias", w.H.Sent);   // off the arrival's own display
     }
 
     [Fact]
@@ -1592,12 +1592,12 @@ public sealed partial class DeathRecoveryManagerTests
         w.H.Paradigm = true;
         w.Enter(1);
         w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Put(1, "corpse of Ermias");
         w.Enter(4);
         Assert.True(w.Recovery.RecoverNow(w.H.Latest));
         w.Run(3);
-        Assert.Equal(new RoomKey(1, 1), w.Here);
 
-        w.H.FeedSurvey("corpse of Ermias");
+        Assert.Equal(new RoomKey(1, 1), w.Here);
         Assert.Contains("recover corpse Ermias", w.H.Sent);
     }
 
