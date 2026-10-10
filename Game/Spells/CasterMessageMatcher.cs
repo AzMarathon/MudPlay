@@ -63,6 +63,10 @@ public sealed class CasterMessageMatcher
     private enum PlaceholderRole { Unknown, Spell, Target, Source }
 
     private readonly Regex _regex;
+    // The template's literal text, cut at the placeholders: one run before the first
+    // placeholder, one after each. A run is empty where the template opens or closes
+    // with a placeholder, or two placeholders touch.
+    private readonly string[] _literalRuns;
     private readonly int[] _stringGroupIndexes;
     private readonly int[] _numberGroupIndexes;
     private readonly PlaceholderRole[] _stringRoles;
@@ -71,11 +75,12 @@ public sealed class CasterMessageMatcher
     public string Template { get; }
 
     private CasterMessageMatcher(
-        string template, Regex regex,
+        string template, Regex regex, string[] literalRuns,
         int[] stringGroupIndexes, int[] numberGroupIndexes, PlaceholderRole[] stringRoles)
     {
         Template = template;
         _regex = regex;
+        _literalRuns = literalRuns;
         _stringGroupIndexes = stringGroupIndexes;
         _numberGroupIndexes = numberGroupIndexes;
         _stringRoles = stringRoles;
@@ -97,6 +102,7 @@ public sealed class CasterMessageMatcher
         if (string.IsNullOrWhiteSpace(template)) return null;
 
         StringBuilder pattern = new();
+        List<string> literalRuns = new();
         List<int> stringGroups = new();
         List<int> numberGroups = new();
         List<PlaceholderRole> stringRoles = new();
@@ -107,7 +113,9 @@ public sealed class CasterMessageMatcher
 
         foreach (Match tok in TokenSplit.Matches(template))
         {
-            pattern.Append(Regex.Escape(template.Substring(last, tok.Index - last)));
+            string literal = template.Substring(last, tok.Index - last);
+            literalRuns.Add(literal);
+            pattern.Append(Regex.Escape(literal));
             group++;
             if (tok.Value is "{d}" or "{dmg}" or "{damage}")
             {
@@ -126,6 +134,7 @@ public sealed class CasterMessageMatcher
             }
             last = tok.Index + tok.Length;
         }
+        literalRuns.Add(template[last..]);
         pattern.Append(Regex.Escape(template[last..]));
 
         if (!sawString && !sawNumber) return null;
@@ -134,8 +143,43 @@ public sealed class CasterMessageMatcher
         if (compiled) options |= RegexOptions.Compiled;
         Regex regex = new(pattern.ToString(), options);
         return new CasterMessageMatcher(
-            template, regex,
+            template, regex, literalRuns.ToArray(),
             stringGroups.ToArray(), numberGroups.ToArray(), stringRoles.ToArray());
+    }
+
+    // False when the line cannot match: the template's literal runs must all sit in
+    // it, in order, each placeholder between them taking at least one character.
+    // The regex is tried from every position of the line and its wildcards stretch
+    // to the line's end from each, so on a line that doesn't match its time grows
+    // with the square of the line's length, or worse. A search's reply is one
+    // unbroken line however long the floor list is, and 240 cast-line templates
+    // spent seconds refusing a 2,200-character one (report
+    // paradigm-20261009-164508). This walk is one pass per run, and only a line
+    // that gets through it is handed to the regex.
+    internal bool LiteralRunsOccurInOrder(string line)
+    {
+        int at = 0;
+        for (int i = 0; i < _literalRuns.Length; i++)
+        {
+            if (i > 0)
+            {
+                at++;   // the placeholder ahead of this run
+                if (at > line.Length) return false;
+            }
+            string run = _literalRuns[i];
+            if (run.Length == 0) continue;
+            int found = line.IndexOf(run, at, StringComparison.Ordinal);
+            if (found < 0) return false;
+            at = found + run.Length;
+        }
+        return true;
+    }
+
+    private Match? MatchLine(string? line)
+    {
+        if (string.IsNullOrEmpty(line) || !LiteralRunsOccurInOrder(line)) return null;
+        Match m = _regex.Match(line);
+        return m.Success ? m : null;
     }
 
     // The longest run of letters in the template's LITERAL text (placeholders
@@ -186,10 +230,7 @@ public sealed class CasterMessageMatcher
     public bool TryMatch(string? line, out IReadOnlyList<string> stringCaptures)
     {
         stringCaptures = System.Array.Empty<string>();
-        if (string.IsNullOrEmpty(line)) return false;
-
-        Match m = _regex.Match(line);
-        if (!m.Success) return false;
+        if (MatchLine(line) is not { } m) return false;
 
         string[] caps = new string[_stringGroupIndexes.Length];
         for (int i = 0; i < _stringGroupIndexes.Length; i++)
@@ -207,10 +248,7 @@ public sealed class CasterMessageMatcher
     public bool TryMatchDamage(string? line, out int damage)
     {
         damage = 0;
-        if (string.IsNullOrEmpty(line)) return false;
-
-        Match m = _regex.Match(line);
-        if (!m.Success) return false;
+        if (MatchLine(line) is not { } m) return false;
 
         damage = FirstNumber(m) ?? 0;
         return true;
@@ -239,10 +277,7 @@ public sealed class CasterMessageMatcher
     public bool TryMatchCaptures(string? line, out MessageCaptures captures)
     {
         captures = default;
-        if (string.IsNullOrEmpty(line)) return false;
-
-        Match m = _regex.Match(line);
-        if (!m.Success) return false;
+        if (MatchLine(line) is not { } m) return false;
 
         string[] names = new string[_stringGroupIndexes.Length];
         for (int i = 0; i < _stringGroupIndexes.Length; i++)

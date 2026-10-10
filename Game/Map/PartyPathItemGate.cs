@@ -106,8 +106,14 @@ public sealed class PartyPathItemGate
 
     // A route item the leader is provisioning: its name and what each member
     // that replied holds of it and its substitutes (given name → item id → copies).
+    // Silent names the members in Others who never answered.
     private sealed record Pending(
-        int Id, string Name, IReadOnlyDictionary<string, IReadOnlyDictionary<int, int>> Others);
+        int Id, string Name, IReadOnlyDictionary<string, IReadOnlyDictionary<int, int>> Others,
+        IReadOnlyList<string> Silent);
+
+    // A party list asked for after a gate was crossed: the item, and the members
+    // whose holding of it rested on a hand-over alone.
+    private sealed record PartyListCheck(string Item, IReadOnlyList<string> Members);
 
     // One copy a member can hand over, and which item it is.
     private readonly record struct Spare(string? Giver, int ItemId);
@@ -133,6 +139,9 @@ public sealed class PartyPathItemGate
     private readonly Func<object?> _journey;
     private readonly Func<DateTimeOffset> _now;
     private readonly PartyHandOverMemory? _handOvers;
+    private readonly Func<string, bool>? _askPartyList;
+    private readonly Func<IReadOnlyCollection<string>> _followingMembers;
+    private PartyListCheck? _partyListCheck;
     private readonly LogService? _log;
     private readonly object _gate = new();
     private readonly Dictionary<int, Pending> _pending = new();
@@ -197,7 +206,11 @@ public sealed class PartyPathItemGate
         Func<object?>? journey = null,
         Func<DateTimeOffset>? now = null,
         // What the leader has handed to members, which a silent member is credited with.
-        PartyHandOverMemory? handOvers = null)
+        PartyHandOverMemory? handOvers = null,
+        // Sends one `par` for the reason given; false when it may not go out now.
+        Func<string, bool>? askPartyList = null,
+        // The members the last `par` read listed as following, by given name.
+        Func<IReadOnlyCollection<string>>? followingMembers = null)
     {
         ArgumentNullException.ThrowIfNull(isCarried);
         ArgumentNullException.ThrowIfNull(selfCount);
@@ -232,6 +245,8 @@ public sealed class PartyPathItemGate
         _journey = journey ?? (static () => null);
         _now = now ?? (static () => DateTimeOffset.UtcNow);
         _handOvers = handOvers;
+        _askPartyList = askPartyList;
+        _followingMembers = followingMembers ?? (static () => Array.Empty<string>());
         _log = log;
     }
 
@@ -412,9 +427,79 @@ public sealed class PartyPathItemGate
     // silent member was credited with may be used up by it, and a count taken
     // before the crossing still says the party holds enough: the trip's next leg
     // would decide from it without asking, and fetch nothing for a later gate.
+    //
+    // A kept copy leaves a second question. A member credited with one they no
+    // longer hold was refused at the exit and is out of the party, and the game
+    // doesn't always tell the leader. A member `par` lists as following is in the
+    // leader's room, so one `par` now says whether each of them came across, and
+    // their credit is not dropped before it has (user, 2026-10-09). Called once
+    // the arrival is confirmed: a `par` sent with the move could be answered
+    // before the move is made.
     public void OnGateCrossed(int itemId)
     {
-        if (_handOvers?.OnGateCrossed(itemId) == true) ForgetCounts();
+        if (_handOvers is null) return;
+        if (_handOvers.OnGateCrossed(itemId)) ForgetCounts();
+
+        IReadOnlyList<string> silent = _handOvers.SilentHoldersOf(itemId);
+        if (silent.Count == 0) return;
+        string item = NameOf(itemId, $"item {itemId}");
+        string credited = $"crossed the gate needing {item} with {silent.Count} member(s) credited from memory "
+            + $"({string.Join(", ", silent)})";
+        if (_askPartyList?.Invoke($"a gate needing {item} was crossed with a member credited from memory") != true)
+        {
+            _log?.Info(LogCategory, $"{credited}: par can't be asked now, so the credit stands");
+            return;
+        }
+        // One list answers for every member, and for a gate crossed just before.
+        lock (_gate)
+        {
+            _partyListCheck = _partyListCheck is { } earlier
+                ? new PartyListCheck($"{earlier.Item}, {item}", earlier.Members.Union(silent, StringComparer.OrdinalIgnoreCase).ToArray())
+                : new PartyListCheck(item, silent);
+        }
+        _log?.Info(LogCategory, $"{credited}: asking par");
+    }
+
+    // A `par` reply has been read and the roster squared with it. Any reply read
+    // after the crossing answers the check, whoever asked for it: the game prints
+    // replies in the order it carried the commands out.
+    public void OnPartyListRead()
+    {
+        PartyListCheck? check;
+        lock (_gate)
+        {
+            check = _partyListCheck;
+            _partyListCheck = null;
+        }
+        if (check is null || _handOvers is null) return;
+
+        IReadOnlyCollection<string> following = _followingMembers();
+        var here = new HashSet<string>(following, StringComparer.OrdinalIgnoreCase);
+        List<string> gone = check.Members.Where(m => !here.Contains(m)).ToList();
+        List<string> stayed = check.Members.Where(here.Contains).ToList();
+        if (stayed.Count > 0)
+            _log?.Info(LogCategory,
+                $"par after the gate needing {check.Item}: {string.Join(", ", stayed)} still following — the credit stands");
+        if (gone.Count == 0) return;
+        _log?.Info(LogCategory,
+            $"par after the gate needing {check.Item}: {string.Join(", ", gone)} no longer following — "
+            + "not in the party, so what was handed to them is forgotten");
+        // A member the list leaves out is off the roster already and forgotten with
+        // it. One it shows as invited is still a row, so is forgotten here.
+        _handOvers.KeepOnly(following);
+        ForgetCounts();
+    }
+
+    // The members a `par` was asked about after a gate, until its reply is read (bug report).
+    public string PartyListCheckSummary
+    {
+        get
+        {
+            lock (_gate)
+                return _partyListCheck is { } check
+                    ? $"{string.Join(", ", check.Members)} after the gate needing {check.Item}"
+                    : "(none)";
+        }
     }
 
     // The answers the trip under way is deciding from without asking again (bug report).
@@ -658,6 +743,7 @@ public sealed class PartyPathItemGate
             _pending.Clear();
             _counting.Clear();
             _counted.Clear();
+            _partyListCheck = null;
             _generation++;
         }
         ReleaseWalk("party provisioning reset");
@@ -734,7 +820,7 @@ public sealed class PartyPathItemGate
         // a second probe / double-give for the same item.
         lock (_gate)
         {
-            if (!_pending.TryAdd(id, new Pending(id, name, NoHoldings))) return;
+            if (!_pending.TryAdd(id, new Pending(id, name, NoHoldings, Array.Empty<string>()))) return;
         }
 
         PartyPool pool = await QueryHoldingsAsync(id).ConfigureAwait(true);
@@ -742,7 +828,7 @@ public sealed class PartyPathItemGate
         lock (_gate)
         {
             if (generation != _generation || !_pending.ContainsKey(id)) return;   // cleared while probing
-            _pending[id] = new Pending(id, name, others);
+            _pending[id] = new Pending(id, name, others, pool.Unanswered);
         }
 
         if (TryComplete(id, out bool handedOut))
@@ -795,7 +881,7 @@ public sealed class PartyPathItemGate
         {
             if (!_pending.Remove(id)) return true;   // another pass already handled it
         }
-        handedOut = !Redistribute(p.Name, p.Others, self, id, q);
+        handedOut = !Redistribute(p.Name, p.Others, p.Silent, self, id, q);
         if (handedOut)
             lock (_gate) _counted.Remove(id);
         Provisioned?.Invoke(id);
@@ -826,7 +912,7 @@ public sealed class PartyPathItemGate
     // True when every member already held the quota and nothing was sent.
     private bool Redistribute(
         string name, IReadOnlyDictionary<string, IReadOnlyDictionary<int, int>> others,
-        IReadOnlyDictionary<int, int> self, int id, int q)
+        IReadOnlyList<string> silent, IReadOnlyDictionary<int, int> self, int id, int q)
     {
         if (_wireSender is null) { _forward(new[] { id }, 1); return false; }
 
@@ -864,7 +950,8 @@ public sealed class PartyPathItemGate
             {
                 SendRaw($"give {item} to {recipient}");                        // hand over our own
                 // Ours is the only give whose line comes back to this client.
-                _handOvers?.NoteGiveSent(copy.ItemId, item, recipient);
+                _handOvers?.NoteGiveSent(copy.ItemId, item, recipient,
+                    recipientSilent: silent.Contains(recipient, StringComparer.OrdinalIgnoreCase));
             }
             else
                 SendRaw($"/{copy.Giver} @do give {item} to {recipient}");     // direct the holder

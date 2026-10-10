@@ -1,13 +1,28 @@
 # Version history
 
+## 3.162.0
+
+- A monster set to **Flee** is run from on sight, while a walk or loop is running
+- It is the Health tab's flee: the Combat tab's run distance and direction
+- With no run coming (idle, paused, no way out, a follower) it is fought back if it attacks
+- Go backwards if running unticked: the run goes on past it, and a loop carries on from there
+- Ticked: a monster on your route is run from on every return
+- A forward flee no longer starts with the step just walked
+- Two monsters ship set to Flee; set Neutral or Enemy to turn it off
+
+## 3.161.7
+
+- Party item gates: after crossing, one `par` checks a member credited with a copy from memory
+- A member `par` no longer lists as following loses that credit, so the next trip fetches for them
+
 ## 3.161.6
 
-- A monster set to **Flee** (Game Data → the monster's record → Fighting it) is now run from as soon as it is seen in the room, while a walk or loop is running
-- It is the Health tab's flee: the Combat tab's run distance and direction, and the walk or loop carries on afterwards
-- When no run can start, a Flee monster that attacks is fought back
-- The gigantic black ooze and the huge gruesome creation ship set to Flee; set a monster to Neutral or Enemy to turn it off
-- Nothing runs with Auto-All off, or with Auto-Heal and Auto-Rest both off; a Hangup monster or a PvP enemy in the room is answered first
-- A monster still standing on your route is met and run from again on every return
+- The client no longer stands still reading a very long line: a search in a room holding hundreds of items froze it for seconds each time
+- Every line from the game is read faster (a slowdown that came in with 3.157.8)
+- Roomba logs one line per room searched, with counts, in place of the full hidden list after every search
+- The program log warns when one line held the client up for a quarter of a second or more, with its length and how long it took
+- Bug report: how much is on the floor here and Roomba's slowest floor read
+- bug reports addressed: paradigm-20261009-164508
 
 ## 3.161.5
 
