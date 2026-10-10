@@ -463,6 +463,9 @@ public sealed class MonsterRelationshipWatcher : IDisposable
             case FleeOutcome.NoEngine:
                 NoRun("no-engine", what, "no walk or loop is running, so there is no route to run back along", fightBack: true);
                 break;
+            case FleeOutcome.Paused:
+                NoRun("paused", what, "the walk or loop is paused, which counts as idle", fightBack: true);
+                break;
             case FleeOutcome.Down:
                 NoRun("down", what, "the character is down and cannot move", fightBack: false);
                 break;

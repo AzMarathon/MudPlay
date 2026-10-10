@@ -824,6 +824,13 @@ public sealed class HealthManager : IDisposable
     // A flee started then is held until the room confirms (see TryFlee).
     public Func<bool>? IsMovePending { get; set; }
 
+    // True while the user has the walk, loop or Auto-Lair run paused (the Pause
+    // button, a typed move, a Stop-held errand): MovementController.IsUserPaused. A
+    // fight or a rest holding the engine is not this. Read by FleeFromMonster, for
+    // which a paused engine is no engine (user, 2026-10-10: "a paused loop or walk
+    // to or autolair, does not count as running, this should be idling").
+    public Func<bool>? IsNavigationPausedByUser { get; set; }
+
     // True while the server is auto-attacking (CombatStateTracker.IsServerEngaged).
     // Null (tests) keeps the old always-break behavior.
     public Func<bool>? IsServerEngaged { get; set; }
@@ -2012,7 +2019,8 @@ public sealed class HealthManager : IDisposable
     // the run-if-below triggers make, at any HP: the sight is the trigger. What
     // stops that flee stops this one: the engine being off (Auto-Heal and
     // Auto-Rest both off), a character that is down, a party follower, and no walk
-    // or loop to retreat along. The master switch is the watcher's to ask, ahead
+    // or loop to retreat along. One the user has paused counts as none, for this
+    // flee alone. The master switch is the watcher's to ask, ahead
     // of this. Nothing goes out in a run's place: no hang-up (the Health tab has
     // no flee that ends in one), and no @heal, which asks for HP.
     //
@@ -2032,6 +2040,9 @@ public sealed class HealthManager : IDisposable
         if (IsFleeInFlight) return FleeOutcome.AlreadyRunning;
         if (_isPartyFollower?.Invoke() == true) return FleeOutcome.Follower;
         if (_getActiveMovementEngine?.Invoke() is null) return FleeOutcome.NoEngine;
+        // Asked of this flee only: the low-HP, hit-and-run and player flees take a
+        // paused engine over as they always have.
+        if (IsNavigationPausedByUser?.Invoke() == true) return FleeOutcome.Paused;
         return TryFlee(reason, stillWanted: stillHere) ? FleeOutcome.Started : FleeOutcome.NoRoute;
     }
 

@@ -729,6 +729,58 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(WalkState.Paused, h.Walker.State);
     }
 
+    // A Flee monster and a real HealthManager over a real walk. A walk the user has
+    // paused is idle (user, 2026-10-10): no run. One a fight is holding is running:
+    // the run goes out, and forwards it is the walk's own next step.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FleeFromMonster_AWalkTheUserPaused_IsIdle_OneHeldByAFightRuns(bool userPaused)
+    {
+        Harness h = NewHarness();
+        MudPlay.Models.Profile.CombatSettings combat = new()
+        {
+            RunDirection = MudPlay.Models.Profile.RunDirection.Forward, RunDistance = 1, BreakBeforeFleeing = false,
+        };
+        using MudPlay.Game.Health.HealthManager health = new(
+            new MudPlay.Game.PlayerState(), h.Coordinator,
+            readSettings: () => new MudPlay.Models.Profile.HealthSettings(),
+            isEnabled: () => true,
+            readHangupCommand: null,
+            getActiveMovementEngine: () => h.Walker.State != WalkState.Idle ? h.Walker : null,
+            getLastSentDirection: null,
+            readCombatSettings: () => combat,
+            readGeneralSettings: null,
+            hasEngageableHostiles: null);
+        health.IsNavigationPausedByUser = () => h.Coordinator.IsGateAsserted(MovementCoordinator.UserGate);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));                           // N, N; the first is in flight
+
+        h.Coordinator.AssertGate(userPaused ? MovementCoordinator.UserGate : MovementCoordinator.CombatGate);
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        health.NoteRoomChanged(new RoomKey(1, 2));
+        int sentBefore = h.Sent.Count;
+
+        MudPlay.Game.Health.FleeOutcome outcome = health.FleeFromMonster("ogre (#7) is here, relationship Flee", () => true);
+
+        if (userPaused)
+        {
+            Assert.Equal(MudPlay.Game.Health.FleeOutcome.Paused, outcome);
+            Assert.Equal(sentBefore, h.Sent.Count);
+            Assert.False(health.IsFleeing);
+            // No flee took the walk over: lifting the pause sends its next step.
+            h.Walker.Resume();
+            Assert.Equal(WalkState.Walking, h.Walker.State);
+            Assert.Equal(sentBefore + 1, h.Sent.Count);
+            return;
+        }
+
+        Assert.Equal(MudPlay.Game.Health.FleeOutcome.Started, outcome);
+        Assert.Equal(sentBefore + 1, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[^1]));   // B → C, the way the walk goes
+    }
+
     // A forward flee walks the walk's next steps. Asked in a room the walk came into
     // while paused (a fight there, or the flee itself pausing it as the move
     // confirms), the step that carried it in is still the one at the index: counted,

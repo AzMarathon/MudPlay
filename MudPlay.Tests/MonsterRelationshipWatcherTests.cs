@@ -1075,6 +1075,7 @@ public sealed class MonsterRelationshipWatcherTests
     // a walk started beside the monster is not turned round by the next roster.
     [Theory]
     [InlineData(FleeOutcome.NoEngine, "no walk or loop is running")]
+    [InlineData(FleeOutcome.Paused, "the walk or loop is paused, which counts as idle")]
     [InlineData(FleeOutcome.NoRoute, "no way out of the room could be found")]
     [InlineData(FleeOutcome.Follower, "a follower does not run off alone")]
     [InlineData(FleeOutcome.Down, "the character is down")]
@@ -1177,6 +1178,7 @@ public sealed class MonsterRelationshipWatcherTests
 
     [Theory]
     [InlineData(FleeOutcome.NoEngine, true)]         // nothing to run along
+    [InlineData(FleeOutcome.Paused, true)]           // a paused walk or loop is idle
     [InlineData(FleeOutcome.NoRoute, true)]          // no way out
     [InlineData(FleeOutcome.Follower, true)]         // stays with the party
     [InlineData(FleeOutcome.EngineOff, true)]        // Auto-Heal and Auto-Rest both off

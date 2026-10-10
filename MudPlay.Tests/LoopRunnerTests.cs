@@ -1433,6 +1433,60 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
+    // A Flee monster and a real HealthManager over a real loop. A loop the user has
+    // paused is idle (user, 2026-10-10): no run. One a fight is holding is running:
+    // the run goes out, and forwards it is the lap's own next step.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FleeFromMonster_ALoopTheUserPaused_IsIdle_OneHeldByAFightRuns(bool userPaused)
+    {
+        Harness h = NewHarness(withWalker: true);
+        MudPlay.Models.Profile.CombatSettings combat = new()
+        {
+            RunDirection = MudPlay.Models.Profile.RunDirection.Forward, RunDistance = 1, BreakBeforeFleeing = false,
+        };
+        using MudPlay.Game.Health.HealthManager health = new(
+            new MudPlay.Game.PlayerState(), h.Coordinator,
+            readSettings: () => new MudPlay.Models.Profile.HealthSettings(),
+            isEnabled: () => true,
+            readHangupCommand: null,
+            getActiveMovementEngine: () => h.Runner.State != LoopState.Idle ? h.Runner : null,
+            getLastSentDirection: null,
+            readCombatSettings: () => combat,
+            readGeneralSettings: null,
+            hasEngageableHostiles: null);
+        health.IsNavigationPausedByUser = () => h.Coordinator.IsGateAsserted(MovementCoordinator.UserGate);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();
+
+        h.Coordinator.AssertGate(userPaused ? MovementCoordinator.UserGate : MovementCoordinator.CombatGate);
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+        health.NoteRoomChanged(new RoomKey(1, 3));
+        int sentBefore = h.Sent.Count;
+
+        MudPlay.Game.Health.FleeOutcome outcome = health.FleeFromMonster("ogre (#7) is here, relationship Flee", () => true);
+
+        if (userPaused)
+        {
+            Assert.Equal(MudPlay.Game.Health.FleeOutcome.Paused, outcome);
+            Assert.Equal(sentBefore, h.Sent.Count);
+            Assert.False(health.IsFleeing);
+            // No flee took the loop over: lifting the pause sends its next step.
+            h.Coordinator.ClearGate(MovementCoordinator.UserGate);
+            h.Drain();
+            Assert.Equal(LoopState.Running, h.Runner.State);
+            Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[^1]));
+            return;
+        }
+
+        Assert.Equal(MudPlay.Game.Health.FleeOutcome.Started, outcome);
+        Assert.Equal(sentBefore + 1, h.Sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[^1]));   // out of C the way the lap goes
+    }
+
     // A run that went forward along the lap and is to carry on (user, 2026-10-10):
     // the steps it walked count as walked and the lap goes on from the room it
     // stopped in. Walking back would only meet again what was run from.

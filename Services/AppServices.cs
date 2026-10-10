@@ -4680,6 +4680,9 @@ public sealed class AppServices
         // The room we came from — the Backward flee's retreat when there's no trail
         // to the loop's origin (we're standing on it).
         Health.IsMovePending = () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending;
+        // MovementControl is built further down; the lambda reads it when a Flee
+        // monster is seen.
+        Health.IsNavigationPausedByUser = () => MovementControl.IsUserPaused;
         Health.IsServerEngaged = () => CombatTracker.IsServerEngaged;
         RoomTracker.MoveBlocked += Health.NoteMoveBlocked;
         Health.PreviousRoom = () =>

@@ -28,6 +28,10 @@ public enum FleeOutcome
     // No walk or loop is running, so there is no route to retreat along.
     NoEngine,
 
+    // A walk or loop is there but the user has paused it, which is idling: a
+    // paused character is not moved (user, 2026-10-10).
+    Paused,
+
     // A walk or loop is running but no way out of the room could be worked out.
     NoRoute,
 }
