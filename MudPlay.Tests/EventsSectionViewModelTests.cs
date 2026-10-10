@@ -205,4 +205,34 @@ public sealed class EventsSectionViewModelTests
         EventsSectionViewModel vm2 = new(events2, profile);
         Assert.True(vm2.IsGloballyDisabled);
     }
+
+    // ----- Queue limits ----------------------------------------------
+
+    // The defaults aren't written to the profile (files hold deltas only); a
+    // change is, kept inside its range, and going back to the default clears it.
+    [Fact]
+    public void QueueLimits_DefaultTo10And30_AndPersistToTheCharacter()
+    {
+        var (_, profile, vm, _) = Build();
+
+        Assert.Equal(10, vm.QueueLimit);
+        Assert.Equal(30, vm.QueueWaitMinutes);
+        Assert.Null(profile.Current!.EventQueueLimit);
+        Assert.Null(profile.Current.EventQueueWaitMinutes);
+
+        vm.QueueLimit = 4;
+        vm.QueueWaitMinutes = 120;
+        Assert.Equal(4, profile.Current.EventQueueLimit);
+        Assert.Equal(120, profile.Current.EventQueueWaitMinutes);
+
+        vm.QueueLimit = 0;
+        vm.QueueWaitMinutes = 100_000;
+        Assert.Equal(1, vm.QueueLimit);
+        Assert.Equal(EventManager.MaxQueueWaitMinutesCeiling, vm.QueueWaitMinutes);
+
+        vm.QueueLimit = 10;
+        vm.QueueWaitMinutes = 30;
+        Assert.Null(profile.Current.EventQueueLimit);
+        Assert.Null(profile.Current.EventQueueWaitMinutes);
+    }
 }

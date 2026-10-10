@@ -69,6 +69,42 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
         }
     }
 
+    // How many events may wait behind the running one, and for how many minutes
+    // before one is dropped (CharacterProfile.EventQueueLimit /
+    // EventQueueWaitMinutes). Character tier and saved on every change, like the
+    // rest of this tab: the events they bound are the character's own.
+    public int QueueLimit
+    {
+        get => Math.Clamp(_profile.Current?.EventQueueLimit ?? EventManager.DefaultMaxQueued,
+            1, EventManager.MaxQueuedCeiling);
+        set
+        {
+            if (_profile.Current is not { } current) return;
+            int clamped = Math.Clamp(value, 1, EventManager.MaxQueuedCeiling);
+            if (QueueLimit == clamped) return;
+            current.EventQueueLimit = clamped == EventManager.DefaultMaxQueued ? null : clamped;
+            _profile.Save();
+            _log?.Info("Events", $"Settings → Events: up to {clamped} event(s) may wait behind the running one.");
+            OnPropertyChanged();
+        }
+    }
+
+    public int QueueWaitMinutes
+    {
+        get => Math.Clamp(_profile.Current?.EventQueueWaitMinutes ?? EventManager.DefaultMaxQueueWaitMinutes,
+            1, EventManager.MaxQueueWaitMinutesCeiling);
+        set
+        {
+            if (_profile.Current is not { } current) return;
+            int clamped = Math.Clamp(value, 1, EventManager.MaxQueueWaitMinutesCeiling);
+            if (QueueWaitMinutes == clamped) return;
+            current.EventQueueWaitMinutes = clamped == EventManager.DefaultMaxQueueWaitMinutes ? null : clamped;
+            _profile.Save();
+            _log?.Info("Events", $"Settings → Events: a waiting event is dropped after {clamped} minute(s).");
+            OnPropertyChanged();
+        }
+    }
+
     public override Control View => _view ??= new EventsSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels => new[]
@@ -77,6 +113,7 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
         "Logon", "Logoff", "Re-log", "At time", "Every",
         "Walk to", "Loop", "Auto-lair", "Command",
         "Disable all events", "Target missing",
+        "Events waiting at most", "Drop a waiting event after", "Event queue",
     };
 
     public EventsSectionViewModel()
@@ -226,6 +263,8 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
         RebuildRows();
         OnPropertyChanged(nameof(HasProfile));
         OnPropertyChanged(nameof(IsGloballyDisabled));
+        OnPropertyChanged(nameof(QueueLimit));
+        OnPropertyChanged(nameof(QueueWaitMinutes));
         NewCommand.NotifyCanExecuteChanged();
     }
 
@@ -234,6 +273,8 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
         RebuildRows();
         OnPropertyChanged(nameof(HasProfile));
         OnPropertyChanged(nameof(IsGloballyDisabled));
+        OnPropertyChanged(nameof(QueueLimit));
+        OnPropertyChanged(nameof(QueueWaitMinutes));
         NewCommand.NotifyCanExecuteChanged();
     }
 

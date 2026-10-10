@@ -40,6 +40,7 @@ internal sealed class EventEngineHarness : IDisposable
     public required EventManager Events { get; init; }
     public required LairTimerStore Timers { get; init; }
     public required LogService Log { get; init; }
+    public required ProfileService Profile { get; init; }
 
     // Every command the walker or the loop runner put on the wire, in order.
     public List<string> Sent { get; } = new();
@@ -98,7 +99,7 @@ internal sealed class EventEngineHarness : IDisposable
         EventEngineHarness h = new()
         {
             Tracker = tracker, Coordinator = coord, Walker = walker, Runner = runner, AutoLair = autoLair,
-            Loops = loops, Lairs = lairs, Events = events, Timers = timers, Log = log,
+            Loops = loops, Lairs = lairs, Events = events, Timers = timers, Log = log, Profile = profile,
         };
         walker.SetWireSender(b => h.Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         runner.SetWireSender(b => h.Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));

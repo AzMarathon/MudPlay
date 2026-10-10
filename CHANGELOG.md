@@ -5,8 +5,8 @@
 - Events run one at a time, start to finish, in the order they fired: one that fires while another is running waits its turn
 - A loop or Auto-Lair event with a Stop after rule finishes (its Then included) before the next starts; one with no rule is done once it has started
 - With an event waiting, the finished one's "go back" or loop passes to it, so the loop is restarted once, after the last
-- Logoff events, and events whose command logs off or hangs up, jump the queue
-- An event isn't queued twice; Settings → Events sets how many may wait (10) and for how long (30 minutes)
+- Logoff events, and events whose command sends a log-off (`;o`, `=x`, the realm's exit command), jump the queue
+- An event isn't queued twice; Settings → Events sets how many may wait (10) and for how long (30 minutes), and one dropped at either says so in the terminal
 - Stopping an event's walk, dying or Reset States drops the waiting events; so does a lost connection
 - A walk back to a loop refused as an automatic walk says so in the terminal and names the Settings → Teleports line to tick
 - Bug report: the events waiting, the queue limits and what the last Then came to

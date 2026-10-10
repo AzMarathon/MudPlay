@@ -223,35 +223,78 @@ public sealed class EventQueueTests : IDisposable
         Assert.Contains(h.EventLog, l => l.Contains("1 waiting event(s) dropped ('two')"));
     }
 
-    // A loop action has no end in sight, so it holds nothing back: the next event
-    // takes over as it always has, and inherits what the loop event interrupted.
+    // "Loop 3 times then go to the bank" finishes before anything else fires off
+    // (user, 2026-10-10): an event that fires mid-loop waits for the laps and for
+    // the Then walk after them.
     [Fact]
-    public void ALoopAction_DoesNotHoldTheQueue()
+    public void ALoopEventWithAStopRule_HoldsTheQueue_UntilItsThenIsDone()
     {
         using Harness h = NewHarness();
         h.Tracker.SetLocated(A);
         h.Loops.Save(new Loop("farm", new[] { A, B }));
         ScheduledEvent farm = Add(h, new ScheduledEvent
         {
-            Name = "farm", ActionType = EventActionType.Loop, LoopName = "farm", StopAfterLaps = 50,
-            Then = EventThenType.Nothing,
+            Name = "farm", ActionType = EventActionType.Loop, LoopName = "farm", StopAfterLaps = 2,
+            Then = EventThenType.WalkTo, ThenWalkTo = new RoomRef(C.Map, C.Room),
+        });
+        ScheduledEvent walk = Add(h, WalkTo("boss", B, EventThenType.Nothing));
+
+        h.Events.Fire(farm);
+        h.Events.Fire(walk);
+
+        Assert.Contains("'farm' Loop", h.Events.RunSummary);
+        Assert.Contains("'boss'", h.Events.QueueSummary);
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);              // the loop goes on
+
+        h.Events.OnLoopEvent(new LoopEvent(LoopEventKind.RepeatStarted, "farm"));
+        Assert.Contains("'boss'", h.Events.QueueSummary);
+        h.Events.OnLoopEvent(new LoopEvent(LoopEventKind.RepeatStarted, "farm"));
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);                 // the laps are done
+        Assert.Contains("'farm' Then walk-to", h.Events.RunSummary);
+        Assert.Contains("'boss'", h.Events.QueueSummary);             // still waiting: the bank walk
+
+        Arrive(h, C);
+        Assert.Contains("'boss' WalkTo", h.Events.RunSummary);
+        Assert.Equal("(empty)", h.Events.QueueSummary);
+    }
+
+    // A loop event with no Stop after rule can never finish, so it is done once
+    // the loop has started: the loop is then what the character is doing, and a
+    // later event takes over from it and goes back to it.
+    [Fact]
+    public void ALoopEventWithNoStopRule_IsDoneOnceTheLoopStarts()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(A);
+        h.Loops.Save(new Loop("farm", new[] { A, B }));
+        ScheduledEvent farm = Add(h, new ScheduledEvent
+        {
+            Name = "farm", ActionType = EventActionType.Loop, LoopName = "farm", Then = EventThenType.Nothing,
         });
         ScheduledEvent walk = Add(h, WalkTo("boss", C));
 
         h.Events.Fire(farm);
-        Assert.NotEqual(LoopState.Idle, h.Runner.State);
+
+        Assert.Equal("(none)", h.Events.RunSummary);
+        Assert.Equal("farm", h.Runner.CurrentLoop?.Name);
+        Assert.Contains(h.EventLog, l => l.Contains("'farm' finished; started loop 'farm'") && l.Contains("no Stop after rule"));
+
         h.Events.Fire(walk);
 
         Assert.Contains("'boss' WalkTo", h.Events.RunSummary);
+        Assert.Contains("resume target loop 'farm'", h.Events.RunSummary);
         Assert.Equal("(empty)", h.Events.QueueSummary);
         Assert.Equal(LoopState.Idle, h.Runner.State);
-        Assert.Contains(h.EventLog, l => l.Contains("'boss' takes over from 'farm' (Loop"));
+
+        Arrive(h, C);
+        Assert.Equal("farm", h.Runner.CurrentLoop?.Name);
     }
 
-    // An event ending in a loop of its own waits for nothing after starting it: an
-    // event waiting behind it starts, with that loop as what it goes back to.
+    // The same event waiting behind another: it starts in its turn, is done at
+    // once, and the event behind it takes its loop as what to go back to.
     [Fact]
-    public void AnEventQueuedBehindALoopEvent_TakesOverOnceTheLoopStarts()
+    public void AnEventQueuedBehindALoopEvent_StartsOnceTheLoopHas()
     {
         using Harness h = NewHarness();
         h.Tracker.SetLocated(A);
@@ -269,6 +312,7 @@ public sealed class EventQueueTests : IDisposable
         Arrive(h, C);
 
         Assert.Contains("'last' WalkTo", h.Events.RunSummary);
+        Assert.Contains("resume target loop 'farm'", h.Events.RunSummary);
         Assert.Equal("(empty)", h.Events.QueueSummary);
     }
 
@@ -321,12 +365,41 @@ public sealed class EventQueueTests : IDisposable
         h.Tracker.SetLocated(A);
         h.Events.Fire(Add(h, WalkTo("running", C, EventThenType.Nothing)));
 
-        for (int i = 0; i < EventManager.MaxQueued + 1; i++)
+        Assert.Equal(EventManager.DefaultMaxQueued, h.Events.MaxQueued);
+        for (int i = 0; i < EventManager.DefaultMaxQueued + 1; i++)
             h.Events.Fire(Add(h, WalkTo($"w{i}", B, EventThenType.Nothing)));
 
-        Assert.Contains($"'w{EventManager.MaxQueued - 1}'", h.Events.QueueSummary);
-        Assert.DoesNotContain($"'w{EventManager.MaxQueued}'", h.Events.QueueSummary);
-        Assert.Contains(h.EventLog, l => l.Contains($"'w{EventManager.MaxQueued}' dropped — {EventManager.MaxQueued} events are already waiting"));
+        Assert.Contains($"'w{EventManager.DefaultMaxQueued - 1}'", h.Events.QueueSummary);
+        Assert.DoesNotContain($"'w{EventManager.DefaultMaxQueued}'", h.Events.QueueSummary);
+        Assert.Contains(h.EventLog, l => l.Contains(
+            $"'w{EventManager.DefaultMaxQueued}' dropped — {EventManager.DefaultMaxQueued} events are already waiting"));
+        Assert.Contains($"[Event 'w{EventManager.DefaultMaxQueued}' dropped:", Assert.Single(h.Notices));
+    }
+
+    // Both limits are the character's own settings (Settings → Events).
+    [Fact]
+    public void TheQueueLimits_ComeFromTheCharactersSettings()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 10, 9, 0, 0, TimeSpan.Zero);
+        h.Events.Now = () => now;
+        h.Profile.Current!.EventQueueLimit = 1;
+        h.Profile.Current!.EventQueueWaitMinutes = 5;
+        h.Tracker.SetLocated(A);
+        h.Events.Fire(Add(h, WalkTo("running", C, EventThenType.Nothing)));
+
+        h.Events.Fire(Add(h, WalkTo("kept", B, EventThenType.Nothing)));
+        h.Events.Fire(Add(h, WalkTo("one too many", A, EventThenType.Nothing)));
+
+        Assert.Contains("'kept'", h.Events.QueueSummary);
+        Assert.DoesNotContain("'one too many'", h.Events.QueueSummary);
+
+        now += TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(1);
+        h.Events.Tick();
+
+        Assert.Equal("(empty)", h.Events.QueueSummary);
+        Assert.Contains(h.EventLog, l => l.Contains("'kept' dropped — it waited 5 minutes behind 'running' (WalkTo)"));
+        Assert.Equal(2, h.Notices.Count);
     }
 
     // A run that doesn't end (a walk left paused) must not set off hours-old events
@@ -341,7 +414,7 @@ public sealed class EventQueueTests : IDisposable
         h.Events.Fire(Add(h, WalkTo("stuck", C, EventThenType.Nothing)));
         h.Events.Fire(Add(h, WalkTo("stale", B, EventThenType.Nothing)));
 
-        now += EventManager.MaxQueueWait - TimeSpan.FromSeconds(1);
+        now += h.Events.MaxQueueWait - TimeSpan.FromSeconds(1);
         h.Events.Tick();
         Assert.Contains("'stale'", h.Events.QueueSummary);
 
@@ -375,9 +448,10 @@ public sealed class EventQueueTests : IDisposable
 
     // ----- What ends a run early -----------------------------------------------
 
-    // Logoff events run in the minutes before a cleanup: they don't wait.
+    // Logoff events run in the minutes before a cleanup: one starts at once. The
+    // run it interrupts is abandoned; what was waiting keeps its place behind it.
     [Fact]
-    public void ALogoffEvent_DoesNotWait()
+    public void ALogoffEvent_JumpsTheQueue()
     {
         using Harness h = NewHarness();
         h.Tracker.SetLocated(A);
@@ -390,8 +464,94 @@ public sealed class EventQueueTests : IDisposable
 
         Assert.Contains("'to the inn' WalkTo", h.Events.RunSummary);
         Assert.Equal(B, h.Walker.Destination);
-        Assert.Equal("(empty)", h.Events.QueueSummary);
-        Assert.Contains(h.EventLog, l => l.Contains("'one' is abandoned at WalkTo"));
+        Assert.Contains("'two'", h.Events.QueueSummary);
+        Assert.Contains(h.EventLog, l => l.Contains("'to the inn' jumps the queue: 'one' is abandoned at WalkTo"));
+
+        Arrive(h, B);
+        Assert.Contains("'two' WalkTo", h.Events.RunSummary);
+    }
+
+    // A second logoff-type event doesn't interrupt the first: it waits, ahead of the
+    // ordinary events. A boss event is an ordinary event.
+    [Fact]
+    public void ASecondLogoffEvent_WaitsAtTheHeadOfTheQueue()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(A);
+        ScheduledEvent first = Add(h, WalkTo("bank", C, EventThenType.Nothing));
+        first.TriggerType = EventTriggerType.Logoff;
+        ScheduledEvent boss = Add(h, BossWalk("Boss", "boss", B));
+        ScheduledEvent second = Add(h, WalkTo("to the inn", B, EventThenType.Nothing));
+        second.TriggerType = EventTriggerType.Logoff;
+
+        h.Events.Fire(first);
+        h.Events.Fire(boss);
+        h.Events.Fire(second);
+
+        Assert.Contains("'bank' WalkTo", h.Events.RunSummary);
+        Assert.StartsWith("'to the inn'", h.Events.QueueSummary);
+        Assert.Contains("'Boss'", h.Events.QueueSummary);
+
+        Arrive(h, C);
+        Assert.Contains("'to the inn' WalkTo", h.Events.RunSummary);
+    }
+
+    // What counts as logoff-type besides the Logoff trigger: a command that sends a
+    // log-off as a line of its own.
+    [Theory]
+    [InlineData(";o", true)]
+    [InlineData("=x", true)]
+    [InlineData("bank;=x", true)]
+    [InlineData("quit now", true)]          // the realm's own exit command
+    [InlineData("stat", false)]
+    [InlineData("say =x", false)]
+    public void ACommandThatLogsOff_IsLogoffType(string command, bool expected)
+    {
+        using Harness h = NewHarness();
+        h.Events.SetExitCommandReader(() => "quit now");
+
+        Assert.Equal(expected, h.Events.IsLogoffType(new ScheduledEvent
+        {
+            TriggerType = EventTriggerType.Every, ActionType = EventActionType.Command, CommandText = command,
+            Then = EventThenType.Resume,
+        }));
+    }
+
+    [Fact]
+    public void OnlyTheLogoffTriggerAndLogOffCommands_AreLogoffType()
+    {
+        using Harness h = NewHarness();
+
+        Assert.True(h.Events.IsLogoffType(new ScheduledEvent
+        {
+            TriggerType = EventTriggerType.Logoff, ActionType = EventActionType.BankTrip,
+        }));
+        Assert.False(h.Events.IsLogoffType(BossWalk("Boss", "boss", B)));
+        Assert.False(h.Events.IsLogoffType(new ScheduledEvent
+        {
+            TriggerType = EventTriggerType.AtTime, ActionType = EventActionType.BankTrip,
+        }));
+    }
+
+    // A relog command with something after it is a run, and it doesn't wait.
+    [Fact]
+    public void ALogOffCommandEvent_JumpsTheQueue()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(A);
+        List<string> sent = new();
+        h.Events.SetWireSender(b => sent.Add(System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        h.Events.Fire(Add(h, WalkTo("one", C, EventThenType.Nothing)));
+        h.Events.Fire(Add(h, WalkTo("two", B, EventThenType.Nothing)));
+
+        h.Events.Fire(Add(h, new ScheduledEvent
+        {
+            Name = "relog", TriggerType = EventTriggerType.Every, ActionType = EventActionType.Command,
+            CommandText = ";o", Then = EventThenType.Resume,
+        }));
+
+        Assert.Equal(";o", Assert.Single(sent));
+        Assert.Contains(h.EventLog, l => l.Contains("'relog' jumps the queue"));
     }
 
     // A drop empties the queue (Logon and Re-log fire afresh on the way back in) and
@@ -620,8 +780,8 @@ public sealed class EventQueueTests : IDisposable
         Assert.Equal(LoopState.Idle, h.Runner.State);
         string notice = Assert.Single(h.Notices);
         Assert.Contains("Event 'Second boss' finished, but loop 'Farm' didn't get going", notice);
-        Assert.Contains("the teleport from 1/10 (Library) to 7/131 (Study)", notice);
-        Assert.Contains("Settings → Teleports", notice);
+        Assert.Contains("this is an automatic walk", notice);
+        Assert.Contains("Tick \"Library (1/10) → Study (7/131)\" on Settings → Teleports", notice);
         Assert.Contains("failed", h.Events.LastThenSummary);
         Assert.Contains(h.EventLog, l => l.Contains("didn't get going"));
     }

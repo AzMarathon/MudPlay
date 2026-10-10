@@ -20,26 +20,36 @@ namespace MudPlay.Game.Events;
 // When an action is done depends on the action: a walk arrives, a command is
 // sent, a wait / rest-up / Roomba sweep / bank trip ends, and a loop or
 // auto-lair meets one of its stop-after rules (laps, minutes, a boss killed,
-// conditions holding) — with none set it runs until stopped by hand.
+// conditions holding).
 //
-// One run at a time, start to finish (user, 2026-10-09: "if multiple events fire
-// near same time, it handles them start to finish before the next one kicks in").
-// An event that fires while another's walk, wait, rest, sweep, trip or transfer
-// is under way waits in a first-in first-out queue and starts when that run is
-// over, its Then walk included. A loop or auto-lair action is the exception: it
-// is what the character does between events and has no end in sight, so an event
-// that fires during one takes over at once (that run's Then is dropped, its Resume
-// target inherited). So does a Logoff event over any run: the connection is about
-// to close. A command event with nothing after it isn't a run: it's sent and
-// leaves whatever run is going alone.
+// One run at a time, start to finish, in the order the events fired (user,
+// 2026-10-09: "if multiple events fire near same time, it handles them start to
+// finish before the next one kicks in"; 2026-10-10: "if we set an event to loop
+// 3 times then goto bank, that event should finish before any other events fire
+// off ... then do the ones that triggered mid event, in order"). An event that
+// fires while another's run is under way waits in a first-in first-out queue and
+// starts when that run is over, its Then walk and any chain of Then → event
+// included. Two things are not runs:
+//   * A command event with nothing after it: it's sent and leaves whatever run
+//     is going alone.
+//   * A loop or auto-lair event with no stop-after rule. Nothing ends it, so
+//     the event is finished the moment the loop has started, and the loop is
+//     then simply what the character is doing: an event that fires later takes
+//     over from it and goes back to it like any loop the user started.
+//
+// Only a logoff-type event jumps the queue (user, 2026-10-10: "logoff events
+// (events triggered basically on cleanup or that make the user logoff) should
+// jump the queue, all others should execute in the order of their trigger
+// time"): one with the Logoff trigger, or one whose command sends a log-off
+// (IsLogoffType). It starts at once, the run it interrupts is abandoned, and
+// the events already waiting keep their places behind it; the connection it is
+// racing would not wait for the run to end.
 //
 // A queued event starts as if it had fired the moment the run before it ended.
 // When that run's Then would only leave an engine running (go back, start a loop
 // or auto-lair), the engine isn't started to be stopped again in the same breath:
 // the queued event takes it as its own Resume target, so "go back to what was
-// running" happens once, after the last of them. A Then that fires another event
-// carries the Resume target down the chain, and the chain finishes before the
-// queue moves.
+// running" happens once, after the last of them.
 //
 // A run the user takes over — they stop its walk / loop / auto-lair, or start one
 // of their own while it waits or rests — ends without its Then and empties the
@@ -47,7 +57,7 @@ namespace MudPlay.Game.Events;
 // empties the queue and leaves the run to the engines' own reconnect rules, no
 // longer holding later events back. A walk frozen on a movement gate (the user's
 // Pause, Auto-All off) is neither: the run is held with it, the queue waits, and
-// MaxQueueWait is what keeps a long freeze from piling events up.
+// the wait limit is what keeps a long freeze from piling events up.
 //
 // Saved-target reconciliation: subscribes to LoopManager.LoopsChanged +
 // LairManager.SetupsChanged. On either, walks every event whose ActionType is
@@ -273,12 +283,21 @@ public sealed class EventManager : IDisposable
     // next prompt; give it this long before reading "not resting" as done.
     private static readonly TimeSpan RestStartGrace = TimeSpan.FromSeconds(3);
 
-    // The queue's bounds. An event waits at most once, so the cap only bites on a
-    // character with more events than this all firing behind one run. The wait
-    // limit is for a run that doesn't end (a walk left paused, Auto-All off for the
-    // night): without it the events of hours ago would all set off when it does.
-    internal const int MaxQueued = 10;
-    internal static readonly TimeSpan MaxQueueWait = TimeSpan.FromMinutes(30);
+    // The queue's bounds, set on Settings → Events (user, 2026-10-10: "make these
+    // limits user definable ... and use these as the default settings"). An event
+    // waits at most once, so the cap only bites on a character with more events
+    // than it all firing behind one run. The wait limit is for a run that doesn't
+    // end soon (a long loop event, a walk left paused, Auto-All off for the night):
+    // without it the events of hours ago would all set off when it does.
+    public const int DefaultMaxQueued = 10;
+    public const int DefaultMaxQueueWaitMinutes = 30;
+    public const int MaxQueuedCeiling = 100;
+    public const int MaxQueueWaitMinutesCeiling = 1440;
+
+    public int MaxQueued =>
+        Math.Clamp(_profile?.Current?.EventQueueLimit ?? DefaultMaxQueued, 1, MaxQueuedCeiling);
+    public TimeSpan MaxQueueWait => TimeSpan.FromMinutes(
+        Math.Clamp(_profile?.Current?.EventQueueWaitMinutes ?? DefaultMaxQueueWaitMinutes, 1, MaxQueueWaitMinutesCeiling));
 
     private sealed class EventRun(
         ScheduledEvent e, ScheduledEvent origin, EventResumePlan? resume, int depth, DateTimeOffset startedAt)
@@ -329,14 +348,39 @@ public sealed class EventManager : IDisposable
         ? "(empty)"
         : string.Join(", ", _queue.Select(q => $"'{Label(q.Event)}' (waiting {(Now() - q.At).TotalSeconds:0}s)"));
 
-    // For the bug report: what the last finished event's Then came to.
+    // For the bug report: what the engine the last finished event left running
+    // (its Then, or an open-ended loop action) came to.
     public string LastThenSummary { get; private set; } = "(none)";
 
-    // Whether an event that fires now waits for this run to end. A loop or auto-lair
-    // is what the character does between events, not an errand with an end in
-    // sight: an event behind one could wait for hours, so it takes over instead.
-    private static bool HoldsQueue(EventRun run) =>
-        !run.Unheld && run.Action is not (EventActionType.Loop or EventActionType.AutoLair);
+    // Whether an event that fires now waits for this run to end.
+    private static bool HoldsQueue(EventRun run) => !run.Unheld;
+
+    // The realm's own log-off command (Settings → BBS), beside the two every board
+    // takes. Bound by AppServices.
+    private Func<string?>? _readExitCommand;
+    public void SetExitCommandReader(Func<string?> read)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        _readExitCommand = read;
+    }
+
+    // The events that jump the queue: the Logoff trigger (fired by the cleanup
+    // warning or the user's own disconnect), and a Command action that sends a
+    // log-off — `;o`, `=x` or the realm's exit command as a line of its own.
+    // Nothing else an action does ends the connection.
+    internal bool IsLogoffType(ScheduledEvent e)
+    {
+        if (e.TriggerType == EventTriggerType.Logoff) return true;
+        if (e.ActionType != EventActionType.Command || string.IsNullOrWhiteSpace(e.CommandText)) return false;
+        string? exit = _readExitCommand?.Invoke()?.Trim();
+        foreach (string line in SplitCommand(e.CommandText))
+        {
+            string sent = line.Trim();
+            if (SentExitCommand.Classify(sent) != SentExitCommand.Intent.None) return true;
+            if (!string.IsNullOrEmpty(exit) && sent.Equals(exit, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
 
     // Run the event (see the header), or queue it behind the run under way. Skips
     // when Disabled is true, when "Disable all events" is on, or when the fire-time
@@ -362,19 +406,19 @@ public sealed class EventManager : IDisposable
         }
         if (_run is { } holder && HoldsQueue(holder))
         {
-            // Logoff events run in the minutes before a cleanup or the moment
-            // before a disconnect; one that waited behind a long trip would miss
-            // the connection. A second Logoff event queues behind the first.
-            bool preempts = e.TriggerType == EventTriggerType.Logoff
-                            && holder.Origin.TriggerType != EventTriggerType.Logoff;
-            if (!preempts)
+            // A logoff-type event runs in the minutes before a cleanup or the
+            // moment before a disconnect; one that waited behind a long trip would
+            // miss the connection. Behind another logoff-type run it waits, at the
+            // head of the queue.
+            bool jumps = IsLogoffType(e);
+            if (!jumps || IsLogoffType(holder.Origin) || IsLogoffType(holder.Event))
             {
-                if (Enqueue(e, holder)) Fired?.Invoke(e);
+                if (Enqueue(e, holder, jumps)) Fired?.Invoke(e);
                 return;
             }
             _log?.Info("Events",
-                $"Logoff event '{Label(e)}' doesn't wait: '{Label(holder.Event)}' is abandoned at {holder.Step}.");
-            ClearQueue("a Logoff event fired");
+                $"Logoff-type event '{Label(e)}' jumps the queue: '{Label(holder.Event)}' is abandoned at {holder.Step}"
+                + (_queue.Count > 0 ? $"; {_queue.Count} waiting event(s) keep their places." : "."));
         }
         Fired?.Invoke(e);
         StartRun(e, _run is { } current ? current.Resume : SnapshotCurrentActivity(), depth: 0);
@@ -384,8 +428,10 @@ public sealed class EventManager : IDisposable
 
     // False when this firing is dropped instead: the event is already running or
     // waiting (an "every 5 minutes" event whose run takes 7 runs once, not twice in
-    // a row), or the queue is full.
-    private bool Enqueue(ScheduledEvent e, EventRun holder)
+    // a row), or the queue is full. jumps: a logoff-type event goes ahead of the
+    // ordinary ones (behind any logoff-type event already waiting) and is never
+    // turned away by the cap.
+    private bool Enqueue(ScheduledEvent e, EventRun holder, bool jumps)
     {
         DropExpired();
         if (ReferenceEquals(holder.Event, e) || ReferenceEquals(holder.Origin, e))
@@ -400,10 +446,19 @@ public sealed class EventManager : IDisposable
                 $"Event '{Label(e)}' fired again while it is already waiting — it stays queued once.");
             return false;
         }
+        if (jumps)
+        {
+            int at = 0;
+            while (at < _queue.Count && IsLogoffType(_queue[at].Event)) at++;
+            _queue.Insert(at, new QueuedEvent(e, Now()));
+            _log?.Info("Events",
+                $"Logoff-type event '{Label(e)}' queued ahead of the others, behind '{Label(holder.Event)}' ({holder.Step}); {_queue.Count} waiting.");
+            return true;
+        }
         if (_queue.Count >= MaxQueued)
         {
-            _log?.Warn("Events",
-                $"Event '{Label(e)}' dropped — {_queue.Count} events are already waiting behind '{Label(holder.Event)}' ({holder.Step}).");
+            Dropped(e, $"{_queue.Count} events are already waiting behind '{Label(holder.Event)}' ({holder.Step}), "
+                + "the most Settings → Events lets wait");
             return false;
         }
         _queue.Add(new QueuedEvent(e, Now()));
@@ -412,16 +467,25 @@ public sealed class EventManager : IDisposable
         return true;
     }
 
+    // An event turned away at one of the queue's limits: the log and the terminal
+    // both say so, since nothing else will show that it never ran.
+    private void Dropped(ScheduledEvent e, string why)
+    {
+        _log?.Warn("Events", $"Event '{Label(e)}' dropped — {why}.");
+        _notice?.Invoke($"[Event '{Label(e)}' dropped: {why}]");
+    }
+
     private void DropExpired()
     {
         DateTimeOffset now = Now();
         for (int i = _queue.Count - 1; i >= 0; i--)
         {
             if (now - _queue[i].At <= MaxQueueWait) continue;
-            _log?.Warn("Events",
-                $"Event '{Label(_queue[i].Event)}' dropped — it waited {MaxQueueWait.TotalMinutes:0} minutes"
-                + (_run is { } holder ? $" behind '{Label(holder.Event)}' ({holder.Step})." : "."));
+            ScheduledEvent stale = _queue[i].Event;
             _queue.RemoveAt(i);
+            Dropped(stale, $"it waited {MaxQueueWait.TotalMinutes:0} minutes"
+                + (_run is { } holder ? $" behind '{Label(holder.Event)}' ({holder.Step})" : "")
+                + ", the longest Settings → Events lets one wait");
         }
     }
 
@@ -509,10 +573,10 @@ public sealed class EventManager : IDisposable
         switch (StartAction(run))
         {
             case ActionStart.Running:
-                StartTicker();
-                // A loop or auto-lair holds nothing back: what waited behind the
-                // run before it takes over now, as it would have firing afresh.
-                StartNextQueued();
+                if (e.ActionType is EventActionType.Loop or EventActionType.AutoLair && !e.HasStopRule)
+                    FinishOpenEnded(run);
+                else
+                    StartTicker();
                 break;
             case ActionStart.Done:
                 Complete(run, finished: true);
@@ -521,6 +585,20 @@ public sealed class EventManager : IDisposable
                 Complete(run, finished: false);
                 break;
         }
+    }
+
+    // A loop or auto-lair with no stop-after rule has nothing to wait for: the
+    // event is finished now that it is running, its Then never comes, and what was
+    // waiting behind it starts with that loop as what it interrupts.
+    private void FinishOpenEnded(EventRun run)
+    {
+        ScheduledEvent e = run.Event;
+        EndRun();
+        bool loop = e.ActionType == EventActionType.Loop;
+        NoteThenStarted(Label(e), "started", loop ? $"loop '{e.LoopName}'" : $"auto-lair '{e.AutoLairSetupName}'",
+            loop ? ThenWatchKind.Loop : ThenWatchKind.AutoLair, EngineStart.Started,
+            note: " (no Stop after rule, so the event is done and its Then never runs)");
+        StartNextQueued();
     }
 
     private enum ActionStart { Running, Done, Failed }
@@ -819,7 +897,8 @@ public sealed class EventManager : IDisposable
     };
 
     private void NoteThenStarted(
-        string label, string verb, string what, ThenWatchKind kind, EngineStart outcome, RoomKey? walkDestination = null)
+        string label, string verb, string what, ThenWatchKind kind, EngineStart outcome,
+        RoomKey? walkDestination = null, string note = "")
     {
         if (outcome == EngineStart.Refused)
         {
@@ -836,7 +915,7 @@ public sealed class EventManager : IDisposable
             ? $", step {runner.CurrentIndex + 1} of {runner.StepCount}"
               + (runner.State == LoopState.Approaching ? " once it has walked there" : "")
             : "";
-        _log?.Info("Events", $"Event '{label}' finished; {verb} {what}{step}.");
+        _log?.Info("Events", $"Event '{label}' finished; {verb} {what}{step}{note}.");
         LastThenSummary = $"'{label}' → {what}: started {Stamp()}";
         _thenWatch = new ThenWatch(label, what, kind, walkDestination);
     }

@@ -121,12 +121,23 @@
                 </Grid>
             </Border>
 
-            <!-- Master switch below the table. -->
-            <CheckBox Grid.Row="3"
-                      Content="Disable all events"
-                      IsChecked="{Binding IsGloballyDisabled, Mode=TwoWay}"
-                      ToolTip.Tip="Master switch — pauses every event regardless of per-row state. Persists immediately."
-                      Margin="0,12,0,0"/>
+            <!-- Master switch and the queue's limits below the table. -->
+            <StackPanel Grid.Row="3" Margin="0,12,0,0" Spacing="8">
+                <CheckBox Content="Disable all events"
+                          IsChecked="{Binding IsGloballyDisabled, Mode=TwoWay}"
+                          ToolTip.Tip="Master switch — pauses every event regardless of per-row state. Persists immediately."/>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="Events waiting at most"/>
+                    <NumericUpDown Width="120" MinWidth="120" Minimum="1" Maximum="100" Increment="1" FormatString="0"
+                                   Value="{Binding QueueLimit, Mode=TwoWay}"
+                                   ToolTip.Tip="Events run one at a time. This is how many may wait behind the one running; an event that fires with the queue full is dropped, and the terminal says so. Logoff events are never turned away. Default 10."/>
+                    <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="Drop a waiting event after"/>
+                    <NumericUpDown Width="120" MinWidth="120" Minimum="1" Maximum="1440" Increment="5" FormatString="0"
+                                   Value="{Binding QueueWaitMinutes, Mode=TwoWay}"
+                                   ToolTip.Tip="An event that has waited this long for the running one is dropped, and the terminal says so. Raise it if you have loop events that run longer than this. Default 30."/>
+                    <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="minutes"/>
+                </StackPanel>
+            </StackPanel>
         </Grid>
     </Grid>
 </UserControl>
