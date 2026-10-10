@@ -62,6 +62,10 @@ public interface IRoomFilter
     // opened at all, or only at poor odds. Null for any exit routes use freely.
     string? DescribeDoorRefusal(in RoomExit exit) => null;
 
+    // Changes whenever the stats the door rule reads change, so a caller that
+    // remembers "no route from here" can tell when the answer may have changed.
+    int DoorRuleStamp => 0;
+
     // Classifies WHY an exit is non-traversable — the union of gate kinds
     // blocking it — so a failed walk can name the real obstacle instead of a
     // generic "level, toll, or class" guess that may not fit (e.g. a

@@ -23,6 +23,7 @@ public sealed class WalkAroundRoomsFilter : IRoomFilter
     public bool IsExitRefused(RoomKey from, in RoomExit exit) => _inner?.IsExitRefused(from, in exit) ?? false;
     public bool IsPoorOddsDoor(in RoomExit exit) => _inner?.IsPoorOddsDoor(in exit) ?? false;
     public string? DescribeDoorRefusal(in RoomExit exit) => _inner?.DescribeDoorRefusal(in exit);
+    public int DoorRuleStamp => _inner?.DoorRuleStamp ?? 0;
     public ExitBlockReason DescribeExitBlock(in RoomExit exit) => _inner?.DescribeExitBlock(in exit) ?? ExitBlockReason.None;
     public bool IsBoatPassable(in BoatPassage passage) => _inner?.IsBoatPassable(in passage) ?? true;
     public ExitBlockReason DescribeBoatBlock(in BoatPassage passage) => _inner?.DescribeBoatBlock(in passage) ?? ExitBlockReason.None;

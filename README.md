@@ -2,11 +2,12 @@
 
 <!-- current-version:start -->
 > **Version 3.161.9**
-> - A lock under 25% a pick is gone round when that costs at most 10 extra steps, on Stock and Paradigm
-> - A door the picks run out on is gone round for the rest of the walk, loop run or Auto-Lair run, where the walk used to stop at it
-> - Auto-Lair no longer stands in the wait room after a failed walk into the lair; a lair it can't reach is left out of the run
-> - Auto-Lair waits one step short of the lair on the route it will take, not behind a door it can't open
-> - Log and bug report name the doors a route went round
+> - Locks under 25% a pick are gone round when the way round is short
+> - A door the picks run out on is gone round, not stood at
+> - Auto-Lair waits one step short of the lair, on its own route
+> - Auto-Lair leaves out a lair it can't reach, and retries a failed entry slower each time
+> - Auto-Lair keeps a door only if you can't open it; a fair-odds door is retried next visit
+> - Log and bug report name the doors gone round and the lairs left out
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

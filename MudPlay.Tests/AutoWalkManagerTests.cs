@@ -1711,6 +1711,9 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed
             && e.Detail.Contains("couldn't open the door down from 3/592 (Viewing Stands)")
             && e.Detail.Contains("no other way to 3/595"));
+        // The trip is over, and its doors go with it, so silent legs of a journey
+        // begun afterwards don't inherit them.
+        Assert.Empty(h.Walker.AbandonedDoors);
     }
 
     // A loop hands its approach walk the doors its run gave up on.

@@ -1931,6 +1931,8 @@ public static class BugReportBuilder
             ? "none" : string.Join(", ", svc.LoopRunner.AbandonedDoors.Select(d => $"{d.From} → {d.To}")));
         Kv(sb, "Doors given up on (Auto-Lair run)", svc.AutoLair.AbandonedDoors.Count == 0
             ? "none" : string.Join(", ", svc.AutoLair.AbandonedDoors.Select(d => $"{d.From} → {d.To}")));
+        Kv(sb, "Lairs left out of the Auto-Lair run", svc.AutoLair.LairsLeftOut.Count == 0
+            ? "(none)" : string.Join(", ", svc.AutoLair.LairsLeftOut));
         // The retained last event carries the failure/stop reason (Detail) — the
         // single most useful line for "why did the walk quit".
         Kv(sb, "Last walk event",

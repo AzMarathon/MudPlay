@@ -3365,6 +3365,7 @@ public sealed class AppServices
             picklocksOverBashProvider:     () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").PicklocksOverBash,
             itemNameLookup:                id => ItemNames.GetName(id),
             maxBashableStrengthProvider:   () => MaxStrength.MaxAchievableStrength,
+            statsRead:                     () => Stats.HasParsed,
             // Read lazily at door-open time — Inventory is constructed after Door.
             holdsKeyItem:                  HoldsKeyItem,
             // Rest-interleave for bashing (bashing drains HP): pause a bash once HP

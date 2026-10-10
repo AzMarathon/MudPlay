@@ -386,6 +386,9 @@ public sealed class MovementFilter : IRoomFilter
         return DoorPolicy.IsPoorOddsPick(exit.StatRequirement, exit.CanBash, strength, picks, maxBash);
     }
 
+    public int DoorRuleStamp => HashCode.Combine(
+        StrengthProvider?.Invoke(), PicklocksProvider?.Invoke(), MaxBashableStrengthProvider?.Invoke());
+
     public string? DescribeDoorRefusal(in RoomExit exit)
     {
         if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) return null;

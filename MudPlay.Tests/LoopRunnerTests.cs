@@ -3147,7 +3147,7 @@ public sealed class LoopRunnerTests : IDisposable
 
         Assert.Equal(LoopState.Idle, h.Runner.State);
         Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed
-            && e.Detail.Contains("couldn't open the door D from 3/592 (Viewing Stands)")
+            && e.Detail.Contains("couldn't open the door down from 3/592 (Viewing Stands)")
             && e.Detail.Contains("the loop has no way round it"));
     }
 

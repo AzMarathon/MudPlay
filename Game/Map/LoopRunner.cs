@@ -1949,7 +1949,7 @@ public sealed class LoopRunner : IRecoverableEngine
         int unreachableBefore = LoopExpander.Expand(waypoints, _bfs, _filter).UnreachableSegments.Count;
         _abandonedDoors.Add((here.Key, exit.Target));
         _filter = new AbandonedDoorsFilter(_runFilter, _abandonedDoors);
-        string door = $"the door {step.Direction} from {here.Key} ({here.Name})";
+        string door = $"the door {step.Direction.ToLongName()} from {here.Key} ({here.Name})";
         if (LoopExpander.Expand(waypoints, _bfs, _filter).UnreachableSegments.Count > unreachableBefore)
         {
             FailStep($"couldn't open {door} ({reason}), and the loop has no way round it");

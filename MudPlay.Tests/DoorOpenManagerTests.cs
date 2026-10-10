@@ -32,6 +32,8 @@ public sealed class DoorOpenManagerTests
         // at rest-max (resume). Defaults never pause — bash proceeds uncapped.
         public bool BashRestNeeded { get; set; }
         public bool BashRestRecovered { get; set; } = true;
+        // Whether a stat screen has been read; false leaves Strength and Picklocks at 0.
+        public bool StatsRead { get; set; } = true;
 
         public Harness(Func<int, bool>? holdsKeyItem = null)
         {
@@ -48,7 +50,8 @@ public sealed class DoorOpenManagerTests
                 holdsKeyItem: holdsKeyItem,
                 bashRestNeeded: () => BashRestNeeded,
                 bashRestRecovered: () => BashRestRecovered,
-                scheduleDelay: Schedule);
+                scheduleDelay: Schedule,
+                statsRead: () => StatsRead);
             Mgr.SetWireSender(Sent.Add);
         }
 
@@ -351,6 +354,42 @@ public sealed class DoorOpenManagerTests
 
         Assert.True(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
         Assert.Empty(h.Sent);
+    }
+
+    // Before a stat screen is read Strength and Picklocks are 0, so any numbered door
+    // has no viable verb: that is not the door beating the character, and the walk
+    // must fail as it always did, not give the door up for good.
+    [Fact]
+    public void NoViableVerb_BeforeAnyStatScreenIsRead_IsAnOrdinaryFailure()
+    {
+        using Harness h = new() { StatsRead = false };
+        h.Stats.Strength = 0;
+        h.Stats.Picklocks = 0;
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.N, 100, canBash: true, "walker", r => result = r);
+
+        Assert.False(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
+        Assert.Empty(h.Sent);
+    }
+
+    // Ten picks that drew no reply are a lost reply, not the lock winning.
+    [Fact]
+    public void PickCapHit_ByTimeoutsAlone_IsAnOrdinaryFailure()
+    {
+        using Harness h = new() { MaxPick = 3 };
+        h.Stats.Strength = 120;
+        h.Stats.Picklocks = 303;
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.D, 301, canBash: true, "walker", r => result = r);
+
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Null(result);
+            h.FireTimeout();
+        }
+
+        Assert.False(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
+        Assert.Equal(3, h.Sent.Count);
     }
 
     // The Ancient Coliseum's door down: Picklocks just over the lock, so a pick is

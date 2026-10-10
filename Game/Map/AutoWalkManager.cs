@@ -1689,7 +1689,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     : filter.DescribeDoorRefusal(in exit);
                 if (why is null) continue;
                 _doorsWalkedRound.Add(
-                    $"the door {DirectionWord(dir)} from {room.Key} ({room.Name}) to {exit.Target}: {why}");
+                    $"the door {dir.ToLongName()} from {room.Key} ({room.Name}) to {exit.Target}: {why}");
             }
         }
         foreach (string door in _doorsWalkedRound)
@@ -2324,7 +2324,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // move bytes are sent from OnTrapReply.
         if (exit.Hint == RoomExitHint.Trap && _trapEnqueuer is not null)
         {
-            string dirWord = DirectionWord(step.Direction);
+            string dirWord = step.Direction.ToLongName();
             if (_shouldDisarmTrap?.Invoke() ?? true)
             {
                 // Local character has the Traps skill — disarm it ourselves.
@@ -2629,7 +2629,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return false;
 
         _abandonedDoors.Add((here.Key, exit.Target));
-        string door = $"the door {DirectionWord(step.Direction)} from {here.Key} ({here.Name})";
+        string door = $"the door {step.Direction.ToLongName()} from {here.Key} ({here.Name})";
         IRoomFilter roundIt = new AbandonedDoorsFilter(_filter, _abandonedDoors);
         IReadOnlyList<Direction>? round;
         using (_activeThroughGates ? roundIt.SuspendAcquirableGates() : null)
@@ -2766,21 +2766,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
         byte[] bytes = EncodeMove(step.Direction);
         EmitMoveBytes(bytes, $"move {step.Direction} (post-disarm)");
     }
-
-    private static string DirectionWord(Direction dir) => dir switch
-    {
-        Direction.N  => "north",
-        Direction.S  => "south",
-        Direction.E  => "east",
-        Direction.W  => "west",
-        Direction.NE => "northeast",
-        Direction.NW => "northwest",
-        Direction.SE => "southeast",
-        Direction.SW => "southwest",
-        Direction.U  => "up",
-        Direction.D  => "down",
-        _ => "?",
-    };
 
     private void SendCommandStep(CommandStep step)
     {
@@ -3183,7 +3168,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // paradigm-20260901-100523). _stepInFlight is already false above, so
         // rm's own reentrant tracker relocate can't be mistaken for an in-flight
         // step's arrival by OnTrackerStateChanged — it's a clean no-op there,
-        // leaving DoReplan as the only thing that actually replans. Stock realms /
+        // leaving ReplanInPlace as the only thing that actually replans. Stock realms /
         // no rm reply fall through to exactly the prior behavior.
         //
         // The ask is marked before it goes out, as an answer can come back inside
@@ -4205,11 +4190,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // it only on a leg to its destination: a side trip that arrives or fails
         // leaves the journey standing for the leg that follows. Read from the leg
         // itself, not the event's room, which a stop-before boss room re-points.
-        if (evt.Kind == WalkEventKind.Stopped
-            || (evt.Kind is WalkEventKind.Finished or WalkEventKind.Failed && _legToJourneyGoal))
-            EndJourney();
+        bool endsJourney = evt.Kind == WalkEventKind.Stopped
+            || (evt.Kind is WalkEventKind.Finished or WalkEventKind.Failed && _legToJourneyGoal);
+        if (endsJourney) EndJourney();
         LastEvent = evt;
         Event?.Invoke(evt);
+        // The doors this trip gave up on go with it, after the listeners had their
+        // look at them: a Shortcut journey's silent legs, begun with no walk of the
+        // walker's own to clear them, would otherwise inherit the last trip's.
+        // A listener that started a new journey from the event keeps its own.
+        if (endsJourney && _journey is null) _abandonedDoors.Clear();
     }
 
     internal static byte[] EncodeMove(Direction dir)
