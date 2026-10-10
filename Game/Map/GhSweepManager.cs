@@ -609,7 +609,7 @@ public sealed class GhSweepManager : IDisposable
         _readOnRecon.Clear();
         _expectedAfterSort = null;
         _hiddenTaken = null;
-        _recounting = null;
+        ForgetRefusedPickups();
         _pickedUpHere.Clear();
         _deliveredHere.Clear();
         _failedHere.Clear();
@@ -1452,9 +1452,17 @@ public sealed class GhSweepManager : IDisposable
             }
             GhSurveyMerger.MergeUnattributed(_visibleByRoom, _hiddenByRoom, room, snapshot, _itemNames);
         }
-        else
+        else if (source == FloorSurveySource.RoomDisplay)
         {
             GhSurveyMerger.Replace(_visibleByRoom, room, snapshot, _itemNames);
+            if (Phase == SweepPhase.Reconning) _readOnRecon.Add(room);
+        }
+        else
+        {
+            // Not shown to be a display, so it may not be the whole floor (someone
+            // else's search reply with its echo knocked away, say): it can add to
+            // the visible record and raise a count, never take anything off it.
+            GhSurveyMerger.Merge(_visibleByRoom, room, snapshot, _itemNames);
             if (Phase == SweepPhase.Reconning) _readOnRecon.Add(room);
         }
         _observedByRoom[room] = GhSurveyMerger.Total(_visibleByRoom, _hiddenByRoom, room, _itemNames);
@@ -1581,15 +1589,11 @@ public sealed class GhSweepManager : IDisposable
         TimeSpan readTime = display is null ? TimeSpan.Zero : _pendingArrivalReadTime;
         _pendingArrivalSurvey = null;
         // A display with no floor list is a floor with nothing in plain sight,
-        // which is how a room that lost its last stack looks. A room too dark to
-        // show, or entered blind, displayed nothing and says nothing. On recon it
-        // empties only a room not yet recorded this sweep: the circuit passes a
-        // corridor room twice, and a list the reader missed on the way back must
-        // not undo the one it read on the way out. The worst a stale stack does
-        // there is one refused pickup; a wiped one is never sorted.
+        // which is how a room that lost its last stack looks, on any pass through
+        // it. A room too dark to show, or entered blind, displayed nothing and
+        // says nothing.
         bool lit = !_tracker.IsInDarkRoom && !_tracker.EnteredBlind;
-        if (display is null && lit && (Phase == SweepPhase.FinalRecon || !_visibleByRoom.ContainsKey(here)))
-            display = new List<string>();
+        if (display is null && lit) display = new List<string>();
         if (Phase == SweepPhase.Reconning && lit && _sweepRooms.Contains(here)) _readOnRecon.Add(here);
         if (reading && display is not null && _sweepRooms.Contains(here))
         {
@@ -1842,6 +1846,7 @@ public sealed class GhSweepManager : IDisposable
         // game's own prompt meter the send makes that unreachable by
         // construction, and needs no guess at the rate.
         _commandQueue.Clear();
+        ForgetRefusedPickups();
         foreach (PendingSortMove move in drops) _commandQueue.Enqueue(("drop", move));
         foreach (PendingSortMove move in gets) _commandQueue.Enqueue(("get", move));
         // The floor paces commands WITHIN a batch. Reaching a new room means we
@@ -1877,8 +1882,20 @@ public sealed class GhSweepManager : IDisposable
         _lastQueuedCommand = (verb, move);
         _dispatchSettle.Stop();
         _dispatchSettle.Start();
-        if (verb == RecountVerb) Send(move.RequiresSearch ? "sea" : "l");
-        else CountedCommand.Emit(Send, verb, move.Count, move.ItemName, _isParadigm());
+        if (verb == LookAgainVerb)
+        {
+            _awaitingLook = true;
+            Send("l");
+        }
+        else if (verb == SearchAgainVerb)
+        {
+            _awaitingSearch = true;
+            Send("sea");
+        }
+        else
+        {
+            CountedCommand.Emit(Send, verb, move.Count, move.ItemName, _isParadigm());
+        }
 
         // A prompt normally releases the next one. Arm a bounded fallback so a
         // prompt we never see (or one swallowed by an interleaved burst) can't
@@ -2029,6 +2046,15 @@ public sealed class GhSweepManager : IDisposable
         _dispatchSettle.Stop();
         if (Phase != SweepPhase.Sorting || _outstandingDispatch.Count == 0) return;
 
+        // The room was read again for refused pickups and no list came: a floor
+        // with nothing in plain sight prints none, and a search that finds nothing
+        // answers in other words.
+        if ((_awaitingLook || _awaitingSearch) && !_rateLimitBackoff.IsEnabled)
+        {
+            SettleRefused(hidden: !_awaitingLook, Array.Empty<string>());
+            return;
+        }
+
         // Still feeding the batch out (or sitting in a rate-limit backoff, which
         // is deliberately longer than this window). "Confirmations stopped" isn't
         // a meaningful reading until every command has actually been sent, so
@@ -2036,15 +2062,6 @@ public sealed class GhSweepManager : IDisposable
         if (_commandQueue.Count > 0 || _rateLimitBackoff.IsEnabled)
         {
             _dispatchSettle.Start();
-            return;
-        }
-
-        // The room was read again for a refused pickup and no list came: a floor
-        // with nothing in plain sight prints none, and a search that finds nothing
-        // answers in other words.
-        if (_recounting is { } unlisted)
-        {
-            StrandFailedGet(unlisted, "a second read of the room doesn't list it", NotHereReason(unlisted));
             return;
         }
 
@@ -2137,6 +2154,7 @@ public sealed class GhSweepManager : IDisposable
         _pickedUpHere.Clear();
         _deliveredHere.Clear();
         _failedHere.Clear();
+        ForgetRefusedPickups();
         _sortSearchesSent = 0;
         _dispatchRoom = null;
     }
@@ -2484,7 +2502,7 @@ public sealed class GhSweepManager : IDisposable
             KeepWhatWasTaken(get);
             _outstandingDispatch.Remove(get);
         }
-        _recounting = null;
+        ForgetRefusedPickups();
         _resyncPending = true;
         _log?.Info(LogCategory,
             $"capacity refused {outstandingGets.Count} pending pickup(s) at {_dispatchRoom}; "
@@ -2529,88 +2547,182 @@ public sealed class GhSweepManager : IDisposable
             $"picked up {taken} of {taken + move.Count} {move.ItemName} at {move.From}, carrying to {move.To}");
     }
 
-    private const string RecountVerb = "recount";
+    // The room read again for the pickups the game refused in it: one look for every
+    // refused stack in plain sight, one search for every refused hidden one.
+    private const string LookAgainVerb = "look again";
+    private const string SearchAgainVerb = "search again";
 
-    // The move whose room is being read again after its `get` was refused, until
-    // the list comes or the wait for it runs out.
-    private PendingSortMove? _recounting;
+    // The refused pickups of the room being worked, waiting on that second read,
+    // by which read they wait on; and whether that read is queued, and sent.
+    private readonly List<PendingSortMove> _refusedVisible = new();
+    private readonly List<PendingSortMove> _refusedHidden = new();
+    private bool _lookAgainQueued, _searchAgainQueued;
+    private bool _awaitingLook, _awaitingSearch;
+
+    // Hidden pickups taken out of the batch because the visible stack of the same
+    // item was refused. The game serves a `get` from the copies in plain sight
+    // first, so sent before that stack is settled it would take those, and be
+    // counted as part of the refused stack.
+    private readonly List<PendingSortMove> _heldForVisibleTwin = new();
+
+    private void ForgetRefusedPickups()
+    {
+        _refusedVisible.Clear();
+        _refusedHidden.Clear();
+        _heldForVisibleTwin.Clear();
+        _lookAgainQueued = _searchAgainQueued = false;
+        _awaitingLook = _awaitingSearch = false;
+    }
 
     // `You don't see … here.` for one of our pickups. Paradigm refuses a counted
     // `get` for more than is there outright and takes nothing (GAME_MECHANICS "`get`
     // failure responses"), so the stack may only be smaller than recorded: the room
-    // is read once more (its display, or a search for a hidden stack) and the pickup
-    // asked again for what is there. A hidden stack of one gets the same second
-    // search. Anything else, or a second refusal, is left where it is, under the
-    // reason that fits: a hidden stack the search didn't find is not gone.
+    // is read once more, after the rest of the batch (its display, or a search for
+    // hidden stacks; one read serves every pickup refused here), and each is asked
+    // again for what is there. A hidden stack of one gets the same second search.
+    // Anything else, or a second refusal, is left where it is, under the reason
+    // that fits: a hidden stack the search didn't find is not gone.
     private void OnGetRefusedAsNotHere(PendingSortMove move, string line)
     {
-        if (_isParadigm() && !move.Recounted && move.ConfirmedUnits == 0
-            && (move.Count > 1 || move.RequiresSearch))
+        // Copies a late answer already credited to this stack are in the pack.
+        KeepWhatWasTaken(move);
+        if (!_isParadigm() || move.Recounted || (move.Count <= 1 && !move.RequiresSearch))
         {
-            move.Recounted = true;
-            _recounting = move;
-            _log?.Debug(LogCategory,
-                $"get refused for {move.Count}x {move.ItemName} at {move.From} (\"{line}\") — reading the room again");
-            _commandQueue.Enqueue((RecountVerb, move));
-            SendNextQueuedCommand();
+            StrandFailedGet(move, $"game reports it isn't there (\"{line}\")", NotHereReason(move));
             return;
         }
-        StrandFailedGet(move, $"game reports it isn't there (\"{line}\")", NotHereReason(move));
+
+        move.Recounted = true;
+        _log?.Debug(LogCategory,
+            $"get refused for {move.Count}x {move.ItemName} at {move.From} (\"{line}\") — reading the room again");
+        if (move.RequiresSearch)
+        {
+            _refusedHidden.Add(move);
+            if (!_searchAgainQueued) _commandQueue.Enqueue((SearchAgainVerb, move));
+            _searchAgainQueued = true;
+        }
+        else
+        {
+            HoldHiddenTwinsOf(move);
+            _refusedVisible.Add(move);
+            if (!_lookAgainQueued) _commandQueue.Enqueue((LookAgainVerb, move));
+            _lookAgainQueued = true;
+        }
+        SendNextQueuedCommand();
+    }
+
+    private void HoldHiddenTwinsOf(PendingSortMove visible)
+    {
+        List<(string Verb, PendingSortMove Move)> queued = _commandQueue.ToList();
+        _commandQueue.Clear();
+        foreach ((string verb, PendingSortMove move) in queued)
+        {
+            if (verb == "get" && move.RequiresSearch && SameItem(move.ItemName, visible.ItemName))
+                _heldForVisibleTwin.Add(move);
+            else
+                _commandQueue.Enqueue((verb, move));
+        }
     }
 
     private static GhLeftReason NotHereReason(PendingSortMove move) =>
         move.RequiresSearch ? GhLeftReason.NotFoundBySearch : GhLeftReason.GoneBySortTime;
 
-    // The list asked for after a refused pickup. A hidden stack found now is asked
-    // for again, at no more than the search shows; a visible stack that turned out
-    // smaller is asked for at its size. One that isn't listed, or a visible one the
-    // game refused though the display shows enough of it, is left.
+    // A list read while sorting. Only the one asked for after a refused pickup
+    // matters here: the display for the stacks in plain sight, a search's reply for
+    // the hidden ones.
     private void RecountFrom(IReadOnlyList<string> list, FloorSurveySource source)
     {
-        if (_recounting is not { } move
-            || _tracker.State.Confidence != RoomConfidence.Confirmed
-            || _tracker.State.CurrentRoom?.Key.Equals(move.From) != true) return;
-        // Not the list that was asked for.
-        if (source == (move.RequiresSearch ? FloorSurveySource.RoomDisplay : FloorSurveySource.SearchReply)) return;
+        if (_tracker.State.Confidence != RoomConfidence.Confirmed
+            || _dispatchRoom is not { } room
+            || _tracker.State.CurrentRoom?.Key.Equals(room) != true) return;
 
-        _recounting = null;
-        int there = list.Where(entry => SameItem(entry, move.ItemName))
-            .Sum(entry => CountedCommand.SplitLeadingCount(entry).Count);
-        if (there <= 0 || (!move.RequiresSearch && there >= move.Count))
-        {
-            StrandFailedGet(move,
-                there <= 0 ? "a second read of the room doesn't list it" : "refused though the room lists it",
-                NotHereReason(move));
-            return;
-        }
-
-        if (there < move.Count)
-        {
-            _log?.Info(LogCategory,
-                $"{move.From} holds {there} {move.ItemName}, not {move.Count}: picking up {there}");
-            // The copies that aren't there were never the sort's to account for.
-            if (!move.RequiresSearch) _expectedAfterSort?.Add(move.From, move.ItemName, there - move.Count);
-            move.Count = there;
-        }
-        _commandQueue.Enqueue(("get", move));
-        SendNextQueuedCommand();
+        if (_awaitingLook && source != FloorSurveySource.SearchReply) SettleRefused(hidden: false, list);
+        else if (_awaitingSearch && source != FloorSurveySource.RoomDisplay) SettleRefused(hidden: true, list);
     }
 
-    // Remove a failed get from the queue (so it stops being retried and no longer
-    // blocks completion), record it under LeftInPlace, and advance the dispatch
-    // exactly as a real confirmation would. Copies of it already taken stay queued
-    // as a carried move (KeepWhatWasTaken); only the rest is left.
-    private void StrandFailedGet(PendingSortMove move, string reason,
-        GhLeftReason why = GhLeftReason.GoneBySortTime)
+    // The second read is in (or the wait for it ran out, with nothing listed: a
+    // floor with nothing in plain sight prints no list, and a search that finds
+    // nothing answers in other words). Each refused pickup is asked again for what
+    // the list shows of it, or left if it shows none; then the hidden pickups held
+    // back for a visible stack go out behind it.
+    private void SettleRefused(bool hidden, IReadOnlyList<string> list)
+    {
+        List<PendingSortMove> refused = hidden ? _refusedHidden : _refusedVisible;
+        if (hidden) _awaitingSearch = _searchAgainQueued = false;
+        else _awaitingLook = _lookAgainQueued = false;
+
+        foreach (PendingSortMove move in refused.ToList())
+        {
+            // Copies credited to the stack since it was refused are in the pack
+            // and off the floor this list is of: only the rest is still to take.
+            KeepWhatWasTaken(move);
+            int there = list.Where(entry => SameItem(entry, move.ItemName))
+                .Sum(entry => CountedCommand.SplitLeadingCount(entry).Count);
+            if (there <= 0)
+            {
+                Strand(move, "a second read of the room doesn't list it", NotHereReason(move));
+            }
+            else
+            {
+                if (there < move.Count)
+                {
+                    _log?.Info(LogCategory,
+                        $"{move.From} holds {there} {move.ItemName}, not {move.Count}: picking up {there}");
+                    // The copies that aren't there were never the sort's to account for.
+                    if (!hidden) _expectedAfterSort?.Add(move.From, move.ItemName, there - move.Count);
+                    move.Count = there;
+                }
+                _commandQueue.Enqueue(("get", move));
+            }
+
+            if (hidden) continue;
+            foreach (PendingSortMove twin in _heldForVisibleTwin
+                         .Where(t => SameItem(t.ItemName, move.ItemName)).ToList())
+            {
+                _heldForVisibleTwin.Remove(twin);
+                _commandQueue.Enqueue(("get", twin));
+            }
+        }
+        refused.Clear();
+        PhaseChanged?.Invoke();
+
+        if (_commandQueue.Count > 0)
+        {
+            SendNextQueuedCommand();
+        }
+        else if (_outstandingDispatch.Count == 0)
+        {
+            EndDispatch();
+            ContinueAfterTransaction("refused pickups settled");
+        }
+        else
+        {
+            _dispatchSettle.Stop();
+            _dispatchSettle.Start();
+        }
+    }
+
+    // Take a failed get out of the queue (so it stops being retried and no longer
+    // blocks completion) and record it under LeftInPlace. Copies of it already
+    // taken stay queued as a carried move (KeepWhatWasTaken); only the rest is left.
+    private void Strand(PendingSortMove move, string reason, GhLeftReason why)
     {
         KeepWhatWasTaken(move);
-        if (ReferenceEquals(_recounting, move)) _recounting = null;
+        _refusedVisible.Remove(move);
+        _refusedHidden.Remove(move);
         _pending.Remove(move);
         _outstandingDispatch.Remove(move);
         _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, why));
         _failedHere.Add($"{Stack(move)} ({reason})");
         _log?.Debug(LogCategory,
             $"get failed for {move.ItemName} at {move.From} — {reason}; not retrying");
+    }
+
+    // Strand a failed get and advance the dispatch exactly as a real confirmation would.
+    private void StrandFailedGet(PendingSortMove move, string reason,
+        GhLeftReason why = GhLeftReason.GoneBySortTime)
+    {
+        Strand(move, reason, why);
         PhaseChanged?.Invoke();
         if (_outstandingDispatch.Count == 0)
         {
@@ -2797,8 +2909,10 @@ public sealed class GhSweepManager : IDisposable
         {
             _visibleByRoom[room] = expected.EntriesAt(room);
             _observedByRoom[room] = GhSurveyMerger.Total(_visibleByRoom, _hiddenByRoom, room, _itemNames);
-            RecordItemLocations(room);
         }
+        // One write for all of them: the file holds every room of the house.
+        _itemLocations?.RecordRooms(missed
+            .Select(room => (room, (IReadOnlyList<string>)_observedByRoom[room])).ToList());
         if (missed.Count > 0)
             _log?.Info(LogCategory,
                 $"final recon: {missed.Count} room(s) not read again; their item-log entries are the "

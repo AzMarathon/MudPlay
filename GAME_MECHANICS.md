@@ -6480,11 +6480,15 @@ A `get <item>` that can't succeed replies with one of these shapes:
     stack there is taken one `get` a copy, and the copies that are there are taken before the first
     refusal.
   - **Client use:** `GhSweepManager.OnGetRefusedAsNotHere`. The echo is matched to the pickup by name
-    with the count read past (`SameItem`). On Paradigm a refused counted pickup has the room read once
-    more (`l`, or `sea` for a hidden stack) and is asked again for what is there (`RecountFrom`); a
-    second refusal, or a second read that doesn't list the item, leaves it. On Stock the copies already
-    taken when a stack runs out go on as a carried move of their own (`KeepWhatWasTaken`) and only the
-    rest is left. A hidden stack left this way is recorded as not found by the search
+    with the count read past (`SameItem`). On Paradigm the room is read once more for its refused
+    pickups, after the rest of the room's batch: one `l` for every refused stack in plain sight, one
+    `sea` for every refused hidden one (`RecountFrom`, `SettleRefused`). Each is then asked again for
+    what that read lists of it; a second refusal, or a read that doesn't list the item, leaves it.
+    Because the game serves a `get` from the copies in plain sight first, the queued pickup of a hidden
+    stack of the same item is taken out of the batch when the visible stack is refused
+    (`HoldHiddenTwinsOf`) and sent after the resized visible pickup. On Stock the copies already taken
+    when a stack runs out go on as a carried move of their own (`KeepWhatWasTaken`) and only the rest is
+    left. A hidden stack left this way is recorded as not found by the search
     (`GhLeftReason.NotFoundBySearch`), not as gone.
 - **`Syntax: GET {Amount} {Currency}`**: the game misparsed the item name as a **currency** get.
   - Observed for some multi-word names, e.g. `get silk cape`, and for gem/stone names like `piece of amber`.
@@ -6626,8 +6630,10 @@ A `get <item>` that can't succeed replies with one of these shapes:
   away without making the list a display.
 - **Roomba adds a room's hidden stacks to its visible ones** (`GhSweepManager`, `GhSurveyMerger`; user
   rulings 2026-10-10). Recon keeps two records per room: the stacks its latest display showed
-  (`GhSurveyMerger.Replace`), and the stacks its search replies named, each at the highest count any one
-  reply showed (`GhSurveyMerger.Merge`). Their sum (`GhSurveyMerger.Total`) is what the room holds: the
+  (`GhSurveyMerger.Replace`; a display with no floor list is an empty floor, on every pass through the
+  room), and the stacks its search replies named, each at the highest count any one
+  reply showed (`GhSurveyMerger.Merge`). A list of unknown source read with no search of Roomba's own
+  out is not shown to be the whole floor, so it only adds to the visible record. Their sum (`GhSurveyMerger.Total`) is what the room holds: the
   item-location log, the room's shown inventory and the inventoried total read it. The item-location log
   is written once per room, when its searches end.
 - **Roomba queues a visible stack and a hidden stack of the same item as two moves**

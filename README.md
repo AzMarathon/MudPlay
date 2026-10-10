@@ -2,17 +2,17 @@
 
 <!-- current-version:start -->
 > **Version 3.165.5**
-> - Roomba counts a room's hidden copies of an item on top of the ones in plain sight (34 on the floor and 2 from a search is 36), not the larger of the two
-> - A hidden item is recorded at the highest count any one search showed; what is in plain sight is the latest room display
-> - The item-location log is written once per room, after its last search
-> - Sorting picks up the copies in plain sight first, then searches for the hidden ones as a pickup of their own
-> - A pickup refused for asking more than is there (Paradigm) has the room read once more and takes what is there
-> - A stack that runs out part-way (Stock) keeps the copies it took: they are delivered and reported, and only the rest is left
-> - A hidden stack the sort's search missed is reported as not found, not as gone
-> - Roomba's final lap records what it sees: each room's item-location entry is rewritten as the room is after the sort
-> - A room someone changed between the sort and that lap is named once in the program log; nothing is re-sorted
-> - Roomba's program log is written a room at a time (queue, pickups, deliveries, searches), with the per-stack lines at Debug
-> - Bug report: where the last floor list came from, Roomba's on-display and hidden counts for the room, the rooms the final lap found changed
+> - Roomba adds a room's hidden copies to its visible ones
+> - A hidden count is the highest any one search showed
+> - Item-location log written once per room
+> - Sort takes visible copies first, hidden ones after a search
+> - A stack smaller than recorded is re-read and what's there picked up
+> - Copies taken from a stack that ran out are still delivered
+> - A hidden stack the search missed is reported as not found
+> - Final lap rewrites each room's item-location entry
+> - A room changed after the sort is logged once
+> - Roomba's program log is one line per room
+> - Bug report shows Roomba's floor counts
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -141,6 +141,32 @@ public sealed class GhSweepFinalLapTests : IDisposable
         Assert.Empty(Sweep.RoomsChangedAfterSort);
     }
 
+    // Several rooms missed are one write of the item-location file between them,
+    // not one each: the file holds the whole house and is rewritten whole.
+    [Fact]
+    public void RoomsTheFinalLapCouldNotRead_AreWrittenInOneGo()
+    {
+        AHouseWithTwoStraysInTheMiddleRoom();
+        Assert.True(Sweep.Start());
+
+        int writesOnTheFinalLap = 0;
+        _house.Locations.Changed += () =>
+        {
+            if (Sweep.Phase == GhSweepManager.SweepPhase.FinalRecon) writesOnTheFinalLap++;
+        };
+        _house.IsDark = _ => Sweep.Phase == GhSweepManager.SweepPhase.FinalRecon;
+        _house.PlayOn();
+
+        Assert.Equal(GhSweepManager.SweepPhase.Idle, Sweep.Phase);
+        Assert.Equal(
+            new[] { "final recon: 3 room(s) not read again; their item-log entries are the sort's own account of them: 1/1, 1/2, 1/3" },
+            _house.SweepLog("final recon: "));
+        Assert.Equal(1, writesOnTheFinalLap);
+        Assert.Equal(new Dictionary<string, int> { ["mace"] = 2, ["war hammer"] = 1 }, _house.LoggedAt(A));
+        Assert.Equal(new Dictionary<string, int> { ["leather cap"] = 1, ["chain shirt"] = 1 }, _house.LoggedAt(B));
+        Assert.Empty(_house.LoggedAt(C));
+    }
+
     // And the other way about: a room recon never read has no floor to be held
     // against. What the final lap sees there is written down, and nothing in it is
     // called extra.

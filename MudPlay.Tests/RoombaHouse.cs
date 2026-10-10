@@ -13,7 +13,8 @@ namespace MudPlay.Tests;
 
 // A small gang house played out against the real Roomba sweep manager: three rooms in
 // a line (A, a weapons room; C between; B, an armour room), with the game's side kept
-// here. Floors that `get` and `drop` change, displays printed from them, a search that
+// here. Floors that `get` and `drop` change, displays printed from them as the whole
+// room block (name, description, floor list, `Obvious exits:`), a search that
 // finds what is hidden, and the game's own rules for a pickup: copies in plain sight
 // are taken before a hidden stack, a hidden stack only once a search has found it, and
 // on Paradigm a counted `get` for more than is there is refused whole. The bytes go
@@ -29,6 +30,7 @@ internal sealed class RoombaHouse : IDisposable
     private readonly string _scratchBbs = "roomba-house-" + Path.GetRandomFileName();
     private readonly TerminalEmulator _emulator = new(80, 24);
     private readonly RoomTracker _tracker;
+    private readonly MovementCoordinator _coordinator = new();
     private readonly InventoryManager _inventory;
     private RoomKey _here = A;
     private int _answered;
@@ -56,6 +58,8 @@ internal sealed class RoombaHouse : IDisposable
     public Func<bool> SearchFinds { get; set; } = () => true;
     // A line the game prints between a search's echo and its reply.
     public string? LineBetweenEchoAndReply { get; set; }
+    // Who the room's display names under its floor list, if anyone.
+    public string? AlsoHere { get; set; }
     // Whether the room being walked into is too dark to show.
     public Func<RoomKey, bool> IsDark { get; set; } = _ => false;
 
@@ -112,7 +116,7 @@ internal sealed class RoombaHouse : IDisposable
         _inventory.AttachLineExtractor(lines);
 
         _tracker = new RoomTracker(graph);
-        MovementCoordinator coordinator = new();
+        MovementCoordinator coordinator = _coordinator;
         GhSweepManager? sweep = null;
         _tracker.StateChanged += transition =>
         {
@@ -183,6 +187,11 @@ internal sealed class RoombaHouse : IDisposable
         }
     }
 
+    // Something other than Roomba holding the walk where it stands, as a rest does,
+    // and letting it go again.
+    public void HoldTheWalk() => _coordinator.AssertGate(MovementCoordinator.HealthRecoveryGate);
+    public void ReleaseTheWalk() => _coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate);
+
     // The next command the client has sent and the game has not yet answered.
     public string? NextCommand => _answered < Sent.Count ? Sent[_answered] : null;
 
@@ -199,11 +208,25 @@ internal sealed class RoombaHouse : IDisposable
             ? null
             : $"You notice {string.Join(", ", stacks.Select(s => s.Value > 1 ? $"{s.Value} {s.Key}" : s.Key))} here.";
 
-    // The room as the game displays it: what was typed, its name, its visible floor.
+    private Direction[] ExitsHere => _here.Equals(A) ? new[] { Direction.N }
+        : _here.Equals(B) ? new[] { Direction.S }
+        : new[] { Direction.N, Direction.S };
+
+    // The room as the game displays it: what was typed, then the room block. Its
+    // name, its description, its visible floor, who else is there, its exits.
     private string[] Display(string promptRow)
     {
-        List<string> rows = new() { promptRow, NameOf(_here) };
+        List<string> rows = new()
+        {
+            promptRow,
+            NameOf(_here),
+            "    Bare stone walls rise to a vaulted ceiling, and the flagstones underfoot are",
+            "worn smooth.",
+        };
         if (ListLine(Floor[_here]) is { } list) rows.Add(list);
+        if (AlsoHere is { } others) rows.Add("Also here: " + others + ".");
+        rows.Add("Obvious exits: "
+            + string.Join(", ", ExitsHere.Select(exit => exit == Direction.N ? "north" : "south")));
         return rows.ToArray();
     }
 
@@ -235,11 +258,7 @@ internal sealed class RoombaHouse : IDisposable
             return;
         }
         Wire(Display(Prompt + direction));
-
-        Direction[] exits = _here.Equals(A) ? new[] { Direction.N }
-            : _here.Equals(B) ? new[] { Direction.S }
-            : new[] { Direction.N, Direction.S };
-        _tracker.NoteRoomObserved(new RoomObservation(NameOf(_here), new HashSet<Direction>(exits)),
+        _tracker.NoteRoomObserved(new RoomObservation(NameOf(_here), new HashSet<Direction>(ExitsHere)),
             DateTimeOffset.UtcNow.AddSeconds(++_clock));
     }
 

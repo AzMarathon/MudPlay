@@ -72,12 +72,23 @@ public sealed class GhItemLocationStore
     // where it isn't searching) — `items` is what the room holds, its visible
     // stacks and its hidden ones added (count-prefixed entries allowed; the
     // count becomes Quantity).
-    public void RecordRoom(RoomKey room, IReadOnlyList<string> items)
+    public void RecordRoom(RoomKey room, IReadOnlyList<string> items) =>
+        RecordRooms(new[] { (room, items) });
+
+    // Several rooms at once, for one write of the file between them.
+    public void RecordRooms(IReadOnlyList<(RoomKey Room, IReadOnlyList<string> Items)> rooms)
     {
-        if (_realmFolder is null) return;
+        if (_realmFolder is null || rooms.Count == 0) return;
         TakeInOutsideChanges();
 
         DateTimeOffset now = DateTimeOffset.Now;
+        foreach ((RoomKey room, IReadOnlyList<string> items) in rooms) Apply(room, items, now);
+        Persist();
+        Changed?.Invoke();
+    }
+
+    private void Apply(RoomKey room, IReadOnlyList<string> items, DateTimeOffset now)
+    {
         HashSet<string> freshNames = new(StringComparer.OrdinalIgnoreCase);
 
         foreach (string entry in items)
@@ -113,9 +124,6 @@ public sealed class GhItemLocationStore
             if (byRoom.Remove(room) && byRoom.Count == 0) emptied.Add(name);
         }
         foreach (string name in emptied) _sightings.Remove(name);
-
-        Persist();
-        Changed?.Invoke();
     }
 
     // Resolve query (a player-typed item name, possibly partial or differently

@@ -179,6 +179,9 @@ public sealed class GhSweepSearchCountsTests : IDisposable
         Wire(Prompt + "n");
         Arrive("B", Direction.S);
         for (int i = 0; i < 3; i++) SearchSettles();
+        // The store room shows its floor again on the way back through it.
+        Wire(Prompt + "s");
+        Displayed(Display);
         Arrive("C", Direction.N, Direction.S);
         for (int i = 0; i < 3; i++) SearchSettles();
         Arrive("A", Direction.N);
