@@ -1,33 +1,27 @@
 namespace MudPlay.Game.Map;
 
-// The route filter of a walk the client started on its own: everything the
-// movement filter says, and on top of it only the teleports the user allowed such
-// walks to use (Settings → Teleports). To the route search a teleport is one step, so
-// it is nearly always on the shortest route, and where it lands is a call the
-// client can't make: the vortex into the Black Wasteland is one step from the
-// Darkwood Forest. A walk the user starts is asked on the route cards and never
-// gets this filter.
+// The route filter of a walk or loop run that has given up on a door: everything
+// the wrapped filter says, with that door refused on top. A door the character
+// tried and couldn't open is not one to plan through again on the same trip, and
+// without this the re-plan from the door's own room is the same one step through it.
 //
-// Wrapping the filter, not passing a flag to one search, is what makes the rule
-// hold for every plan the walk makes: the land route, the legs either side of a
-// boat or a sysop jump, and each re-plan on the way.
-public sealed class AutomaticWalkTeleportFilter : IRoomFilter
+// The set is the caller's and is read live, so a door given up on later is refused
+// by the filter already in use. A door is named by the room it leaves and the room
+// it leads to, since an exit alone doesn't say where it leaves from.
+public sealed class AbandonedDoorsFilter : IRoomFilter
 {
     private readonly IRoomFilter? _inner;
-    private readonly IReadOnlySet<(RoomKey From, RoomKey To)> _allowed;
+    private readonly IReadOnlySet<(RoomKey From, RoomKey To)> _abandoned;
 
-    public AutomaticWalkTeleportFilter(IRoomFilter? inner, IReadOnlySet<(RoomKey From, RoomKey To)> allowed)
+    public AbandonedDoorsFilter(IRoomFilter? inner, IReadOnlySet<(RoomKey From, RoomKey To)> abandoned)
     {
-        ArgumentNullException.ThrowIfNull(allowed);
+        ArgumentNullException.ThrowIfNull(abandoned);
         _inner = inner;
-        _allowed = allowed;
+        _abandoned = abandoned;
     }
 
-    public static bool IsTeleport(in RoomExit exit) =>
-        exit.Hint == RoomExitHint.Teleport || exit.GatewayTeleport;
-
     public bool IsExitRefused(RoomKey from, in RoomExit exit) =>
-        (IsTeleport(in exit) && !_allowed.Contains((from, exit.Target)))
+        (exit.Hint is RoomExitHint.Door or RoomExitHint.KeyLocked && _abandoned.Contains((from, exit.Target)))
         || (_inner?.IsExitRefused(from, in exit) ?? false);
 
     public bool IsAvoided(RoomKey key) => _inner?.IsAvoided(key) ?? false;

@@ -198,6 +198,26 @@ public sealed class AutoOpenChestOffloadTests : IDisposable
         Assert.Equal(2, Assert.Single(_profile.Current!.ChestLoot!.Items).Count);
     }
 
+    // Auto-discard takes a whole pile of what the chest gave right after the read:
+    // one counted line on Paradigm, a line a copy on Stock. Either way the pile's
+    // row goes and the rest of the list stays.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void APileDiscardedInABatchRightAfterTheRead_LeavesTheList(bool counted)
+    {
+        Inventory("torch", gold: 10);
+        Feed("You took oak chest.");
+        RunScheduled();
+        Inventory("torch, 3 moonstone, ruby", gold: 10);
+
+        if (counted) Feed("You dropped 3 moonstone.");
+        else for (int i = 0; i < 3; i++) Feed("You dropped moonstone.");
+
+        Assert.Equal(new[] { ("ruby", 1) }, Listed);
+        Assert.Equal("ruby", Assert.Single(_profile.Current!.ChestLoot!.Items).Name);
+    }
+
     // A full read that no longer shows a listed item is as good as a confirmation:
     // it was used up, or left while nothing was watching.
     [Fact]

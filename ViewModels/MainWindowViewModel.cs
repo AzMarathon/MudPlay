@@ -6536,11 +6536,12 @@ public partial class MainWindowViewModel : ObservableObject
     partial void OnIsAutoGetItemsActiveChanged(bool value)
     {
         PersistAutoModeFlag("AutoGetItems", value, d => d.AutoGetItems = value);
-        // The auto-discard engine's held hides waited for its switch.
-        if (value) AppServices.Current.AutoDiscard.RecheckHeldHides();
+        // The auto-discard engine's held hides waited for its switch; switched off,
+        // its piles still waiting to be sent come back.
+        AppServices.Current.AutoDiscard.OnRulesChanged();
         // An open the auto-open engine still owed is forgotten as the switch goes
         // off, not at the next pack change: by then it may be back on.
-        else AppServices.Current.AutoOpen.Recheck();
+        if (!value) AppServices.Current.AutoOpen.Recheck();
         if (!_climbDrivingEngines) _climbTurnedOffGetItems = false;
         MaybeEndSprintOnManualEngineEnable(value);
     }

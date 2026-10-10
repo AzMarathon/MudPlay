@@ -12,6 +12,38 @@
 - Chest Offload: `op <chest>` is tracked, `open <direction>` is not
 - Bug report shows auto-open's state
 
+## 3.161.16
+
+- Auto-discard counts copies, not pack entries: an item with Min. to keep of 1 or more is now discarded down to that amount (it never was before)
+- Worn copies count toward Min. to keep and are never the copy discarded
+- A flagged light is discarded lit or not; the lit one counts as a pack copy
+- A discard waiting to be sent is checked again before it goes, and taken back on a Roomba sweep, the switch going off, an unticked flag or a raised keep
+- An inventory read landing before a pile's answers no longer has the pile sent twice
+- Taking off a lit light on Stock no longer adds a pack item named `<light> and extinguished it` or leaves the light listed as lit
+
+## 3.161.10
+
+- Locks under 25% a pick are gone round when the way round is short
+- A door the picks run out on is gone round, not stood at
+- Auto-Lair waits one step short of the lair, on its own route
+- Auto-Lair leaves out a lair it can't reach, and retries a failed entry slower each time
+- Auto-Lair keeps a door only if you can't open it; a fair-odds door is retried next visit
+- Log and bug report name the doors gone round and the lairs left out
+
+## 3.161.9
+
+- Exp/Hr estimator and loop simulator: room-spell summons now read in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
+- One-at-a-time bosses with a regen wait a room spell summons are no longer counted: lowers estimates through the Ancient Fortress (Angelic Hunter)
+- A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
+- Every monster a summon roll brings is counted, and an empty-room-only summon line only in an empty room
+- Program log lists the summoning room spells and each summon left out
+
+## 3.161.8
+
+- Party window: a member's level is the one they state, no longer the level their exp could train to
+- MegaMUD `@level` replies that count past the next level (`Needed: N (L60)  Will level in: +2 in 2-3 days`) are now read
+- Party window: a member's exp line names the level their figure counts toward
+
 ## 3.161.7
 
 - Party item gates: after crossing, one `par` checks a member credited with a copy from memory
