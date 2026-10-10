@@ -1446,9 +1446,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 // finds nothing is the target walled by a non-acquirable gate —
                 // fall back to the all-gates-ignored probe to name the level /
                 // toll / class reason (or "no path" when truly disconnected).
+                // The rooms closed to routes stay closed for that probe: acquiring
+                // nothing opens them, and with them open the shortest way cut
+                // across the lake and the lake was named for a walk whose real
+                // want was a door key. They are opened only when nothing else
+                // gets there, so that the lake is named when it is the reason.
                 IReadOnlyList<Direction>? describePath;
-                using (Filter?.SuspendAcquirableGates())
+                using (Filter?.SuspendAcquirableGatesButUnprotectableHazards())
                     describePath = _bfs.FindPath(source.Key, destination, Filter);
+                if (describePath is null || describePath.Count == 0)
+                    using (Filter?.SuspendAcquirableGates())
+                        describePath = _bfs.FindPath(source.Key, destination, Filter);
                 if (describePath is null || describePath.Count == 0)
                     describePath =
                         _bfs.FindPath(source.Key, destination, Filter, ignoreExitGates: true);
@@ -1750,8 +1758,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // with the far side (which may have a different requirement entirely).
         (RoomKey From, Direction Dir, RoomExit Exit)? doorGate = null;
         // The rooms on the way that no route enters whatever is carried (Crystal
-        // Lake's sea rooms): how many, and the first, so the message says what the
-        // hazard is and that fetching something won't help.
+        // Lake's sea rooms): how many, and the first.
         (RoomKey First, int Count)? closedRooms = null;
         RoomKey cur = source;
         foreach (Direction dir in ungatedPath)
@@ -1774,7 +1781,38 @@ public sealed class AutoWalkManager : IRecoverableEngine
             }
             cur = exit.Target;
         }
-        return FormatBlockReasons(reasons, missingItems, levelGate, doorGate, closedRooms);
+        // Nothing else on the way matters once it runs into these: no item, key or
+        // level opens them, so they are the whole of the reason.
+        if (closedRooms is { } closed && Filter is { } filter)
+            return DescribeClosedRooms(source, cur, closed.First, closed.Count, filter);
+        return FormatBlockReasons(reasons, missingItems, levelGate, doorGate);
+    }
+
+    // Why a walk that would have to go through rooms closed to routes has no route,
+    // in one line. Mostly: only typed moves go into them (user, 2026-10-10). Where
+    // the map has no other way there, a crossing exists on terms (BfsMapper.
+    // FindCrossing), so the line says what the crosser lacks; and for the room that
+    // teleports on arrival, that the crossing is a route card's, on a walk the user
+    // starts.
+    private string DescribeClosedRooms(RoomKey source, RoomKey destination, RoomKey first, int count, IRoomFilter filter)
+    {
+        string rooms = $"{count} teleporting room(s), from {NameRoom(first)} on";
+        if (filter.IsClosedToRoutes(destination) || !_bfs.IsCutOffByClosedRooms(source, destination, filter)
+            || filter.CrossingTerms(first) is not { } terms)
+            return $"no route: the way there crosses {rooms}, and only typed moves go into those";
+
+        string items = string.Join(" or ", terms.Items.Select(id => _itemNameResolver?.Invoke(id) ?? $"item #{id}"));
+        string asks = $"level {terms.MinLevel} and {items} in your pack";
+        if (!terms.Met)
+        {
+            List<string> missing = new();
+            if (!terms.LevelMet) missing.Add($"level {terms.MinLevel}");
+            if (!terms.ItemHeld) missing.Add(items);
+            return $"no route: the only way there is across {rooms}, which takes {asks} (missing: {string.Join(" and ", missing)})";
+        }
+        return filter.TeleportsOnArrival(destination)
+            ? $"no route: the only way there is across {rooms}, a crossing offered only on the route card of a walk you start yourself"
+            : $"no route: the only way there is across {rooms}, and no crossing of them could be planned";
     }
 
     // "no route without the teleport from 3/784 (Darkwood Forest) to 3/740 (Black
@@ -1849,8 +1887,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private string FormatBlockReasons(ExitBlockReason reasons, IReadOnlyList<int> missingItems,
         (RoomKey Room, int Min, int Max)? levelGate,
-        (RoomKey From, Direction Dir, RoomExit Exit)? doorGate,
-        (RoomKey First, int Count)? closedRooms = null)
+        (RoomKey From, Direction Dir, RoomExit Exit)? doorGate)
     {
         // Classification came up empty (e.g. a bare IRoomFilter with no gate
         // model) — keep a truthful generic line rather than inventing a cause.
@@ -1869,12 +1906,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (reasons.HasFlag(ExitBlockReason.LockedDoor) || reasons.HasFlag(ExitBlockReason.Door))
             parts.Add(DescribeDoorGate(doorGate));
         if (reasons.HasFlag(ExitBlockReason.Item)) parts.Add(DescribeMissingItems(missingItems));
-        // A walk nobody picked on a route card never crosses these, and no item
-        // would let it: say so, and how the user can cross them if they mean to.
-        if (closedRooms is { } closed)
-            parts.Add($"{closed.Count} room(s) that teleport at random and that nothing protects from, "
-                + $"from {NameRoom(closed.First)} on (only a walk you start and pick on its route card crosses them)");
-        else if (reasons.HasFlag(ExitBlockReason.Hazard)) parts.Add("a room hazard you can't survive");
+        if (reasons.HasFlag(ExitBlockReason.Hazard)) parts.Add("a room hazard you can't survive");
         if (reasons.HasFlag(ExitBlockReason.Alignment)) parts.Add("an alignment-gated entrance a party member can't enter");
         return "all routes blocked by " + string.Join(" or ", parts);
     }

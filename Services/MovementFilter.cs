@@ -425,6 +425,40 @@ public sealed class MovementFilter : IRoomFilter
             && IsUncounteredHazardRoom(room);
     }
 
+    // The terms on which the few walks that cross such a room do: the level from
+    // which the room's own textblock treats a boat's holder apart (50 on the lake),
+    // and a boat in hand. With both the lake teleports about 2 entries in 100; with
+    // either missing, about 70. Judged on our own level and pack, and never met on
+    // a level or pack not read yet: a crossing isn't made on a guess.
+    public ClosedRoomTerms? CrossingTerms(RoomKey room)
+    {
+        int spell = RoomEntrySpellProbe?.Invoke(room) ?? 0;
+        if (spell <= 0 || Hazards?.HazardForSpell(spell) is not { } hazard || HazardCounterProtects(hazard))
+            return null;
+        return TermsOf(hazard);
+    }
+
+    private ClosedRoomTerms TermsOf(RoomHazardIndex.RoomHazard hazard) => new(
+        hazard.CounterHolderMinLevel,
+        hazard.ProtectingItems,
+        LevelMet: LevelProvider?.Invoke() is { } level && level >= hazard.CounterHolderMinLevel,
+        ItemHeld: InventoryKnown && ItemCarriedProbe is { } carries && hazard.IsSatisfiedBy(carries));
+
+    public bool MayCrossClosedRooms()
+    {
+        if (Hazards is null) return false;
+        foreach (RoomHazardIndex.RoomHazard hazard in Hazards.Hazards)
+            if (!HazardCounterProtects(hazard) && TermsOf(hazard).Met) return true;
+        return false;
+    }
+
+    // Whether a room spell teleports on a roll or outright (RoomSpellTeleportIndex's
+    // Sudden class). Wired by AppServices; unset, no room reads as one.
+    public Func<int, bool>? SpellTeleportsAtRandomProbe { get; set; }
+
+    public bool TeleportsOnArrival(RoomKey room) =>
+        RoomEntrySpellProbe?.Invoke(room) is > 0 and int spell && SpellTeleportsAtRandomProbe?.Invoke(spell) == true;
+
     private bool InventoryKnown => InventoryReadyProbe?.Invoke() == true;
 
     // Suspends the four acquirable gates for a single planning pass so a caller
@@ -639,7 +673,7 @@ public sealed class MovementFilter : IRoomFilter
         _tollGateForcedClosed = true;
         try
         {
-            using IDisposable _ = SuspendAcquirableGates();
+            using IDisposable _ = SuspendAcquirableGatesButUnprotectableHazards();
             return bfs.FindPath(source, destination, this) is not null;
         }
         finally { _tollGateForcedClosed = false; }
@@ -705,7 +739,7 @@ public sealed class MovementFilter : IRoomFilter
         _tollGateSuspended = true;
         try
         {
-            using IDisposable _ = SuspendAcquirableGates();
+            using IDisposable _ = SuspendAcquirableGatesButUnprotectableHazards();
             return bfs.RouteTollCopper(source, destination, this);
         }
         finally { _tollGateSuspended = false; }

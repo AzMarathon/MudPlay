@@ -21,6 +21,13 @@ public enum ExitBlockReason
     Alignment  = 1 << 8,   // an (Alignment: X to Y) exit a party member's alignment is outside
 }
 
+// What a crosser needs for a room closed to routes on a walk that may cross it: a
+// level, and any one of some items in hand; and whether this crosser has each.
+public readonly record struct ClosedRoomTerms(int MinLevel, IReadOnlyList<int> Items, bool LevelMet, bool ItemHeld)
+{
+    public bool Met => LevelMet && ItemHeld;
+}
+
 // Pathing-time room filter — when supplied to BfsMapper.FindPath, any
 // room with IsAvoided=true is treated as a non-traversable node (cannot be
 // on a path; cannot be a path's intermediate hop). The source and
@@ -125,6 +132,27 @@ public interface IRoomFilter
     // takes the shortest way out first). Crystal Lake's teleporting sea rooms are
     // the case. Default: none; only Services.MovementFilter knows of any.
     bool IsClosedToRoutes(RoomKey room) => false;
+
+    // What this crosser needs to be taken across a room closed to routes, on the
+    // few walks that are (BfsMapper.FindCrossing), and whether they have it. Null
+    // for a room that isn't one. Default: none.
+    ClosedRoomTerms? CrossingTerms(RoomKey room) => null;
+
+    // Whether this crosser meets the terms of any closed room there is. A cheap
+    // gate on the crossing search: false for nearly every character, so a failed
+    // plan costs them nothing more. Default: no.
+    bool MayCrossClosedRooms() => false;
+
+    // A room whose own spell teleports whoever arrives, on a roll or outright. A
+    // walk is never taken across closed rooms to one on its own account: that is
+    // the one crossing a route card offers (the room on Paradigm's Crystal Lake that
+    // sends you to the Bloodwood Weald). Default: none.
+    bool TeleportsOnArrival(RoomKey room) => false;
+
+    // SuspendAcquirableGates, but for the rooms closed to routes, which stay closed:
+    // what could be walked by obtaining something. Default: the plain suspension,
+    // for filters that know no such room.
+    IDisposable SuspendAcquirableGatesButUnprotectableHazards() => SuspendAcquirableGates();
 
     // The default-implementation's inert scope — disposing it does nothing.
     private sealed class NoGateSuspension : IDisposable

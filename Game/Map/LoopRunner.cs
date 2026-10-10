@@ -936,8 +936,9 @@ public sealed class LoopRunner : IRecoverableEngine
 
         // The free way in first; failing that, through a gate the walk can open on
         // the way, as the runner's own start falls back.
+        // Never across a room closed to routes: the walk there wouldn't cross either.
         if (Nearest() is { } free) return free;
-        using (_filter?.SuspendAcquirableGates())
+        using (_filter?.SuspendAcquirableGatesButUnprotectableHazards())
             return Nearest();
     }
 
@@ -1160,7 +1161,7 @@ public sealed class LoopRunner : IRecoverableEngine
         if (entryIndex.Count == 0) return false;
 
         IReadOnlyDictionary<RoomKey, int> steps;
-        using (IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGates() : null)
+        using (IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGatesButUnprotectableHazards() : null)
             steps = _bfs!.ComputeDistancesTo(from, entryIndex.Keys, _filter);
         RoomKey? best = null;
         foreach ((RoomKey room, int index) in entryIndex)
@@ -1237,8 +1238,9 @@ public sealed class LoopRunner : IRecoverableEngine
         // hazard) for the reachability probe so a waypoint reachable only by acquiring
         // something en route (e.g. the key to re-enter a walled city after a detour)
         // still counts as reachable; the approach walk then plans + acquires through
-        // them. Level / toll / class gates stay active regardless.
-        using IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGates() : null;
+        // them. Level / toll / class gates stay active regardless, and so do the
+        // rooms closed to routes, which that walk would not cross.
+        using IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGatesButUnprotectableHazards() : null;
         RoomKey? best = null;
         int bestLen = int.MaxValue;
         foreach (LoopWaypoint w in waypoints)

@@ -44,6 +44,11 @@ public sealed class AutomaticWalkTeleportFilter : IRoomFilter
         IReadOnlyCollection<RoomKey>? openHazardRooms = null) =>
         _inner?.SuspendAcquirableGatesExcept(keepClosed, keepUncounteredHazards, openHazardRooms) ?? NoSuspension.Instance;
     public bool IsClosedToRoutes(RoomKey room) => _inner?.IsClosedToRoutes(room) ?? false;
+    public ClosedRoomTerms? CrossingTerms(RoomKey room) => _inner?.CrossingTerms(room);
+    public bool MayCrossClosedRooms() => _inner?.MayCrossClosedRooms() ?? false;
+    public bool TeleportsOnArrival(RoomKey room) => _inner?.TeleportsOnArrival(room) ?? false;
+    public IDisposable SuspendAcquirableGatesButUnprotectableHazards() =>
+        _inner?.SuspendAcquirableGatesButUnprotectableHazards() ?? NoSuspension.Instance;
     private sealed class NoSuspension : IDisposable
     {
         public static readonly NoSuspension Instance = new();

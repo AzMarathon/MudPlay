@@ -2456,22 +2456,32 @@ public sealed class RouteChoicePlannerTests
         """[ { "Number": 1076, "Abil-0": 115, "AbilVal-0": 66, "Abil-1": 148, "AbilVal-1": 9358 } ]""";
 
     private static void WithLake(string roomsJson, Action<BfsMapper, RoomGraphManager, MovementFilter> body)
+        => WithLake(roomsJson, (bfs, graph, filter, _) => body(bfs, graph, filter));
+
+    // The room spell of the lake room that teleports on to the Bloodwood Weald; like
+    // the sea spells it teleports on a roll, which is all the filter is told of it.
+    private const int WealdSpell = 5258;
+
+    // meetsTerms: level 50 or over and a boat in the pack, both together, which is
+    // what the few crossings the client makes ask (one case in the four).
+    private static void WithLake(string roomsJson, Action<BfsMapper, RoomGraphManager, MovementFilter, bool> body)
     {
         foreach (int level in new[] { 25, 58 })
-            foreach (Func<int, bool> carries in new Func<int, bool>[] { _ => false, id => id == 690 })
+            foreach (bool boat in new[] { false, true })
                 WithGraph(roomsJson.Replace("\"Spell\": 700", "\"Spell\": 1076"),
                     (bfs, graph, filter) =>
                     {
                         filter.RoomEntrySpellProbe = key => graph.GetRoom(key)?.Spell ?? 0;
-                        body(bfs, graph, filter);
+                        body(bfs, graph, filter, level >= 50 && boat);
                     },
                     spellsJson: LakeSpellsJson,
                     wireHazards: (index, filter) =>
                     {
                         filter.Hazards = index;
                         filter.InventoryReadyProbe = () => true;
-                        filter.ItemCarriedProbe = carries;
+                        filter.ItemCarriedProbe = id => boat && id == 690;
                         filter.LevelProvider = () => level;
+                        filter.SpellTeleportsAtRandomProbe = spell => spell is 1076 or WealdSpell;
                     },
                     tbInfoJson: RoomHazardIndexTests.LakeTbInfoJson);
     }
@@ -2519,50 +2529,185 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
-    // The lake is the only way: a walk the user starts gets the one card that says
-    // so and fetches nothing; a trip nobody picked finds no route.
+    // "only typed moves should enter the lake" (user, 2026-10-10): a sea room is
+    // never a walk's destination, for a walk the user starts or one the client
+    // does, whatever the level and with or without a boat. No route, and no card.
     [Fact]
-    public void LakeOnlyRoute_IsOneExplicitCard_AndNoRouteForAnAutomaticTrip()
+    public void DestinationInTheLake_HasNoRouteAndNoCard()
     {
-        WithLake(HazardOnlyRoomsJson, (bfs, graph, filter) =>
+        WithLake(LakeCrossingJson, (bfs, graph, filter) =>
         {
-            RoomKey from = new(1, 1), to = new(1, 9);
-            Assert.Null(bfs.FindPath(from, to, filter));
+            RoomKey from = new(1, 1), inTheLake = new(1, 3);
+            Assert.Null(bfs.FindPath(from, inTheLake, filter));
             using (filter.SuspendAcquirableGatesButUncounteredHazards())
-                Assert.Null(bfs.FindPath(from, to, filter));
-
-            RouteChoice? choice = RouteChoicePlanner.Evaluate(bfs, filter, graph, from, to);
-            Assert.NotNull(choice);
-            Assert.False(choice!.HasFreeRoute);
-            Assert.Equal(2, choice.GatedStepCount);
-            RouteRequirement req = Assert.Single(choice.Requirements);
-            Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);
-            Assert.True(req.NoProtection);
-            Assert.Empty(RouteChoicePlanner.SourceableGateItems(choice.Requirements, NoSummons));
-            Assert.Equal(new[] { "Hazard (1/5)" }, choice.UnprotectedRoomNames);
-            Assert.Equal(new[] { new RoomKey(1, 5) }, RouteChoicePlanner.UncounteredHazardRooms(filter, choice.GatedPath));
-
-            // The walk the card commits opens the rooms agreed to, and those only.
-            using (filter.SuspendAcquirableGatesExcept(
-                Array.Empty<int>(), keepUncounteredHazards: true, openHazardRooms: new[] { new RoomKey(1, 5) }))
-                Assert.Equal(2, bfs.FindPath(from, to, filter)!.Count);
+                Assert.Null(bfs.FindPath(from, inTheLake, filter));
+            Assert.Null(RouteChoicePlanner.Evaluate(bfs, filter, graph, from, inTheLake));
+            Assert.Null(bfs.FindCrossing(from, inTheLake, filter));
         });
     }
 
-    // A destination in the spell area plans in on that same card, from outside.
+    // Stock's White Forest: a place the map reaches across the lake and no other
+    // way (here the island, 1/10). A walk is taken across to it and back out of it,
+    // one the client starts as much as one the user does, with no card; but only at
+    // level 50 or over with a boat in the pack, both together, and by the crossing
+    // with the fewest sea rooms rather than the fewest steps.
     [Fact]
-    public void DestinationInTheLake_IsReachedOnTheExplicitCardOnly()
+    public void PlaceReachedOnlyAcrossTheLake_IsCrossedTo_WithLevelAndBoat_ByTheFewestSeaRooms()
     {
-        WithLake(HazardOnlyRoomsJson, (bfs, graph, filter) =>
+        WithLake(LakeCrossingJson, (bfs, graph, filter, meetsTerms) =>
         {
-            RoomKey from = new(1, 1), inTheLake = new(1, 5);
-            Assert.Null(bfs.FindPath(from, inTheLake, filter));
+            RoomKey shore = new(1, 1), island = new(1, 10), bank = new(1, 9);
+            Assert.True(bfs.IsCutOffByClosedRooms(shore, island, filter));
+            Assert.Equal(meetsTerms, filter.MayCrossClosedRooms());
 
-            RouteChoice? choice = RouteChoicePlanner.Evaluate(bfs, filter, graph, from, inTheLake);
-            Assert.NotNull(choice);
-            Assert.Equal(1, choice!.GatedStepCount);
-            Assert.True(Assert.Single(choice.Requirements).NoProtection);
+            IReadOnlyList<Direction>? there = bfs.FindPath(shore, island, filter);
+            IReadOnlyList<Direction>? back = bfs.FindPath(island, bank, filter);
+            // The plan an automatic trip makes through gates is the same.
+            using (filter.SuspendAcquirableGatesButUncounteredHazards())
+                Assert.Equal(there?.Count, bfs.FindPath(shore, island, filter)?.Count);
+            // Either way there is nothing for a card to offer.
+            Assert.Null(RouteChoicePlanner.Evaluate(bfs, filter, graph, shore, island));
+
+            if (!meetsTerms)
+            {
+                Assert.Null(there);
+                Assert.Null(back);
+                return;
+            }
+            Assert.Equal(new[] { shore, new RoomKey(1, 2), island }, RouteChoicePlanner.BuildKeyPath(graph, shore, there!));
+            // Out by the one sea room to the west shore and round by the path (7
+            // steps), not east across three of them (5 steps).
+            Assert.Equal(
+                new[] { island, new RoomKey(1, 2), shore, new RoomKey(1, 6), new RoomKey(1, 7), new RoomKey(1, 8),
+                        new RoomKey(1, 5), bank },
+                RouteChoicePlanner.BuildKeyPath(graph, island, back!));
         });
+    }
+
+    // The Isle of Bones: the lake surrounds it too, but there is another way in (a
+    // keyed door here), so it is never reached across the lake, whoever asks: the
+    // route card is the key's.
+    [Fact]
+    public void PlaceWithAnotherWayIn_IsNeverReachedAcrossTheLake()
+    {
+        // The island's row is the one whose north is 1/2, the bank's the one whose
+        // west is 1/5.
+        string isle = LakeCrossingJson
+            .Replace("\"N\": \"1/2\", \"S\": \"0\", \"E\": \"0\"", "\"N\": \"1/2\", \"S\": \"0\", \"E\": \"1/9 (Key: 7)\"")
+            .Replace("\"N\": \"0\", \"S\": \"0\", \"E\": \"0\", \"W\": \"1/5\"",
+                     "\"N\": \"0\", \"S\": \"1/10 (Key: 7)\", \"E\": \"0\", \"W\": \"1/5\"");
+        Assert.Contains("\"S\": \"1/10 (Key: 7)\"", isle);
+        Assert.Contains("\"E\": \"1/9 (Key: 7)\"", isle);
+        WithLake(isle, (bfs, graph, filter) =>
+        {
+            RoomKey shore = new(1, 1), island = new(1, 10);
+            Assert.False(bfs.IsCutOffByClosedRooms(shore, island, filter));
+            Assert.Null(bfs.FindPath(shore, island, filter));
+            Assert.Null(bfs.FindCrossing(shore, island, filter));
+
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(bfs, filter, graph, shore, island);
+            Assert.NotNull(choice);
+            Assert.Equal(RouteRequirementKind.DoorKey, Assert.Single(choice!.Requirements).Kind);
+            Assert.DoesNotContain(choice.GatedPath, filter.IsClosedToRoutes);
+            Assert.Null(choice.UnprotectedRoomNames);
+        });
+    }
+
+    // The one card that crosses the lake: a walk the user starts to the room that
+    // teleports on to the Bloodwood Weald (here the island, given that spell), at
+    // level 50 or over with a boat, "both ... together" (user, 2026-10-10). With
+    // either missing there is no card and no route; and no walk the client starts
+    // is ever planned there, terms met or not.
+    [Fact]
+    public void RoomThatTeleportsOn_IsOfferedOnACard_OnlyWithLevelAndBoat_AndNeverToAnAutomaticWalk()
+    {
+        string weald = LakeCrossingJson.Replace("\"Name\": \"Island\", \"Spell\": 0", $"\"Name\": \"Island\", \"Spell\": {WealdSpell}");
+        WithLake(weald, (bfs, graph, filter, meetsTerms) =>
+        {
+            RoomKey shore = new(1, 1), room = new(1, 10);
+            Assert.True(filter.TeleportsOnArrival(room));
+            Assert.False(filter.IsClosedToRoutes(room));
+
+            // What any walk plans for itself, the user's plain walk included: nothing.
+            Assert.Null(bfs.FindPath(shore, room, filter));
+            using (filter.SuspendAcquirableGatesButUncounteredHazards())
+                Assert.Null(bfs.FindPath(shore, room, filter));
+
+            RouteChoice? card = RouteChoicePlanner.Evaluate(bfs, filter, graph, shore, room);
+            if (!meetsTerms)
+            {
+                Assert.Null(card);
+                return;
+            }
+            Assert.NotNull(card);
+            Assert.False(card!.HasFreeRoute);
+            Assert.Equal(new[] { shore, new RoomKey(1, 2), room }, card.GatedPath);
+            RouteRequirement req = Assert.Single(card.Requirements);
+            Assert.True(req.NoProtection);
+            Assert.Empty(RouteChoicePlanner.SourceableGateItems(card.Requirements, NoSummons));
+            Assert.Equal(new[] { "Lake (1/2)" }, card.UnprotectedRoomNames);
+            // Picking it agrees to the sea room on its route, and the walk it commits
+            // opens that room and no other.
+            Assert.Equal(new[] { new RoomKey(1, 2) }, RouteChoicePlanner.UncounteredHazardRooms(filter, card.GatedPath));
+            using (filter.SuspendAcquirableGatesExcept(
+                Array.Empty<int>(), keepUncounteredHazards: true, openHazardRooms: new[] { new RoomKey(1, 2) }))
+                Assert.Equal(2, bfs.FindPath(shore, room, filter)!.Count);
+        });
+    }
+
+    // What the walk itself says when it has no route for the lake, in one line: only
+    // typed moves go into the sea rooms; and for a place only the lake reaches, what
+    // the crossing takes and which of it is missing.
+    [Fact]
+    public void WalkWithNoRouteForTheLake_SaysWhy()
+    {
+        string weald = LakeCrossingJson.Replace("\"Name\": \"Island\", \"Spell\": 0", $"\"Name\": \"Island\", \"Spell\": {WealdSpell}");
+        foreach (string rooms in new[] { LakeCrossingJson, weald })
+            WithLake(rooms, (bfs, graph, filter, meetsTerms) =>
+            {
+                string? Refusal(RoomKey destination)
+                {
+                    RoomTracker tracker = new(graph);
+                    tracker.SetLocated(new RoomKey(1, 1));
+                    AutoWalkManager walker = new(graph, bfs, tracker, new MovementCoordinator(), filter);
+                    walker.SetItemNameResolver(id => id == 690 ? "log raft" : "wooden skiff");
+                    walker.SetWireSender(_ => { });
+                    string? detail = null;
+                    walker.Event += e => { if (e.Kind == WalkEventKind.Failed) detail = e.Detail; };
+                    return walker.WalkTo(destination) ? null : detail;
+                }
+
+                Assert.Equal(
+                    "no route: the way there crosses 2 teleporting room(s), from 1/2 (Lake) on, and only typed moves go into those",
+                    Refusal(new RoomKey(1, 3)));
+
+                bool teleportsOn = filter.TeleportsOnArrival(new RoomKey(1, 10));
+                string? island = Refusal(new RoomKey(1, 10));
+                if (meetsTerms && !teleportsOn)
+                    Assert.Null(island);   // the White Forest case: it walks
+                else if (meetsTerms)
+                    Assert.Equal(
+                        "no route: the only way there is across 1 teleporting room(s), from 1/2 (Lake) on, a crossing "
+                        + "offered only on the route card of a walk you start yourself",
+                        island);
+                else
+                {
+                    Assert.StartsWith(
+                        "no route: the only way there is across 1 teleporting room(s), from 1/2 (Lake) on, which takes "
+                        + "level 50 and log raft or wooden skiff in your pack (missing: ", island);
+                    Assert.Equal(filter.LevelProvider!() < 50, island!.Contains("missing: level 50"));
+                    Assert.Equal(!filter.ItemCarriedProbe!(690), island.Contains("log raft or wooden skiff)"));
+                }
+            });
+    }
+
+    // A lever trip is planned like the rest: where the lever sits beyond a sea room,
+    // no card offers that crossing.
+    [Fact]
+    public void LeverBeyondTheLake_IsNeverOfferedOnACard()
+    {
+        WithLake(LeverBehindHazardRoomsJson, (bfs, graph, filter) =>
+            Assert.Null(RouteChoicePlanner.EvaluateLeverDetour(bfs, filter, graph, new RoomKey(1, 5), new RoomKey(1, 9))));
     }
 
     // West shore 1/1, three sea rooms 1/2–1/4, east shore 1/5, destination 1/9 beyond
@@ -2617,12 +2762,10 @@ public sealed class RouteChoicePlannerTests
             Assert.Equal(2, bfs.FindPath(new RoomKey(1, 3), new RoomKey(1, 1), filter)!.Count);
             Assert.Null(bfs.FindPath(new RoomKey(1, 2), new RoomKey(1, 4), filter));
 
-            // The island is out of the spell area but leads nowhere: the way off it is
-            // the lake, which is the explicit card's to offer.
+            // The island is out of the spell area and a step away: a way out like any
+            // other, though it leads no further for a crosser who can't be taken
+            // back across.
             Assert.Single(bfs.FindPath(inTheLake, new RoomKey(1, 10), filter)!);
-            Assert.Null(bfs.FindPath(new RoomKey(1, 10), bank, filter));
-            Assert.True(RouteChoicePlanner.Evaluate(bfs, filter, graph, new RoomKey(1, 10), bank)!
-                .Requirements.Single().NoProtection);
         });
     }
 

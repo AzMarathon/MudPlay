@@ -554,7 +554,7 @@ public sealed partial class RouteChoiceDialogViewModel
             {
                 bool nothingProtects = choice.Requirements.All(r => r.NoProtection);
                 FreeSummary = nothingProtects
-                    ? "No way round — the only way there crosses rooms that teleport at random, and nothing protects from them"
+                    ? "No way round — the only way to this room is across rooms that teleport at random"
                     : "No hazard-free route — every path there crosses a hazard you must counter";
                 if (nothingProtects)
                 {
@@ -599,11 +599,6 @@ public sealed partial class RouteChoiceDialogViewModel
                 GatedSummary = $"Route — {StepsEta(choice.GatedStepCount, gatedEta)}";
             }
 
-            // Whatever else the route asks for, one that crosses rooms nothing protects
-            // from is headed as that crossing. (The hazard-only card says it above.)
-            if (!HasFreeRoute && !soleHazardOnly && choice.Requirements.Any(r => r.NoProtection))
-                GatedSummary = $"Cross the teleport rooms — {StepsEta(choice.GatedStepCount, gatedEta)}";
-
             // A hazard no item makes safe is not something to bring: it is said apart,
             // as what the route does, with the items that don't help named so nobody
             // buys one to find out.
@@ -617,13 +612,18 @@ public sealed partial class RouteChoiceDialogViewModel
             string crosses = string.Empty;
             if (choice.Requirements.FirstOrDefault(r => r.NoProtection) is { } unprotected)
             {
+                // The one crossing a card offers: to the room that teleports on (to
+                // the Bloodwood Weald, on Paradigm's lake), for a crosser who already
+                // has what it asks. Said plainly, with what can still go wrong.
                 int rooms = choice.UnprotectedRoomNames?.Count ?? 0;
-                string useless = string.Join(" or ", unprotected.ItemIds.Select(id => itemName(id) ?? $"item #{id}"));
-                crosses = (rooms > 0
-                        ? $"Crosses {rooms} room{(rooms == 1 ? "" : "s")} that can teleport you away as you enter: "
-                          + $"{RouteChoicePlanner.ListAvoided(choice.UnprotectedRoomNames)}. "
-                        : "Crosses rooms that can teleport you away as you enter. ")
-                    + $"Nothing protects from them ({useless} does not), so nothing is fetched and the walk may be thrown off its route.";
+                string boat = string.Join(" or ", unprotected.ItemIds.Select(id => itemName(id) ?? $"item #{id}"));
+                string goal = string.IsNullOrEmpty(choice.CrossingGoalSpell)
+                    ? "the room that teleports you on"
+                    : $"the room whose spell ({choice.CrossingGoalSpell}) teleports you on";
+                crosses = $"Crosses {rooms} teleporting room{(rooms == 1 ? "" : "s")} to reach {goal}: "
+                    + $"{RouteChoicePlanner.ListAvoided(choice.UnprotectedRoomNames)}. "
+                    + $"You have what the crossing asks (the level, and {boat}); each of those rooms can still "
+                    + "move you, so the walk may be thrown off its route. Nothing is fetched.";
             }
             RequirementSummary = requires.Length > 0 && crosses.Length > 0 ? $"{requires}. {crosses}" : requires + crosses;
 

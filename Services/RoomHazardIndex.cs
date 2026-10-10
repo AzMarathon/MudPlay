@@ -98,16 +98,25 @@ public sealed class RoomHazardIndex
         // raft"), so for routing the item is no counter at all.
         public bool TeleportsCounterHolders { get; }
 
+        // The level from which the textblock gives the item's holder a line of their
+        // own (`minlevel 50:checkitem 690:…` on the sea spells), 0 when it has none.
+        // From that level, with the item, the lake teleports rarely; below it, about
+        // as often as with no boat. The few crossings the client does make (Stock's
+        // White Forest, the walk to the Bloodwood Weald's room) ask for both.
+        public int CounterHolderMinLevel { get; }
+
         public RoomHazard(
             IReadOnlyList<IReadOnlyList<int>> groups,
             IReadOnlyList<BuffCounter>? buffCounters = null,
             bool isSurvivableDamage = false,
-            bool teleportsCounterHolders = false)
+            bool teleportsCounterHolders = false,
+            int counterHolderMinLevel = 0)
         {
             RequirementGroups = groups;
             BuffCounters = buffCounters ?? Array.Empty<BuffCounter>();
             IsSurvivableDamage = isSurvivableDamage;
             TeleportsCounterHolders = teleportsCounterHolders;
+            CounterHolderMinLevel = counterHolderMinLevel;
         }
 
         // Every distinct protecting item across all groups — the set the route
@@ -151,6 +160,9 @@ public sealed class RoomHazardIndex
 
     // Number of distinct protectable room-entry spells indexed.
     public int HazardCount => _hazardBySpell.Count;
+
+    // Every indexed hazard, for a question about the set as a whole.
+    public IReadOnlyCollection<RoomHazard> Hazards => _hazardBySpell.Values;
 
     // Fires after every successful (re)load, including the transition to
     // no-set-active.
@@ -276,9 +288,10 @@ public sealed class RoomHazardIndex
 
         bool survivable = IsSurvivableHazardDamage(rootSpell, spellAbils, tbActions);
         bool holdersTeleported = false;
+        int holderMinLevel = 0;
         foreach (int tb in textBlocks)
-            holdersTeleported |= TeleportsHolders(tb, tbActions);
-        return new RoomHazard(groups, buffCounters, survivable, holdersTeleported);
+            holdersTeleported |= TeleportsHolders(tb, tbActions, ref holderMinLevel);
+        return new RoomHazard(groups, buffCounters, survivable, holdersTeleported, holderMinLevel);
     }
 
     // Steps that relocate whoever the textblock runs on.
@@ -293,7 +306,7 @@ public sealed class RoomHazardIndex
     // desert's root blocks stop at their `failitem`. Stock's nested desert blocks
     // (2654, 2659) do have holder lines, but they are not roots and relocate nobody,
     // so they come out false here as well.
-    private bool TeleportsHolders(int tb, Dictionary<int, string> tbActions)
+    private bool TeleportsHolders(int tb, Dictionary<int, string> tbActions, ref int holderMinLevel)
     {
         if (!tbActions.TryGetValue(tb, out string? action) || string.IsNullOrWhiteSpace(action))
             return false;
@@ -317,17 +330,21 @@ public sealed class RoomHazardIndex
             if (holder && !guarded) holderLines.Add(steps);
         }
 
+        bool teleports = false;
         foreach (string[] steps in holderLines)
         {
             bool holdsCounter = false;
+            int lineMinLevel = 0;
             foreach (string raw in steps)
             {
                 string tok = raw.Trim();
-                if (StartsWith(tok, "checkitem")) holdsCounter |= counters.Contains(FirstIntAfter(tok, "checkitem"));
-                else if (holdsCounter && Relocates(tok, 0, tbActions, new HashSet<int> { tb })) return true;
+                if (StartsWith(tok, "minlevel")) lineMinLevel = FirstIntAfter(tok, "minlevel");
+                else if (StartsWith(tok, "checkitem")) holdsCounter |= counters.Contains(FirstIntAfter(tok, "checkitem"));
+                else if (holdsCounter && Relocates(tok, 0, tbActions, new HashSet<int> { tb })) teleports = true;
             }
+            if (holdsCounter) holderMinLevel = Math.Max(holderMinLevel, lineMinLevel);
         }
-        return false;
+        return teleports;
     }
 
     // Whether one textblock step relocates, itself or through the blocks a `random`

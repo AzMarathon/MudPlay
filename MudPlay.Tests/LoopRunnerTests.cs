@@ -57,16 +57,31 @@ public sealed class LoopRunnerTests : IDisposable
         // so existing tests stay fail-open.
         public HashSet<RoomKey> GatedTargets { get; } = new();
         private int _suspendDepth;
+        // A room closed to routes is shut to every search but one with every gate
+        // stood down; the suspension that keeps such rooms closed opens the gated
+        // exits only.
+        private int _everyGateDepth;
         public bool IsExitBlocked(in RoomExit exit)
-            => _suspendDepth == 0 && GatedTargets.Contains(exit.Target);
+            => (_suspendDepth == 0 && GatedTargets.Contains(exit.Target))
+               || (_everyGateDepth == 0 && ClosedToRoutes.Contains(exit.Target));
         public IDisposable SuspendAcquirableGates()
         {
             _suspendDepth++;
-            return new SuspendScope(this);
+            _everyGateDepth++;
+            return new SuspendScope(this, everyGate: true);
         }
-        private sealed class SuspendScope(TestAvoidFilter f) : IDisposable
+        public IDisposable SuspendAcquirableGatesButUnprotectableHazards()
         {
-            public void Dispose() => f._suspendDepth--;
+            _suspendDepth++;
+            return new SuspendScope(this, everyGate: false);
+        }
+        private sealed class SuspendScope(TestAvoidFilter f, bool everyGate) : IDisposable
+        {
+            public void Dispose()
+            {
+                f._suspendDepth--;
+                if (everyGate) f._everyGateDepth--;
+            }
         }
     }
 
@@ -189,6 +204,23 @@ public sealed class LoopRunnerTests : IDisposable
         h.Filter.ClosedToRoutes.Clear();
         Assert.Null(h.Runner.RefusalFor(AbCycle()));
         Assert.True(h.Runner.Start(AbCycle()));
+    }
+
+    // The probe for the nearest room of a loop falls back to rooms behind a gate the
+    // walk can open on the way, and never to rooms behind one closed to routes: the
+    // walk there would not cross it.
+    [Fact]
+    public void NearestRoomOf_IsNeverARoomBeyondOneClosedToRoutes()
+    {
+        Harness h = NewHarness();
+        Loop beyond = new("c", new[] { new RoomKey(1, 3), new RoomKey(1, 3) });
+
+        h.Filter.GatedTargets.Add(new RoomKey(1, 2));
+        Assert.Equal(new RoomKey(1, 3), h.Runner.NearestRoomOf(beyond, new RoomKey(1, 1)));
+
+        h.Filter.GatedTargets.Clear();
+        h.Filter.ClosedToRoutes.Add(new RoomKey(1, 2));
+        Assert.Null(h.Runner.NearestRoomOf(beyond, new RoomKey(1, 1)));
     }
 
     [Fact]

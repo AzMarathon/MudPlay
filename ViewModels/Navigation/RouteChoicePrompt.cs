@@ -203,6 +203,21 @@ public static class RouteChoicePrompt
                     + $" ({bossRoom.Map}/{bossRoom.Room})";
                 return await RunPickerAsync(services, destination, src,
                     bossChoice with { BossRoomLabel = bossLabel }, previewSink, calcVm, calcDialogTask, startMode);
+            case RoutePlanKind.ItemGate when plan.Choice is { UnprotectedRoomNames.Count: > 0 } crossing:
+                // The one card that crosses the lake's teleporting rooms is for a walk
+                // the user starts. One the client starts on their behalf takes the
+                // plain walk, which finds no route and says why.
+                if (askOnlyOverAvoids)
+                {
+                    calcVm?.Close();
+                    CommitWalk(services, destination, gated: false, stopForBossRooms: stopsForBossRooms);
+                    return true;
+                }
+                // Named here, on the UI thread: the plan may have run off it.
+                string? goalSpell = services.RoomGraph.GetRoom(destination)?.Spell is > 0 and int goal
+                    ? services.GameData.FindNameByNumber("Spells", goal) : null;
+                return await RunPickerAsync(services, destination, src,
+                    crossing with { CrossingGoalSpell = goalSpell }, previewSink, calcVm, calcDialogTask, startMode);
             case RoutePlanKind.AutoObtainSole:
                 calcVm?.Close();
                 ApplyStartMode(services, startMode);
@@ -407,8 +422,9 @@ public static class RouteChoicePrompt
         if (RouteChoicePlanner.UncounteredHazardRooms(services.Movement, choice.GatedPath) is { Count: > 0 } crossed)
             reqSummary += $", crossing {crossed.Count} hazard room(s)"
                 + (choice.UnprotectedRoomNames is { Count: > 0 } unprotected
-                    ? $", {unprotected.Count} of them teleport room(s) nothing protects from "
-                      + $"({RouteChoicePlanner.ListAvoided(unprotected)}): the only way there"
+                    ? $", {unprotected.Count} of them teleporting room(s) "
+                      + $"({RouteChoicePlanner.ListAvoided(unprotected)}): the crossing to a room that teleports on, "
+                      + "offered because the level and the boat it asks are met"
                     : "");
         if (choice.ClosedGateItems is { Count: > 0 } closed)
             reqSummary += $", going round the gates that need item(s) {string.Join("/", closed)}";

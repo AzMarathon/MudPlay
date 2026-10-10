@@ -4028,6 +4028,8 @@ public sealed class AppServices
         Movement.MaxBashableStrengthProvider = () => MaxStrength.MaxAchievableStrength;
         Movement.RoomEntrySpellProbe = key => RoomGraph.GetRoom(key)?.Spell ?? 0;
         Movement.Hazards = RoomHazards;
+        Movement.SpellTeleportsAtRandomProbe =
+            spell => RoomSpellTeleports.ClassOf(spell) == Game.Map.RoomSpellTeleport.Sudden;
         Favorites = new FavoritesStore(Profile, GameData, ProfileGameDataSet, Log);
         GotoHistory = new GotoHistoryStore(Profile);
 

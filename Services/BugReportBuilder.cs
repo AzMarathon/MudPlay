@@ -2052,6 +2052,10 @@ public static class BugReportBuilder
         Kv(sb, "Room no route enters (teleports its counter's holders too)",
             here is not null && svc.Movement.IsClosedToRoutes(here.Key)
                 ? "yes — routes from here take the nearest way out first" : "no");
+        // The few walks taken across such rooms (where the map has no other way) ask
+        // a level and a boat: whether this character has both decides "no route".
+        Kv(sb, "Meets the terms to be walked across such rooms (level and boat)",
+            svc.Movement.MayCrossClosedRooms() ? "yes" : "no");
         if (hazard is null || hazard.BuffCounters.Count == 0)
             Kv(sb, "Checkspell hazard", "(none — current room needs no buff counter)");
         else foreach (RoomHazardIndex.BuffCounter bc in hazard.BuffCounters)
