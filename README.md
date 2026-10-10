@@ -5,7 +5,7 @@
 > - A room wiped clean by a room spell no longer holds the walker 1–2 s as a fight walked out on
 > - A prompt that just matched is no longer reported as one the statline can't read
 > - Run-out buff timers of members who left the party are dropped
-> - The engaged combat profile's full configuration is now always logged (Info) when it changes, not on every engage; it used to appear only with Combat diagnostics on
+> - Engaged combat profile logged in full when it changes, always at Info; a short line on repeats
 > - A spell that lands no longer counts as a missed weapon swing in Monster Intel's observations
 > - Monster Intel's saved weapon swing counts are cleared once per character: older versions counted spell casts as misses
 > - Lair timer log lines print local time
