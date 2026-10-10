@@ -56,7 +56,7 @@ public static class RoomSpellDamageText
     }
 
     // "drowning 5–20 after 25 rounds": the spell a timer ends in, what it does and
-    // when, counted from the room's cast.
+    // when, counted from the room's first cast (a later one doesn't restart it).
     private static string Stage(RoomSpellDamageStage stage, Func<int, string?>? spellName)
     {
         string name = spellName?.Invoke(stage.Spell) ?? $"spell {stage.Spell.ToString(CultureInfo.InvariantCulture)}";
