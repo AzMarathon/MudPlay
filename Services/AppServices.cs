@@ -7469,12 +7469,6 @@ public sealed class AppServices
             EveryItemOfThisNameStaysOnDeath,
             isKeyItem: name => ItemNames.FindByName(name) is int number
                 && ItemNames.ItemTypeOf(number) == Game.Inventory.InventoryManager.KeyItemType);
-        // A gift reopens a pile marked Missing only from someone following in our
-        // party now (an invited row is not in it).
-        DeathRecovery.SetPartyMemberProbe(giver =>
-            GivenNameOf(giver) is { Length: > 0 } given
-            && PartyState.Members.Any(m => !m.IsSelf && !m.IsInvited
-                && string.Equals(GivenNameOf(m.Name), given, StringComparison.OrdinalIgnoreCase)));
         // The walker's abandoned-combat halt: the sweep ends in place on it.
         CombatTracker.EngagedTargetAbandoned += _ => DeathRecovery.NoteEngagedTargetAbandoned();
         // Combat-aware re-equip interleaving: recovering a corpse in a room with a

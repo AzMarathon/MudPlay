@@ -1,6 +1,6 @@
 # Version history
 
-## 3.165.16
+## 3.165.17
 
 - A follower left behind sends `@comeback`: a follow that failed at an exit, or the leader seen leaving without it
 - On Stock also when its own `par` shows the leader `[Invited]`
@@ -14,6 +14,10 @@
 - Leader: a re-invited follower who never answers is waited on 90 s when the wait is set to 0
 - Party train: members are told when a trip sets out and ends
 - The bug report shows the last left-behind incident
+
+## 3.165.10
+
+- A handed-back item counts toward a Missing deathpile from anyone, at any time
 
 ## 3.165.9
 
