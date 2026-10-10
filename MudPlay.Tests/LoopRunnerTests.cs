@@ -1536,6 +1536,301 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
+    // A Flee monster and a real HealthManager over a real loop. A loop the user has
+    // paused is idle (user, 2026-10-10): no run. One a fight is holding is running:
+    // the run goes out, and forwards it is the lap's own next step.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FleeFromMonster_ALoopTheUserPaused_IsIdle_OneHeldByAFightRuns(bool userPaused)
+    {
+        Harness h = NewHarness(withWalker: true);
+        MudPlay.Models.Profile.CombatSettings combat = new()
+        {
+            RunDirection = MudPlay.Models.Profile.RunDirection.Forward, RunDistance = 1, BreakBeforeFleeing = false,
+        };
+        using MudPlay.Game.Health.HealthManager health = new(
+            new MudPlay.Game.PlayerState(), h.Coordinator,
+            readSettings: () => new MudPlay.Models.Profile.HealthSettings(),
+            isEnabled: () => true,
+            readHangupCommand: null,
+            getActiveMovementEngine: () => h.Runner.State != LoopState.Idle ? h.Runner : null,
+            getLastSentDirection: null,
+            readCombatSettings: () => combat,
+            readGeneralSettings: null,
+            hasEngageableHostiles: null);
+        health.IsNavigationPausedByUser = () => h.Coordinator.IsGateAsserted(MovementCoordinator.UserGate);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();
+
+        h.Coordinator.AssertGate(userPaused ? MovementCoordinator.UserGate : MovementCoordinator.CombatGate);
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+        health.NoteRoomChanged(new RoomKey(1, 3));
+        int sentBefore = h.Sent.Count;
+
+        MudPlay.Game.Health.FleeOutcome outcome = health.FleeFromMonster("ogre (#7) is here, relationship Flee", () => true);
+
+        if (userPaused)
+        {
+            Assert.Equal(MudPlay.Game.Health.FleeOutcome.Paused, outcome);
+            Assert.Equal(sentBefore, h.Sent.Count);
+            Assert.False(health.IsFleeing);
+            // No flee took the loop over: lifting the pause sends its next step.
+            h.Coordinator.ClearGate(MovementCoordinator.UserGate);
+            h.Drain();
+            Assert.Equal(LoopState.Running, h.Runner.State);
+            Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[^1]));
+            return;
+        }
+
+        Assert.Equal(MudPlay.Game.Health.FleeOutcome.Started, outcome);
+        Assert.Equal(sentBefore + 1, h.Sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[^1]));   // out of C the way the lap goes
+    }
+
+    // A real HealthManager over a real loop, the loop in C with a Flee monster seen:
+    // a forward run of two rooms, the first of them already sent.
+    private static MudPlay.Game.Health.HealthManager StartForwardFleeFromC(Harness h, out MudPlay.Game.Health.FleeOutcome outcome)
+    {
+        MudPlay.Models.Profile.CombatSettings combat = new()
+        {
+            RunDirection = MudPlay.Models.Profile.RunDirection.Forward, RunDistance = 2, BreakBeforeFleeing = false,
+        };
+        MudPlay.Game.Health.HealthManager health = new(
+            new MudPlay.Game.PlayerState(), h.Coordinator,
+            readSettings: () => new MudPlay.Models.Profile.HealthSettings(),
+            isEnabled: () => true,
+            readHangupCommand: null,
+            getActiveMovementEngine: () => h.Runner.State != LoopState.Idle ? h.Runner : null,
+            getLastSentDirection: null,
+            readCombatSettings: () => combat,
+            readGeneralSettings: null,
+            hasEngageableHostiles: null);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+        health.NoteRoomChanged(new RoomKey(1, 3));
+        outcome = health.FleeFromMonster("ogre (#7) is here, relationship Flee", () => true);
+        return health;
+    }
+
+    // The toolbar Stop ends the loop without telling HealthManager. The first flee
+    // move lands with a room still queued: nothing goes out through the stopped
+    // loop, and the flee is over instead of staying in flight with the loop idle.
+    [Fact]
+    public void AFlee_WhoseLoopWasStopped_EndsWhenItsFirstMoveLands_AndSendsNothing()
+    {
+        Harness h = NewHarness(withWalker: true);
+        using MudPlay.Game.Health.HealthManager health = StartForwardFleeFromC(h, out MudPlay.Game.Health.FleeOutcome outcome);
+        Assert.Equal(MudPlay.Game.Health.FleeOutcome.Started, outcome);
+        Assert.True(health.IsFleeInFlight);
+        h.Runner.Stop("user stop from toolbar");
+        int sentBefore = h.Sent.Count;
+
+        health.NoteRoomChanged(new RoomKey(1, 2));                   // the first move lands
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.False(health.IsFleeInFlight);
+        Assert.False(health.IsFleeing);
+        Assert.Equal(sentBefore, h.Sent.Count);
+    }
+
+    // A profile load mid-run: the loop the flee had paused belongs to the character
+    // going away, so it is stopped and a later prompt resumes nothing.
+    [Fact]
+    public void AFleeCutByAProfileLoad_StopsTheLoopItHadPaused()
+    {
+        Harness h = NewHarness(withWalker: true);
+        using MudPlay.Game.Health.HealthManager health = StartForwardFleeFromC(h, out _);
+        health.StopMovementEngine = (engine, why) => ((LoopRunner)engine).Stop(why);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        int sentBefore = h.Sent.Count;
+
+        Assert.True(health.EndFlee("another profile was loaded", stopItsEngine: true));
+        health.NoteInGamePrompt();
+        health.Evaluate();
+        h.Drain();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.False(health.IsFleeing);
+        Assert.Equal(sentBefore, h.Sent.Count);
+    }
+
+    // A flee or recovery that outlived the loop (a death, a drop of the line) must
+    // not walk the character on through it.
+    [Fact]
+    public void SendBacktrackMove_ThroughAStoppedLoop_SendsNothing()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.Stop("player died");
+        int sentBefore = h.Sent.Count;
+
+        h.Runner.SendBacktrackMove(Direction.S);
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Equal(sentBefore, h.Sent.Count);
+    }
+
+    // A run that went forward along the lap and is to carry on (user, 2026-10-10):
+    // the steps it walked count as walked and the lap goes on from the room it
+    // stopped in. Walking back would only meet again what was run from.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]    // another gate is still up when the run lands
+    public void ForwardFleeResume_CarriesOnFromWhereTheRunLanded(bool gateStillUp)
+    {
+        Harness h = NewHarness(withWalker: true, wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();
+
+        h.Runner.PauseForFlee("a Flee monster");                     // seen in C as step 2 lands
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+        Assert.Equal(new[] { Direction.S }, h.Runner.PeekPlannedDirections(1));
+        int sentBefore = h.Sent.Count;
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));                     // the run walked step 3 (S) itself
+        if (gateStillUp) h.Coordinator.AssertGate(MovementCoordinator.HealthRecoveryGate);
+        h.Runner.ResumeAfterFlee(new RoomKey(1, 2), carryOnFromHere: true);
+        h.Drain();
+        if (gateStillUp)
+        {
+            Assert.Equal(sentBefore, h.Sent.Count);
+            h.Coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate);
+            h.Drain();
+        }
+
+        Assert.Equal(LoopState.Running, h.Runner.State);             // not Approaching: no walk back
+        Assert.Equal(sentBefore + 1, h.Sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[^1]));  // step 4, B → A
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    // A square: 1/1 ─E─ 1/2 ─N─ 1/3 ─W─ 1/4 ─S─ back to 1/1.
+    private const string RingGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "SW",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "0", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "SE",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "NE",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "1/4",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "NW",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "1/3", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // A forward run that walked over the lap's end: the lap it finished is counted
+    // and announced like any other, and the next one goes on from where the run
+    // landed. It used to be re-planned from there as a fresh start, the lap lost.
+    [Fact]
+    public void ForwardFleeResume_OverTheLapsEnd_CountsTheLap_AndCarriesOn()
+    {
+        Harness h = NewHarness(RingGraphJson, withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ring", new[]
+        {
+            new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3), new RoomKey(1, 4),
+        }));                                                          // E, N, W, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("SE", new HashSet<Direction> { Direction.N, Direction.W }));
+        h.Drain();
+        h.Tracker.NoteRoomObserved(new RoomObservation("NE", new HashSet<Direction> { Direction.S, Direction.W }));
+        h.Drain();                                                    // step 3 (W into NW) is in flight
+        h.Runner.PauseForFlee("a Flee monster");
+        h.Tracker.NoteRoomObserved(new RoomObservation("NW", new HashSet<Direction> { Direction.S, Direction.E }));
+        Assert.Equal(new[] { Direction.S, Direction.E }, h.Runner.PeekPlannedDirections(2));   // over the lap's end
+        int sentBefore = h.Sent.Count;
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));                     // the run walked S and then E itself
+        h.Runner.ResumeAfterFlee(new RoomKey(1, 2), carryOnFromHere: true);
+        h.Drain();
+
+        Assert.Equal(1, h.Runner.CompletedLaps);
+        Assert.Single(h.Events, e => e.Kind == LoopEventKind.RepeatStarted);
+        Assert.Single(h.Events, e => e.Kind == LoopEventKind.Started);                         // not restarted
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(sentBefore + 1, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[^1]));                            // step 2 of the new lap
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    // A forward flee walks the loop's next steps. Asked in a room the loop came into
+    // while paused (a fight there, or the flee itself pausing it as the move
+    // confirms), the step that carried it in is still the one at the index: counted,
+    // it sent the flee off with the direction just walked, into a wall or off the
+    // loop.
+    [Theory]
+    [InlineData(true)]    // paused by a fight before the move landed
+    [InlineData(false)]   // paused by the flee before the loop saw the arrival
+    public void ForwardPeek_InARoomEnteredWhilePaused_LeavesOutTheStepJustWalked(bool pausedByAFight)
+    {
+        Harness h = NewHarness(withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();                                                    // step 2 (N into C) is in flight
+
+        if (pausedByAFight) h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        else h.Runner.PauseForFlee("a Flee monster");
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+
+        Assert.Equal(new RoomKey(1, 3), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(new[] { Direction.S, Direction.S }, h.Runner.PeekPlannedDirections(2));
+    }
+
+    // A later leg of the same run (still under the run trigger, or a Flee monster
+    // seen where a low-HP run landed): the earlier leg walked a step of the lap the
+    // index knows nothing of, and the loop no longer stands where its paused step
+    // landed. Peeked from the index, the leg set off back into the room it had run
+    // from.
+    [Fact]
+    public void ForwardPeek_ForALaterLegOfARun_StartsAfterTheStepsItHasWalked()
+    {
+        Harness h = NewHarness(withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();
+        h.Runner.PauseForFlee("low HP");
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+        Assert.Equal(new[] { Direction.S }, h.Runner.PeekPlannedDirections(1));           // leg 1: C → B
+
+        h.Runner.SendBacktrackMove(Direction.S);
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+
+        Assert.Equal(new RoomKey(1, 2), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(new[] { Direction.S }, h.Runner.PeekPlannedDirections(1));           // leg 2: B → A, not N back into C
+    }
+
+    // The other ordering: the loop saw the arrival, advanced and sent the next step.
+    // That step has not landed, so it is still the first one ahead.
+    [Fact]
+    public void ForwardPeek_WithTheNextStepInFlight_StartsWithThatStep()
+    {
+        Harness h = NewHarness(withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();
+
+        Assert.Equal(new[] { Direction.N, Direction.S }, h.Runner.PeekPlannedDirections(2));
+    }
+
     [Fact]
     public void RepeatedGenuineDesyncs_StillExhaustTheRecoveryBudget()
     {

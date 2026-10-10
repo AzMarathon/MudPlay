@@ -522,7 +522,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     // "Hangup watch off 0:59" beside the connection light, for the minute after a
     // reconnect that follows a hang-up for a Hangup-relationship monster. Empty
-    // otherwise. MonsterHangupWatcher owns the countdown; this mirrors its text.
+    // otherwise. MonsterRelationshipWatcher owns the countdown; this mirrors its text.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsHangupWatchHoldVisible))]
     private string _hangupWatchHoldText = string.Empty;
@@ -1473,8 +1473,8 @@ public partial class MainWindowViewModel : ObservableObject
         // After the exit command goes out, close the carrier ourselves rather
         // than waiting on the server to notice — see RequestHangupDisconnect.
         AppServices.Current.Health.SetHangupDisconnect(RequestHangupDisconnect);
-        AppServices.Current.MonsterHangup.HoldChanged += () =>
-            HangupWatchHoldText = AppServices.Current.MonsterHangup.HoldText ?? string.Empty;
+        AppServices.Current.MonsterWatch.HoldChanged += () =>
+            HangupWatchHoldText = AppServices.Current.MonsterWatch.HoldText ?? string.Empty;
         // The raw, gate-piercing wire for `sys goto` (SysopGotoManager). Sys commands
         // are honoured at any HP — mortally-wounded included — so the jump (and the
         // wimpy escape built on it) must survive the EngineSendGate hold, exactly like
@@ -3464,6 +3464,11 @@ public partial class MainWindowViewModel : ObservableObject
                 // latch here silently stops the character from ever resuming the
                 // fight after reconnect (report paradigm-20260827-203548).
                 AppServices.Current.Combat.OnDisconnected();
+                // A flee does not run on offline. The loop was stopped above and
+                // restarts by its own reconnect resume; a walk lives through the
+                // drop, so one the flee had paused is handed back at the first
+                // game prompt of the next stay.
+                AppServices.Current.Health.EndFlee("disconnected", handBackLiveEngine: true);
                 // The replies to discards still on the wire went with the connection.
                 // Hides a full room refused stay held: the pack is as it was.
                 AppServices.Current.AutoDiscard.Reset("disconnected", keepHeld: true);
@@ -3473,7 +3478,7 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.RoomClassifier.NoteGameLeft();
                 // A drop with a Hangup monster in sight turns the watch off for the
                 // first minute back in the game.
-                AppServices.Current.MonsterHangup.NoteDisconnected();
+                AppServices.Current.MonsterWatch.NoteDisconnected();
 
                 // Categorise: if the user clicked Disconnect, the flag was
                 // set in DisconnectInternalAsync. Otherwise check for a
@@ -3565,7 +3570,7 @@ public partial class MainWindowViewModel : ObservableObject
                     // The Hangup-monster watch's minute off is for a reconnect the
                     // user makes. This one dials and enters on its own, and would
                     // stand the character beside the monster with nobody watching.
-                    AppServices.Current.MonsterHangup.CancelHold();
+                    AppServices.Current.MonsterWatch.CancelHold();
                     SchedulePvpReconnect(pvp.Delay, pvp.EnterRealm);
                 }
                 else

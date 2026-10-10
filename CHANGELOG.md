@@ -1,6 +1,6 @@
 # Version history
 
-## 3.163.0
+## 3.164.0
 
 - Events run one at a time, start to finish, in the order they fired: one that fires while another is running waits its turn
 - A loop or Auto-Lair event with a Stop after rule finishes (its Then included) before the next starts; one with no rule is done once it has started
@@ -14,6 +14,23 @@
 - Bug report: the events waiting, the queue limits and what the last Then came to
 - Settings → Events: how long a paused event may stand still before it is given up (5 minutes)
 - bug reports addressed: paradigm-20261009-185106, paradigm-20261009-220128
+
+## 3.163.0
+
+- A monster set to **Flee** is run from on sight, while a walk or loop is running
+- It is the Health tab's flee: the Combat tab's run distance and direction
+- With no run coming (idle, paused, no way out, a follower) it is fought back if it attacks
+- Go backwards if running unticked: the run goes on past it, and a loop carries on from there
+- Ticked: a monster on your route is run from on every return
+- A low-HP or low-mana flee set to run forwards now carries a loop on too, instead of returning to the fight room
+- A forward flee no longer starts with the step just walked
+- A flee ends when you die, disconnect or load another character
+- Two monsters ship set to Flee; set Neutral or Enemy to turn it off
+- A flee stops short of Crystal Lake's teleporting rooms
+
+## 3.162.4
+
+- Hang-up death check: on Paradigm anything still worn rules a death out, as on Stock
 
 ## 3.162.3
 
