@@ -202,7 +202,15 @@ public sealed class RoomTracker
     // conditions and its pack was read after the death. Subscribers are the few
     // things a death still owes then: stopping the movement engines, the self
     // buffs it wiped, the recovery list.
+    //
+    // Raised only for a death worked out at the login, before anything has run
+    // (UnwitnessedDeath.AtEntry). One worked out later finds a character that has
+    // played on since, and gets its record and no more.
     public event Action? PlayerDeathInferred;
+
+    // Fired from NoteUnwitnessedDeath for every record it makes, at the login or
+    // later: the death history has a new row, and a life was spent.
+    public event Action? UnwitnessedDeathRecorded;
 
     // Fires when a MANUAL movement step is observed — a cardinal or text-exit command
     // the user typed that did NOT match a walker/loop echo claim (so the engine didn't
@@ -1350,7 +1358,8 @@ public sealed class RoomTracker
         string? roomName = death.Room is { } room ? _graph.GetRoom(new RoomKey(room.Map, room.Room))?.Name : null;
         DeathRecord record = AppendDeathRecord(_profile, death.At, death.Room, roomName,
             death.LivesRemaining, death.Message, death.Equipped, death.Lost, death.Coins);
-        PlayerDeathInferred?.Invoke();
+        UnwitnessedDeathRecorded?.Invoke();
+        if (death.AtEntry) PlayerDeathInferred?.Invoke();
         return record;
     }
 

@@ -1032,6 +1032,48 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
     }
 
+    // The link dropped mid-loop and the hang-up penalty killed the character
+    // after it. The death is worked out at the login, which can be before the
+    // first prompt this runner counts: the loop set aside at the drop is not
+    // running then, so stopping the engines doesn't reach it. It must not start
+    // on that prompt and walk a stripped character out of the temple.
+    [Fact]
+    public void ADeathFoundOutAtTheLogin_DropsTheLoopSetAsideAtTheDisconnect()
+    {
+        Harness h = NewHarness();
+        h.Tracker.Hydrate(new MudPlay.Models.Profile.CharacterProfile());
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.NotifyDisconnected();
+        Assert.NotNull(h.Runner.PendingReconnectResumeForTests);
+        int sent = h.Sent.Count;
+
+        h.Tracker.NoteUnwitnessedDeath(new MudPlay.Game.Recovery.UnwitnessedDeath(
+            null, System.DateTimeOffset.UtcNow, 6, "Killed by the hang-up penalty.", null, null, null));
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Equal(sent, h.Sent.Count);
+    }
+
+    // One found out long after the login leaves a loop set aside alone: the
+    // character has played on since.
+    [Fact]
+    public void ADeathFoundOutLate_LeavesTheLoopSetAsideAlone()
+    {
+        Harness h = NewHarness();
+        h.Tracker.Hydrate(new MudPlay.Models.Profile.CharacterProfile());
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.NotifyDisconnected();
+
+        h.Tracker.NoteUnwitnessedDeath(new MudPlay.Game.Recovery.UnwitnessedDeath(
+            null, System.DateTimeOffset.UtcNow, 6, "Killed by the hang-up penalty.", null, null, null, AtEntry: false));
+
+        Assert.NotNull(h.Runner.PendingReconnectResumeForTests);
+    }
+
     // Report paradigm-20260923-092317: the leader's link dropped mid-loop. Back in the
     // game, the loop restarted on the first prompt and sent its first step in the
     // same second, before the party reform (which fires off the room display that

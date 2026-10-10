@@ -135,8 +135,8 @@ public sealed class DefaultTaskRunner : IDisposable
     // bug report so a "task didn't start on time" capture explains the delay.
     public bool PendingPartyRebuildHold => _hadInSessionDisconnect && _wasInPartyBeforeDrop;
 
-    // True when the task was called off for this connection because the character
-    // turned out to have died while the link was down.
+    // True when a task still waiting to start was called off for this connection
+    // because the character turned out to have died while the link was down.
     public bool StoodDownForDeath { get; private set; }
 
     // ----- telnet-driven notifications -------------------------------
@@ -187,12 +187,13 @@ public sealed class DefaultTaskRunner : IDisposable
     private void OnDeathInferred()
     {
         if (!_isConnected) return;
-        bool waiting = _holdTimer is not null || !_taskFired;
+        // Already started and not holding: nothing here to call off. The engine
+        // stop that comes with this death reaches what it started.
+        if (_holdTimer is null && _taskFired) return;
         CancelHold();
         _taskFired = true;
         StoodDownForDeath = true;
-        if (waiting)
-            _log?.Info("DefaultTask", "the character died while the link was down — the default task is not started on this connection.");
+        _log?.Info("DefaultTask", "the character died while the link was down — the default task is not started on this connection.");
     }
 
     // Fire once when connected, the first prompt has landed, and the current

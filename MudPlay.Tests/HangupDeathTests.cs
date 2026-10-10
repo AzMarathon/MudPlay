@@ -160,6 +160,7 @@ public sealed class HangupDeathTests
     [InlineData(-5, 0)]
     [InlineData(40, -20)]    // the share dropped it, short of the threshold
     [InlineData(40, 12)]     // the share was taken, and it stands
+    [InlineData(40, 40)]     // nothing was taken, and a death would have filled it
     public void HpAtEntryOfACharacterNotKilled_ClosesTheQuestion_WhileNoLifeIsKnownLost(int hpAtDrop, int hpAtEntry)
     {
         Assert.Equal(HangupDeathVerdict.Alive, Verdict(hpAtDrop: hpAtDrop, hpAtEntry: hpAtEntry, livesNow: null));
@@ -211,18 +212,14 @@ public sealed class HangupDeathTests
             (worn ?? []).Select(w => new EquippedItem(w.Name, w.Slot)).ToList(),
             carried, DateTimeOffset.Now, null, null);
 
-    private static HeldAtDisconnect ListOf(InventorySnapshot held)
+    private static HeldAtDisconnect ListOf(InventorySnapshot held) => new()
     {
-        (List<DeathItem> worn, List<DeathItem> carried) = DeathLootCapture.FromSnapshot(held);
-        return new HeldAtDisconnect
-        {
-            At = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero),
-            Room = Left,
-            Items = HangupItemPlan.Held(held),
-            Worn = worn,
-            Carried = carried,
-        };
-    }
+        At = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero),
+        Room = Left,
+        Items = HangupItemPlan.Held(held),
+        Worn = DeathLootCapture.FromSnapshot(held).Equipped,
+        Carried = HangupDeath.CarriedOf(held),
+    };
 
     [Fact]
     public void Pile_IsWhatWasHeldAndIsNotNow_WornPiecesWithTheirSlots()
@@ -233,34 +230,47 @@ public sealed class HangupDeathTests
 
         // A loyal piece stayed (in the pack now: a death unequips everything), and
         // one torch and one ring are still held.
-        (List<DeathItem> equipped, List<DeathItem> lost) = HangupDeath.Pile(before,
+        (List<DeathItem>? equipped, List<DeathItem>? lost) = HangupDeath.Pile(before,
             Snap(null, "soulbound amulet", "torch", "gold ring"));
 
         Assert.Equal(new[] { ("chainmail hauberk", "Torso"), ("gold ring", "Finger"), ("gold ring", "Finger") },
-            equipped.Select(i => (i.Name, i.Slot!)).ToArray());
+            equipped!.Select(i => (i.Name, i.Slot!)).ToArray());
         // The carried stack as the inventory words it, which recovery expands per copy.
+        Assert.NotNull(lost);
         Assert.Equal(new[] { "2 torch", "rope" }, lost.Select(i => i.Name).ToArray());
         Assert.All(lost, i => Assert.Null(i.Slot));
     }
 
-    // A death line's record lists what was worn and what was carried, and neither
-    // the key ring nor the lit light. This one is built the same way, though the
-    // item list it starts from counts both (a hang-up's item penalty takes keys).
+    // A lit light and keys drop at a death like everything else, so they are on
+    // the pile: the keys as the key ring words them, the lit light by its name.
     [Fact]
-    public void Pile_LeavesOutTheKeyRingAndTheLitLight_AsAWitnessedPileDoes()
+    public void Pile_TakesTheKeyRingAndTheLitLightToo()
     {
         InventorySnapshot held = new(CurrencyHoldings.Empty, EncumbranceReading.Empty,
             [new EquippedItem("chainmail hauberk", "Torso")], ["2 torch", "rope"], DateTimeOffset.Now,
-            new ReadiedLight("torch", 40), ["2 black star key"]);
+            new ReadiedLight("torch", 40), ["2 black star key", "brass key"]);
         HeldAtDisconnect before = ListOf(held);
-        Assert.Contains(before.Items, i => i.Name == "black star key");
 
-        (List<DeathItem> equipped, List<DeathItem> lost) = HangupDeath.Pile(before, Snap());
-        (List<DeathItem> seenWorn, List<DeathItem> seenLost) = DeathLootCapture.FromSnapshot(held);
+        (List<DeathItem>? equipped, List<DeathItem>? lost) = HangupDeath.Pile(before, Snap(null, "brass key"));
 
-        Assert.Equal(seenWorn.Select(i => i.Name), equipped.Select(i => i.Name));
-        Assert.Equal(seenLost.Select(i => i.Name), lost.Select(i => i.Name));
-        Assert.Equal(new[] { "2 torch", "rope" }, lost.Select(i => i.Name).ToArray());
+        Assert.Equal("chainmail hauberk", Assert.Single(equipped!).Name);
+        // Three torches in all: the two carried and the lit one. The brass key is
+        // still held (in the pack now), so it isn't on it.
+        Assert.Equal(new[] { "2 torch", "rope", "2 black star key", "torch" }, lost!.Select(i => i.Name).ToArray());
+    }
+
+    // No inventory was read on the connection the list was written on: what was
+    // held isn't known, and the record says so with no pile where it used to take
+    // an older list's.
+    [Fact]
+    public void Pile_OfAListThatDoesntKnowWhatWasHeld_IsUnknown()
+    {
+        HeldAtDisconnect before = new() { ItemsUnknown = true };
+
+        (List<DeathItem>? equipped, List<DeathItem>? lost) = HangupDeath.Pile(before, Snap(null, "rope"));
+
+        Assert.Null(equipped);
+        Assert.Null(lost);
     }
 
     // ----- The record ----------------------------------------------------
@@ -288,6 +298,7 @@ public sealed class HangupDeathTests
         public int EngineStops { get; private set; }
         public int Observed { get; private set; }
         public int Inferred { get; private set; }
+        public int Recorded { get; private set; }
         public List<byte[]> Sent { get; } = new();
 
         public TrackerHarness(bool profileLoaded = true)
@@ -304,6 +315,7 @@ public sealed class HangupDeathTests
             if (profileLoaded) Tracker.Hydrate(Profile);
             Tracker.PlayerDeathObserved += () => Observed++;
             Tracker.PlayerDeathInferred += () => Inferred++;
+            Tracker.UnwitnessedDeathRecorded += () => Recorded++;
             Halt = new PlayerDeathMovementHalt(Tracker, Coordinator);
             Halt.SetEngineStopper(() => EngineStops++);
             Halt.SetWireSender(Sent.Add);
@@ -365,6 +377,40 @@ public sealed class HangupDeathTests
 
     // A loop the reconnect restarted must not walk a stripped character out of
     // the temple; there is no respawn display to hurry along.
+    // A death worked out long after the login (a `stat` typed hours in) finds a
+    // character that has played on since: a loop doing fine, buffs cast after the
+    // death. It gets its record, and the engines are left running.
+    [Fact]
+    public void ADeathFoundLate_IsRecorded_AndStopsNothing()
+    {
+        using TrackerHarness h = new();
+
+        DeathRecord? made = h.Tracker.NoteUnwitnessedDeath(Unseen() with { AtEntry = false });
+
+        Assert.Same(made, Assert.Single(h.Profile.DeathHistory!));
+        Assert.Equal(1, h.Recorded);
+        Assert.Equal(0, h.Inferred);
+        Assert.Equal(0, h.EngineStops);
+
+        h.Tracker.NoteUnwitnessedDeath(Unseen());
+        Assert.Equal(2, h.Recorded);
+        Assert.Equal(1, h.Inferred);
+        Assert.Equal(1, h.EngineStops);
+    }
+
+    // A record with no pile: what was held wasn't known.
+    [Fact]
+    public void AnUnwitnessedDeathWithAnUnknownPile_RecordsNoneAsADeathSeenWithoutAnInventoryDoes()
+    {
+        using TrackerHarness h = new();
+
+        DeathRecord record = h.Tracker.NoteUnwitnessedDeath(Unseen() with { Equipped = null, Lost = null, Coins = null })!;
+
+        Assert.Null(record.EquippedAtDeath);
+        Assert.Null(record.LostItems);
+        Assert.Equal("None recorded.", record.EquippedAtDeathText);
+    }
+
     [Fact]
     public void AnUnwitnessedDeath_StopsTheEngines_WithoutTheRespawnResync()
     {

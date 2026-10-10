@@ -9399,14 +9399,17 @@ public sealed class AppServices
         // reaches only the handlers that still make sense minutes later, in the room
         // the character woke in: the engine stop (PlayerDeathMovementHalt), Death
         // Recovery's grid, the default task (DefaultTaskRunner) and these two. The
-        // life is as spent as in a death that was seen, and the buff timers were
-        // only frozen when the link dropped. The life is asked for under the master
-        // switch like everything else this check sends: a `stat` the user types can
-        // bring the verdict, and with the switch off nothing automatic goes out.
-        RoomTracker.PlayerDeathInferred += () =>
+        // life is as spent as in a death that was seen, whenever it is found out;
+        // it is asked for under the master switch like everything else this check
+        // sends: a `stat` the user types can bring the verdict, and with the switch
+        // off nothing automatic goes out.
+        RoomTracker.UnwitnessedDeathRecorded += () =>
         {
             if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath();
         };
+        // The buff timers were only frozen when the link dropped. Cleared for a
+        // death found at the login only: one found later would wipe the timers of
+        // buffs cast since.
         RoomTracker.PlayerDeathInferred += () => CastDirector.ClearSelfBuffTracking();
         // The event the other engines take a death of our own from (both wordings).
         RoomTracker.PlayerDeathObserved += HangupItems.OnPlayerDied;

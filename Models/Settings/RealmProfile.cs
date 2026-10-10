@@ -83,10 +83,11 @@ public sealed class RealmProfile
     public int HangupPveItemsDropped { get; set; }
 
     // The board penalises every hang-up made in the game, in a fight or not, at the
-    // monster side's figures. Off, a hang-up outside a fight is taken as free. Only
-    // Game.Inventory.HangupItemRecheck reads it, to decide whether a death by the
+    // monster side's figures. Off, a hang-up outside a fight is taken as free.
+    // Game.Inventory.HangupItemRecheck acts on it, deciding whether a death by the
     // penalty is worth looking for after such a hang-up (a hold on movement, and a
-    // `stat` if none was read).
+    // `stat` if none was read); HangupPenaltyNotice words it into the program log's
+    // hang-up line and the bug report.
     public bool HangupOutsideFightPenaltyEnabled { get; set; }
 
     // The realm's nightly cleanup wall-clock time. Some bosses ("Respawns @

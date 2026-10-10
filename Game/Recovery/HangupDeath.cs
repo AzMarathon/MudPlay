@@ -76,12 +76,15 @@ public static class HangupDeath
             return (HangupDeathVerdict.NotSuspected,
                 $"HP was {dropHp}, more than the {hpShareTop}% of max HP the realm's settings say the penalty takes at most");
 
-        // A death sets HP to its maximum, so one that came back dropped, or under
-        // what it left with, wasn't killed by this hang-up.
+        // A death sets HP to its maximum, so one that came back dropped, under what
+        // it left with, or at exactly what it left with short of the maximum (the
+        // penalty took nothing) wasn't killed by this hang-up.
         string? hpSaysNo = hpAtEntry switch
         {
             { } hp when hp <= 0 => $"it came back dropped (HP {hp}), where a death sets HP to its maximum",
             { } hp when hp < dropHp => $"it came back at {hp} HP, under the {dropHp} it left with, where a death sets HP to its maximum",
+            { } hp when hp == dropHp && maxHpAtDrop is { } max && dropHp < max =>
+                $"it came back at the {hp} HP it left with, where a death sets HP to its maximum ({max})",
             _ => null,
         };
 
@@ -119,13 +122,32 @@ public static class HangupDeath
         return (HangupDeathVerdict.Died, $"lives went from {before} to {now}");
     }
 
-    // The pile for the record, as a death line's record has it: the worn pieces
-    // with their slots and the carried items as the inventory list words them (a
-    // stack as "3 torch"), less whatever is still held. What stayed with the
-    // character (loyal and cursed items) is still held, so it isn't on it; keys
-    // and the lit light aren't on a witnessed pile either.
-    public static (List<DeathItem> Equipped, List<DeathItem> Lost) Pile(HeldAtDisconnect before, InventorySnapshot now)
+    // What a death takes that isn't worn, as the inventory words it: the carried
+    // entries (a worn piece that also lingers in the carried list is listed once,
+    // as worn, the way DeathLootCapture has it), the keys and the lit light.
+    public static List<DeathItem> CarriedOf(InventorySnapshot held)
     {
+        HashSet<string> worn = new(held.EquippedItems.Select(e => e.Name), StringComparer.OrdinalIgnoreCase);
+        List<DeathItem> carried = new();
+        foreach (string entry in held.CarriedItems)
+            if (!worn.Contains(entry)) carried.Add(new DeathItem(entry));
+        foreach (string key in held.Keys ?? Array.Empty<string>())
+        {
+            (int count, string name) = InventorySnapshot.ParseKeyEntry(key);
+            if (name.Length > 0) carried.Add(new DeathItem(count > 1 ? $"{count} {name}" : name));
+        }
+        if (held.ReadiedLight is { Name.Length: > 0 } light) carried.Add(new DeathItem(light.Name));
+        return carried;
+    }
+
+    // The pile for the record: the worn pieces with their slots and everything
+    // else a death takes, as the inventory list words it (a stack as "3 torch"),
+    // less whatever is still held. What stayed with the character (loyal and
+    // cursed items) is still held, so it isn't on it. Both null when the list
+    // doesn't know what was held.
+    public static (List<DeathItem>? Equipped, List<DeathItem>? Lost) Pile(HeldAtDisconnect before, InventorySnapshot now)
+    {
+        if (before.ItemsUnknown) return (null, null);
         Dictionary<string, int> missing = new(StringComparer.OrdinalIgnoreCase);
         foreach ((string name, int count) in HangupItemPlan.Missing(before.Items, now))
             missing[name] = count;

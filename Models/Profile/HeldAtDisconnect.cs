@@ -44,6 +44,26 @@ public sealed class HeldAtDisconnect
     // it: the penalty takes items.
     public List<HeldItem> Items { get; set; } = new();
 
+    // No inventory was read on the connection the list was written on, so what
+    // the character held isn't known and Items, Worn, Carried and Coins say
+    // nothing. Written all the same when the link dropped with the character low
+    // enough to be killed for it: where and when that was must not be the older
+    // list's.
+    public bool ItemsUnknown { get; set; }
+
+    // The game was left by its own exit command with the link still up (the
+    // character saved, the board's menu showing), not by the link going down.
+    // That is not a hang-up: the board takes nothing for it and kills nobody.
+    public bool CleanExit { get; set; }
+
+    // Seen on a connection made after this list was written that ended without
+    // judging it (no inventory read, and nothing that could kill): the board
+    // printed its hang-up lines there, and HP at that connection's first prompt.
+    // Both belong to the first entry after the hang-up, and the connection that
+    // does judge the list wouldn't see them again.
+    public bool LoginLinesSeenSince { get; set; }
+    public int? HpAtFirstEntrySince { get; set; }
+
     // HP and max HP as the statline last showed them, or null when they weren't
     // known. At or below 0 the character was dropped.
     public int? Hp { get; set; }
@@ -65,9 +85,9 @@ public sealed class HeldAtDisconnect
     // written before this was kept.
     public List<DeathItem>? Worn { get; set; }
 
-    // The carried entries among Items as the inventory list words them ("3 torch"),
-    // without the keys and the lit light, which a death record's pile doesn't
-    // carry either. null on a list written before this was kept.
+    // Everything among Items that isn't worn, as the inventory words it ("3 torch"):
+    // the carried entries, the keys and the lit light, all of which a death takes.
+    // null on a list written before this was kept.
     public List<DeathItem>? Carried { get; set; }
 
     // The coins on hand: a death takes them too.
