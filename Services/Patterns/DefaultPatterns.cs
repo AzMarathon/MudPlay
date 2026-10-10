@@ -754,6 +754,11 @@ public static class DefaultPatterns
             @"^(?<player>\w+) started to follow you\.");
         yield return new RegexPattern(KnownPatterns.PartyYouFollowing,
             @"^You are now following (?<player>\w+)\.?$");
+        // The line a follower's `par` opens with, ahead of the roster header: the
+        // game's own word that we follow someone (GAME_MECHANICS "`par` output
+        // block"). A player who follows nobody isn't printed it.
+        yield return new RegexPattern(KnownPatterns.PartyParFollowing,
+            @"^You are following (?<player>[A-Z]\w*)\.\s*$");
         // Party-follow drag — the game moved us one room in the leader's wake and
         // prints " -- Following your Party leader <dir> --" just before the new
         // room display. Longest direction alternatives first so "northeast" can't

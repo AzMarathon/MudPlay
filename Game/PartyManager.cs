@@ -44,10 +44,14 @@ public sealed partial class PartyManager : IDisposable
     private ParState _parState = ParState.Idle;
     // Names observed in the current par block; used to skip duplicates.
     private readonly HashSet<string> _parBlockNames = new(StringComparer.OrdinalIgnoreCase);
-    // The leader we believed we followed when this par block opened. Taken at the
-    // header because an [Invited] row for another member, read first, already
-    // flips us to leading.
+    // The leader we believed we followed when this par block opened, and whether
+    // the game said so itself: a follower's `par` opens with "You are following
+    // X." ahead of the header, and a player who follows nobody isn't printed it.
     private string? _parFollowedLeader;
+    private bool _parFollowing;
+    private DateTimeOffset _parFollowingLineAt = DateTimeOffset.MinValue;
+    // The following line and the header are one reply; this only has to span them.
+    private static readonly TimeSpan ParFollowingLineWindow = TimeSpan.FromSeconds(2);
 
     // ----- disconnect grace window + auto-invite -------
     // Disconnected members keyed by name → moment we last saw them drop.
@@ -313,6 +317,7 @@ public sealed partial class PartyManager : IDisposable
         _subs.Add(_router.Subscribe(KnownPatterns.PartyStopsFollowing, OnStopsFollowing));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyLeftBehind,     OnLeftBehind));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyYouInvited,     OnYouInvited));
+        _subs.Add(_router.Subscribe(KnownPatterns.PartyParFollowing,   _ => _parFollowingLineAt = NowProvider()));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyHeader,         OnParHeader));
         // Disconnect / death / reconnect grace window. We watch every "X just
         // disconnected" / "X just entered the Realm" line because a party
@@ -812,6 +817,12 @@ public sealed partial class PartyManager : IDisposable
         _parFollowedLeader = State.IsInParty && !State.SelfIsLeader && State.LeaderName is { Length: > 0 } leader
             ? GivenNameOf(leader)
             : null;
+        // The game's own word outranks what we believe: told we follow someone, the
+        // leader can't be an [Invited] row, and nothing in the block makes us lead.
+        bool saysFollowing = NowProvider() - _parFollowingLineAt <= ParFollowingLineWindow;
+        _parFollowingLineAt = DateTimeOffset.MinValue;
+        _parFollowing = saysFollowing || _parFollowedLeader is not null;
+        if (saysFollowing) _parFollowedLeader = null;
     }
 
     // ----- disconnect / death / reconnect ---------------
@@ -1028,6 +1039,16 @@ public sealed partial class PartyManager : IDisposable
             }
         }
         return false;
+    }
+
+    // A member we know went missing on a trip of ours is about to ask to be fetched
+    // (PartyTrainCoordinator, at the end of a party train trip). Their @comeback is
+    // a party member's however long ago an exit turned them out of the party, so
+    // the window it is honoured in starts now.
+    public void ExpectComebackFrom(string given)
+    {
+        string name = GivenNameOf(given);
+        if (name.Length > 0) _recentlyDisconnected[name] = NowProvider();
     }
 
     // Given names of the followers we're currently leading (self + pending
@@ -1286,6 +1307,12 @@ public sealed partial class PartyManager : IDisposable
                 ? invited.Groups["class"].Value.Trim()
                 : string.Empty;
             _parBlockNames.Add(inviteeName);
+            // While we follow someone an [Invited] row says nothing about who
+            // leads: it is a member on the list who isn't following our leader (left
+            // behind, dead, only invited). Reading it as an invite of our own made
+            // this client the leader, which let go of the follower movement hold and
+            // of the leader remembered for a reconnect. The one row that does
+            // concern us is our own leader's: we are on their list and follow nobody.
             if (_parFollowedLeader is { } followed
                 && GivenNameOf(inviteeName).Equals(followed, StringComparison.OrdinalIgnoreCase))
             {
@@ -1294,6 +1321,7 @@ public sealed partial class PartyManager : IDisposable
             }
             PartyMember row = AddOrTouchMember(inviteeName, isInvited: true);
             if (inviteeClass.Length > 0) row.Class = inviteeClass;
+            if (_parFollowing) return;
             // Sending an invite implies leadership-in-the-making —
             // mirrors what OnYouInvited does when the outbound echo
             // fires, so the X-uninvite button is enabled even if the
