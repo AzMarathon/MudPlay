@@ -6411,6 +6411,12 @@ A `get <item>` that can't succeed replies with one of these shapes:
 - **Roomba queues a visible stack and a hidden stack of the same item as two moves**
   (`GhSweepManager.BuildSortQueue`): the visible one needs no search, the hidden one is searched for
   first. The game takes from the visible stack before a found hidden one.
+- **Roomba's final lap doesn't search, so it rereads only the visible set** (`GhSweepManager`
+  `CarryRecordsIntoFinalLap`, `NoteFinalLapRead`; **Client policy**, user 2026-10-10). Each room's visible
+  record is rebuilt from the lap's displays, a display with no floor list being an empty floor. The hidden
+  record stands as recon left it, less the hidden stacks the sort took. A room whose display differs from
+  what the sort should have left is logged once and written to the item-location log as it is; nothing is
+  re-sorted.
 - **A list Roomba can't place** (source unknown, read while a search of its own is out) adds nothing to
   a stack the display showed: the higher of the two counts stands, and only a name the display never
   showed is taken as hidden (`GhSurveyMerger.MergeUnattributed`). A redisplay misread as a reply would

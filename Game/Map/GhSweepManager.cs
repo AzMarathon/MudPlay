@@ -329,6 +329,18 @@ public sealed class GhSweepManager : IDisposable
     private readonly Dictionary<RoomKey, List<string>> _observedByRoom = new();
     private readonly Dictionary<RoomKey, List<string>> _visibleByRoom = new();
     private readonly Dictionary<RoomKey, List<string>> _hiddenByRoom = new();
+
+    // The final lap. What each room should have in plain sight once the sort is
+    // done: recon's visible record, less what was picked up there, plus what was
+    // delivered there. Each room's display on that lap is held against it once.
+    // Null on a resumed sweep, which ran no recon to work it out from.
+    private Dictionary<RoomKey, List<string>>? _expectedAfterSort;
+    private readonly HashSet<RoomKey> _readOnFinalLap = new();
+    private readonly List<RoomKey> _changedAfterSort = new();
+
+    // Rooms the final lap found holding something other than what the sort left
+    // (someone took or dropped an item meanwhile). Surfaced for the bug report.
+    public IReadOnlyList<RoomKey> RoomsChangedAfterSort => _changedAfterSort;
     private readonly List<PendingSortMove> _pending = new();
     private readonly List<GhSweepItemFound> _leftInPlace = new();
     private readonly List<GhSweepMove> _movedSoFar = new();
@@ -568,6 +580,9 @@ public sealed class GhSweepManager : IDisposable
         _observedByRoom.Clear();
         _visibleByRoom.Clear();
         _hiddenByRoom.Clear();
+        _expectedAfterSort = null;
+        _readOnFinalLap.Clear();
+        _changedAfterSort.Clear();
         _pendingArrivalSurvey = null;
         _surveysHere = 0;
         _slowestSurveyHere = null;
@@ -1356,7 +1371,7 @@ public sealed class GhSweepManager : IDisposable
     // search's reply is hidden stacks, a redisplay is the visible floor again.
     private void OnSurveyUpdated()
     {
-        if (Phase != SweepPhase.Reconning) return;
+        if (Phase != SweepPhase.Reconning && Phase != SweepPhase.FinalRecon) return;
         var snapshot = new List<string>(_groundItems.Items);
         FloorSurveySource source = _groundItems.LastSurveySource;
 
@@ -1405,6 +1420,11 @@ public sealed class GhSweepManager : IDisposable
 
         // While its searches run, the room is written and logged once, when they end.
         if (searchingHere) return;
+        if (Phase == SweepPhase.FinalRecon)
+        {
+            NoteFinalLapRead(room);
+            return;
+        }
         RecordItemLocations(room);
         LogRoomSurveyIfHuge(room);
     }
@@ -1520,9 +1540,20 @@ public sealed class GhSweepManager : IDisposable
                 _observedByRoom[here] = GhSurveyMerger.Total(_visibleByRoom, _hiddenByRoom, here, _itemNames);
                 NoteSurvey(here, _pendingArrivalReadTime, Stopwatch.GetElapsedTime(started));
                 // A room about to be searched is written once, when its searches end.
-                if (Phase != SweepPhase.Reconning || !_labels.SearchForHidden) RecordItemLocations(here);
+                if (Phase == SweepPhase.FinalRecon) NoteFinalLapRead(here);
+                else if (!_labels.SearchForHidden) RecordItemLocations(here);
             }
             _pendingArrivalSurvey = null;
+        }
+        else if (Phase == SweepPhase.FinalRecon && _sweepRooms.Contains(here)
+                 && !_tracker.IsInDarkRoom && !_tracker.EnteredBlind)
+        {
+            // A display with no floor list is a floor with nothing in plain sight,
+            // which is how a room that lost its last stack looks. A room too dark
+            // to show, or entered blind, displayed nothing and says nothing.
+            _visibleByRoom[here] = new List<string>();
+            _observedByRoom[here] = GhSurveyMerger.Total(_visibleByRoom, _hiddenByRoom, here, _itemNames);
+            NoteFinalLapRead(here);
         }
 
         if (!_sweepRooms.Contains(here))
@@ -2423,10 +2454,7 @@ public sealed class GhSweepManager : IDisposable
     {
         if (Phase != SweepPhase.Sorting) return;
         Phase = SweepPhase.FinalRecon;
-        ReleaseGate("final recon begins");
-        _observedByRoom.Clear();
-        _visibleByRoom.Clear();
-        _hiddenByRoom.Clear();
+        CarryRecordsIntoFinalLap();
         _pendingArrivalSurvey = null;
         _log?.Info(LogCategory, "sort complete; final recon pass to refresh room inventories");
         PhaseChanged?.Invoke();
@@ -2435,12 +2463,79 @@ public sealed class GhSweepManager : IDisposable
         _reroutingSortLoop = true; // suppress the supersede Stopped event as we swap loops
         try { started = PlotAndStartCircuit(); }
         finally { _reroutingSortLoop = false; }
+        // Only once the circuit has replaced the sort's shuttle, as a reroute does:
+        // released first, the shuttle shipped one more step of its own and the lap
+        // set off a room out of step with where it thought it was.
+        ReleaseGate("final recon begins");
         if (!started)
         {
             _log?.Warn(LogCategory, "final recon couldn't plot a circuit; finishing");
             FinishSweep();
         }
     }
+
+    // The final lap reads each room's display again and does not search. So the
+    // visible record starts empty and is rebuilt from what the lap sees, while the
+    // hidden record is kept, less the hidden stacks the sort took: no display will
+    // show whether the rest are still there, and recon's count is the last word on
+    // them. The floor each room should now show is worked out here too, before the
+    // visible record is emptied, for the lap to hold its displays against.
+    private void CarryRecordsIntoFinalLap()
+    {
+        _expectedAfterSort = null;
+        if (CompletedReconLaps > 0)
+        {
+            _expectedAfterSort = _visibleByRoom.ToDictionary(r => r.Key, r => r.Value.ToList());
+            foreach (PendingSortMove move in _pending)
+            {
+                if (!move.RequiresSearch && (move.IsCarried || move.Delivered))
+                    GhSurveyMerger.Adjust(_expectedAfterSort, move.From, move.ItemName, -move.Count, _itemNames);
+                if (move.Delivered)
+                    GhSurveyMerger.Adjust(_expectedAfterSort, move.To, move.ItemName, move.Count, _itemNames);
+            }
+        }
+        foreach (PendingSortMove move in _pending.Where(m => m.RequiresSearch && (m.IsCarried || m.Delivered)))
+            GhSurveyMerger.Adjust(_hiddenByRoom, move.From, move.ItemName, -move.Count, _itemNames);
+
+        _observedByRoom.Clear();
+        _visibleByRoom.Clear();
+        _readOnFinalLap.Clear();
+        _changedAfterSort.Clear();
+    }
+
+    // A room read on the final lap: write it to the item-location log, and say
+    // once if it isn't as the sort left it. Nothing is re-sorted: the sort is over,
+    // and whoever took or dropped an item since may still be at it. A resumed sweep
+    // ran no recon, so it has no floor to expect, and where searching is on it has no
+    // hidden record either: writing the room from its display alone would drop the
+    // hidden stacks an earlier sweep logged there.
+    private void NoteFinalLapRead(RoomKey room)
+    {
+        if (CompletedReconLaps > 0 || !_labels.SearchForHidden) RecordItemLocations(room);
+        if (_expectedAfterSort is null || !_readOnFinalLap.Add(room)) return;
+
+        List<(string Item, int Difference)> differences = GhSurveyMerger.Difference(
+            _expectedAfterSort.GetValueOrDefault(room) ?? new List<string>(),
+            _visibleByRoom.GetValueOrDefault(room) ?? new List<string>(),
+            _itemNames);
+        if (differences.Count == 0) return;
+
+        _changedAfterSort.Add(room);
+        List<string> gained = differences.Where(d => d.Difference > 0)
+            .Select(d => d.Difference > 1 ? $"{d.Difference} {d.Item}" : d.Item).ToList();
+        List<string> lost = differences.Where(d => d.Difference < 0)
+            .Select(d => d.Difference < -1 ? $"{-d.Difference} {d.Item}" : d.Item).ToList();
+        _log?.Info(LogCategory,
+            $"final recon at {room}: not as the sort left it"
+            + (gained.Count > 0 ? $"; {gained.Count} more than expected: {NameFew(gained)}" : string.Empty)
+            + (lost.Count > 0 ? $"; {lost.Count} missing: {NameFew(lost)}" : string.Empty)
+            + (_itemLocations is not null ? "; item log brought up to date" : string.Empty));
+    }
+
+    private static string NameFew(IReadOnlyList<string> stacks) =>
+        stacks.Count > StacksNamedPerLogLine
+            ? $"{string.Join(", ", stacks.Take(StacksNamedPerLogLine))} (+{stacks.Count - StacksNamedPerLogLine} more)"
+            : string.Join(", ", stacks);
 
     private bool TryRerouteToNextWork()
     {

@@ -36,6 +36,45 @@ internal static class GhSurveyMerger
         return total.Select(e => e.Value > 1 ? $"{e.Value} {e.Key}" : e.Key).ToList();
     }
 
+    // Puts copies of an item on a room's record or takes them off, as a delivery or
+    // a pickup does to the floor recon recorded. An item taken down to nothing
+    // leaves the record.
+    public static void Adjust(
+        Dictionary<RoomKey, List<string>> ledger,
+        RoomKey room,
+        string itemName,
+        int delta,
+        ItemNameStore itemNames)
+    {
+        string canonical = Canonical(itemName, itemNames);
+        List<string> entries = ledger.TryGetValue(room, out List<string>? existing) ? existing : new List<string>();
+        int at = entries.FindIndex(e => string.Equals(
+            Canonical(e, itemNames), canonical, StringComparison.OrdinalIgnoreCase));
+        int count = (at >= 0 ? CountedCommand.SplitLeadingCount(entries[at]).Count : 0) + delta;
+
+        if (at >= 0) entries.RemoveAt(at);
+        if (count > 0) entries.Insert(at >= 0 ? at : entries.Count, count > 1 ? $"{count} {canonical}" : canonical);
+        ledger[room] = entries;
+    }
+
+    // How a floor as seen differs from the floor expected, item by item: more than
+    // expected is a positive count, fewer a negative one. Items that agree are left out.
+    public static List<(string Item, int Difference)> Difference(
+        IReadOnlyList<string> expected, IReadOnlyList<string> seen, ItemNameStore itemNames)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (string entry in seen) Add(entry, 1);
+        foreach (string entry in expected) Add(entry, -1);
+        return counts.Where(c => c.Value != 0).Select(c => (c.Key, c.Value)).ToList();
+
+        void Add(string entry, int sign)
+        {
+            string canonical = Canonical(entry, itemNames);
+            counts[canonical] = counts.GetValueOrDefault(canonical)
+                + sign * CountedCommand.SplitLeadingCount(entry).Count;
+        }
+    }
+
     // A list read while a search of ours was out, on a statline that hides which
     // command a line answers: it may be the search's reply or a redisplay of the
     // room. Adding a redisplay to the room as hidden copies would double the floor,

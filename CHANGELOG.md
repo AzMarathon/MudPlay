@@ -1,5 +1,13 @@
 # Version history
 
+## 3.161.11
+
+- Roomba's final lap records what it sees: each room's entry in the item-location log is rewritten as the room is after the sort
+- A room someone changed between the sort and that lap is named once in the program log, with what is extra and what is missing; nothing is re-sorted
+- Hidden items the scan found and the sort didn't take stay on the room's record (the final lap doesn't search)
+- The final lap no longer sets off with a doubled first step
+- Bug report: the rooms the final lap found changed
+
 ## 3.161.10
 
 - Roomba's program log: the sort queue is one line per room (stacks, items, where they are bound), not one per stack

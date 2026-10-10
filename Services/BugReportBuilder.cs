@@ -1669,6 +1669,10 @@ public static class BugReportBuilder
                 ? $"{ledger.VisibleItems} item(s) in {ledger.VisibleStacks} stack(s) / "
                   + $"{ledger.HiddenItems} item(s) in {ledger.HiddenStacks} stack(s)"
                 : "(none)");
+        Kv(sb, "Roomba rooms not as the sort left them (final lap)",
+            svc.GhSweep.RoomsChangedAfterSort is { Count: > 0 } changed
+                ? string.Join(", ", changed.Select(r => $"{r.Map}/{r.Room}"))
+                : "(none)");
         Kv(sb, "Roomba slowest floor read (this sweep or the last)",
             svc.GhSweep.SlowestSurvey is { } slowest
                 ? $"{slowest.Room.Map}/{slowest.Room.Room}: {slowest.Items} item(s) of {slowest.Stacks} kind(s); {slowest.StagesText}"
