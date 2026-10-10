@@ -626,8 +626,8 @@ public sealed class EventManager : IDisposable
     }
 
     // A loop or auto-lair with no stop-after rule has nothing to wait for: the
-    // event is finished now that it is running, its Then never comes, and what was
-    // waiting behind it starts with that loop as what it interrupts.
+    // event is finished now that it is running and its Then never comes. (With an
+    // event already waiting it never gets here: HandOpenEndedToQueued.)
     private void FinishOpenEnded(EventRun run)
     {
         ScheduledEvent e = run.Event;
