@@ -510,11 +510,11 @@ public sealed class EquipmentManager
     // The carried-but-unworn item names for an observed inventory — the pool a
     // wear / eq can actually draw from — or null when no 'i' dump has been parsed
     // yet (availability unknown, so callers don't gate). Only meaningful after a
-    // dump; the carried list is patched live on pickup / drop thereafter.
+    // dump; the carried list is patched live on pickup / drop thereafter. Names,
+    // not pack entries: a piece carried twice is one entry under a count, which a
+    // set's pick or a weapon's name would never match.
     private static ISet<string>? HeldNames(InventorySnapshot snap) =>
-        snap.LastUpdated == DateTimeOffset.MinValue
-            ? null
-            : new HashSet<string>(snap.CarriedItems, StringComparer.OrdinalIgnoreCase);
+        snap.LastUpdated == DateTimeOffset.MinValue ? null : snap.PackNames();
 
     // A named item can be equipped only if it's in the pack. Null availability
     // (no dump parsed) can't gate, so it's allowed through unchanged.
@@ -1042,8 +1042,9 @@ public sealed class EquipmentManager
         var result = new List<string>();
         var wornNames = new HashSet<string>(
             worn.Select(e => e.Name), StringComparer.OrdinalIgnoreCase);
-        var carriedSet = new HashSet<string>(
-            carried.Select(c => StripStackCount(c.Trim())), StringComparer.OrdinalIgnoreCase);
+        // By item name: a doubled-up piece is one pack entry under a count.
+        List<string> carriedNames = InventorySnapshot.Stacks(carried).Select(s => s.Name).ToList();
+        var carriedSet = new HashSet<string>(carriedNames, StringComparer.OrdinalIgnoreCase);
         // One of each named item across the whole plan (also blocks re-wearing worn).
         var chosen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -1081,11 +1082,10 @@ public sealed class EquipmentManager
         // Fallback pass — fill remaining empty slots, first-come-first-served, except
         // weapons go first: a two-hander it wields must shut the off-hand before an
         // off-hand item earlier in the pack claims it.
-        foreach (string rawName in carried.OrderBy(
-                     c => resolveSlot(StripStackCount(c.Trim())) == EquipmentSlot.Weapon ? 0 : 1))
+        foreach (string name in carriedNames.OrderBy(
+                     n => resolveSlot(n) == EquipmentSlot.Weapon ? 0 : 1))
         {
-            string name = StripStackCount(rawName.Trim());
-            if (name.Length == 0 || chosen.Contains(name) || wornNames.Contains(name)) continue;
+            if (chosen.Contains(name) || wornNames.Contains(name)) continue;
             if (blockedNames is not null && blockedNames.Contains(name)) continue;
             if (resolveSlot(name) is not EquipmentSlot slot || IsVirtual(slot)) continue;
             EquipmentSlot family = FamilyOf(slot);
@@ -1117,22 +1117,6 @@ public sealed class EquipmentManager
         string? pick = set.Slots.FirstOrDefault(e => e.Slot == slot)?.ItemName?.Trim();
         if (!string.IsNullOrEmpty(pick) && PlanEquips(cmds, pick)) return pick;
         return WornSlotItem(worn, wornLabel);
-    }
-
-    // The game lists a stack of identical items as "<count> <name>" (e.g.
-    // "2 padded helm"); a singleton has no prefix. Strip the count so a stacked
-    // carried token still matches its set entry and resolves to a slot —
-    // otherwise equip-all skips every doubled-up piece. Currency tokens
-    // ("86 gold crowns") never reach here: the inventory parser filters them
-    // out before the carried list is built.
-    private static string StripStackCount(string token)
-    {
-        int space = token.IndexOf(' ');
-        if (space <= 0) return token;
-        for (int i = 0; i < space; i++)
-            if (!char.IsDigit(token[i])) return token;
-        string rest = token[(space + 1)..];
-        return rest.Length == 0 ? token : rest;
     }
 
     private static void Bump(Dictionary<EquipmentSlot, int> counts, EquipmentSlot family)
