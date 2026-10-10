@@ -1,5 +1,15 @@
 # Version history
 
+## 3.167.0
+
+- Auto-All is a true master switch: off, nothing automatic acts
+- `@auto-all` is the only remote command followed while it is off
+- Switching it on gives back what was ticked when it went off
+- A walk, loop or Auto-Lair started with it off is refused, with a notice
+- Low-HP hang-up now needs Auto-Rest on
+- "Allow hangup in all-off mode" follows the master switch
+- Events held more than 5 minutes by it: you pick which still run
+
 ## 3.166.0
 
 - New Settings tab **Periodic Damage Room Spells**: per room spell, whether it bars resting

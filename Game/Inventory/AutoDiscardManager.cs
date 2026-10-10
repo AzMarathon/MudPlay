@@ -886,9 +886,17 @@ public sealed class AutoDiscardManager : IDisposable
         OnInventoryChanged();
     }
 
+    // The master switch (true = off). The engine's own piles follow it through
+    // isEnabled; this is for the held hides, which answer to neither.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // What keeps every held hide back right now, or null when they may go.
     private string? KeptBackBy()
     {
+        // A retry is the client's own doing even when the hide it retries was
+        // asked for by hand, so the master switch stops it. The engine's switch
+        // does not (see ReviewQueued), which is why this is asked here.
+        if (MasterSwitchOff?.Invoke() == true) return "the master switch is off";
         if (_awaitingRead) return "the pack hasn't been read again yet";
         if (_room is null) return "the room isn't known";
         if (_wireSender is null) return "not connected";

@@ -162,6 +162,15 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
     // Supply the opt-in gate (active BBS's ReconnectAfterCleanup).
     public void SetAutoLogoutEnabledCheck(Func<bool> enabled) => _autoLogoutEnabled = enabled;
 
+    // Supply the master switch (true = off). The cleanup log-off is not a
+    // hang-up, but it is automatic: with the switch off it doesn't start, and one
+    // still waiting for a safe room waits on (user, 2026-10-09). An exit already
+    // sent runs to its end, or the character would be left at the menu. The
+    // reconnect after the board's own drop is the BBS settings' business, not ours.
+    public void SetMasterSwitchCheck(Func<bool> isOff) => _masterSwitchOff = isOff;
+
+    private Func<bool>? _masterSwitchOff;
+
     // Supply the disconnect action invoked once we reach the main menu (the
     // host's user-initiated disconnect path).
     public void SetDisconnectCallback(Action disconnect) => _disconnect = disconnect;
@@ -196,6 +205,14 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
         if (Phase != CleanupLogoutPhase.Idle) return;
         if (!(_autoLogoutEnabled?.Invoke() ?? false)) return;
         if (!(_isConnected?.Invoke() ?? false)) return;
+        // Left Idle, so a later warning of the same cycle (5m, 2m) arms the
+        // log-off if the switch is back on by then.
+        if (_masterSwitchOff?.Invoke() == true)
+        {
+            _log?.Log(LogSeverity.Info, "CleanupLogout",
+                $"Shutdown warning ({warning.MinutesRemaining}m) — the master switch is off, so no automatic log-off.");
+            return;
+        }
 
         Phase = CleanupLogoutPhase.Pending;
         _log?.Log(LogSeverity.Info, "CleanupLogout",
@@ -281,7 +298,7 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
         switch (Phase)
         {
             case CleanupLogoutPhase.Pending:
-                if (!(_isSafe?.Invoke() ?? false))
+                if (_masterSwitchOff?.Invoke() == true || !(_isSafe?.Invoke() ?? false))
                 {
                     _safeSinceUtc = null;
                     break;

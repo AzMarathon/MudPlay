@@ -307,8 +307,9 @@ public sealed class EventManager : IDisposable
     // limits user definable ... and use these as the default settings"). An event
     // waits at most once, so the cap only bites on a character with more events
     // than it all firing behind one run. The wait limit is for a run that doesn't
-    // end soon (a long loop event, a walk left paused, Auto-All off for the night):
-    // without it the events of hours ago would all set off when it does.
+    // end soon (a long loop event, a walk left paused): without it the events of
+    // hours ago would all set off when it does. Time with the master switch off
+    // doesn't count toward it (HoldsForMasterSwitch).
     public const int DefaultMaxQueued = 10;
     public const int DefaultMaxQueueWaitMinutes = 30;
     public const int MaxQueuedCeiling = 100;
@@ -335,7 +336,9 @@ public sealed class EventManager : IDisposable
         public ScheduledEvent Origin { get; } = origin;
         public EventResumePlan? Resume { get; } = resume;
         public int Depth { get; } = depth;
-        public DateTimeOffset StartedAt { get; } = startedAt;
+        // Moved forward by any time the run spent held by the master switch, so
+        // what is counted from it is time the event was actually running.
+        public DateTimeOffset StartedAt { get; set; } = startedAt;
         public int Laps;
         public RoomKey? WalkTarget;
         // The action is done and the run is on its Then walk-to.
@@ -353,7 +356,229 @@ public sealed class EventManager : IDisposable
         public string Step => OnThenWalk ? "Then walk-to" : Event.ActionType.ToString();
     }
 
-    private readonly record struct QueuedEvent(ScheduledEvent Event, DateTimeOffset At);
+    // At: when it took its place, moved forward by any time its clock stood still
+    // (the master switch off, a choice awaited), so the wait limit counts only time
+    // it could have run. FiredAt stays the real moment. HeldBySwitch: how much of
+    // its wait the master switch was off; HeldAnswered: how much of that the user
+    // has already been asked about (see the queue choice below).
+    private readonly record struct QueuedEvent(ScheduledEvent Event, DateTimeOffset At)
+    {
+        public DateTimeOffset FiredAt { get; init; } = At;
+        public TimeSpan HeldBySwitch { get; init; }
+        public TimeSpan HeldAnswered { get; init; }
+    }
+
+    // ----- Master switch -------------------------------------------------
+    // With the master switch (Auto-All) off nothing here acts. An event that
+    // fires is skipped, not queued (Fire asks BlockedByMasterSwitch with the
+    // event's name; true = off, and AutoModeController.Blocks counts the skip).
+    // What is already under way is held, not dropped: the running or suspended
+    // event does not move on, an event waiting in the queue does not start and
+    // keeps its place, and a completion that lands meanwhile is kept for later.
+    // Every clock stops with it (HoldsForMasterSwitch): a wait's seconds, a stop
+    // rule's minutes, the queue's wait limit and a suspended run's idle limit all
+    // count time the switch was on, so nothing ends or is given up for the hours
+    // the switch spent off.
+    public Func<string, bool>? BlockedByMasterSwitch { get; set; }
+    public Func<bool>? IsMasterSwitchOff { get; set; }
+
+    // Since when the master switch has held everything; null while it is on.
+    private DateTimeOffset? _heldSince;
+    // Completions that landed while it was off, run when it is back on.
+    private readonly List<Action> _whenSwitchBackOn = new();
+
+    // True while the master switch is off. The first read after it comes back on
+    // moves every clock forward by the time it was off.
+    private bool HoldsForMasterSwitch()
+    {
+        if (IsMasterSwitchOff?.Invoke() == true)
+        {
+            _heldSince ??= Now();
+            return true;
+        }
+        if (_heldSince is not { } since) return false;
+        _heldSince = null;
+        TimeSpan held = Now() - since;
+        if (_run is { } run)
+        {
+            run.StartedAt += held;
+            if (run.IdleSince is { } idle) run.IdleSince = idle + held;
+        }
+        for (int i = 0; i < _queue.Count; i++)
+            _queue[i] = _queue[i] with { At = _queue[i].At + held, HeldBySwitch = _queue[i].HeldBySwitch + held };
+        // A choice already being awaited stood still with everything else.
+        if (_choiceSince is { } asked) _choiceSince = asked + held;
+        // Decided here, at the moment the hold ends, so nothing waiting can be
+        // taken between the switch coming on and the user being asked.
+        else if (_queue.Any(q => q.HeldBySwitch - q.HeldAnswered > HeldQueuePromptAfter)) _choiceSince = Now();
+        return false;
+    }
+
+    // The master switch was switched (AppServices tells us on both edges, so the
+    // clocks stop the moment it goes off and not at the next tick). Coming back
+    // on, what landed meanwhile is finished and, with nothing running, the next
+    // waiting event starts, in its order: unless the switch held the waiting
+    // events long enough that the user is asked first (the queue choice below).
+    // remote: the switch was not switched by the user's own press (a party
+    // member's `@auto-all on`, the local API), so nobody is there to ask.
+    public void NoteMasterSwitchChanged(bool remote = false)
+    {
+        if (HoldsForMasterSwitch())
+        {
+            // The prompt asks about a switch-on that is no longer true. The
+            // events stay waiting and the question is put again next time.
+            if (_choiceSince is not null) QueueChoiceWithdrawn?.Invoke();
+            return;
+        }
+        Action[] landed = _whenSwitchBackOn.ToArray();
+        _whenSwitchBackOn.Clear();
+        // A completion starts an engine. With the connection down it waits for
+        // the way back into the game, like one that landed during the outage:
+        // started now, the engine's moves would reach the board's login prompts.
+        if (_offline) _whenBackInGame.AddRange(landed);
+        else foreach (Action act in landed) act();
+        if (_choiceSince is not null)
+        {
+            string held = $"Master switch back on with {_queue.Count} event(s) waiting, held by it for more than "
+                + $"{HeldQueuePromptAfter.TotalMinutes:0} minutes ({string.Join(", ", _queue.Select(q => $"'{Label(q.Event)}' {q.HeldBySwitch.TotalMinutes:0} min"))})";
+            if (remote)
+            {
+                // "if it was triggered remotely the default should be to skip all
+                // the events, if it was auto all off for a long period of time"
+                // (user, 2026-10-10): a prompt on an unattended client would be
+                // answered by nobody, and the queue would stand behind it.
+                _log?.Info("Events", held + ": switched on remotely, so they are dropped without asking.");
+                _offered = _queue.Select(q => q.Event).ToList();
+                SettleQueueChoice(Array.Empty<ScheduledEvent>(),
+                    unanswered: $"Auto-All was switched back on remotely after more than {HeldQueuePromptAfter.TotalMinutes:0} minutes off");
+                return;
+            }
+            _log?.Info("Events", held + ": asking which to run; none of them starts until that is answered.");
+            QueueChoiceNeeded?.Invoke();
+        }
+        StartNextQueued();
+    }
+
+    // ----- Queue choice after a long spell with the master switch off ------
+    // Events waiting when the switch goes off are kept, with their clocks
+    // stopped. Back on within HeldQueuePromptAfter they carry on by themselves.
+    // After longer, up to a queue-full of stale events would set off one after
+    // another, so the user is asked which to run: "if we swap back on and have
+    // had events in queue for longer than 5 minutes because of this, it should
+    // pop up with a menu for the user to pick which ones to execute and which
+    // ones to drop" (user, 2026-10-10). Until the answer nothing waiting starts
+    // and nothing is dropped for the wait limit; the running or suspended event
+    // carries on, and events that fire queue behind as usual.
+    //
+    // The choice is never left standing, since every later event would wait
+    // behind it for good: closing the prompt drops the listed events
+    // (DropQueueChoice), and a switch-on nobody is at the keyboard for drops them
+    // without asking (NoteMasterSwitchChanged, remote). Only the switch going off
+    // again keeps it, and then the switch is what holds the queue.
+    public static readonly TimeSpan HeldQueuePromptAfter = TimeSpan.FromMinutes(5);
+
+    // One waiting event as the prompt lists it. Waiting: since it fired.
+    // HeldBySwitch: how much of that the master switch was off.
+    public readonly record struct HeldQueueEntry(ScheduledEvent Event, TimeSpan Waiting, TimeSpan HeldBySwitch);
+
+    // Since when the user's choice has been awaited; null when none is.
+    private DateTimeOffset? _choiceSince;
+    // The events the open prompt lists: the answer is about these only, so one
+    // that queued after the prompt opened is neither run early nor dropped by it.
+    private List<ScheduledEvent>? _offered;
+
+    public bool QueueChoicePending => _choiceSince is not null;
+
+    // Open the prompt, or bring the open one forward.
+    public event Action? QueueChoiceNeeded;
+    // Close the prompt with no answer: the switch went off again, or the queue
+    // it asked about is gone (another profile, a Stop).
+    public event Action? QueueChoiceWithdrawn;
+
+    // The waiting events as they stand, for the prompt to list. Empty when no
+    // choice is awaited.
+    public IReadOnlyList<HeldQueueEntry> OfferQueueChoice()
+    {
+        if (_choiceSince is null) return Array.Empty<HeldQueueEntry>();
+        DateTimeOffset now = Now();
+        _offered = _queue.Select(q => q.Event).ToList();
+        return _queue.Select(q => new HeldQueueEntry(q.Event, now - q.FiredAt, q.HeldBySwitch)).ToList();
+    }
+
+    // The user's answer: of the events the prompt listed, the ones in `run` keep
+    // their places and the rest are dropped. The queue then moves as usual
+    // (nothing starts while the connection is down).
+    public void ResolveQueueChoice(IReadOnlyCollection<ScheduledEvent> run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        SettleQueueChoice(run, unanswered: null);
+    }
+
+    // No answer is coming: the user closed the prompt by its X ("drop all of
+    // them"; user, 2026-10-10), or it could not be shown. Every event it listed
+    // is dropped, and the queue runs on for whatever fires afterwards. A choice
+    // left standing would hold every later event behind it for good.
+    public void DropQueueChoice(string why)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(why);
+        SettleQueueChoice(Array.Empty<ScheduledEvent>(), unanswered: why);
+    }
+
+    // The wording for an X-close, shared by the opener and the tests.
+    public const string PromptClosedUnanswered = "the Waiting Events window was closed without an answer";
+
+    // unanswered: why nobody chose (every listed event is then dropped, with that
+    // as the reason given); null when `run` is the user's own answer.
+    private void SettleQueueChoice(IReadOnlyCollection<ScheduledEvent> run, string? unanswered)
+    {
+        if (_choiceSince is not { } since) return;
+        List<ScheduledEvent> offered = _offered ?? new List<ScheduledEvent>();
+        DateTimeOffset now = Now();
+        _choiceSince = null;
+        _offered = null;
+        int dropped = 0, kept = 0;
+        for (int i = _queue.Count - 1; i >= 0; i--)
+        {
+            QueuedEvent q = _queue[i];
+            bool asked = offered.Any(e => ReferenceEquals(e, q.Event));
+            if (asked && !run.Any(e => ReferenceEquals(e, q.Event)))
+            {
+                RemoveQueuedAt(i);
+                dropped++;
+                string waited = $"after waiting {(now - q.FiredAt).TotalMinutes:0} min ({q.HeldBySwitch.TotalMinutes:0} min of it with the master switch off)";
+                _log?.Info("Events", unanswered is null
+                    ? $"Event '{Label(q.Event)}' dropped by the user's choice {waited}."
+                    : $"Event '{Label(q.Event)}' dropped {waited}: {unanswered}.");
+                continue;
+            }
+            if (asked)
+            {
+                kept++;
+                _log?.Info("Events", $"Event '{Label(q.Event)}' kept by the user's choice: it runs in its turn.");
+            }
+            // The wait limit does not count the time spent on the question.
+            DateTimeOffset stoodSince = q.At > since ? q.At : since;
+            _queue[i] = q with { At = q.At + (now - stoodSince), HeldAnswered = q.HeldBySwitch };
+        }
+        if (dropped > 0)
+        {
+            _notice?.Invoke(unanswered is not null
+                ? $"[{dropped} waiting event(s) dropped: {unanswered}]"
+                : kept > 0
+                    ? $"[{dropped} waiting event(s) dropped by your choice; {kept} will run]"
+                    : $"[{dropped} waiting event(s) dropped by your choice; none will run]");
+        }
+        StartNextQueued();
+    }
+
+    // The queue the choice was about is gone.
+    private void EndQueueChoice()
+    {
+        if (_choiceSince is null) return;
+        _choiceSince = null;
+        _offered = null;
+        QueueChoiceWithdrawn?.Invoke();
+    }
 
     private EventRun? _run;
     private readonly List<QueuedEvent> _queue = new();
@@ -382,12 +607,23 @@ public sealed class EventManager : IDisposable
           + (r.Resume is { } plan ? $"; resume target {plan.Describe()}" : "")
           + (r.Depth > 0 ? $"; chain depth {r.Depth}" : "")
           + (r.Suspended ? "; suspended (its engine was stopped by something that brings it back)" : "")
-          + (_offline ? "; connection down" : "");
+          + (_offline ? "; connection down" : "")
+          + HeldNote;
+
+    // Said on the run and on the queue while the master switch holds them, so a
+    // report of "my event never finished" shows why.
+    private string HeldNote => _heldSince is { } since
+        ? $"; held by the master switch for {(Now() - since).TotalSeconds:0}s, clocks stopped"
+          + (_whenSwitchBackOn.Count > 0 ? $", {_whenSwitchBackOn.Count} completion(s) kept for when it is back on" : "")
+        : "";
 
     // For the bug report: the events waiting behind the running one, oldest first.
     public string QueueSummary => _queue.Count == 0
         ? "(empty)"
-        : string.Join(", ", _queue.Select(q => $"'{Label(q.Event)}' (waiting {(Now() - q.At).TotalSeconds:0}s)"));
+        : string.Join(", ", _queue.Select(q => $"'{Label(q.Event)}' (waiting {(Now() - q.At).TotalSeconds:0}s)")) + HeldNote
+          + (_choiceSince is null
+              ? ""
+              : $"; waiting for your choice (held {_queue.Max(q => q.HeldBySwitch).TotalMinutes:0} min by the master switch)");
 
     // For the bug report: what the engine the last finished event left running
     // (its Then, or an open-ended loop action) came to.
@@ -403,22 +639,28 @@ public sealed class EventManager : IDisposable
     // safety net finds a missing saved target (Loop / AutoLair name no longer in the
     // manager's collection) — the safety net mirrors what ReconcileTargets does on
     // LoopsChanged / SetupsChanged, defense in depth for races and direct-disk
-    // profile edits.
-    public void Fire(ScheduledEvent e)
+    // profile edits. True when the firing was taken: run now, or given a place in
+    // the queue.
+    public bool Fire(ScheduledEvent e)
     {
         ArgumentNullException.ThrowIfNull(e);
-        if (e.Disabled) return;
+        if (e.Disabled) return false;
         // Master switch — Settings → Events "Disable all events" gate.
         // Per-character; checked here so the scheduler doesn't have to
         // worry about it and tests using the parameterless ctor (no
         // profile) keep firing.
-        if (_profile?.Current?.EventsGloballyDisabled == true) return;
+        if (_profile?.Current?.EventsGloballyDisabled == true) return false;
+        // Events are the user's own automation: with the master switch off this
+        // firing is skipped, not put off and not queued (user, 2026-10-09). Every
+        // trigger kind comes through here, a Logoff event included, so one check
+        // covers logon, timed, state and boss events alike.
+        if (BlockedByMasterSwitch?.Invoke($"event '{Label(e)}'") == true) return false;
 
         if (e.ActionType == EventActionType.Command && e.ResolvedThen == EventThenType.Nothing)
         {
             Fired?.Invoke(e);
             ExecuteCommand(e);
-            return;
+            return true;
         }
         bool jumps = IsLogoffType(e);
         if (_run is { } holder)
@@ -429,8 +671,9 @@ public sealed class EventManager : IDisposable
             // the queue.
             if (!jumps || IsLogoffType(holder.Origin) || IsLogoffType(holder.Event))
             {
-                if (Enqueue(e, holder, jumps)) Fired?.Invoke(e);
-                return;
+                if (!Enqueue(e, holder, jumps)) return false;
+                Fired?.Invoke(e);
+                return true;
             }
             _log?.Info("Events",
                 $"Logoff event '{Label(e)}' jumps the queue: '{Label(holder.Event)}' is abandoned at {holder.Step}"
@@ -440,12 +683,14 @@ public sealed class EventManager : IDisposable
         {
             // Nothing is running but events are waiting (kept across a dropped
             // connection): this one takes its place behind them.
-            if (Enqueue(e, holder: null, jumps: false)) Fired?.Invoke(e);
+            bool queued = Enqueue(e, holder: null, jumps: false);
+            if (queued) Fired?.Invoke(e);
             StartNextQueued();
-            return;
+            return queued;
         }
         Fired?.Invoke(e);
         StartRun(e, _run is { } current ? current.Resume : SnapshotCurrentActivity(), depth: 0);
+        return true;
     }
 
     // ----- Queue -------------------------------------------------------
@@ -500,6 +745,7 @@ public sealed class EventManager : IDisposable
     {
         _queue.RemoveAt(index);
         _toldFull.Clear();
+        if (_queue.Count == 0) EndQueueChoice();
     }
 
     // An event turned away at one of the queue's limits: the log and the terminal
@@ -512,6 +758,11 @@ public sealed class EventManager : IDisposable
 
     private void DropExpired()
     {
+        // Asked first: it also settles the clocks after a spell with the master
+        // switch off, so nothing is dropped for time spent waiting on the switch.
+        if (HoldsForMasterSwitch()) return;
+        // Nor while the user is being asked which of them to run.
+        if (_choiceSince is not null) return;
         DateTimeOffset now = Now();
         for (int i = _queue.Count - 1; i >= 0; i--)
         {
@@ -531,12 +782,19 @@ public sealed class EventManager : IDisposable
             $"{_queue.Count} waiting event(s) dropped ({string.Join(", ", _queue.Select(q => $"'{Label(q.Event)}'"))}) — {why}.");
         _queue.Clear();
         _toldFull.Clear();
+        EndQueueChoice();
     }
 
     // The next waiting event that may still run, taken off the queue. One removed,
     // edited (an edit replaces the instance) or disabled while it waited is dropped.
     private ScheduledEvent? TakeNextQueued()
     {
+        // No waiting event starts with the master switch off, whichever way it
+        // would have been taken (the run before it ending, its Then handing on,
+        // the way back in after a reconnect). It keeps its place.
+        if (HoldsForMasterSwitch()) return null;
+        // Nor while the user has yet to say which of them should run.
+        if (_choiceSince is not null) return null;
         DropExpired();
         while (_queue.Count > 0)
         {
@@ -574,8 +832,16 @@ public sealed class EventManager : IDisposable
             // The link can drop between the engine's raise and the dispatcher's turn;
             // nothing is finished or started while it is down.
             if (_offline) _whenBackInGame.Add(act);
-            else act();
+            else FinishUnlessHeld(act);
         });
+    }
+
+    // A completion runs the event's Then, which starts an engine: with the master
+    // switch off it is kept and run when the switch is back on.
+    private void FinishUnlessHeld(Action act)
+    {
+        if (HoldsForMasterSwitch()) _whenSwitchBackOn.Add(act);
+        else act();
     }
 
     // Synchronously fires every EventTriggerType.Logoff event in the list. Called
@@ -585,7 +851,8 @@ public sealed class EventManager : IDisposable
     // drop). Caller is responsible for the bounded flush window between this call
     // and the actual DisposeAsync so the wire writes have time to drain. Returns
     // the number of events actually dispatched so the caller can skip the flush
-    // wait when nothing fired.
+    // wait when nothing fired: one Fire skipped (the master switch off, "Disable
+    // all events") is not counted.
     public int FireLogoffEvents()
     {
         // Snapshot to a list so an event action that adds / removes
@@ -594,8 +861,10 @@ public sealed class EventManager : IDisposable
         List<ScheduledEvent> snapshot = Events
             .Where(e => e.TriggerType == EventTriggerType.Logoff && !e.Disabled)
             .ToList();
-        foreach (ScheduledEvent e in snapshot) Fire(e);
-        return snapshot.Count;
+        int taken = 0;
+        foreach (ScheduledEvent e in snapshot)
+            if (Fire(e)) taken++;
+        return taken;
     }
 
     // origin: the event that began the chain this run belongs to; null for a run
@@ -821,6 +1090,7 @@ public sealed class EventManager : IDisposable
         if (_run is { } run) Abort(run, why, byUser: true);
         else ClearQueue(why);
         _whenBackInGame.Clear();
+        _whenSwitchBackOn.Clear();
         _thenWatch = null;
     }
 
@@ -867,7 +1137,7 @@ public sealed class EventManager : IDisposable
             _log?.Info("Events", $"Back in the game: running {RunSummary}; waiting {QueueSummary}.");
         Action[] ended = _whenBackInGame.ToArray();
         _whenBackInGame.Clear();
-        foreach (Action act in ended) act();
+        foreach (Action act in ended) FinishUnlessHeld(act);
         DropExpired();
         StartNextQueued();
     }
@@ -912,6 +1182,15 @@ public sealed class EventManager : IDisposable
                 {
                     // Run as the chain, it has had its turn.
                     int waiting = _queue.FindIndex(q => ReferenceEquals(q.Event, next));
+                    if (waiting >= 0 && _choiceSince is not null)
+                    {
+                        // The user is being asked whether that event still runs.
+                        // Taken out of the queue here it would start before the
+                        // answer, and a "drop" could no longer reach it.
+                        _log?.Info("Events",
+                            $"Event '{label}': its Then event '{Label(next)}' is waiting for the user's choice over the held events, so it is left to that choice and not started now.");
+                        break;
+                    }
                     if (waiting >= 0)
                     {
                         RemoveQueuedAt(waiting);
@@ -1379,6 +1658,11 @@ public sealed class EventManager : IDisposable
     internal void Tick()
     {
         if (_offline || _run is not { } run) return;
+        // An event already running when the master switch goes off is held, as
+        // its walk or loop is: nothing here ends its action, so its Then (which
+        // starts an engine) waits for the switch to come back on, and a suspended
+        // run is not given up for standing idle meanwhile.
+        if (HoldsForMasterSwitch()) return;
         DropExpired();
         if (run.Suspended && SuspendedTooLong(run)) return;
         ScheduledEvent e = run.Event;
@@ -1539,8 +1823,11 @@ public sealed class EventManager : IDisposable
     {
         EndRun();
         _queue.Clear();
+        EndQueueChoice();
         _toldFull.Clear();
         _whenBackInGame.Clear();
+        _whenSwitchBackOn.Clear();
+        _heldSince = null;
         _thenWatch = null;
         LastThenSummary = "(none)";
         Events.Clear();
@@ -1575,8 +1862,11 @@ public sealed class EventManager : IDisposable
     {
         EndRun();
         _queue.Clear();
+        EndQueueChoice();
         _toldFull.Clear();
         _whenBackInGame.Clear();
+        _whenSwitchBackOn.Clear();
+        _heldSince = null;
         _thenWatch = null;
         LastThenSummary = "(none)";
         Events.Clear();

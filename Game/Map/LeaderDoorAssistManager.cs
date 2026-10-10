@@ -62,9 +62,13 @@ public sealed class LeaderDoorAssistManager : IDisposable
         _sub.Dispose();
     }
 
+    // The master switch (true = off): off, the leader's door is not helped with.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void OnLeaderBashAttempt(MatchResult m)
     {
         if (!_party.IsInParty) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         if (!_readPartySettings().HelpLeaderOpenDoors) return;
 
         // RegexPattern returns numbered groups 1..N as a 0-based list; the

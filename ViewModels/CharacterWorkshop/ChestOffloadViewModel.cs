@@ -587,6 +587,8 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // room: it would hide the item on the way to the shop.
     private void StartTour(IReadOnlyList<ChestSellTour.Stop> stops)
     {
+        // The tour walks from shop to shop: a walk started by hand.
+        if (Services.AppServices.Current.RefuseStartForMasterSwitch("Sell Tour")) return;
         CallOffHeldHides(stops.SelectMany(s => s.Items).Select(i => i.Name));
         _tour.Start(stops);
     }

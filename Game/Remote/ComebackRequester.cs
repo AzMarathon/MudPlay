@@ -92,6 +92,9 @@ public sealed class ComebackRequester : IDisposable
 
     private void OnMovementFailed(MatchResult _) => _moveFailedAt = NowProvider();
 
+    // The master switch (true = off): off, no @comeback is sent.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void OnNoLongerFollowing(MatchResult result)
     {
         DateTimeOffset now = NowProvider();
@@ -110,6 +113,7 @@ public sealed class ComebackRequester : IDisposable
             _log?.Debug(LogCategory, $"left behind by {leaderGiven} but auto-@comeback disabled");
             return;
         }
+        if (MasterSwitchOff?.Invoke() == true) return;
 
         // Only attach a room when we're confident where we are; a stale
         // guess would send the leader to the wrong place. Bare @comeback

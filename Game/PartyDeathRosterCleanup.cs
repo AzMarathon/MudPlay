@@ -136,9 +136,15 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         if (e.PropertyName == nameof(PartyMember.IsInvited)) TryCleanup();
     }
 
+    // The master switch (true = off): off, nobody is uninvited. The death stays
+    // recorded, so the uninvite goes out if the switch is back on within the
+    // cleanup window.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void TryCleanup()
     {
         if (_pendingDeaths.Count == 0) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         // Hold until the room is clear of combat, then let the route continue.
         if (_coordinator.AssertedGates.Contains(MovementCoordinator.CombatGate)) return;
 
