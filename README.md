@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.6**
+> **Version 3.161.7**
 > - Auto-discard counts copies, not pack entries
 > - An item with Min. to keep of 1 or more was never auto-discarded before; now it is, down to that amount
 > - Worn copies and the lit light count toward Min. to keep and are never the copy discarded

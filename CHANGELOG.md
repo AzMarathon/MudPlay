@@ -1,12 +1,21 @@
 # Version history
 
-## 3.161.6
+## 3.161.7
 
 - Auto-discard counts copies, not pack entries
 - An item with Min. to keep of 1 or more was never auto-discarded before; now it is, down to that amount
 - Worn copies and the lit light count toward Min. to keep and are never the copy discarded
 - A pile goes in one drop N on Paradigm, one per copy (paced) on Stock
 - A pile still waiting is taken back on a Roomba sweep, the switch going off, an unticked flag or a raised keep
+
+## 3.161.6
+
+- The client no longer stands still reading a very long line: a search in a room holding hundreds of items froze it for seconds each time
+- Every line from the game is read faster (a slowdown that came in with 3.157.8)
+- Roomba logs one line per room searched, with counts, in place of the full hidden list after every search
+- The program log warns when one line held the client up for a quarter of a second or more, with its length and how long it took
+- Bug report: how much is on the floor here and Roomba's slowest floor read
+- bug reports addressed: paradigm-20261009-164508
 
 ## 3.161.5
 
