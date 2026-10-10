@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.8**
+> **Version 3.161.9**
 > - A lock under 25% a pick is gone round when that costs at most 10 extra steps, on Stock and Paradigm
 > - A door the picks run out on is gone round for the rest of the walk, loop run or Auto-Lair run, where the walk used to stop at it
 > - Auto-Lair no longer stands in the wait room after a failed walk into the lair; a lair it can't reach is left out of the run

@@ -1,12 +1,18 @@
 # Version history
 
-## 3.161.8
+## 3.161.9
 
 - A lock under 25% a pick is gone round when that costs at most 10 extra steps, on Stock and Paradigm
 - A door the picks run out on is gone round for the rest of the walk, loop run or Auto-Lair run, where the walk used to stop at it
 - Auto-Lair no longer stands in the wait room after a failed walk into the lair; a lair it can't reach is left out of the run
 - Auto-Lair waits one step short of the lair on the route it will take, not behind a door it can't open
 - Log and bug report name the doors a route went round
+
+## 3.161.8
+
+- Party window: a member's level is the one they state, no longer the level their exp could train to
+- MegaMUD `@level` replies that count past the next level (`Needed: N (L60)  Will level in: +2 in 2-3 days`) are now read
+- Party window: a member's exp line names the level their figure counts toward
 
 ## 3.161.7
 
