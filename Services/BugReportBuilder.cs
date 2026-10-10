@@ -346,6 +346,24 @@ public static class BugReportBuilder
             ? "(none)"
             : $"{lastDeath.Status} @ {lastDeath.RoomKeyText}"
               + (lastDeath.RecoveryMessage is { Length: > 0 } msg ? $" — {msg}" : ""));
+        // The Stock spill sweep: what the pile is still waiting on, where the sweep
+        // is (or how the last one ended), and the rooms it tries in order — a "it
+        // walked off and found nothing" or "it never looked there" report needs all
+        // three, plus what this death said was gone and the trail it kept.
+        if (lastDeath is not null)
+        {
+            Kv(sb, "Latest deathpile still missing",
+                lastDeath.UnrecoveredItems is { Count: > 0 } missing ? string.Join(", ", missing) : "(nothing)");
+            if (lastDeath.ReturnedItems is { Count: > 0 } returned)
+                Kv(sb, "Latest death: returned to their rightful place", string.Join(", ", returned));
+            if (lastDeath.Trail is { Count: > 0 } trail)
+                Kv(sb, "Latest death: rooms walked up to it (newest first)",
+                    string.Join(", ", trail.Select(r => $"{r.Map}/{r.Room}")));
+        }
+        Kv(sb, "Stock spill sweep", svc.DeathRecovery.SpillSweepState);
+        Kv(sb, "Stock spill sweep held back right now by", svc.DeathRecovery.SpillSweepBlockers);
+        if (svc.DeathRecovery.SpillSweepPlan is { Length: > 0 } plan)
+            Kv(sb, "Stock spill sweep rooms, in order", plan);
         return sb.ToString();
     }
 
@@ -1390,6 +1408,7 @@ public static class BugReportBuilder
           .Append(svc.ChestOpens.IsOpening ? ", an open in progress" : "")
           .Append(", coin ").Append(svc.ChestOpens.Coin.TotalCopperValue).Append("c")
           .Append(svc.ChestOpens.SayLootToRoom ? "; said to the room" : "; not said to the room")
+          .Append("; Drop sends `").Append(svc.AutoDiscard.DiscardVerb).Append('`')
           .Append(svc.ChestSellTour.IsRunning ? "; sell tour running" : "")
           .Append(svc.ChestSellTour.Status.Length > 0 ? $" — {svc.ChestSellTour.Status}" : "")
           .Append(")\n\n");
@@ -1398,6 +1417,23 @@ public static class BugReportBuilder
         else
             foreach ((string name, int count) in chestLoot)
                 sb.Append("- ").Append(count).Append(' ').Append(name).Append('\n');
+
+        // Discard hides a full room refused (AutoDiscardManager), each sent again in
+        // the next room entered: who sent each, the room that last had it and what
+        // it is waiting on, and how many hides are out with no answer yet.
+        var heldHides = svc.AutoDiscard.HeldHides;
+        sb.Append("\n**Discard hides held for the next room** (").Append(heldHides.Count)
+          .Append("; ").Append(svc.AutoDiscard.UnansweredHides).Append(" hides and ")
+          .Append(svc.AutoDiscard.UnansweredDrops).Append(" drops sent and unanswered")
+          .Append(svc.AutoDiscard.AwaitingInventoryRead ? "; waiting for an inventory read" : "")
+          .Append(")\n\n");
+        if (heldHides.Count == 0)
+            sb.Append("_(none)_\n");
+        else
+            foreach (Game.Inventory.AutoDiscardManager.HeldHideInfo held in heldHides)
+                sb.Append("- ").Append(held.Count).Append(' ').Append(held.Name)
+                  .Append(" (by hand ").Append(held.ByHand).Append(", auto-discard ").Append(held.Engine)
+                  .Append(", sent again ").Append(held.Out).Append(") — ").Append(held.Why).Append('\n');
 
         var plan = profile.CharacterPlan;
         sb.Append("\n**CP allocation plan (CharacterPlan)** (").Append(plan?.Count ?? 0).Append(")\n\n");
@@ -1878,7 +1914,12 @@ public static class BugReportBuilder
         // back to. A journey can stand with the walker idle, between two legs.
         Kv(sb, "Whole trip (every leg keeps to this)",
             walker.Journey is not { } journey
-                ? (walker.State == Game.Map.WalkState.Idle ? "(none)" : "(none — this walk is on no trip's rules)")
+                ? (walker.State == Game.Map.WalkState.Idle ? "(none)"
+                    // A spill sweep's leg is a journey the walker doesn't report, so
+                    // nothing saves it to resume; here it is named for what it is.
+                    : svc.DeathRecovery.SpillSweepActive && walker.Destination is { } stop
+                        ? $"a Stock spill sweep's leg to {stop.Map}/{stop.Room}, on foot (not a trip anything resumes)"
+                    : "(none — this walk is on no trip's rules)")
             : $"to {journey.Destination.Map}/{journey.Destination.Room}: {journey.Describe()}"
               + (journey.ClosedGates is { Count: > 0 } closed
                   ? $" ({string.Join(", ", closed.Select(id => $"#{id} {svc.ItemNames.GetName(id) ?? "?"}"))})" : string.Empty)
@@ -1939,6 +1980,8 @@ public static class BugReportBuilder
         // from, or a route card's count waiting for the walk that card starts.
         Kv(sb, "Party counts standing for this trip", svc.PartyPathItemGate.JourneyCountsSummary);
         Kv(sb, "Route card counts not yet taken by a walk", svc.CardCountSummary);
+        // Why a member who never answers a count was or wasn't fetched a copy.
+        Kv(sb, "Gate items handed to party members (remembered)", svc.PartyHandOvers.Summary);
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));

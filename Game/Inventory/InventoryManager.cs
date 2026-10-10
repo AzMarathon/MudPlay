@@ -189,6 +189,16 @@ public sealed partial class InventoryManager : IDisposable
     // for us and gave back as our deathpile coming home.
     public event Action<string, string>? ItemReceived;
 
+    // The game confirmed an item hand-over of ours: (item name, copies, recipient
+    // as the line names them). Items only. It is the one proof a `give` landed, so
+    // what a party member was handed is remembered from it and not from the send.
+    public event Action<string, int, string>? ItemGivenAway;
+
+    // The game refused a give of ours. Carries the player the line names, or null
+    // for the refusal that names nobody. A give waiting to be confirmed stops
+    // waiting on it rather than on a timer.
+    public event Action<string?>? GiveRefused;
+
     // True for another character's hand-over line this parser reads, item or
     // coins. It reads the wire directly and registers no router pattern, so the
     // unrecognized-line watcher asks here rather than restate the shapes.
@@ -522,9 +532,11 @@ public sealed partial class InventoryManager : IDisposable
 
         // Item stash: "You hid <item>." (Stock) or Paradigm's counted batch form
         // "You hid <N> <item>." — same verb as the coin line above, which already
-        // returned for a `(\d+) <coin>` match. The singular "a <coin>" form (which
-        // HidCurrencyRegex's leading digit misses) still reaches here, so skip any
-        // coin-noun-suffixed text; CashManager's coin path records those.
+        // returned for the coin nouns it knows. A board's own coin wording ("a gold
+        // piece") still reaches here, so skip text shaped like a coin amount;
+        // CashManager's coin path records those. An item merely named after a coin
+        // (iron crown, sack of coins) has no amount in front and is an item, as on
+        // the drop path.
         //
         // A stashed item leaves the pack exactly like a drop, so decrement the
         // carried list + weight estimate — otherwise the reading stays inflated
@@ -538,7 +550,7 @@ public sealed partial class InventoryManager : IDisposable
         if (itemHidden.Success)
         {
             string hiddenItem = itemHidden.Groups[1].Value.TrimEnd();
-            if (hiddenItem.Length > 0 && !CoinNounSuffixRegex().IsMatch(hiddenItem))
+            if (hiddenItem.Length > 0 && !CoinAmountRegex().IsMatch(hiddenItem))
             {
                 (int count, string name) = CountedCommand.SplitLeadingCount(hiddenItem);
                 RemoveHeld(name, count);
@@ -680,7 +692,10 @@ public sealed partial class InventoryManager : IDisposable
         Match gaveAway = GaveItemAwayRegex().Match(line);
         if (gaveAway.Success)
         {
-            ApplyGiveTransfer(gaveAway.Groups[1].Value.TrimEnd(), -1);
+            string gaveItem = gaveAway.Groups[1].Value.TrimEnd();
+            ApplyGiveTransfer(gaveItem, -1);
+            if (!CurrencyTokenRegex().IsMatch(gaveItem))
+                ItemGivenAway?.Invoke(gaveItem, 1, gaveAway.Groups[2].Value.Trim());
             return;
         }
 
@@ -717,6 +732,7 @@ public sealed partial class InventoryManager : IDisposable
         {
             RemoveHeld(awayItem, awayCount);
             AdjustItemWeight(awayItem, -awayCount);
+            ItemGivenAway?.Invoke(awayItem, awayCount, handedAway.Groups[2].Value);
             return;
         }
 
@@ -750,6 +766,16 @@ public sealed partial class InventoryManager : IDisposable
         if (GiveFailedRegex().IsMatch(line))
         {
             _log?.Debug(LogCategory, "give bounced: item not held");
+            return;
+        }
+
+        // A give the other player's settings or pack turned down, or an item that
+        // can't be given: the Stock engine's three refusals. Nothing moved.
+        Match refusedBy = GiveRefusedByRegex().Match(line);
+        if (refusedBy.Success || line == GiveNotAllowedLine)
+        {
+            _log?.Debug(LogCategory, $"give refused: {line}");
+            GiveRefused?.Invoke(refusedBy.Success ? refusedBy.Groups[1].Value : null);
             return;
         }
 
@@ -1496,9 +1522,17 @@ public sealed partial class InventoryManager : IDisposable
     private static partial Regex HidItemRegex();
 
     // Trailing coin noun set (mirrors the currency regexes' denomination nouns) —
-    // tells a coin-shaped "You hid a gold piece." from a genuine item hide.
+    // tells a coin hand-over from an item's.
     [GeneratedRegex(@"\b(?:farthing|noble|crown|piece|coin)s?$")]
     private static partial Regex CoinNounSuffixRegex();
+
+    // A coin amount as the hide echo words it: a count or `a`, then a metal and a
+    // coin noun, or one word and "coin(s)" for a board's runic tier. Tells "You hid
+    // a gold piece." from a genuine item hide. The count is what makes it coin: an
+    // item is echoed by its bare name, and Paradigm's counted item echo ("3 iron
+    // crown") names no coin metal.
+    [GeneratedRegex(@"^(?:\d+|a) (?:(?:copper|silver|gold|platinum) (?:farthing|noble|crown|piece)s?|\w+ coins?)$")]
+    private static partial Regex CoinAmountRegex();
 
     [GeneratedRegex(@"^You deposit (\d.+)\.$")]
     private static partial Regex DepositCurrencyRegex();
@@ -1561,7 +1595,8 @@ public sealed partial class InventoryManager : IDisposable
     // ("... to Bob."); receive names the giver ("Bob just gave you ..."). The
     // captured name (item or a currency token) is routed through the currency
     // guard in ApplyGiveTransfer. The greedy item groups let a multi-word name
-    // ("a rusty dagger") round-trip; the recipient / giver token isn't used.
+    // ("a rusty dagger") round-trip. The recipient and the giver are passed on
+    // with the item (ItemGivenAway, ItemReceived) and change nothing in the pack.
     [GeneratedRegex(@"^You just gave (.+) to (.+)\.$")]
     private static partial Regex GaveItemAwayRegex();
 
@@ -1573,7 +1608,7 @@ public sealed partial class InventoryManager : IDisposable
     [GeneratedRegex(@"^(\S+) gives you (.+)\.$")]
     private static partial Regex HandedItemRegex();
 
-    [GeneratedRegex(@"^You give (.+) to \S+\.$")]
+    [GeneratedRegex(@"^You give (.+) to (\S+)\.$")]
     private static partial Regex HandedAwayRegex();
 
     // Coins in that wording carry no full stop, which keeps them apart from items.
@@ -1592,4 +1627,12 @@ public sealed partial class InventoryManager : IDisposable
 
     [GeneratedRegex(@"^You don't have (.+) to give\.$")]
     private static partial Regex GiveFailedRegex();
+
+    // "<Player> refuses your offer." (they have receiving switched off) and
+    // "<Player> cannot accept your offer." (no room for it), as the Stock engine
+    // prints them (GAME_MECHANICS "Giving items and coins to another player").
+    [GeneratedRegex(@"^(.+) (?:refuses|cannot accept) your offer\.$")]
+    private static partial Regex GiveRefusedByRegex();
+
+    private const string GiveNotAllowedLine = "You may not give that item away!";
 }

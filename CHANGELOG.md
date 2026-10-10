@@ -1,12 +1,46 @@
 # Version history
 
-## 3.160.2
+## 3.161.2
 
 - A monster set to **Flee** (Game Data → the monster's record → Fighting it) is now run from as soon as it is seen in the room, while a walk or loop is running
 - It is the Health tab's flee: the Combat tab's run distance and direction, and the walk or loop carries on afterwards
+- When no run can start, a Flee monster that attacks is fought back
 - The gigantic black ooze and the huge gruesome creation ship set to Flee; set a monster to Neutral or Enemy to turn it off
 - Nothing runs with Auto-All off, or with Auto-Heal and Auto-Rest both off; a Hangup monster or a PvP enemy in the room is answered first
 - A monster still standing on your route is met and run from again on every return
+
+## 3.161.1
+
+- Party item gates: a member who never answers the `@have` count is no longer fetched another copy on every trip
+- A copy you handed them and the game confirmed is remembered until the party changes
+
+## 3.161.0
+
+- Stock death recovery follows the game's spill order: up to five rooms out, behind doors and hidden exits
+- With items still missing, it searches the rooms walked before the death (never a stash room)
+- The sweep runs for Recover Now or your own walk-to; a loop's or Auto-Lair's arrival only looks next door
+- It walks to 12 rooms at most and returns; Stop and Pause reach it
+- It gives way to other engines, following and any other walk; silent during a rest, a pause or Auto-All off
+- Stock: loyal, major-cursed and "returned to its rightful place" items no longer waited for
+- Stock: a partly recovered pile keeps its count; an empty death-room floor no longer stalls recovery
+- Stop calls off a Recover Now that was still walking (both realms)
+- Bug report: the pile's missing items and the sweep's plan, state and blockers
+
+## 3.160.4
+
+- Gear sets, backstab armour, location gear and weapon swaps equip a piece the pack holds two or more of
+- Combat no longer counts out an alternate weapon the pack holds two or more of
+
+## 3.160.2
+
+- Chest Offload Drop / Drop All hide when Hide items when discarding is on
+- Hidden items leave the Chest Offload list
+- A hide a full room refuses is retried in each new room
+- A sale, drop, ✕ or Clear list calls a waiting hide off
+- No hide sent for a copy not in the pack
+- Refused or unanswered auto-discard drops no longer stay counted all session
+- No discard after a death or reconnect until the inventory is read
+- Items named after a coin (iron crown) no longer read as coin
 
 ## 3.160.1
 
