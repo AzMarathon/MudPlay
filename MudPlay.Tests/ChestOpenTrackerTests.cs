@@ -136,6 +136,21 @@ public sealed class ChestOpenTrackerTests : IDisposable
         Assert.Null(_profile.Current!.ChestLoot);
     }
 
+    // A Drop from the tab goes out as `hide` under "Hide items when discarding", and
+    // the game then answers "You hid …" instead of "You dropped …".
+    [Fact]
+    public void ConfirmedHide_TakesItemsOff_LikeADrop()
+    {
+        OpenOakChest();
+
+        Feed("You hid 2 moonstone.");   // Paradigm's counted echo
+        Assert.Equal(new[] { ("ruby", 1) }, _tracker.Loot(new[] { "2 moonstone", "ruby" }));
+
+        Feed("You hid ruby.");
+        Assert.Empty(_tracker.Loot(new[] { "ruby" }));
+        Assert.Empty(_profile.Current!.ChestLoot!.Items);   // saved, the coin tally stays
+    }
+
     private void OpenOakChestAgain()
     {
         _tracker.Open("oak chest");

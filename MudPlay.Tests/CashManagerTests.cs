@@ -576,6 +576,30 @@ public sealed class CashManagerTests
         Assert.Equal(("gold", 30), Assert.Single(h.Hidden));
     }
 
+    // Paradigm echoes a counted item hide by the item's bare name, and some items
+    // are named after a coin. That is an item leaving the pack, not coin.
+    [Fact]
+    public void ItemNamedAfterACoin_Hidden_IsNotCoin()
+    {
+        using Harness h = new();
+        h.Feed("You picked up 50 gold pieces.");
+        h.Feed("You hid 3 iron crown.");
+
+        Assert.Empty(h.Hidden);
+        Assert.Equal(50, h.Cash.HeldCoin("gold"));
+    }
+
+    [Fact]
+    public void ItemNamedAfterACoin_Dropped_IsNotCoin()
+    {
+        using Harness h = new();
+        h.Feed("You picked up 50 gold pieces.");
+        h.Feed("You dropped 3 iron crown.");
+
+        Assert.Equal(50, h.Cash.HeldCoin("gold"));
+        Assert.Equal(0, h.Cash.HeldCoin("iron"));
+    }
+
     // ----- Discard auto-drop -----------------------------------------
 
     // A Discard currency picked up drops once the inventory snapshot has it — the
