@@ -1082,6 +1082,94 @@ public sealed class InventoryManagerTests
         Assert.Equal(new[] { 1 }, heldAtEachNotice);
     }
 
+    // The listing sets the lit light apart from the pack, and only a full read used
+    // to clear it. A copy that leaves with no pack entry to take it from was the lit
+    // one: left listed, it was counted as held after it had gone.
+    [Theory]
+    [InlineData("You dropped torch.")]
+    [InlineData("You hid torch.")]
+    [InlineData("You sold torch for 2 copper farthings.")]
+    public void LitLightLeaving_WithNoPackCopy_IsNoLongerListedAsLit(string line)
+    {
+        using Harness h = new();
+        h.Feed("You are carrying torch (Readied/200), 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+        Assert.Equal("torch", h.Inv.Snapshot.ReadiedLight?.Name);
+
+        h.Feed(line);
+
+        Assert.Null(h.Inv.Snapshot.ReadiedLight);
+        Assert.DoesNotContain("torch", Carried(h));
+    }
+
+    // With a spare in the pack the client can't tell which copy the game took. The
+    // spare is taken off first and the light stays listed: one torch held either way.
+    [Fact]
+    public void LitLightAndASpare_OneLeaving_TakesTheSpareFirst()
+    {
+        using Harness h = new();
+        h.Feed("You are carrying torch (Readied/200), torch, 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        h.Feed("You dropped torch.");
+        Assert.Equal("torch", h.Inv.Snapshot.ReadiedLight?.Name);
+        Assert.DoesNotContain("torch", Carried(h));
+
+        h.Feed("You dropped torch.");
+        Assert.Null(h.Inv.Snapshot.ReadiedLight);
+    }
+
+    // Stock's line for taking off the lit light. The plain removal pattern read the
+    // item as "torch and extinguished it" and left the light listed as lit.
+    [Fact]
+    public void RemovingTheLitLight_PutsItBackInThePack_InOneNotice()
+    {
+        using Harness h = new();
+        h.Feed("You are carrying torch (Readied/200), 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+        int before = h.ChangedCount;
+
+        h.Feed("You have removed torch and extinguished it.");
+
+        Assert.Null(h.Inv.Snapshot.ReadiedLight);
+        Assert.Equal(new[] { "torch" }, Carried(h));
+        Assert.Equal(1, h.ChangedCount - before);
+    }
+
+    // A light lit since the last full read was never listed apart: its pack entry
+    // is still there, and taking it off adds no second one.
+    [Fact]
+    public void RemovingALight_LitSinceTheLastRead_AddsNoSecondPackEntry()
+    {
+        using Harness h = new();
+        h.Feed("You are carrying torch, 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        h.Feed("You have removed torch and extinguished it.");
+
+        Assert.Equal(new[] { "torch" }, Carried(h));
+    }
+
+    // A plain removal line naming the light listed as lit, with nothing worn by
+    // that name: the light is what came off, and it is not counted twice.
+    [Fact]
+    public void PlainRemovalOfTheLitLight_DoesNotListItTwice()
+    {
+        using Harness h = new();
+        h.Feed("You are carrying torch (Readied/200), 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        h.Feed("You have removed torch.");
+
+        Assert.Null(h.Inv.Snapshot.ReadiedLight);
+        Assert.Equal(new[] { "torch" }, Carried(h));
+    }
+
     [Fact]
     public void GetItem_DoesNotCollideWithCurrencyPickup()
     {

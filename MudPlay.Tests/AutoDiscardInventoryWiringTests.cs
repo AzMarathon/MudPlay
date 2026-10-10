@@ -27,7 +27,7 @@ public sealed class AutoDiscardInventoryWiringTests
 
         private readonly List<(DateTimeOffset Due, Action Run)> _timers = new();
 
-        public InventoryManager Inventory { get; } = new(log: null, itemWeightResolver: null, slotResolver: null);
+        public InventoryManager Inventory { get; }
         public AutoDiscardManager Discard { get; }
         public List<string> Sent { get; } = new();
         // The real pacer, when a test asks for one: Sent is then what it let out.
@@ -36,8 +36,11 @@ public sealed class AutoDiscardInventoryWiringTests
 
         // The live client dispatches a line to the router before the inventory
         // reads it. Both orders are run: neither may over-send.
-        public Rig(bool routerFirst = true, bool paradigm = false, bool pacer = false)
+        // With weights known a line that takes a copy off the character changes the
+        // carried weight too, a second patch under the same line.
+        public Rig(bool routerFirst = true, bool paradigm = false, bool pacer = false, bool weights = false)
         {
+            Inventory = new InventoryManager(log: null, itemWeightResolver: weights ? _ => 10 : null, slotResolver: null);
             DefaultPatterns.Seed(_router);
             if (routerFirst) _lines.LineEmitted += l => _router.Dispatch(l);
             Inventory.AttachLineExtractor(_lines);
@@ -273,6 +276,68 @@ public sealed class AutoDiscardInventoryWiringTests
         Assert.Equal("torch", r.Inventory.Snapshot.ReadiedLight?.Name);
         Assert.Equal(1, r.Discard.EmitDiscard(byHand.Add, "torch", 1).Sent);
         Assert.Equal(new[] { "drop torch" }, byHand);
+    }
+
+    // The lit light is the only copy and is discarded. Left listed as lit until the
+    // next read, it was counted again and a second discard went out for a torch no
+    // longer held: on Stock a drop then takes another item whose name matches in
+    // part, and a hide of nothing is said aloud.
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    public void LitLightDiscarded_IsNotCountedAgain(bool routerFirst, bool hide, bool weights)
+    {
+        using Rig r = new(routerFirst, weights: weights);
+        r.Discard.HideMode = hide;
+        r.Map("torch", 3, discard: true, keep: 0);
+        r.FullInventory("torch (Readied/200)");
+        Assert.Single(r.Sent);
+
+        r.Feed(hide ? "You hid torch." : "You dropped torch.");
+        r.Feed("You picked up 3 copper farthings");
+
+        Assert.Single(r.Sent);
+        Assert.Null(r.Inventory.Snapshot.ReadiedLight);
+        Assert.Equal(0, r.Discard.UnansweredDrops + r.Discard.UnansweredHides);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LitLightAndASpareDiscarded_SendNoThird(bool routerFirst)
+    {
+        using Rig r = new(routerFirst, weights: true);
+        r.Map("torch", 3, discard: true, keep: 0);
+        r.FullInventory("torch (Readied/200), torch");
+        Assert.Equal(2, r.Sent.Count);
+
+        r.Feed("You dropped torch.");
+        r.Feed("You dropped torch.");
+        r.Feed("You picked up 3 copper farthings");
+
+        Assert.Equal(2, r.Sent.Count);
+    }
+
+    // Taking the lit light off puts it back in the pack as the one torch held:
+    // with one to keep, nothing is discarded.
+    [Theory]
+    [InlineData("You have removed torch and extinguished it.")]
+    [InlineData("You have removed torch.")]
+    public void LitLightTakenOff_IsStillOneCopy_AndIsKept(string line)
+    {
+        using Rig r = new();
+        r.Map("torch", 3, discard: true, keep: 1);
+        r.FullInventory("torch (Readied/200)");
+
+        r.Feed(line);
+
+        Assert.Empty(r.Sent);
+        Assert.Equal(1, r.Carried("torch"));
+        Assert.Null(r.Inventory.Snapshot.ReadiedLight);
     }
 
     // ----- putting a piece on, taking it off --------------------------------
