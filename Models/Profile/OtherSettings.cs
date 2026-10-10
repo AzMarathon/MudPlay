@@ -41,12 +41,13 @@ public sealed class OtherSettings
     // in Settings → Other. Read live by Game.Inventory.LocationEquipManager.
     public List<LocationEquipRule> LocationEquipRules { get; set; } = new();
 
-    // When true, the auto-discard engine conceals each excess flagged item with
-    // hide <item> instead of drop <item> — it still leaves the pack, but lands
-    // out of sight on the ground. Engine hides are excluded from the Transaction
-    // history ledger (a discard isn't a stash); manual and stash-room hides still
-    // record there. Default false (plain drop). Char-tier; surfaced in
-    // Settings → Other. Read live by Game.Inventory.AutoDiscardManager.HideMode.
+    // When true, a discard goes out as hide <item> instead of drop <item> — the
+    // item still leaves the pack, but lands out of sight on the ground. Covers the
+    // auto-discard engine's offload of an excess flagged item and Chest Offload's
+    // Drop / Drop All. Those hides are excluded from the Transaction history
+    // ledger (a discard isn't a stash); manual and stash-room hides still record
+    // there. Default false (plain drop). Char-tier; surfaced in Settings → Other.
+    // Read live by Game.Inventory.AutoDiscardManager.HideMode.
     public bool HideWhenDiscarding { get; set; }
 
     // ----- Sneaking ---------------------------------------------------

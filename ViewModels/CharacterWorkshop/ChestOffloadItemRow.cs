@@ -16,7 +16,7 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 public sealed partial class ChestOffloadItemRow : ObservableObject
 {
     public string Name { get; }
-    // Held count from the chest — reduced as confirmed sales/drops of this item land
+    // Held count from the chest — reduced as confirmed sales/drops/hides of this item land
     // (bound as the sell-qty ceiling and the "of N" label, so both track live).
     [ObservableProperty] private int _gained;
     public double BaseCopper { get; }
@@ -124,9 +124,9 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
         return Gained <= 0;
     }
 
-    // Apply a confirmed DROP of `count` of this item: shed the held count and
-    // clamp the sell pick to what remains. Returns true when nothing's left.
-    public bool ApplyDropped(int count)
+    // Apply a confirmed DROP or HIDE of `count` of this item: shed the held count
+    // and clamp the sell pick to what remains. Returns true when nothing's left.
+    public bool ApplyDiscarded(int count)
     {
         Gained = Math.Max(0, Gained - count);
         if (SellQty > Gained) SellQty = Gained;

@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.3**
+> **Version 3.160.4**
 > - Gear sets, backstab armour, location gear and weapon swaps equip a piece the pack holds two or more of
 > - Combat no longer counts out an alternate weapon the pack holds two or more of
 >

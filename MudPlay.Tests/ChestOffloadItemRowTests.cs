@@ -3,8 +3,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// The per-item Sell/Drop reconcile math: Sell sheds the picked quantity, Drop sheds
-// the dropped count, and both react to the game's CONFIRMED counts.
+// The per-item Sell/Drop reconcile math: Sell sheds the picked quantity, Drop (or the
+// hide it becomes under "Hide items when discarding") sheds the discarded count, and
+// both react to the game's CONFIRMED counts.
 public sealed class ChestOffloadItemRowTests
 {
     private static ChestOffloadItemRow Row(int gained)
@@ -42,16 +43,16 @@ public sealed class ChestOffloadItemRowTests
     }
 
     [Fact]
-    public void ApplyDropped_ShedsHeldButKeepsPick()
+    public void ApplyDiscarded_ShedsHeldButKeepsPick()
     {
         ChestOffloadItemRow row = Row(10);
         row.SellQty = 7;                       // keep 7 to sell, leftover 3
 
-        Assert.False(row.ApplyDropped(3));     // dropped the leftover
+        Assert.False(row.ApplyDiscarded(3));     // dropped the leftover
         Assert.Equal(7, row.Gained);           // 7 held remain
         Assert.Equal(7, row.SellQty);          // pick intact
 
-        Assert.True(row.ApplyDropped(7));       // dropped the rest → cleared
+        Assert.True(row.ApplyDiscarded(7));       // dropped the rest → cleared
         Assert.Equal(0, row.Gained);
     }
 }
