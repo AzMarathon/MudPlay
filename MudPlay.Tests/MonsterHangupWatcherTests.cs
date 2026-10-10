@@ -813,15 +813,15 @@ public sealed class MonsterHangupWatcherTests
     }
 
     // The whole path through HealthManager: the exit command, the carrier drop and
-    // the penalty line after it, and the two switches that stop the low-HP hang-up
-    // stopping this one.
+    // the penalty line after it, and the two switches that stop it: Disable
+    // Hangups, and the master switch being off without the all-off opt-in.
     [Theory]
-    [InlineData(true, false, false, 1)]    // an Auto on
+    [InlineData(true, false, false, 1)]    // master switch on
     [InlineData(true, true, false, 0)]     // Disable Hangups
-    [InlineData(false, false, false, 0)]   // all off
-    [InlineData(false, false, true, 1)]    // all off, Allow hangup in all-off mode
+    [InlineData(false, false, false, 0)]   // master switch off
+    [InlineData(false, false, true, 1)]    // master switch off, Allow hangup in all-off mode
     [InlineData(false, true, true, 0)]     // Disable Hangups outranks it
-    public void SightGoesThroughTheHealthHangUp(bool healthEngineOn, bool hangupsDisabled, bool allowInAllOff, int expected)
+    public void SightGoesThroughTheHealthHangUp(bool masterSwitchOn, bool hangupsDisabled, bool allowInAllOff, int expected)
     {
         GeneralSettings general = new() { DisableHangups = hangupsDisabled, AllowHangupInAllOffMode = allowInAllOff };
         LogService log = new();
@@ -832,7 +832,7 @@ public sealed class MonsterHangupWatcherTests
         using HealthManager health = new(
             new PlayerState(), new MovementCoordinator(log),
             readSettings: () => new HealthSettings(),
-            isEnabled: () => healthEngineOn,
+            isEnabled: () => masterSwitchOn,
             readHangupCommand: () => "=x",
             getActiveMovementEngine: null,
             getLastSentDirection: null,
@@ -843,6 +843,7 @@ public sealed class MonsterHangupWatcherTests
             hangupSignal: signal);
         health.SetWireSender(bytes => wire.Add(System.Text.Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
         health.SetHangupDisconnect(() => carrierDrops++);
+        health.SetMasterSwitch(() => !masterSwitchOn, _ => { });
         health.SetHangupPenaltyLog(pvp =>
         {
             Assert.Contains("=x", wire);

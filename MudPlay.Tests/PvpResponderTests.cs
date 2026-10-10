@@ -37,6 +37,9 @@ public sealed class PvpResponderTests
         public PvpSettings Settings { get; set; } = new();
         public DateTimeOffset Clock { get; set; } = new(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
 
+        public bool MasterSwitchOff { get; set; }
+        public List<string> SkippedForMasterSwitch { get; } = new();
+
         public bool HangUpWorks { get; set; } = true;
         public bool FleeRoomsWorks { get; set; } = true;
         public bool FleeToWorks { get; set; } = true;
@@ -92,7 +95,11 @@ public sealed class PvpResponderTests
                 sendGang: Gang.Add,
                 roomName: () => "Town Square",
                 schedule: (delay, action) => Scheduled.Add((delay, action)),
-                now: () => Clock);
+                now: () => Clock)
+            {
+                IsMasterSwitchOff = () => MasterSwitchOff,
+                SkippedForMasterSwitch = SkippedForMasterSwitch.Add,
+            };
             Responder.Responded += Reports.Add;
 
             Players.RecordObservation("Bob", "Mage", null, null, null, null, null, DateTime.UtcNow);
@@ -121,6 +128,94 @@ public sealed class PvpResponderTests
             Room.Dispose();
             Classifier.Dispose();
         }
+    }
+
+    // ----- the master switch ---------------------------------------------
+
+    // Off, nothing answers but a hang-up action's hang-up (HealthManager lets
+    // that out only with Allow hangup in all-off mode): no flee, no fight, no
+    // gang tell. On, every action is carried out as before.
+    [Theory]
+    [InlineData(PvpAction.Flee)]
+    [InlineData(PvpAction.Attack)]
+    [InlineData(PvpAction.ChaseAttack)]
+    public void MasterSwitchOff_NonHangupActions_DoNothing(PvpAction action)
+    {
+        using Harness h = new()
+        {
+            MasterSwitchOff = true,
+            Settings = new PvpSettings { Action = action, NotifyGang = true, GangTellSeen = true },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Empty(h.HangUps);
+        Assert.Empty(h.RoomFlees);
+        Assert.Empty(h.RoomWalks);
+        Assert.Empty(h.Fights);
+        Assert.Empty(h.Gang);
+        Assert.Empty(h.Reports);
+        Assert.Equal("Bob is here", Assert.Single(h.SkippedForMasterSwitch));
+    }
+
+    [Theory]
+    [InlineData(PvpAction.Flee)]
+    [InlineData(PvpAction.Attack)]
+    [InlineData(PvpAction.ChaseAttack)]
+    public void MasterSwitchOn_NonHangupActions_AreCarriedOut(PvpAction action)
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = action } };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.True(h.RoomFlees.Count + h.RoomWalks.Count + h.Fights.Count > 0);
+        Assert.Empty(h.SkippedForMasterSwitch);
+    }
+
+    [Theory]
+    [InlineData(PvpAction.HangUp)]
+    [InlineData(PvpAction.FleeThenHangUp)]
+    public void MasterSwitchOff_HangupActions_AskForTheHangupOnly(PvpAction action)
+    {
+        using Harness h = new()
+        {
+            MasterSwitchOff = true,
+            Settings = new PvpSettings { Action = action, NotifyGang = true, GangTellSeen = true },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Equal("Bob is here", Assert.Single(h.HangUps));
+        Assert.Empty(h.RoomFlees);
+        Assert.Empty(h.RoomWalks);
+        Assert.Empty(h.Scheduled);
+        Assert.Empty(h.Gang);
+    }
+
+    // A hang-up the switch held back leaves the Enemy unanswered, so the roster
+    // issued when the switch comes back on draws the full response.
+    [Fact]
+    public void MasterSwitchOff_HeldHangup_IsAnsweredOnceTheSwitchIsBackOn()
+    {
+        using Harness h = new()
+        {
+            MasterSwitchOff = true,
+            HangUpWorks = false,
+            Settings = new PvpSettings { Action = PvpAction.HangUp },
+        };
+        h.MarkEnemy("Bob");
+        h.Feed("Also here: Bob.");
+        Assert.Empty(h.Reports);
+
+        h.MasterSwitchOff = false;
+        h.HangUpWorks = true;
+        h.Feed("Also here: Bob.");
+
+        Assert.Equal(2, h.HangUps.Count);
+        Assert.Contains("hanging up", Assert.Single(h.Reports));
     }
 
     // ----- what draws a response ----------------------------------------

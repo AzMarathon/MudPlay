@@ -3417,20 +3417,19 @@ public sealed class AppServices
         // never trick it; ALSO skips on the first connect after a
         // hangup (HangupSignal.ConsumeSuppressEntry) so the user can
         // read the screen before they decide to act.
-        // Auto-entry obeys the Auto-All kill switch: when the user (or an
-        // @auto-all off) actively silences automation, the menu-match send
-        // is suppressed too. We gate on KillSwitchEngaged, NOT AllWiredOff —
-        // a manual-play character runs with every auto-engine off but never
-        // pressed the kill switch, and must still auto-enter the realm.
+        // Auto-entry is the last step of logging in, and login automation works
+        // whatever the master switch says (user, 2026-10-09), so it is not given
+        // the switch as its enable probe: a reconnect made under the BBS's
+        // reconnect settings ends in the realm, as a first login does.
         MainMenuEntry = new Game.MainMenuEntryAutomation(
             Router, GameCommands, HangupSignal,
-            isAutoEnabled: () => !AutoModeController.KillSwitchEngaged,
             log: Log);
         // Cleanup-driven proactive log-off. Subscribes to the same
         // CleanupWarningWatcher the reconnect scheduler reads; its safe
         // predicate + connection check + disconnect callback are wired by
         // MainWindowViewModel (they depend on VM-level connection state).
         CleanupLogout = new Game.CleanupLogoutOrchestrator(Cleanup, Router, Log);
+        CleanupLogout.SetMasterSwitchCheck(MasterSwitchOff("Cleanup log-off"));
         PromptScanner.RealmLeftPromptObserved += () => CleanupLogout.NoteRealmLeftPrompt();
 
         // Bridge: load persisted panel layouts on profile load; snapshot back
@@ -4781,6 +4780,9 @@ public sealed class AppServices
         // its waypoints flagged DoNotRest. Matched by room key (per-room), so it
         // clears the instant the loop steps into any other room. Loops only.
         Health.SetRestEnabledGate(() => ReadAutoModeFlag(d => d.AutoRest));
+        Health.SetMasterSwitch(
+            () => AutoModeController.KillSwitchEngaged,
+            what => AutoModeController.Blocks("Hang-ups", what));
         Health.SetHangupPenaltyLog(LogHangupPenalty);
         Health.SetDoNotRestSelector(() =>
             ReadSprintMode()
@@ -8175,7 +8177,11 @@ public sealed class AppServices
             sendGang: text => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes($"bg {text}\r")),
             roomName: () => RoomTracker.State.CurrentRoom?.Name,
             schedule: pacedReplyScheduler,
-            log: Log);
+            log: Log)
+        {
+            IsMasterSwitchOff = () => AutoModeController.KillSwitchEngaged,
+            SkippedForMasterSwitch = why => AutoModeController.Blocks("PvP response", why),
+        };
         PvpResponse.Responded += what => WriteTerminalNotice($"[PvP: {what}]");
 
         // Always-alive control surface over the three movement engines.

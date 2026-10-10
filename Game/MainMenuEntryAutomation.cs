@@ -118,9 +118,9 @@ public sealed class MainMenuEntryAutomation : IDisposable
         _router = router;
         _commands = commands;
         _hangup = hangup;
-        // Master auto-responses gate. When it returns false, auto-entry is
-        // suppressed on every connect / post-cleanup relog. Defaults to
-        // "always on" so tests + callers that don't pass it behave as before.
+        // Enable probe: while it returns false, auto-entry is suppressed on
+        // every connect / post-cleanup relog. The app leaves it unset: login
+        // automation runs whatever the master switch says.
         _isAutoEnabled = isAutoEnabled ?? (() => true);
         _log = log;
         _patternSub = _router.Subscribe(KnownPatterns.MainMenuEnterRealm, OnMainMenuLine);
