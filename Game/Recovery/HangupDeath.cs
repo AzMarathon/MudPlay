@@ -136,29 +136,16 @@ public static class HangupDeath
         return (HangupDeathVerdict.Died, $"lives went from {before} to {now}");
     }
 
-    // What a death takes that isn't worn, as the inventory words it: the carried
-    // entries (a worn piece that also lingers in the carried list is listed once,
-    // as worn, the way DeathLootCapture has it), the keys and the lit light.
-    public static List<DeathItem> CarriedOf(InventorySnapshot held)
-    {
-        HashSet<string> worn = new(held.EquippedItems.Select(e => e.Name), StringComparer.OrdinalIgnoreCase);
-        List<DeathItem> carried = new();
-        foreach (string entry in held.CarriedItems)
-            if (!worn.Contains(entry)) carried.Add(new DeathItem(entry));
-        foreach (string key in held.Keys ?? Array.Empty<string>())
-        {
-            (int count, string name) = InventorySnapshot.ParseKeyEntry(key);
-            if (name.Length > 0) carried.Add(new DeathItem(count > 1 ? $"{count} {name}" : name));
-        }
-        if (held.ReadiedLight is { Name.Length: > 0 } light) carried.Add(new DeathItem(light.Name));
-        return carried;
-    }
-
     // The pile for the record: the worn pieces with their slots and everything
     // else a death takes, as the inventory list words it (a stack as "3 torch"),
     // less whatever is still held. What stayed with the character (loyal and
     // cursed items) is still held, so it isn't on it. Both null when the list
     // doesn't know what was held.
+    //
+    // The list's two halves were taken by DeathLootCapture when the character left
+    // the game, the rule a death that is seen uses, so a pile worked out afterwards
+    // is the pile that death would have recorded, less what came back. A key keeps
+    // its key-ring mark.
     public static (List<DeathItem>? Equipped, List<DeathItem>? Lost) Pile(HeldAtDisconnect before, InventorySnapshot now)
     {
         if (before.ItemsUnknown) return (null, null);
@@ -181,7 +168,7 @@ public static class HangupDeath
             int gone = Math.Min(Math.Max(1, count), missing.GetValueOrDefault(name));
             if (gone <= 0) continue;
             missing[name] -= gone;
-            lost.Add(new DeathItem(gone > 1 ? $"{gone} {name}" : name));
+            lost.Add(new DeathItem(gone > 1 ? $"{gone} {name}" : name, onKeyRing: carried.OnKeyRing));
         }
         return (equipped, lost);
     }
