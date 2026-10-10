@@ -1414,6 +1414,164 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Null(w.H.Walker.Journey);
     }
 
+    // ----- fourth review -----------------------------------------------
+
+    [Fact]
+    public void RecoverNowWalk_TakenForADetourAndResumed_StillRecoversOnArrival()
+    {
+        // An errand takes the walk for a side trip of its own and then resumes the
+        // journey (the light-shop detour: a character that has just died has lost its
+        // lights). The walker says Stopped for the walk it took; the arrival is still
+        // the Recover Now's, with Auto-Recover off.
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.Enter(1);
+        w.Die(Worn("iron sword"), Array.Empty<string>());
+        w.Put(1, "iron sword");
+        w.Enter(4);
+        Assert.False(w.H.Recovery.AutoRecover);
+        Assert.True(w.Recovery.RecoverNow(w.H.Latest));
+        WalkJourney journey = w.H.Walker!.Journey!;
+
+        Assert.True(w.H.Walker.WalkTo(new RoomKey(1, 4)));   // the detour's own walk
+        w.Run(2);
+        Assert.True(w.H.Walker.ResumeJourney(journey));      // and the walk is picked back up
+        w.Run(8);
+
+        Assert.Equal(new RoomKey(1, 1), w.Here);
+        Assert.Contains("get iron sword", w.H.Sent);
+    }
+
+    [Fact]
+    public void Paradigm_RecoverNowWalk_StoppedAndResumedByADetour_StillForcesTheCorpseGrab()
+    {
+        // The same through a stop and a resume, as the sell detour and the PvP flee
+        // do it.
+        using SpillWorld w = new(CrossJson);
+        w.H.Paradigm = true;
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Enter(4);
+        Assert.True(w.Recovery.RecoverNow(w.H.Latest));
+        WalkJourney journey = w.H.Walker!.Journey!;
+
+        w.H.Walker.Stop("sell detour");
+        w.Settle();
+        Assert.True(w.H.Walker.ResumeJourney(journey, planThroughAcquirableGates: true));
+        w.Run(8);
+        Assert.Equal(new RoomKey(1, 1), w.Here);
+
+        w.H.FeedSurvey("corpse of Ermias");                  // the room's next display
+        Assert.Contains("recover corpse Ermias", w.H.Sent);
+    }
+
+    [Fact]
+    public void Paradigm_RecoverNowWalk_LeftToArrive_ForcesTheCorpseGrab()
+    {
+        using SpillWorld w = new(CrossJson);
+        w.H.Paradigm = true;
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Enter(4);
+        Assert.True(w.Recovery.RecoverNow(w.H.Latest));
+        w.Run(3);
+        Assert.Equal(new RoomKey(1, 1), w.Here);
+
+        w.H.FeedSurvey("corpse of Ermias");
+        Assert.Contains("recover corpse Ermias", w.H.Sent);
+    }
+
+    [Fact]
+    public void RecoverNow_PressedTwice_StillRecoversOnArrival()
+    {
+        // The second press replaces the first's walk, which the walker stops. That
+        // stop is not the user calling the Recover Now off.
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Put(1, "iron sword");
+        w.Enter(4);
+        Assert.True(w.Recovery.RecoverNow(w.H.Latest));
+        Assert.True(w.Recovery.RecoverNow(w.H.Latest));
+        w.Run(6);
+        Assert.Contains("get iron sword", w.H.Sent);
+    }
+
+    [Fact]
+    public void RecoverNow_WhoseFirstLegGoesElsewhere_IsStillCalledOffByStop()
+    {
+        // The trip is to the death room; its first leg is a side trip (for an item
+        // the route needs, say). It is the trip's destination that marks the walk as
+        // the Recover Now's, so Stop calls it off on that leg too.
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Put(1, "iron sword");
+        w.Enter(2);
+        w.Recovery.SetDemandedWalk(room =>
+        {
+            w.H.Walker!.BeginJourney(new WalkJourney(room));
+            return w.H.Walker.WalkTo(new RoomKey(1, 4), supersedeSilently: true);
+        });
+        Assert.True(w.Recovery.RecoverNow(w.H.Latest));
+
+        w.H.Controller!.Stop();
+        w.Settle();                                    // the step already sent lands (1/4)
+        w.H.Tracker.NoteMoveSentByObserver(Direction.S);
+        w.H.Sent.Add("s");
+        w.Settle();
+        w.H.Tracker.NoteMoveSentByObserver(Direction.S);
+        w.H.Sent.Add("s");
+        w.Run(20);
+
+        Assert.Equal(new RoomKey(1, 1), w.Here);
+        Assert.DoesNotContain(w.H.Sent, s => s.StartsWith("get ") || s.StartsWith("look"));
+    }
+
+    [Fact]
+    public void DeferredSweep_GetsSentWhileItWaits_AreCountedBeforeAnySweepStarts()
+    {
+        // An empty floor on a deliberate arrival, and the sweep waits on a hostile.
+        // Then the room shows ours (a search's reveal) and the gets go out as the
+        // hostile leaves. The sweep must not start over them: while its looks run the
+        // "You took" lines aren't read, and it would walk out after items in the pack.
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Enter(3);
+        w.H.Hostiles = true;
+        w.H.Recovery.AutoRecover = true;
+        Assert.True(w.H.Walker!.WalkTo(new RoomKey(1, 1)));
+        w.Run(4);
+        Assert.Contains("waiting to start", w.State);
+
+        w.H.Hostiles = false;
+        w.H.FeedSurvey("iron sword, rope");
+        Assert.Contains("get iron sword", w.H.Sent);
+        w.H.Heartbeat();                                   // ticks before the replies are in
+        w.Recovery.FeedTestLine("You took iron sword.");
+        w.Recovery.FeedTestLine("You took rope.");
+        for (int i = 0; i < 3; i++) w.H.Heartbeat();
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, w.H.Latest.Status);
+        Assert.DoesNotContain(w.H.Sent, s => s.StartsWith("look "));
+    }
+
+    [Fact]
+    public void Sweep_ThatGaveWayAtItsStart_IsNotStartedByALaterSurveyInTheRoom()
+    {
+        using SpillWorld w = SwordHereRopeOut();
+        w.H.OtherEngine = true;
+        w.RecoverNow(beats: 6);
+        Assert.Contains("Recover Now runs it", w.Note);
+
+        w.H.OtherEngine = false;
+        w.H.FeedSurvey("a lantern");   // a later display of the room, nothing of ours on it
+        w.Run(20);
+
+        Assert.DoesNotContain(w.H.Sent, s => s.StartsWith("look "));
+        Assert.Empty(w.Walked);
+    }
+
     [Fact]
     public void Paradigm_NeverSweeps()
     {

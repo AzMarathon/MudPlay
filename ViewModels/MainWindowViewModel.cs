@@ -558,6 +558,10 @@ public partial class MainWindowViewModel : ObservableObject
     private bool               _loopRunning;
     private bool               _autoLairOn;
 
+    // Route cards up for a Recover Now's walk, and whether any was picked from.
+    private int  _recoverNowCardsOpen;
+    private bool _recoverNowWalkPicked;
+
     // Label inside the chip — short upper-case state tag. PAUSED while the user's
     // own pause holds a running engine, so a paused loop doesn't go on reading
     // LOOPING.
@@ -1625,10 +1629,15 @@ public partial class MainWindowViewModel : ObservableObject
         });
 
         // The cards closed without a pick: no walk went out, so the Recover Now that
-        // asked for one isn't left waiting for an arrival.
-        static async Task WalkForRecoverNowAsync(Game.Map.RoomKey room)
+        // asked for one isn't left waiting for an arrival. Pressed twice, two sets of
+        // cards are up for the one request: it is forgotten only when the last of
+        // them has closed and none was picked from.
+        async Task WalkForRecoverNowAsync(Game.Map.RoomKey room)
         {
-            if (!await MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room))
+            if (_recoverNowCardsOpen++ == 0) _recoverNowWalkPicked = false;
+            bool picked = await MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
+            _recoverNowWalkPicked |= picked;
+            if (--_recoverNowCardsOpen == 0 && !_recoverNowWalkPicked)
                 AppServices.Current.DeathRecovery.ForgetRecoverNowWalk("the route cards were closed");
         }
         // A party-splitting CMD teleport (chime-style, Darkwood's `go vortex`)

@@ -9,6 +9,7 @@
 > - It gives way to other engines, following and any other walk; silent during a rest, a pause or Auto-All off
 > - Stock: loyal, major-cursed and "returned to its rightful place" items no longer waited for
 > - Stock: a partly recovered pile keeps its count; an empty death-room floor no longer stalls recovery
+> - Stop calls off a Recover Now that was still walking (both realms)
 > - Bug report: the pile's missing items and the sweep's plan, state and blockers
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

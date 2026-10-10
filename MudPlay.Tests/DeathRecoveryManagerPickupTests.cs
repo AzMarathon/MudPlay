@@ -234,10 +234,12 @@ public sealed partial class DeathRecoveryManagerTests
     }
 
     [Fact]
-    public void Stock_ArmedGrab_IgnoresTheNextRoomsFloor_ReadWithTheMoveOnTheWire()
+    public void Stock_ArmedGrab_DoesNotTakeTheNextRoomsFloorForTheDeathRooms()
     {
         // What makes staying armed safe: the next room prints its floor before it
-        // confirms, with the move that leads there still pending.
+        // confirms, with the move that leads there still pending. The death-room grab
+        // leaves that survey alone. The room it belongs to borders the pile, so the
+        // pass-through grab takes it when the room confirms: once, and counted.
         using GraphHarness h = new() { Paradigm = false };
         Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
         h.Recovery.AutoRecover = true;
@@ -247,10 +249,83 @@ public sealed partial class DeathRecoveryManagerTests
         System.Threading.Thread.Sleep(5);
 
         h.Tracker.NoteMoveSent(Direction.N);          // walking on
-        h.FeedSurvey("a torch");                      // 1/3's floor, a torch like ours on it
-        h.Tracker.NoteRoomObserved(Obs3());
-
+        h.FeedSurvey("a torch");                      // 1/3's floor, our overflow on it
         Assert.Empty(h.Sent);
+
+        h.Tracker.NoteRoomObserved(Obs3());
+        Assert.Equal(new[] { "get torch" }, h.Sent.ToArray());
+        h.Recovery.FeedTestLine("You took torch.");
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
+    [Fact]
+    public void Stock_ArmedAfterAnEmptyFloor_WalkingOn_TheNextRoomsOverflowIsGot()
+    {
+        // The death-room grab no longer takes the next room's entry survey for its
+        // own, as it used to by accident. The pass-through grab for that room reads
+        // the floor it walked in over instead of arming for a survey that has gone by.
+        using GraphHarness h = new() { Paradigm = false };
+        Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
+        h.Recovery.AutoRecover = true;
+        h.EnterGates();                                  // back in the death room, floor empty
+        h.Tracker.NoteMoveSentByObserver(Direction.N);
+        h.FeedSurvey("a torch");
+        h.Tracker.NoteRoomObserved(Obs3());
+        for (int i = 0; i < 2; i++) h.Heartbeat();
+
+        Assert.Equal(1, h.Sent.Count(s => s == "get torch"));
+    }
+
+    [Fact]
+    public void Stock_WalkInFromANeighbour_AsksForEachFloorItemOnce()
+    {
+        using GraphHarness h = new() { Paradigm = false };
+        Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
+        h.Recovery.AutoRecover = true;
+        h.Tracker.NoteRoomObserved(Obs3());             // respawned next door: borders the pile
+        h.Tracker.NoteMoveSentByObserver(Direction.S);
+        h.FeedSurvey("a torch");
+        h.EnterGates();
+        Assert.Equal(1, h.Sent.Count(s => s == "get torch"));
+    }
+
+    [Fact]
+    public void Stock_PassThroughGrabLeftArmedNextDoor_ThenTheDeathRoom_AsksOnce_AndCounts()
+    {
+        // The neighbour's floor was empty, so its pass-through grab stayed armed and
+        // took the first survey to come: the death room's own, read before the room
+        // confirmed. The death-room grab must not ask for the same floor again, and
+        // the replies must still come off the pile.
+        using GraphHarness h = new() { Paradigm = false };
+        Die(h, Array.Empty<EquippedItem>(), new[] { "torch", "rope" });
+        h.Latest.UnrecoveredItems = new List<string> { "torch", "rope" };
+        h.Latest.Status = DeathRecoveryStatus.Partial;
+        h.Recovery.AutoRecover = true;
+        h.Tracker.NoteRoomObserved(Obs3());             // next door, nothing on its floor: armed
+        h.Tracker.NoteMoveSentByObserver(Direction.S);
+        h.FeedSurvey("a torch");                        // the death room's floor
+        h.EnterGates();
+
+        Assert.Equal(1, h.Sent.Count(s => s == "get torch"));
+        h.Recovery.FeedTestLine("You took torch.");
+        Assert.Equal(new[] { "rope" }, h.Latest.UnrecoveredItems);
+    }
+
+    [Fact]
+    public void Stock_ArmedInTheDark_TrackerSuspect_AMoveThatBounced_ALookStillGets()
+    {
+        using GraphHarness h = new() { Paradigm = false };
+        Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
+        h.Recovery.AutoRecover = true;
+        h.Tracker.NoteRoomObserved(Obs3());
+        h.Tracker.NoteMoveSent(Direction.S);
+        h.Tracker.NoteDarkRoomEntered();                 // armed in the dark
+        h.Tracker.NoteRoomObserved(ObsNowhere());        // a display it can't place
+        h.Tracker.NoteMoveSentByObserver(Direction.W);   // no such exit
+        h.Tracker.NoteMoveBlocked();
+        h.FeedSurvey("a torch");
+        h.EnterGates();
+        Assert.Contains("get torch", h.Sent);
     }
 
     // ----- a disconnect while armed ------------------------------------

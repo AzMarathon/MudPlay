@@ -90,12 +90,13 @@ public sealed class PvpFleeWalk : IDisposable
 
     private void OnWalkEvent(WalkEvent e)
     {
+        // No return after this: were the flag ever left set past its walk, a return
+        // here would swallow the next flee's own Finished below.
         if (_comingBack && e.Kind is WalkEventKind.Finished or WalkEventKind.Failed or WalkEventKind.Stopped)
         {
             _comingBack = false;
             if (e.Kind == WalkEventKind.Finished && e.Destination is { } back)
                 _walkEnded = (back, DateTimeOffset.UtcNow);
-            return;
         }
         if (!IsActive || e.Destination is not { } dest || !dest.Equals(_destination)) return;
         switch (e.Kind)

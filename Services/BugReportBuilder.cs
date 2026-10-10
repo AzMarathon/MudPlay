@@ -1894,7 +1894,12 @@ public static class BugReportBuilder
         // back to. A journey can stand with the walker idle, between two legs.
         Kv(sb, "Whole trip (every leg keeps to this)",
             walker.Journey is not { } journey
-                ? (walker.State == Game.Map.WalkState.Idle ? "(none)" : "(none — this walk is on no trip's rules)")
+                ? (walker.State == Game.Map.WalkState.Idle ? "(none)"
+                    // A spill sweep's leg is a journey the walker doesn't report, so
+                    // nothing saves it to resume; here it is named for what it is.
+                    : svc.DeathRecovery.SpillSweepActive && walker.Destination is { } stop
+                        ? $"a Stock spill sweep's leg to {stop.Map}/{stop.Room}, on foot (not a trip anything resumes)"
+                    : "(none — this walk is on no trip's rules)")
             : $"to {journey.Destination.Map}/{journey.Destination.Room}: {journey.Describe()}"
               + (journey.ClosedGates is { Count: > 0 } closed
                   ? $" ({string.Join(", ", closed.Select(id => $"#{id} {svc.ItemNames.GetName(id) ?? "?"}"))})" : string.Empty)

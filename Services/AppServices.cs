@@ -8052,6 +8052,10 @@ public sealed class AppServices
             log: Log);
         PvpFight.Reported += what => WriteTerminalNotice($"[PvP: {what}]");
         PvpFight.Started += given => PvpResponse.NoteWeAttack(given);
+        // A sweep's leg is not a walk the fight's suspend can see and stop, and a
+        // neighbours-only sweep doesn't give way to engines by itself: the fight
+        // ends either at once, before the walker takes another step out of the room.
+        PvpFight.Started += _ => DeathRecovery.StopSpillSweep("a fight with a player began");
         PvpStrangers = new Game.Pvp.PvpStrangerLookup(
             Router, RoomClassifier, Players,
             pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
@@ -13068,6 +13072,10 @@ public sealed class AppServices
 
     private Game.Map.RoomKey? LightDetourWalkDestination()
     {
+        // A spill sweep's leg reports no journey, and its bare destination is a stop
+        // that means nothing once the detour has taken the walk and ended the sweep.
+        // No destination, no detour: the light is left to the other provisioning.
+        if (DeathRecovery.SpillSweepActive) return null;
         _lightDetourJourney = Walker.State != Game.Map.WalkState.Idle ? Walker.Journey : null;
         return _lightDetourJourney?.Destination ?? Walker.Destination;
     }
