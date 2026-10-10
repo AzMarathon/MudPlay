@@ -781,6 +781,58 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[^1]));   // B → C, the way the walk goes
     }
 
+    // A walk lives through a drop of the line. One a flee had paused when the line
+    // dropped is handed back at the first game prompt of the next stay: the run is
+    // over at once, nothing is sent offline, and then the walk goes on.
+    [Fact]
+    public void AFleeCutByADisconnect_ThePausedWalkGoesOnAfterTheReconnect()
+    {
+        Harness h = NewHarness();
+        MudPlay.Models.Profile.CombatSettings combat = new()
+        {
+            RunDirection = MudPlay.Models.Profile.RunDirection.Forward, RunDistance = 1, BreakBeforeFleeing = false,
+        };
+        MudPlay.Game.PlayerState state = new();
+        using MudPlay.Game.Health.HealthManager health = new(
+            state, h.Coordinator,
+            readSettings: () => new MudPlay.Models.Profile.HealthSettings(),
+            isEnabled: () => true,
+            readHangupCommand: null,
+            getActiveMovementEngine: () => h.Walker.State != WalkState.Idle ? h.Walker : null,
+            getLastSentDirection: null,
+            readCombatSettings: () => combat,
+            readGeneralSettings: null,
+            hasEngageableHostiles: null);
+        state.MaxHp = 200;
+        state.Hp = 200;
+        state.HasPromptData = true;                                   // and it stays set through a disconnect
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        health.NoteRoomChanged(new RoomKey(1, 2));
+        Assert.Equal(MudPlay.Game.Health.FleeOutcome.Started,
+            health.FleeFromMonster("ogre (#7) is here, relationship Flee", () => true));
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        Assert.Equal(WalkState.Paused, h.Walker.State);               // held by the flee
+        int sentBefore = h.Sent.Count;
+
+        health.EndFlee("disconnected", handBackLiveEngine: true);    // the line drops mid-run
+
+        Assert.False(health.IsFleeInFlight);
+        health.Evaluate();
+        Assert.Equal(WalkState.Paused, h.Walker.State);               // nothing resumes offline
+        Assert.Equal(sentBefore, h.Sent.Count);
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));                      // back in the game, same room
+        health.NoteInGamePrompt();
+
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(sentBefore + 1, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[^1]));   // on to C
+    }
+
     // A forward flee walks the walk's next steps. Asked in a room the walk came into
     // while paused (a fight there, or the flee itself pausing it as the move
     // confirms), the step that carried it in is still the one at the index: counted,

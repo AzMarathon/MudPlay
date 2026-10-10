@@ -4685,6 +4685,16 @@ public sealed class AppServices
         // MovementControl is built further down; the lambda reads it when a Flee
         // monster is seen.
         Health.IsNavigationPausedByUser = () => MovementControl.IsUserPaused;
+        // A flee does not outlive what cuts it off (user, 2026-10-10: "if we died,
+        // the flee needs to end"). Health is built once, so a profile swap is one of
+        // those; the disconnect is MainWindowViewModel's to tell it. The death
+        // halt's own subscription, made earlier, has stopped the engines by now.
+        RoomTracker.PlayerDeathObserved += () => Health.EndFlee("died");
+        Profile.ProfileLoaded += _ => Health.EndFlee("another profile was loaded");
+        Profile.ProfileClosed += () => Health.EndFlee("the profile was closed");
+        // The first game prompt after a reconnect hands back a walk that a flee cut
+        // off by the disconnect had paused.
+        PromptScanner.PromptObserved += _ => Health.NoteInGamePrompt();
         Health.IsServerEngaged = () => CombatTracker.IsServerEngaged;
         RoomTracker.MoveBlocked += Health.NoteMoveBlocked;
         Health.PreviousRoom = () =>

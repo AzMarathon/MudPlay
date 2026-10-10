@@ -2821,6 +2821,157 @@ public sealed class HealthManagerTests
         Assert.Null(h.Engine.ResumedAtRoom);                         // the stay-away is not over
     }
 
+    // The game refused the run's way out. A fresh sighting in the same room must
+    // not start the same refused run again (a `break` and a move into the wall each
+    // time): the refused way is remembered until the room is left.
+    [Fact]
+    public void FleeFromMonster_AWayOutRefused_IsNotTriedAgainFromThatRoom_UntilItIsLeft()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.BreakBeforeFleeing = true;
+        h.Health.IsServerEngaged = () => true;
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+        h.Health.NoteMoveBlocked();                                  // refused; the engine is handed back
+        Assert.NotNull(h.Engine!.ResumedAtRoom);
+        int breaks = h.SentLines.Count(l => l == "break");
+
+        Assert.Equal(FleeOutcome.NoRoute, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        Assert.Single(h.Engine.SentBacktrackMoves);
+        Assert.Equal(breaks, h.SentLines.Count(l => l == "break"));
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));       // walked on, and came back
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 50));
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+    }
+
+    // The run waited for a move in flight to land, and the user paused the walk or
+    // loop in the meantime: a paused one is idle for this flee, at the landing as
+    // at the sighting.
+    [Fact]
+    public void FleeFromMonster_HeldForAMove_IsDroppedIfTheUserPausedMeanwhile()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        bool pending = true, userPaused = false;
+        h.Health.IsMovePending = () => pending;
+        h.Health.IsNavigationPausedByUser = () => userPaused;
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        userPaused = true;
+        pending = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.False(h.Health.IsFleeInFlight);
+        Assert.Null(h.Engine.PausedReason);
+    }
+
+    // ----- a flee cut short ------------------------------------------------
+    //
+    // "if we died, the flee needs to end" (user, 2026-10-10). A death, a profile
+    // load and a drop of the line all end it at once: left standing it read as in
+    // flight until the next move, and that move sent its next queued step.
+
+    private static FleeHarness RunWithTwoRoomsQueued()
+    {
+        FleeHarness h = HitAndRunFlee();
+        h.Combat.RunDistance = 3;
+        h.ReversePath = (_, _) => new[]
+        {
+            Game.Map.Direction.S, Game.Map.Direction.W, Game.Map.Direction.U,
+        };
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+        Assert.Single(h.Engine!.SentBacktrackMoves);                 // S sent; W and U queued
+        Assert.True(h.Health.IsFleeInFlight);
+        return h;
+    }
+
+    [Theory]
+    [InlineData("died")]
+    [InlineData("another profile was loaded")]
+    [InlineData("the profile was closed")]
+    public void AFleeCutShort_EndsAtOnce_AndTheNextRoomChangeSendsNothing(string why)
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        List<LogEntry> logged = new();
+        h.Log.EntryAdded += logged.Add;
+
+        Assert.True(h.Health.EndFlee(why));
+
+        Assert.False(h.Health.IsFleeInFlight);                       // combat engages again
+        Assert.False(h.Health.IsFleeing);
+        Assert.Contains(logged, e => e.Severity == LogSeverity.Info && e.Message.Contains($"flee ended — {why}"));
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 7));        // the graveyard, or the next character's room
+        h.Health.Evaluate();
+
+        Assert.Single(h.Engine!.SentBacktrackMoves);                 // no queued step went out
+        Assert.Null(h.Engine.ResumedAtRoom);                         // and nothing was resumed
+        // A new sighting is a new run, not one "already under way".
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+    }
+
+    [Fact]
+    public void EndFlee_WithNoFleeOn_SaysSo()
+    {
+        using FleeHarness h = HitAndRunFlee();
+
+        Assert.False(h.Health.EndFlee("died"));
+    }
+
+    // A drop of the line ends the run too, but a walk lives through it: the one the
+    // flee had paused is handed back, at the first game prompt of the next stay and
+    // not before (the prompt data is as it was, so Evaluate alone would resume it
+    // offline).
+    [Fact]
+    public void AFleeCutByADisconnect_HandsTheWalkBackAtTheFirstGamePrompt()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+
+        Assert.True(h.Health.EndFlee("disconnected", handBackLiveEngine: true));
+
+        Assert.False(h.Health.IsFleeInFlight);
+        h.Health.Evaluate();                                         // offline: a timer, a party event
+        h.State.Hp = 199;
+        Assert.Null(h.Engine!.ResumedAtRoom);
+        Assert.Single(h.Engine.SentBacktrackMoves);
+
+        h.Health.NoteInGamePrompt();
+
+        Assert.Equal(new Game.Map.RoomKey(1, 50), h.Engine.ResumedAtRoom);
+        Assert.Single(h.Engine.SentBacktrackMoves);                  // the queued steps are gone
+        Assert.False(h.Health.IsFleeing);
+    }
+
+    // The engine the flee paused is no longer the one running (the loop is stopped
+    // by the disconnect and restarts by its own reconnect resume): nothing is kept.
+    [Fact]
+    public void AFleeCutByADisconnect_WithItsEngineStopped_ResumesNothing()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        FakeFleeEngine paused = h.Engine!;
+        h.Engine = null;
+
+        Assert.True(h.Health.EndFlee("disconnected", handBackLiveEngine: true));
+        h.Health.NoteInGamePrompt();
+
+        Assert.False(h.Health.IsFleeing);
+        Assert.Null(paused.ResumedAtRoom);
+    }
+
+    // A death after the drop ends the hand-back as well.
+    [Fact]
+    public void ADeathAfterTheDisconnect_DropsTheHandBack()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        h.Health.EndFlee("disconnected", handBackLiveEngine: true);
+
+        Assert.True(h.Health.EndFlee("died"));
+        h.Health.NoteInGamePrompt();
+
+        Assert.Null(h.Engine!.ResumedAtRoom);
+    }
+
     // Which runs tell the engine to carry on from where they landed (user,
     // 2026-10-10): the ones that ran forward to get away from something. A
     // hit-and-run or a failed backstab's run comes back for the monster, a player's

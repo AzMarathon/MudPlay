@@ -471,6 +471,13 @@ public sealed class LoopRunner : IRecoverableEngine
         // FSM stays in sync with the observation it'll receive.
         // Cardinals only, same as the walker's — callers must keep
         // Direction.Teleport out rather than have this swallow it.
+        // A stopped loop moves nobody: a flee or recovery that outlived it (a death,
+        // a drop of the line) must not walk the character on through it.
+        if (State == LoopState.Idle)
+        {
+            _log?.Info("LoopRunner", $"backtrack move {direction} not sent: the loop is stopped");
+            return;
+        }
         (byte[] bytes, string what) = SpecialExitDispatch.EncodeBacktrack(_tracker, direction);
         _preMoveHook?.Invoke();
         Write(bytes, what);

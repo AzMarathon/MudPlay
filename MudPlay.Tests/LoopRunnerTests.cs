@@ -1487,6 +1487,23 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[^1]));   // out of C the way the lap goes
     }
 
+    // A flee or recovery that outlived the loop (a death, a drop of the line) must
+    // not walk the character on through it.
+    [Fact]
+    public void SendBacktrackMove_ThroughAStoppedLoop_SendsNothing()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.Stop("player died");
+        int sentBefore = h.Sent.Count;
+
+        h.Runner.SendBacktrackMove(Direction.S);
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Equal(sentBefore, h.Sent.Count);
+    }
+
     // A run that went forward along the lap and is to carry on (user, 2026-10-10):
     // the steps it walked count as walked and the lap goes on from the room it
     // stopped in. Walking back would only meet again what was run from.

@@ -3449,6 +3449,11 @@ public partial class MainWindowViewModel : ObservableObject
                 // latch here silently stops the character from ever resuming the
                 // fight after reconnect (report paradigm-20260827-203548).
                 AppServices.Current.Combat.OnDisconnected();
+                // A flee does not run on offline. The loop was stopped above and
+                // restarts by its own reconnect resume; a walk lives through the
+                // drop, so one the flee had paused is handed back at the first
+                // game prompt of the next stay.
+                AppServices.Current.Health.EndFlee("disconnected", handBackLiveEngine: true);
                 // The replies to discards still on the wire went with the connection.
                 // Hides a full room refused stay held: the pack is as it was.
                 AppServices.Current.AutoDiscard.Reset("disconnected", keepHeld: true);

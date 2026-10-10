@@ -1469,6 +1469,64 @@ public sealed class MonsterRelationshipWatcherTests
         Assert.Single(loop.Moves);                                           // no second run from the same sighting
     }
 
+    // A run cut short by a death, a drop of the line or a profile load ends in
+    // HealthManager (EndFlee). The watch needs nothing of its own for it: what the
+    // app already tells it on each of the three clears the sighting, and the next
+    // one is answered afresh, fight-back included.
+    [Theory]
+    [InlineData("died")]
+    [InlineData("disconnected")]
+    [InlineData("profile")]
+    public void AFleeCutShort_LeavesNothingStandingInTheWatch(string cut)
+    {
+        LogService log = new();
+        RecordingEngine loop = new() { JourneyOrigin = new RoomKey(1, 1) };
+        using HealthManager health = new(
+            new PlayerState(), new MovementCoordinator(log),
+            readSettings: () => new HealthSettings(),
+            isEnabled: () => true,
+            readHangupCommand: null,
+            getActiveMovementEngine: () => loop,
+            getLastSentDirection: () => Direction.N,
+            readCombatSettings: () => new CombatSettings { RunDistance = 3, BreakBeforeFleeing = false },
+            readGeneralSettings: null,
+            hasEngageableHostiles: null,
+            log: log,
+            findReversePath: (_, _) => new[] { Direction.S, Direction.W, Direction.U });
+        health.NoteRoomChanged(new RoomKey(1, 5));
+        using Harness h = new(flee: health.FleeFromMonster, fleeInFlight: () => health.IsFleeInFlight);
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+        h.Feed("Also here: ogre.");
+        Assert.Single(loop.Moves);                                           // two rooms still queued
+
+        switch (cut)
+        {
+            case "died":
+                health.EndFlee("died");
+                h.Classifier.NoteRoomChanged();
+                break;
+            case "disconnected":
+                health.EndFlee("disconnected", handBackLiveEngine: true);
+                h.Classifier.NoteGameLeft();
+                h.Watcher.NoteDisconnected();
+                break;
+            default:
+                health.EndFlee("another profile was loaded");
+                h.Watcher.Reset();
+                break;
+        }
+
+        Assert.False(health.IsFleeInFlight);
+        Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+        health.NoteRoomChanged(new RoomKey(1, 9));
+        Assert.Single(loop.Moves);                                           // no queued step went out
+
+        h.Feed("Also here: ogre.");                                          // the next sighting
+        Assert.Equal(2, loop.Moves.Count);
+        health.NoteMoveBlocked();
+        Assert.True(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+    }
+
     // The sight sends what the health settings' own flee sends: `break` when a fight
     // is on, then the Combat tab's run distance back along the loop, one move per
     // room, and the loop picked up again where the run lands. No exit command.

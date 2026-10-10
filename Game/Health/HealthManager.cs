@@ -1277,8 +1277,8 @@ public sealed class HealthManager : IDisposable
             _deferredFleeStillWanted = null;
             _post(() =>
             {
-                if (stuckStillWanted?.Invoke() == false)
-                    _log?.Combat(LogCategory, $"held flee dropped — what it ran from has gone ({stuckReason})");
+                if (stuckStillWanted is not null && !HeldMonsterRunStillWanted(stuckStillWanted))
+                    _log?.Combat(LogCategory, $"held flee dropped — what it ran from has gone, or navigation was paused meanwhile ({stuckReason})");
                 else
                     TryFlee(stuckReason, stuckFromGates, stuckStillWanted);
             });
@@ -1331,7 +1331,7 @@ public sealed class HealthManager : IDisposable
         // A hit-and-run retreat runs at healthy HP, so "recovered" is already true the
         // moment it starts — hold the resume until its last step has actually landed.
         if (_fleeEngine is not null && _fleeQueue.Count == 0 && _state.MaxHp > 0
-            && _fleeLanded)
+            && _fleeLanded && !_fleeResumeAwaitsPrompt)
         {
             int hpRunTrigger = ResolveHpThreshold(s.HpThresholdMode, s.RunIfBelowHp);
             int maRunTrigger = ResolveMaThreshold(s.MaThresholdMode, s.RunIfBelowMa);
@@ -1351,7 +1351,7 @@ public sealed class HealthManager : IDisposable
                 _fleeEngine.ResumeAfterFlee(room, _fleeCarriesOn);
                 _fleeEngine = null;
                 _fleeCarriesOn = false;
-                _refusedFleeMoves.Clear();
+                ForgetRefusedMovesElsewhere();
             }
         }
 
@@ -2231,7 +2231,7 @@ public sealed class HealthManager : IDisposable
         // run-trigger (handled in Evaluate's recovery branch).
         engine.PauseForFlee($"flee — {reason}");
 
-        if (_fleeEngine is null) _refusedFleeMoves.Clear();   // a new run starts with every way out open
+        if (_fleeEngine is null) ForgetRefusedMovesElsewhere();   // a new run starts with every way out open, but for this room's
         _fleeEngine = engine;
         _fleeFromGates = fromGates;
         // A run that went forward to get away from something (low HP or mana, a Flee
@@ -2597,13 +2597,41 @@ public sealed class HealthManager : IDisposable
     // recovers, so a stopped loop / walk isn't restarted afterwards.
     public void CancelFlee()
     {
-        if (_fleeEngine is null && _deferredFleeReason is null && _fleeQueue.Count == 0) return;
-        _log?.Combat(LogCategory, "flee cancelled (reset) — nothing will be resumed");
-        _fleeEngine = null;
+        if (EndFlee("reset")) _post(Evaluate);
+    }
+
+    // A flee that cannot go on is over: the character died (user, 2026-10-10: "if
+    // we died, the flee needs to end"), the line dropped, another profile was
+    // loaded, or the states were reset. Left standing it read as in flight until
+    // the next move, with combat declining every engage meanwhile, and that move
+    // was then taken for the run's next arrival and sent its next queued step.
+    // Returns whether there was one to end.
+    //
+    // handBackLiveEngine is for a drop of the line alone. A loop is stopped by the
+    // disconnect and restarted by its own reconnect resume, but a walk lives through
+    // it: one this flee had paused would stay paused for good with nobody to resume
+    // it. So where the paused engine is still the active one the retreat only stops
+    // where it stands, as after a refused move, and the engine is handed back at the
+    // first game prompt of the next stay (NoteInGamePrompt). Not before: the prompt
+    // data is as it was when the line dropped, so a resume left to Evaluate would
+    // run offline.
+    public bool EndFlee(string why, bool handBackLiveEngine = false)
+    {
+        // Kept past a run for the room they were refused in (NoteMoveBlocked), so
+        // they go here whether or not a run is on.
         _refusedFleeMoves.Clear();
+        if (_fleeEngine is null && _deferredFleeReason is null && _fleeQueue.Count == 0) return false;
+        Map.IRecoverableEngine? live = handBackLiveEngine && _fleeEngine is { } paused
+            && ReferenceEquals(_getActiveMovementEngine?.Invoke(), paused) ? paused : null;
+        _log?.Info(LogCategory, live is not null
+            ? $"flee ended — {why}; {live.Name} is handed back at the next game prompt"
+            : $"flee ended — {why}; nothing will be resumed");
+        _fleeEngine = live;
+        _fleeLanded = live is not null;
+        _fleeResumeAwaitsPrompt = live is not null;
         _fleeQueue.Clear();
-        _fleeLanded = false;
         _fleeFromRoom = null;
+        _lastFleeMove = null;
         _fleeFromGates = false;
         _fleeCarriesOn = false;
         _fledThisCombat = false;
@@ -2611,6 +2639,30 @@ public sealed class HealthManager : IDisposable
         _deferredFleeFromGates = false;
         _deferredFleeStillWanted = null;
         ClearPlayerFlee();
+        return true;
+    }
+
+    // Set by EndFlee when an engine is to be handed back after a reconnect.
+    private bool _fleeResumeAwaitsPrompt;
+
+    // A run from a Flee monster that waited for a move to land is asked again what
+    // it was asked when the monster was seen: is one still there, and has the user
+    // paused the walk or loop since (a paused one is idle for that flee).
+    private bool HeldMonsterRunStillWanted(Func<bool> monsterStillHere) =>
+        monsterStillHere() && IsNavigationPausedByUser?.Invoke() != true;
+
+    // The ways out the game refused are kept for the room we stand in when a run
+    // ends: the next sighting there would otherwise start the same refused run
+    // again, a `break` and a move into the wall each time. They go when we leave.
+    private void ForgetRefusedMovesElsewhere() =>
+        _refusedFleeMoves.RemoveWhere(r => _lastKnownRoom is not { } here || !r.Room.Equals(here));
+
+    // A game prompt: the character is in the game. The first one after a
+    // disconnect hands back the walk a cut-off flee had paused.
+    public void NoteInGamePrompt()
+    {
+        if (!_fleeResumeAwaitsPrompt) return;
+        _fleeResumeAwaitsPrompt = false;
         _post(Evaluate);
     }
 
@@ -2629,7 +2681,7 @@ public sealed class HealthManager : IDisposable
         if (_fleeFromRoom is { } room && _lastFleeMove is { } tried)
         {
             _refusedFleeMoves.Add((room, tried));
-            _log?.Combat(LogCategory, $"flee move {tried} refused at {room} — stopping the retreat here; that way out won't be tried again this run");
+            _log?.Combat(LogCategory, $"flee move {tried} refused at {room} — stopping the retreat here; that way out won't be tried again while we stand in this room");
         }
         else
             _log?.Combat(LogCategory, "flee move refused — stopping the retreat here");
@@ -2645,7 +2697,12 @@ public sealed class HealthManager : IDisposable
     // recovers.
     public void NoteRoomChanged(Map.RoomKey? newRoom)
     {
-        if (newRoom is { } r) _lastKnownRoom = r;
+        if (newRoom is { } r)
+        {
+            // Outside a run, the refused ways out belong to the room just left.
+            if (_fleeEngine is null && !r.Equals(_lastKnownRoom)) _refusedFleeMoves.Clear();
+            _lastKnownRoom = r;
+        }
 
         // A flee step only lands on a confirmed arrival somewhere new. While its move
         // is still in flight a re-display of the room we're leaving can swing the
@@ -2670,10 +2727,10 @@ public sealed class HealthManager : IDisposable
             // run from, and "back" would lead straight to it (report
             // paradigm-20260927-011659: a held run sent us back down into the kobold).
             // A run from a monster that is not counted a hostile asks after it instead.
-            if (stillWanted is not null ? !stillWanted() : _hasHostileInRoom?.Invoke() == false)
+            if (stillWanted is not null ? !HeldMonsterRunStillWanted(stillWanted) : _hasHostileInRoom?.Invoke() == false)
             {
                 _log?.Combat(LogCategory, stillWanted is not null
-                    ? $"held flee dropped — what it ran from is not where the move landed ({heldReason})"
+                    ? $"held flee dropped — what it ran from is not where the move landed, or navigation was paused meanwhile ({heldReason})"
                     : $"held flee dropped — no hostile where the move landed ({heldReason})");
                 ClearPlayerFlee();
             }
