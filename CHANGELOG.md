@@ -1,5 +1,17 @@
 # Version history
 
+## 3.167.7
+
+- A room wiped clean by a room spell no longer holds the walker 1–2 s as a fight walked out on
+- A prompt that just matched is no longer reported as one the statline can't read
+- Run-out buff timers of members who left the party are dropped
+- Engaged combat profile logged in full when it changes, always at Info; a short line on repeats
+- A spell that lands no longer counts as a missed weapon swing in Monster Intel's observations
+- Monster Intel's saved weapon swing counts are cleared once per character: older versions counted spell casts as misses
+- Lair timer log lines print local time
+- Paradigm: the farm fields' haze line is no longer logged as unrecognized
+- bug reports addressed: paradigm-20261010-145330
+
 ## 3.167.0
 
 - Auto-All is a true master switch: off, nothing automatic acts

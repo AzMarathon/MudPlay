@@ -1,14 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.0**
-> - Auto-All is a true master switch: off, nothing automatic acts
-> - `@auto-all` is the only remote command followed while it is off
-> - Switching it on gives back what was ticked when it went off
-> - A walk, loop or Auto-Lair started with it off is refused, with a notice
-> - Low-HP hang-up now needs Auto-Rest on
-> - "Allow hangup in all-off mode" follows the master switch
-> - Events held more than 5 minutes by it: you pick which still run
+> **Version 3.167.7**
+> - A room wiped clean by a room spell no longer holds the walker 1–2 s as a fight walked out on
+> - A prompt that just matched is no longer reported as one the statline can't read
+> - Run-out buff timers of members who left the party are dropped
+> - Engaged combat profile logged in full when it changes, always at Info; a short line on repeats
+> - A spell that lands no longer counts as a missed weapon swing in Monster Intel's observations
+> - Monster Intel's saved weapon swing counts are cleared once per character: older versions counted spell casts as misses
+> - Lair timer log lines print local time
+> - Paradigm: the farm fields' haze line is no longer logged as unrecognized
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
