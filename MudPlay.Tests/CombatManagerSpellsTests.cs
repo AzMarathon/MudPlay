@@ -1,6 +1,7 @@
 using System.Text;
 using MudPlay.Game;
 using MudPlay.Game.Combat;
+using MudPlay.Game.Map;
 using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
@@ -80,11 +81,26 @@ public sealed class CombatManagerSpellsTests
             foreach (Action a in due) a();
         }
 
-        public Harness(bool wireCaster = true, bool deferPost = false)
+        // The exp + *Combat Off* death watcher, wired as AppServices wires it: built
+        // ahead of the combat manager, each death routed to NoteUnattributedDeath.
+        // Only with wireDeathWatcher; other tests call NoteUnattributedDeath themselves.
+        public MonsterDeathWatcher? Deaths { get; }
+        public List<MonsterDeathEvent> DeathEvents { get; } = new();
+
+        public Harness(bool wireCaster = true, bool deferPost = false, bool wireDeathWatcher = false)
         {
             _deferPost = deferPost;
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, Log);
+            if (wireDeathWatcher)
+            {
+                Deaths = new MonsterDeathWatcher(Router, Log);
+                Deaths.MonsterDied += evt =>
+                {
+                    DeathEvents.Add(evt);
+                    Combat!.NoteUnattributedDeath();
+                };
+            }
             Cast = new CastCoordinator(Router, Log);
             Cast.SetWireSender(b => Sent.Add(b));
             Combat = new CombatManager(Router, Classifier, Monsters,
@@ -177,6 +193,17 @@ public sealed class CombatManagerSpellsTests
             Router.Dispatch(emitted);
         }
 
+        // A command as the server echoes it: the prompt row, then its trailing
+        // text as a second line carrying the same timestamp.
+        public void FeedEchoed(string command)
+        {
+            DateTimeOffset at = DateTimeOffset.UtcNow;
+            Router.Dispatch(new LineExtractor.EmittedLine(
+                "[HP=724/MA=343]:", Array.Empty<CellAttributes>(), at, IsPromptLine: true));
+            Router.Dispatch(new LineExtractor.EmittedLine(
+                command, Array.Empty<CellAttributes>(), at, IsPromptLine: false));
+        }
+
         // A between-round cast's *Combat Off* that closes the open attack-spell
         // round. In production RoundDamageTracker (CombatStatus tieBreak 100)
         // CloseCurrent's that round — RoundCount++ — BEFORE CombatManager's resume
@@ -234,6 +261,7 @@ public sealed class CombatManagerSpellsTests
         public void Dispose()
         {
             Combat.Dispose();
+            Deaths?.Dispose();
             Cast.Dispose();
             Classifier.Dispose();
         }
@@ -2456,6 +2484,127 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: dark sprite.");
         Assert.Equal("nebo dark sprite", h.LastSent);
+    }
+
+    // Four of one monster under a room spell, three of them killed, and the room read
+    // again with the survivor attacked by name: where report paradigm-20261010-145330
+    // stood when the game printed the *Combat Off* of that attack.
+    private static void RoomSpellKillsThreeOfFour_SurvivorAttacked(Harness h)
+    {
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "aslt" };
+        h.AddMonster(1, "brute zombie");
+
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie, brute zombie.");
+        Assert.Equal("hsto", h.LastSent);
+        h.Feed("*Combat Engaged*");
+
+        // The survivor keeps the room spell running, so the kills print no *Combat Off*.
+        h.Feed("You gain 16250 experience.");
+        h.Feed("You gain 16250 experience.");
+        h.Feed("You gain 16250 experience.");
+
+        h.Feed("Also here: brute zombie.");
+        Assert.Equal("aslt brute zombie", h.LastSent);
+    }
+
+    // Report paradigm-20261010-145330. A new attack sent while another is running
+    // prints *Combat Off* ahead of its *Combat Engaged*. Right after the room spell's
+    // three exp lines, that Off was read as a kill: the survivor was dropped,
+    // three kills were counted against a roster already re-read down to one and the
+    // roster emptied, the Combat gate cleared, and the buff cast next had no attack to
+    // bring back. The Off answers the echoed attack; nothing died.
+    [Fact]
+    public void AttackOnARoomSpellsSurvivor_ItsCombatOffIsNotAKill_AndTheBuffsOffResumesIt()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        MovementCoordinator coordinator = new(h.Log);
+        using CombatStateTracker tracker = new(
+            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true, h.Log);
+        bool GateHeld() => coordinator.AssertedGates.Contains(MovementCoordinator.CombatGate);
+        int emptyRosters = 0;
+        h.Classifier.EntitiesObserved += o =>
+        {
+            if (!o.Entities.Any(e => e.Kind == EntityKind.Monster)) emptyRosters++;
+        };
+
+        RoomSpellKillsThreeOfFour_SurvivorAttacked(h);
+        Assert.True(GateHeld());
+
+        h.FeedEchoed("aslt brute zombie");
+        h.Feed("*Combat Off*");
+        h.Feed("*Combat Engaged*");
+
+        Assert.Empty(h.DeathEvents);                             // no death: no lair-timer kill either
+        Assert.Equal("brute zombie", h.Combat.CurrentTarget);    // the survivor is still the target
+        Assert.True(h.Classifier.Current is { Entities.Count: 1 });
+        Assert.Equal(0, emptyRosters);                           // the room was never read as cleared
+        Assert.True(GateHeld());
+
+        // The Buff Watchdog's between-round cast stops the attack; its Off brings it back.
+        int sentBeforeBuff = h.Sent.Count;
+        h.Cast.NotifyExternalCastSent();
+        h.Combat.NoteBetweenRoundCast();
+        h.FeedEchoed("blsh");
+        h.Feed("*Combat Off*");
+
+        Assert.Equal(sentBeforeBuff + 1, h.Sent.Count);
+        Assert.Equal("aslt brute zombie", h.LastSent);
+        Assert.Empty(h.DeathEvents);
+        Assert.Equal(0, emptyRosters);
+        Assert.True(GateHeld());
+
+        // Next round the survivor dies: exp, then the kill's own Off with no echo
+        // ahead of it. That one is a death, and the room is clear.
+        h.Feed("*Combat Engaged*");
+        h.Tick();
+        h.Feed("You gain 16250 experience.");
+        h.Feed("*Combat Off*");
+
+        Assert.Single(h.DeathEvents);
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.False(GateHeld());
+    }
+
+    // A typed `break` right after a room spell's kills answers the same way: its Off
+    // is the command's, and the monster it was typed at is alive.
+    [Fact]
+    public void TypedBreakAfterARoomSpellsKills_IsNotAKill()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        RoomSpellKillsThreeOfFour_SurvivorAttacked(h);
+        h.FeedEchoed("aslt brute zombie");
+        h.Feed("*Combat Off*");
+        h.Feed("*Combat Engaged*");
+
+        h.FeedEchoed("break");
+        h.Feed("*Combat Off*");
+
+        Assert.Empty(h.DeathEvents);
+        Assert.Equal("brute zombie", h.Combat.CurrentTarget);
+        Assert.True(h.Classifier.Current is { Entities.Count: 1 });
+    }
+
+    // With a statline the extractor can't split no echo is read, so the attack's Off
+    // keeps its old reading as a death. What it may no longer do is empty the roster:
+    // the three kills came before the room was read again, and the one monster that
+    // read lists is the one that outlived them.
+    [Fact]
+    public void UnsplitStatline_AttackOffStillReadsAsADeath_ButTheReReadRosterIsKept()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        MovementCoordinator coordinator = new(h.Log);
+        using CombatStateTracker tracker = new(
+            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true, h.Log);
+        RoomSpellKillsThreeOfFour_SurvivorAttacked(h);
+
+        h.Feed("<724hp 343ma> aslt brute zombie");
+        h.Feed("*Combat Off*");
+        h.Feed("*Combat Engaged*");
+
+        Assert.Single(h.DeathEvents);
+        Assert.True(h.Classifier.Current is { Entities.Count: 1 });
+        Assert.Contains(MovementCoordinator.CombatGate, coordinator.AssertedGates);
     }
 
     [Fact]

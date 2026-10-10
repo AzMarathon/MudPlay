@@ -624,8 +624,9 @@ public sealed partial class CombatManager
         bool resumeHeldForUserAttack = _spellResumeHeldForUserAttack;
         _spellResumeHeldForUserAttack = false;
 
-        // New round — reset the per-round exp-line tally the AoE-wipe path reads.
+        // New round — reset the per-round exp-line tallies the AoE-wipe path reads.
         _expGainsThisRound = 0;
+        _expGainsSinceRosterRead = 0;
 
         // New round — re-arm the once-per-round attack-immunity handler so the next
         // round's "no effect" burst can drive the next cascade step.

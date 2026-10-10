@@ -1,5 +1,16 @@
 # Version history
 
+## 3.165.1
+
+- A new attack's `*Combat Off*` is no longer read as a kill (an attack sent at the survivor of a room spell)
+- The survivor stays the target, the room isn't taken for cleared and the loop doesn't walk on
+- A buff cast right after that attack is followed by the attack again at once
+- A typed `break` just after a kill isn't counted as another
+- No lair-timer kill, kill count or kill sound for a kill that didn't happen
+- A room read again after a room spell's kills is never emptied by them
+- Program log notes a `*Combat Off*` that answers a command
+- bug reports addressed: paradigm-20261010-145330
+
 ## 3.165.0
 
 - Auto-open opens a flagged container on arrival; it did nothing before

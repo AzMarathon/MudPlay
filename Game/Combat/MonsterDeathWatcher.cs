@@ -11,6 +11,11 @@ namespace MudPlay.Game.Combat;
 // consumers attribute the kill to whatever they were fighting
 // (CombatManager.CurrentTarget) and force a roster re-display to pick the survivor.
 //
+// Not every *Combat Off* inside the window is the kill's. A room spell that leaves a
+// survivor prints its kills' exp lines and no Off at all, and the next Off is then
+// whatever command stops that spell: the attack sent at the survivor, a cast, a
+// `break`. CommandOffProbe names those, and they are not deaths.
+//
 // Per-monster death MESSAGES were retired: they're arbitrary per-monster flavor with
 // no shared keyword and no distinctive colour, so a generic wording/colour matcher is
 // infeasible. The exp line is the only reliable generic signal, and our own targeting
@@ -25,6 +30,7 @@ public sealed class MonsterDeathWatcher : IDisposable
     private static readonly TimeSpan ExpToCombatOffWindow = TimeSpan.FromSeconds(5);
 
     private readonly LogService? _log;
+    private readonly CommandOffProbe _offProbe;
     private readonly IDisposable _expSub;
     private readonly IDisposable _combatStatusSub;
 
@@ -42,6 +48,7 @@ public sealed class MonsterDeathWatcher : IDisposable
     {
         ArgumentNullException.ThrowIfNull(router);
         _log = log;
+        _offProbe = new CommandOffProbe(router);
         _expSub          = router.Subscribe(KnownPatterns.UserGainExperience, OnExp);
         _combatStatusSub = router.Subscribe(KnownPatterns.CombatStatus,        OnCombatStatus);
     }
@@ -63,6 +70,18 @@ public sealed class MonsterDeathWatcher : IDisposable
         DateTimeOffset now = NowProvider();
         if (now - expAt > ExpToCombatOffWindow) return;
 
+        // The exp is dropped with it: its kill's own Off would have come straight
+        // after it, so no later Off is that kill's either.
+        if (_offProbe.CommandAnswered is { } command)
+        {
+            _log?.Info(LogCategory,
+                $"*Combat Off* answers '{command}', not a kill — no death read from the exp "
+                + $"{(now - expAt).TotalSeconds:F1}s before it");
+            _lastExpAt = null;
+            _lastExpAmount = null;
+            return;
+        }
+
         MonsterDeathEvent evt = new(
             Candidates:       Array.Empty<MonsterDeathIdentity>(),
             ExperienceGained: _lastExpAmount,
@@ -81,6 +100,7 @@ public sealed class MonsterDeathWatcher : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _offProbe.Dispose();
         _expSub.Dispose();
         _combatStatusSub.Dispose();
     }

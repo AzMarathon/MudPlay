@@ -722,6 +722,18 @@ public sealed partial class CombatManager : IDisposable
     // the round boundary (OnCombatTick).
     private int _expGainsThisRound;
 
+    // This round's exp lines that arrived after the room was last read from the game:
+    // the kills the roster still lists. An "Also here:" read after a kill comes from
+    // the game after it, so that monster is already off the list, and counting its
+    // exp against the list a second time emptied a roster that held only the survivor
+    // (report paradigm-20261010-145330: 3 kills, a re-read showing 1, "cleared all 1").
+    // _rosterReadAt tells a fresh read from a re-issue of the same one.
+    private int _expGainsSinceRosterRead;
+    private DateTimeOffset _rosterReadAt = DateTimeOffset.MinValue;
+
+    // Whether the *Combat Off* being handled is a command's and not a kill's.
+    private readonly CommandOffProbe _offProbe;
+
     // The target a prompt exp-inferred kill just dropped, remembered so the kill's
     // *Combat Off* can still drop it from the live roster. The exp line lands BEFORE
     // *Combat Off* and nulls _currentTarget (so the round's alternate can't corpse-cast)
@@ -873,6 +885,7 @@ public sealed partial class CombatManager : IDisposable
         _readPartySettings = readPartySettings;
         _log = log;
 
+        _offProbe = new CommandOffProbe(router);
         _classifier.EntitiesObserved += OnEntitiesObserved;
         _announceSub  = router.Subscribe(KnownPatterns.PartyAttackAnnounce, OnAttackAnnounce);
         _castAnnounceSub = router.Subscribe(KnownPatterns.PartyCastAnnounce, OnCastAnnounce);
@@ -1555,6 +1568,12 @@ public sealed partial class CombatManager : IDisposable
             _arrivalHeldForMove = false;
             // The re-display a summon-on-death kill was waiting for (or a new room).
             _summonRescanArmed = false;
+        }
+
+        if (obs.Source == RoomObservationSource.AlsoHere && obs.At != _rosterReadAt)
+        {
+            _rosterReadAt = obs.At;
+            _expGainsSinceRosterRead = 0;
         }
 
         CombatSettings settings = _readSettings();
@@ -4268,6 +4287,7 @@ public sealed partial class CombatManager : IDisposable
     {
         _lastExpGainAt = DateTimeOffset.Now;
         _expGainsThisRound++;
+        _expGainsSinceRosterRead++;
         if (_currentTarget is not null
             && _attackSentSinceDeath
             && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)
@@ -4324,13 +4344,22 @@ public sealed partial class CombatManager : IDisposable
         // the roster intact and the CR re-parse below still handles it; the CR also
         // re-asserts any hostile that arrived unlisted, exactly the idle-stall
         // watchdog's own optimistic-clear-plus-safety-probe pattern.
+        //
+        // Only the kills the roster still lists count (_expGainsSinceRosterRead): once
+        // the room has been read again, what it lists is what outlived them.
         int listed = _classifier.Current is { } cur ? CountEngageable(cur) : 0;
-        if (listed > 0 && _expGainsThisRound >= listed)
+        if (listed > 0 && _expGainsSinceRosterRead >= listed)
         {
             _log?.Combat(LogCategory,
-                $"AoE multi-kill ({_expGainsThisRound} exp) cleared all {listed} listed hostile(s) — "
+                $"AoE multi-kill ({_expGainsSinceRosterRead} exp) cleared all {listed} listed hostile(s) — "
                 + "dropping the stale roster so the combat gate releases without the idle-stall wait");
             _classifier.NoteRoomChanged();
+        }
+        else if (listed > 0 && _expGainsThisRound >= listed)
+        {
+            _log?.Combat(LogCategory,
+                $"AoE multi-kill: {_expGainsThisRound} exp this round, {_expGainsSinceRosterRead} since the room "
+                + $"was last read — the {listed} hostile(s) it lists outlived the rest, roster kept");
         }
 
         if (TrySendRoomRefresh(context))
@@ -4403,14 +4432,25 @@ public sealed partial class CombatManager : IDisposable
             // corpse; the death→re-observe re-picks the survivor. The no-between-
             // round-cast gate keeps a heal's Off — or a party share-exp landing
             // beside one — from being misread as a kill (that path resumes below).
-            if (_currentTarget is not null
+            bool expExplainsOff = _currentTarget is not null
                 && DateTimeOffset.Now - _lastExpGainAt < ExpKillWindow
                 && DateTimeOffset.Now - _betweenRoundCastAt >= CastInterruptResumeWindow
                 // ...and NO matched death line just handled this kill. If one did,
                 // it already dropped the corpse and re-picked the next survivor —
                 // this *Combat Off* is that kill's Off, so inferring a second kill
                 // here would drop the fresh target and re-attack it (double-fire).
-                && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)
+                && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow;
+            // Nor is it a kill's when it answers a command (CommandOffProbe): the exp
+            // is then an earlier kill's, a room spell's that left this target standing,
+            // and the Off is the one our attack on that survivor prints ahead of its
+            // *Combat Engaged* (or a typed `break`). Dropping the target for it threw
+            // the fresh attack away (report paradigm-20261010-145330).
+            if (expExplainsOff && _offProbe.CommandAnswered is { } answered)
+            {
+                _log?.Combat(LogCategory,
+                    $"*Combat Off* answers '{answered}', not a kill — target={_currentTarget} kept");
+            }
+            else if (expExplainsOff)
             {
                 DropTargetForInferredKill(
                     "kill inferred from exp + *Combat Off* (no between-round cast) — " +
@@ -4948,6 +4988,7 @@ public sealed partial class CombatManager : IDisposable
         if (_disposed) return;
         _disposed = true;
         if (_cast is not null) _cast.CastFailed -= OnCombatCastFailed;
+        _offProbe.Dispose();
         _classifier.EntitiesObserved -= OnEntitiesObserved;
         _announceSub.Dispose();
         _castAnnounceSub.Dispose();

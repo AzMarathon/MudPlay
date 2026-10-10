@@ -34,6 +34,17 @@ public sealed class MonsterDeathWatcherTests
                 DateTimeOffset.UtcNow, IsPromptLine: false));
         }
 
+        // A command as the server echoes it: the prompt row, then its trailing
+        // text as a second line carrying the same timestamp.
+        public void FeedEchoed(string command)
+        {
+            DateTimeOffset at = DateTimeOffset.UtcNow;
+            Router.Dispatch(new LineExtractor.EmittedLine(
+                "[HP=724/MA=343]:", Array.Empty<CellAttributes>(), at, IsPromptLine: true));
+            Router.Dispatch(new LineExtractor.EmittedLine(
+                command, Array.Empty<CellAttributes>(), at, IsPromptLine: false));
+        }
+
         public void Dispose() => Watcher.Dispose();
     }
 
@@ -91,5 +102,83 @@ public sealed class MonsterDeathWatcherTests
         h.FeedRouter("*Combat Off*");
 
         Assert.Empty(h.Events);
+    }
+
+    // Report paradigm-20261010-145330: a room spell killed three of four and printed no
+    // *Combat Off* (the survivor kept it running). The attack then sent at the survivor
+    // printed one ahead of its *Combat Engaged*, inside the window the exp lines had
+    // opened, and was read as a fourth death.
+    [Fact]
+    public void CombatOffAnsweringAnEchoedAttack_IsNotADeath()
+    {
+        using Harness h = new();
+
+        h.FeedRouter("You gain 16250 experience.");
+        h.FeedRouter("You gain 16250 experience.");
+        h.FeedRouter("You gain 16250 experience.");
+        h.FeedEchoed("aslt brute zombie");
+        h.FeedRouter("*Combat Off*");
+        h.FeedRouter("*Combat Engaged*");
+
+        Assert.Empty(h.Events);
+
+        // The exp lines are spent: the buff cast next prints an Off of its own.
+        h.FeedRouter("*Combat Off*");
+        Assert.Empty(h.Events);
+    }
+
+    [Fact]
+    public void CombatOffAnsweringATypedBreak_IsNotADeath()
+    {
+        using Harness h = new();
+
+        h.FeedRouter("You gain 9 experience.");
+        h.FeedEchoed("break");
+        h.FeedRouter("*Combat Off*");
+
+        Assert.Empty(h.Events);
+    }
+
+    // The kill's own Off follows its exp line, with the command that led to it further
+    // back, so it is still a death.
+    [Fact]
+    public void KillAfterAnEchoedAttack_StillFiresDeath()
+    {
+        using Harness h = new();
+
+        h.FeedEchoed("aslt brute zombie");
+        h.FeedRouter("*Combat Engaged*");
+        h.FeedRouter("The brute zombie keels over like a hewn tree!");
+        h.FeedRouter("You gain 16250 experience.");
+        h.FeedRouter("*Combat Off*");
+
+        Assert.Single(h.Events);
+    }
+
+    // Text the game appends to a prompt row without clearing it reads as an echo. An
+    // exp line that arrived that way must not turn its own Off into a command's.
+    [Fact]
+    public void ExpLineOnAPromptRow_ThenCombatOff_StillFiresDeath()
+    {
+        using Harness h = new();
+
+        h.FeedEchoed("You gain 9 experience.");
+        h.FeedRouter("*Combat Off*");
+
+        Assert.Single(h.Events);
+    }
+
+    // A statline the extractor can't split arrives as one line, prompt and command
+    // together, so no echo is read and the Off keeps its old reading.
+    [Fact]
+    public void CommandOnAnUnsplitStatline_KeepsTheOldReading()
+    {
+        using Harness h = new();
+
+        h.FeedRouter("You gain 9 experience.");
+        h.FeedRouter("<724hp 343ma> aslt brute zombie");
+        h.FeedRouter("*Combat Off*");
+
+        Assert.Single(h.Events);
     }
 }
