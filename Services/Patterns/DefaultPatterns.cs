@@ -626,6 +626,10 @@ public static class DefaultPatterns
         // so it resolves against a pending drop the same way the confirmation does.
         yield return new RegexPattern(KnownPatterns.RoomDropRefused,
             @"^There is no room to drop (?<item>.*) here\.");
+        // The same refusal for a `hide`: a room's hidden items have a cap of their
+        // own, apart from the visible floor's.
+        yield return new RegexPattern(KnownPatterns.RoomHideRefused,
+            @"^There is no room to hide (?<item>.*) here\.");
         yield return new RegexPattern(KnownPatterns.UserEquipped,
             @"^(?:You are now wearing|You lit the) (?<item>[\w ]+)\.$");
         yield return new RegexPattern(KnownPatterns.UserEquipFailed,

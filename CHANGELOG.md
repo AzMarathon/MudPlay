@@ -1,10 +1,26 @@
 # Version history
 
-## 3.160.2
+## 3.160.5
 
 - A walk or loop held by a fight asks the game where you are before stepping on when the map lost its place during the fight (Paradigm: `rm`), instead of walking into a wall and standing there
 - A step sent while the map was unsure of its room and left unanswered for 10 seconds now asks too, instead of waiting for good
 - bug reports addressed: paradigm-20261009-082958
+
+## 3.160.4
+
+- Gear sets, backstab armour, location gear and weapon swaps equip a piece the pack holds two or more of
+- Combat no longer counts out an alternate weapon the pack holds two or more of
+
+## 3.160.2
+
+- Chest Offload Drop / Drop All hide when Hide items when discarding is on
+- Hidden items leave the Chest Offload list
+- A hide a full room refuses is retried in each new room
+- A sale, drop, ✕ or Clear list calls a waiting hide off
+- No hide sent for a copy not in the pack
+- Refused or unanswered auto-discard drops no longer stay counted all session
+- No discard after a death or reconnect until the inventory is read
+- Items named after a coin (iron crown) no longer read as coin
 
 ## 3.160.1
 
