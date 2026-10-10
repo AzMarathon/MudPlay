@@ -1,9 +1,22 @@
 # Version history
 
-## 3.159.28
+## 3.160.2
 
 - A walk or loop held by a fight re-checks its room before stepping on when the map lost its place during the fight (Paradigm: `rm`), instead of walking into a wall and standing there
 - bug reports addressed: paradigm-20261009-082958
+
+## 3.160.1
+
+- Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
+- In that mode the room tooltip and the Legend name the colours
+
+## 3.160.0
+
+- Items a hang-up penalty dropped are picked up on re-entering the game
+- Only on a realm set to drop items, and never more than it drops
+- The gear set last equipped is applied again for pieces that came back
+- Loops and walks wait for the check
+- Never changes when the client hangs up
 
 ## 3.159.27
 

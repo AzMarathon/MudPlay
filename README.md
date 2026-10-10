@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.28**
+> **Version 3.160.2**
 > - A walk or loop held by a fight re-checks its room before stepping on when the map lost its place during the fight (Paradigm: `rm`), instead of walking into a wall and standing there
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
