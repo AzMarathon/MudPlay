@@ -23,10 +23,20 @@ namespace MudPlay.Game.Recovery;
 // hang-up's. A death by this hang-up leaves marks the entry shows:
 //   - HP at the first prompt is above 0 and not under what the character left
 //     with: a death sets it to the maximum.
+//   - something it held is gone: a death takes everything but what stays with
+//     the character, on both realms (to the floor on Stock, into a corpse on
+//     Paradigm). A character that still holds all of it died somewhere else and
+//     got it back.
 //   - nothing is worn (Stock): a death takes every piece off the body.
 //   - the board's two login lines were printed (Stock): they follow the first
 //     entry after a hang-up it didn't let go free, and no other.
 // A life lost with one of those missing is not recorded, and is told.
+//
+// One case nothing on the connection separates: the character was played from
+// another client in between and that session itself ended in a death by a
+// hang-up. It comes back stripped, a life down, on Stock with the board's lines
+// printed. The record made then names where this client last had the character,
+// which is why its wording says exactly that and no more.
 public static class HangupDeath
 {
     // Whether that hang-up can have killed: the realm's settings penalise it, and
@@ -51,9 +61,12 @@ public static class HangupDeath
     //                    (not Stock) or no inventory has been read.
     //   loginLines     — the board's hang-up lines were printed on this connection;
     //                    null where it isn't known to print them (not Stock).
+    //   heldGone       — an item or coins the list has were not held at the first
+    //                    inventory read; null when the list held nothing, what it
+    //                    held isn't known, or no inventory has been read.
     public static (HangupDeathVerdict Verdict, string Why) Judge(
         int? hpAtDrop, int? maxHpAtDrop, int? hpShareTop, int? hpAtEntry,
-        int? livesBefore, int? livesNow, bool? worn, bool? loginLines)
+        int? livesBefore, int? livesNow, bool? worn, bool? loginLines, bool? heldGone)
     {
         if (hpAtDrop is not { } dropHp)
             return (HangupDeathVerdict.NotSuspected, "HP wasn't known when the character left the game");
@@ -92,6 +105,10 @@ public static class HangupDeath
         string lost = $"a life was lost (lives {before} to {now})";
         if (hpSaysNo is not null)
             return (HangupDeathVerdict.Unsure, $"{lost}, but {hpSaysNo}");
+        if (heldGone == false)
+            return (HangupDeathVerdict.Unsure,
+                $"{lost}, but everything the character held when it left the game is still held, where a death takes "
+                + "all but what stays with it: the life was lost somewhere else (on another client?)");
         if (worn == true)
             return (HangupDeathVerdict.Unsure,
                 $"{lost}, but something was still worn on entering the game, where a death takes everything off");

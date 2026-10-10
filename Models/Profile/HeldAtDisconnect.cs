@@ -26,6 +26,11 @@ public sealed class HeldAtDisconnect
     // one says nothing about this character's pack here, and is ignored.
     public string? Realm { get; set; }
 
+    // The character's name as a `stat` on that connection gave it, or null when
+    // none was read. A profile can be loaded over another character (a copied
+    // profile, a shared account): a list of one says nothing about the other.
+    public string? Character { get; set; }
+
     // The room the character stood in, or null when the map wasn't sure of it.
     public RoomRef? Room { get; set; }
 

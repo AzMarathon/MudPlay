@@ -9381,7 +9381,8 @@ public sealed class AppServices
         // reconnect is the one from before the link dropped.
         Stats.ScreenParsed += screen =>
         {
-            if (Stats.LastCaptureReadLives) HangupItems.NoteLivesRead(screen.Lives);
+            // The name is on the same row of the screen as the lives.
+            if (Stats.LastCaptureReadLives) HangupItems.NoteLivesRead(screen.Lives, screen.Name);
         };
         // Stock's word, on the way in, that the last exit was a hang-up it didn't
         // let go free. Without it a life lost isn't taken as lost to that hang-up.

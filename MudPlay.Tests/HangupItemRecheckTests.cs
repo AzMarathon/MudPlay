@@ -216,6 +216,9 @@ public sealed class HangupItemRecheckTests
         public List<string[]> GearAsked { get; } = new();
         public string? GearSetApplied { get; set; } = "Default";
         public List<string> Notices { get; } = new();
+        public DateTimeOffset Now { get; set; } = DateTimeOffset.Now;
+        // The name on the `stat` screen.
+        public string StatName { get; set; } = "Ermias Asghedom";
         // What the death question reads: the statline's HP, the client's lives,
         // the fight, and the realm's largest HP share for each side (null: that
         // side isn't penalised).
@@ -254,6 +257,7 @@ public sealed class HangupItemRecheckTests
                 collect: (name, count) => Collected.Add((name, count)),
                 reapplyGearSet: names => { GearAsked.Add(names.ToArray()); return GearSetApplied; },
                 notice: Notices.Add,
+                now: () => Now,
                 vitals: () => Vitals,
                 lives: () => Lives,
                 pvpFight: () => PvpFight,
@@ -295,7 +299,46 @@ public sealed class HangupItemRecheckTests
         public void BoardSaysHungUp() => Check.NoteHangupLoginLine();
 
         // The login's `stat`, ahead of its `i`.
-        public void ReadLives(int lives) => Check.NoteLivesRead(lives);
+        public void ReadLives(int lives) => Check.NoteLivesRead(lives, StatName);
+
+        // A whole connection the client played on: the login's `stat` and `i`, then
+        // how things stood when the link went down ten minutes later.
+        public void PlayAndDrop(int lives, InventorySnapshot held, int hpAtDrop, RoomKey room, bool fight = true)
+        {
+            Check.NoteConnected();
+            Vitals = (200, 200);
+            Check.NoteRoomDisplayed();
+            Check.OnInGameChanged(true);
+            Lives = lives;
+            ReadLives(lives);
+            ReadInventory(held);
+            Room = room;
+            Vitals = (hpAtDrop, 200);
+            MonsterFight = fight;
+            Now = Now.AddMinutes(10);
+            Check.NoteLinkDropping();
+            Check.NoteDisconnected();
+            MonsterFight = false;
+        }
+
+        // The next entry: this room, this HP at the first prompt, the board's line
+        // or not, the login's `stat` or not, then its `i`.
+        public void ComeBack(int hp, int? lives, InventorySnapshot held, bool boardLine = true, RoomKey? room = null)
+        {
+            Room = room ?? new RoomKey(1, 1);
+            Now = Now.AddMinutes(1);
+            Check.NoteConnected();
+            if (boardLine) BoardSaysHungUp();
+            Check.NoteRoomDisplayed();
+            Vitals = (hp, 200);
+            Check.OnInGameChanged(true);
+            if (lives is { } read)
+            {
+                Lives = read;
+                ReadLives(read);
+            }
+            ReadInventory(held);
+        }
 
         // The list a save left on disk before the link dropped, in room 1/3.
         public void Stored(InventorySnapshot before, RoomRef? room = null) =>
@@ -1964,5 +2007,106 @@ public sealed class HangupItemRecheckTests
         h.ReadInventory(Snap());
 
         Assert.Single(h.Deaths);
+    }
+
+    // ----- A life lost where this client wasn't looking --------------------
+    //
+    // From the second review: each of these pinned a life lost in a session this
+    // client never saw on its own last hang-up, or hid a real one.
+
+    // Paradigm, where nothing is asked of what is worn or of the board's lines:
+    // the character left at 80 of 200 in a monster fight with 7 lives. Days on
+    // another client follow; it dies once there, recovers its corpse and wears
+    // everything again. Back here at full HP, in another room, with 6 lives and
+    // nothing missing. A death takes all but what stays with the character, so
+    // one that still holds everything didn't die to this hang-up.
+    [Fact]
+    public void ALifeLostElsewhere_WithNothingMissing_IsNotRecorded_OnEitherRealm()
+    {
+        foreach (bool stock in new[] { false, true })
+        {
+            Harness h = new() { MaxItems = 0, PveShare = 50, Stock = stock };
+            h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 80, new RoomKey(1, 3));
+
+            h.Now = h.Now.AddDays(4);
+            // On Stock the gear is back but not worn, and the board printed its
+            // lines for some later hang-up: only what is held speaks.
+            h.ComeBack(hp: 200, lives: 6, stock ? Geared with { EquippedItems = [], CarriedItems = ["chainmail hauberk", "3 torch", "rope"] } : Geared,
+                boardLine: stock, room: new RoomKey(1, 700));
+
+            Assert.Empty(h.Deaths);
+            Assert.Null(h.Profile.DeathHistory);
+            string notice = Assert.Single(h.Notices);
+            Assert.Contains("a life was lost", notice);
+            Assert.Contains("still held", notice);
+            Assert.Contains("No death was recorded", notice);
+        }
+    }
+
+    // A list that held nothing can't be read that way: the lives decide alone.
+    [Fact]
+    public void AListThatHeldNothing_CantSayNothingIsMissing()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, Stock = false };
+        h.PlayAndDrop(lives: 7, Snap(), hpAtDrop: -5, new RoomKey(1, 3));
+
+        h.ComeBack(hp: 200, lives: 6, Snap());
+
+        Assert.Single(h.Deaths);
+    }
+
+    // A profile loaded over another character (a copied profile, a shared
+    // account): the list is one character's and the `stat` screen names another.
+    // It answers nothing, about a death or about dropped items.
+    [Fact]
+    public void AListOfAnotherCharacter_AnswersNothing()
+    {
+        Harness h = new() { PveShare = 50, Stock = false };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
+        Assert.Equal("Ermias Asghedom", h.Profile.HeldAtDisconnect!.Character);
+
+        h.StatName = "Raijin WuzHere";
+        h.Floor.Add("3 torch");
+        h.Check.NoteFloorSurveyed();
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: new RoomKey(1, 3));
+
+        Assert.Empty(h.Deaths);
+        Assert.Empty(h.Collected);
+        Assert.Empty(h.Notices);
+        Assert.False(h.Held);
+        Assert.Contains("Ermias Asghedom's", h.Check.LastDeathCheck);
+        // The list written next is the other character's own.
+        Assert.Equal("Raijin WuzHere", h.Profile.HeldAtDisconnect!.Character);
+    }
+
+    // The same name in another case is the same character.
+    [Fact]
+    public void TheSameNameInAnotherCase_IsTheSameCharacter()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, Stock = false };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
+
+        h.StatName = "ermias asghedom";
+        h.ComeBack(hp: 200, lives: 6, Snap());
+
+        Assert.Single(h.Deaths);
+    }
+
+    // What the record claims: where this client last had the character, and that
+    // the pile is elsewhere if it was played from another client since. Nothing
+    // on the connection tells a death by this hang-up from one by a hang-up made
+    // on another client in between.
+    [Fact]
+    public void TheRecord_ClaimsOnlyWhereThisClientLastHadTheCharacter()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
+
+        h.ComeBack(hp: 200, lives: 6, Snap());
+
+        Assert.Contains("where this client last had the character", Assert.Single(h.Deaths).Message);
+        string notice = Assert.Single(h.Notices);
+        Assert.Contains("This client last had it in the game at", notice);
+        Assert.Contains("another client", notice);
     }
 }

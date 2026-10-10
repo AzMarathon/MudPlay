@@ -81,7 +81,12 @@ public sealed class HangupItemRecheck
     private const int LivesWaitTicks = 3;
 
     // The line a death record shows where a witnessed death has the game's own.
-    public const string DeathMessage = "Killed by the hang-up penalty (not seen: worked out on entering the game).";
+    // It claims no more than is known: the room and time are where this client
+    // last had the character, which is where it died unless it was played from
+    // another client in between.
+    public const string DeathMessage =
+        "Killed by the hang-up penalty (not seen: worked out on entering the game). The room and time are where this "
+        + "client last had the character in the game.";
 
     private enum Phase { Idle, AwaitingEntry, AwaitingInventory, AwaitingLives, AwaitingRoom, AwaitingFightEnd, PickingUp }
 
@@ -151,6 +156,8 @@ public sealed class HangupItemRecheck
     // nobody saw in between, and the next comparison would pin it on the wrong
     // hang-up.
     private bool _livesKnownThisLink;
+    // The character's name off a `stat` read on this connection.
+    private string? _nameReadThisLink;
     // A game prompt was read on this connection, so the HP the client holds is
     // this connection's and not the one it left the game with.
     private bool _promptThisLink;
@@ -328,6 +335,7 @@ public sealed class HangupItemRecheck
         {
             At = _now(),
             Realm = _realmKey(),
+            Character = _nameReadThisLink,
             Room = _confirmedRoom() is { } room ? new RoomRef(room.Map, room.Room) : null,
             // What an unfinished check hasn't found was dropped before this
             // connection; a drop of this one comes on top of it.
@@ -370,6 +378,7 @@ public sealed class HangupItemRecheck
         _moveSentSinceEntry = false;
         _livesReadThisLink = null;
         _livesKnownThisLink = false;
+        _nameReadThisLink = null;
         _promptThisLink = false;
         _askedLives = false;
         _deathBefore = null;
@@ -460,12 +469,14 @@ public sealed class HangupItemRecheck
         if (_linkUp) _loginLines = true;
     }
 
-    // StatParser.ScreenParsed, when that `stat` gave the lives.
-    public void NoteLivesRead(int lives)
+    // StatParser.ScreenParsed, when that `stat` gave the lives; the name is the
+    // one on the same screen.
+    public void NoteLivesRead(int lives, string? name = null)
     {
         if (!_linkUp) return;
         _livesReadThisLink = lives;
         _livesKnownThisLink = true;
+        if (!string.IsNullOrWhiteSpace(name)) _nameReadThisLink = name.Trim();
         if (_before is { } before && _phase == Phase.AwaitingLives)
             CompareAndSave(before);
         // Left open by a pass that couldn't ask for the lives itself: any `stat`
@@ -521,6 +532,7 @@ public sealed class HangupItemRecheck
         _deathBefore = null;
         _livesReadThisLink = null;
         _livesKnownThisLink = false;
+        _nameReadThisLink = null;
         _firstInventory = null;
         LastOutcome = NoneYet;
         LastMissing = [];
@@ -591,6 +603,15 @@ public sealed class HangupItemRecheck
         LastStillMissing = [];
         _log?.Debug(LogCategory, $"held before: {Names(before.Items.Select(i => (i.Name, i.Count)))}");
 
+        // A profile can be loaded over another character. Its list answers nothing
+        // about this one: not what a hang-up took, and not whether it died.
+        if (OtherCharacter(before) is { } other)
+        {
+            _deathBefore = null;
+            LastDeathCheck = $"{_now():HH:mm:ss} not asked: {other}";
+            Finish(other, quiet: true);
+            return;
+        }
         // A death seen since the list was written took what the list names into
         // its own pile, and has its own record.
         if (DeathSeenSince(before))
@@ -690,6 +711,14 @@ public sealed class HangupItemRecheck
     private bool DeathSeenSince(HeldAtDisconnect before) =>
         _profile()?.DeathHistory is { } deaths && deaths.Exists(d => d.At > before.At);
 
+    // Says so when the list names one character and the `stat` read on this
+    // connection another. Null while either name isn't known.
+    private string? OtherCharacter(HeldAtDisconnect before) =>
+        before.Character is { Length: > 0 } then && _nameReadThisLink is { Length: > 0 } now
+        && !string.Equals(then, now, StringComparison.OrdinalIgnoreCase)
+            ? $"the list is {then}'s, and the character in the game is {now}"
+            : null;
+
     private enum DeathAnswer
     {
         No,         // no death: the question is closed
@@ -710,10 +739,16 @@ public sealed class HangupItemRecheck
         // isn't recorded.
         bool? worn = stock && _firstInventory is not null ? held.EquippedItems.Count > 0 : null;
         bool? loginLines = stock ? _loginLines : null;
-        (Recovery.HangupDeathVerdict verdict, string why) = Recovery.HangupDeath.Judge(
-            before.Hp, before.MaxHp, share, _hpAtEntry, before.Lives, _livesReadThisLink, worn, loginLines);
-
+        // Both realms: a death takes all but what stays with the character, so a
+        // list that held something, all of it still held, was not ended by one.
         List<(string Name, int Count)> gone = HangupItemPlan.Missing(before.Items, held);
+        long coinsThen = before.Coins?.TotalCoinCount ?? 0;
+        bool? heldGone = _firstInventory is null || (before.Items.Count == 0 && coinsThen == 0)
+            ? null
+            : gone.Count > 0 || held.Currency.TotalCoinCount < coinsThen;
+        (Recovery.HangupDeathVerdict verdict, string why) = Recovery.HangupDeath.Judge(
+            before.Hp, before.MaxHp, share, _hpAtEntry, before.Lives, _livesReadThisLink, worn, loginLines, heldGone);
+
         RoomKey? here = _confirmedRoom();
         string evidence =
             $"left the game {before.At.ToLocalTime():yyyy-MM-dd HH:mm:ss} at {RoomText(before.Room)} with HP "
@@ -773,6 +808,13 @@ public sealed class HangupItemRecheck
     // A `stat` was read while the question stood open after its pass.
     private void AnswerOpenQuestion(HeldAtDisconnect before)
     {
+        if (OtherCharacter(before) is { } other)
+        {
+            _deathBefore = null;
+            LastDeathCheck = $"{_now():HH:mm:ss} not asked: {other}";
+            _log?.Info(LogCategory, $"The hang-up before this connection is not judged: {other}.");
+            return;
+        }
         if (DeathSeenSince(before))
         {
             _deathBefore = null;
@@ -816,9 +858,10 @@ public sealed class HangupItemRecheck
             + $"{(before.Coins is { TotalCoinCount: > 0 } coins ? $", {coins.TotalCoinCount} coin(s)" : "")}. "
             + "The item check stands down: what is missing is the pile.");
         _notice?.Invoke(
-            $"[Hang-up check: the character died to the hang-up penalty at {where}: it was {HpText(before)} when the link "
-            + $"went down ({before.At.ToLocalTime():HH:mm:ss}), and has {lives} {(lives == 1 ? "life" : "lives")} left. "
-            + $"Death{number} is recorded; Recover Now in Death Recovery goes for the pile]");
+            $"[Hang-up check: the character died to the hang-up penalty and has {lives} {(lives == 1 ? "life" : "lives")} "
+            + $"left. This client last had it in the game at {where}, {HpText(before)}, when the link went down "
+            + $"({before.At.ToLocalTime():yyyy-MM-dd HH:mm:ss}): death{number} is recorded there, and Recover Now in Death "
+            + "Recovery goes for the pile. If it was played from another client since, the pile is where it died then]");
         // What an item pass called missing was the pile.
         LastMissing = [];
         _missing = new List<(string Name, int Count)>();
