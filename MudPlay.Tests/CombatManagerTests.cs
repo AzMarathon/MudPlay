@@ -3903,6 +3903,268 @@ public sealed class CombatManagerTests
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
     }
 
+    // Report paradigm-20261009-122342, 12:23:19 to 12:23:26. The attack went out and
+    // was answered, the user typed an `eq` half a second later and the game stopped
+    // the fight for it, and the round came 0.4 s after that: inside the 1.5 s the
+    // resume guard allows a fresh swing. Every line of that round and its tick were
+    // dropped, the heal sent a moment later drew no Off (combat was already off), and
+    // nothing asked again until the next round, in which the monster died unattacked.
+    [Fact]
+    public void CombatOffAfterTheAttackWasAnswered_NextRoundLineReAttacks_AndSoDoesTheHealAfterIt()
+    {
+        using Harness h = new();
+        h.AddMonster(1250, "giant hellhound", killable: false, allowNoPrefix: true, "nasty");
+
+        h.Feed("Also here: nasty giant hellhound.");
+        Assert.Equal("a nasty giant hellhound", h.LastSent);
+        h.Feed("*Combat Engaged*");
+        Assert.Single(h.Sent);
+
+        // The typed `eq` (not the engine's, so nothing is armed for it).
+        h.Feed("*Combat Off*");
+        h.Feed("You have removed rainbow stone.");
+        h.Feed("You are now wearing phoenix feather.");
+        Assert.Single(h.Sent);
+
+        // The round, a party member's hit first. The attack is still fresh.
+        h.Feed("Forged punches nasty giant hellhound for 28 damage!");
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("a nasty giant hellhound", h.LastSent);
+        h.Feed("*Combat Engaged*");
+
+        // The round's other lines ask for nothing more.
+        h.Feed("Forged punches nasty giant hellhound for 24 damage!");
+        h.Combat.OnCombatTick();
+        Assert.Equal(2, h.Sent.Count);
+
+        // The heal on the party member, cast between rounds, stops the fight again.
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal("a nasty giant hellhound", h.LastSent);
+        Assert.Contains("re-attacking", h.Combat.LastResumeDecision);
+    }
+
+    [Fact]
+    public void CombatOffAfterTheAttackWasAnswered_RoundTickReAttacks()
+    {
+        // The same break with no combat line the client reads: the round tick is
+        // the other thing that asks.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: false);
+
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+        h.Feed("*Combat Off*");
+        Assert.Single(h.Sent);
+
+        h.Combat.OnCombatTick();
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
+    [Fact]
+    public void CombatOffBeforeTheFreshAttackIsAnswered_StillGuarded()
+    {
+        // What the guard is for: an Off the game printed before it had our fresh
+        // attack (a kill's, after the re-pick already swung at the survivor). That
+        // attack is in flight, and a resume would send it twice.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: false);
+
+        h.Feed("Also here: giant rat.");
+        Assert.Single(h.Sent);
+
+        h.Feed("*Combat Off*");
+        h.Feed("The giant rat bites you for 5 damage!");
+        h.Combat.OnCombatTick();
+
+        Assert.Single(h.Sent);
+        Assert.Contains("hasn't answered it", h.Combat.LastResumeDecision);
+    }
+
+    // The guard is 1.5 s from the attack. The stamps it reads are wall-clock
+    // (CombatManager.SetClock doesn't reach them), so the attack is aged instead.
+    [Theory]
+    [InlineData(1.4, 1)]
+    [InlineData(1.6, 2)]
+    public void UnansweredCombatOff_GuardEndsOneAndAHalfSecondsAfterTheAttack(double attackAgeSeconds, int sentAfter)
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: false);
+        h.Feed("Also here: giant rat.");
+        BackdateLastAttack(h.Combat, attackAgeSeconds);
+
+        h.Feed("*Combat Off*");
+        h.Feed("The giant rat bites you for 5 damage!");
+
+        Assert.Equal(sentAfter, h.Sent.Count);
+    }
+
+    [Fact]
+    public void AnsweredCombatOff_RightAfterAKill_StaysGuarded()
+    {
+        // The Off that ends an answered attack a moment after a kill is the kill's
+        // own. If the corpse is still on the roster, the guard keeps a swing off it.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: false);
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+        SetStamp(h.Combat, "_lastDeathAt", DateTimeOffset.Now);
+
+        h.Feed("*Combat Off*");
+        h.Feed("Forged punches giant rat for 28 damage!");
+        h.Combat.OnCombatTick();
+
+        Assert.Single(h.Sent);
+        Assert.Contains("a kill came right behind it", h.Combat.LastResumeDecision);
+    }
+
+    [Fact]
+    public void AnsweredCombatOff_AutoCombatOff_SendsNothing()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: false);
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+        h.AutoCombatEnabled = false;
+
+        h.Feed("*Combat Off*");
+        h.Feed("Forged punches giant rat for 28 damage!");
+        h.Combat.OnCombatTick();
+
+        Assert.Single(h.Sent);
+    }
+
+    [Fact]
+    public void OwnCastCombatOff_ThenTheRoundsLines_IsOneReAttack()
+    {
+        // The cast's Off queues the re-attack (a 200 ms deferral in the app); the
+        // round's lines land before it goes out and must not queue another.
+        using Harness h = new() { DeferUi = true };
+        h.AddMonster(1, "giant rat", killable: false);
+        h.Feed("Also here: giant rat.");
+        h.PumpUi();
+        h.Feed("*Combat Engaged*");
+        int before = h.Sent.Count;
+
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        h.Feed("Forged punches giant rat for 28 damage!");
+        h.Feed("The giant rat bites you for 5 damage!");
+        h.Combat.OnCombatTick();
+        h.PumpUi();
+
+        Assert.Equal(before + 1, h.Sent.Count);
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
+    // ----- typed gear commands ------------------------------------------
+
+    // Report paradigm-20261009-122342 again, with the typed `eq` recognised as it is
+    // sent (user, 2026-10-09: re-attack at once): the attack is back before the round
+    // 0.4 s later, not after it.
+    [Fact]
+    public void TypedGearCommand_CombatOff_ReAttacksAtOnce_AndOnlyOnce()
+    {
+        using Harness h = new();
+        h.AddMonster(1250, "giant hellhound", killable: false, allowNoPrefix: true, "nasty");
+
+        h.Feed("Also here: nasty giant hellhound.");
+        h.Feed("*Combat Engaged*");
+        Assert.Single(h.Sent);
+
+        h.Combat.NoteTypedGearCommand("Eq phoenix");
+        h.Feed("*Combat Off*");
+        Assert.Equal(2, h.Sent.Count);                      // before any line of the round
+        Assert.Equal("a nasty giant hellhound", h.LastSent);
+        h.Feed("You have removed rainbow stone.");
+        h.Feed("You are now wearing phoenix feather.");
+        h.Feed("*Combat Engaged*");
+
+        // The round, 0.4 s later: nothing more to send.
+        h.Feed("Forged punches nasty giant hellhound for 28 damage!");
+        h.Combat.OnCombatTick();
+        Assert.Equal(2, h.Sent.Count);
+
+        // The heal that follows stops the fight again and is answered as before.
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.Equal(3, h.Sent.Count);
+    }
+
+    [Fact]
+    public void TypedGearCommands_InARow_AreOneReAttackARound()
+    {
+        // `rem ring`, `eq ring 2`, `wear cloak` inside a second: the first stops the
+        // fight and is answered, the re-attack is stopped by the second, and that one
+        // waits for the round like any resume (a cast of ours is never paced; a user's
+        // typing is).
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: false);
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+
+        h.Combat.NoteTypedGearCommand("rem ring");
+        h.Feed("*Combat Off*");
+        Assert.Equal(2, h.Sent.Count);
+        h.Feed("*Combat Engaged*");
+
+        h.Combat.NoteTypedGearCommand("eq ring 2");
+        h.Feed("*Combat Off*");
+        Assert.Equal(2, h.Sent.Count);
+    }
+
+    [Fact]
+    public void TypedGearCommand_AutoCombatOff_ArmsNothing()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: false);
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+        h.AutoCombatEnabled = false;
+
+        h.Combat.NoteTypedGearCommand("eq sword");
+        h.Feed("*Combat Off*");
+
+        Assert.Single(h.Sent);
+    }
+
+    [Fact]
+    public void TypedGearCommand_NoCombatOffInTime_LatchLapses()
+    {
+        // The command stopped nothing (an item we don't hold). An Off that comes
+        // three seconds later is not its doing and gets no instant re-attack.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: false);
+        h.Feed("Also here: giant rat.");
+        BackdateLastAttack(h.Combat);
+
+        h.Combat.NoteTypedGearCommand("eq sword");
+        SetStamp(h.Combat, "_betweenRoundCastAt", DateTimeOffset.Now - TimeSpan.FromSeconds(3.1));
+        h.Feed("*Combat Off*");
+
+        Assert.Single(h.Sent);
+    }
+
+    [Fact]
+    public void EngineGearSwap_CombatOff_StillOneReAttack()
+    {
+        // The Equipment Manager's own swap arms the same latch at its swap-complete
+        // edge. Unchanged: one re-attack on the wear's Off, none on a second Off.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: false);
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+
+        h.Combat.NoteGearSwapInterrupt();
+        h.Feed("*Combat Off*");
+        Assert.Equal(2, h.Sent.Count);
+        h.Feed("*Combat Off*");
+        h.Feed("Forged punches giant rat for 28 damage!");
+        Assert.Equal(2, h.Sent.Count);
+    }
+
     [Fact]
     public void MatchedDeath_ThenSameKillsExpAndCombatOff_DoesNotDropTheRePickedSurvivor()
     {
@@ -4309,14 +4571,13 @@ public sealed class CombatManagerTests
     /// or between-round cast resumes. The guard only suppresses a resume that
     /// lands right on the heels of a fresh swing (see ResumeAfterAttackGuard),
     /// so time-compressed tests must age the stamp to exercise a real resume.</summary>
-    private static void BackdateLastAttack(CombatManager combat)
-    {
-        System.Reflection.FieldInfo f = typeof(CombatManager).GetField(
-            "_lastAttackSentAt",
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.NonPublic)!;
-        f.SetValue(combat, DateTimeOffset.Now - TimeSpan.FromSeconds(5));
-    }
+    private static void BackdateLastAttack(CombatManager combat, double seconds = 5) =>
+        SetStamp(combat, "_lastAttackSentAt", DateTimeOffset.Now - TimeSpan.FromSeconds(seconds));
+
+    private static void SetStamp(CombatManager combat, string field, DateTimeOffset value) =>
+        typeof(CombatManager).GetField(field,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(combat, value);
 
     [Fact]
     public void AttackUnconfirmed_AfterWindow_FiresRoomRefreshCr()

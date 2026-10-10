@@ -500,9 +500,16 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private bool _resumingAfterFlee;
 
+    // The room the loop stood in, with nothing in flight, when the recovery gate
+    // took it to find out where we are (a resume with the tracker unsure). Null
+    // otherwise, and when the tracker held no room.
+    private RoomKey? _heldRoomAskedAbout;
+
     public void ResumeAfterRecovery(RoomKey recoveredAnchor)
     {
         if (_loop is null) return;
+        RoomKey? heldRoom = _heldRoomAskedAbout;
+        _heldRoomAskedAbout = null;
 
         // Normally the gate paused us and we're Paused here. But the gate's pause
         // and the MovementCoordinator's are separate: the coordinator can clear on
@@ -524,6 +531,27 @@ public sealed class LoopRunner : IRecoverableEngine
         }
 
         if (State != LoopState.Paused) return;
+
+        // Nothing was in flight when the gate took us, and we turn out to be in the
+        // room we stood in: the tracker's doubt was unfounded and the step waiting
+        // there was never sent, so it goes out now. A reroute would spend one of
+        // the three recovery attempts on nothing and walk an out-and-back spur
+        // over again. With another gate still up, its clearing sends the step.
+        if (heldRoom is { } held && recoveredAnchor.Equals(held))
+        {
+            if (_coordinator.IsPaused)
+            {
+                _log?.Info("LoopRunner",
+                    $"ResumeAfterRecovery: still in {held} with nothing in flight, but coordinator still paused (gates={string.Join(",", _coordinator.AssertedGates)}); step {_index + 1} goes out when it clears");
+                return;
+            }
+            _log?.Info("LoopRunner",
+                $"ResumeAfterRecovery: still in {held} with nothing in flight; sending step {_index + 1}");
+            State = LoopState.Running;
+            Raise(new LoopEvent(LoopEventKind.Resumed, $"still in {held}"));
+            SendNextStep();
+            return;
+        }
 
         // Engine policy for loops: if the recovered anchor matches the
         // step's expected target, advance. Otherwise the loop is
@@ -579,6 +607,9 @@ public sealed class LoopRunner : IRecoverableEngine
         if (_resumingAfterFlee)
             _log?.Info("LoopRunner",
                 $"ResumeAfterFlee: landed at {recoveredAnchor} (step {_index + 1} was headed for {_expectedMoveTarget}); re-planning from here");
+        else if (_expectedMoveTarget is null)
+            _log?.Warn("LoopRunner",
+                $"ResumeAfterRecovery: recovered at {recoveredAnchor} with nothing in flight (stood in {heldRoom?.ToString() ?? "an unknown room"} before step {_index + 1}); rerouting from re-determined room");
         else
             _log?.Warn("LoopRunner",
                 $"ResumeAfterRecovery: desync at step {_index + 1} — recovered at {recoveredAnchor} but expected {_expectedMoveTarget}; rerouting from re-determined room");
@@ -988,6 +1019,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _awaitingCommandReplies = false;
         _expectedMoveTarget = null;
         _expectedMoveSource = null;
+        _heldRoomAskedAbout = null;
         _approachTarget = null;
         _circleStartRoom = null;
         _expandedSteps = new List<LoopStep>();
@@ -1798,8 +1830,18 @@ public sealed class LoopRunner : IRecoverableEngine
             ? $"move {direction} → {target}"
             : $"move {direction} ({note})";
         Write(bytes, reason);
+        _cardinalsSent++;
         ArmStallWatchdog($"step {_index + 1} move sent");
     }
+
+    // Counts the cardinals put on the wire, so the stall watchdog can tell whether
+    // the move it asked about is still the one in flight when the answer comes
+    // (a reroute can leave the step index where it was).
+    private int _cardinalsSent;
+
+    // The send (by _cardinalsSent) the stall watchdog has already taken its one
+    // extra wait for.
+    private int _stallRearmedForSend = -1;
 
     // Fail the active circuit with reason and reset.
     private void FailStep(string reason)
@@ -2371,11 +2413,78 @@ public sealed class LoopRunner : IRecoverableEngine
         // mismatch here parks us in tier 2 forever, because this watchdog has
         // already stopped itself and only a send or a resume re-arms it.
         if (State != LoopState.Running || !_stepInFlight) return;
-        if (_tracker.State.Confidence != RoomConfidence.Pending) return;
+        if (_tracker.State.Confidence == RoomConfidence.Pending)
+        {
+            _log?.Warn("LoopRunner",
+                $"step {_index + 1} in-flight stall: move Pending, unconfirmed for {StallWatchdogInterval.TotalSeconds:F0}s — escalating to recovery");
+            _recovery?.NoteEngineStalled(
+                $"loop step {_index + 1} in-flight stall (move interrupted, never confirmed)");
+            return;
+        }
+
+        // A move sent while the tracker was unsure of its room arms no Pending, so
+        // when the game refuses it nothing changes that anyone is listening for and
+        // the branch above never sees it (the walker's side of this is report
+        // paradigm-20261009-082958). Ask the game where we are. Asked directly, not
+        // through NoteEngineStalled: with nobody to ask that goes on to the
+        // reverse-walk, and a timer is no ground for walking a stock realm's loop
+        // backwards. With nobody to ask, everything stays as it was.
+        if (!IsPlainMoveSentWhileUnsure(out EngineRecoveryGate? gate)) return;
+        int askedForSend = _cardinalsSent;
         _log?.Warn("LoopRunner",
-            $"step {_index + 1} in-flight stall: move Pending, unconfirmed for {StallWatchdogInterval.TotalSeconds:F0}s — escalating to recovery");
-        _recovery?.NoteEngineStalled(
-            $"loop step {_index + 1} in-flight stall (move interrupted, never confirmed)");
+            $"step {_index + 1} in-flight stall: sent with the tracker {_tracker.State.Confidence}, nothing for {StallWatchdogInterval.TotalSeconds:F0}s — asking the game where we are");
+        if (gate.TryResyncOnce?.Invoke(
+                $"loop step {_index + 1} sent with the tracker {_tracker.State.Confidence} and unanswered",
+                key => OnStallLocateAnswered(askedForSend, key),
+                () => WaitOnceMoreForStalledMove(askedForSend, "the game didn't answer")) == true)
+        {
+            return;
+        }
+        WaitOnceMoreForStalledMove(askedForSend, "nobody to ask yet");
+    }
+
+    // The step in flight is a bare move (no door, hidden-exit, winch or trap task
+    // and no command block owns it), the tracker isn't sure of its room, and the
+    // recovery gate isn't already dealing with it.
+    private bool IsPlainMoveSentWhileUnsure([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out EngineRecoveryGate? gate)
+    {
+        gate = _recovery;
+        return gate is { AwaitingAuthoritativeResync: false, CurrentTier: not TierLevel.Tier3 }
+            && _tracker.State.Confidence is RoomConfidence.Suspect or RoomConfidence.Lost or RoomConfidence.Unknown
+            && _index < _expandedSteps.Count && _expandedSteps[_index] is MoveLoopStep
+            && !(_awaitingDoorOpen || _awaitingHiddenReveal || _awaitingWinch || _awaitingTrapDisarm || _awaitingCommandReplies);
+    }
+
+    // The game's answer to the stall watchdog's ask. It has already re-located the
+    // tracker, and a landing on the step's target, or a refusal that left us in the
+    // room it was sent from, has been dealt with on that transition. What is left
+    // is the move still in flight with the game naming some other room, which
+    // nothing else would act on.
+    private void OnStallLocateAnswered(int askedForSend, RoomKey key)
+    {
+        if (State != LoopState.Running || !_stepInFlight || _cardinalsSent != askedForSend) return;
+        if (_tracker.State.CurrentRoom?.Key.Equals(key) != true) return;   // a room the map doesn't have
+        if (key.Equals(_expectedMoveTarget))
+        {
+            _stepInFlight = false;
+            AdvanceStep();
+            return;
+        }
+        EnterRecovery($"step {_index + 1} unanswered; the game has us in {key}");
+    }
+
+    // One more wait for the same move when the ask didn't come off: the resolver's
+    // throttle, or a confusion fumble eating the `rm`, may be all that was in the way.
+    private void WaitOnceMoreForStalledMove(int askedForSend, string why)
+    {
+        if (State != LoopState.Running || !_stepInFlight || _cardinalsSent != askedForSend) return;
+        if (_stallRearmedForSend == askedForSend)
+        {
+            _log?.Info("LoopRunner", $"step {_index + 1}: {why}, again; leaving the step in flight");
+            return;
+        }
+        _stallRearmedForSend = askedForSend;
+        ArmStallWatchdog($"step {_index + 1}: {why}, one more wait");
     }
 
     // Test seam — pretend the in-flight stall watchdog just elapsed.
@@ -2734,6 +2843,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _awaitingCommandReplies = false;
         _expectedMoveTarget = null;
         _expectedMoveSource = null;
+        _heldRoomAskedAbout = null;
         _approachTarget = null;
         _fleeReturnTarget = null;
         State = LoopState.Recovering;
@@ -3081,6 +3191,50 @@ public sealed class LoopRunner : IRecoverableEngine
                     $"tracker {_tracker.State.Confidence} on resume at step {_index + 1}");
                 return;
             }
+            // The same loss of place with nothing in flight (the pause landed
+            // between steps): the send at the bottom would go out from a room we
+            // may not be standing in, to the same silently dropped refusal (the
+            // walker's side of this is report paradigm-20261009-082958). Tell the
+            // gate here too. Where the game can be asked (rm, sys st) the gate
+            // pauses us for the answer. The last step's target is dropped first,
+            // because an answer naming it would otherwise count as a landing and
+            // skip the step that was never sent; the room we stand in is kept
+            // instead, so that an answer naming it sends that step
+            // (ResumeAfterRecovery). Where the game can't be asked, the gate starts
+            // watching and the send goes ahead as before, unless 15 or more steps
+            // have gone by since its last sure room: then it takes the loop over
+            // for its reverse-walk at once, as it does for a step in flight.
+            if (_tracker.State.Confidence is RoomConfidence.Suspect or RoomConfidence.Lost or RoomConfidence.Unknown)
+            {
+                RoomKey? held = _tracker.State.CurrentRoom?.Key;
+                // Another gate came and went while the recovery gate still had us
+                // (the game's answer not yet in, or its reverse-walk under way).
+                // Telling it again would leave us Running, and its result would
+                // then re-drive the step from whichever room it found, with no
+                // reroute. Wait for it paused.
+                if (_recovery is { AwaitingAuthoritativeResync: true } or { CurrentTier: TierLevel.Tier3 })
+                {
+                    _expectedMoveTarget = null;
+                    _expectedMoveSource = null;
+                    _heldRoomAskedAbout = held;
+                    PauseForRecovery("the recovery gate is still finding where we are");
+                    return;
+                }
+                // Not when recovery would drop a reroute as an echo of its last
+                // attempt: nothing would be left to wake the loop.
+                if (!RecoveryWouldDeclineAsEcho())
+                {
+                    _log?.Warn("LoopRunner",
+                        $"resume: tracker confidence={_tracker.State.Confidence} after pause with nothing in flight; forwarding to recovery gate before step {_index + 1}");
+                    _expectedMoveTarget = null;
+                    _expectedMoveSource = null;
+                    _heldRoomAskedAbout = held;
+                    _recovery?.NoteSuspectedMismatch(
+                        $"tracker {_tracker.State.Confidence} on resume before step {_index + 1}");
+                    if (State != LoopState.Running) return;
+                    _heldRoomAskedAbout = null;
+                }
+            }
             // A move was already on the wire when the pause hit and its
             // confirmation hasn't landed yet (the overshoot guard above didn't
             // fire, so the tracker is still Pending on it). Re-sending it here
@@ -3176,6 +3330,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _awaitingCommandReplies = false;
         _expectedMoveTarget = null;
         _expectedMoveSource = null;
+        _heldRoomAskedAbout = null;
         _approachTarget = null;
         _fleeReturnTarget = null;
         _circleStartRoom = null;
