@@ -1,5 +1,4 @@
 using MudPlay.Game.Inventory;
-using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 
 namespace MudPlay.Game.Recovery;
@@ -12,19 +11,22 @@ namespace MudPlay.Game.Recovery;
 // death line is ever seen, and the next entry finds the character standing in the
 // temple at full HP with a life less and nothing on it.
 //
-// What a death leaves that the client can read on the way back in:
-//   - HP higher than it was, and above 0. A death sets it to the maximum; nothing
-//     else raises it while the character is out of the game, and a penalty that
-//     didn't kill only lowered it.
-//   - one life fewer. Lives go down by nothing else.
-//   - another room, with something the character held gone. Weaker: the map can
-//     be wrong about either room, a board can move a character that hangs up for
-//     reasons of its own, a penalty that drops items takes some without a death,
-//     and the list of what was held is as old as the last profile save if the
-//     client itself went down.
-// A death record sends Death Recovery walking for a pile, so a wrong one costs
-// more than a missing one. Hence: HP risen always, and then the lives when both
-// counts are known; only when one of them isn't do the room and the pack stand in.
+// A death record sends Death Recovery walking for a pile, stops the engines and
+// clears the buff timers, so a wrong one costs far more than a missing one. Only
+// one thing says "died": exactly one life fewer than the character left the game
+// with, both counts read from the game. Lives go down by nothing but a death.
+// HP, the room and the pack never say it: all three change by playing on, and
+// the list they are compared with can be older than the hang-up.
+//
+// What else is seen can only take a death away again. A life can be lost on
+// another client between two sessions of this one, and that death is not this
+// hang-up's. A death by this hang-up leaves marks the entry shows:
+//   - HP at the first prompt is above 0 and not under what the character left
+//     with: a death sets it to the maximum.
+//   - nothing is worn (Stock): a death takes every piece off the body.
+//   - the board's two login lines were printed (Stock): they follow the first
+//     entry after a hang-up it didn't let go free, and no other.
+// A life lost with one of those missing is not recorded, and is told.
 public static class HangupDeath
 {
     // Whether that hang-up can have killed: the realm's settings penalise it, and
@@ -40,14 +42,18 @@ public static class HangupDeath
     }
 
     //   hpAtDrop / maxHpAtDrop — as the statline last gave them in the game; null if not known.
-    //   hpNow          — HP on the way back in; null until a statline has given it.
-    //   livesBefore / livesNow — null when not known; livesNow only from a `stat`
-    //                    read on this connection.
-    //   roomBefore / roomNow — the room the map was sure of then, and is sure of now.
-    //   heldGone       — an item or the coins held then are not held now.
+    //   hpAtEntry      — HP at the first prompt of this connection; null if none was read.
+    //   livesBefore    — the count the character left the game with, read on that
+    //                    connection; null when it wasn't.
+    //   livesNow       — from a `stat` read on this connection; null until one is.
+    //   worn           — something was worn at the first inventory read of this
+    //                    connection; null where a death isn't known to unequip
+    //                    (not Stock) or no inventory has been read.
+    //   loginLines     — the board's hang-up lines were printed on this connection;
+    //                    null where it isn't known to print them (not Stock).
     public static (HangupDeathVerdict Verdict, string Why) Judge(
-        int? hpAtDrop, int? maxHpAtDrop, int? hpShareTop, int? hpNow,
-        int? livesBefore, int? livesNow, RoomRef? roomBefore, RoomKey? roomNow, bool heldGone)
+        int? hpAtDrop, int? maxHpAtDrop, int? hpShareTop, int? hpAtEntry,
+        int? livesBefore, int? livesNow, bool? worn, bool? loginLines)
     {
         if (hpAtDrop is not { } dropHp)
             return (HangupDeathVerdict.NotSuspected, "HP wasn't known when the character left the game");
@@ -57,53 +63,55 @@ public static class HangupDeath
             return (HangupDeathVerdict.NotSuspected,
                 $"HP was {dropHp}, more than the {hpShareTop}% of max HP the realm's settings say the penalty takes at most");
 
-        if (hpNow is not { } hp)
-            return (HangupDeathVerdict.Unsure, "HP isn't known yet");
-        if (hp <= 0 || hp <= dropHp)
-            return (HangupDeathVerdict.Alive,
-                $"HP is {hp} where it was {dropHp}: a death would have set it to its maximum");
-
-        if (livesBefore is { } before && livesNow is { } now)
+        // A death sets HP to its maximum, so one that came back dropped, or under
+        // what it left with, wasn't killed by this hang-up.
+        string? hpSaysNo = hpAtEntry switch
         {
-            if (now == before - 1)
-                return (HangupDeathVerdict.Died, $"HP is {hp} where it was {dropHp}, and lives went from {before} to {now}");
-            // More than one life down is more than this hang-up can have cost.
-            return now < before
-                ? (HangupDeathVerdict.Unsure,
-                    $"lives went from {before} to {now}, more than the one a hang-up costs; HP is {hp} where it was {dropHp}")
-                : (HangupDeathVerdict.Alive,
-                    $"lives read {before} before and {now} now, so no life was lost; HP is {hp} where it was {dropHp}");
-        }
+            { } hp when hp <= 0 => $"it came back dropped (HP {hp}), where a death sets HP to its maximum",
+            { } hp when hp < dropHp => $"it came back at {hp} HP, under the {dropHp} it left with, where a death sets HP to its maximum",
+            _ => null,
+        };
 
-        string lives = livesBefore is null ? "lives weren't known before" : "no `stat` has given the lives since";
-        if (roomBefore is not { } left || roomNow is not { } here)
+        if (livesBefore is not { } before)
+            return hpSaysNo is not null
+                ? (HangupDeathVerdict.Alive, hpSaysNo)
+                : (HangupDeathVerdict.Unsure,
+                    "its lives weren't read on the connection it left the game on, and only a life lost tells a death");
+        if (livesNow is not { } now)
+            return hpSaysNo is not null
+                ? (HangupDeathVerdict.Alive, hpSaysNo)
+                : (HangupDeathVerdict.NeedsLives, "no `stat` has given the lives on this connection");
+
+        if (now >= before)
+            return (HangupDeathVerdict.Alive, $"lives read {before} before and {now} now, so no life was lost");
+        if (now < before - 1)
             return (HangupDeathVerdict.Unsure,
-                $"HP is {hp} where it was {dropHp}, but {lives} and the map isn't sure of both rooms");
-        if (here.Map == left.Map && here.Room == left.Room)
+                $"lives went from {before} to {now}, more than the one a hang-up costs");
+
+        // One life fewer. What the entry showed can still say it wasn't lost here.
+        string lost = $"a life was lost (lives {before} to {now})";
+        if (hpSaysNo is not null)
+            return (HangupDeathVerdict.Unsure, $"{lost}, but {hpSaysNo}");
+        if (worn == true)
             return (HangupDeathVerdict.Unsure,
-                $"HP is {hp} where it was {dropHp}, but the character is in the room it left the game in and {lives}");
-        return heldGone
-            ? (HangupDeathVerdict.Died,
-                $"HP is {hp} where it was {dropHp}, the character is at {here}, not at {left.Map}/{left.Room} where it "
-                + $"left the game, and what it held is gone ({lives})")
-            : (HangupDeathVerdict.Unsure,
-                $"HP is {hp} where it was {dropHp} and the character is at {here}, not at {left.Map}/{left.Room}, but "
-                + $"nothing it held is gone and {lives}");
+                $"{lost}, but something was still worn on entering the game, where a death takes everything off");
+        if (loginLines == false)
+            return (HangupDeathVerdict.Unsure,
+                $"{lost}, but the board didn't print its hang-up lines at this entry, so the character has been in the "
+                + "game since (on another client?) and the life wasn't lost to this hang-up");
+        return (HangupDeathVerdict.Died, $"lives went from {before} to {now}");
     }
 
-    // The pile for the record: what was held when the character left the game and
-    // isn't now, the worn pieces with their slots and the rest by name (a stack as
-    // the inventory list words it, "3 torch"). What stayed with the character
-    // (loyal and cursed items) is still held, so it isn't on it.
+    // The pile for the record, as a death line's record has it: the worn pieces
+    // with their slots and the carried items as the inventory list words them (a
+    // stack as "3 torch"), less whatever is still held. What stayed with the
+    // character (loyal and cursed items) is still held, so it isn't on it; keys
+    // and the lit light aren't on a witnessed pile either.
     public static (List<DeathItem> Equipped, List<DeathItem> Lost) Pile(HeldAtDisconnect before, InventorySnapshot now)
     {
         Dictionary<string, int> missing = new(StringComparer.OrdinalIgnoreCase);
-        List<string> order = new();
         foreach ((string name, int count) in HangupItemPlan.Missing(before.Items, now))
-        {
             missing[name] = count;
-            order.Add(name);
-        }
 
         List<DeathItem> equipped = new();
         foreach (DeathItem worn in before.Worn ?? new List<DeathItem>())
@@ -114,9 +122,14 @@ public static class HangupDeath
         }
 
         List<DeathItem> lost = new();
-        foreach (string name in order)
-            if (missing[name] is > 0 and int left)
-                lost.Add(new DeathItem(left > 1 ? $"{left} {name}" : name));
+        foreach (DeathItem carried in before.Carried ?? new List<DeathItem>())
+        {
+            (int count, string name) = CountedCommand.SplitLeadingCount(carried.Name.Trim());
+            int gone = Math.Min(Math.Max(1, count), missing.GetValueOrDefault(name));
+            if (gone <= 0) continue;
+            missing[name] -= gone;
+            lost.Add(new DeathItem(gone > 1 ? $"{gone} {name}" : name));
+        }
         return (equipped, lost);
     }
 }

@@ -19,7 +19,6 @@ public sealed class HangupDeathTests
 {
     private static readonly RoomRef Left = new(1, 3);
     private static readonly RoomKey Temple = new(1, 1);
-    private static readonly RoomKey SameRoom = new(1, 3);
 
     // ----- The realm's settings ----------------------------------------
 
@@ -67,21 +66,33 @@ public sealed class HangupDeathTests
 
     // ----- The verdict ---------------------------------------------------
 
+    // Left dropped at -5 of 200 with 7 lives on a realm taking up to 50%; back at
+    // full HP with 6, nothing worn, the board's hang-up lines printed.
     private static HangupDeathVerdict Verdict(
-        int? hpAtDrop = -5, int? share = 50, int? hpNow = 200, int? livesBefore = 7, int? livesNow = 6,
-        RoomRef? roomBefore = null, RoomKey? roomNow = null, bool heldGone = true, bool roomsKnown = true) =>
-        HangupDeath.Judge(hpAtDrop, 200, share, hpNow, livesBefore, livesNow,
-            roomsKnown ? roomBefore ?? Left : null, roomsKnown ? roomNow ?? Temple : null, heldGone).Verdict;
+        int? hpAtDrop = -5, int? share = 50, int? hpAtEntry = 200, int? livesBefore = 7, int? livesNow = 6,
+        bool? worn = false, bool? loginLines = true) =>
+        HangupDeath.Judge(hpAtDrop, 200, share, hpAtEntry, livesBefore, livesNow, worn, loginLines).Verdict;
 
+    // Only a life lost says "died": exactly one, both counts read from the game.
     [Fact]
-    public void HpRisen_AndOneLifeFewer_IsADeath_WhateverTheRoomAndThePack()
+    public void ExactlyOneLifeFewer_IsADeath()
     {
         Assert.Equal(HangupDeathVerdict.Died, Verdict());
-        Assert.Equal(HangupDeathVerdict.Died, Verdict(roomNow: SameRoom, heldGone: false));
-        Assert.Equal(HangupDeathVerdict.Died, Verdict(roomsKnown: false, heldGone: false));
         // A standing character the share finished.
         Assert.Equal(HangupDeathVerdict.Died, Verdict(hpAtDrop: 40));
+        // HP not read at the first prompt: the lives still say it.
+        Assert.Equal(HangupDeathVerdict.Died, Verdict(hpAtEntry: null));
+        // Where a death isn't known to unequip, or the board to print its lines
+        // (not Stock), neither is asked for.
+        Assert.Equal(HangupDeathVerdict.Died, Verdict(worn: null, loginLines: null));
     }
+
+    // Left at the top of its HP on a realm whose share goes to 100%: a death sets
+    // HP to the maximum, which is where it already was.
+    [Fact]
+    public void ADeathFromFullHp_ShowsNoRiseInHp_AndIsStillADeath() =>
+        Assert.Equal(HangupDeathVerdict.Died,
+            HangupDeath.Judge(200, 200, 100, 200, 7, 6, worn: false, loginLines: true).Verdict);
 
     [Fact]
     public void NotLookedAt_WhenNotPenalised_NotLowEnough_OrHpWasNotKnown()
@@ -91,18 +102,8 @@ public sealed class HangupDeathTests
         Assert.Equal(HangupDeathVerdict.NotSuspected, Verdict(hpAtDrop: null));
     }
 
-    // A death sets HP to its maximum; a penalty that didn't kill only lowered it.
-    [Theory]
-    [InlineData(-5, -5)]     // a free room: still dropped
-    [InlineData(-5, 0)]
-    [InlineData(40, -20)]    // the share dropped it, short of the threshold
-    [InlineData(40, 40)]     // nothing was taken
-    [InlineData(40, 12)]
-    public void HpNotRisen_IsNoDeath_EvenWithALifeFewer(int hpAtDrop, int hpNow) =>
-        Assert.Equal(HangupDeathVerdict.Alive, Verdict(hpAtDrop: hpAtDrop, hpNow: hpNow));
-
     [Fact]
-    public void LivesKnownOnBothSides_Decide()
+    public void NoLifeLost_IsNoDeath_WhateverElseIsSeen()
     {
         Assert.Equal(HangupDeathVerdict.Alive, Verdict(livesNow: 7));
         // Trained since, with no `stat` read after it: no life was lost.
@@ -111,22 +112,62 @@ public sealed class HangupDeathTests
         Assert.Equal(HangupDeathVerdict.Unsure, Verdict(livesNow: 5));
     }
 
-    // Without the lives on one side, the room and the pack must both say so.
-    [Theory]
-    [InlineData(null, 6)]
-    [InlineData(7, null)]
-    [InlineData(null, null)]
-    public void LivesUnknownOnASide_NeedsAnotherRoomAndSomethingGone(int? before, int? now)
+    // HP, the room and the pack never say "died". Without the lives now, a `stat`
+    // is what is needed; without the lives from before, nothing will tell.
+    [Fact]
+    public void WithoutBothCounts_NothingSaysDied()
     {
-        Assert.Equal(HangupDeathVerdict.Died, Verdict(livesBefore: before, livesNow: now));
-        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(livesBefore: before, livesNow: now, heldGone: false));
-        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(livesBefore: before, livesNow: now, roomNow: SameRoom));
-        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(livesBefore: before, livesNow: now, roomsKnown: false));
+        Assert.Equal(HangupDeathVerdict.NeedsLives, Verdict(livesNow: null));
+        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(livesBefore: null));
+        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(livesBefore: null, livesNow: null));
     }
 
+    // A death sets HP to its maximum. Back dropped, or under what it left with,
+    // it wasn't killed: no `stat` is needed to say so.
+    [Theory]
+    [InlineData(-5, -5)]     // a free room: still dropped
+    [InlineData(-5, 0)]
+    [InlineData(40, -20)]    // the share dropped it, short of the threshold
+    [InlineData(40, 12)]     // the share was taken, and it stands
+    public void HpAtEntryOfACharacterNotKilled_ClosesTheQuestion_WhileNoLifeIsKnownLost(int hpAtDrop, int hpAtEntry)
+    {
+        Assert.Equal(HangupDeathVerdict.Alive, Verdict(hpAtDrop: hpAtDrop, hpAtEntry: hpAtEntry, livesNow: null));
+        Assert.Equal(HangupDeathVerdict.Alive, Verdict(hpAtDrop: hpAtDrop, hpAtEntry: hpAtEntry, livesBefore: null));
+        Assert.Equal(HangupDeathVerdict.Alive, Verdict(hpAtDrop: hpAtDrop, hpAtEntry: hpAtEntry, livesNow: 7));
+    }
+
+    // A life can be lost on another client between two sessions of this one. What
+    // the entry showed then takes the death away again: it is told, not recorded.
     [Fact]
-    public void HpNotKnownYet_CantTell() =>
-        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(hpNow: null));
+    public void ALifeLost_ButNotToThisHangUp_IsNotADeathHere()
+    {
+        // Something is still worn: a death takes everything off.
+        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(worn: true));
+        // The board didn't print its hang-up lines: another session came in between.
+        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(loginLines: false));
+        // It came back dropped, or under the HP it left with.
+        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(hpAtEntry: -3));
+        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(hpAtDrop: 40, hpAtEntry: 12));
+    }
+
+    // Stock's word on the way in that the last exit was a hang-up it didn't let go
+    // free, as the engine prints it.
+    [Theory]
+    [InlineData("Last time you were on, you disconnected while playing.", true)]
+    [InlineData("The gods have punished you appropriately.", false)]
+    [InlineData("Borric gossips: Last time you were on, you disconnected while playing.", false)]
+    public void TheBoardsHangUpLine_IsRecognised(string line, bool recognised)
+    {
+        MessageRouter router = new();
+        MudPlay.Services.Patterns.DefaultPatterns.Seed(router);
+        int seen = 0;
+        using IDisposable sub = router.Subscribe(MudPlay.Services.Patterns.KnownPatterns.HangupLoginNotice, _ => seen++);
+
+        router.Dispatch(new MudPlay.Terminal.LineExtractor.EmittedLine(
+            line, Array.Empty<MudPlay.Terminal.CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+
+        Assert.Equal(recognised ? 1 : 0, seen);
+    }
 
     // ----- The pile ------------------------------------------------------
 
@@ -135,13 +176,18 @@ public sealed class HangupDeathTests
             (worn ?? []).Select(w => new EquippedItem(w.Name, w.Slot)).ToList(),
             carried, DateTimeOffset.Now, null, null);
 
-    private static HeldAtDisconnect ListOf(InventorySnapshot held) => new()
+    private static HeldAtDisconnect ListOf(InventorySnapshot held)
     {
-        At = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero),
-        Room = Left,
-        Items = HangupItemPlan.Held(held),
-        Worn = DeathLootCapture.FromSnapshot(held).Equipped,
-    };
+        (List<DeathItem> worn, List<DeathItem> carried) = DeathLootCapture.FromSnapshot(held);
+        return new HeldAtDisconnect
+        {
+            At = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero),
+            Room = Left,
+            Items = HangupItemPlan.Held(held),
+            Worn = worn,
+            Carried = carried,
+        };
+    }
 
     [Fact]
     public void Pile_IsWhatWasHeldAndIsNotNow_WornPiecesWithTheirSlots()
@@ -162,16 +208,24 @@ public sealed class HangupDeathTests
         Assert.All(lost, i => Assert.Null(i.Slot));
     }
 
+    // A death line's record lists what was worn and what was carried, and neither
+    // the key ring nor the lit light. This one is built the same way, though the
+    // item list it starts from counts both (a hang-up's item penalty takes keys).
     [Fact]
-    public void Pile_FromAListWithoutWornSlots_IsAllCarried()
+    public void Pile_LeavesOutTheKeyRingAndTheLitLight_AsAWitnessedPileDoes()
     {
-        HeldAtDisconnect before = ListOf(Snap(worn: [("chainmail hauberk", "Torso")], "rope"));
-        before.Worn = null;
+        InventorySnapshot held = new(CurrencyHoldings.Empty, EncumbranceReading.Empty,
+            [new EquippedItem("chainmail hauberk", "Torso")], ["2 torch", "rope"], DateTimeOffset.Now,
+            new ReadiedLight("torch", 40), ["2 black star key"]);
+        HeldAtDisconnect before = ListOf(held);
+        Assert.Contains(before.Items, i => i.Name == "black star key");
 
         (List<DeathItem> equipped, List<DeathItem> lost) = HangupDeath.Pile(before, Snap());
+        (List<DeathItem> seenWorn, List<DeathItem> seenLost) = DeathLootCapture.FromSnapshot(held);
 
-        Assert.Empty(equipped);
-        Assert.Equal(new[] { "chainmail hauberk", "rope" }, lost.Select(i => i.Name).ToArray());
+        Assert.Equal(seenWorn.Select(i => i.Name), equipped.Select(i => i.Name));
+        Assert.Equal(seenLost.Select(i => i.Name), lost.Select(i => i.Name));
+        Assert.Equal(new[] { "2 torch", "rope" }, lost.Select(i => i.Name).ToArray());
     }
 
     // ----- The record ----------------------------------------------------

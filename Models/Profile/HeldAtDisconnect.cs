@@ -44,7 +44,9 @@ public sealed class HeldAtDisconnect
     public int? Hp { get; set; }
     public int? MaxHp { get; set; }
 
-    // Lives as the client last knew them, or null.
+    // Lives as the game gave them on that connection (a `stat`, or the readout of
+    // a death that was seen), or null when it gave none: a count carried over from
+    // an earlier session can be a death behind.
     public int? Lives { get; set; }
 
     // A fight with a player was under way, or a player had just attacked.
@@ -57,6 +59,11 @@ public sealed class HeldAtDisconnect
     // this list can put them back on after the pile is recovered. null on a list
     // written before this was kept.
     public List<DeathItem>? Worn { get; set; }
+
+    // The carried entries among Items as the inventory list words them ("3 torch"),
+    // without the keys and the lit light, which a death record's pile doesn't
+    // carry either. null on a list written before this was kept.
+    public List<DeathItem>? Carried { get; set; }
 
     // The coins on hand: a death takes them too.
     public Game.Inventory.CurrencyHoldings? Coins { get; set; }

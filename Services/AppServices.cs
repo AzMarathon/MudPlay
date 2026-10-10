@@ -9246,6 +9246,7 @@ public sealed class AppServices
                 || PvpAttacks.Recent.Any(a => DateTimeOffset.Now - a.At < HangupPvpAttackWindow),
             monsterFight: () => PlayerState.InCombat || CombatTracker.HasHostileMonster,
             hpShareTop: pvp => Game.Health.HangupPenaltyNotice.HpShareTop(ResolveActiveRealm()?.Realm, pvp),
+            stockRealm: () => GameData.ActiveRealm == Game.RealmType.Stock,
             recordDeath: RoomTracker.NoteUnwitnessedDeath);
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
@@ -9255,12 +9256,21 @@ public sealed class AppServices
         {
             if (Stats.LastCaptureReadLives) HangupItems.NoteLivesRead(screen.Lives);
         };
+        // Stock's word, on the way in, that the last exit was a hang-up it didn't
+        // let go free. Without it a life lost isn't taken as lost to that hang-up.
+        Router.Subscribe(Services.Patterns.KnownPatterns.HangupLoginNotice, _ => HangupItems.NoteHangupLoginLine());
         // A death the check works out after the fact (RoomTracker.NoteUnwitnessedDeath)
         // reaches only the handlers that still make sense minutes later, in the room
         // the character woke in: the engine stop (PlayerDeathMovementHalt), Death
-        // Recovery's grid, and these two. The life is as spent as in a death that
-        // was seen, and the buff timers were only frozen when the link dropped.
-        RoomTracker.PlayerDeathInferred += SysopGodLife.OnDeath;
+        // Recovery's grid, the default task (DefaultTaskRunner) and these two. The
+        // life is as spent as in a death that was seen, and the buff timers were
+        // only frozen when the link dropped. The life is asked for under the master
+        // switch like everything else this check sends: a `stat` the user types can
+        // bring the verdict, and with the switch off nothing automatic goes out.
+        RoomTracker.PlayerDeathInferred += () =>
+        {
+            if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath();
+        };
         RoomTracker.PlayerDeathInferred += () => CastDirector.ClearSelfBuffTracking();
         // The event the other engines take a death of our own from (both wordings).
         RoomTracker.PlayerDeathObserved += HangupItems.OnPlayerDied;

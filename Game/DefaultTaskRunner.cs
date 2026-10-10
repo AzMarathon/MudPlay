@@ -105,6 +105,7 @@ public sealed class DefaultTaskRunner : IDisposable
 
         _prompt.PromptObserved += OnPromptObserved;
         _tracker.StateChanged += OnRoomStateChanged;
+        _tracker.PlayerDeathInferred += OnDeathInferred;
         _partyState.PropertyChanged += OnPartyStateChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
         _profile.ProfileClosed += OnProfileClosed;
@@ -117,6 +118,7 @@ public sealed class DefaultTaskRunner : IDisposable
 
         _prompt.PromptObserved -= OnPromptObserved;
         _tracker.StateChanged -= OnRoomStateChanged;
+        _tracker.PlayerDeathInferred -= OnDeathInferred;
         _partyState.PropertyChanged -= OnPartyStateChanged;
         _profile.ProfileLoaded -= OnProfileLoaded;
         _profile.ProfileClosed -= OnProfileClosed;
@@ -133,6 +135,10 @@ public sealed class DefaultTaskRunner : IDisposable
     // bug report so a "task didn't start on time" capture explains the delay.
     public bool PendingPartyRebuildHold => _hadInSessionDisconnect && _wasInPartyBeforeDrop;
 
+    // True when the task was called off for this connection because the character
+    // turned out to have died while the link was down.
+    public bool StoodDownForDeath { get; private set; }
+
     // ----- telnet-driven notifications -------------------------------
 
     // MainWindowVM calls this right after its TelnetClient.Connected handler runs.
@@ -142,6 +148,7 @@ public sealed class DefaultTaskRunner : IDisposable
         _inGameConfirmed = false;
         _taskFired = false;
         _sawPartyThisConnection = false;
+        StoodDownForDeath = false;
         CancelHold();
     }
 
@@ -171,6 +178,22 @@ public sealed class DefaultTaskRunner : IDisposable
     }
 
     private void OnRoomStateChanged(RoomTransition _) => MaybeFire();
+
+    // RoomTracker.PlayerDeathInferred: the character died while the link was down
+    // and stands stripped in the temple. The death stops the engines that are
+    // running; a task still waiting out the party-rebuild window, or for the room
+    // to be known, would start after that stop and walk it out. Not on this
+    // connection any more.
+    private void OnDeathInferred()
+    {
+        if (!_isConnected) return;
+        bool waiting = _holdTimer is not null || !_taskFired;
+        CancelHold();
+        _taskFired = true;
+        StoodDownForDeath = true;
+        if (waiting)
+            _log?.Info("DefaultTask", "the character died while the link was down — the default task is not started on this connection.");
+    }
 
     // Fire once when connected, the first prompt has landed, and the current
     // room is known — whichever of prompt / room arrives second triggers it.

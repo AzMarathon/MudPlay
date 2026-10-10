@@ -3357,7 +3357,18 @@ public partial class MainWindowViewModel : ObservableObject
                 // Ahead of everything below that tears the fight down (the PvP
                 // fight, combat, the room's occupants): the list of what was held
                 // also says what fight the character left the game in.
-                if (wasConnected) AppServices.Current.HangupItems.NoteLinkDropping();
+                // Guarded: ending a check clears a movement gate, whose subscribers run
+                // here and now, and a throw this early would skip the whole handler,
+                // the reconnect scheduling included.
+                if (wasConnected)
+                {
+                    try { AppServices.Current.HangupItems.NoteLinkDropping(); }
+                    catch (Exception ex)
+                    {
+                        AppServices.Current.Log.Warn(Game.Inventory.HangupItemRecheck.LogCategory,
+                            $"Couldn't note the link dropping ({ex.GetType().Name}: {ex.Message}).");
+                    }
+                }
                 // Snapshot the followers we were leading while PartyState is still
                 // intact — par reconciliation after the reconnect wipes the roster,
                 // so the leader-side reform must capture them now. Only on a real

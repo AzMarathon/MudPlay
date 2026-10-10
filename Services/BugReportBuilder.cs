@@ -1644,6 +1644,7 @@ public static class BugReportBuilder
         // behind the party-reform hold and whether that hold is still counting.
         Kv(sb, "Default task party-hold armed", svc.DefaultTaskRunner.PendingPartyRebuildHold.ToString());
         Kv(sb, "Default task holding now", svc.DefaultTaskRunner.IsHoldingForParty.ToString());
+        Kv(sb, "Default task stood down for a hang-up death", svc.DefaultTaskRunner.StoodDownForDeath.ToString());
 
         // Recovery gate + Paradigm rm re-sync — a "walker got lost / stuck
         // mid-walk" report needs the tier the gate climbed to, the anchor it
