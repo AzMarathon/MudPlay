@@ -164,7 +164,7 @@
                                             IsVisible="{Binding Warning.HasSpell}"
                                             VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding Warning.Label}"
-                                               IsVisible="{Binding Warning.HasItems}"
+                                               IsVisible="{Binding Warning.HasLabel}"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                FontSize="10"
                                                VerticalAlignment="Center"

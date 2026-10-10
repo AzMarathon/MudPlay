@@ -106,10 +106,11 @@ public sealed class PathItemGiveSources
     // acquirable gates are suspended, but for the ones the card's route goes round:
     // the walk is priced with the fetched item in hand, and the destination of a
     // walk that needs a key is behind the door the key opens. On the live filter
-    // that leg has no length and every source is turned down.
+    // that leg has no length and every source is turned down. The rooms no item
+    // makes safe (the lake's sea rooms) stay closed: no walk to a giver goes through them.
     public int? DetourDistance(RoomKey a, RoomKey b, IReadOnlyCollection<int>? closedGates = null)
     {
-        using (_filter.SuspendAcquirableGatesExcept(closedGates ?? Array.Empty<int>()))
+        using (_filter.SuspendAcquirableGatesExceptUnprotectable(closedGates ?? Array.Empty<int>()))
             return _bfs.DistanceBetween(a, b, _filter);
     }
 

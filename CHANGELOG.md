@@ -1,5 +1,20 @@
 # Version history
 
+## 3.162.3
+
+- Routes never enter Crystal Lake's teleport rooms, boat or not
+- No raft or skiff offered, fetched or bought for the lake
+- A walk the lake blocks says why in one line
+- Stock: White Forest reached along the coast at level 50+ with a boat
+- Paradigm: one card to cross to the Bloodwood Weald room
+- Lake crossings are named on the card and logged once
+- Isle of Bones never reached across the lake
+- The lake's spell-free rooms stay ordinary ground
+- Standing in a teleport room, you are planned out
+- A loop waypoint in a teleport room is refused at start
+- A key-only route goes round the lake and asks for the key alone
+- bug reports addressed: paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314
+
 ## 3.162.0
 
 - A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded

@@ -1478,9 +1478,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 // finds nothing is the target walled by a non-acquirable gate —
                 // fall back to the all-gates-ignored probe to name the level /
                 // toll / class reason (or "no path" when truly disconnected).
+                // The rooms closed to routes stay closed for that probe: acquiring
+                // nothing opens them, and with them open the shortest way cut
+                // across the lake and the lake was named for a walk whose real
+                // want was a door key. They are opened only when nothing else
+                // gets there, so that the lake is named when it is the reason.
                 IReadOnlyList<Direction>? describePath;
-                using (Filter?.SuspendAcquirableGates())
+                using (Filter?.SuspendAcquirableGatesButUnprotectableHazards())
                     describePath = _bfs.FindPath(source.Key, destination, Filter);
+                if (describePath is null || describePath.Count == 0)
+                    using (Filter?.SuspendAcquirableGates())
+                        describePath = _bfs.FindPath(source.Key, destination, Filter);
                 if (describePath is null || describePath.Count == 0)
                     describePath =
                         _bfs.FindPath(source.Key, destination, Filter, ignoreExitGates: true);
@@ -1571,6 +1579,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
             : $"{moveCount} step(s)";
         Raise(new WalkEvent(WalkEventKind.Started, detail, destination));
         NoteDoorsWalkedRound(source.Key, boatPlan is null && sysGotoPlan is null ? path : null);
+        if (boatPlan is null && sysGotoPlan is null && !_replanningInPlace && path is not null)
+            NoteLakeCrossing(source.Key, destination, path);
 
         // Announce the items this route demands so the demand-driven
         // auto-search can arm for anything we're not carrying, and the rooms it
@@ -1696,6 +1706,25 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _log?.Info("Walker", $"walk to {_destination}: going round {door}");
     }
 
+    // A plain route that enters rooms closed to routes is BfsMapper.FindCrossing's:
+    // a place the map reaches no other way, crossed to by a crosser who meets the
+    // rooms' terms. Said once at plan time, since nothing else in the log tells that
+    // walk from one that went round. A walk that starts inside such a room is only
+    // being planned out of it, and the room that teleports on arrival is the route
+    // card's own crossing, which the pick already logged.
+    private void NoteLakeCrossing(RoomKey source, RoomKey destination, IReadOnlyList<Direction> path)
+    {
+        if (_log is null || Filter is not { } filter
+            || filter.IsClosedToRoutes(source) || filter.TeleportsOnArrival(destination)) return;
+        List<RoomKey> closed = ExpandRouteKeys(source, path).Skip(1).Where(filter.IsClosedToRoutes).ToList();
+        if (closed.Count == 0 || filter.CrossingTerms(closed[0]) is not { } terms) return;
+
+        string items = string.Join(" or ", terms.Items.Select(id => _itemNameResolver?.Invoke(id) ?? $"item #{id}"));
+        _log.Info("Walker",
+            $"walk to {destination}: crosses {closed.Count} teleporting room(s), {closed[0]} to {closed[^1]}; "
+            + $"allowed because no other way there exists and the character is level {terms.MinLevel}+ with {items} in the pack");
+    }
+
     // Announce the freshly-planned route to any bound listener (the auto-light
     // provisioner scans it). Skipped entirely when no announcer is bound.
     private void AnnouncePlannedRoute(RoomKey source, IReadOnlyList<Direction> path)
@@ -1817,6 +1846,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // — directional, from the blocking room's own exit, so it can't be confused
         // with the far side (which may have a different requirement entirely).
         (RoomKey From, Direction Dir, RoomExit Exit)? doorGate = null;
+        // The rooms on the way that no route enters whatever is carried (Crystal
+        // Lake's sea rooms): how many, and the first.
+        (RoomKey First, int Count)? closedRooms = null;
         RoomKey cur = source;
         foreach (Direction dir in ungatedPath)
         {
@@ -1827,6 +1859,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
             {
                 ExitBlockReason hop = f.DescribeExitBlock(in exit);
                 reasons |= hop;
+                if (hop.HasFlag(ExitBlockReason.Hazard) && f.IsClosedToRoutes(exit.Target))
+                    closedRooms = (closedRooms?.First ?? exit.Target, (closedRooms?.Count ?? 0) + 1);
                 if (hop.HasFlag(ExitBlockReason.Item)) ExitGateItems.Collect(in exit, missingItems);
                 if (hop.HasFlag(ExitBlockReason.Level) && levelGate is null)
                     levelGate = (exit.Target, exit.MinLevel, exit.MaxLevel);
@@ -1836,7 +1870,42 @@ public sealed class AutoWalkManager : IRecoverableEngine
             }
             cur = exit.Target;
         }
+        // Nothing else on the way matters once it runs into these: no item, key or
+        // level opens them, so they are the whole of the reason.
+        if (closedRooms is { } closed && Filter is { } filter)
+            return DescribeClosedRooms(source, cur, closed.First, closed.Count, filter);
         return FormatBlockReasons(reasons, missingItems, levelGate, doorGate);
+    }
+
+    // Why a walk that would have to go through rooms closed to routes has no route,
+    // in one line. Mostly: only typed moves go into them (user, 2026-10-10). Where
+    // the map has no other way there, a crossing exists on terms (BfsMapper.
+    // FindCrossing), so the line says what the crosser lacks; and for the room that
+    // teleports on arrival, that the crossing is a route card's, on a walk the user
+    // starts.
+    private string DescribeClosedRooms(RoomKey source, RoomKey destination, RoomKey first, int count, IRoomFilter filter)
+    {
+        if (filter.IsClosedToRoutes(destination) || !_bfs.IsCutOffByClosedRooms(source, destination, filter)
+            || filter.CrossingTerms(first) is not { } terms)
+            return $"no route: the way there crosses {count} teleporting room(s), from {NameRoom(first)} on, "
+                + "and only typed moves go into those";
+
+        // No count here: the crossing that would be made takes the fewest such rooms,
+        // which is not the way this probe came.
+        string rooms = $"the teleporting rooms from {NameRoom(first)} on";
+
+        string items = string.Join(" or ", terms.Items.Select(id => _itemNameResolver?.Invoke(id) ?? $"item #{id}"));
+        string asks = $"level {terms.MinLevel} and {items} in your pack";
+        if (!terms.Met)
+        {
+            List<string> missing = new();
+            if (!terms.LevelMet) missing.Add($"level {terms.MinLevel}");
+            if (!terms.ItemHeld) missing.Add(items);
+            return $"no route: the only way there is across {rooms}, which takes {asks} (missing: {string.Join(" and ", missing)})";
+        }
+        return filter.TeleportsOnArrival(destination)
+            ? $"no route: the only way there is across {rooms}, a crossing offered only on the route card of a walk you start yourself"
+            : $"no route: the only way there is across {rooms}, and no crossing of them could be planned";
     }
 
     // "no route without the teleport from 3/784 (Darkwood Forest) to 3/740 (Black
@@ -2632,7 +2701,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         string door = $"the door {step.Direction.ToLongName()} from {here.Key} ({here.Name})";
         IRoomFilter roundIt = new AbandonedDoorsFilter(_filter, _abandonedDoors);
         IReadOnlyList<Direction>? round;
-        using (_activeThroughGates ? roundIt.SuspendAcquirableGates() : null)
+        // The rooms nothing makes safe stay closed, as they do for the re-plan this
+        // looks ahead to: a way round across them would be announced and not taken.
+        using (_activeThroughGates ? roundIt.SuspendAcquirableGatesButUnprotectableHazards() : null)
             round = _bfs.FindPath(here.Key, dest, roundIt, ignoreAvoids: _activeIgnoreAvoids);
         if (round is null)
         {

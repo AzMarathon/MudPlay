@@ -1366,7 +1366,7 @@ public sealed class AppServices
     public IReadOnlyList<(Game.GameData.BankShop Bank, int? Steps)> BanksNearestFirst(Game.Map.RoomKey from)
     {
         IReadOnlyDictionary<Game.Map.RoomKey, int> distances;
-        using (Movement.SuspendAcquirableGates())
+        using (Movement.SuspendAcquirableGatesButUnprotectableHazards())
             distances = Bfs.ComputeDistancesFrom(from, Movement, viaBoats: true);
         return Game.GameData.BankCatalog.ByDistance(Game.GameData.BankCatalog.Enumerate(GameData), distances);
     }
@@ -1377,7 +1377,7 @@ public sealed class AppServices
     public IReadOnlyList<(Game.Map.RoomKey Stash, int? Steps, long Copper)> StashesNearestFirst(Game.Map.RoomKey bank)
     {
         IReadOnlyDictionary<Game.Map.RoomKey, int> distances;
-        using (Movement.SuspendAcquirableGates())
+        using (Movement.SuspendAcquirableGatesButUnprotectableHazards())
             distances = Bfs.ComputeDistancesFrom(bank, Movement, viaBoats: true);
         var rows = new List<(Game.Map.RoomKey Stash, int? Steps, long Copper)>();
         foreach (Game.Map.RoomKey stash in Movement.Stash)
@@ -4029,6 +4029,8 @@ public sealed class AppServices
         Movement.MaxBashableStrengthProvider = () => MaxStrength.MaxAchievableStrength;
         Movement.RoomEntrySpellProbe = key => RoomGraph.GetRoom(key)?.Spell ?? 0;
         Movement.Hazards = RoomHazards;
+        Movement.SpellTeleportsAtRandomProbe =
+            spell => RoomSpellTeleports.ClassOf(spell) == Game.Map.RoomSpellTeleport.Sudden;
         Favorites = new FavoritesStore(Profile, GameData, ProfileGameDataSet, Log);
         GotoHistory = new GotoHistoryStore(Profile);
 
@@ -12484,7 +12486,7 @@ public sealed class AppServices
         // already make (report paradigm-20260917-233549). Null when nothing acquirable is on
         // the way (suspending changes nothing), leaving the plain comparison unchanged.
         int? obtainableSteps;
-        using (Movement.SuspendAcquirableGates())
+        using (Movement.SuspendAcquirableGatesButUnprotectableHazards())
         {
             int? obt = Bfs.FindPath(src, destination, Movement)?.Count;
             obtainableSteps = obt is { } o && o < overland.Count ? o : null;
@@ -13421,7 +13423,8 @@ public sealed class AppServices
             int spell = RoomGraph.GetRoom(key)?.Spell ?? 0;
             if (spell <= 0) continue;
             if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
-            if (hazard.IsSatisfiedBy(IsItemCarried)) continue;   // player counters it → survives
+            if (hazard.IsSatisfiedBy(IsItemCarried) && MovementFilter.HazardCounterProtects(hazard))
+                continue;                                         // player counters it → survives
             if (!hazard.IsSurvivableDamage) return false;         // an unprotected grave hazard
             sawUnprotected = true;
         }
@@ -13442,7 +13445,8 @@ public sealed class AppServices
             int spell = RoomGraph.GetRoom(path[i])?.Spell ?? 0;
             if (spell <= 0) continue;
             if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
-            if (hazard.IsSatisfiedBy(IsItemCarried)) continue;   // player survives it
+            if (hazard.IsSatisfiedBy(IsItemCarried) && MovementFilter.HazardCounterProtects(hazard))
+                continue;                                         // player survives it
             return i > 0 ? path[i - 1] : path[0];
         }
         return null;
@@ -13456,6 +13460,9 @@ public sealed class AppServices
         RoomHazardIndex.RoomHazard? hazard =
             RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0);
         if (hazard is null) return System.Array.Empty<int>();
+        // A boat is no counter on Crystal Lake: nothing is provisioned, or asked of
+        // the party, for a room its item doesn't make safe.
+        if (!MovementFilter.HazardCounterProtects(hazard)) return System.Array.Empty<int>();
         if (!JourneyHasFetchOrder) return hazard.MandatoryItems;
 
         System.Collections.Generic.List<int> items = new(hazard.MandatoryItems);

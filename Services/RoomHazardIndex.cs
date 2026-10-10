@@ -89,14 +89,34 @@ public sealed class RoomHazardIndex
         // never offered that — the crosser can only pass it with a counter in hand.
         public bool IsSurvivableDamage { get; }
 
+        // True when the room teleports whoever holds its `failitem` item as well:
+        // the textblock gives a holder a `checkitem` line of their own, and that
+        // line leads to a teleport too. Crystal Lake's three sea spells are the
+        // case, on both realms: with a raft or skiff the lake still moves you. No
+        // route is planned into such a room, boat or no boat (user, 2026-10-09:
+        // nobody "should ever enter the room spell area of crystal lake, even with a
+        // raft"), so for routing the item is no counter at all.
+        public bool TeleportsCounterHolders { get; }
+
+        // The level from which the textblock gives the item's holder a line of their
+        // own (`minlevel 50:checkitem 690:…` on the sea spells), 0 when it has none.
+        // From that level, with the item, the lake teleports rarely; below it, about
+        // as often as with no boat. The few crossings the client does make (Stock's
+        // White Forest, the walk to the Bloodwood Weald's room) ask for both.
+        public int CounterHolderMinLevel { get; }
+
         public RoomHazard(
             IReadOnlyList<IReadOnlyList<int>> groups,
             IReadOnlyList<BuffCounter>? buffCounters = null,
-            bool isSurvivableDamage = false)
+            bool isSurvivableDamage = false,
+            bool teleportsCounterHolders = false,
+            int counterHolderMinLevel = 0)
         {
             RequirementGroups = groups;
             BuffCounters = buffCounters ?? Array.Empty<BuffCounter>();
             IsSurvivableDamage = isSurvivableDamage;
+            TeleportsCounterHolders = teleportsCounterHolders;
+            CounterHolderMinLevel = counterHolderMinLevel;
         }
 
         // Every distinct protecting item across all groups — the set the route
@@ -140,6 +160,9 @@ public sealed class RoomHazardIndex
 
     // Number of distinct protectable room-entry spells indexed.
     public int HazardCount => _hazardBySpell.Count;
+
+    // Every indexed hazard, for a question about the set as a whole.
+    public IReadOnlyCollection<RoomHazard> Hazards => _hazardBySpell.Values;
 
     // Fires after every successful (re)load, including the transition to
     // no-set-active.
@@ -264,7 +287,85 @@ public sealed class RoomHazardIndex
         if (!harmful || groups.Count == 0) return null;
 
         bool survivable = IsSurvivableHazardDamage(rootSpell, spellAbils, tbActions);
-        return new RoomHazard(groups, buffCounters, survivable);
+        bool holdersTeleported = false;
+        int holderMinLevel = 0;
+        foreach (int tb in textBlocks)
+            holdersTeleported |= TeleportsHolders(tb, tbActions, ref holderMinLevel);
+        return new RoomHazard(groups, buffCounters, survivable, holdersTeleported, holderMinLevel);
+    }
+
+    // Steps that relocate whoever the textblock runs on.
+    private static readonly string[] RelocatingTbDirectives = { "teleport", "transfer" };
+
+    // Whether the hazard's own textblock teleports a holder of its `failitem` item.
+    // Its lines are tried in order: the `failitem` line is what happens with none of
+    // the items, and a line that passes on `checkitem <one of them>` is what happens
+    // to a holder. The sea spells have such lines for each boat, split by level
+    // (`maxlevel 49:checkitem 690:random 9445`, `minlevel 50:checkitem 690:random
+    // 9361`), and both lead on to a teleport. The river, the ice cavern and the
+    // desert's root blocks stop at their `failitem`. Stock's nested desert blocks
+    // (2654, 2659) do have holder lines, but they are not roots and relocate nobody,
+    // so they come out false here as well.
+    private bool TeleportsHolders(int tb, Dictionary<int, string> tbActions, ref int holderMinLevel)
+    {
+        if (!tbActions.TryGetValue(tb, out string? action) || string.IsNullOrWhiteSpace(action))
+            return false;
+
+        HashSet<int> counters = new();
+        List<string[]> holderLines = new();
+        foreach (string line in action.Split('\n'))
+        {
+            string[] steps = line.Split(':');
+            bool guarded = false, holder = false;
+            foreach (string raw in steps)
+            {
+                string tok = raw.Trim();
+                if (StartsWith(tok, "failitem"))
+                {
+                    guarded = true;
+                    if (FirstIntAfter(tok, "failitem") is > 0 and int item) counters.Add(item);
+                }
+                else if (StartsWith(tok, "checkitem")) holder = true;
+            }
+            if (holder && !guarded) holderLines.Add(steps);
+        }
+
+        bool teleports = false;
+        foreach (string[] steps in holderLines)
+        {
+            bool holdsCounter = false;
+            int lineMinLevel = 0;
+            foreach (string raw in steps)
+            {
+                string tok = raw.Trim();
+                if (StartsWith(tok, "minlevel")) lineMinLevel = FirstIntAfter(tok, "minlevel");
+                else if (StartsWith(tok, "checkitem")) holdsCounter |= counters.Contains(FirstIntAfter(tok, "checkitem"));
+                else if (holdsCounter && Relocates(tok, 0, tbActions, new HashSet<int> { tb })) teleports = true;
+            }
+            if (holdsCounter) holderMinLevel = Math.Max(holderMinLevel, lineMinLevel);
+        }
+        return teleports;
+    }
+
+    // Whether one textblock step relocates, itself or through the blocks a `random`
+    // / link step hands over to. Bounded like BranchHarmful, which this mirrors for
+    // the two relocating directives alone.
+    private bool Relocates(string tok, int depth, Dictionary<int, string> tbActions, HashSet<int> visited)
+    {
+        foreach (string kw in RelocatingTbDirectives)
+            if (StartsWith(tok, kw)) return true;
+        foreach (string flow in BranchFlowDirectives)
+        {
+            if (!StartsWith(tok, flow)) continue;
+            int target = FirstIntAfter(tok, flow);
+            if (depth >= MaxChainDepth || target <= 0 || !visited.Add(target)) return false;
+            if (!tbActions.TryGetValue(target, out string? action) || string.IsNullOrWhiteSpace(action))
+                return false;
+            foreach (string line in action.Split('\n'))
+                foreach (string raw in line.Split(':'))
+                    if (Relocates(raw.Trim(), depth + 1, tbActions, visited)) return true;
+        }
+        return false;
     }
 
     // Classify a room-entry hazard's unprotected outcome as survivable damage or
