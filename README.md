@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.10**
+> **Version 3.164.0**
 > - No rest or meditate in a room whose own spell damages you every tick (volcano heat, swamp poison, a river with no raft)
 > - The walk carries on and the rest starts in the next room that doesn't hurt
 > - *Heal (rest)* is cast standing while that rest is owed

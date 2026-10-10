@@ -406,6 +406,12 @@
                                                    HorizontalAlignment="Left"
                                                    ToolTip.Tip="The most items the board drops on the floor of the room for a hang-up in a fight with a monster. Leave it at 0 when the board takes HP only, as most do. Above 0, MudPlay looks for dropped items when you come back into the game: what you held before and are missing is picked up from the floor of the room, never more copies than the larger of this figure and the PvP one (that many again for each earlier check the link cut short). It does not change when or whether MudPlay hangs up. Default 0."/>
                                 </Grid>
+
+                                <CheckBox IsChecked="{Binding HangupOutsideFightPenaltyEnabled, Mode=TwoWay}"
+                                          Margin="0,6,0,0"
+                                          IsEnabled="{Binding HangupPvePenaltyEnabled}"
+                                          Content="Also penalised outside a fight (every hang-up)"
+                                          ToolTip.Tip="Tick this when the board penalises every hang-up made in the game, whether or not you were in a fight, at the PvE figures above. Unticked, a hang-up outside a fight is taken as free. It decides one thing: whether MudPlay checks for a death by the penalty after a hang-up made while dropped or low on HP with no fight on (movement is held for the second the check takes, and one stat is sent if none was read). It does not change when or whether MudPlay hangs up. Default off."/>
                             </StackPanel>
 
                             <!-- Nightly boss cleanup: "Respawns @ Cleanup" bosses on the

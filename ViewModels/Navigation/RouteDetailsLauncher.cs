@@ -181,10 +181,12 @@ public static class RouteDetailsLauncher
         var spellLink = new RoomDetailLink(spellName, null,
             new AsyncRelayCommand(() => services.OpenSpellRecordAsync(room.Spell)));
 
-        var counters = new List<RoomDetailLink>(hz.ProtectingItems.Count);
-        foreach (int itemId in hz.ProtectingItems)
-            counters.Add(ItemLink(services, itemId));
-        return new RouteStepWarning(spellLink, counters);
+        bool protects = MovementFilter.HazardCounterProtects(hz);
+        var counters = new List<RoomDetailLink>(protects ? hz.ProtectingItems.Count : 0);
+        if (protects)
+            foreach (int itemId in hz.ProtectingItems)
+                counters.Add(ItemLink(services, itemId));
+        return new RouteStepWarning(spellLink, counters, noProtection: !protects);
     }
 
     // An item id → a clickable link to its Game Data record (hazard counters +

@@ -31,7 +31,6 @@ namespace MudPlay.Game.Map;
 // and shares only that parser's table reader.
 public static class RoomSpellTeleportClassifier
 {
-    private const int TextBlockAbility = 148;
     private const int EndCastAbility = 151;
 
     // A d100 table is rolled 0–99 and runs the first line whose number is above the
@@ -114,12 +113,9 @@ public static class RoomSpellTeleportClassifier
             Reach reach = default;
             foreach (SpellAbility ability in spell.Abilities)
             {
-                if (ability.Code == TextBlockAbility)
+                if (ability.Code == SpellTextBlock.AbilityCode)
                 {
-                    // A textblock spell with no value in the slot keeps the block's
-                    // number in MinBase / MaxBase (GAME_MECHANICS "Room-spell hazard
-                    // shape 2 — TextBlock action guarded by `failitem <itemNum>`").
-                    int block = ability.Value > 0 ? ability.Value : spell.MinBase > 0 ? spell.MinBase : spell.MaxBase;
+                    int block = SpellTextBlock.Number(ability.Value, spell.MinBase, spell.MaxBase);
                     reach = reach.With(Lines(block, gates, depth + 1));
                 }
                 else if (ability.Code == EndCastAbility && ability.Value > 0)

@@ -1,6 +1,6 @@
 # Version history
 
-## 3.161.10
+## 3.164.0
 
 - No rest or meditate in a room whose own spell damages you every tick (volcano heat, swamp poison, a river with no raft)
 - The walk carries on and the rest starts in the next room that doesn't hurt
@@ -10,6 +10,79 @@
 - A gear command from a macro, alias, trigger or event mid-fight re-attacks at once
 - A stopped spell fight is picked up on the next round tick, not only on a combat line
 - Bug report: a *Room spell and resting* line
+
+## 3.163.0
+
+- A monster set to **Flee** is run from on sight, while a walk or loop is running
+- It is the Health tab's flee: the Combat tab's run distance and direction
+- With no run coming (idle, paused, no way out, a follower) it is fought back if it attacks
+- Go backwards if running unticked: the run goes on past it, and a loop carries on from there
+- Ticked: a monster on your route is run from on every return
+- A low-HP or low-mana flee set to run forwards now carries a loop on too, instead of returning to the fight room
+- A forward flee no longer starts with the step just walked
+- A flee ends when you die, disconnect or load another character
+- Two monsters ship set to Flee; set Neutral or Enemy to turn it off
+- A flee stops short of Crystal Lake's teleporting rooms
+
+## 3.162.4
+
+- Hang-up death check: on Paradigm anything still worn rules a death out, as on Stock
+
+## 3.162.3
+
+- Routes never enter Crystal Lake's teleport rooms, boat or not
+- No raft or skiff offered, fetched or bought for the lake
+- A walk the lake blocks says why in one line
+- Stock: White Forest reached along the coast at level 50+ with a boat
+- Paradigm: one card to cross to the Bloodwood Weald room
+- Lake crossings are named on the card and logged once
+- Isle of Bones never reached across the lake
+- The lake's spell-free rooms stay ordinary ground
+- Standing in a teleport room, you are planned out
+- A loop waypoint in a teleport room is refused at start
+- A key-only route goes round the lake and asks for the key alone
+- bug reports addressed: paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314
+
+## 3.162.0
+
+- A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
+- Only on a life lost: Death Recovery gets the room, time and pile; loops, walks and a waiting default task are stopped
+- A life lost on another client, or after a clean exit, is not recorded here
+- The item pickup stands down for it, and nothing is recorded when it can't be told
+- Lives are read again after a life is given back or a level trained
+- Settings → BBS: a box for boards that penalise every hang-up, not only one made in a fight
+
+## 3.161.16
+
+- Auto-discard counts copies, not pack entries: an item with Min. to keep of 1 or more is now discarded down to that amount (it never was before)
+- Worn copies count toward Min. to keep and are never the copy discarded
+- A flagged light is discarded lit or not; the lit one counts as a pack copy
+- A discard waiting to be sent is checked again before it goes, and taken back on a Roomba sweep, the switch going off, an unticked flag or a raised keep
+- An inventory read landing before a pile's answers no longer has the pile sent twice
+- Taking off a lit light on Stock no longer adds a pack item named `<light> and extinguished it` or leaves the light listed as lit
+
+## 3.161.10
+
+- Locks under 25% a pick are gone round when the way round is short
+- A door the picks run out on is gone round, not stood at
+- Auto-Lair waits one step short of the lair, on its own route
+- Auto-Lair leaves out a lair it can't reach, and retries a failed entry slower each time
+- Auto-Lair keeps a door only if you can't open it; a fair-odds door is retried next visit
+- Log and bug report name the doors gone round and the lairs left out
+
+## 3.161.9
+
+- Exp/Hr estimator and loop simulator: room-spell summons now read in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
+- One-at-a-time bosses with a regen wait a room spell summons are no longer counted: lowers estimates through the Ancient Fortress (Angelic Hunter)
+- A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
+- Every monster a summon roll brings is counted, and an empty-room-only summon line only in an empty room
+- Program log lists the summoning room spells and each summon left out
+
+## 3.161.8
+
+- Party window: a member's level is the one they state, no longer the level their exp could train to
+- MegaMUD `@level` replies that count past the next level (`Needed: N (L60)  Will level in: +2 in 2-3 days`) are now read
+- Party window: a member's exp line names the level their figure counts toward
 
 ## 3.161.7
 

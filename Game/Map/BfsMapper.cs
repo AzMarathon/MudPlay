@@ -170,11 +170,35 @@ public sealed class BfsMapper
         if (source.Equals(destination))
             return returnEmptyWhenAtDestination ? Array.Empty<Direction>() : null;
 
+        IReadOnlyList<Direction>? path = FindPathRoundClosedRooms(
+            source, destination, filter, ignoreExitGates, refuseTeleports, avoidTraps, ignoreAvoids);
+        if (path is not null || ignoreExitGates || filter is null) return path;
+
+        // No way there that keeps out of the rooms closed to routes. A walk is taken
+        // across them only when the map has no other way at all and the crosser
+        // meets their terms (FindCrossing); and never on its own account to a room
+        // that teleports on arrival, which is a route card's to offer.
+        return filter.MayCrossClosedRooms() && !filter.TeleportsOnArrival(destination)
+            ? FindCrossing(source, destination, filter, refuseTeleports, ignoreAvoids)
+            : null;
+    }
+
+    private IReadOnlyList<Direction>? FindPathRoundClosedRooms(
+        RoomKey source, RoomKey destination, IRoomFilter? filter,
+        bool ignoreExitGates, bool refuseTeleports, bool avoidTraps, bool ignoreAvoids)
+    {
+        // Standing in a room no route enters (teleported onto Crystal Lake, or
+        // part-way across it), every way on starts through more such rooms and an
+        // ordinary search finds nothing. The way out is always allowed.
+        if (!ignoreExitGates && filter is not null && filter.IsClosedToRoutes(source))
+            return FindPathOutOfClosedRooms(source, destination, filter, refuseTeleports, avoidTraps, ignoreAvoids);
+
         // Trap-minimising route is a cost search (fewest traps, then fewest hops),
         // not a plain BFS — a refuse-all-traps BFS would return NOTHING the moment
         // one trap on the way is unavoidable, stranding the whole "avoid" offer.
         if (avoidTraps)
-            return FindMinTrapPath(source, destination, filter, ignoreExitGates, refuseTeleports, ignoreAvoids);
+            return RoundPoorOddsDoors(source, filter, ignoreExitGates, fewestTraps: true,
+                round => FindMinTrapPath(source, destination, filter, ignoreExitGates, refuseTeleports, ignoreAvoids, round));
 
         // Two-tier search: a deterministic pass first (gateway teleports
         // excluded), then — only if that finds nothing — a fallback pass that
@@ -183,9 +207,219 @@ public sealed class BfsMapper
         // resort: from inside a room cluster the deterministic path wins, so the
         // walker never routes through the portal and loops; from the overworld,
         // where the only way up is the portal, the fallback pass takes it and the
-        // walker re-plans from wherever the cast drops it.
-        return FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: false, ignoreAvoids)
-            ?? FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: true, ignoreAvoids);
+        // walker re-plans from wherever the cast drops it. The way round a
+        // poor-odds door is looked for inside each tier, so it is never a gateway
+        // when the door's own route needed none.
+        return RoundPoorOddsDoors(source, filter, ignoreExitGates, fewestTraps: false,
+                round => FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: false, ignoreAvoids, round))
+            ?? RoundPoorOddsDoors(source, filter, ignoreExitGates, fewestTraps: false,
+                round => FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: true, ignoreAvoids, round));
+    }
+
+    // A hop-count search can't weigh a lock that opens one try in thirty against
+    // three plain steps, so a door the filter calls poor-odds is handled by
+    // searching twice: the route with those doors open, and, when that route
+    // crosses one, the route with them shut. The second is taken when it exists
+    // and is at most DoorPolicy.PoorPickDetourSteps longer; otherwise the door is
+    // the way. A fewest-traps search also keeps the first when the way round would
+    // cross more traps, which is what that search was asked to avoid.
+    private IReadOnlyList<Direction>? RoundPoorOddsDoors(
+        RoomKey source, IRoomFilter? filter, bool ignoreExitGates, bool fewestTraps,
+        Func<bool, IReadOnlyList<Direction>?> search)
+    {
+        IReadOnlyList<Direction>? through = search(false);
+        if (through is null || filter is null || ignoreExitGates
+            || !CrossesPoorOddsDoor(source, through, filter)) return through;
+
+        IReadOnlyList<Direction>? round = search(true);
+        if (round is null || round.Count - through.Count > DoorPolicy.PoorPickDetourSteps) return through;
+        if (fewestTraps && CountTrapsOnPath(source, round) > CountTrapsOnPath(source, through)) return through;
+        return round;
+    }
+
+    private bool CrossesPoorOddsDoor(RoomKey source, IReadOnlyList<Direction> path, IRoomFilter filter)
+    {
+        RoomKey cursor = source;
+        foreach (Direction dir in path)
+        {
+            if (_graph.GetRoom(cursor) is not { } room || !room.Exits.TryGetValue(dir, out RoomExit exit)) return false;
+            if (filter.IsPoorOddsDoor(in exit)) return true;
+            cursor = exit.Target;
+        }
+        return false;
+    }
+
+    // Whether the map itself has no way from source to destination but through
+    // rooms closed to routes: every exit gate set aside (a key, a level, a class can
+    // all be had or outgrown; the lake can't be gone round where there is no round),
+    // sailings and gateway portals counted as ways. This is what tells Stock's White
+    // Forest, which lies beyond the lake and nowhere else, from the Isle of Bones,
+    // which the lake also surrounds but a portal reaches: the first is crossed to,
+    // the second never.
+    public bool IsCutOffByClosedRooms(RoomKey source, RoomKey destination, IRoomFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        if (_graph.GetRoom(source) is null || _graph.GetRoom(destination) is null) return false;
+        if (source.Equals(destination)) return false;
+
+        var seen = new HashSet<RoomKey> { source };
+        var queue = new Queue<RoomKey>();
+        queue.Enqueue(source);
+        bool Reach(RoomKey next)
+        {
+            if (!seen.Add(next) || _graph.GetRoom(next) is null || filter.IsClosedToRoutes(next)) return false;
+            queue.Enqueue(next);
+            return next.Equals(destination);
+        }
+        while (queue.Count > 0)
+        {
+            RoomKey here = queue.Dequeue();
+            if (_graph.GetRoom(here) is not { } room) continue;
+            foreach (RoomExit exit in room.Exits.Values)
+            {
+                // A landing nobody can count on, and an exit there is no data to
+                // open, are no way round anything.
+                if (exit.CastTeleportRandom) continue;
+                if (exit.Hint == RoomExitHint.MultiActionHidden && exit.MultiAction is not { IsSatisfiable: true }) continue;
+                if (Reach(exit.Target)) return false;
+            }
+            foreach (BoatPassage passage in _graph.BoatPassagesAt(here))
+                if (Reach(passage.ArrivalRoom)) return false;
+        }
+        return true;
+    }
+
+    // The way across rooms closed to routes, for the few walks taken across them:
+    // only where the map has no other way (IsCutOffByClosedRooms), only through
+    // closed rooms whose terms the crosser meets (IRoomFilter.CrossingTerms: on the
+    // lake, level 50 and a boat in hand), and by the fewest such rooms, then the
+    // fewest steps. That is the user's "hugging the coast": each of those rooms is
+    // a roll to be thrown off the route, so their number is what is kept down, not
+    // the length of the walk. Every other gate on the way stands as it does for any
+    // route. Null when there is another way, or no crossing the crosser may make.
+    public IReadOnlyList<Direction>? FindCrossing(
+        RoomKey source, RoomKey destination, IRoomFilter filter,
+        bool refuseTeleports = false, bool ignoreAvoids = false)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        if (_graph.GetRoom(source) is null || _graph.GetRoom(destination) is null) return null;
+        if (source.Equals(destination) || filter.IsClosedToRoutes(destination)) return null;
+        if (!IsCutOffByClosedRooms(source, destination, filter)) return null;
+
+        var best = new Dictionary<RoomKey, (int Closed, int Hops)> { [source] = (0, 0) };
+        var parent = new Dictionary<RoomKey, (RoomKey ParentKey, Direction Step)> { [source] = (source, default) };
+        var frontier = new PriorityQueue<RoomKey, (int Closed, int Hops)>();
+        frontier.Enqueue(source, (0, 0));
+
+        while (frontier.TryDequeue(out RoomKey here, out (int Closed, int Hops) cost))
+        {
+            if (!best.TryGetValue(here, out (int Closed, int Hops) settled) || settled != cost) continue;
+            if (here.Equals(destination)) return ReconstructPath(parent, source, destination);
+            if (_graph.GetRoom(here) is not { } room) continue;
+
+            foreach ((Direction dir, RoomExit exit) in room.Exits)
+            {
+                RoomKey next = exit.Target;
+                if (exit.CastTeleportRandom || exit.GatewayTeleport || _graph.GetRoom(next) is null) continue;
+                if (exit.Hint == RoomExitHint.MultiActionHidden
+                    && exit.MultiAction is not { IsSatisfiable: true }) continue;
+                if (refuseTeleports && exit.Hint == RoomExitHint.Teleport) continue;
+                if (filter.IsExitRefused(here, in exit)) continue;
+                if (!ignoreAvoids && filter.IsAvoided(next)) continue;
+
+                bool closed = filter.IsClosedToRoutes(next);
+                if (closed)
+                {
+                    if (filter.CrossingTerms(next) is not { Met: true }) continue;
+                    if ((filter.DescribeExitBlock(in exit) & ~ExitBlockReason.Hazard) != ExitBlockReason.None) continue;
+                }
+                else if (filter.IsExitBlocked(in exit)) continue;
+
+                (int Closed, int Hops) nextCost = (cost.Closed + (closed ? 1 : 0), cost.Hops + 1);
+                if (best.TryGetValue(next, out (int Closed, int Hops) prior) && prior.CompareTo(nextCost) <= 0) continue;
+                best[next] = nextCost;
+                parent[next] = (here, dir);
+                frontier.Enqueue(next, nextCost);
+            }
+        }
+        return null;
+    }
+
+    // The route from a room no route enters (IRoomFilter.IsClosedToRoutes): out of
+    // the closed rooms by the fewest steps, then on to the destination as any route
+    // goes, never back in. The nearest way out is tried first and the next nearest
+    // only when the destination can't be reached from there (the lake has an island
+    // with no way off but the lake); of several equally near, the one with the
+    // shortest way on. Null when no way out reaches it, the destination being in
+    // the closed rooms itself included: that crossing is the user's to pick on a
+    // route card.
+    private IReadOnlyList<Direction>? FindPathOutOfClosedRooms(
+        RoomKey source, RoomKey destination, IRoomFilter filter,
+        bool refuseTeleports, bool avoidTraps, bool ignoreAvoids)
+    {
+        var parent = new Dictionary<RoomKey, (RoomKey ParentKey, Direction Step)> { [source] = (source, default) };
+        var stepsIn = new Dictionary<RoomKey, int> { [source] = 0 };
+        var queue = new Queue<RoomKey>();
+        queue.Enqueue(source);
+        // Rooms the destination has been found unreachable from. A way out that
+        // lands in one is not searched again: what a room can't reach, no room it
+        // reaches can.
+        HashSet<RoomKey> deadEnds = new();
+        IReadOnlyList<Direction>? best = null;
+        int bestWayOut = int.MaxValue;
+
+        while (queue.Count > 0)
+        {
+            RoomKey here = queue.Dequeue();
+            // The search is breadth-first, so every way out from here on is longer
+            // than the one already found.
+            if (stepsIn[here] + 1 > bestWayOut) break;
+            if (_graph.GetRoom(here) is not { } room) continue;
+
+            foreach ((Direction dir, RoomExit exit) in room.Exits)
+            {
+                RoomKey next = exit.Target;
+                if (parent.ContainsKey(next) || _graph.GetRoom(next) is null) continue;
+                if (exit.CastTeleportRandom || exit.GatewayTeleport) continue;
+                if (exit.Hint == RoomExitHint.MultiActionHidden
+                    && exit.MultiAction is not { IsSatisfiable: true }) continue;
+                if (refuseTeleports && exit.Hint == RoomExitHint.Teleport) continue;
+                if (filter.IsExitRefused(here, in exit)) continue;
+                if (!ignoreAvoids && filter.IsAvoided(next)) continue;
+
+                // Between two closed rooms the room itself is the one gate set aside;
+                // any other on the exit still stands.
+                bool closed = filter.IsClosedToRoutes(next);
+                if (closed
+                        ? (filter.DescribeExitBlock(in exit) & ~ExitBlockReason.Hazard) != ExitBlockReason.None
+                        : filter.IsExitBlocked(in exit))
+                    continue;
+
+                parent[next] = (here, dir);
+                if (closed)
+                {
+                    stepsIn[next] = stepsIn[here] + 1;
+                    queue.Enqueue(next);
+                    continue;
+                }
+
+                IReadOnlyList<Direction> wayOut = ReconstructPath(parent, source, next);
+                IReadOnlyList<Direction>? onward = next.Equals(destination) ? Array.Empty<Direction>()
+                    : deadEnds.Contains(next) ? null
+                    : FindPath(next, destination, filter, refuseTeleports: refuseTeleports,
+                        avoidTraps: avoidTraps, ignoreAvoids: ignoreAvoids);
+                if (onward is null)
+                {
+                    if (!deadEnds.Contains(next))
+                        deadEnds.UnionWith(Distances(next, filter, viaBoats: false, targets: null, allowGateway: false).Keys);
+                    continue;
+                }
+                if (best is null || wayOut.Count + onward.Count < best.Count)
+                    best = wayOut.Concat(onward).ToList();
+                bestWayOut = wayOut.Count;
+            }
+        }
+        return best;
     }
 
     private IReadOnlyList<Direction>? FindPathCore(
@@ -195,7 +429,8 @@ public sealed class BfsMapper
         bool ignoreExitGates,
         bool refuseTeleports,
         bool allowGateway,
-        bool ignoreAvoids = false)
+        bool ignoreAvoids = false,
+        bool roundPoorOddsDoors = false)
     {
         // Per-node parent + direction-from-parent, replayed on hit.
         var parent = new Dictionary<RoomKey, (RoomKey ParentKey, Direction Step)>();
@@ -248,7 +483,7 @@ public sealed class BfsMapper
                 // the teleport.
                 if (refuseTeleports && (exit.Hint == RoomExitHint.Teleport || exit.GatewayTeleport))
                     continue;
-                if (filter is not null && filter.IsTeleportRefused(here, in exit)) continue;
+                if (filter is not null && filter.IsExitRefused(here, in exit)) continue;
 
                 // Avoid filter applies to intermediates AND to the
                 // destination itself — walking *into* an avoided room
@@ -261,6 +496,7 @@ public sealed class BfsMapper
                 // gate) — non-traversable when the player doesn't meet
                 // it, unless the caller is probing with gates ignored.
                 if (!ignoreExitGates && filter is not null && filter.IsExitBlocked(exit)) continue;
+                if (roundPoorOddsDoors && filter is not null && filter.IsPoorOddsDoor(in exit)) continue;
 
                 // Destination room must still exist in the graph.
                 if (_graph.GetRoom(next) is null) continue;
@@ -309,9 +545,34 @@ public sealed class BfsMapper
         return Distances(source, filter, viaBoats: false, new HashSet<RoomKey>(targets), allowGateway: false);
     }
 
+    // FindPath's hop counts for many rooms at once, its way round a poor-odds door
+    // included (RoundPoorOddsDoors): where the plain search used one, the search is
+    // run again with those doors shut, and a room takes the second count when it is
+    // reachable that way within the detour bound.
     private Dictionary<RoomKey, int> Distances(
         RoomKey source, IRoomFilter? filter, bool viaBoats, HashSet<RoomKey>? targets, bool allowGateway)
     {
+        // Each search removes the targets it reaches, so the second needs its own.
+        HashSet<RoomKey>? targetsAgain = targets is null ? null : new HashSet<RoomKey>(targets);
+        Dictionary<RoomKey, int> through = DistancesCore(
+            source, filter, viaBoats, targets, allowGateway, roundPoorOddsDoors: false, out bool usedPoorOddsDoor);
+        if (!usedPoorOddsDoor) return through;
+
+        Dictionary<RoomKey, int> round = DistancesCore(
+            source, filter, viaBoats, targetsAgain, allowGateway, roundPoorOddsDoors: true, out _);
+        foreach ((RoomKey room, int hops) in round)
+        {
+            if (!through.TryGetValue(room, out int direct)) through[room] = hops;
+            else if (hops - direct <= DoorPolicy.PoorPickDetourSteps) through[room] = hops;
+        }
+        return through;
+    }
+
+    private Dictionary<RoomKey, int> DistancesCore(
+        RoomKey source, IRoomFilter? filter, bool viaBoats, HashSet<RoomKey>? targets, bool allowGateway,
+        bool roundPoorOddsDoors, out bool usedPoorOddsDoor)
+    {
+        usedPoorOddsDoor = false;
         Dictionary<RoomKey, int> dist = new();
         if (_graph.GetRoom(source) is null) return dist;
         if (filter is not null && filter.IsAvoided(source)) return dist;
@@ -348,10 +609,15 @@ public sealed class BfsMapper
                 // not routable (see FindPathCore).
                 if (exit.Hint == RoomExitHint.MultiActionHidden
                     && exit.MultiAction is not { IsSatisfiable: true }) continue;
-                if (filter is not null && filter.IsTeleportRefused(here, in exit)) continue;
+                if (filter is not null && filter.IsExitRefused(here, in exit)) continue;
                 if (filter is not null && filter.IsAvoided(next)) continue;
                 if (filter is not null && filter.IsExitBlocked(exit)) continue;
                 if (_graph.GetRoom(next) is null) continue;
+                if (filter is not null && filter.IsPoorOddsDoor(in exit))
+                {
+                    if (roundPoorOddsDoors) continue;
+                    usedPoorOddsDoor = true;
+                }
                 if (Reach(next, here_d + 1)) return dist;
             }
             if (!viaBoats) continue;
@@ -555,7 +821,8 @@ public sealed class BfsMapper
         IRoomFilter? filter,
         bool ignoreExitGates,
         bool refuseTeleports,
-        bool ignoreAvoids = false)
+        bool ignoreAvoids = false,
+        bool roundPoorOddsDoors = false)
     {
         var best = new Dictionary<RoomKey, (int Traps, int Hops)>();
         var parent = new Dictionary<RoomKey, (RoomKey ParentKey, Direction Step)>();
@@ -585,9 +852,10 @@ public sealed class BfsMapper
                 if (exit.Hint == RoomExitHint.MultiActionHidden
                     && exit.MultiAction is not { IsSatisfiable: true }) continue;
                 if (refuseTeleports && exit.Hint == RoomExitHint.Teleport) continue;
-                if (filter is not null && filter.IsTeleportRefused(here, in exit)) continue;
+                if (filter is not null && filter.IsExitRefused(here, in exit)) continue;
                 if (!ignoreAvoids && filter is not null && filter.IsAvoided(next)) continue;
                 if (!ignoreExitGates && filter is not null && filter.IsExitBlocked(exit)) continue;
+                if (roundPoorOddsDoors && filter is not null && filter.IsPoorOddsDoor(in exit)) continue;
                 if (_graph.GetRoom(next) is null) continue;
 
                 (int Traps, int Hops) nextCost =
