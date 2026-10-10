@@ -2808,7 +2808,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // and the pile it belongs to.
     //
     // Any pile takes the item from anyone, party or not, at any time: an Active,
-    // Partial or Missing one alike (owner's ruling, 2026-10-10). A corpse gone from
+    // Partial or Missing one alike (user, 2026-10-10). A corpse gone from
     // the death room is what it looks like when someone has picked it up to hand the
     // gear back, and a pile marked Missing is not closed to that.
     public void OnItemReceived(string itemName, string giver)
