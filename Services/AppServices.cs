@@ -9302,7 +9302,6 @@ public sealed class AppServices
         // Posted: the engine event that reports a refused walk back can arrive from
         // inside the message pump, where a terminal write re-feeds the emulator.
         Events.SetNotice(msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)));
-        Events.SetExitCommandReader(() => GameCommands.ExitCommand);
         Events.SetStatsReader(ReadEventReadings);
         GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
         BossTimers.BossKilled += def => Events.NoteBossKilled(def.Name);

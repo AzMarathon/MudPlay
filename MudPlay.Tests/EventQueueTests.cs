@@ -471,7 +471,7 @@ public sealed class EventQueueTests : IDisposable
         Assert.Contains("'two' WalkTo", h.Events.RunSummary);
     }
 
-    // A second logoff-type event doesn't interrupt the first: it waits, ahead of the
+    // A second Logoff event doesn't interrupt the first: it waits, ahead of the
     // ordinary events. A boss event is an ordinary event.
     [Fact]
     public void ASecondLogoffEvent_WaitsAtTheHeadOfTheQueue()
@@ -496,46 +496,31 @@ public sealed class EventQueueTests : IDisposable
         Assert.Contains("'to the inn' WalkTo", h.Events.RunSummary);
     }
 
-    // What counts as logoff-type besides the Logoff trigger: a command that sends a
-    // log-off as a line of its own.
-    [Theory]
-    [InlineData(";o", true)]
-    [InlineData("=x", true)]
-    [InlineData("bank;=x", true)]
-    [InlineData("quit now", true)]          // the realm's own exit command
-    [InlineData("stat", false)]
-    [InlineData("say =x", false)]
-    public void ACommandThatLogsOff_IsLogoffType(string command, bool expected)
+    // Only the Logoff trigger makes an event logoff-type: a boss event, and an event
+    // whose command logs off, are ordinary events.
+    [Fact]
+    public void OnlyTheLogoffTrigger_IsLogoffType()
     {
-        using Harness h = NewHarness();
-        h.Events.SetExitCommandReader(() => "quit now");
-
-        Assert.Equal(expected, h.Events.IsLogoffType(new ScheduledEvent
+        Assert.True(EventManager.IsLogoffType(new ScheduledEvent
         {
-            TriggerType = EventTriggerType.Every, ActionType = EventActionType.Command, CommandText = command,
+            TriggerType = EventTriggerType.Logoff, ActionType = EventActionType.BankTrip,
+        }));
+        Assert.False(EventManager.IsLogoffType(BossWalk("Boss", "boss", B)));
+        Assert.False(EventManager.IsLogoffType(new ScheduledEvent
+        {
+            TriggerType = EventTriggerType.AtTime, ActionType = EventActionType.BankTrip,
+        }));
+        Assert.False(EventManager.IsLogoffType(new ScheduledEvent
+        {
+            TriggerType = EventTriggerType.Every, ActionType = EventActionType.Command, CommandText = ";o",
             Then = EventThenType.Resume,
         }));
     }
 
+    // A relog command with something after it is a run like any other: it waits its
+    // turn, and nothing is sent until the run before it ends.
     [Fact]
-    public void OnlyTheLogoffTriggerAndLogOffCommands_AreLogoffType()
-    {
-        using Harness h = NewHarness();
-
-        Assert.True(h.Events.IsLogoffType(new ScheduledEvent
-        {
-            TriggerType = EventTriggerType.Logoff, ActionType = EventActionType.BankTrip,
-        }));
-        Assert.False(h.Events.IsLogoffType(BossWalk("Boss", "boss", B)));
-        Assert.False(h.Events.IsLogoffType(new ScheduledEvent
-        {
-            TriggerType = EventTriggerType.AtTime, ActionType = EventActionType.BankTrip,
-        }));
-    }
-
-    // A relog command with something after it is a run, and it doesn't wait.
-    [Fact]
-    public void ALogOffCommandEvent_JumpsTheQueue()
+    public void ALogOffCommandEvent_WaitsItsTurn()
     {
         using Harness h = NewHarness();
         h.Tracker.SetLocated(A);
@@ -550,8 +535,11 @@ public sealed class EventQueueTests : IDisposable
             CommandText = ";o", Then = EventThenType.Resume,
         }));
 
-        Assert.Equal(";o", Assert.Single(sent));
-        Assert.Contains(h.EventLog, l => l.Contains("'relog' jumps the queue"));
+        Assert.Empty(sent);
+        Assert.Contains("'one' WalkTo", h.Events.RunSummary);
+        Assert.Equal("'two'", h.Events.QueueSummary.Split(" (")[0]);
+        Assert.Contains("'relog'", h.Events.QueueSummary);
+        Assert.DoesNotContain(h.EventLog, l => l.Contains("'relog' jumps the queue"));
     }
 
     // A drop empties the queue (Logon and Re-log fire afresh on the way back in) and

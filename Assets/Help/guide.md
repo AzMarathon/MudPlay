@@ -4551,7 +4551,7 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 
 **Default:** `10` (1–100)
 **What it does:** Events run one at a time (see [When events overlap](#when-events-overlap)). This is how many may wait behind the one running. An event that fires with that many already waiting is dropped: it doesn't run, the Program Log says so and the terminal prints `[Event '<name>' dropped: …]`.
-**Important notes:** An event never waits twice, so the limit only matters when more events than this fire behind one long run. Logoff-type events are never turned away. Saved for this character, immediately.
+**Important notes:** An event never waits twice, so the limit only matters when more events than this fire behind one long run. Logoff events are never turned away. Saved for this character, immediately.
 
 ### Drop a waiting event after … minutes
 
@@ -4649,7 +4649,7 @@ Events run one at a time, each from start to finish, **in the order they fired**
 - **A loop or Auto-Lair event with no Stop after rule is done once the loop has started.** It can't make others wait, since it would never finish. An event waiting behind it starts right after, and an event that fires later takes over from the loop and goes back to it.
 - **Go back happens once.** When the event that just finished would only go back or start a loop or Auto-Lair, and another event is waiting, the waiting event starts straight away and takes that loop as what **it** goes back to. Two boss events that both end in the same loop walk to the first boss, then the second, then start the loop.
 - **A plain command** (Nothing after it) is sent the moment it fires and waits for nothing.
-- **Logoff-type events jump the queue.** These are events with the **Logoff** trigger (fired by a cleanup warning or your own disconnect), and events whose **Command** sends a log-off as a line of its own: `;o`, `=x`, or the realm's exit command from Settings → BBS. No other trigger or action counts, boss events included. One starts at once: the event it interrupts is abandoned without its Then, and the events already waiting keep their places behind it. A second logoff-type event waits for the first, ahead of the ordinary ones.
+- **Logoff events jump the queue.** Only an event whose **When** is **Logoff** (fired by a cleanup warning or your own disconnect) starts at once: the event it interrupts is abandoned without its Then, and the events already waiting keep their places behind it. A second Logoff event waits for the first, ahead of the others. Every other event waits its turn, boss events and events whose command logs off (`;o`, `=x`, the realm's exit command) included.
 - **The same event isn't queued twice.** An **Every 5 minutes** event whose run takes seven fires again while it is still going: that firing is skipped. One that fires again while it waits stays queued once.
 - **Limits.** How many events may wait, and for how long, are the two settings above ([Events waiting at most](#events-waiting-at-most), 10 and 30 minutes by default). An event turned away at either is dropped, and the terminal says so. An event you remove, edit or disable while it waits doesn't run.
 - **Stopping the running event empties the queue.** Stop its walk or loop (or take over, as above) and the waiting events are dropped with it. So does dying and **Reset States**. A lost connection drops the waiting events too; Logon and Re-log events fire afresh when you are back in.

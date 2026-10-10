@@ -37,13 +37,11 @@ namespace MudPlay.Game.Events;
 //     then simply what the character is doing: an event that fires later takes
 //     over from it and goes back to it like any loop the user started.
 //
-// Only a logoff-type event jumps the queue (user, 2026-10-10: "logoff events
-// (events triggered basically on cleanup or that make the user logoff) should
-// jump the queue, all others should execute in the order of their trigger
-// time"): one with the Logoff trigger, or one whose command sends a log-off
-// (IsLogoffType). It starts at once, the run it interrupts is abandoned, and
-// the events already waiting keep their places behind it; the connection it is
-// racing would not wait for the run to end.
+// Only an event with the Logoff trigger jumps the queue (user, 2026-10-10: "an
+// event that its 'when' is logoff, should fire immediately, all other events
+// queue"; IsLogoffType). It starts at once, the run it interrupts is abandoned,
+// and the events already waiting keep their places behind it; the connection it
+// is racing would not wait for the run to end.
 //
 // A queued event starts as if it had fired the moment the run before it ended.
 // When that run's Then would only leave an engine running (go back, start a loop
@@ -355,32 +353,10 @@ public sealed class EventManager : IDisposable
     // Whether an event that fires now waits for this run to end.
     private static bool HoldsQueue(EventRun run) => !run.Unheld;
 
-    // The realm's own log-off command (Settings → BBS), beside the two every board
-    // takes. Bound by AppServices.
-    private Func<string?>? _readExitCommand;
-    public void SetExitCommandReader(Func<string?> read)
-    {
-        ArgumentNullException.ThrowIfNull(read);
-        _readExitCommand = read;
-    }
-
     // The events that jump the queue: the Logoff trigger (fired by the cleanup
-    // warning or the user's own disconnect), and a Command action that sends a
-    // log-off — `;o`, `=x` or the realm's exit command as a line of its own.
-    // Nothing else an action does ends the connection.
-    internal bool IsLogoffType(ScheduledEvent e)
-    {
-        if (e.TriggerType == EventTriggerType.Logoff) return true;
-        if (e.ActionType != EventActionType.Command || string.IsNullOrWhiteSpace(e.CommandText)) return false;
-        string? exit = _readExitCommand?.Invoke()?.Trim();
-        foreach (string line in SplitCommand(e.CommandText))
-        {
-            string sent = line.Trim();
-            if (SentExitCommand.Classify(sent) != SentExitCommand.Intent.None) return true;
-            if (!string.IsNullOrEmpty(exit) && sent.Equals(exit, StringComparison.OrdinalIgnoreCase)) return true;
-        }
-        return false;
-    }
+    // warning or the user's own disconnect). What an event's action does, a command
+    // that sends a log-off included, doesn't make it one.
+    internal static bool IsLogoffType(ScheduledEvent e) => e.TriggerType == EventTriggerType.Logoff;
 
     // Run the event (see the header), or queue it behind the run under way. Skips
     // when Disabled is true, when "Disable all events" is on, or when the fire-time
@@ -406,10 +382,10 @@ public sealed class EventManager : IDisposable
         }
         if (_run is { } holder && HoldsQueue(holder))
         {
-            // A logoff-type event runs in the minutes before a cleanup or the
-            // moment before a disconnect; one that waited behind a long trip would
-            // miss the connection. Behind another logoff-type run it waits, at the
-            // head of the queue.
+            // A Logoff event runs in the minutes before a cleanup or the moment
+            // before a disconnect; one that waited behind a long trip would miss
+            // the connection. Behind another Logoff run it waits, at the head of
+            // the queue.
             bool jumps = IsLogoffType(e);
             if (!jumps || IsLogoffType(holder.Origin) || IsLogoffType(holder.Event))
             {
@@ -417,7 +393,7 @@ public sealed class EventManager : IDisposable
                 return;
             }
             _log?.Info("Events",
-                $"Logoff-type event '{Label(e)}' jumps the queue: '{Label(holder.Event)}' is abandoned at {holder.Step}"
+                $"Logoff event '{Label(e)}' jumps the queue: '{Label(holder.Event)}' is abandoned at {holder.Step}"
                 + (_queue.Count > 0 ? $"; {_queue.Count} waiting event(s) keep their places." : "."));
         }
         Fired?.Invoke(e);
@@ -428,8 +404,8 @@ public sealed class EventManager : IDisposable
 
     // False when this firing is dropped instead: the event is already running or
     // waiting (an "every 5 minutes" event whose run takes 7 runs once, not twice in
-    // a row), or the queue is full. jumps: a logoff-type event goes ahead of the
-    // ordinary ones (behind any logoff-type event already waiting) and is never
+    // a row), or the queue is full. jumps: a Logoff event goes ahead of the
+    // ordinary ones (behind any Logoff event already waiting) and is never
     // turned away by the cap.
     private bool Enqueue(ScheduledEvent e, EventRun holder, bool jumps)
     {
@@ -452,7 +428,7 @@ public sealed class EventManager : IDisposable
             while (at < _queue.Count && IsLogoffType(_queue[at].Event)) at++;
             _queue.Insert(at, new QueuedEvent(e, Now()));
             _log?.Info("Events",
-                $"Logoff-type event '{Label(e)}' queued ahead of the others, behind '{Label(holder.Event)}' ({holder.Step}); {_queue.Count} waiting.");
+                $"Logoff event '{Label(e)}' queued ahead of the others, behind '{Label(holder.Event)}' ({holder.Step}); {_queue.Count} waiting.");
             return true;
         }
         if (_queue.Count >= MaxQueued)
