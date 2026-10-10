@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.2**
+> **Version 3.161.3**
 > - Events run one at a time, start to finish: one that fires while another is walking, waiting, resting, sweeping or on a bank trip or stash transfer waits its turn
 > - With an event waiting, the finished one's "go back" or loop passes to it, so the loop is restarted once, after the last
 > - An event isn't queued twice; at most 10 wait; one that waited 30 minutes is dropped

@@ -1,6 +1,6 @@
 # Version history
 
-## 3.161.2
+## 3.161.3
 
 - Events run one at a time, start to finish: one that fires while another is walking, waiting, resting, sweeping or on a bank trip or stash transfer waits its turn
 - With an event waiting, the finished one's "go back" or loop passes to it, so the loop is restarted once, after the last
@@ -10,6 +10,11 @@
 - A Then that can't get going (a loop behind a teleport Settings → Teleports doesn't allow) says why in the terminal
 - Bug report: the events waiting and what the last Then came to
 - bug reports addressed: paradigm-20261009-185106, paradigm-20261009-220128
+
+## 3.161.1
+
+- Party item gates: a member who never answers the `@have` count is no longer fetched another copy on every trip
+- A copy you handed them and the game confirmed is remembered until the party changes
 
 ## 3.161.0
 
