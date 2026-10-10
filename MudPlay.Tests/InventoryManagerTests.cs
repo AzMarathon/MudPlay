@@ -480,6 +480,29 @@ public sealed class InventoryManagerTests
         Assert.Equal(new[] { "a torch" }, hidden);
     }
 
+    // An item merely named after a coin is echoed by its bare name, with no amount
+    // in front: it is an item on the hide path as it is on the drop path. Paradigm's
+    // counted echo of one names no coin metal either.
+    [Theory]
+    [InlineData("iron crown")]
+    [InlineData("storm crown")]
+    [InlineData("fiery crown")]
+    [InlineData("woven ivy crown")]
+    [InlineData("sack of coins")]
+    [InlineData("3 iron crown")]
+    [InlineData("2 woven ivy crown")]
+    [InlineData("4 sack of coins")]
+    public void ItemNamedAfterACoin_Hidden_FiresItemHidden(string echo)
+    {
+        using Harness h = new();
+        List<string> hidden = new();
+        h.Inv.ItemHidden += hidden.Add;
+
+        h.Feed($"You hid {echo}.");
+
+        Assert.Equal(new[] { echo }, hidden);
+    }
+
     [Fact]
     public void CoinHide_DoesNotFireItemHidden()
     {
