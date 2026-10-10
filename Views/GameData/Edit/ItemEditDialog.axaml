@@ -173,7 +173,7 @@
                                             <CheckBox Content="Auto-stash" IsChecked="{Binding AutoStash, Mode=TwoWay}"
                                                       ToolTip.Tip="Hide it in a stash room as you pass through. With Must have minimum ticked, Min. to keep stays with you and only the copies above it are stashed; otherwise every copy goes. Works for keys on your key ring too."/>
                                             <CheckBox Content="Auto-discard" IsChecked="{Binding AutoDiscard, Mode=TwoWay}"
-                                                      ToolTip.Tip="Drop it as soon as it's picked up. With Must have minimum ticked, Min. to keep copies stay with you and only the ones above that are dropped; otherwise every copy goes. A copy you are wearing (or the light you have lit) counts as one you keep and is never the one dropped. Hidden instead of dropped when Settings → Other → Hide items when discarding is ticked."/>
+                                                      ToolTip.Tip="Drop it as soon as it's picked up. With Must have minimum ticked, Min. to keep copies stay with you and only the ones above that are dropped; otherwise every copy goes. A copy you are wearing counts as one you keep and is never the one dropped. A lit light is not protected: the game picks which copy goes, and it can be the lit one. Hidden instead of dropped when Settings → Other → Hide items when discarding is ticked."/>
                                         </StackPanel>
                                     </Border>
 

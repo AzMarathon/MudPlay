@@ -6538,8 +6538,7 @@ public partial class MainWindowViewModel : ObservableObject
         PersistAutoModeFlag("AutoGetItems", value, d => d.AutoGetItems = value);
         // The auto-discard engine's held hides waited for its switch; switched off,
         // its piles still waiting to be sent come back.
-        if (value) AppServices.Current.AutoDiscard.RecheckHeldHides();
-        else AppServices.Current.AutoDiscard.ReviewQueuedDiscards();
+        AppServices.Current.AutoDiscard.OnRulesChanged();
         if (!_climbDrivingEngines) _climbTurnedOffGetItems = false;
         MaybeEndSprintOnManualEngineEnable(value);
     }

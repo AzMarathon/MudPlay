@@ -135,4 +135,46 @@ public sealed class BulkCommandPacerTests
         h.Drain(10);
         Assert.Equal(new[] { "drop moonstone", "drop dagger", "drop ruby" }, h.Sent.Skip(BulkCommandPacer.Window));
     }
+
+    // A command waits seconds for its turn; its sender is asked again as it comes
+    // up. One it turns down is dropped without using a place in the window, and
+    // the commands behind it still go.
+    [Fact]
+    public void ACommandItsSenderTurnsDown_IsDropped_AndTheRestStillGo()
+    {
+        Harness h = new();
+        List<string> asked = new();
+        h.Pacer.Enqueue(new[] { "hide dagger", "hide ruby", "hide dagger" }, owner: null, mayGo: command =>
+        {
+            asked.Add(command);
+            return command != "hide ruby";
+        });
+        h.Drain(10);
+
+        Assert.Equal(new[] { "hide dagger", "hide ruby", "hide dagger" }, asked);
+        Assert.Equal(new[] { "hide dagger", "hide dagger" }, h.Sent);
+
+        // Two unanswered, not three: four more fit the window.
+        h.Pacer.Enqueue(Drops(10));
+        h.Drain(10);
+        Assert.Equal(BulkCommandPacer.Window, h.Sent.Count);
+    }
+
+    // The check may take back the rest of its sender's commands while it is asked.
+    [Fact]
+    public void TheCheck_MayTakeBackTheRestWhileItIsAsked()
+    {
+        Harness h = new();
+        object engine = new();
+        h.Pacer.Enqueue(Enumerable.Repeat("hide dagger", 4), engine, _ =>
+        {
+            h.Pacer.CancelOwned(engine, _ => true);
+            return false;
+        });
+        h.Pacer.Enqueue(new[] { "drop ruby" });
+        h.Drain(10);
+
+        Assert.Equal(new[] { "drop ruby" }, h.Sent);
+        Assert.Equal(0, h.Pacer.Pending);
+    }
 }

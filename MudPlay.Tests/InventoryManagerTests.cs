@@ -1053,6 +1053,35 @@ public sealed class InventoryManagerTests
         Assert.DoesNotContain(Worn(h), e => e.Name == "padded gloves");
     }
 
+    // A wear, wield or remove line moves one piece between the pack and the worn
+    // set. Listeners count the two together (a keep amount, a copy to sell), so
+    // they are told once, with the piece in exactly one of them: a notice half-way
+    // would show it in both, or in neither.
+    [Theory]
+    [InlineData("padded gloves (Hands), lantern", "You are now wearing lantern.", "lantern")]
+    [InlineData("padded gloves (Hands), lantern", "You are now holding lantern.", "lantern")]
+    [InlineData("padded gloves (Hands), lantern", "You have removed padded gloves.", "padded gloves")]
+    [InlineData("lantern (Weapon Hand), padded gloves", "You now have no weapon readied.", "lantern")]
+    // A swap: the displaced weapon and the new one each change sides in one notice.
+    [InlineData("quarterstaff (Weapon Hand), lantern", "You are now holding lantern.", "lantern")]
+    [InlineData("quarterstaff (Weapon Hand), lantern", "You are now holding lantern.", "quarterstaff")]
+    public void MoveBetweenPackAndWorn_IsOneNotice_WithThePieceHeldOnce(string carrying, string line, string piece)
+    {
+        using Harness h = new();
+        h.Feed($"You are carrying {carrying}, 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+        List<int> heldAtEachNotice = new();
+        h.Inv.Changed += () => heldAtEachNotice.Add(
+            Carried(h).Count(c => c == piece) + Worn(h).Count(e => e.Name == piece));
+        int before = h.ChangedCount;
+
+        h.Feed(line);
+
+        Assert.Equal(1, h.ChangedCount - before);
+        Assert.Equal(new[] { 1 }, heldAtEachNotice);
+    }
+
     [Fact]
     public void GetItem_DoesNotCollideWithCurrencyPickup()
     {

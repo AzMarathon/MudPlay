@@ -6800,14 +6800,11 @@ public sealed class AppServices
             isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems),
             log: Log,
             isParadigm: onParadigm,
-            // Worn gear and the lit light count toward an item's keep amount. The
-            // lit light is known from the last full read only.
-            wornItems: () =>
-            {
-                Game.Inventory.InventorySnapshot snap = Inventory.Snapshot;
-                IEnumerable<string> worn = snap.EquippedItems.Select(e => e.Name);
-                return snap.ReadiedLight is { } lit ? worn.Append(lit.Name) : worn;
-            });
+            // Worn gear counts toward an item's keep amount. The lit light is a pack
+            // copy to the game, though the listing sets it apart; it is known from
+            // the last full read only.
+            wornItems: () => Inventory.Snapshot.EquippedItems.Select(e => e.Name),
+            litLight: () => Inventory.Snapshot.ReadiedLight?.Name);
         // Auto-discard re-evaluates the pack on every inventory change — the
         // seam that surfaces chest dumps and freshly collected loot.
         Inventory.Changed += AutoDiscard.OnInventoryChanged;
@@ -6820,12 +6817,13 @@ public sealed class AppServices
             if (t.NewConfidence == Game.Map.RoomConfidence.Confirmed && t.NewRoom is { } arrived)
                 AutoDiscard.OnRoomEntered(arrived.Key);
         };
-        // The engine's own piles go in under its name, so it can take back what is
-        // still waiting when the rules change under them; nothing else is its to take.
-        AutoDiscard.PacedSender = (cmds, ownPile) => InventoryAction.SendPaced(cmds, ownPile ? AutoDiscard : null);
-        AutoDiscard.RecallQueued = take => InventoryAction.RecallPaced(AutoDiscard, take);
+        // The engine's commands go into the pacer under its own tags and with its
+        // own last-moment check, so it can take back what is still waiting when
+        // the rules change under them; nothing else in the queue is its to take.
+        AutoDiscard.PacedSender = (cmds, owner, mayGo) => InventoryAction.SendPaced(cmds, owner, mayGo);
+        AutoDiscard.RecallQueued = (owner, take) => InventoryAction.RecallPaced(owner, take);
         // An item's flag unticked or its keep amount raised while a pile waits.
-        Resolver.GameDataChanged += _ => AutoDiscard.ReviewQueuedDiscards();
+        Resolver.GameDataChanged += _ => AutoDiscard.OnRulesChanged();
         AutoDiscard.SendsQueued = () => InventoryAction.HasPacedCommandsQueued;
         AutoDiscard.CancelQueuedSends = () => InventoryAction.CancelPaced();
         // A discard sent while the send gate is up is dropped unsent. And on Stock
@@ -8951,13 +8949,9 @@ public sealed class AppServices
         AutoGetItems.SuppressDuringSweep = () => GhSweep.IsActive;
         AutoDiscard.SuppressDuringSweep = () => GhSweep.IsActive;
         // A sweep starting takes back the engine's piles still waiting to be sent.
-        // Hides a full room refused were kept back for the sweep; it may have left
-        // the character somewhere with room.
-        GhSweep.PhaseChanged += () =>
-        {
-            if (GhSweep.IsActive) AutoDiscard.ReviewQueuedDiscards();
-            else AutoDiscard.RecheckHeldHides();
-        };
+        // One ending may have left the character somewhere with room for the hides
+        // a full room refused, and lets the engine's own discards go again.
+        GhSweep.PhaseChanged += AutoDiscard.OnInventoryChanged;
 
         // Shop-source routing (PR C). On a one-shot walk-to that needs an
         // uncarried Item/Ticket-gate item a shop sells, detour to the

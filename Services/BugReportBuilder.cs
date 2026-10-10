@@ -1426,7 +1426,8 @@ public static class BugReportBuilder
         var heldHides = svc.AutoDiscard.HeldHides;
         sb.Append("\n**Discard hides held for the next room** (").Append(heldHides.Count)
           .Append("; ").Append(svc.AutoDiscard.UnansweredHides).Append(" hides and ")
-          .Append(svc.AutoDiscard.UnansweredDrops).Append(" drops sent and unanswered")
+          .Append(svc.AutoDiscard.UnansweredDrops).Append(" drops counted and unanswered, ")
+          .Append(svc.AutoDiscard.QueuedCopies).Append(" of them still waiting to be sent")
           .Append(svc.AutoDiscard.AwaitingInventoryRead ? "; waiting for an inventory read" : "")
           .Append(")\n\n");
         if (heldHides.Count == 0)

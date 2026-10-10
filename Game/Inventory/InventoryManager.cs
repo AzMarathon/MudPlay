@@ -407,21 +407,24 @@ public sealed partial class InventoryManager : IDisposable
             // instead of vanishing until the next full 'i' dump. Skip an item that
             // matches the incoming name (a re-confirm of the same weapon).
             var displaced = new List<string>();
-            PatchEquipped(list =>
+            MoveBetweenPackAndWorn(() =>
             {
-                foreach (EquippedItem e in list)
-                    if (e.Slot == "Weapon Hand"
-                        && !string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase))
-                        displaced.Add(e.Name);
-                list.RemoveAll(e => e.Slot == "Weapon Hand");
-                list.Add(new EquippedItem(name, "Weapon Hand"));
-                return true;
+                PatchEquipped(list =>
+                {
+                    foreach (EquippedItem e in list)
+                        if (e.Slot == "Weapon Hand"
+                            && !string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase))
+                            displaced.Add(e.Name);
+                    list.RemoveAll(e => e.Slot == "Weapon Hand");
+                    list.Add(new EquippedItem(name, "Weapon Hand"));
+                    return true;
+                });
+                // The newly-held weapon leaves the pack for the hand; the displaced
+                // one returns to it.
+                RemoveCarried(name);
+                foreach (string old in displaced)
+                    AddCarried(old);
             });
-            // The newly-held weapon leaves the pack for the hand; the displaced one
-            // returns to it.
-            RemoveCarried(name);
-            foreach (string old in displaced)
-                AddCarried(old);
             return;
         }
 
@@ -437,22 +440,26 @@ public sealed partial class InventoryManager : IDisposable
             string slot = _slotResolver?.Invoke(name) ?? "Worn";
             (int Index, string Family)? filled = _lastRemovedPaired;
             _lastRemovedPaired = null;   // consumed — correlate only the immediately-following wear
-            PatchEquipped(list =>
+            MoveBetweenPackAndWorn(() =>
             {
-                // A finger/wrist item worn right after removing a same-family slot-mate
-                // took THAT physical slot (the game's `eq <ring>` remove-then-wear
-                // pair) — insert it at the freed index so the snapshot keeps the game's
-                // slot order. Only when the family still has a surviving slot-mate (so
-                // we're filling a pair, not seeding one). Otherwise append, unchanged.
-                if (filled is { } f && PairedFamily(slot) is { } fam && fam == f.Family
-                    && f.Index <= list.Count
-                    && list.Exists(e => PairedFamily(e.Slot) == fam))
-                    list.Insert(f.Index, new EquippedItem(name, slot));
-                else
-                    list.Add(new EquippedItem(name, slot));
-                return true;
+                PatchEquipped(list =>
+                {
+                    // A finger/wrist item worn right after removing a same-family
+                    // slot-mate took THAT physical slot (the game's `eq <ring>`
+                    // remove-then-wear pair) — insert it at the freed index so the
+                    // snapshot keeps the game's slot order. Only when the family still
+                    // has a surviving slot-mate (so we're filling a pair, not seeding
+                    // one). Otherwise append, unchanged.
+                    if (filled is { } f && PairedFamily(slot) is { } fam && fam == f.Family
+                        && f.Index <= list.Count
+                        && list.Exists(e => PairedFamily(e.Slot) == fam))
+                        list.Insert(f.Index, new EquippedItem(name, slot));
+                    else
+                        list.Add(new EquippedItem(name, slot));
+                    return true;
+                });
+                RemoveCarried(name);
             });
-            RemoveCarried(name);
             return;
         }
 
@@ -461,16 +468,19 @@ public sealed partial class InventoryManager : IDisposable
         {
             string name = removed.Groups[1].Value.TrimEnd();
             _lastRemovedPaired = null;
-            PatchEquipped(list =>
+            MoveBetweenPackAndWorn(() =>
             {
-                int idx = list.FindIndex(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
-                // Remember a vacated finger/wrist slot for the wear line that follows.
-                if (idx >= 0 && PairedFamily(list[idx].Slot) is { } fam)
-                    _lastRemovedPaired = (idx, fam);
-                return list.RemoveAll(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase)) > 0;
+                PatchEquipped(list =>
+                {
+                    int idx = list.FindIndex(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+                    // Remember a vacated finger/wrist slot for the wear line that follows.
+                    if (idx >= 0 && PairedFamily(list[idx].Slot) is { } fam)
+                        _lastRemovedPaired = (idx, fam);
+                    return list.RemoveAll(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase)) > 0;
+                });
+                // A removed piece returns to the pack (unworn) until re-equipped.
+                AddCarried(name);
             });
-            // A removed piece returns to the pack (unworn) until re-equipped.
-            AddCarried(name);
             return;
         }
 
@@ -481,14 +491,17 @@ public sealed partial class InventoryManager : IDisposable
             // weapon's name from the worn set as it leaves so it can return to
             // the pack (unworn) just like removed armor.
             var unreadied = new List<string>();
-            PatchEquipped(list =>
+            MoveBetweenPackAndWorn(() =>
             {
-                foreach (EquippedItem e in list)
-                    if (e.Slot == "Weapon Hand") unreadied.Add(e.Name);
-                return list.RemoveAll(e => e.Slot == "Weapon Hand") > 0;
+                PatchEquipped(list =>
+                {
+                    foreach (EquippedItem e in list)
+                        if (e.Slot == "Weapon Hand") unreadied.Add(e.Name);
+                    return list.RemoveAll(e => e.Slot == "Weapon Hand") > 0;
+                });
+                foreach (string name in unreadied)
+                    AddCarried(name);
             });
-            foreach (string name in unreadied)
-                AddCarried(name);
             return;
         }
 
@@ -1002,6 +1015,38 @@ public sealed partial class InventoryManager : IDisposable
         return null;
     }
 
+    // One game line can move a piece between the pack and the worn set (a wear, a
+    // wield, a remove). Both sides are patched before anyone is told, and Changed
+    // is raised once: a listener called in between would see the piece in both
+    // places and count it twice, or in neither and take it for lost. Lines are
+    // read on one thread, so the two fields need no lock.
+    private int _movesUnderWay;
+    private bool _changedDuringMove;
+
+    private void MoveBetweenPackAndWorn(Action patch)
+    {
+        _movesUnderWay++;
+        try
+        {
+            patch();
+        }
+        finally
+        {
+            if (--_movesUnderWay == 0 && _changedDuringMove)
+            {
+                _changedDuringMove = false;
+                Changed?.Invoke();
+            }
+        }
+    }
+
+    // What a patch of the pack or the worn set raises in place of Changed itself.
+    private void NotifyChanged()
+    {
+        if (_movesUnderWay > 0) _changedDuringMove = true;
+        else Changed?.Invoke();
+    }
+
     // Apply an in-place edit to the worn set, publishing only if it changed.
     // Gated on a loaded baseline: patching an empty set would imply the
     // character wears nothing but the piece just equipped — misleading until
@@ -1021,7 +1066,7 @@ public sealed partial class InventoryManager : IDisposable
                 }
             }
         }
-        if (changed) Changed?.Invoke();
+        if (changed) NotifyChanged();
     }
 
     // Establish the loaded baseline from an acquisition when no full 'i' has run
@@ -1067,7 +1112,7 @@ public sealed partial class InventoryManager : IDisposable
                 }
             }
         }
-        if (changed) Changed?.Invoke();
+        if (changed) NotifyChanged();
     }
 
     // A give / receive of coins ("... 30 gold crowns ...") adjusts currency, not
@@ -1145,7 +1190,7 @@ public sealed partial class InventoryManager : IDisposable
                 }
             }
         }
-        if (changed) Changed?.Invoke();
+        if (changed) NotifyChanged();
     }
 
     // "<Player> gives you <item>." is a player's hand-over only when the item is a
@@ -1388,7 +1433,7 @@ public sealed partial class InventoryManager : IDisposable
                 changed = true;
             }
         }
-        if (changed) Changed?.Invoke();
+        if (changed) NotifyChanged();
     }
 
     private static long ComputeWealth(int copper, int silver, int gold, int platinum, int runic)

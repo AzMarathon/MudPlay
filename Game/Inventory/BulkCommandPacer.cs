@@ -38,8 +38,9 @@ public sealed class BulkCommandPacer
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
 
-    // Each waiting command with whoever asked to be able to take it back, if anyone.
-    private readonly Queue<(string Command, object? Owner)> _queue = new();
+    // Each waiting command with whoever asked to be able to take it back, if anyone,
+    // and the check its sender wants made the moment before it goes.
+    private readonly Queue<(string Command, object? Owner, Func<string, bool>? MayGo)> _queue = new();
     private int _unanswered;
     private DateTimeOffset _lastSend = DateTimeOffset.MinValue;
     private DateTimeOffset _lastActivity = DateTimeOffset.MinValue;
@@ -62,10 +63,14 @@ public sealed class BulkCommandPacer
 
     // An owner marks the commands as its own to take back while they wait
     // (CancelOwned). Commands without one are only ever dropped by Cancel.
-    public void Enqueue(IEnumerable<string> commands, object? owner = null)
+    // A command can wait seconds for its turn, so what made it right to queue may
+    // no longer hold when it goes: `mayGo` is asked just before each one is sent,
+    // and a command it turns down is dropped, not sent. It may take back more of
+    // the owner's commands, or queue new ones, while it is asked.
+    public void Enqueue(IEnumerable<string> commands, object? owner = null, Func<string, bool>? mayGo = null)
     {
         ArgumentNullException.ThrowIfNull(commands);
-        foreach (string command in commands) _queue.Enqueue((command, owner));
+        foreach (string command in commands) _queue.Enqueue((command, owner, mayGo));
         Pump();
     }
 
@@ -79,7 +84,7 @@ public sealed class BulkCommandPacer
         List<string> taken = new();
         for (int n = _queue.Count; n > 0; n--)
         {
-            (string Command, object? Owner) waiting = _queue.Dequeue();
+            (string Command, object? Owner, Func<string, bool>? MayGo) waiting = _queue.Dequeue();
             if (ReferenceEquals(waiting.Owner, owner) && take(waiting.Command)) taken.Add(waiting.Command);
             else _queue.Enqueue(waiting);
         }
@@ -130,7 +135,9 @@ public sealed class BulkCommandPacer
             TimeSpan sinceLast = now - _lastSend;
             if (sinceLast < MinGap) { Arm(MinGap - sinceLast); return; }
 
-            _send(_queue.Dequeue().Command);
+            (string command, _, Func<string, bool>? mayGo) = _queue.Dequeue();
+            if (mayGo is not null && !mayGo(command)) continue;
+            _send(command);
             _unanswered++;
             _lastSend = now;
             _lastActivity = now;

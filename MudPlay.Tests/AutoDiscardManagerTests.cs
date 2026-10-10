@@ -59,14 +59,21 @@ public sealed class AutoDiscardManagerTests
         public AutoDiscardManager Discard { get; }
         public List<byte[]> Sent { get; } = new();
         public Pack Carried { get; } = new();
-        // What is worn, and the lit light: one name per copy.
+        // What is worn: one name per copy.
         public List<string> Worn { get; } = new();
+        // The lit light, as the last full read listed it apart from the pack.
+        public string? Lit { get; set; }
         public bool Enabled { get; set; } = true;
         public bool Paradigm { get; set; }
+        public DateTimeOffset Now { get; set; } = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
 
-        // The pacer's queue, when a test stands one in: each waiting command and
-        // whether it is one of the engine's own piles.
-        public List<(string Command, bool OwnPile)> Queued { get; } = new();
+        // A command waiting in the stand-in pacer: whose it is, and the check its
+        // sender wants made just before it goes.
+        public sealed record Waiting(string Command, object? Owner, Func<string, bool>? MayGo);
+
+        // The stand-in pacer's queue, and what it has let out.
+        public List<Waiting> Queued { get; } = new();
+        public List<string> Wire { get; } = new();
 
         // name -> (Number, Discard, Keep)
         private readonly Dictionary<string, (int Number, bool Discard, int Keep)> _map =
@@ -81,30 +88,49 @@ public sealed class AutoDiscardManagerTests
                 isEnabled: () => Enabled,
                 log: Log,
                 isParadigm: () => Paradigm,
-                wornItems: () => Worn);
+                wornItems: () => Worn,
+                litLight: () => Lit,
+                now: () => Now);
             Discard.SetWireSender(b => Sent.Add(b));
         }
 
+        // Long enough for the game to have answered whatever went out.
+        public void Settle() => Now += AutoDiscardManager.AnswerSettle;
+
         // Stand a pacer in that sends nothing until told to: commands wait in
-        // Queued, and the engine can take its own piles back.
+        // Queued, and each sender can take its own back.
         public void UsePacer()
         {
-            Discard.PacedSender = (commands, ownPile) => Queued.AddRange(commands.Select(c => (c, ownPile)));
+            Discard.PacedSender = (commands, owner, mayGo) =>
+                Queued.AddRange(commands.Select(c => new Waiting(c, owner, mayGo)));
             Discard.SendsQueued = () => Queued.Count > 0;
-            Discard.RecallQueued = take =>
+            Discard.RecallQueued = (owner, take) =>
             {
                 List<string> taken = new();
                 for (int i = 0; i < Queued.Count;)
                 {
-                    if (Queued[i].OwnPile && take(Queued[i].Command)) { taken.Add(Queued[i].Command); Queued.RemoveAt(i); }
+                    if (ReferenceEquals(Queued[i].Owner, owner) && take(Queued[i].Command))
+                    {
+                        taken.Add(Queued[i].Command);
+                        Queued.RemoveAt(i);
+                    }
                     else i++;
                 }
                 return taken;
             };
         }
 
-        // The pacer lets the next `count` waiting commands out.
-        public void Release(int count) => Queued.RemoveRange(0, count);
+        // The pacer reaches the next `count` waiting commands: each goes out if its
+        // sender still wants it to.
+        public void Release(int count)
+        {
+            for (int i = 0; i < count && Queued.Count > 0; i++)
+            {
+                Waiting next = Queued[0];
+                Queued.RemoveAt(0);
+                if (next.MayGo is null || next.MayGo(next.Command)) Wire.Add(next.Command);
+            }
+        }
 
         public void Map(string name, int number, bool discard, int keep = 0)
             => _map[name] = (number, discard, keep);
@@ -287,7 +313,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new();
         List<IReadOnlyList<string>> batches = new();
-        h.Discard.PacedSender = (commands, _) => batches.Add(commands);
+        h.Discard.PacedSender = (commands, _, _) => batches.Add(commands);
         h.Map("dagger", 1, discard: true);
         h.Carried.Set("dagger", 10);
 
@@ -359,19 +385,21 @@ public sealed class AutoDiscardManagerTests
         Assert.Single(h.Sent);
     }
 
-    // A flagged light is discarded like anything else, but the one that is lit is a
-    // held copy: it counts toward the keep amount and no discard is sent for it.
+    // The lit light is a pack copy like any other, though the listing sets it apart:
+    // it is counted with the spares, and a flagged light is discarded lit or not.
+    // Which copy a drop takes is the game's choice, and it can be the lit one.
     [Theory]
-    [InlineData(1, 1, 1)]   // lit + one spare, keep 1: the spare goes
-    [InlineData(1, 0, 1)]
-    [InlineData(2, 2, 1)]   // lit + two spares, keep 2: one spare goes
-    [InlineData(0, 0, 0)]   // only the lit one: nothing
-    public void LitLight_CountsTowardKeep_AndIsNeverDiscarded(int spares, int keep, int discarded)
+    [InlineData(1, 1, 1)]   // lit + one spare, keep 1: two copies, one goes
+    [InlineData(1, 0, 2)]   // keep none: both go, the lit one with them
+    [InlineData(2, 2, 1)]
+    [InlineData(0, 0, 1)]   // only the lit one, and it is flagged: it goes
+    [InlineData(0, 1, 0)]   // only the lit one, one to keep: it stays
+    public void LitLight_IsCountedAsAPackCopy_AndIsNotHeldBack(int spares, int keep, int discarded)
     {
         using Harness h = new();
         h.Map("torch", 3, discard: true, keep: keep);
         h.Carried.Set("torch", spares);
-        h.Worn.Add("torch");                  // the light in use, as the last full read listed it
+        h.Lit = "torch";
 
         h.Discard.OnInventoryChanged();
 
@@ -397,13 +425,13 @@ public sealed class AutoDiscardManagerTests
     public void QueuedPile_IsTakenBack_WhenTheSwitchGoesOff_ButNotWhatHasGoneOut()
     {
         using Harness h = QueuedPileOfTenDaggers();
-        h.Queued.Add(("drop moonstone", false));   // someone else's waiting command
+        h.Queued.Add(new Harness.Waiting("drop moonstone", null, null));   // someone else's waiting command
         h.Release(3);                              // three are on the wire
 
         h.Enabled = false;
-        h.Discard.ReviewQueuedDiscards();
+        h.Discard.OnRulesChanged();
 
-        Assert.Equal(new[] { ("drop moonstone", false) }, h.Queued);
+        Assert.Equal("drop moonstone", Assert.Single(h.Queued).Command);
         Assert.Equal(3, h.Discard.UnansweredDrops);
     }
 
@@ -413,7 +441,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = QueuedPileOfTenDaggers();
 
         h.Discard.SuppressDuringSweep = () => true;
-        h.Discard.ReviewQueuedDiscards();
+        h.Discard.OnInventoryChanged();
 
         Assert.Empty(h.Queued);
         Assert.Equal(0, h.Discard.UnansweredDrops);
@@ -425,7 +453,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = QueuedPileOfTenDaggers();
 
         h.Map("dagger", 1, discard: false);
-        h.Discard.ReviewQueuedDiscards();
+        h.Discard.OnRulesChanged();
 
         Assert.Empty(h.Queued);
         Assert.Equal(0, h.Discard.UnansweredDrops);
@@ -437,14 +465,15 @@ public sealed class AutoDiscardManagerTests
         using Harness h = QueuedPileOfTenDaggers();
 
         h.Map("dagger", 1, discard: true, keep: 2);
-        h.Discard.ReviewQueuedDiscards();
+        h.Discard.OnRulesChanged();
 
         Assert.Equal(8, h.Queued.Count);
         Assert.Equal(8, h.Discard.UnansweredDrops);
     }
 
     // Paradigm's pile is one counted command: it can't be taken back in part, so it
-    // comes back whole and the next look sends the smaller one.
+    // comes back whole and what the rules still ask for goes out again at once, with
+    // no change of the pack to wait for.
     [Fact]
     public void QueuedCountedCommand_ComesBackWhole_AndIsResentForTheNewKeepAmount()
     {
@@ -452,10 +481,96 @@ public sealed class AutoDiscardManagerTests
         Assert.Equal("drop 10 dagger", h.Queued[0].Command);
 
         h.Map("dagger", 1, discard: true, keep: 2);
-        h.Discard.OnInventoryChanged();
+        h.Discard.OnRulesChanged();
 
-        Assert.Equal(new[] { ("drop 8 dagger", true) }, h.Queued);
+        Assert.Equal("drop 8 dagger", Assert.Single(h.Queued).Command);
         Assert.Equal(8, h.Discard.UnansweredDrops);
+    }
+
+    // The same when nothing tells the engine the rule changed: the pacer asks before
+    // the command goes, and the right one takes its place.
+    [Fact]
+    public void QueuedCountedCommand_IsCheckedAgainWhenItsTurnComes()
+    {
+        using Harness h = QueuedPileOfTenDaggers(paradigm: true);
+        h.Map("dagger", 1, discard: true, keep: 2);
+
+        h.Release(1);
+
+        Assert.Empty(h.Wire);
+        Assert.Equal("drop 8 dagger", Assert.Single(h.Queued).Command);
+        h.Release(1);
+        Assert.Equal(new[] { "drop 8 dagger" }, h.Wire);
+        Assert.Equal(8, h.Discard.UnansweredDrops);
+    }
+
+    // The gates are checked when each command goes, not only when the pile was
+    // queued: sight lost, the send gate up, the switch off or a sweep started while
+    // commands wait, and the rest come back uncounted instead of going out blind.
+    [Theory]
+    [InlineData("sight")]
+    [InlineData("gate")]
+    [InlineData("switch")]
+    [InlineData("sweep")]
+    public void QueuedHidePile_IsNotSentOnceAGateCloses(string gate)
+    {
+        using Harness h = new();
+        h.UsePacer();
+        h.Discard.HideMode = true;
+        h.Map("dagger", 1, discard: true);
+        h.Carried.Set("dagger", 10);
+        h.Discard.OnRoomEntered(RoomA);
+        h.Discard.OnInventoryChanged();
+        h.Release(6);
+        Assert.Equal(6, h.Wire.Count);
+
+        switch (gate)
+        {
+            case "sight": h.Discard.CanSeeToHide = () => false; break;
+            case "gate": h.Discard.SendGateOpen = () => false; break;
+            case "switch": h.Enabled = false; break;
+            default: h.Discard.SuppressDuringSweep = () => true; break;
+        }
+        h.Release(4);
+
+        Assert.Equal(6, h.Wire.Count);
+        Assert.Empty(h.Queued);
+        Assert.Equal(6, h.Discard.UnansweredHides);
+        // No ledger claim outlives the four that never went.
+        for (int i = 0; i < 6; i++) Assert.True(h.Hid("dagger"));
+        Assert.False(h.Discard.TryConsumeSuppressedHide("dagger"));
+    }
+
+    // A held hide's retry waits in the pacer too, and is checked the same way: one
+    // that can no longer be answered goes back to being held, not out.
+    [Fact]
+    public void QueuedRetry_IsHeldAgain_WhenSightIsLostBeforeItGoes()
+    {
+        using Harness h = new();
+        h.UsePacer();
+        h.Discard.HideMode = true;
+        h.Map("moonstone", 7, discard: false);
+        h.Carried.Set("moonstone", 2);
+        h.Discard.OnRoomEntered(RoomA);
+        List<string> byHand = new();
+        h.Discard.EmitDiscard(byHand.Add, "moonstone", 2);
+        h.Feed("There is no room to hide moonstone here.");
+        h.Feed("There is no room to hide moonstone here.");
+        h.Discard.OnRoomEntered(RoomB);
+        Assert.Equal(2, h.Queued.Count);
+
+        h.Discard.CanSeeToHide = () => false;
+        h.Release(2);
+
+        Assert.Empty(h.Wire);
+        Assert.Empty(h.Queued);
+        Assert.Equal(0, h.Discard.UnansweredHides);
+        Assert.Equal(2, h.Discard.HeldFor("moonstone"));
+
+        // Sight back in the same room: nothing here has refused them.
+        h.Discard.CanSeeToHide = () => true;
+        h.Discard.OnInventoryChanged();
+        Assert.Equal(2, h.Queued.Count);
     }
 
     [Fact]
@@ -520,7 +635,6 @@ public sealed class AutoDiscardManagerTests
 
         h.Discard.OnRoomEntered(RoomB);
         Assert.Equal(4, h.Queued.Count);
-        Assert.All(h.Queued, q => Assert.False(q.OwnPile));           // a retry is not a pile to take back
     }
 
     [Fact]
@@ -892,6 +1006,7 @@ public sealed class AutoDiscardManagerTests
         Assert.Equal(3, h.Discard.UnansweredDrops);
         Assert.Single(h.Sent);
 
+        h.Settle();
         h.Discard.OnFullInventoryRead();
         h.Discard.OnFullInventoryRead();
         Assert.Equal(0, h.Discard.UnansweredDrops);
@@ -1116,7 +1231,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = HidingMoonstones(2);
         List<IReadOnlyList<string>> batches = new();
-        h.Discard.PacedSender = (commands, _) => batches.Add(commands);
+        h.Discard.PacedSender = (commands, _, _) => batches.Add(commands);
         h.Discard.EmitDiscard(_ => { }, "moonstone", 2);
         h.Feed("There is no room to hide moonstone here.");
         h.Feed("There is no room to hide moonstone here.");
@@ -1400,10 +1515,12 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true, keep: 1);
-        h.Carried.Set("dagger", 4);
         h.Discard.OnRoomEntered(RoomA);
+        h.Enabled = false;
+        h.Carried.Set("dagger", 4);
 
-        h.Discard.EmitDiscard(_ => { }, "dagger", 1);   // one by hand
+        h.Discard.EmitDiscard(_ => { }, "dagger", 1);   // one by hand, the engine switched off
+        h.Enabled = true;
         h.Discard.OnInventoryChanged();                 // the engine: 4 - 1 out - keep 1 = 2
         Assert.Equal(3, h.Discard.UnansweredHides);
 
@@ -1535,6 +1652,7 @@ public sealed class AutoDiscardManagerTests
         h.Discard.OnRoomEntered(RoomB);          // the retry goes out and is lost
         Assert.Single(h.Sent);
 
+        h.Settle();
         h.Discard.OnFullInventoryRead();
         h.Discard.OnFullInventoryRead();
 
@@ -1703,6 +1821,11 @@ public sealed class AutoDiscardManagerTests
         h.Carried.Set("moonstone", 1);
         Assert.Equal(1, h.Discard.UnansweredHides);
 
+        h.Discard.OnFullInventoryRead();   // too soon after the answer to mean anything
+        h.Discard.OnFullInventoryRead();
+        Assert.Equal(1, h.Discard.UnansweredHides);
+
+        h.Settle();
         h.Discard.OnFullInventoryRead();
         Assert.Equal(1, h.Discard.UnansweredHides);
         h.Discard.OnFullInventoryRead();
@@ -1720,6 +1843,7 @@ public sealed class AutoDiscardManagerTests
         h.Discard.SendsQueued = () => queued;
         h.Discard.EmitDiscard(_ => { }, "moonstone", 3);
 
+        h.Settle();
         h.Discard.OnFullInventoryRead();
         h.Discard.OnFullInventoryRead();
         h.Discard.OnFullInventoryRead();
@@ -1742,12 +1866,39 @@ public sealed class AutoDiscardManagerTests
         List<string> sent = new();
         h.Discard.EmitDiscard(sent.Add, "moonstone", 1);
 
-        h.Discard.OnFullInventoryRead();   // may have been asked for before the hide
+        h.Settle();
+        h.Discard.OnFullInventoryRead();   // the first read after the answer was due
         Assert.Equal(0, h.Discard.EmitDiscard(sent.Add, "moonstone", 1).Sent);
 
         h.Discard.OnFullInventoryRead();   // nothing sent or answered since the last
         Assert.False(h.Discard.TryConsumeSuppressedHide("moonstone"));
         Assert.Equal(1, h.Discard.EmitDiscard(sent.Add, "moonstone", 1).Sent);
+    }
+
+    // Two listings asked for before a pile went out land before its first answer.
+    // When a listing was asked for can't be known, so reads that soon after the
+    // send say nothing: the pile stays counted and is not sent a second time.
+    [Fact]
+    public void ReadsLandingBeforeTheAnswers_ForgetNothing_AndThePileIsNotResent()
+    {
+        using Harness h = new();
+        h.Map("dagger", 1, discard: true, keep: 2);
+        h.Carried.Set("dagger", 5);
+        h.Discard.OnInventoryChanged();
+        Assert.Equal(3, h.Sent.Count);
+
+        h.Discard.OnFullInventoryRead();
+        h.Discard.OnFullInventoryRead();
+        Assert.Equal(3, h.Discard.UnansweredDrops);
+
+        for (int i = 0; i < 3; i++)
+        {
+            h.Feed("You dropped dagger.");
+            h.Carried.Lose("dagger");
+            h.Discard.OnInventoryChanged();
+        }
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal(2, h.Carried.Count("dagger"));
     }
 
     [Fact]
