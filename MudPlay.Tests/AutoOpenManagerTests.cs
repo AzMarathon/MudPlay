@@ -30,6 +30,7 @@ public sealed class AutoOpenManagerTests
         public bool TrackerBusy { get; set; }
         public bool Sweeping { get; set; }
         public bool GateOpen { get; set; } = true;
+        public bool Resting { get; set; }
         public bool SneakKept { get; set; }
         public Dictionary<string, int> ComingBack { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -49,6 +50,7 @@ public sealed class AutoOpenManagerTests
             {
                 SuppressDuringSweep = () => Sweeping,
                 SendGateOpen = () => GateOpen,
+                Resting = () => Resting,
                 SneakKept = () => SneakKept,
                 ComingBack = name => ComingBack.GetValueOrDefault(name),
             };
@@ -72,9 +74,8 @@ public sealed class AutoOpenManagerTests
 
         // The tracker has read the open: it gave something, or nothing.
         public void Settle(bool gaveSomething = true) => Open.OnOpenSettled(new ChestOpenTracker.OpenResult(
-            Array.Empty<string>(),
             gaveSomething ? new[] { ("ruby", 1) } : Array.Empty<(string, int)>(),
-            CurrencyHoldings.Empty));
+            CurrencyHoldings.Empty, Read: true));
     }
 
     [Fact]
@@ -191,6 +192,7 @@ public sealed class AutoOpenManagerTests
 
     [Theory]
     [InlineData("gate")]
+    [InlineData("rest")]
     [InlineData("sneak")]
     [InlineData("tracker")]
     public void Held_TheOpenWaits_AndGoesOutOnceClear(string hold)
@@ -199,6 +201,7 @@ public sealed class AutoOpenManagerTests
         h.Items["small sack"] = (100, true);
         h.Seed();
         if (hold == "gate") h.GateOpen = false;
+        if (hold == "rest") h.Resting = true;
         if (hold == "sneak") h.SneakKept = true;
         if (hold == "tracker") h.TrackerBusy = true;
 
@@ -207,6 +210,7 @@ public sealed class AutoOpenManagerTests
         Assert.NotNull(h.Open.HeldFor);
 
         h.GateOpen = true;
+        h.Resting = false;
         h.SneakKept = false;
         h.TrackerBusy = false;
         h.Open.Recheck();
@@ -242,6 +246,50 @@ public sealed class AutoOpenManagerTests
         h.PickUp("small sack");
 
         Assert.Empty(h.Opened);
+    }
+
+    // ...unless that copy was still owed its open when the hang-up took it: picked
+    // up mid-fight, the link dropped, the board dropped the sack on the floor.
+    [Fact]
+    public void ACopyOwedAnOpenBeforeAHangup_IsOpenedWhenPickedBackUp()
+    {
+        Harness h = new() { GateOpen = false };          // mid-fight, then the link is gone
+        h.Items["small sack"] = (100, true);
+        h.Seed();
+        h.PickUp("small sack");
+        Assert.Equal(new[] { "small sack" }, h.Open.Owed);
+
+        h.Open.OnEnteredGame();                          // back in the game
+        h.GateOpen = true;
+        h.Open.Recheck();
+        Assert.Empty(h.Opened);                          // not before the pack is read
+        h.Carried.Clear();                               // the read: the sack is gone
+        h.Open.OnInventoryChanged();
+        h.Open.OnFullInventoryRead();
+        Assert.Empty(h.Open.Owed);
+
+        h.ComingBack["small sack"] = 1;                  // the hang-up check gets it back
+        h.PickUp("small sack");
+
+        Assert.Equal(new[] { "small sack" }, h.Opened);
+    }
+
+    // One still in the pack at that read was not dropped: its open goes out then.
+    [Fact]
+    public void AnOpenOwedAcrossAReconnect_GoesOutOnceThePackIsRead()
+    {
+        Harness h = new() { GateOpen = false };
+        h.Items["small sack"] = (100, true);
+        h.Seed();
+        h.PickUp("small sack");
+
+        h.Open.OnEnteredGame();
+        h.GateOpen = true;
+        h.Open.OnInventoryChanged();
+        Assert.Empty(h.Opened);
+        h.Open.OnFullInventoryRead();
+
+        Assert.Equal(new[] { "small sack" }, h.Opened);
     }
 
     [Fact]

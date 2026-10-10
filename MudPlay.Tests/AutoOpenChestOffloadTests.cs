@@ -23,7 +23,13 @@ public sealed class AutoOpenChestOffloadTests : IDisposable
     private readonly AutoOpenManager _engine;
 
     private bool _enabled = true;
+    private bool _flagged = true;
     private bool _inCombat;
+    private bool _resting;
+    // The death record of the last death is still Active or Partial.
+    private bool _deathpileOpen = true;
+    // The send gate is up: an `i` sent now never reaches the wire.
+    private bool _readsDropped;
 
     public AutoOpenChestOffloadTests()
     {
@@ -39,15 +45,18 @@ public sealed class AutoOpenChestOffloadTests : IDisposable
         _engine = new AutoOpenManager(
             carriedItems: () => _inv.Snapshot.CarriedItems,
             resolve: name => IsChest(name)
-                ? new AutoOpenManager.ResolvedOpen(name.Length, name, AutoOpen: true)
+                ? new AutoOpenManager.ResolvedOpen(name.Length, name, AutoOpen: _flagged)
                 : null,
             isEnabled: () => _enabled,
             isLoaded: () => _inv.IsLoaded,
             open: _tracker.TryOpenNow)
         {
             InCombat = () => _inCombat,
+            Resting = () => _resting,
+            DeathpileOpenSince = _ => _deathpileOpen,
         };
         _inv.Changed += _engine.OnInventoryChanged;
+        _inv.FullInventoryParsed += _engine.OnFullInventoryRead;
         _tracker.OpenSettled += _engine.OnOpenSettled;
     }
 
@@ -63,6 +72,7 @@ public sealed class AutoOpenChestOffloadTests : IDisposable
     // as a typed line does.
     private void Send(string command)
     {
+        if (_readsDropped && command == "i") return;
         _sent.Add(command);
         _outbound.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
     }
@@ -201,6 +211,171 @@ public sealed class AutoOpenChestOffloadTests : IDisposable
         Assert.Null(_profile.Current!.ChestLoot);
     }
 
+    // The coin tally is one figure for the list: it clears when the list no longer
+    // holds any chest's items, and not before.
+
+    [Fact]
+    public void TheCoinTally_ClearsWhenTheLastListedItemLeaves()
+    {
+        Inventory("torch", gold: 10);
+        Feed("You took oak chest.");
+        RunScheduled();
+        Inventory("torch, ruby", gold: 40);
+        Assert.Equal(30, _tracker.Coin.Gold);
+
+        Feed("You dropped ruby.");
+
+        Assert.Empty(Listed);
+        Assert.Equal(0, _tracker.Coin.TotalCopperValue);
+        Assert.Null(_profile.Current!.ChestLoot);
+    }
+
+    [Fact]
+    public void OneChestsItemsLeaving_WhileAnothersAreStillListed_ClearsNoCoin()
+    {
+        Inventory("torch", gold: 10);
+        Feed("You took oak chest.");
+        RunScheduled();
+        Inventory("torch, ruby", gold: 40);          // the oak chest: a ruby and 30 gold
+        Feed("You took iron chest.");
+        RunScheduled();
+        Inventory("torch, ruby, opal", gold: 45);    // the iron chest: an opal and 5 gold
+
+        Feed("You dropped ruby.");
+        Assert.Equal(new[] { ("opal", 1) }, Listed);
+        Assert.Equal(35, _tracker.Coin.Gold);
+
+        Feed("You dropped opal.");
+        Assert.Equal(0, _tracker.Coin.TotalCopperValue);
+    }
+
+    // A chest that gave only coin has no row to leave, so its coin stays in the
+    // tally until the list next empties.
+    [Fact]
+    public void ACoinOnlyChest_KeepsItsCoinInTheTally_UntilTheListEmpties()
+    {
+        Inventory("torch", gold: 10);
+        Feed("You took oak chest.");
+        RunScheduled();
+        Inventory("torch", gold: 40);                // coin only
+        Inventory("torch", gold: 40);                // a later read: nothing listed, nothing cleared
+        Assert.Equal(30, _tracker.Coin.Gold);
+
+        Feed("You took oak chest.");
+        RunScheduled();
+        Inventory("torch, ruby", gold: 45);
+        Assert.Equal(35, _tracker.Coin.Gold);
+
+        Feed("You dropped ruby.");
+        Assert.Equal(0, _tracker.Coin.TotalCopperValue);
+    }
+
+    // Ticking Auto-open on a container that is already in the pack is not a copy
+    // arriving, whatever changes in the pack next.
+    [Theory]
+    [InlineData("oak chest, torch")]
+    [InlineData("3 oak chest, torch")]
+    public void FlaggingAContainerAlreadyCarried_OpensNothing(string carrying)
+    {
+        _flagged = false;
+        Inventory(carrying, gold: 10);
+
+        _flagged = true;                            // ticked in Game Data
+        Feed("You picked up 3 gold crowns");        // any unrelated pack change
+        Feed("You took rusty dagger.");
+        RunScheduled();
+
+        Assert.Empty(_sent);
+        Assert.Empty(_engine.Owed);
+    }
+
+    [Fact]
+    public void AFlaggedContainerArrivingBesideUnflaggedOnes_OpensOnlyItself()
+    {
+        _flagged = false;
+        Inventory("2 oak chest, torch", gold: 10);
+        _flagged = true;
+
+        Feed("You took oak chest.");
+
+        Assert.Equal(new[] { "open oak chest" }, _sent);
+        Assert.Empty(_engine.Owed);
+    }
+
+    [Fact]
+    public void UntickedWhileItWaited_TheOpenIsDropped()
+    {
+        Inventory("torch", gold: 10);
+        _inCombat = true;
+        Feed("You took oak chest.");
+
+        _flagged = false;
+        _inCombat = false;
+        _engine.Recheck();
+
+        Assert.Empty(_sent);
+        Assert.Empty(_engine.Owed);
+    }
+
+    // `open` stands a resting character up, so it waits the rest out as the door
+    // and trap tries do.
+    [Fact]
+    public void Resting_TheOpenWaits_ForTheRestToEnd()
+    {
+        Inventory("torch", gold: 10);
+        _resting = true;
+
+        Feed("You took oak chest.");
+        Assert.Empty(_sent);
+        Assert.Equal("resting", _engine.HeldFor);
+
+        _resting = false;
+        _engine.Recheck();
+
+        Assert.Equal(new[] { "open oak chest" }, _sent);
+    }
+
+    // Another engine's `i` went out just before the chest arrived, and its reply
+    // lands after the tracker's own `i` was sent. That reply shows the pack as it
+    // was before the open: it is not the read after it.
+    [Fact]
+    public void AnInventoryReplyAskedForBeforeTheOpen_IsNotTakenForTheReadAfterIt()
+    {
+        Inventory("torch", gold: 10);
+        Send("i");                                   // asked for before the open
+        Feed("You took oak chest.");
+        RunScheduled();                              // 900 ms: the tracker's own `i`
+        Inventory("torch, oak chest", gold: 10);     // the earlier read's reply
+        Assert.Empty(Listed);
+        Assert.Equal("oak chest", _engine.Opening);  // still waiting for its own
+
+        Inventory("torch, 2 moonstone, ruby", gold: 15);
+
+        Assert.Equal(new[] { ("moonstone", 2), ("ruby", 1) }, Listed);
+        Assert.Equal(5, _tracker.Coin.Gold);
+    }
+
+    // The read after the open never reaches the wire, or never comes back. The
+    // open ends as not read, not as having given nothing, and nothing is listed
+    // from a pack that was never read.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void WithNoReadAfterTheOpen_ItEndsAsNotRead(bool readDropped)
+    {
+        Inventory("torch", gold: 10);
+        Feed("You took oak chest.");
+        _readsDropped = readDropped;
+        RunScheduled();                              // the `i` goes out, or is dropped
+        RunScheduled();                              // 3 s: nothing came back
+
+        Assert.Null(_engine.Opening);
+        Assert.Contains("not read", _engine.LastOpen);
+        Assert.DoesNotContain("gave nothing", _engine.LastOpen);
+        Assert.Empty(Listed);
+        Assert.Equal(new[] { "open oak chest" }, _sent.Where(s => s.StartsWith("open")));
+    }
+
     [Fact]
     public void SwitchedOff_NothingIsSent_AndNothingOpensLater()
     {
@@ -323,6 +498,96 @@ public sealed class AutoOpenChestOffloadTests : IDisposable
         Assert.Empty(_sent);
 
         Feed("You took oak chest.");               // one more than was lost
+        Assert.Equal(new[] { "open oak chest" }, _sent);
+    }
+
+    // The pile was never got back and its record is closed (found missing, or
+    // cleared): the next chest off a kill is a new one.
+    [Fact]
+    public void AChestLostAtADeath_WhosePileIsNoLongerOpen_DoesNotSwallowAFreshOne()
+    {
+        Inventory("oak chest", gold: 10);
+        _engine.OnPlayerDied();
+        Inventory("torch", gold: 0);
+        Assert.Equal(1, _engine.AwaitedFromDeath);
+
+        _deathpileOpen = false;
+        Feed("You took oak chest.");
+
+        Assert.Equal(new[] { "open oak chest" }, _sent);
+        Assert.Equal(0, _engine.AwaitedFromDeath);
+    }
+
+    // The read after the death is what says a container went. One that is still
+    // in the pack then, having stayed or come straight back, is not awaited.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AChestStillInThePackAtTheReadAfterADeath_LeavesNothingAwaited(bool cameBackFirst)
+    {
+        Inventory("oak chest", gold: 10);
+        _engine.OnPlayerDied();
+        if (cameBackFirst) Feed("You took oak chest.");   // the corpse, before any read
+        Inventory("oak chest", gold: 0);
+        Assert.Empty(_sent);
+        Assert.Equal(0, _engine.AwaitedFromDeath);
+
+        Feed("You took oak chest.");               // a new one
+
+        Assert.Equal(new[] { "open oak chest" }, _sent);
+    }
+
+    // Picked up mid-fight, so its open was waiting; then the death. Recovered, it
+    // is opened: it was never one the player kept shut.
+    [Fact]
+    public void AChestOwedAnOpenAtDeath_IsOpenedWhenRecovered()
+    {
+        Inventory("oak chest, torch", gold: 10);    // one kept shut since connect
+        _inCombat = true;
+        Feed("You took oak chest.");
+        Assert.Equal(new[] { "oak chest" }, _engine.Owed);
+
+        _engine.OnPlayerDied();
+        _inCombat = false;
+        Inventory("torch", gold: 0);
+        Assert.Empty(_sent);
+        Feed("You took 2 oak chest.");              // corpse recovery: both come back
+
+        Assert.Equal(new[] { "open oak chest" }, _sent);   // the owed one, not the kept one
+        Assert.Empty(_engine.Owed);
+    }
+
+    [Fact]
+    public void AChestOwedAnOpenAtDeath_ButUntickedSince_StaysShut()
+    {
+        Inventory("torch", gold: 10);
+        _inCombat = true;
+        Feed("You took oak chest.");
+        _engine.OnPlayerDied();
+        _inCombat = false;
+        Inventory("torch", gold: 0);
+
+        _flagged = false;
+        Feed("You took oak chest.");
+
+        Assert.Empty(_sent);
+        Assert.Empty(_engine.Owed);
+    }
+
+    // The death didn't take it (or it was back before the pack was read): still in
+    // the pack and still owed, it is opened once the read says so.
+    [Fact]
+    public void AChestOwedAnOpenAtDeath_ThatNeverLeft_IsOpenedAfterTheRead()
+    {
+        Inventory("torch", gold: 10);
+        _inCombat = true;
+        Feed("You took oak chest.");
+        _engine.OnPlayerDied();
+        _inCombat = false;
+        Assert.Empty(_sent);
+
+        Inventory("torch, oak chest", gold: 0);
+
         Assert.Equal(new[] { "open oak chest" }, _sent);
     }
 

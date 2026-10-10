@@ -188,10 +188,10 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     }
 
     // The tracker's list changed as a whole (an open settled, a row was taken off, the
-    // list was cleared or its last item left). A sale, drop, hide or give that leaves
-    // items listed doesn't come through here — it moves its one row (OnItemLeft) so
-    // the user's sell quantities and ⇄ shop moves survive. Simulated chests keep
-    // their own view.
+    // list was cleared, or its last item left and took the coin tally with it). A
+    // sale, drop, hide or give that leaves items listed doesn't come through here —
+    // it moves its one row (OnItemLeft) so the user's sell quantities and ⇄ shop
+    // moves survive. Simulated chests keep their own view.
     private void OnChestsChanged()
     {
         SayLootToRoom = _chests.SayLootToRoom;   // a profile swap brings its own setting

@@ -1429,6 +1429,10 @@ public static class BugReportBuilder
           .Append(owedOpens.Count > 0 ? $": {string.Join(", ", owedOpens)}" : "")
           .Append(svc.AutoOpen.Opening is { } opening ? $"; opening {opening}" : "")
           .Append(svc.AutoOpen.HeldFor is { } heldFor ? $"; waiting — {heldFor}" : "")
+          .Append(svc.AutoOpen.AwaitedFromDeath > 0
+              ? $"; {svc.AutoOpen.AwaitedFromDeath} lost at a death and not new if recovered" : "")
+          .Append(svc.AutoOpen.OwedIfReturned > 0
+              ? $"; {svc.AutoOpen.OwedIfReturned} owed an open if they come back (death or hang-up)" : "")
           .Append("; last open: ").Append(svc.AutoOpen.LastOpen ?? "none this session")
           .Append(")\n");
 

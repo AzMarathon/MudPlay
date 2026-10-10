@@ -281,6 +281,67 @@ public sealed class HangupItemRecheckTests
         }
     }
 
+    // The auto-open engine asks what is coming back, so a container the check is
+    // picking up again isn't opened as a new arrival. That is a question about
+    // now: counted down as copies arrive, and nothing once the check has ended.
+    [Fact]
+    public void BeingPickedUp_CountsWhatTheCheckIsStillWaitingFor_AndNothingAfterIt()
+    {
+        Harness h = new();
+        h.Stored(Snap(carried: ["2 oak chest", "torch"]));
+        h.ConnectAndEnter("2 oak chest");
+        Assert.Equal(0, h.Check.BeingPickedUp("oak chest"));   // nothing asked for yet
+
+        h.ReadInventory(Snap(carried: ["torch"]));
+        Assert.Equal([("oak chest", 2)], h.Collected);
+        Assert.Equal(2, h.Check.BeingPickedUp("oak chest"));
+        Assert.Equal(0, h.Check.BeingPickedUp("torch"));
+
+        h.Check.OnItemTaken("oak chest", 1);
+        Assert.Equal(1, h.Check.BeingPickedUp("oak chest"));
+
+        h.Check.OnItemTaken("oak chest", 1);
+        Assert.Equal(0, h.Check.BeingPickedUp("oak chest"));
+    }
+
+    // A check that ended with a container still missing leaves it on its report
+    // for the rest of the session. That must not stop later chests being opened.
+    [Fact]
+    public void AContainerTheCheckNeverFound_DoesNotStopLaterOnesBeingOpened()
+    {
+        Harness h = new();
+        h.Stored(Snap(carried: ["oak chest", "torch"]));
+        h.ConnectAndEnter("torch");                 // the chest isn't on the floor
+        h.ReadInventory(Snap());
+        h.Check.OnItemTaken("torch", 1);
+        Assert.False(h.Held);                       // the check is over
+        Assert.Equal([("oak chest", 1)], h.Check.LastStillMissing);
+
+        List<string> carried = ["torch"];
+        List<string> opened = [];
+        AutoOpenManager engine = new(
+            carriedItems: () => carried,
+            resolve: name => name == "oak chest" ? new AutoOpenManager.ResolvedOpen(907, name, true) : null,
+            isEnabled: () => true,
+            isLoaded: () => true,
+            open: name => { opened.Add(name); return true; })
+        {
+            ComingBack = h.Check.BeingPickedUp,     // as AppServices wires it
+        };
+        engine.OnInventoryChanged();                // baseline
+
+        for (int kill = 0; kill < 3; kill++)
+        {
+            carried = ["torch", "oak chest"];       // a fresh chest off a kill
+            engine.OnInventoryChanged();
+            carried = ["torch"];                    // opened and gone
+            engine.OnInventoryChanged();
+            engine.OnOpenSettled(new ChestOpenTracker.OpenResult([("ruby", 1)], CurrencyHoldings.Empty, Read: true));
+        }
+
+        Assert.Equal(["oak chest", "oak chest", "oak chest"], opened);
+    }
+
     [Fact]
     public void ARealmThatDropsNoItems_IsLeftAlone()
     {

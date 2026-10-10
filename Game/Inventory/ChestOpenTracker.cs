@@ -29,14 +29,18 @@ public sealed class ChestOpenTracker : IDisposable
     // the copies sold out of the ones picked to sell.
     public enum Departure { Sold, Dropped, Hidden, Given }
 
-    // One read open: the containers it covered, and the items and coin they gave.
+    // How an open ended: the items and coin it gave, or Read false when no inventory
+    // read came back after it, so what it gave is not known and nothing was listed.
     public sealed record OpenResult(
-        IReadOnlyList<string> Opened, IReadOnlyList<(string Name, int Count)> Items, CurrencyHoldings Coin);
+        IReadOnlyList<(string Name, int Count)> Items, CurrencyHoldings Coin, bool Read);
 
     // The loot spills a beat after the open; the after-read waits this long.
     private const int SettleMs = 900;
     // An `i` that never parses (cut off by combat output, say) mustn't strand an open.
     private const int ReadTimeoutMs = 3000;
+    // A read asked for this long ago and still unanswered is taken as lost, so one
+    // dropped read doesn't make every later open wait for a reply that isn't coming.
+    private static readonly TimeSpan ReadGivenUpAfter = TimeSpan.FromSeconds(20);
     // Same conservative per-line budget the client uses for other chat lines.
     private const int AnnounceMaxChars = 120;
 
@@ -48,6 +52,7 @@ public sealed class ChestOpenTracker : IDisposable
     private readonly Action<int, Action> _schedule;
     private readonly Action<Action> _post;
     private readonly Func<string> _runicName;
+    private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
 
     private readonly ChestLootLedger _ledger = new();
@@ -75,6 +80,19 @@ public sealed class ChestOpenTracker : IDisposable
     // The read after the open, held from the moment it parses until it is diffed.
     private InventorySnapshot? _afterRead;
     private bool _afterReadSent;
+    // When each inventory read still unanswered went out, oldest first, whoever
+    // sent it. The game answers them in order.
+    private readonly Queue<DateTimeOffset> _readsOut = new();
+    // Reads that were already out when the after-read was sent. Their replies come
+    // first and may show the pack as it was before the open: diffed, such a reply
+    // would end the open as having given nothing and the loot would never be listed.
+    private int _readsAhead;
+    // Whether the after-read reached the wire (the send gate can drop it).
+    private bool _afterReadOut;
+    private bool _sendingAfterRead;
+    // An open is being wound up: its save and its say lines run handlers of their
+    // own, and none of them may start the next open ahead of OpenSettled.
+    private bool _ending;
     private int _generation;   // cancels a stale timer callback
     // True while one of our own `open` commands is going out. Every send, an
     // engine's as much as a typed line, passes the outbound observers, so without
@@ -91,14 +109,17 @@ public sealed class ChestOpenTracker : IDisposable
     // this, keeping the sell quantities and shop moves a rebuild would lose.
     public event Action<string, int, Departure>? ItemLeft;
 
-    // An open has been read and the tracker has moved on: what it gave.
+    // An open is over and the tracker has moved on: what it gave, or that it
+    // couldn't be read.
     public event Action<OpenResult>? OpenSettled;
 
     public ChestOpenTracker(
         InventoryManager inventory, ProfileService profile, OutboundOpenObserver typedOpen,
         Func<string, bool> isContainer, Action<string> send, Action<int, Action> schedule,
-        Action<Action> post, Func<string> runicName, LogService? log = null)
+        Action<Action> post, Func<string> runicName, LogService? log = null,
+        Func<DateTimeOffset>? now = null)
     {
+        _now = now ?? (static () => DateTimeOffset.UtcNow);
         _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _typedOpen = typedOpen ?? throw new ArgumentNullException(nameof(typedOpen));
@@ -117,6 +138,7 @@ public sealed class ChestOpenTracker : IDisposable
         _inventory.ItemHidden += OnItemHidden;
         _inventory.ItemGivenAway += OnItemGivenAway;
         _typedOpen.OpenSent += OnTypedOpen;
+        _typedOpen.InventoryRequested += OnInventoryRequested;
         _profile.ProfileLoaded += OnProfileLoaded;
         LoadFromProfile();
     }
@@ -170,7 +192,7 @@ public sealed class ChestOpenTracker : IDisposable
     // asks again on OpenSettled.
     public bool TryOpenNow(string name)
     {
-        if (_step != Step.Idle) return false;
+        if (_step != Step.Idle || _ending) return false;
         _opened.Clear();
         _opened.Add(name);
         _log?.Info(LogCategory, $"auto-open {name} — using the cached inventory as the before snapshot");
@@ -186,7 +208,7 @@ public sealed class ChestOpenTracker : IDisposable
         bool hadItems = !_ledger.IsEmpty;
         if (!_ledger.RemoveAll(name)) return;
         _log?.Info(LogCategory, $"{name} removed from the list by hand");
-        DropCoinIfEmptied(hadItems);
+        ClearCoinIfEmptied(hadItems);
         SaveAndNotify();
     }
 
@@ -261,11 +283,42 @@ public sealed class ChestOpenTracker : IDisposable
             _log?.Info(LogCategory, $"no inventory read in {ReadTimeoutMs / 1000}s — opening {_buttonTarget} on the cached inventory");
             SendOpen(_beforeOverride ?? _inventory.Snapshot);
         }
-        else if (_step == Step.AwaitingAfter && _afterReadSent)
-        {
-            _log?.Info(LogCategory, $"no inventory read in {ReadTimeoutMs / 1000}s after opening {Label(_opened)} — diffing the cached inventory");
-            Settle(_inventory.Snapshot);
-        }
+        else if (_step == Step.AwaitingAfter && _afterReadSent) EndUnread();
+    }
+
+    // No read came back after the open. The cached inventory can't stand in for
+    // it: a chest's contents only show in a full read, so diffing the cache would
+    // record the open as having given nothing. It ends as not read instead, and
+    // the next read that does arrive shows the items in the pack, unlisted.
+    private void EndUnread()
+    {
+        ++_generation;
+        _step = Step.Idle;
+        _ending = true;
+        _afterRead = null;
+        _log?.Info(LogCategory,
+            $"{Label(_opened)} was opened, but " +
+            (_afterReadOut
+                ? $"no inventory read came back in {ReadTimeoutMs / 1000}s"
+                : "the inventory read after it could not be sent") +
+            " — what it gave is not listed");
+        Continue(_inventory.Snapshot);
+        _ending = false;
+        OpenSettled?.Invoke(new OpenResult(Array.Empty<(string, int)>(), CurrencyHoldings.Empty, Read: false));
+    }
+
+    // An inventory read went out, ours or anyone's.
+    private void OnInventoryRequested()
+    {
+        _readsOut.Enqueue(_now());
+        if (_sendingAfterRead) _afterReadOut = true;
+    }
+
+    private int ReadsStillOut()
+    {
+        DateTimeOffset oldest = _now() - ReadGivenUpAfter;
+        while (_readsOut.Count > 0 && _readsOut.Peek() < oldest) _readsOut.Dequeue();
+        return _readsOut.Count;
     }
 
     private void SendOpen(InventorySnapshot before)
@@ -288,7 +341,13 @@ public sealed class ChestOpenTracker : IDisposable
         {
             if (gen != _generation) return;
             _afterReadSent = true;
-            _send("i");
+            // Replies come in the order the reads were asked for, so every read
+            // still out is answered before this one.
+            _readsAhead = ReadsStillOut();
+            _afterReadOut = false;
+            _sendingAfterRead = true;
+            try { _send("i"); }
+            finally { _sendingAfterRead = false; }
             int readGen = ++_generation;
             _schedule(ReadTimeoutMs, () => OnReadTimeout(readGen));
         });
@@ -335,9 +394,21 @@ public sealed class ChestOpenTracker : IDisposable
 
     private void OnFullInventoryParsed()
     {
-        // The after-read is taken as it parses: by the time the posted half runs,
-        // lines behind it in the same burst may have moved the pack again.
-        if (_step == Step.AwaitingAfter && _afterReadSent) _afterRead ??= _inventory.Snapshot;
+        // This reply answers the oldest read still out.
+        bool answersARead = _readsOut.Count > 0;
+        if (answersARead) _readsOut.Dequeue();
+        if (_step == Step.AwaitingAfter && _afterReadSent && _afterRead is null)
+        {
+            // A read asked for before ours: it may show the pack before the open.
+            if (_readsAhead > 0 && answersARead)
+            {
+                _readsAhead--;
+                _log?.Debug(LogCategory, "an inventory read asked for earlier came back first — still waiting for the one after the open");
+            }
+            // Taken as it parses: by the time the posted half runs, lines behind
+            // it in the same burst may have moved the pack again.
+            else _afterRead = _inventory.Snapshot;
+        }
         _post(() =>
         {
             if (_step == Step.ReadingBefore) { SendOpen(_beforeOverride ?? _inventory.Snapshot); return; }
@@ -350,7 +421,7 @@ public sealed class ChestOpenTracker : IDisposable
             if (_ledger.Prune(_inventory.Snapshot.CarriedItems))
             {
                 _log?.Info(LogCategory, "list trimmed to what the inventory shows carried");
-                DropCoinIfEmptied(hadItems);
+                ClearCoinIfEmptied(hadItems);
                 SaveAndNotify();
             }
         });
@@ -361,16 +432,16 @@ public sealed class ChestOpenTracker : IDisposable
     {
         ++_generation;
         _step = Step.Idle;
+        _ending = true;
         _afterRead = null;
         // What was listed and has since left the pack goes first: a list this read
-        // finds empty takes its coin with it, and the open starts a new one.
+        // finds empty takes its tally with it, and this open starts a new one.
         bool hadItems = !_ledger.IsEmpty;
-        if (_ledger.Prune(after.CarriedItems)) DropCoinIfEmptied(hadItems);
+        if (_ledger.Prune(after.CarriedItems)) ClearCoinIfEmptied(hadItems);
         CurrencyHoldings coin = CoinGain(_beforeCoin, after.Currency);
         IReadOnlyList<(string Name, int Count)> items = _ledger.AddOpen(_beforeCarried, after.CarriedItems);
         _coin = AddCoins(_coin, coin);
         _ledger.Prune(after.CarriedItems);
-        var result = new OpenResult(_opened.ToList(), items, coin);
         string label = Label(_opened);
         _log?.Info(LogCategory,
             $"{label} gave " +
@@ -378,18 +449,23 @@ public sealed class ChestOpenTracker : IDisposable
             $" and {coin.TotalCopperValue}c");
         Announce(label, items, coin);
         SaveAndNotify();
+        Continue(after);
+        _ending = false;
+        OpenSettled?.Invoke(new OpenResult(items, coin, Read: true));
+    }
 
-        // A chest typed open after the after-read went out: diff again from this read.
+    // What comes after an open: a chest typed open after the after-read went out is
+    // diffed again from the pack as it now stands, else the next queued click goes.
+    private void Continue(InventorySnapshot from)
+    {
         if (_followUp.Count > 0)
         {
             _opened.Clear();
             _opened.AddRange(_followUp);
             _followUp.Clear();
-            StartAfterRead(after);
+            StartAfterRead(from);
         }
         else if (_queued.Count > 0) Open(_queued.Dequeue());
-
-        OpenSettled?.Invoke(result);
     }
 
     private void Announce(string label, IReadOnlyList<(string Name, int Count)> items, CurrencyHoldings coin)
@@ -428,20 +504,25 @@ public sealed class ChestOpenTracker : IDisposable
         bool hadItems = !_ledger.IsEmpty;
         if (!_ledger.Remove(name, count)) return;
         _log?.Info(LogCategory, $"{how.ToString().ToLowerInvariant()} {count} {name} confirmed — taken off the list");
-        bool emptied = DropCoinIfEmptied(hadItems);
+        bool emptied = ClearCoinIfEmptied(hadItems);
         Save();
         ItemLeft?.Invoke(name, count, how);
         if (emptied) Changed?.Invoke();
     }
 
-    // The coin tally heads the list of what the chests gave. With the last listed
-    // item gone there is no list left for it to head, so it goes too and nothing
-    // stays saved.
-    private bool DropCoinIfEmptied(bool hadItems)
+    // The coin tally is one figure for the whole list. It goes when the list no
+    // longer holds any chest's items, and not before (user, 2026-10-10): one
+    // chest's items leaving while another's are still listed clears nothing, and a
+    // chest that gave only coin has no row, so its coin stays in the tally until
+    // then. The amount is logged as it goes, so it is never lost unseen.
+    private bool ClearCoinIfEmptied(bool hadItems)
     {
         if (!hadItems || !_ledger.IsEmpty) return false;
+        if (_coin.TotalCopperValue > 0)
+            _log?.Info(LogCategory,
+                $"the last listed item is gone — coin tally cleared (it stood at {_coin.TotalCopperValue}c: "
+                + $"{_coin.Runic} runic, {_coin.Platinum} platinum, {_coin.Gold} gold, {_coin.Silver} silver, {_coin.Copper} copper)");
         _coin = CurrencyHoldings.Empty;
-        _log?.Info(LogCategory, "the last listed item is gone — list cleared");
         return true;
     }
 
@@ -453,6 +534,7 @@ public sealed class ChestOpenTracker : IDisposable
         _followUp.Clear();
         _beforeOverride = null;
         _afterRead = null;
+        _readsOut.Clear();
         LoadFromProfile();
         Changed?.Invoke();
     });
@@ -509,6 +591,7 @@ public sealed class ChestOpenTracker : IDisposable
         _inventory.ItemHidden -= OnItemHidden;
         _inventory.ItemGivenAway -= OnItemGivenAway;
         _typedOpen.OpenSent -= OnTypedOpen;
+        _typedOpen.InventoryRequested -= OnInventoryRequested;
         _profile.ProfileLoaded -= OnProfileLoaded;
     }
 }

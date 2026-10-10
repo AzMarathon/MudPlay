@@ -205,6 +205,19 @@ public sealed class HangupItemRecheck
     public IReadOnlyList<(string Name, int Count)> LastMissing { get; private set; } = [];
     public IReadOnlyList<(string Name, int Count)> LastStillMissing { get; private set; } = [];
 
+    // Copies of an item this check has asked the game for and not yet seen arrive:
+    // those are coming back, not being acquired. Only while it is picking up. The
+    // lists above are a record of how the last check went and say nothing about now.
+    public int BeingPickedUp(string name)
+    {
+        if (_phase != Phase.PickingUp) return 0;
+        string key = Key(name);
+        foreach ((string planned, int wanted) in _plan)
+            if (string.Equals(Key(planned), key, StringComparison.OrdinalIgnoreCase))
+                return Math.Max(0, wanted - _taken.GetValueOrDefault(planned));
+        return 0;
+    }
+
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;

@@ -6872,22 +6872,40 @@ public sealed class AppServices
             // An `open` typed at the board's menus would be a menu choice.
             SendGateOpen = () => !EngineGate.IsLocked && InGameCapture.InGame,
             InCombat = () => PlayerState.InCombat,
+            // `open` stands a resting character up, as the door and trap tries do.
+            Resting = RestHeld,
             SneakKept = () => SneakGuard.Holds,
-            ComingBack = name => HangupItems.LastStillMissing
-                .Where(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)).Sum(m => m.Count),
+            ComingBack = name => HangupItems.BeingPickedUp(name),
+            // The pile of a death is open until its record is recovered, found
+            // missing or cleared. A minute's slack: the record and the engine each
+            // stamp the death themselves.
+            DeathpileOpenSince = since => Profile.Current?.DeathHistory?.Any(r =>
+                r.At >= since.AddMinutes(-1)
+                && r.Status is Models.Profile.DeathRecoveryStatus.Active
+                    or Models.Profile.DeathRecoveryStatus.Partial) == true,
         };
         // Auto-open re-evaluates the pack on every inventory change — the seam
         // that surfaces a container the moment it enters inventory.
         Inventory.Changed += AutoOpen.OnInventoryChanged;
+        Inventory.FullInventoryParsed += AutoOpen.OnFullInventoryRead;
         ChestOpens.OpenSettled += AutoOpen.OnOpenSettled;
         // Each of these may be what an owed open was waiting on.
         EngineGate.Released += AutoOpen.Recheck;
         SneakGuard.Released += AutoOpen.Recheck;
-        InGameCapture.InGameChanged += _ => AutoOpen.Recheck();
+        MovementCoordinator.GatesChanged += AutoOpen.Recheck;
+        InGameCapture.InGameChanged += inGame =>
+        {
+            if (inGame) AutoOpen.OnEnteredGame();
+            AutoOpen.Recheck();
+        };
         PlayerState.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Game.PlayerState.InCombat) && !PlayerState.InCombat) AutoOpen.Recheck();
         };
+        // Switched off, an owed open is forgotten then and there: back on a moment
+        // later, with nothing having moved in the pack, it must not go out. The
+        // Auto Get Items toggle does the same from the main window.
+        AutoModeController.KillSwitchToggled += _ => AutoOpen.Recheck();
         Profile.ProfileLoaded += _ => AutoOpen.Reset();
         RoomTracker.PlayerDeathObserved += AutoOpen.OnPlayerDied;
         // Settings → Talk auto-greet. Self name resolves through the
@@ -12886,20 +12904,20 @@ public sealed class AppServices
     private const int ContainerItemType = 8;
 
     // Resolve a carried entry for AutoOpen: map the loose carry wording to an
-    // item Number, read the verbatim Name, and resolve the AutoOpen flag gated
-    // on the item actually being a container (ItemType == 8) — a stale overlay
-    // flag on a non-container never opens. Returns null only when the entry
-    // isn't an item in the active set.
+    // item Number, read the verbatim Name and the AutoOpen flag. Null unless the
+    // item is a container (ItemType == 8), so a stale overlay flag on anything
+    // else never opens. A container comes back whether it is flagged or not: the
+    // engine counts them all, so that ticking the flag on one already carried is
+    // not a copy arriving.
     private Game.Inventory.AutoOpenManager.ResolvedOpen? ResolveAutoOpenItem(string entry)
     {
         if (ItemNames.FindByName(entry) is not int number) return null;
+        if (ItemNames.ItemTypeOf(number) != ContainerItemType) return null;
         string? name = ItemNames.GetName(number);
         if (string.IsNullOrWhiteSpace(name)) return null;
 
-        Models.GameData.ItemOverlay overlay = ResolveItemOverlay(number);
-        bool open = (overlay.AutoOpen ?? false)
-            && ItemNames.ItemTypeOf(number) == ContainerItemType;
-        return new Game.Inventory.AutoOpenManager.ResolvedOpen(number, name, open);
+        return new Game.Inventory.AutoOpenManager.ResolvedOpen(
+            number, name, ResolveItemOverlay(number).AutoOpen ?? false);
     }
 
     // The 4-tier ItemOverlay for an item Number (Defaults seed → Global → BBS →
