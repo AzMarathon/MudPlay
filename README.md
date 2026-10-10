@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.3**
+> **Version 3.160.5**
 > - Party item gates: a member who never answers the `@have` count is no longer fetched another copy on every trip
 > - A copy you handed them and the game confirmed is remembered until the party changes
 >

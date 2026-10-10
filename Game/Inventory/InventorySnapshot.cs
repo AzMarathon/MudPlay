@@ -56,6 +56,53 @@ public readonly record struct InventorySnapshot(
         return false;
     }
 
+    // The pack keeps identical items as ONE entry under a leading count ("3 dagger"),
+    // from a full 'i' read and from every get, buy and hand-over between reads. So
+    // an entry is not one item, and its text is not the item's name: whatever counts
+    // copies or looks an item up by name reads the pack through the members below.
+    // Worn gear, the lit light and the key ring are lists of their own, not the pack.
+
+    // Each pack entry as the item's bare name and the copies it stands for.
+    public static System.Collections.Generic.IEnumerable<(string Name, int Count)> Stacks(
+        System.Collections.Generic.IEnumerable<string> entries)
+    {
+        foreach (string entry in entries)
+        {
+            (int count, string name) = CountedCommand.SplitLeadingCount(entry.Trim());
+            if (name.Length > 0) yield return (name, count);
+        }
+    }
+
+    // Copies of the item of exactly this name in the pack. A worn copy isn't one.
+    public int PackCount(string itemName)
+    {
+        string wanted = itemName.Trim();
+        int copies = 0;
+        foreach ((string name, int count) in Stacks(CarriedItems))
+            if (string.Equals(name, wanted, System.StringComparison.OrdinalIgnoreCase)) copies += count;
+        return copies;
+    }
+
+    // The names of what is in the pack, one per pile.
+    public System.Collections.Generic.HashSet<string> PackNames()
+    {
+        var names = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        foreach ((string name, int _) in Stacks(CarriedItems)) names.Add(name);
+        return names;
+    }
+
+    // True when an item of exactly this name is in the pack or worn. Has matches
+    // loosely, which suits a question a person asks; this is for gear the client is
+    // about to swap to, where a near miss on the name would send the wrong piece.
+    public bool IsCarriedOrWorn(string itemName)
+    {
+        if (string.IsNullOrWhiteSpace(itemName)) return false;
+        string wanted = itemName.Trim();
+        foreach (EquippedItem e in EquippedItems)
+            if (string.Equals(e.Name, wanted, System.StringComparison.OrdinalIgnoreCase)) return true;
+        return PackCount(wanted) > 0;
+    }
+
     // Split a key-ring entry into its stack quantity and item name. The dump
     // stacks duplicate keys behind a leading count ("3 black star key") and
     // lists a lone key bare ("black star key"); a bare entry is quantity 1.
