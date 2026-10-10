@@ -1,16 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.165.9**
-> - Paradigm: a pile is marked Missing only off a confirmed death-room display
-> - Paradigm: Recover Now marks Missing when the look shows no corpse
-> - Recover Now on a Missing pile walks there and looks again
-> - A party member's hand-back reopens a Missing pile
-> - A single spare of a worn item is recorded in the deathpile
-> - The lit light and keys are recorded in the deathpile
-> - A light that burns out comes off what you hold at once
-> - Stock: being placed in a death room is not an empty floor
-> - Bug report shows where the death-room pickup stands
+> **Version 3.165.10**
+> - A handed-back item counts toward a Missing deathpile from anyone, at any time
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

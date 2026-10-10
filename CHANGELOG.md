@@ -1,5 +1,9 @@
 # Version history
 
+## 3.165.10
+
+- A handed-back item counts toward a Missing deathpile from anyone, at any time
+
 ## 3.165.9
 
 - Paradigm: a pile is marked Missing only off a confirmed death-room display
