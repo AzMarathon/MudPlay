@@ -561,11 +561,20 @@ public sealed class StealthManager : IDisposable
     // Auto-Sneak was just switched on: sneak now rather than at the next clear room.
     public void NoteAutoSneakSwitchedOn() => ScheduleInPlaceReSneak();
 
-    // The player typed a move. With nothing driving the moves, this is the pre-move
-    // moment an engine has: send the `sn` ahead of the step so the step itself is
-    // sneaked, however soon after a sneak-ending command it was typed.
+    // A move went out. The game drops a hide as it takes the move command, before it
+    // knows whether the move goes anywhere, so one refused at a wall ends the hide too
+    // and no room change would say so.
+    //
+    // When the player typed it, with nothing driving the moves, this is also the
+    // pre-move moment an engine has: send the `sn` ahead of the step so the step itself
+    // is sneaked, however soon after a sneak-ending command it was typed.
     public void NoteTypedMove()
     {
+        if (_stateValue == StealthState.Hidden)
+        {
+            _log?.Info(LogCategory, "a move ended the hide");
+            NoteHideBroken();
+        }
         if (_isEngineDriving?.Invoke() != false) return;
         RequestPreMoveStealth();
     }
@@ -586,6 +595,8 @@ public sealed class StealthManager : IDisposable
     }
 
     internal void ReSneakInPlaceForTests() => ReSneakInPlace();
+
+    internal bool InPlaceReSneakPendingForTests => _inPlaceTimer is not null;
 
     private void ReSneakInPlace()
     {
@@ -621,8 +632,19 @@ public sealed class StealthManager : IDisposable
     // could latch, so without this the FSM reads stale-Sneaking and the next move goes
     // out unsneaked. Drop to Idle; the next move's ready check re-sneaks. Not in place:
     // a gear swap is a burst of commands, and an `sn` mid-burst would be broken again.
-    public void NoteSneakBroken(string what)
+    //
+    // endsHide: the command ends a hide as well ("What ends a hide on Stock"), just as
+    // silently. There is no re-hide for any break, so the hide is only dropped, and
+    // Auto-Sneak takes over as it does after a cast.
+    public void NoteSneakBroken(string what, bool endsHide = false)
     {
+        if (endsHide && _stateValue == StealthState.Hidden)
+        {
+            _log?.Info(LogCategory, $"{what} ended the hide");
+            NoteHideBroken();
+            ScheduleInPlaceReSneak();
+            return;
+        }
         if (_stateValue is not (StealthState.Sneaking or StealthState.AttemptingSneak)) return;
         _log?.Info(LogCategory, $"{what} ended the sneak — re-sneaking before the next move");
         // An `sn` still unanswered was sent BEFORE this command, so the game takes the
@@ -680,7 +702,13 @@ public sealed class StealthManager : IDisposable
                 _log?.Info(LogCategory, "cast during a rest — not re-sneaking; the rest would end it, the next move re-sneaks");
                 return;
             }
-            TryBeginAutoSneak("post-cast re-sneak");
+            // An item cast also marked the sneak broken on its `use`, which arms the
+            // in-place re-sneak for a moment later. This `sn` answers both.
+            if (TryBeginAutoSneak("post-cast re-sneak"))
+            {
+                _inPlaceTimer?.Stop();
+                _inPlaceTimer = null;
+            }
         }
         finally
         {

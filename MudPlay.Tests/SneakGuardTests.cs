@@ -115,12 +115,22 @@ public sealed class SneakGuardTests
     [InlineData(">Raijin {ok}", true)]
     [InlineData("rest", true)]
     [InlineData("get sword", false)]
-    [InlineData("use torch", false)]
     [InlineData("/Raijin {ok}", false)]
     [InlineData("bg hello", false)]
     [InlineData("n", false)]
     public void EndsSneak_FollowsTheEngineList(string command, bool ends) =>
         Assert.Equal(ends, SneakBreakingCommands.EndsSneak(command));
+
+    // A `use` ends a sneak when the item's spell is cast, which takes the pack and the
+    // game data to answer (UseEndsSneakTests). Asked with neither, it counts as ended.
+    [Theory]
+    [InlineData("use torch")]
+    [InlineData("read scroll")]
+    [InlineData("eat ration")]
+    [InlineData("drink waterskin")]
+    [InlineData("light torch")]
+    public void EndsSneak_ItemCommandWithNoItemRule_CountsAsEnded(string command) =>
+        Assert.True(SneakBreakingCommands.EndsSneak(command));
 
     [Fact]
     public void ShadowRest_KeepsTheSneakThroughARest()

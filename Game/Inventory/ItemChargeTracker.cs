@@ -384,21 +384,29 @@ public sealed class ItemChargeTracker : IDisposable
         return null;
     }
 
+    private string? ResolveHeld(string arg) => ResolveHeld(_held(), arg, out _);
+
     // The held item (carried or worn) a look/use arg refers to — case-insensitive
     // substring, the loose resolution the game does for a partial. First match wins.
-    private string? ResolveHeld(string arg)
+    // wholeArg comes back false when only the first word named the item, so more
+    // words follow it (`use <item> <target>`).
+    public static string? ResolveHeld(IReadOnlyList<string> heldItems, string arg, out bool wholeArg)
     {
+        wholeArg = true;
         if (arg.Length < 2) return null;
         string a = arg.ToLowerInvariant();
-        foreach (string held in _held())
+        foreach (string held in heldItems)
             if (!string.IsNullOrWhiteSpace(held) && held.ToLowerInvariant().Contains(a))
                 return Singular(held);
         // `use <item> <target>` — fall back to the first word matching a held item.
         string first = a.Split(' ')[0];
         if (first.Length >= MinLookArgLength && first != a)
-            foreach (string held in _held())
+            foreach (string held in heldItems)
                 if (!string.IsNullOrWhiteSpace(held) && held.ToLowerInvariant().Contains(first))
+                {
+                    wholeArg = false;
                     return Singular(held);
+                }
         return null;
     }
 
