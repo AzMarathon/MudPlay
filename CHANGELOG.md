@@ -1,9 +1,20 @@
 # Version history
 
-## 3.160.2
+## 3.160.3
 
 - Party item gates: a member who never answers the `@have` count is no longer fetched another copy on every trip
 - A copy you handed them and the game confirmed is remembered until the party changes
+
+## 3.160.2
+
+- Chest Offload Drop / Drop All hide when Hide items when discarding is on
+- Hidden items leave the Chest Offload list
+- A hide a full room refuses is retried in each new room
+- A sale, drop, ✕ or Clear list calls a waiting hide off
+- No hide sent for a copy not in the pack
+- Refused or unanswered auto-discard drops no longer stay counted all session
+- No discard after a death or reconnect until the inventory is read
+- Items named after a coin (iron crown) no longer read as coin
 
 ## 3.160.1
 

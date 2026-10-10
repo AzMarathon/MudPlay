@@ -532,9 +532,11 @@ public sealed partial class InventoryManager : IDisposable
 
         // Item stash: "You hid <item>." (Stock) or Paradigm's counted batch form
         // "You hid <N> <item>." — same verb as the coin line above, which already
-        // returned for a `(\d+) <coin>` match. The singular "a <coin>" form (which
-        // HidCurrencyRegex's leading digit misses) still reaches here, so skip any
-        // coin-noun-suffixed text; CashManager's coin path records those.
+        // returned for the coin nouns it knows. A board's own coin wording ("a gold
+        // piece") still reaches here, so skip text shaped like a coin amount;
+        // CashManager's coin path records those. An item merely named after a coin
+        // (iron crown, sack of coins) has no amount in front and is an item, as on
+        // the drop path.
         //
         // A stashed item leaves the pack exactly like a drop, so decrement the
         // carried list + weight estimate — otherwise the reading stays inflated
@@ -548,7 +550,7 @@ public sealed partial class InventoryManager : IDisposable
         if (itemHidden.Success)
         {
             string hiddenItem = itemHidden.Groups[1].Value.TrimEnd();
-            if (hiddenItem.Length > 0 && !CoinNounSuffixRegex().IsMatch(hiddenItem))
+            if (hiddenItem.Length > 0 && !CoinAmountRegex().IsMatch(hiddenItem))
             {
                 (int count, string name) = CountedCommand.SplitLeadingCount(hiddenItem);
                 RemoveHeld(name, count);
@@ -1520,9 +1522,17 @@ public sealed partial class InventoryManager : IDisposable
     private static partial Regex HidItemRegex();
 
     // Trailing coin noun set (mirrors the currency regexes' denomination nouns) —
-    // tells a coin-shaped "You hid a gold piece." from a genuine item hide.
+    // tells a coin hand-over from an item's.
     [GeneratedRegex(@"\b(?:farthing|noble|crown|piece|coin)s?$")]
     private static partial Regex CoinNounSuffixRegex();
+
+    // A coin amount as the hide echo words it: a count or `a`, then a metal and a
+    // coin noun, or one word and "coin(s)" for a board's runic tier. Tells "You hid
+    // a gold piece." from a genuine item hide. The count is what makes it coin: an
+    // item is echoed by its bare name, and Paradigm's counted item echo ("3 iron
+    // crown") names no coin metal.
+    [GeneratedRegex(@"^(?:\d+|a) (?:(?:copper|silver|gold|platinum) (?:farthing|noble|crown|piece)s?|\w+ coins?)$")]
+    private static partial Regex CoinAmountRegex();
 
     [GeneratedRegex(@"^You deposit (\d.+)\.$")]
     private static partial Regex DepositCurrencyRegex();
