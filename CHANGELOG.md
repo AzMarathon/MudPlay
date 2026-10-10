@@ -11,6 +11,7 @@
 - A hidden stack the search missed is reported as not found
 - Final lap rewrites each room's item-location entry
 - A room changed after the sort is logged once
+- After "You cannot carry that much!" the room's other pickups wait for the pack read
 - Roomba's program log is one line per room
 - Bug report shows Roomba's floor counts
 
