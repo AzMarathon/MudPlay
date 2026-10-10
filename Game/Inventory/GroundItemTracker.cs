@@ -35,22 +35,38 @@ public sealed class GroundItemTracker : IDisposable
     private readonly List<string> _items = new();
     private readonly CurrencyNaming _naming;
     private readonly Func<string, bool>? _isKnownItem;
+    private readonly MessageRouter _router;
 
     private Terminal.LineExtractor? _lines;
     private string? _noticeBuffer;            // multi-line continuation
     private bool _disposed;
 
+    private readonly Func<string, bool>? _isRoomName;
+    // Whether a room's name has gone by since the last prompt or exits line: the
+    // head of a room display, whose floor list comes after it and before its exits.
+    private bool _roomNameSeen;
+    // What printed the list now being read, settled on the row that opens it: later
+    // rows of a wrapped list follow that row, not an echo.
+    private FloorSurveySource _openListSource;
+
     // isKnownItem resolves a survey entry against the active item table (true
     // when it names a real Items.json record). Injected so the cash filter can
     // settle the "2 gold key" ambiguity below; null when no game data is wired
     // (tests), where the count+denomination heuristic stands alone.
+    // isRoomName says whether a line is the name of a room in the active set; null
+    // when no map is wired, where no list can be shown to be a room display's.
     public GroundItemTracker(MessageRouter router, CurrencyNaming naming,
-        Func<string, bool>? isKnownItem = null)
+        Func<string, bool>? isKnownItem = null, Func<string, bool>? isRoomName = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(naming);
         _naming = naming;
         _isKnownItem = isKnownItem;
+        _isRoomName = isRoomName;
+        _router = router;
+        // Ahead of the pattern handlers, and inside the dispatch that knows which
+        // command the line answers.
+        _router.LineDispatched += NoteWhatTheLineFollows;
         _noticeSub = router.Subscribe(KnownPatterns.YouNoticeRoom, OnYouNoticeRoom);
     }
 
@@ -67,6 +83,11 @@ public sealed class GroundItemTracker : IDisposable
     // item cap, so a list can run to hundreds of stacks; Roomba reports this beside
     // its own stages so a slow floor read shows in a capture.
     public TimeSpan LastSurveyReadTime { get; private set; }
+
+    // What printed the latest survey: the room's display, or the reply to a room
+    // search. They list different things (FloorSurveySource), and Items holds
+    // whichever came last.
+    public FloorSurveySource LastSurveySource { get; private set; }
 
     // Bind the per-session LineExtractor so the tracker can stitch a wrapped
     // "You notice" survey back together — same shape as AutoGetItemsManager /
@@ -89,6 +110,32 @@ public sealed class GroundItemTracker : IDisposable
     }
 
     // ----- notice parsing ----------------------------------------------
+
+    // Each source is taken only on proof. The echo of a bare search directly ahead
+    // of the list proves a reply; a room's name ahead of it, with no prompt between,
+    // proves a display. A list with neither is left unknown: a line that lands
+    // between a search's echo and its reply, or a statline that puts text of its own
+    // after the prompt, takes the echo away without making the list a room display.
+    private void NoteWhatTheLineFollows(Terminal.LineExtractor.EmittedLine line)
+    {
+        if (line.IsPromptLine)
+        {
+            _roomNameSeen = false;
+            return;
+        }
+
+        string text = line.Text.Trim();
+        if (FloorListLine.Opens(text))
+        {
+            _openListSource = _router.CommandEchoedBeforeLine is { } echo && FloorListLine.IsRoomSearch(echo)
+                ? FloorSurveySource.SearchReply
+                : _roomNameSeen ? FloorSurveySource.RoomDisplay : FloorSurveySource.Unknown;
+            return;
+        }
+
+        if (text.StartsWith("Obvious exits:", StringComparison.Ordinal)) _roomNameSeen = false;
+        else if (_isRoomName?.Invoke(text) == true) _roomNameSeen = true;
+    }
 
     // Single-line "You notice <list> here." — the pattern subscription path.
     // Multi-line wraps stitch through OnLine and feed the same rebuild.
@@ -142,6 +189,7 @@ public sealed class GroundItemTracker : IDisposable
             _items.Add(entry);
         }
         LastSurveyReadTime = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+        LastSurveySource = _openListSource;
         SurveyUpdated?.Invoke();
     }
 
@@ -239,6 +287,7 @@ public sealed class GroundItemTracker : IDisposable
         if (_disposed) return;
         _disposed = true;
         _noticeSub.Dispose();
+        _router.LineDispatched -= NoteWhatTheLineFollows;
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = null;
     }

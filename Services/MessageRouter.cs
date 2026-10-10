@@ -43,6 +43,11 @@ public sealed class MessageRouter
     // reply as they did before.
     public string? CommandEchoedBeforeLine { get; private set; }
 
+    // Whether the line now being dispatched is itself such an echo: the trailing
+    // text of a prompt row. For a reader that has to remember an echo for longer than
+    // the one line CommandEchoedBeforeLine keeps it (CommandOffProbe).
+    public bool LineIsCommandEcho { get; private set; }
+
     private string? _echoOnPreviousLine;
     private bool _previousLineWasPrompt;
     private DateTimeOffset _previousPromptAt;
@@ -55,6 +60,7 @@ public sealed class MessageRouter
             _previousPromptAt = line.Timestamp;
             _echoOnPreviousLine = null;
             CommandEchoedBeforeLine = null;
+            LineIsCommandEcho = false;
             return;
         }
 
@@ -62,6 +68,7 @@ public sealed class MessageRouter
         _previousLineWasPrompt = false;
         CommandEchoedBeforeLine = _echoOnPreviousLine;
         _echoOnPreviousLine = isEcho ? line.Text.Trim() : null;
+        LineIsCommandEcho = isEcho;
     }
 
     // True when the line being dispatched answers an echoed command that doesn't
