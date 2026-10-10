@@ -618,7 +618,8 @@ public static class BugReportBuilder
         sb.Append("- **Waiting behind it:** ").Append(svc.Events.QueueSummary).Append('\n');
         sb.Append("- **Queue limits (Settings → Events):** at most ").Append(svc.Events.MaxQueued)
           .Append(" waiting, each for up to ").Append(svc.Events.MaxQueueWait.TotalMinutes.ToString("0"))
-          .Append(" minutes\n");
+          .Append(" minutes, a paused event is given up after ")
+          .Append(svc.Events.SuspendedIdleLimit.TotalMinutes.ToString("0")).Append(" minutes standing still\n");
         sb.Append("- **Last Then:** ").Append(svc.Events.LastThenSummary).Append('\n');
         if (events.Count == 0) sb.Append("- _(no events)_\n");
         else foreach (Models.GameData.ScheduledEvent e in events)

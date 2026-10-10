@@ -12,6 +12,7 @@
 > - A bank or sell trip, a flee or a reconnect no longer ends an event's loop or walk: it goes on afterwards, laps and Stop after rule intact
 > - A walk refused as an automatic walk says so in the terminal and names the Settings → Teleports line to tick
 > - Bug report: the events waiting, the queue limits and what the last Then came to
+> - Settings → Events: how long a paused event may stand still before it is given up (5 minutes)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

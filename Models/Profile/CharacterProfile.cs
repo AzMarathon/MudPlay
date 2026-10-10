@@ -95,11 +95,14 @@ public sealed class CharacterProfile
     public bool EventsGloballyDisabled { get; set; }
 
     // The bounds of the queue events wait in while another event runs (Settings →
-    // Events): how many may wait, and for how many minutes before one is dropped.
-    // Null is the default (EventManager.DefaultMaxQueued /
-    // DefaultMaxQueueWaitMinutes). Per-character, like the events themselves.
+    // Events): how many may wait, for how many minutes before one is dropped, and
+    // how many minutes a paused event may stand with nothing moving before it is
+    // given up. Null is the default (EventManager.DefaultMaxQueued /
+    // DefaultMaxQueueWaitMinutes / DefaultSuspendedIdleMinutes). Per-character,
+    // like the events themselves.
     public int? EventQueueLimit { get; set; }
     public int? EventQueueWaitMinutes { get; set; }
+    public int? EventSuspendedIdleMinutes { get; set; }
 
     // Per-character keybindings for built-in app actions (toolbar + menu
     // shortcuts). Sparse — only entries the user has overridden from the seed

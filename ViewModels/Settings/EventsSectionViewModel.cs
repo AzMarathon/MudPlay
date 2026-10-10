@@ -71,7 +71,7 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
 
     // How many events may wait behind the running one, and for how many minutes
     // before one is dropped (CharacterProfile.EventQueueLimit /
-    // EventQueueWaitMinutes). Character tier and saved on every change, like the
+    // EventQueueWaitMinutes), and the paused-event limit below. Character tier and saved on every change, like the
     // rest of this tab: the events they bound are the character's own.
     public int QueueLimit
     {
@@ -105,6 +105,24 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
         }
     }
 
+    // CharacterProfile.EventSuspendedIdleMinutes: how long a paused event may stand
+    // with nothing moving before it is given up.
+    public int SuspendedIdleMinutes
+    {
+        get => Math.Clamp(_profile.Current?.EventSuspendedIdleMinutes ?? EventManager.DefaultSuspendedIdleMinutes,
+            1, EventManager.SuspendedIdleMinutesCeiling);
+        set
+        {
+            if (_profile.Current is not { } current) return;
+            int clamped = Math.Clamp(value, 1, EventManager.SuspendedIdleMinutesCeiling);
+            if (SuspendedIdleMinutes == clamped) return;
+            current.EventSuspendedIdleMinutes = clamped == EventManager.DefaultSuspendedIdleMinutes ? null : clamped;
+            _profile.Save();
+            _log?.Info("Events", $"Settings → Events: a paused event is given up after {clamped} minute(s) standing still.");
+            OnPropertyChanged();
+        }
+    }
+
     public override Control View => _view ??= new EventsSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels => new[]
@@ -114,6 +132,7 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
         "Walk to", "Loop", "Auto-lair", "Command",
         "Disable all events", "Target missing",
         "Events waiting at most", "Drop a waiting event after", "Event queue",
+        "Give up a paused event after", "Paused event",
     };
 
     public EventsSectionViewModel()

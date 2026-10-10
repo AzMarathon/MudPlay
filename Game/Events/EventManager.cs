@@ -314,10 +314,18 @@ public sealed class EventManager : IDisposable
     public const int MaxQueuedCeiling = 100;
     public const int MaxQueueWaitMinutesCeiling = 1440;
 
+    // A suspended run whose engine nothing brought back, with every engine idle
+    // this long, is given up rather than left holding the queue for good (Settings →
+    // Events, user, 2026-10-10).
+    public const int DefaultSuspendedIdleMinutes = 5;
+    public const int SuspendedIdleMinutesCeiling = 120;
+
     public int MaxQueued =>
         Math.Clamp(_profile?.Current?.EventQueueLimit ?? DefaultMaxQueued, 1, MaxQueuedCeiling);
     public TimeSpan MaxQueueWait => TimeSpan.FromMinutes(
         Math.Clamp(_profile?.Current?.EventQueueWaitMinutes ?? DefaultMaxQueueWaitMinutes, 1, MaxQueueWaitMinutesCeiling));
+    public TimeSpan SuspendedIdleLimit => TimeSpan.FromMinutes(
+        Math.Clamp(_profile?.Current?.EventSuspendedIdleMinutes ?? DefaultSuspendedIdleMinutes, 1, SuspendedIdleMinutesCeiling));
 
     private sealed class EventRun(
         ScheduledEvent e, ScheduledEvent origin, EventResumePlan? resume, int depth, DateTimeOffset startedAt)
@@ -356,9 +364,6 @@ public sealed class EventManager : IDisposable
     private bool _offline;
     // What ended a run while the link was down, done on the way back in.
     private readonly List<Action> _whenBackInGame = new();
-    // A suspended run whose engine nothing brought back, with every engine idle
-    // this long, is ended as failed rather than left holding the queue for good.
-    private static readonly TimeSpan SuspendedIdleLimit = TimeSpan.FromMinutes(5);
     private Avalonia.Threading.DispatcherTimer? _ticker;
     // Set while this manager stops or starts an engine, so the Stopped / Started
     // that raises isn't read as the user taking over.
@@ -564,7 +569,13 @@ public sealed class EventManager : IDisposable
     private void Later(Action act)
     {
         if (_offline) _whenBackInGame.Add(act);
-        else _post(act);
+        else _post(() =>
+        {
+            // The link can drop between the engine's raise and the dispatcher's turn;
+            // nothing is finished or started while it is down.
+            if (_offline) _whenBackInGame.Add(act);
+            else act();
+        });
     }
 
     // Synchronously fires every EventTriggerType.Logoff event in the list. Called
@@ -1395,8 +1406,10 @@ public sealed class EventManager : IDisposable
 
     // A detour that never brought the engine back (it was cancelled, or gave up)
     // would leave the run suspended for good, holding the queue. With every engine
-    // idle for SuspendedIdleLimit nothing is coming: the run ends as a failed
-    // action does, its Then run anyway.
+    // idle for SuspendedIdleLimit nothing is coming, and something called the detour
+    // off (a plain stop, the user's own walk): the run ends as a user Stop ends it,
+    // with no Then and the waiting events dropped, so nothing sets off by itself
+    // long after.
     private bool SuspendedTooLong(EventRun run)
     {
         bool idle = _walker is not { State: not WalkState.Idle }
@@ -1409,10 +1422,14 @@ public sealed class EventManager : IDisposable
         }
         run.IdleSince ??= Now();
         if (Now() - run.IdleSince < SuspendedIdleLimit) return false;
+        int dropped = _queue.Count;
+        string minutes = SuspendedIdleLimit.TotalMinutes.ToString("0");
         _log?.Warn("Events",
-            $"Event '{Label(run.Event)}': what stopped its {run.Step} never brought it back ({SuspendedIdleLimit.TotalMinutes:0} minutes with nothing moving).");
-        run.Suspended = false;
-        Complete(run, finished: false);
+            $"Event '{Label(run.Event)}': what stopped its {run.Step} never brought it back ({minutes} minute(s) with nothing moving); given up.");
+        EndByUser("what paused it never brought it back");
+        _notice?.Invoke(
+            $"[Event '{Label(run.Event)}' given up: what paused its {run.Step} never brought it back in {minutes} minute(s)"
+            + (dropped > 0 ? $"; its Then was skipped and the {dropped} waiting event(s) were dropped]" : "; its Then was skipped]"));
         return true;
     }
 

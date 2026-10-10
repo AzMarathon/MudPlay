@@ -137,6 +137,13 @@
                                    ToolTip.Tip="An event that has waited this long for the running one is dropped, and the terminal says so. Raise it if you have loop events that run longer than this. Default 30."/>
                     <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="minutes"/>
                 </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="Give up a paused event after"/>
+                    <NumericUpDown Width="120" MinWidth="120" Minimum="1" Maximum="120" Increment="1" FormatString="0"
+                                   Value="{Binding SuspendedIdleMinutes, Mode=TwoWay}"
+                                   ToolTip.Tip="A bank or sell trip, a trainer detour, a party comeback or a reconnect can pause the running event. If nothing has moved for this long, it is given up with the events waiting behind it. Time spent walking, however long, never counts; a walk held by a fight or a rest is not standing still either. Default 5."/>
+                    <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="minutes standing still"/>
+                </StackPanel>
             </StackPanel>
         </Grid>
     </Grid>
