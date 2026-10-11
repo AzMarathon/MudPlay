@@ -131,6 +131,29 @@ public sealed class OutboundBreakObserverTests
         Assert.Empty(s.Attacks);
     }
 
+    // A text exit of the room we stand in is a move: it doesn't lift the hold, though
+    // its first word spells jumpkick. A real exit from each data set
+    // (OutboundAttackObserverTests.RoomWithJumpExit).
+    [Theory]
+    [InlineData(true, "jump moat")]
+    [InlineData(false, "jump pool")]
+    public void TextExitOfTheRoom_IsForwardedAsNoAttack(bool stock, string line)
+    {
+        MudPlay.Game.Map.Room room = OutboundAttackObserverTests.RoomWithJumpExit(stock);
+        List<string> attacks = new();
+        OutboundBreakObserver observer = new(
+            isAttackSpell: _ => false,
+            onBreak: (_, _) => { },
+            onAttack: (word, _, _) => attacks.Add(word),
+            isExitCommandHere: room.HasExitCommand);
+
+        observer.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"));
+        Assert.Empty(attacks);
+
+        observer.ObserveOutbound(Encoding.Latin1.GetBytes("jump giant rat\r"));
+        Assert.Equal(new[] { "jump" }, attacks);
+    }
+
     // A paste is no bare command.
     [Fact]
     public void LongPayload_IsIgnored()

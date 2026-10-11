@@ -5048,10 +5048,7 @@ public sealed class AppServices
                 text.Length <= 40 && text[^1] != '.' && ItemNames.FindByName(text) is not null,
             // A named exit ("go manhole") prints its own passage flavour, which the
             // game data doesn't carry; the room's exit commands identify the cause.
-            isRoomExitCommand: command =>
-                RoomTracker.State.CurrentRoom is { } room
-                && room.Exits.Values.Any(exit => exit.TextCommands is { } commands
-                    && commands.Contains(command, StringComparer.OrdinalIgnoreCase)));
+            isRoomExitCommand: IsExitCommandHere);
         // Subscribed after the message and candidate stores' own loads, so the queue is
         // re-checked against the set's freshly loaded catalogue.
         GameData.ActiveSetChanged += _ => PruneMessageCandidatesWhenIdle();
@@ -5450,11 +5447,13 @@ public sealed class AppServices
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
         CombatSpells = new Game.Combat.CombatSpellIndex(GameData);
         Combat.SetCombatSpellPredicate(CombatSpells.IsCombatSpell);
-        // A hand-typed PHYSICAL attack (a / at / att / aa / bash / smash / sm / sma / bs)
-        // is likewise a user override — the observer forwards every recognised verb and
-        // Combat drops its own swing's echo via a one-shot claim.
+        // A hand-typed PHYSICAL attack (any word of AttackCommandWords) is likewise a
+        // user override — the observer forwards every recognised verb and Combat
+        // drops its own swing's echo via a one-shot claim. A line that is a text exit
+        // of the room we stand in is a move, whatever its first word (`jump pool`).
         OutboundAttack = new Game.Combat.OutboundAttackObserver(
-            (verb, target) => Combat.NoteAttackCommandObserved(verb, target));
+            (verb, target) => Combat.NoteAttackCommandObserved(verb, target),
+            isExitCommandHere: IsExitCommandHere);
         // A hand-typed eq / wear / wield / rem mid-fight stops the fight like a cast:
         // arm the re-attack for the *Combat Off* it draws.
         OutboundGear = new Game.Combat.OutboundGearObserver(Combat.NoteTypedGearCommand);
@@ -5465,7 +5464,8 @@ public sealed class AppServices
         OutboundBreak = new Game.Combat.OutboundBreakObserver(
             isAttackSpell: CombatSpells.IsCombatSpell,
             onBreak: Combat.NoteUserBreak,
-            onAttack: Combat.NoteUserAttack);
+            onAttack: Combat.NoteUserAttack,
+            isExitCommandHere: IsExitCommandHere);
         Combat.UserBreakHoldNotice += text => WriteTerminalNotice($"[{text}]");
         RoomTracker.StateChanged += t =>
         {
@@ -11794,6 +11794,10 @@ public sealed class AppServices
         finally { SendingEngineRawCommand = false; }
         return true;
     }
+
+    // Whether a line is a text exit of the room the tracker has us in.
+    private bool IsExitCommandHere(string command) =>
+        RoomTracker.State.CurrentRoom is { } room && room.HasExitCommand(command);
 
     // True while SendGameCommandRaw is sending. The raw wire goes round the
     // EngineSendGate, so to an outbound observer its lines look typed; the `break`

@@ -29,13 +29,15 @@ public sealed class OutboundBreakObserver
     private readonly Func<string, bool> _isAttackSpell;
     private readonly Action<string, string?> _onBreak;
     private readonly Action<string, string?, string?> _onAttack;
+    private readonly Func<string, bool>? _isExitCommandHere;
 
     // onBreak(word, askedBy) and onAttack(word, target, askedBy): askedBy says whose
     // relay sent the line ("<name>'s @do", "<name>'s @party"), null for the user's own.
     public OutboundBreakObserver(
         Func<string, bool> isAttackSpell,
         Action<string, string?> onBreak,
-        Action<string, string?, string?> onAttack)
+        Action<string, string?, string?> onAttack,
+        Func<string, bool>? isExitCommandHere = null)
     {
         ArgumentNullException.ThrowIfNull(isAttackSpell);
         ArgumentNullException.ThrowIfNull(onBreak);
@@ -43,6 +45,7 @@ public sealed class OutboundBreakObserver
         _isAttackSpell = isAttackSpell;
         _onBreak = onBreak;
         _onAttack = onAttack;
+        _isExitCommandHere = isExitCommandHere;
     }
 
     public void ObserveOutbound(ReadOnlySpan<byte> bytes, string? askedBy = null)
@@ -57,6 +60,10 @@ public sealed class OutboundBreakObserver
         string word = space >= 0 ? cmd[..space] : cmd;
         string? target = space >= 0 ? cmd[(space + 1)..].Trim() : null;
         if (string.IsNullOrEmpty(target)) target = null;
+
+        // A text exit of the room we stand in is a move, whatever its first word
+        // (`jump pool` where `jump` is otherwise a jumpkick).
+        if (_isExitCommandHere?.Invoke(cmd) == true) return;
 
         if (AttackCommandWords.IsBreak(word))
         {

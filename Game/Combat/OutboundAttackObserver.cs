@@ -22,6 +22,11 @@ namespace MudPlay.Game.Combat;
 // reading when the room has that exit; a monster targeted by a bare direction letter
 // is rare enough to give up.
 //
+// A line that is a text exit of the room we stand in is no attack either, whatever
+// its first word: a room with the exit `jump pool` takes that line for the move, and
+// `jump` is otherwise a spelling of jumpkick. isExitCommandHere answers from the room
+// graph; the walker's own text-exit steps come through here as well.
+//
 // Unlike casts, the combat engine's OWN physical attacks DO flow through this observer
 // (SendAttack rides the same wrapped SendUserInput path). So the observer can't tell a
 // manual swing from the engine's echo on its own — it forwards every recognised verb to
@@ -35,11 +40,14 @@ public sealed class OutboundAttackObserver
     private const int MaxBytes = 64;
 
     private readonly Action<string, string?> _onAttackCommand;
+    private readonly Func<string, bool>? _isExitCommandHere;
 
-    public OutboundAttackObserver(Action<string, string?> onAttackCommand)
+    public OutboundAttackObserver(
+        Action<string, string?> onAttackCommand, Func<string, bool>? isExitCommandHere = null)
     {
         ArgumentNullException.ThrowIfNull(onAttackCommand);
         _onAttackCommand = onAttackCommand;
+        _isExitCommandHere = isExitCommandHere;
     }
 
     public void ObserveOutbound(ReadOnlySpan<byte> bytes)
@@ -57,6 +65,7 @@ public sealed class OutboundAttackObserver
         string? target = space >= 0 ? cmd[(space + 1)..].Trim() : null;
         if (!AttackCommandWords.IsAttack(verb)) return;
         if (AttackCommandWords.IsDoorBash(verb, target)) return;
+        if (_isExitCommandHere?.Invoke(cmd) == true) return;
         _onAttackCommand(verb, string.IsNullOrEmpty(target) ? null : target);
     }
 }

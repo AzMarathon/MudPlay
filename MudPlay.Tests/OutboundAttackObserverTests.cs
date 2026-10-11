@@ -132,6 +132,61 @@ public sealed class OutboundAttackObserverTests
         Assert.Empty(seen);
     }
 
+    // Two rooms as the game data has them, each with a text exit that starts with a
+    // jumpkick word: Stock 1.11p room 8/559 (Dark-Elf City, Moatside), exit D; and
+    // Paradigm 1.9.1 room 15/1031 (Lava Cavern, Obsidian Cliffs), exit NE.
+    public static Game.Map.Room RoomWithJumpExit(bool stock)
+    {
+        (Game.Map.RoomKey key, string name, Game.Map.Direction direction, string wire) = stock
+            ? (new Game.Map.RoomKey(8, 559), "Dark-Elf City, Moatside", Game.Map.Direction.D,
+                "8/646 (Text: go moat, dive moat, jump moat)")
+            : (new Game.Map.RoomKey(15, 1031), "Lava Cavern, Obsidian Cliffs", Game.Map.Direction.NE,
+                "15/10236 (Text: go pool, jump pool, enter pool)");
+        Assert.True(Game.Map.RoomExit.TryParseWire(wire, out Game.Map.RoomExit exit));
+        return new Game.Map.Room
+        {
+            Key = key,
+            Name = name,
+            Exits = new Dictionary<Game.Map.Direction, Game.Map.RoomExit> { [direction] = exit },
+        };
+    }
+
+    // `jump` is a spelling of jumpkick, and typed in a room with the exit `jump
+    // moat` / `jump pool` the line is the move through it: no round is taken. The
+    // walker's own text-exit steps come through the observer the same way.
+    [Theory]
+    [InlineData(true, "jump moat")]
+    [InlineData(false, "jump pool")]
+    [InlineData(false, "JUMP POOL")]
+    public void TextExitOfTheRoom_IsAMove_NotAnAttack(bool stock, string line)
+    {
+        Game.Map.Room room = RoomWithJumpExit(stock);
+        List<string> seen = new();
+        OutboundAttackObserver obs = new((verb, _) => seen.Add(verb), room.HasExitCommand);
+
+        Send(obs, line);
+
+        Assert.Empty(seen);
+    }
+
+    // The same words anywhere else, or aimed at something that is no exit of the
+    // room, are the jumpkick they spell.
+    [Theory]
+    [InlineData(true, "jump giant rat")]
+    [InlineData(true, "jump")]
+    [InlineData(false, "jump moat")]      // the Stock room's exit, typed in the Paradigm room
+    [InlineData(false, "jumpkick orc")]
+    public void StrikeWordThatIsNoExitOfTheRoom_IsStillAnAttack(bool stock, string line)
+    {
+        Game.Map.Room room = RoomWithJumpExit(stock);
+        List<string> seen = new();
+        OutboundAttackObserver obs = new((verb, _) => seen.Add(verb), room.HasExitCommand);
+
+        Send(obs, line);
+
+        Assert.Single(seen);
+    }
+
     [Fact]
     public void EmptyOrOversized_Ignored()
     {
