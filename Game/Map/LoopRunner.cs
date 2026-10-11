@@ -338,9 +338,10 @@ public sealed class LoopRunner : IRecoverableEngine
     public Loop? StagedLoop { get; private set; }
 
     // Every loop this runner holds on to: the one running, the snapshot of the last
-    // run and the staged one. Any of them can be a copy the catalogue no longer
-    // holds, so the character's settings for a loop are brought to them here when
-    // they change (AppServices, on LoopManager.SettingsChanged).
+    // run, the staged one and the one to restart after a reconnect. Any of them can
+    // be a copy the catalogue no longer holds, so the character's settings for a loop
+    // are brought to them here when they change (AppServices, on
+    // LoopManager.SettingsChanged).
     public IEnumerable<Loop> HeldLoops
     {
         get
@@ -348,6 +349,7 @@ public sealed class LoopRunner : IRecoverableEngine
             if (_loop is { } running) yield return running;
             if (LastRunLoop is { } last) yield return last;
             if (StagedLoop is { } staged) yield return staged;
+            if (_pendingReconnectResume is { } resume) yield return resume;
         }
     }
 

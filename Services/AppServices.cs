@@ -8496,11 +8496,6 @@ public sealed class AppServices
             PromptScanner, Log, RoomGraph, Recovery, Bfs, Walker, Movement);
         Loops.NamesInUse = () => new[] { LoopRunner.CurrentLoop?.Name, LoopRunner.StagedLoop?.Name }
             .OfType<string>().ToArray();
-        // The runner's loops can be copies the catalogue no longer holds (its snapshot
-        // of the last run, a loop re-read from disk under a run). A change to the
-        // character's settings for a loop, or another character loading, reaches
-        // those too, or a run would go on with the settings it started with.
-        Loops.SettingsChanged += name => Loops.CopySettingsTo(LoopRunner.HeldLoops, name);
         // A confusion fumble ("You convulse violently!" / "You fumble in
         // confusion!") can bonk several consecutive moves in a row well inside
         // the loop's bounded recovery budget; EnterRecovery reads this to avoid
@@ -10039,6 +10034,13 @@ public sealed class AppServices
             BlockedByMasterSwitch = what => AutoModeController.Blocks("Events", what),
             IsMasterSwitchOff = () => AutoModeController.KillSwitchEngaged,
         };
+
+        // A loop held outside the catalogue can be a copy the catalogue no longer
+        // holds (a snapshot of the last run, a loop re-read from disk under a run).
+        // A change to the character's settings for a loop, or another character
+        // loading, reaches those too, or a run would start or go on with the
+        // settings the copy was made with. Hooked up here, once every holder exists.
+        Loops.SettingsChanged += name => Loops.CopySettingsTo(LoopsHeldApartFromTheCatalogue(), name);
 
         // EventScheduler. Owns the AtTime ticker +
         // per-event Every-timers + connection-aware Logon / Re-log
@@ -11660,6 +11662,16 @@ public sealed class AppServices
     // current room, or the direction isn't a graph exit (a command / boat / special
     // step). Feeds the pre-move gear swap for boss / lair rooms.
     public Game.Map.LairEntryDebuffHold LairDebuffHold { get; private set; } = null!;
+
+    // Every loop some engine holds on to outside the loop catalogue: the runner's
+    // (running, last run, staged, to restart after a reconnect), the one waiting on
+    // its walk-to, and the one a running event goes back to.
+    private IEnumerable<Game.Map.Loop> LoopsHeldApartFromTheCatalogue()
+    {
+        foreach (Game.Map.Loop held in LoopRunner.HeldLoops) yield return held;
+        if (LoopHandoff.Pending is { } waitingOnItsWalk) yield return waitingOnItsWalk;
+        if (Events.ResumeLoop is { } eventGoesBackTo) yield return eventGoesBackTo;
+    }
 
     // How the running loop wants its next step taken with respect to the debuff:
     // the loop's own setting when that step enters a lair we would fight in and the

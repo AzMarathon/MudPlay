@@ -465,6 +465,23 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(new[] { h.Runner.LastRunLoop, staged }, h.Runner.HeldLoops);
     }
 
+    // A loop cut off by a disconnect is held to restart on reconnect, and is no
+    // longer the running one: a change to its settings in that gap must reach it.
+    [Fact]
+    public void LoopHeldForAReconnect_IsAmongTheLoopsTheRunnerHolds()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Loop loop = AbCycle();
+        h.Runner.Start(loop);
+
+        h.Runner.NotifyDisconnected();
+
+        Assert.Null(h.Runner.CurrentLoop);
+        Assert.Same(loop, h.Runner.PendingReconnectResumeForTests);
+        Assert.Contains(loop, h.Runner.HeldLoops);
+    }
+
     [Fact]
     public void Stop_DuringRun_GoesIdle()
     {
