@@ -69,12 +69,12 @@ public sealed class MonsterMdbInfoBuilder
         List<MdbInfoRow> kv = new();
         if (!int.TryParse(wccNoStr, out int wccNo)) return kv;
 
-        JsonDocument? doc = _cache.GetRawTable("Monsters");
+        GameTable? doc = _cache.GetTable("Monsters");
         if (doc is null) return kv;
 
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        foreach (GameRow el in doc.Rows)
         {
-            if (!el.TryGetProperty("Number", out JsonElement numProp)) continue;
+            if (!el.TryGetProperty("Number", out GameValue numProp)) continue;
             if (numProp.ValueKind != JsonValueKind.Number) continue;
             if (numProp.GetInt32() != wccNo) continue;
 
@@ -397,9 +397,9 @@ public sealed class MonsterMdbInfoBuilder
     private List<(int Number, string Name)> FindSummonSpells(int wccNo)
     {
         List<(int, string)> spells = new();
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null) return spells;
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        foreach (GameRow el in doc.Rows)
         {
             if (!SpellSummons(el, wccNo)) continue;
             int num = ReadInt(el, "Number");
@@ -430,9 +430,9 @@ public sealed class MonsterMdbInfoBuilder
     {
         List<string> casters = new();
         HashSet<string> seen = new(StringComparer.Ordinal);
-        JsonDocument? doc = _cache.GetRawTable("Monsters");
+        GameTable? doc = _cache.GetTable("Monsters");
         if (doc is null) return casters;
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        foreach (GameRow el in doc.Rows)
         {
             string? ctx = SummonContext(el, spellIds);
             if (ctx is null) continue;
@@ -448,14 +448,14 @@ public sealed class MonsterMdbInfoBuilder
     // FindSummoningMonsters. Walks the viewed monster's own spell slots (create / death /
     // spell-attack / hit-spell / between-rounds), resolves each summon spell to its target
     // monster, and tags how + the % chance where the cast carries one.
-    private List<OutgoingSummon> FindOutgoingSummons(JsonElement monster)
+    private List<OutgoingSummon> FindOutgoingSummons(GameRow monster)
     {
-        JsonDocument? spellsDoc = _cache.GetRawTable("Spells");
+        GameTable? spellsDoc = _cache.GetTable("Spells");
         if (spellsDoc is null) return new();
 
         // Index spells by number so each cast slot is an O(1) resolve.
-        Dictionary<int, JsonElement> spellByNum = new();
-        foreach (JsonElement s in spellsDoc.RootElement.EnumerateArray())
+        Dictionary<int, GameRow> spellByNum = new();
+        foreach (GameRow s in spellsDoc.Rows)
         {
             int num = ReadInt(s, "Number");
             if (num > 0) spellByNum[num] = s;
@@ -463,7 +463,7 @@ public sealed class MonsterMdbInfoBuilder
 
         return BuildOutgoingSummonLabels(
             monster,
-            spellId => spellByNum.TryGetValue(spellId, out JsonElement s) ? SummonTargets(s) : Array.Empty<int>(),
+            spellId => spellByNum.TryGetValue(spellId, out GameRow s) ? SummonTargets(s) : Array.Empty<int>(),
             target => LookupMonsterName(target) ?? $"Monster #{target}");
     }
 
@@ -471,7 +471,7 @@ public sealed class MonsterMdbInfoBuilder
     // is testable without a loaded cache. summonTargetsOf maps a spell id to the monster(s) it
     // summons (empty for non-summon spells); nameOf maps a monster number to its display name.
     internal static List<OutgoingSummon> BuildOutgoingSummonLabels(
-        JsonElement monster,
+        GameRow monster,
         Func<int, IReadOnlyList<int>> summonTargetsOf,
         Func<int, string> nameOf)
     {
@@ -525,7 +525,7 @@ public sealed class MonsterMdbInfoBuilder
     // (AttType 2 whose AttAcc is the spell), a per-hit spell (AttHitSpell), or a between-rounds
     // spell (MidSpell); plus the DeathSpell ("death") and CreateSpell ("on spawn"). A monster
     // can carry several.
-    internal static string? SummonContext(JsonElement monster, IReadOnlySet<int> spellIds)
+    internal static string? SummonContext(GameRow monster, IReadOnlySet<int> spellIds)
     {
         bool combat = false;
         for (int i = 0; i < 5; i++)
@@ -549,13 +549,13 @@ public sealed class MonsterMdbInfoBuilder
     // True when spell summons monster monsterNo. Summon spells carry ability code 12; the
     // summoned monster number is inconsistently encoded, so this is best-effort (see
     // SummonTargets).
-    internal static bool SpellSummons(JsonElement spell, int monsterNo)
+    internal static bool SpellSummons(GameRow spell, int monsterNo)
         => monsterNo > 0 && SummonTargets(spell).Contains(monsterNo);
 
     // Monster number(s) spell summons, or empty when it isn't a summon spell. Encoding is
     // inconsistent: the summon abilities' own positive values win, and only when none name a
     // target does the spell's MinBase stand in (e.g. "raptor summon" → 509 = tetraraptor).
-    internal static IReadOnlyList<int> SummonTargets(JsonElement spell)
+    internal static IReadOnlyList<int> SummonTargets(GameRow spell)
     {
         List<int> targets = new();
         bool isSummon = false;
@@ -675,15 +675,15 @@ public sealed class MonsterMdbInfoBuilder
 
     // ----- Field readers + row helpers (private copies; the grid keeps its own) -----
 
-    private static int ReadInt(JsonElement el, string field)
+    private static int ReadInt(GameRow el, string field)
     {
-        if (!el.TryGetProperty(field, out JsonElement v)) return 0;
+        if (!el.TryGetProperty(field, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 
-    private static double ReadDouble(JsonElement el, string field)
+    private static double ReadDouble(GameRow el, string field)
     {
-        if (!el.TryGetProperty(field, out JsonElement v)) return 0d;
+        if (!el.TryGetProperty(field, out GameValue v)) return 0d;
         return v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out double d) ? d : 0d;
     }
 
@@ -700,9 +700,9 @@ public sealed class MonsterMdbInfoBuilder
         return $"Energy: {attEnergy} (Max {monsterEnergy / attEnergy}x/round)";
     }
 
-    private static string ReadString(JsonElement el, string field)
+    private static string ReadString(GameRow el, string field)
     {
-        if (!el.TryGetProperty(field, out JsonElement v)) return string.Empty;
+        if (!el.TryGetProperty(field, out GameValue v)) return string.Empty;
         return v.ValueKind switch
         {
             JsonValueKind.Null      => string.Empty,
@@ -727,7 +727,7 @@ public sealed class MonsterMdbInfoBuilder
     }
 
     // "2R/3P/5G/10S/2C" — only non-zero coins, slash-separated.
-    private static string BuildCashBreakdown(JsonElement el)
+    private static string BuildCashBreakdown(GameRow el)
     {
         List<string> parts = new();
         void Maybe(string field, string letter)
@@ -794,18 +794,18 @@ public sealed class MonsterMdbInfoBuilder
     private string ResolveSpellEffect(int spellId, int castLevel)
     {
         if (spellId <= 0) return string.Empty;
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null) return string.Empty;
 
-        JsonElement? found = null;
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        GameRow? found = null;
+        foreach (GameRow el in doc.Rows)
         {
-            if (!el.TryGetProperty("Number", out JsonElement n)) continue;
+            if (!el.TryGetProperty("Number", out GameValue n)) continue;
             if (n.ValueKind != JsonValueKind.Number) continue;
             if (n.GetInt32() == spellId) { found = el; break; }
         }
         if (found is null) return string.Empty;
-        JsonElement s = found.Value;
+        GameRow s = found.Value;
 
         // Min/Max with optional level scaling.
         int minBase    = ReadInt(s, "MinBase");

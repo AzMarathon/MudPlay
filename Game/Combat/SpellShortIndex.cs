@@ -60,17 +60,17 @@ public sealed class SpellShortIndex
         if (_byNumber is { } cached) return cached;
 
         Dictionary<int, string> map = new();
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Number", out JsonElement nEl)
+                if (!row.TryGetProperty("Number", out GameValue nEl)
                     || nEl.ValueKind != JsonValueKind.Number
                     || !nEl.TryGetInt32(out int number)
                     || number <= 0)
                     continue;
-                if (!row.TryGetProperty("Short", out JsonElement shortEl)
+                if (!row.TryGetProperty("Short", out GameValue shortEl)
                     || shortEl.ValueKind != JsonValueKind.String)
                     continue;
                 string? code = shortEl.GetString();
@@ -82,7 +82,7 @@ public sealed class SpellShortIndex
             }
         }
 
-        // Folded into the map — release the pinned raw Spells JsonDocument.
+        // Folded into the map — the cache may drop the Spells table.
         _cache.EvictTable("Spells");
         _byNumber = map;
         return map;

@@ -28,16 +28,16 @@ public sealed class EncumbranceDebuffIndex
     private HashSet<int> Spells()
     {
         if (_spells is not null && _builtForSet == _cache.ActiveSet) return _spells;
-        _spells = Build(_cache.GetRawTable("Spells"));
+        _spells = Build(_cache.GetTable("Spells"));
         _builtForSet = _cache.ActiveSet;
         return _spells;
     }
 
-    internal static HashSet<int> Build(JsonDocument? spells)
+    internal static HashSet<int> Build(GameTable? spells)
     {
         HashSet<int> result = new();
         if (spells is null) return result;
-        foreach (JsonElement row in spells.RootElement.EnumerateArray())
+        foreach (GameRow row in spells.Rows)
         {
             int number = ReadInt(row, "Number");
             if (number <= 0) continue;
@@ -50,7 +50,7 @@ public sealed class EncumbranceDebuffIndex
         return result;
     }
 
-    private static int ReadInt(JsonElement row, string name)
-        => row.TryGetProperty(name, out JsonElement e) && e.ValueKind == JsonValueKind.Number
+    private static int ReadInt(GameRow row, string name)
+        => row.TryGetProperty(name, out GameValue e) && e.ValueKind == JsonValueKind.Number
             && e.TryGetInt32(out int v) ? v : 0;
 }

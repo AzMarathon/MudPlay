@@ -236,8 +236,8 @@ public sealed record ItemFinderEntry
 
     // The backing Items row — kept so the finder's character filter can call
     // ItemEquipFilter.CanEquip against the live class / level / alignment. Valid
-    // for the lifetime of the cached Items JsonDocument.
-    public required JsonElement Row { get; init; }
+    // for as long as this entry is held.
+    public required GameRow Row { get; init; }
 
     // The item's MDB record number — the key the Game Data Browser selects on
     // when the finder double-clicks through to the item's record.
@@ -335,13 +335,13 @@ public sealed record ItemFinderEntry
         ItemDamageModel? damage = null)
     {
         ArgumentNullException.ThrowIfNull(cache);
-        JsonDocument? doc = cache.GetRawTable("Items");
+        GameTable? doc = cache.GetTable("Items");
         if (doc is null) return Array.Empty<ItemFinderEntry>();
 
         bool martialArts = attackType is MudAttackType.Punch or MudAttackType.Kick or MudAttackType.Jumpkick;
 
         var list = new List<ItemFinderEntry>();
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             string? name = GetString(row, "Name");
             if (string.IsNullOrEmpty(name)) continue;
@@ -526,7 +526,7 @@ public sealed record ItemFinderEntry
     // against the Spells table (mirrors the item record view). A spell id that
     // doesn't resolve falls back to "#id" so the row still reads. Returns the
     // shared empty list for the common no-negate item.
-    private static IReadOnlyList<NegatedSpell> ScanNegates(JsonElement row, GameDataCache cache)
+    private static IReadOnlyList<NegatedSpell> ScanNegates(GameRow row, GameDataCache cache)
     {
         List<NegatedSpell>? list = null;
         for (int i = 0; i < 10; i++)
@@ -541,7 +541,7 @@ public sealed record ItemFinderEntry
 
     // One Abil-0..19 pass for the two facts the worn-stat summary leaves out: the
     // min-level wear gate (135, value = level) and backstab capability (116 present).
-    private static (int LevelReq, bool Backstab) ScanAbilFacts(JsonElement row)
+    private static (int LevelReq, bool Backstab) ScanAbilFacts(GameRow row)
     {
         int levelReq = 0;
         bool backstab = false;
@@ -588,25 +588,22 @@ public sealed record ItemFinderEntry
     // as no-generate / buy-only. Those can't be acquired in play, so the finder
     // omits them. The check is defensive: a set predating the flag (property
     // absent, or non-numeric) is treated as obtainable rather than blanked out.
-    private static bool IsObtainable(JsonElement row)
+    private static bool IsObtainable(GameRow row)
     {
-        if (row.ValueKind != JsonValueKind.Object) return true;
-        if (!row.TryGetProperty("In Game", out JsonElement el)) return true;
+        if (!row.TryGetProperty("In Game", out GameValue el)) return true;
         if (el.ValueKind != JsonValueKind.Number || !el.TryGetInt32(out int v)) return true;
         return v != 0;
     }
 
-    private static int GetInt(JsonElement row, string property)
+    private static int GetInt(GameRow row, string property)
     {
-        if (row.ValueKind != JsonValueKind.Object) return 0;
-        if (!row.TryGetProperty(property, out JsonElement el)) return 0;
+        if (!row.TryGetProperty(property, out GameValue el)) return 0;
         return el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int v) ? v : 0;
     }
 
-    private static string? GetString(JsonElement row, string property)
+    private static string? GetString(GameRow row, string property)
     {
-        if (row.ValueKind != JsonValueKind.Object) return null;
-        if (!row.TryGetProperty(property, out JsonElement el)) return null;
+        if (!row.TryGetProperty(property, out GameValue el)) return null;
         return el.ValueKind == JsonValueKind.String ? el.GetString() : null;
     }
 

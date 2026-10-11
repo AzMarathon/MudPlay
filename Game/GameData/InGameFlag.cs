@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MudPlay.Services;
 
 namespace MudPlay.Game.GameData;
 
@@ -9,10 +10,9 @@ namespace MudPlay.Game.GameData;
 // (property absent or non-numeric) is treated as in play rather than blanking a table.
 public static class InGameFlag
 {
-    public static bool IsOutOfPlay(JsonElement row)
+    public static bool IsOutOfPlay(GameRow row)
     {
-        if (row.ValueKind != JsonValueKind.Object) return false;
-        if (!row.TryGetProperty("In Game", out JsonElement el)) return false;
+        if (!row.TryGetProperty("In Game", out GameValue el)) return false;
         return el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int v) && v == 0;
     }
 }

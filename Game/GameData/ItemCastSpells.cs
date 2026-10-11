@@ -31,7 +31,7 @@ public static class ItemCastSpells
         return ReadCasts(row);
     }
 
-    public static IReadOnlyList<CastEntry> ReadCasts(JsonElement itemRow)
+    public static IReadOnlyList<CastEntry> ReadCasts(GameRow itemRow)
     {
         List<CastEntry>? casts = null;
         int pendingPercent = 0;
@@ -67,9 +67,9 @@ public static class ItemCastSpells
         return casts[0].SpellNumber;
     }
 
-    private static int ReadInt(JsonElement el, string field)
+    private static int ReadInt(GameRow el, string field)
     {
-        if (!el.TryGetProperty(field, out JsonElement v)) return 0;
+        if (!el.TryGetProperty(field, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 }

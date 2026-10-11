@@ -72,13 +72,13 @@ public static class QuestCrawler
 
     private static IReadOnlyList<CrawledQuest> CrawlSet(GameDataCache cache, int? classId)
     {
-        JsonDocument? tbinfo = cache.GetRawTable("TBInfo");
+        GameTable? tbinfo = cache.GetTable("TBInfo");
         if (tbinfo is null) return Array.Empty<CrawledQuest>();
 
         var rawChains = new List<string>();
-        foreach (JsonElement block in tbinfo.RootElement.EnumerateArray())
+        foreach (GameRow block in tbinfo.Rows)
         {
-            if (!block.TryGetProperty("Action", out JsonElement actionEl)) continue;
+            if (!block.TryGetProperty("Action", out GameValue actionEl)) continue;
             if (actionEl.ValueKind != JsonValueKind.String) continue;
             string? action = actionEl.GetString();
             if (string.IsNullOrEmpty(action) || action == "\0") continue;

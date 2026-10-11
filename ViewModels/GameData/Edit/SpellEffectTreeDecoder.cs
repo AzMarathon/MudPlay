@@ -33,10 +33,10 @@ public static class SpellEffectTreeDecoder
     {
         ArgumentNullException.ThrowIfNull(cache);
         if (textblockNumber <= 0) return Array.Empty<SpellEffectNode>();
-        if (cache.GetRawTable("TBInfo") is not { } tbDoc) return Array.Empty<SpellEffectNode>();
+        if (cache.GetTable("TBInfo") is not { } tbDoc) return Array.Empty<SpellEffectNode>();
 
-        var tb = new Dictionary<int, JsonElement>();
-        foreach (JsonElement e in tbDoc.RootElement.EnumerateArray())
+        var tb = new Dictionary<int, GameRow>();
+        foreach (GameRow e in tbDoc.Rows)
         {
             int n = ReadInt(e, "Number");
             if (n > 0) tb.TryAdd(n, e);
@@ -45,15 +45,15 @@ public static class SpellEffectTreeDecoder
         return DecodeBlock(ctx, textblockNumber, 0, new HashSet<int>());
     }
 
-    private sealed record Ctx(GameDataCache Cache, Dictionary<int, JsonElement> Tb, Dictionary<(int, int), string> RoomNames);
+    private sealed record Ctx(GameDataCache Cache, Dictionary<int, GameRow> Tb, Dictionary<(int, int), string> RoomNames);
 
     private static IReadOnlyList<SpellEffectNode> DecodeBlock(Ctx ctx, int tbNum, int depth, HashSet<int> ancestors)
     {
         if (tbNum <= 0 || depth > MaxDepth || !ancestors.Add(tbNum)) return Array.Empty<SpellEffectNode>();
         try
         {
-            if (!ctx.Tb.TryGetValue(tbNum, out JsonElement entry)) return Array.Empty<SpellEffectNode>();
-            string action = entry.TryGetProperty("Action", out JsonElement a) && a.ValueKind == JsonValueKind.String
+            if (!ctx.Tb.TryGetValue(tbNum, out GameRow entry)) return Array.Empty<SpellEffectNode>();
+            string action = entry.TryGetProperty("Action", out GameValue a) && a.ValueKind == JsonValueKind.String
                 ? a.GetString() ?? string.Empty : string.Empty;
 
             var nodes = new List<SpellEffectNode>();
@@ -251,8 +251,8 @@ public static class SpellEffectTreeDecoder
     // block isn't a teleport-only table.
     private static (IReadOnlyList<MdbInline> Summary, IReadOnlyList<SpellEffectNode> Rooms)? TryCollapseTeleports(Ctx ctx, int tbNum)
     {
-        if (!ctx.Tb.TryGetValue(tbNum, out JsonElement entry)) return null;
-        string action = entry.TryGetProperty("Action", out JsonElement a) && a.ValueKind == JsonValueKind.String
+        if (!ctx.Tb.TryGetValue(tbNum, out GameRow entry)) return null;
+        string action = entry.TryGetProperty("Action", out GameValue a) && a.ValueKind == JsonValueKind.String
             ? a.GetString() ?? string.Empty : string.Empty;
 
         var dests = new List<(int Map, int Room)>();
@@ -348,19 +348,19 @@ public static class SpellEffectTreeDecoder
     private static Dictionary<(int, int), string> BuildRoomNames(GameDataCache cache)
     {
         var map = new Dictionary<(int, int), string>();
-        if (cache.GetRawTable("Rooms") is not { } doc) return map;
-        foreach (JsonElement r in doc.RootElement.EnumerateArray())
+        if (cache.GetTable("Rooms") is not { } doc) return map;
+        foreach (GameRow r in doc.Rows)
         {
             int m = ReadInt(r, "Map Number"), rm = ReadInt(r, "Room Number");
             if (m <= 0 || rm <= 0) continue;
-            if (r.TryGetProperty("Name", out JsonElement e) && e.ValueKind == JsonValueKind.String
+            if (r.TryGetProperty("Name", out GameValue e) && e.ValueKind == JsonValueKind.String
                 && e.GetString() is { } nm && nm.Trim().Length > 0 && nm[0] != '\0')
                 map[(m, rm)] = nm.Trim();
         }
         return map;
     }
 
-    private static int ReadInt(JsonElement row, string prop)
-        => row.TryGetProperty(prop, out JsonElement e) && e.ValueKind == JsonValueKind.Number
+    private static int ReadInt(GameRow row, string prop)
+        => row.TryGetProperty(prop, out GameValue e) && e.ValueKind == JsonValueKind.Number
            && e.TryGetInt32(out int n) ? n : 0;
 }

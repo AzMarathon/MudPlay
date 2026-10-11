@@ -91,15 +91,15 @@ public sealed class ShopsSectionViewModel : JsonTableSectionViewModel, IEditable
     // anyway, and the rest are accessible via the Rooms tab's search.
     private (int Map, int Room) ReadAssignedRoom(int shopNumber)
     {
-        JsonDocument? doc = _cache.GetRawTable("Shops");
+        GameTable? doc = _cache.GetTable("Shops");
         if (doc is null) return (0, 0);
 
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        foreach (GameRow el in doc.Rows)
         {
-            if (!el.TryGetProperty("Number", out JsonElement n)) continue;
+            if (!el.TryGetProperty("Number", out GameValue n)) continue;
             if (n.ValueKind != JsonValueKind.Number) continue;
             if (n.GetInt32() != shopNumber) continue;
-            if (!el.TryGetProperty("Assigned To", out JsonElement assignedEl)) return (0, 0);
+            if (!el.TryGetProperty("Assigned To", out GameValue assignedEl)) return (0, 0);
             if (assignedEl.ValueKind != JsonValueKind.String) return (0, 0);
 
             // Take just the FIRST "Room M/R" token from a comma-separated list — the popup

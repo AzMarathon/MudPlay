@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.176.5**
+> **Version 3.177.2**
 > - Simulator area ranking: **Save as loop** turns a ranked area's tour into a saved loop you can run, with how it was tested in the loop's notes
 > - A picked ranking now shows its route (the rooms walked, in order) and what it was tested at (level, runs × hours, walk pace, start room)
 >

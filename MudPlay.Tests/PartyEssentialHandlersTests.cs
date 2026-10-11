@@ -1316,6 +1316,39 @@ public sealed class PartyEssentialHandlersTests
         Assert.Equal("join Raijin\r", Encoding.Latin1.GetString(relay[0]));
     }
 
+    // The join an @join has us send is announced, so the game's answer to it can
+    // be read by whoever watches for one (ComebackRequester).
+    [Fact]
+    public void Join_AnnouncesTheJoinItSent()
+    {
+        var (engine, handlers, _, _, players, relay) = Setup();
+        SeedPlayer(players, "Boss", PlayerRemoteControls.RequestInvite);
+        List<string> announced = new();
+        handlers.JoinSent = announced.Add;
+
+        engine.DispatchForTests(Telepath("Boss", "@join"));
+
+        Assert.Equal("join Boss\r", Encoding.Latin1.GetString(Assert.Single(relay)));
+        Assert.Equal(new[] { "Boss" }, announced);
+    }
+
+    // Our own client joined that leader a moment ago by itself: one join is enough.
+    [Fact]
+    public void Join_WhenAJoinToThatLeaderJustWentOut_SendsNoSecond()
+    {
+        var (engine, handlers, _, _, players, relay) = Setup();
+        SeedPlayer(players, "Boss", PlayerRemoteControls.RequestInvite);
+        handlers.JoinAlreadySent = leader => leader == "Boss";
+        List<string> announced = new();
+        handlers.JoinSent = announced.Add;
+
+        engine.DispatchForTests(Telepath("Boss", "@join"));
+
+        Assert.Empty(relay);
+        Assert.Empty(announced);
+        Assert.Empty(engine.LastSentForTests);
+    }
+
     // ===== @invite / @join while mortally wounded =====
 
     /// <summary>

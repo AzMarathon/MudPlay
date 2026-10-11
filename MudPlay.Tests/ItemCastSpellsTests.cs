@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using System.Text.Json;
 using MudPlay.Game.GameData;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -12,12 +12,12 @@ namespace MudPlay.Tests;
 // the first proc — so items sharing a cast spell share one message record.
 public sealed class ItemCastSpellsTests
 {
-    private static JsonElement Item(string json) => JsonDocument.Parse(json).RootElement;
+    private static GameRow Item(string json) => TestRows.Row(json);
 
     [Fact]
     public void BareCastsSp_IsOnUse()
     {
-        JsonElement it = Item("{\"Abil-0\":43,\"AbilVal-0\":114}");
+        GameRow it = Item("{\"Abil-0\":43,\"AbilVal-0\":114}");
         IReadOnlyList<ItemCastSpells.CastEntry> casts = ItemCastSpells.ReadCasts(it);
         Assert.Single(casts);
         Assert.Equal(114, casts[0].SpellNumber);
@@ -28,7 +28,7 @@ public sealed class ItemCastSpellsTests
     public void PercentSpell_BeforeCastsSp_IsSwingProc()
     {
         // 40% swing proc of spell 170.
-        JsonElement it = Item("{\"Abil-0\":114,\"AbilVal-0\":40,\"Abil-1\":43,\"AbilVal-1\":170}");
+        GameRow it = Item("{\"Abil-0\":114,\"AbilVal-0\":40,\"Abil-1\":43,\"AbilVal-1\":170}");
         IReadOnlyList<ItemCastSpells.CastEntry> casts = ItemCastSpells.ReadCasts(it);
         Assert.Single(casts);
         Assert.Equal(170, casts[0].SpellNumber);
@@ -40,7 +40,7 @@ public sealed class ItemCastSpellsTests
     public void OnUse_Preferred_OverProc_ForPrimary()
     {
         // shimmering longsword shape: bare CastsSp 114 (use-bless) THEN a 40%/swing proc of 170.
-        JsonElement it = Item(
+        GameRow it = Item(
             "{\"Abil-0\":43,\"AbilVal-0\":114,\"Abil-1\":114,\"AbilVal-1\":40,\"Abil-2\":43,\"AbilVal-2\":170}");
         IReadOnlyList<ItemCastSpells.CastEntry> casts = ItemCastSpells.ReadCasts(it);
         Assert.Equal(2, casts.Count);
@@ -53,26 +53,26 @@ public sealed class ItemCastSpellsTests
     [Fact]
     public void ProcOnly_Weapon_PrimaryIsTheProc()
     {
-        JsonElement it = Item("{\"Abil-0\":114,\"AbilVal-0\":25,\"Abil-1\":43,\"AbilVal-1\":979}");
+        GameRow it = Item("{\"Abil-0\":114,\"AbilVal-0\":25,\"Abil-1\":43,\"AbilVal-1\":979}");
         Assert.Equal(979, PrimaryOf(it));
     }
 
     [Fact]
     public void NoCast_ReturnsEmpty()
     {
-        JsonElement it = Item("{\"Abil-0\":28,\"AbilVal-0\":1,\"Abil-1\":86,\"AbilVal-1\":50}");
+        GameRow it = Item("{\"Abil-0\":28,\"AbilVal-0\":1,\"Abil-1\":86,\"AbilVal-1\":50}");
         Assert.Empty(ItemCastSpells.ReadCasts(it));
     }
 
     [Fact]
     public void ZeroValueCastsSp_Ignored()
     {
-        JsonElement it = Item("{\"Abil-0\":43,\"AbilVal-0\":0}");
+        GameRow it = Item("{\"Abil-0\":43,\"AbilVal-0\":0}");
         Assert.Empty(ItemCastSpells.ReadCasts(it));
     }
 
-    // PrimaryCastSpell over a JsonElement item row (the ReadCasts overload feeds it).
-    private static int? PrimaryOf(JsonElement it)
+    // PrimaryCastSpell over an item row (the ReadCasts overload feeds it).
+    private static int? PrimaryOf(GameRow it)
     {
         IReadOnlyList<ItemCastSpells.CastEntry> casts = ItemCastSpells.ReadCasts(it);
         if (casts.Count == 0) return null;

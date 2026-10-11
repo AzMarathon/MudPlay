@@ -1,5 +1,5 @@
-using System.Text.Json;
 using MudPlay.Models.GameData;
+using MudPlay.Services;
 
 namespace MudPlay.Game.Spells;
 
@@ -57,11 +57,10 @@ public sealed class DrainLineSet
     }
 
     // The Spells-table numbers of every spell with a drain ability.
-    public static IReadOnlyList<int> DrainSpells(JsonElement spellsTable)
+    public static IReadOnlyList<int> DrainSpells(GameTable spellsTable)
     {
         List<int> drains = new();
-        if (spellsTable.ValueKind != JsonValueKind.Array) return drains;
-        foreach (JsonElement row in spellsTable.EnumerateArray())
+        foreach (GameRow row in spellsTable.Rows)
         {
             SpellFormulaInput formula = SpellFormulaReader.Read(row);
             if (formula.Abilities.Any(a => a.Code == AbilDrain)) drains.Add(formula.Number);

@@ -42,17 +42,17 @@ public sealed class SpellAttackTypeIndex
         if (_byShort is { } cached) return cached;
 
         Dictionary<string, int> map = new(StringComparer.OrdinalIgnoreCase);
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Short", out JsonElement shortEl)) continue;
+                if (!row.TryGetProperty("Short", out GameValue shortEl)) continue;
                 if (shortEl.ValueKind != JsonValueKind.String) continue;
                 string? code = shortEl.GetString();
                 if (string.IsNullOrWhiteSpace(code)) continue;
 
-                if (!row.TryGetProperty("AttType", out JsonElement typeEl)) continue;
+                if (!row.TryGetProperty("AttType", out GameValue typeEl)) continue;
                 if (typeEl.ValueKind != JsonValueKind.Number) continue;
                 if (!typeEl.TryGetInt32(out int attType)) continue;
 
@@ -61,9 +61,9 @@ public sealed class SpellAttackTypeIndex
             }
         }
 
-        // Folded into the map — release the pinned raw Spells JsonDocument.
+        // Folded into the map — the cache may drop the Spells table.
         // (SpellReqLevelIndex evicts the same table; whichever builds second just
-        // triggers a one-time reload via GetRawTable.)
+        // triggers a one-time reload via GetTable.)
         _cache.EvictTable("Spells");
         _byShort = map;
         return map;

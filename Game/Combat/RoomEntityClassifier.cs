@@ -425,7 +425,7 @@ public sealed class RoomEntityClassifier : IDisposable
         number = 0;
         if (_gameData is null) return false;
         if (_gameData.FindRowByName("Monsters", name) is not { } row) return false;
-        if (!row.TryGetProperty("Number", out JsonElement numEl)) return false;
+        if (!row.TryGetProperty("Number", out GameValue numEl)) return false;
         if (numEl.ValueKind != JsonValueKind.Number) return false;
         return numEl.TryGetInt32(out number);
     }

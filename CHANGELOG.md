@@ -1,9 +1,26 @@
 # Version history
 
-## 3.176.5
+## 3.177.2
 
 - Simulator area ranking: **Save as loop** turns a ranked area's tour into a saved loop you can run, with how it was tested in the loop's notes
 - A picked ranking now shows its route (the rooms walked, in order) and what it was tested at (level, runs × hours, walk pace, start room)
+
+## 3.177.0
+
+- Imported game data is held in a compact form instead of parsed JSON: about 25 MB less memory through a Paradigm session (14 MB on Stock), and 80 MB less in the first minutes after a set loads
+- Loading a set's tables allocates a third of the memory it did
+- Program log shows what each game-data table holds when a set loads
+
+## 3.176.10
+
+- Stock: a follower an exit left behind is still on the leader's list, and is now brought back with a `join`, not an invite it never sees
+- Stock leader: tells that member to `@join` when it reaches them, and invites only if they aren't following 5 s later
+- Stock follower: joins the leader it asked back by itself on `found you` or on seeing them; on `You must be invited first!` it waits for the invite
+- Stock: Auto-Lair's promised invite on its next pass is now kept
+- Stock: a party of six no longer answers its own left-behind member `my party is full`
+- Stock: a loop's invite wait that runs out no longer uninvites a member who was following before
+- Stock: after a follow is given up, a `par` of `[Invited]` rows no longer makes the follower a party leader
+- Paradigm unchanged
 
 ## 3.176.3
 

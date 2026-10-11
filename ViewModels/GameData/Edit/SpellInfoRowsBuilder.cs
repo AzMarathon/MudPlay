@@ -103,11 +103,11 @@ public sealed class SpellInfoRowsBuilder
     {
         var rows = new List<GameDataInfoRow>();
 
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null) return rows;
 
-        JsonElement? found = null;
-        foreach (JsonElement r in doc.RootElement.EnumerateArray())
+        GameRow? found = null;
+        foreach (GameRow r in doc.Rows)
             if (ReadInt(r, "Number") == spellNumber) { found = r; break; }
         if (found is not { } el) return rows;
 
@@ -150,7 +150,7 @@ public sealed class SpellInfoRowsBuilder
         bool teleportRendered = false;
         bool growthRendered = false;
         bool removesRendered = false;
-        foreach (JsonProperty prop in el.EnumerateObject())
+        foreach (GameField prop in el.Fields)
         {
             string field = prop.Name;
 
@@ -342,19 +342,19 @@ public sealed class SpellInfoRowsBuilder
     private void AppendCastInRoomsRow(List<GameDataInfoRow> rows, int spellNumber)
     {
         if (spellNumber <= 0) return;
-        JsonDocument? doc = _cache.GetRawTable("Rooms");
+        GameTable? doc = _cache.GetTable("Rooms");
         if (doc is null) return;
 
         var links = new List<GameDataRecordLink>();
         var names = new List<string>();
-        foreach (JsonElement r in doc.RootElement.EnumerateArray())
+        foreach (GameRow r in doc.Rows)
         {
             if (ReadInt(r, "Spell") != spellNumber) continue;
             int map = ReadInt(r, "Map Number");
             int room = ReadInt(r, "Room Number");
             if (map <= 0 || room <= 0) continue;
             string mapRoom = $"{map.ToString(CultureInfo.InvariantCulture)}/{room.ToString(CultureInfo.InvariantCulture)}";
-            string label = r.TryGetProperty("Name", out JsonElement e) && e.ValueKind == JsonValueKind.String
+            string label = r.TryGetProperty("Name", out GameValue e) && e.ValueKind == JsonValueKind.String
                 && CleanString(e.GetString()) is { } nm ? $"{nm} {mapRoom}" : mapRoom;
             var key = new Game.Map.RoomKey(map, room);
             links.Add(new GameDataRecordLink(label, ", ", new RelayCommand(() => AppServices.Current.NavigateToRoom(key))));
@@ -407,9 +407,9 @@ public sealed class SpellInfoRowsBuilder
     // Empty when the spell has no TextBlock effect.
     public IReadOnlyList<SpellEffectNode> BuildEffectTree(int spellNumber)
     {
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null) return Array.Empty<SpellEffectNode>();
-        foreach (JsonElement r in doc.RootElement.EnumerateArray())
+        foreach (GameRow r in doc.Rows)
             if (ReadInt(r, "Number") == spellNumber)
             {
                 int tb = FindAbilVal(r, 148);
@@ -442,7 +442,7 @@ public sealed class SpellInfoRowsBuilder
     // links and other kinds (Room / TextBlock / Class) or unresolvable tokens as
     // inert text. Keeps the MDB's trailing "+" cap marker as a "+ more" tail.
     // Returns null when the cell is empty.
-    private GameDataInfoRow? BuildSourceListLinkRow(string field, JsonElement value)
+    private GameDataInfoRow? BuildSourceListLinkRow(string field, GameValue value)
     {
         if (value.ValueKind != JsonValueKind.String || CleanString(value.GetString()) is not { } raw)
             return null;
@@ -535,11 +535,11 @@ public sealed class SpellInfoRowsBuilder
     private void AppendNegatedByRow(List<GameDataInfoRow> rows, int spellNumber)
     {
         if (spellNumber <= 0) return;
-        JsonDocument? doc = _cache.GetRawTable("Items");
+        GameTable? doc = _cache.GetTable("Items");
         if (doc is null) return;
 
         var itemNumbers = new List<int>();
-        foreach (JsonElement item in doc.RootElement.EnumerateArray())
+        foreach (GameRow item in doc.Rows)
         {
             bool negates = false;
             for (int i = 0; i < 10 && !negates; i++)
@@ -556,7 +556,7 @@ public sealed class SpellInfoRowsBuilder
 
     // "Mage-1" / "Priest" — the spell's casting school with its magery-level suffix folded in
     // (suffix dropped when MageryLVL is 0). Null when the school value can't be formatted.
-    private static string? MageryDisplay(JsonElement el, JsonElement mageryValue)
+    private static string? MageryDisplay(GameRow el, GameValue mageryValue)
     {
         string? school = LookupEnums.FormatMagery(
             mageryValue.ValueKind == JsonValueKind.Number ? mageryValue.GetRawText() : null);
@@ -595,7 +595,7 @@ public sealed class SpellInfoRowsBuilder
 
     // "map/room (room name)" for a teleport spell — the destination map comes from TeleportMap
     // (141), the room from TeleportRoom (140), the name resolved against the Rooms table.
-    private string TeleportDestination(JsonElement el)
+    private string TeleportDestination(GameRow el)
     {
         int map = FindAbilVal(el, 141);
         int room = FindAbilVal(el, 140);
@@ -604,7 +604,7 @@ public sealed class SpellInfoRowsBuilder
         return dest;
     }
 
-    private static int FindAbilVal(JsonElement el, int code)
+    private static int FindAbilVal(GameRow el, int code)
     {
         for (int i = 0; i < 10; i++)
             if (ReadInt(el, $"Abil-{i}") == code) return ReadInt(el, $"AbilVal-{i}");
@@ -613,7 +613,7 @@ public sealed class SpellInfoRowsBuilder
 
     // Every AbilVal on the row whose Abil code matches, in slot order — used to
     // collapse the repeated RemovesSpell (122) slots into a single linked row.
-    private static List<int> CollectAbilVals(JsonElement el, int code)
+    private static List<int> CollectAbilVals(GameRow el, int code)
     {
         List<int> vals = new();
         for (int i = 0; i < 10; i++)
@@ -629,11 +629,11 @@ public sealed class SpellInfoRowsBuilder
     private string? ResolveRoomName(int map, int room)
     {
         if (map <= 0 || room <= 0) return null;
-        JsonDocument? doc = _cache.GetRawTable("Rooms");
+        GameTable? doc = _cache.GetTable("Rooms");
         if (doc is null) return null;
-        foreach (JsonElement r in doc.RootElement.EnumerateArray())
+        foreach (GameRow r in doc.Rows)
             if (ReadInt(r, "Map Number") == map && ReadInt(r, "Room Number") == room)
-                return r.TryGetProperty("Name", out JsonElement e) && e.ValueKind == JsonValueKind.String
+                return r.TryGetProperty("Name", out GameValue e) && e.ValueKind == JsonValueKind.String
                     ? CleanString(e.GetString())
                     : null;
         return null;
@@ -642,7 +642,7 @@ public sealed class SpellInfoRowsBuilder
     // Render one scalar (non-ability) field: enum columns via the shared formatters, the
     // "Learned From" / "Casted By" source lists resolved to real names, blank / NUL text dropped.
     // Returns null to omit the field.
-    private string? RenderField(string field, JsonElement value)
+    private string? RenderField(string field, GameValue value)
     {
         if (ColumnFormatters.TryGetValue(field, out var fmt))
         {
@@ -748,11 +748,11 @@ public sealed class SpellInfoRowsBuilder
         var fx = new TextblockEffects();
         if (rootTextblock <= 0) return fx;
 
-        JsonDocument? doc = _cache.GetRawTable("TBInfo");
+        GameTable? doc = _cache.GetTable("TBInfo");
         if (doc is null) return fx;
 
-        var byNumber = new Dictionary<int, JsonElement>();
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        var byNumber = new Dictionary<int, GameRow>();
+        foreach (GameRow el in doc.Rows)
         {
             int num = ReadInt(el, "Number");
             if (num > 0) byNumber.TryAdd(num, el);
@@ -764,9 +764,9 @@ public sealed class SpellInfoRowsBuilder
         void Walk(int tb, int depth)
         {
             if (tb <= 0 || depth > MaxDepth || !visited.Add(tb)) return;
-            if (!byNumber.TryGetValue(tb, out JsonElement entry)) return;
+            if (!byNumber.TryGetValue(tb, out GameRow entry)) return;
 
-            string? action = entry.TryGetProperty("Action", out JsonElement a) && a.ValueKind == JsonValueKind.String
+            string? action = entry.TryGetProperty("Action", out GameValue a) && a.ValueKind == JsonValueKind.String
                 ? a.GetString() : null;
             if (!string.IsNullOrEmpty(action))
             {
@@ -804,8 +804,8 @@ public sealed class SpellInfoRowsBuilder
     // walked Summons / Casts rows.
     private static readonly Regex BareTextblock = new(@"^TextBlock \d+$", RegexOptions.Compiled);
 
-    private static int ReadInt(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement e)
+    private static int ReadInt(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue e)
            && e.ValueKind == JsonValueKind.Number
            && e.TryGetInt32(out int n) ? n : 0;
 

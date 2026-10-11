@@ -1,6 +1,5 @@
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using MudPlay.Game;
 using MudPlay.Services;
@@ -35,6 +34,12 @@ public sealed class GameDataCacheTests : IDisposable
     private static readonly string MalformedJson = "[{\"Name\":\"Go" + (char)0x1E + "blin\"}]";
 
     private GameDataCache NewCache() => new GameDataCache(_root);
+
+    // A field the row must have.
+    private static GameValue Field(GameRow? row, string name) =>
+        row!.Value.TryGetProperty(name, out GameValue value) ? value : throw new KeyNotFoundException(name);
+
+    private static string? FirstName(GameTable? table) => Field(table!.Rows[0], "Name").GetString();
 
     private string SeedSet(string setName, params (string Table, string Json)[] tables)
     {
@@ -74,6 +79,28 @@ public sealed class GameDataCacheTests : IDisposable
         Assert.Equal(new[] { "alpha", null }, fired);
     }
 
+    // The set-load log says what the set's tables hold once its subscribers have
+    // read what they need, table by table.
+    [Fact]
+    public void SwitchSet_LogsWhatTheTablesItsSubscribersLoadedHold()
+    {
+        SeedSet("alpha", ("Monsters", "[{\"Number\":1,\"Name\":\"Goblin\"}]"), ("Items", "[]"));
+        GameDataCache cache = NewCache();
+        LogService log = new();
+        cache.Log = log;
+        cache.ActiveSetChanged += _ =>
+        {
+            cache.GetTable("Monsters");
+            cache.GetTable("Items");
+        };
+
+        cache.SwitchSet("alpha");
+
+        LogEntry held = Assert.Single(log.Snapshot(), e => e.Message.StartsWith("Tables held", StringComparison.Ordinal));
+        Assert.Equal(LogSeverity.Info, held.Severity);
+        Assert.Equal("Tables held for 'alpha': Items 0.0 MB, Monsters 0.0 MB (0.0 MB in all).", held.Message);
+    }
+
     [Fact]
     public void SwitchSet_EvictsTablesFromPriorSet()
     {
@@ -82,7 +109,7 @@ public sealed class GameDataCacheTests : IDisposable
 
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
-        _ = cache.GetRawTable("Monsters"); // loads + caches
+        _ = cache.GetTable("Monsters"); // loads + caches
 
         Assert.Contains("Monsters", cache.LoadedTables);
 
@@ -98,7 +125,7 @@ public sealed class GameDataCacheTests : IDisposable
         string dir = SeedSet("alpha", ("Monsters", "[{\"Number\":1,\"Name\":\"Goblin\"}]"));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
-        _ = cache.GetRawTable("Monsters");                       // load + cache
+        _ = cache.GetTable("Monsters");                       // load + cache
         Assert.Contains("Monsters", cache.LoadedTables);
 
         List<string?> fired = new();
@@ -112,7 +139,7 @@ public sealed class GameDataCacheTests : IDisposable
         Assert.Equal(new[] { "alpha" }, fired);                  // consumers notified, same name
         Assert.Equal("alpha", cache.ActiveSet);                  // still active
         // Next read re-parses the fresh JSON, not the stale cached doc.
-        Assert.Equal("Orc", cache.GetRawTable("Monsters")!.RootElement[0].GetProperty("Name").GetString());
+        Assert.Equal("Orc", FirstName(cache.GetTable("Monsters")));
     }
 
     [Fact]
@@ -129,77 +156,77 @@ public sealed class GameDataCacheTests : IDisposable
     }
 
     [Fact]
-    public void GetRawTable_ReturnsNull_WhenNoSetActive()
+    public void GetTable_ReturnsNull_WhenNoSetActive()
     {
         SeedSet("alpha", ("Monsters", "[]"));
         GameDataCache cache = NewCache();
 
-        Assert.Null(cache.GetRawTable("Monsters"));
+        Assert.Null(cache.GetTable("Monsters"));
     }
 
     [Fact]
-    public void GetRawTable_ReturnsNull_WhenTableMissing()
+    public void GetTable_ReturnsNull_WhenTableMissing()
     {
         SeedSet("alpha", ("Monsters", "[]"));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
 
-        Assert.Null(cache.GetRawTable("DefinitelyNotATable"));
+        Assert.Null(cache.GetTable("DefinitelyNotATable"));
     }
 
     [Fact]
-    public void GetRawTable_LazyLoadsAndCaches()
+    public void GetTable_LazyLoadsAndCaches()
     {
         SeedSet("alpha", ("Monsters", "[{\"Name\":\"Goblin\"}]"));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
 
-        JsonDocument? first = cache.GetRawTable("Monsters");
-        JsonDocument? second = cache.GetRawTable("Monsters");
+        GameTable? first = cache.GetTable("Monsters");
+        GameTable? second = cache.GetTable("Monsters");
 
         Assert.NotNull(first);
         Assert.Same(first, second);
-        Assert.Equal("Goblin", first!.RootElement[0].GetProperty("Name").GetString());
+        Assert.Equal("Goblin", FirstName(first));
     }
 
     [Fact]
-    public void GetRawTable_IsCaseInsensitive()
+    public void GetTable_IsCaseInsensitive()
     {
         SeedSet("alpha", ("Monsters", "[]"));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
 
-        Assert.NotNull(cache.GetRawTable("monsters"));
-        Assert.NotNull(cache.GetRawTable("MONSTERS"));
+        Assert.NotNull(cache.GetTable("monsters"));
+        Assert.NotNull(cache.GetTable("MONSTERS"));
     }
 
     // ----- Malformed table JSON (corrupted MDB import) ---------------------
 
     [Fact]
-    public void GetRawTable_MalformedJson_ReturnsNullInsteadOfThrowing()
+    public void GetTable_MalformedJson_ReturnsNullInsteadOfThrowing()
     {
         SeedSet("alpha", ("Monsters", MalformedJson));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
 
-        Assert.Null(cache.GetRawTable("Monsters"));
+        Assert.Null(cache.GetTable("Monsters"));
         Assert.Empty(cache.LoadedTables);
     }
 
     [Fact]
-    public void GetRawTable_MalformedJson_DoesNotReReadFileOnEachCall()
+    public void GetTable_MalformedJson_DoesNotReReadFileOnEachCall()
     {
         string dir = SeedSet("alpha", ("Monsters", MalformedJson));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
 
-        Assert.Null(cache.GetRawTable("Monsters"));
+        Assert.Null(cache.GetTable("Monsters"));
 
         // Fix the file on disk without reloading the set — the cache should keep
         // reporting the earlier failure rather than transparently pick up the fix
         // (that requires an explicit Reload / re-import, same as any other table).
         File.WriteAllText(Path.Combine(dir, "Monsters.json"), "[{\"Name\":\"Goblin\"}]");
-        Assert.Null(cache.GetRawTable("Monsters"));
+        Assert.Null(cache.GetTable("Monsters"));
     }
 
     [Fact]
@@ -208,16 +235,16 @@ public sealed class GameDataCacheTests : IDisposable
         string dir = SeedSet("alpha", ("Monsters", MalformedJson));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
-        Assert.Null(cache.GetRawTable("Monsters"));
+        Assert.Null(cache.GetTable("Monsters"));
 
         File.WriteAllText(Path.Combine(dir, "Monsters.json"), "[{\"Name\":\"Goblin\"}]");
         cache.ReloadActiveSet();
 
-        Assert.Equal("Goblin", cache.GetRawTable("Monsters")!.RootElement[0].GetProperty("Name").GetString());
+        Assert.Equal("Goblin", FirstName(cache.GetTable("Monsters")));
     }
 
     [Fact]
-    public void GetRawTable_OneMalformedTable_DoesNotAffectOthers()
+    public void GetTable_OneMalformedTable_DoesNotAffectOthers()
     {
         SeedSet("alpha",
             ("Monsters", MalformedJson),
@@ -225,12 +252,12 @@ public sealed class GameDataCacheTests : IDisposable
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
 
-        Assert.Null(cache.GetRawTable("Monsters"));
-        Assert.Equal("Sword", cache.GetRawTable("Items")!.RootElement[0].GetProperty("Name").GetString());
+        Assert.Null(cache.GetTable("Monsters"));
+        Assert.Equal("Sword", FirstName(cache.GetTable("Items")));
     }
 
     [Fact]
-    public void GetRawTable_MalformedJson_FiresTableParseFailedOnce()
+    public void GetTable_MalformedJson_FiresTableParseFailedOnce()
     {
         SeedSet("alpha", ("Monsters", MalformedJson));
         GameDataCache cache = NewCache();
@@ -239,8 +266,8 @@ public sealed class GameDataCacheTests : IDisposable
         List<string> failed = new();
         cache.TableParseFailed += failed.Add;
 
-        Assert.Null(cache.GetRawTable("Monsters"));   // first lookup — parse fails → notifies
-        Assert.Null(cache.GetRawTable("Monsters"));   // second — short-circuits, no re-notify
+        Assert.Null(cache.GetTable("Monsters"));   // first lookup — parse fails → notifies
+        Assert.Null(cache.GetTable("Monsters"));   // second — short-circuits, no re-notify
 
         Assert.Equal(new[] { "Monsters" }, failed);   // fired exactly once, with the table name
     }
@@ -251,7 +278,7 @@ public sealed class GameDataCacheTests : IDisposable
         SeedSet("alpha", ("Monsters", "[]"));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
-        _ = cache.GetRawTable("Monsters");
+        _ = cache.GetTable("Monsters");
 
         Assert.True(cache.EvictTable("Monsters"));
         Assert.Single(cache.LoadedTables);
@@ -271,10 +298,10 @@ public sealed class GameDataCacheTests : IDisposable
         SeedSet("alpha", ("Monsters", "[]"));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
-        _ = cache.GetRawTable("Monsters");
+        _ = cache.GetTable("Monsters");
 
         cache.EvictTable("Monsters");
-        _ = cache.GetRawTable("Monsters");
+        _ = cache.GetTable("Monsters");
         cache.EvictIdle(GameDataCache.IdleEvictAfter);
 
         Assert.Single(cache.LoadedTables);
@@ -288,11 +315,11 @@ public sealed class GameDataCacheTests : IDisposable
         SeedSet("alpha", ("Monsters", """[{"Number":7,"Name":"orc"}]"""));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
-        JsonElement? row = cache.FindRowByNumber("Monsters", 7);
+        GameRow? row = cache.FindRowByNumber("Monsters", 7);
 
         cache.EvictTable("Monsters");
 
-        Assert.Equal("orc", row!.Value.GetProperty("Name").GetString());
+        Assert.Equal("orc", Field(row, "Name").GetString());
     }
 
     [Fact]
@@ -301,15 +328,15 @@ public sealed class GameDataCacheTests : IDisposable
         SeedSet("alpha", ("Monsters", "[]"), ("Rooms", "[]"));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
-        _ = cache.GetRawTable("Monsters");
-        _ = cache.GetRawTable("Rooms");
+        _ = cache.GetTable("Monsters");
+        _ = cache.GetTable("Rooms");
 
         cache.EvictIdle(TimeSpan.FromHours(1));
         Assert.Equal(2, cache.LoadedTables.Count);
 
         cache.EvictIdle(TimeSpan.Zero);
         Assert.Empty(cache.LoadedTables);
-        Assert.NotNull(cache.GetRawTable("Rooms"));   // a later read re-parses
+        Assert.NotNull(cache.GetTable("Rooms"));   // a later read re-parses
     }
 
     [Fact]
@@ -324,7 +351,7 @@ public sealed class GameDataCacheTests : IDisposable
         cache.SwitchSet("beta");
 
         // Read fresh from disk — the dropped prewarm was not claimed.
-        Assert.Equal("New", cache.GetRawTable("Rooms")!.RootElement[0].GetProperty("Name").GetString());
+        Assert.Equal("New", FirstName(cache.GetTable("Rooms")));
     }
 
     [Fact]
@@ -336,8 +363,8 @@ public sealed class GameDataCacheTests : IDisposable
             ("Spells",   "[]"));
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
-        _ = cache.GetRawTable("Monsters");
-        _ = cache.GetRawTable("Items");
+        _ = cache.GetTable("Monsters");
+        _ = cache.GetTable("Items");
 
         cache.EvictAll();
 
@@ -354,11 +381,11 @@ public sealed class GameDataCacheTests : IDisposable
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
 
-        JsonElement? row = cache.FindRowByName("Classes", "thief");
+        GameRow? row = cache.FindRowByName("Classes", "thief");
 
         Assert.NotNull(row);
-        Assert.Equal("Thief", row!.Value.GetProperty("Name").GetString());
-        Assert.Equal(40, row.Value.GetProperty("Abil-0").GetInt32());
+        Assert.Equal("Thief", Field(row, "Name").GetString());
+        Assert.Equal(40, Field(row, "Abil-0").GetInt32());
     }
 
     [Fact]
@@ -390,9 +417,9 @@ public sealed class GameDataCacheTests : IDisposable
 
         foreach (string q in new[] { "silvery skullcap", "silvery skullcap ", " silvery skullcap", "silvery  skullcap", "SILVERY  SKULLCAP " })
         {
-            JsonElement? row = cache.FindRowByName("Items", q);
+            GameRow? row = cache.FindRowByName("Items", q);
             Assert.True(row is not null, $"'{q}' should resolve to the skullcap row");
-            Assert.Equal(401, row!.Value.GetProperty("Number").GetInt32());
+            Assert.Equal(401, Field(row, "Number").GetInt32());
         }
     }
 
@@ -409,7 +436,7 @@ public sealed class GameDataCacheTests : IDisposable
 
         Assert.Equal("not-yet-imported", cache.ActiveSet);
         Assert.Single(fired);
-        Assert.Null(cache.GetRawTable("Monsters"));
+        Assert.Null(cache.GetTable("Monsters"));
     }
 
     // ----- PrewarmAsync (startup head-start) --------------------------------
@@ -423,7 +450,7 @@ public sealed class GameDataCacheTests : IDisposable
         await cache.PrewarmAsync("alpha", new[] { "Monsters" });
         cache.SwitchSet("alpha");
 
-        Assert.NotNull(cache.GetRawTable("Monsters"));
+        Assert.NotNull(cache.GetTable("Monsters"));
         // Claimed into the live cache, not left sitting in the prewarm bucket —
         // a second read must not re-parse the file.
         Assert.Contains("Monsters", cache.LoadedTables);
@@ -453,7 +480,7 @@ public sealed class GameDataCacheTests : IDisposable
         await cache.PrewarmAsync("alpha", new[] { "DefinitelyNotATable" });
         cache.SwitchSet("alpha");
 
-        Assert.Null(cache.GetRawTable("DefinitelyNotATable"));
+        Assert.Null(cache.GetTable("DefinitelyNotATable"));
     }
 
     // Re-importing over the active set must not re-hand a stale prewarmed doc that
@@ -472,7 +499,7 @@ public sealed class GameDataCacheTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "Monsters.json"), "[{\"Number\":1,\"Name\":\"Orc\"}]");
         cache.ReloadActiveSet();
 
-        Assert.Equal("Orc", cache.GetRawTable("Monsters")!.RootElement[0].GetProperty("Name").GetString());
+        Assert.Equal("Orc", FirstName(cache.GetTable("Monsters")));
     }
 
     // ----- ActiveRealm (Info.Legit derivation, MMUD Explorer parity) -------

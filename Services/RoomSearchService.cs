@@ -390,17 +390,17 @@ public sealed class RoomSearchService
         if (_searchableMonsterCache is not null) return _searchableMonsterCache;
 
         List<(int, string, string)> list = new();
-        JsonDocument? doc = _gameData.GetRawTable("Monsters");
+        GameTable? doc = _gameData.GetTable("Monsters");
         if (doc is null) { _searchableMonsterCache = list; return list; }
 
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             TryInt(row, "RegenTime", out int regen);
             TryInt(row, "GameLimit", out int limit);
             bool isUnique = limit == 1;
             if (regen <= 0 && !isUnique) continue;
             if (!TryInt(row, "Number", out int id)) continue;
-            if (!row.TryGetProperty("Name", out JsonElement nameEl)
+            if (!row.TryGetProperty("Name", out GameValue nameEl)
                 || nameEl.ValueKind != JsonValueKind.String) continue;
             string? name = nameEl.GetString();
             if (string.IsNullOrEmpty(name)) continue;
@@ -493,15 +493,15 @@ public sealed class RoomSearchService
 
         // Source 2: Monsters.json "Summoned By" — boss / script spawns
         // whose room placement lives on the monster record.
-        JsonDocument? doc = _gameData.GetRawTable("Monsters");
+        GameTable? doc = _gameData.GetTable("Monsters");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Number", out JsonElement numEl)
+                if (!row.TryGetProperty("Number", out GameValue numEl)
                     || numEl.ValueKind != JsonValueKind.Number
                     || !numEl.TryGetInt32(out int id)) continue;
-                if (!row.TryGetProperty("Summoned By", out JsonElement summonEl)
+                if (!row.TryGetProperty("Summoned By", out GameValue summonEl)
                     || summonEl.ValueKind != JsonValueKind.String) continue;
                 string? text = summonEl.GetString();
                 if (string.IsNullOrEmpty(text)) continue;
@@ -551,13 +551,13 @@ public sealed class RoomSearchService
         foreach (Room room in _graph.Rooms)
             if (room.Npc > 0) AddMonsterRoom(placed, seen, room.Npc, room.Key);
 
-        JsonDocument? doc = _gameData.GetRawTable("Monsters");
+        GameTable? doc = _gameData.GetTable("Monsters");
         if (doc is not null)
         {
             // Map each summon spell to the NPC(s) whose CreateSpell casts it, so a
             // "Summoned By: Spell #N" target can borrow its summoner's placement.
             Dictionary<int, List<int>> summonerBySpell = new();
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
                 if (!TryInt(row, "Number", out int owner)) continue;
                 if (!TryInt(row, "CreateSpell", out int spell) || spell <= 0) continue;
@@ -568,10 +568,10 @@ public sealed class RoomSearchService
 
             // Fallback for monsters with no static placement: their own Summoned By
             // spawn room(s), else the placement of whoever summons them.
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
                 if (!TryInt(row, "Number", out int id) || placed.ContainsKey(id)) continue;
-                if (!row.TryGetProperty("Summoned By", out JsonElement sbEl)
+                if (!row.TryGetProperty("Summoned By", out GameValue sbEl)
                     || sbEl.ValueKind != JsonValueKind.String) continue;
                 string text = sbEl.GetString() ?? string.Empty;
                 if (text.Length == 0) continue;
@@ -604,10 +604,10 @@ public sealed class RoomSearchService
         return _questKillRoomsCache;
     }
 
-    private static bool TryInt(JsonElement row, string property, out int value)
+    private static bool TryInt(GameRow row, string property, out int value)
     {
         value = 0;
-        return row.TryGetProperty(property, out JsonElement el)
+        return row.TryGetProperty(property, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out value);
     }

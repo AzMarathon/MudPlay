@@ -32,15 +32,14 @@ public static class ItemUseFactsIndex
     {
         Dictionary<string, List<ItemUseStealthRule.Facts>> byName = new(StringComparer.OrdinalIgnoreCase);
         // The tables are read back only for this build, so one that wasn't held
-        // parsed before it is handed to the cache's idle sweep again after.
+        // before it is handed to the cache's idle sweep again after.
         bool itemsLoaded = gameData.IsTableLoaded("Items");
         bool spellsLoaded = gameData.IsTableLoaded("Spells");
-        if (gameData.GetRawTable("Items") is { } items)
+        if (gameData.GetTable("Items") is { } items)
         {
-            foreach (JsonElement row in items.RootElement.EnumerateArray())
+            foreach (GameRow row in items.Rows)
             {
-                if (row.ValueKind != JsonValueKind.Object
-                    || !row.TryGetProperty("Name", out JsonElement n)
+                if (!row.TryGetProperty("Name", out GameValue n)
                     || n.ValueKind != JsonValueKind.String
                     || n.GetString() is not { } name
                     || Key(name) is not { Length: > 0 } key)
@@ -61,7 +60,7 @@ public static class ItemUseFactsIndex
     private static int? TargetsOf(GameDataCache gameData, int spellNumber) =>
         spellNumber >= 1
         && gameData.FindRowByNumber("Spells", spellNumber) is { } spell
-        && spell.TryGetProperty("Targets", out JsonElement t)
+        && spell.TryGetProperty("Targets", out GameValue t)
         && t.ValueKind == JsonValueKind.Number && t.TryGetInt32(out int targets)
             ? targets : null;
 }

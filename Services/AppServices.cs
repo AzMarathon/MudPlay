@@ -963,9 +963,8 @@ public sealed class AppServices
     // Models.Settings.BbsProfile.ActiveGameDataSet field
     // (falling back to Models.Settings.GlobalSettings.DefaultGameDataSet
     // when no BBS is pinned). Per-tab consumers
-    // convert raw System.Text.Json.JsonDocument rows into
-    // typed model collections and call EvictTable to drop the
-    // raw bytes.
+    // convert a table's rows into typed model collections
+    // and call EvictTable to hand the table back.
     public GameDataCache GameData { get; } = new();
 
     // Loopback-only HTTP control API — live state, program log, scrollback and a
@@ -2880,10 +2879,10 @@ public sealed class AppServices
         // startup profile's BBS pin. RoomGraphManager's set-switch rebuild is the biggest
         // single cost on a cold launch (a full Rooms.json parse + graph build over
         // thousands of rooms, done synchronously before the window even exists); this
-        // just gets GameDataCache's raw JsonDocument cache warm ahead of time so that
+        // just gets GameDataCache's tables read ahead of time so that
         // work finds the parse already done. A wrong guess (auto-load off, or the
         // predicted BBS/set doesn't match what actually loads) just wastes the
-        // background parse — GetRawTable falls back to its normal on-demand read either
+        // background parse — GetTable falls back to its normal on-demand read either
         // way, so this can't make startup any slower than it already is.
         if (Settings.Current.StartupProfile() is { } startupPrediction)
         {
@@ -2960,7 +2959,12 @@ public sealed class AppServices
         StatlineReconcile.SetDesiredCommandProvider(
             () => ReadSection<Models.Profile.StatlineSettings>(Profile.Current, "Statline").Command);
         PartyState = new Game.PartyState();
-        Party = new Game.PartyManager(Router, PartyState);
+        Party = new Game.PartyManager(Router, PartyState, Log)
+        {
+            // Stock keeps a follower an exit turned away on the leader's member
+            // list, where Paradigm drops them (GameData is read when asked).
+            OnStock = () => GameData.ActiveRealm != Game.RealmType.ParaMud,
+        };
         // Mirror the local character's live HP/MA into the self party
         // row on every prompt — without this the self row only updates
         // on a par poll, so per-prompt damage between polls doesn't
@@ -3195,6 +3199,9 @@ public sealed class AppServices
         // followers sitting in the room, so re-invite each once AutoParty observes them
         // present (they never "re-enter the Realm" to trip the grace-window auto-invite).
         Party.LeaderReconnectReformInvites += AutoParty.NoteLeaderReconnectReform;
+        // A Stock member an exit left behind is on our list because they joined:
+        // an invite wait that runs out for them doesn't end in an uninvite.
+        AutoParty.LeftBehindOnOurList = Party.IsLeftBehindOnOurList;
         // Suicide-password observer + engine-gate consumer. Drives
         // EngineGate.IsLocked during password-entry prompts so
         // MainWindowViewModel's wrapped engine wire-senders silently
@@ -3783,7 +3790,7 @@ public sealed class AppServices
         // subscribed first so a set swap reloads it ahead of the graph: the
         // graph consults it during build to re-hint the door exits a CMD
         // teleport shadows (ring chime bypassing the Slum Street door). The
-        // graph reads the typed store, so the raw JSON eviction here is fine.
+        // graph reads the typed store, so evicting the TBInfo table here is fine.
         TBInfo = new TBInfoStore(GameData, Log);
         // MonsterSpawns — reverse RoomKey -> monster-ids index for the room
         // tooltip's Also Here line. Same lazy-but-warmed-in-the-background shape
@@ -4173,7 +4180,7 @@ public sealed class AppServices
         {
             if (!Stats.HasParsed || string.IsNullOrWhiteSpace(PlayerStats.Race)) return null;
             return GameData.FindRowByName("Races", PlayerStats.Race) is { } raceRow
-                && raceRow.TryGetProperty("Number", out System.Text.Json.JsonElement raceNumber)
+                && raceRow.TryGetProperty("Number", out GameValue raceNumber)
                 && raceNumber.ValueKind == System.Text.Json.JsonValueKind.Number
                 && raceNumber.TryGetInt32(out int n) && n > 0 ? n : (int?)null;
         };
@@ -4401,8 +4408,8 @@ public sealed class AppServices
         PartyHp = new Game.PartyHpEstimator(Router, RoundDamage, Party,
             buildReader: BuildHealLineReader,
             buildDrains: () => new Game.Spells.DrainLineSet(
-                GameData.GetRawTable("Spells") is { } doc
-                    ? Game.Spells.DrainLineSet.DrainSpells(doc.RootElement)
+                GameData.GetTable("Spells") is { } doc
+                    ? Game.Spells.DrainLineSet.DrainSpells(doc)
                     : Array.Empty<int>(),
                 Messages.Messages),
             ownLevel: () => Stats.HasParsed ? PlayerStats.Level : 0,
@@ -4719,8 +4726,8 @@ public sealed class AppServices
         // so a set switch or a message edit rebuilds them on next use.
         MonsterSummons = new Game.Combat.MonsterSummonWatcher(Router, RoomClassifier,
             build: () => new Game.Spells.SummonLineSet(
-                GameData.GetRawTable("Spells") is { } doc
-                    ? Game.Spells.SummonLineSet.SummonSpells(doc.RootElement)
+                GameData.GetTable("Spells") is { } doc
+                    ? Game.Spells.SummonLineSet.SummonSpells(doc)
                     : Array.Empty<int>(),
                 Messages.Messages),
             requestRoomRefresh: Combat.RequestRoomRefresh,
@@ -5093,8 +5100,8 @@ public sealed class AppServices
             // A room-display title line is not a server message — the room-display
             // parser reads it directly and registers no router pattern, so exclude
             // any line that's a known room name in the active set. Asks the room graph's
-            // name index, not the raw Rooms table — a raw lookup here re-parses and pins
-            // the set's largest JSON document for the whole session after the graph
+            // name index, not the Rooms table — a lookup there re-reads and keeps
+            // the set's largest table for the whole session after the graph
             // build evicted it.
             isKnownRoomName: text => RoomGraph.FindByName(text).Count > 0,
             // Stateful block parsers read the wire directly and register no router
@@ -7863,7 +7870,7 @@ public sealed class AppServices
                 Game.Map.MovementCoordinator.CorpseRecoveryGate, "DeathRecovery",
                 "re-equip complete"),
             name => GameData.FindRowByName("Items", name) is { } row
-                    && row.TryGetProperty("ArmourClass", out System.Text.Json.JsonElement ac)
+                    && row.TryGetProperty("ArmourClass", out GameValue ac)
                     && ac.ValueKind == System.Text.Json.JsonValueKind.Number
                     && ac.TryGetInt32(out int acv) ? acv : 0);
         Tick.CombatTickElapsed += DeathRecovery.OnRecoveryCombatRound;
@@ -9206,6 +9213,9 @@ public sealed class AppServices
         // A follower we backtracked for couldn't move — hold for their @ok as if
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
+        // Stock keeps a follower an exit turned away on the leader's member list,
+        // where Paradigm drops them: what brings such a member back differs.
+        PartyComeback.OnStock = () => GameData.ActiveRealm != Game.RealmType.ParaMud;
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
         // A loop doesn't go back for a member an exit of its circuit turned away.
         // What tells that from a hold: a wait or hold the member has out with us,
@@ -10001,6 +10011,26 @@ public sealed class AppServices
         // A leader who refused, or never came: the follow the game ended without a
         // line is ended on our side too.
         ComebackRequest.FollowGivenUp = (leader, _) => Party.NoteFollowGivenUp(leader);
+        // Stock leaves a follower an exit turned away on the leader's member list,
+        // where an invite prints them nothing and a `join` of theirs needs none: the
+        // follower's client joins by itself once the leader it asked is with it.
+        ComebackRequest.OnStock = () => GameData.ActiveRealm != Game.RealmType.ParaMud;
+        ComebackRequest.ListedWith = () => Party.ListedWithLeader;
+        ComebackRequest.NotOnTheirList = leader => Party.NoteNotListedWith(leader);
+        // One join, whichever of the two sends it: ours, or the one the leader's
+        // @join asks for. The game's answer to either is read in one place. Not
+        // keyed on the realm: a second @join inside 3 s is passed over anywhere
+        // (PartyEssentialHandlers.OnJoin says why that is safe).
+        PartyEssentials.JoinSent = ComebackRequest.NoteJoinSent;
+        PartyEssentials.JoinAlreadySent = ComebackRequest.JoinJustSentTo;
+        RoomClassifier.EntitiesObserved += observation =>
+        {
+            foreach (Game.Combat.RoomEntity entity in observation.Entities)
+            {
+                if (entity.Kind != Game.Combat.EntityKind.Player) continue;
+                ComebackRequest.NotePlayerInRoom(Models.GameData.PlayerObservation.SplitName(entity.ResolvedName).Given);
+            }
+        };
         // The trip's leader may tell us it is over after an exit has turned us out
         // of the party on our own side.
         RemoteCommands.PartyTrainEligibility = sender => PartyTrain.InTripOf(sender);
@@ -10978,7 +11008,7 @@ public sealed class AppServices
     {
         if (string.IsNullOrWhiteSpace(weaponName)) return false;
         if (GameData.FindRowByName("Items", weaponName) is not { } row) return false;
-        if (!row.TryGetProperty("WeaponType", out System.Text.Json.JsonElement wt)) return false;
+        if (!row.TryGetProperty("WeaponType", out GameValue wt)) return false;
         int code = wt.ValueKind switch
         {
             System.Text.Json.JsonValueKind.Number when wt.TryGetInt32(out int n) => n,
@@ -10994,7 +11024,7 @@ public sealed class AppServices
     // carried gear into empty slots.
     private Models.Profile.EquipmentSlot? ResolveEquipItemSlot(string itemName)
     {
-        if (GameData.FindRowByName("Items", itemName) is not System.Text.Json.JsonElement row)
+        if (GameData.FindRowByName("Items", itemName) is not GameRow row)
             return null;
         return Game.Inventory.EquipmentSlotMap.SlotForItem(row);
     }
@@ -11005,7 +11035,7 @@ public sealed class AppServices
     // An unknown item (no Items row) resolves false: don't queue what we can't verify.
     private bool CanCharacterEquipItem(string itemName)
     {
-        if (GameData.FindRowByName("Items", itemName) is not System.Text.Json.JsonElement row)
+        if (GameData.FindRowByName("Items", itemName) is not GameRow row)
             return false;
         Game.Inventory.ClassEquipProfile cls =
             Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
@@ -11036,7 +11066,7 @@ public sealed class AppServices
         foreach (Models.Profile.EquipmentSlotEntry slot in set.Slots)
         {
             if (string.IsNullOrWhiteSpace(slot.ItemName)) continue;
-            if (GameData.FindRowByName("Items", slot.ItemName.Trim()) is not System.Text.Json.JsonElement row) continue;
+            if (GameData.FindRowByName("Items", slot.ItemName.Trim()) is not GameRow row) continue;
             bool Fits(Game.Calculators.AlignmentBucket? b) =>
                 Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, b, realm);
             if (!Fits(null)) continue;   // unwearable for another reason
@@ -11056,7 +11086,7 @@ public sealed class AppServices
     private void LearnFromEvilOnlyRefusal(string? itemName)
     {
         if (string.IsNullOrWhiteSpace(itemName)) return;
-        if (GameData.FindRowByName("Items", itemName) is not System.Text.Json.JsonElement row) return;
+        if (GameData.FindRowByName("Items", itemName) is not GameRow row) return;
         if (Game.Inventory.ItemEquipFilter.EvilOnlyValue(row) is not { } value || value <= 0) return;
         Game.RealmType realm = GameData.ActiveRealm;
         if (Alignment.SelfEvilPoints(realm) is not { } range
@@ -11072,7 +11102,7 @@ public sealed class AppServices
 
     private bool IsEquipRestricted(string itemName)
     {
-        if (GameData.FindRowByName("Items", itemName) is not System.Text.Json.JsonElement row)
+        if (GameData.FindRowByName("Items", itemName) is not GameRow row)
             return false;
         Game.Inventory.ClassEquipProfile cls =
             Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
@@ -12159,10 +12189,9 @@ public sealed class AppServices
         if (_spellFormulas is null)
         {
             Dictionary<int, Game.Spells.SpellFormulaInput> map = new();
-            if (GameData.GetRawTable("Spells") is { } doc
-                && doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
-                foreach (System.Text.Json.JsonElement row in doc.RootElement.EnumerateArray())
-                    if (row.TryGetProperty("Number", out System.Text.Json.JsonElement n)
+            if (GameData.GetTable("Spells") is { } doc)
+                foreach (GameRow row in doc.Rows)
+                    if (row.TryGetProperty("Number", out GameValue n)
                         && n.TryGetInt32(out int num))
                         map[num] = Game.Spells.SpellFormulaReader.Read(row);
             _spellFormulas = map;
@@ -12512,10 +12541,10 @@ public sealed class AppServices
     {
         int deathSpell = MonsterCatalog.Get(monsterNumber)?.DeathSpell ?? 0;
         if (deathSpell <= 0) return TimeSpan.Zero;
-        if (GameData.FindRowByNumber("Spells", deathSpell) is not System.Text.Json.JsonElement spell) return TimeSpan.Zero;
-        string? name = spell.TryGetProperty("Name", out System.Text.Json.JsonElement n) ? n.GetString() : null;
+        if (GameData.FindRowByNumber("Spells", deathSpell) is not GameRow spell) return TimeSpan.Zero;
+        string? name = spell.TryGetProperty("Name", out GameValue n) ? n.GetString() : null;
         if (!Game.Combat.TempDeathResponse.IsTempSpell(name)) return TimeSpan.Zero;
-        int dur = spell.TryGetProperty("Dur", out System.Text.Json.JsonElement d) && d.TryGetInt32(out int rounds) ? rounds : 0;
+        int dur = spell.TryGetProperty("Dur", out GameValue d) && d.TryGetInt32(out int rounds) ? rounds : 0;
         return Game.Combat.TempDeathResponse.StallTime(dur);
     }
 
@@ -12670,8 +12699,8 @@ public sealed class AppServices
     private int? TableNumberByName(string table, string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
-        if (GameData.FindRowByName(table, name) is not System.Text.Json.JsonElement row) return null;
-        return row.TryGetProperty("Number", out System.Text.Json.JsonElement el)
+        if (GameData.FindRowByName(table, name) is not GameRow row) return null;
+        return row.TryGetProperty("Number", out GameValue el)
                && el.TryGetInt32(out int n) ? n : null;
     }
 
@@ -12761,7 +12790,7 @@ public sealed class AppServices
         if (!Stats.HasParsed) return null;
         if (Spellbook.FindByCastCode(spellCode.Trim()) is not { } spell) return null;
         if (!Game.Spells.ManaRegenReroller.IsRollSpell(spell.Formula)) return null;
-        System.Text.Json.JsonElement? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
+        GameRow? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
         int mageryType = RowInt(classRow, "MageryType");
         if (mageryType == 0) return null;
         int level = System.Math.Max(1, PlayerStats.Level);
@@ -12905,7 +12934,7 @@ public sealed class AppServices
     public int? PassiveManaRegenTick()
     {
         if (!Stats.HasParsed) return null;
-        System.Text.Json.JsonElement? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
+        GameRow? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
         int mageryType = RowInt(classRow, "MageryType");
         if (mageryType == 0) return null;   // non-caster: no mana pool worth planning
         int mageryLevel = RowInt(classRow, "MageryLVL");
@@ -12916,11 +12945,10 @@ public sealed class AppServices
             PlayerStats.Charm, mageryType, mageryLevel, gearRegen, isMeditating: false, GameData.ActiveRealm);
     }
 
-    private static int RowInt(System.Text.Json.JsonElement? row, string property)
+    private static int RowInt(GameRow? row, string property)
     {
-        if (row is not System.Text.Json.JsonElement el
-            || el.ValueKind != System.Text.Json.JsonValueKind.Object) return 0;
-        return el.TryGetProperty(property, out System.Text.Json.JsonElement v)
+        if (row is not GameRow el) return 0;
+        return el.TryGetProperty(property, out GameValue v)
             && v.ValueKind == System.Text.Json.JsonValueKind.Number
             && v.TryGetInt32(out int n) ? n : 0;
     }
@@ -13036,8 +13064,8 @@ public sealed class AppServices
 
     private Game.Spells.HealLineReader BuildHealLineReader()
     {
-        IReadOnlyList<Game.Spells.HealSpell> heals = GameData.GetRawTable("Spells") is { } doc
-            ? Game.Spells.HealLineReader.InstantHeals(doc.RootElement)
+        IReadOnlyList<Game.Spells.HealSpell> heals = GameData.GetTable("Spells") is { } doc
+            ? Game.Spells.HealLineReader.InstantHeals(doc)
             : Array.Empty<Game.Spells.HealSpell>();
         return new Game.Spells.HealLineReader(heals, Messages.Messages);
     }
@@ -13175,14 +13203,14 @@ public sealed class AppServices
     // name lookup would weigh the wrong one.
     private Game.Inventory.RoomSpellCounterItem? DescribeGear(int itemId, string name)
     {
-        System.Text.Json.JsonElement? found = itemId > 0
+        GameRow? found = itemId > 0
             ? GameData.FindRowByNumber("Items", itemId)
             : GameData.FindRowByName("Items", name);
-        if (found is not System.Text.Json.JsonElement row
+        if (found is not GameRow row
             || Game.Inventory.EquipmentSlotMap.SlotForItem(row) is not { } slot)
             return null;
-        static int Int(System.Text.Json.JsonElement row, string field) =>
-            row.TryGetProperty(field, out System.Text.Json.JsonElement v) && v.TryGetInt32(out int n) ? n : 0;
+        static int Int(GameRow row, string field) =>
+            row.TryGetProperty(field, out GameValue v) && v.TryGetInt32(out int n) ? n : 0;
         // Before the stat screen is read the class and level aren't known, and an
         // unknown build is not restricted (the rule the route gates follow): the
         // game's own refusal settles it then.
@@ -15351,6 +15379,7 @@ public sealed class AppServices
         AutoParty.JoinNagFrequency    = nagFreq;
         AutoParty.JoinNagMaxTotal     = nagMax;
         AutoParty.JoinNagEnabled      = dto.SendJoinToInvited;
+        PartyComeback.SendJoinToInvited = dto.SendJoinToInvited;
         PartyPoller.HealthNagInitialDelay = nagInitial;
         PartyPoller.HealthNagFrequency    = nagFreq;
         PartyPoller.HealthNagMaxTotal     = nagMax;
@@ -15379,6 +15408,7 @@ public sealed class AppServices
         AutoParty.JoinNagFrequency    = nagFreq;
         AutoParty.JoinNagMaxTotal     = nagMax;
         AutoParty.JoinNagEnabled      = defaults.SendJoinToInvited;
+        PartyComeback.SendJoinToInvited = defaults.SendJoinToInvited;
         PartyPoller.HealthNagInitialDelay = nagInitial;
         PartyPoller.HealthNagFrequency    = nagFreq;
         PartyPoller.HealthNagMaxTotal     = nagMax;
@@ -15716,7 +15746,7 @@ public sealed class AppServices
     private bool GameRefusesToDrop(string name, bool worn)
     {
         if (string.IsNullOrWhiteSpace(name) || GameData.FindRowByName("Items", name) is not { } row) return false;
-        bool notDroppable = row.TryGetProperty("Not Droppable", out System.Text.Json.JsonElement nd)
+        bool notDroppable = row.TryGetProperty("Not Droppable", out GameValue nd)
             && nd.ValueKind == System.Text.Json.JsonValueKind.Number && nd.GetInt32() != 0;
         return Game.Inventory.ItemDropRule.Refused(notDroppable, ItemAbilityCodes(row), worn);
     }
@@ -15729,10 +15759,10 @@ public sealed class AppServices
     {
         if (string.IsNullOrWhiteSpace(name) || GameData.FindRowByName("Items", name) is not { } first) return false;
         if (!Game.Recovery.DeathPileRules.StaysWithCharacter(ItemAbilityCodes(first))) return false;
-        if (GameData.GetRawTable("Items") is not { } items) return true;
+        if (GameData.GetTable("Items") is not { } items) return true;
         string wanted = name.Trim();
-        return Game.Recovery.DeathPileRules.EveryItemOfTheNameStays(items.RootElement.EnumerateArray()
-            .Where(row => row.TryGetProperty("Name", out System.Text.Json.JsonElement n)
+        return Game.Recovery.DeathPileRules.EveryItemOfTheNameStays(items.Rows
+            .Where(row => row.TryGetProperty("Name", out GameValue n)
                 && n.ValueKind == System.Text.Json.JsonValueKind.String
                 && string.Equals(n.GetString()?.Trim(), wanted, StringComparison.OrdinalIgnoreCase))
             .Select(ItemAbilityCodes));
@@ -15745,11 +15775,11 @@ public sealed class AppServices
             ? ItemAbilityCodes(row)
             : new List<int>();
 
-    private static List<int> ItemAbilityCodes(System.Text.Json.JsonElement row)
+    private static List<int> ItemAbilityCodes(GameRow row)
     {
         List<int> abilities = new();
         for (int i = 0; i < 20; i++)
-            if (row.TryGetProperty($"Abil-{i}", out System.Text.Json.JsonElement a)
+            if (row.TryGetProperty($"Abil-{i}", out GameValue a)
                 && a.ValueKind == System.Text.Json.JsonValueKind.Number && a.GetInt32() is int code and not 0)
                 abilities.Add(code);
         return abilities;
@@ -15758,7 +15788,7 @@ public sealed class AppServices
     private int ItemNumberByName(string name)
         => !string.IsNullOrWhiteSpace(name)
            && GameData.FindRowByName("Items", name) is { } row
-           && row.TryGetProperty("Number", out System.Text.Json.JsonElement n)
+           && row.TryGetProperty("Number", out GameValue n)
            && n.ValueKind == System.Text.Json.JsonValueKind.Number
             ? n.GetInt32() : 0;
 

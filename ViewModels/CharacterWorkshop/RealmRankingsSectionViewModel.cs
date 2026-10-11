@@ -94,12 +94,12 @@ public sealed partial class RealmRankingsSectionViewModel : WorkshopSectionViewM
     {
         if (ClassFilterOptions.Count > 0) return;
         ClassFilterOptions.Add(NoClassFilter);
-        JsonDocument? doc = _gameData.GetRawTable("Classes");
+        GameTable? doc = _gameData.GetTable("Classes");
         if (doc is null) return;
 
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (!row.TryGetProperty("Name", out JsonElement nameEl)) continue;
+            if (!row.TryGetProperty("Name", out GameValue nameEl)) continue;
             if (nameEl.ValueKind != JsonValueKind.String) continue;
             string? name = nameEl.GetString();
             if (string.IsNullOrEmpty(name)) continue;

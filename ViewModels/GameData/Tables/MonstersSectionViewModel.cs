@@ -38,7 +38,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
 
     // A monster the game marks out of play (In Game = 0), or one that can never spawn
     // (StrayMonsterRule), is listed in the Unobtainable table rather than here.
-    protected override bool IncludeRow(JsonElement element)
+    protected override bool IncludeRow(GameRow element)
         => !StrayMonsterRule.IsOutOfPlay(element, _roomGraph is null ? null : _roomGraph.GetRoom);
 
     // Wide record table — the user arranges its columns by dragging the headers.
@@ -293,7 +293,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
 
     private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
 
-    protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(JsonElement element)
+    protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(GameRow element)
     {
         int baseExp = ReadInt(element, "EXP");
         int mult = ReadInt(element, "ExpMulti");
@@ -364,7 +364,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     // combat engine use — so the Relationship + Toggles columns reflect how the runtime
     // actually treats it. An un-tagged monster resolves to an empty overlay (Relationship
     // then defaults to Enemy, per MonsterEngagement's engage-by-default rule).
-    private MonsterOverlay ResolveMonsterOverlay(JsonElement element)
+    private MonsterOverlay ResolveMonsterOverlay(GameRow element)
     {
         string wcc = ReadInt(element, "Number").ToString(Inv);
         MonsterOverlay seedDefaults =
@@ -398,7 +398,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     private static string[] SlotNames(string prefix, int count) =>
         Enumerable.Range(0, count).Select(i => prefix + i.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
 
-    private static int ReadAbilValue(JsonElement el, int code)
+    private static int ReadAbilValue(GameRow el, int code)
     {
         for (int i = 0; i < AbilSlots.Length; i++)
             if (ReadInt(el, AbilSlots[i]) == code)
@@ -409,7 +409,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     // Presence of an ability code in the monster's Abil-0..9 slots — for the flag
     // facets (Animal 78, NonLiving 109) whose value carries no meaning, only
     // presence.
-    private static bool HasAbil(JsonElement el, int code)
+    private static bool HasAbil(GameRow el, int code)
     {
         for (int i = 0; i < AbilSlots.Length; i++)
             if (ReadInt(el, AbilSlots[i]) == code) return true;
@@ -417,7 +417,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     }
 
     // True when the monster casts a between-rounds spell (any MidSpell-0..4 slot set).
-    private static bool HasMidSpell(JsonElement el)
+    private static bool HasMidSpell(GameRow el)
     {
         for (int i = 0; i < MidSpellSlots.Length; i++)
             if (ReadInt(el, MidSpellSlots[i]) > 0) return true;
@@ -425,7 +425,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     }
 
     // True when the monster drops at least one item (any DropItem-0..9 slot set).
-    private static bool HasDrop(JsonElement el)
+    private static bool HasDrop(GameRow el)
     {
         for (int i = 0; i < DropItemSlots.Length; i++)
             if (ReadInt(el, DropItemSlots[i]) > 0) return true;
@@ -438,7 +438,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     // chance). A spell-only monster has no physical accuracy, so it renders blank — the
     // AttAcc-0 slot of a spell attack holds a spell id, not an accuracy, so it must not
     // be shown here.
-    internal static string? ComputeAttackAccuracy(JsonElement el)
+    internal static string? ComputeAttackAccuracy(GameRow el)
     {
         int majAcc = 0, maxAcc = 0;
         double bestChance = -1;
@@ -577,15 +577,15 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
 
     // Grid-cell JSON readers kept here (the builder carries its own copies) — used by the
     // synthesised columns in ComputeRowCells.
-    private static int ReadInt(JsonElement el, string field)
+    private static int ReadInt(GameRow el, string field)
     {
-        if (!el.TryGetProperty(field, out JsonElement v)) return 0;
+        if (!el.TryGetProperty(field, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 
-    private static double ReadDouble(JsonElement el, string field)
+    private static double ReadDouble(GameRow el, string field)
     {
-        if (!el.TryGetProperty(field, out JsonElement v)) return 0d;
+        if (!el.TryGetProperty(field, out GameValue v)) return 0d;
         return v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out double d) ? d : 0d;
     }
 

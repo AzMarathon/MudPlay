@@ -310,7 +310,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         Hits = $"{_stats.Hits}/{_stats.MaxHits}";
 
         // Mana vs Kai: Mystic classes (MageryType 5) carry Kai, not Mana.
-        JsonElement? classRow = _gameData.FindRowByName("Classes", _stats.Class);
+        GameRow? classRow = _gameData.FindRowByName("Classes", _stats.Class);
         bool isKai = GetInt(classRow, "MageryType") == 5;
         ManaLabel = isKai ? "Kai" : "Mana";
         ManaValue = isKai
@@ -347,10 +347,10 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         // innate race + class ability bonuses, which the in-game accuracy
         // formulas account for.
         EquipmentStatBreakdown combined = CharacterCalculator.AggregateEquipmentStats(worn, _gameData);
-        JsonElement? classRow = _gameData.FindRowByName("Classes", _stats.Class);
-        JsonElement? raceRow = _gameData.FindRowByName("Races", _stats.Race);
-        if (raceRow is JsonElement r) CharacterCalculator.ApplyAbilityBonuses(combined, r, _stats.Race);
-        if (classRow is JsonElement c) CharacterCalculator.ApplyAbilityBonuses(combined, c, _stats.Class);
+        GameRow? classRow = _gameData.FindRowByName("Classes", _stats.Class);
+        GameRow? raceRow = _gameData.FindRowByName("Races", _stats.Race);
+        if (raceRow is GameRow r) CharacterCalculator.ApplyAbilityBonuses(combined, r, _stats.Race);
+        if (classRow is GameRow c) CharacterCalculator.ApplyAbilityBonuses(combined, c, _stats.Class);
 
         // Completed quests grant permanent stat rewards the same accuracy/damage
         // formulas account for — fold them into the combined aggregate (never Box B,
@@ -366,7 +366,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
     // HP and mana per regen tick (CharacterCalculator), with when each tick lands
     // (GAME_MECHANICS "Rest and meditate tick timing").
-    private void ComputeRegen(EquipmentStatSummary t, JsonElement? classRow)
+    private void ComputeRegen(EquipmentStatSummary t, GameRow? classRow)
     {
         RealmType realm = _gameData.ActiveRealm;
         int level = _stats.Level;
@@ -526,7 +526,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         HasQuestBonuses = QuestBonusRows.Count > 0;
     }
 
-    private void ComputeDerivedCombat(EquipmentStatSummary gear, JsonElement? classRow, JsonElement? raceRow)
+    private void ComputeDerivedCombat(EquipmentStatSummary gear, GameRow? classRow, GameRow? raceRow)
     {
         RealmType realm = _gameData.ActiveRealm;
         int level = _stats.Level;
@@ -927,10 +927,10 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
     private static string Display(string value) => string.IsNullOrEmpty(value) ? "—" : value;
 
-    private static int GetInt(JsonElement? row, string property)
+    private static int GetInt(GameRow? row, string property)
     {
-        if (row is not JsonElement el || el.ValueKind != JsonValueKind.Object) return 0;
-        if (!el.TryGetProperty(property, out JsonElement v)) return 0;
+        if (row is not GameRow el) return 0;
+        if (!el.TryGetProperty(property, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 
@@ -1010,7 +1010,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     private int LookupItemNumber(string name)
     {
         if (_gameData.FindRowByName("Items", name) is not { } row) return 0;
-        return row.TryGetProperty("Number", out JsonElement n) && n.ValueKind == JsonValueKind.Number
+        return row.TryGetProperty("Number", out GameValue n) && n.ValueKind == JsonValueKind.Number
             ? n.GetInt32()
             : 0;
     }

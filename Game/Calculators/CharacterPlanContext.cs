@@ -44,8 +44,8 @@ public readonly record struct CharacterPlanContext(
         ArgumentNullException.ThrowIfNull(listedEffects);
 
         RealmType realm = gameData.ActiveRealm;
-        JsonElement? raceOpt = gameData.FindRowByName("Races", stats.Race);
-        if (raceOpt is not JsonElement race || string.IsNullOrEmpty(stats.Race))
+        GameRow? raceOpt = gameData.FindRowByName("Races", stats.Race);
+        if (raceOpt is not GameRow race || string.IsNullOrEmpty(stats.Race))
             return new CharacterPlanContext(false, new CpPlanEntry(), new CpPlanEntry(), new CpPlanEntry(),
                                             realm, UnmodifiedStats.None);
 
@@ -77,10 +77,9 @@ public readonly record struct CharacterPlanContext(
         return new CharacterPlanContext(true, baseline, raceMin, raceMax, realm, reading);
     }
 
-    private static int GetInt(JsonElement row, string property)
+    private static int GetInt(GameRow row, string property)
     {
-        if (row.ValueKind != JsonValueKind.Object) return 0;
-        if (!row.TryGetProperty(property, out JsonElement v)) return 0;
+        if (!row.TryGetProperty(property, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 }

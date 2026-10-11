@@ -23,9 +23,9 @@ public static class BossCatalog
     {
         ArgumentNullException.ThrowIfNull(gameData);
         var list = new List<BossMonster>();
-        JsonDocument? doc = gameData.GetRawTable("Monsters");
-        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Array) return list;
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        GameTable? doc = gameData.GetTable("Monsters");
+        if (doc is null) return list;
+        foreach (GameRow el in doc.Rows)
         {
             int regen = GetInt(el, "RegenTime");
             if (!IsBoss(GetInt(el, "GameLimit"))) continue;
@@ -43,9 +43,9 @@ public static class BossCatalog
     {
         ArgumentNullException.ThrowIfNull(gameData);
         if (string.IsNullOrWhiteSpace(bossName)) return null;
-        JsonDocument? doc = gameData.GetRawTable("Monsters");
-        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Array) return null;
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        GameTable? doc = gameData.GetTable("Monsters");
+        if (doc is null) return null;
+        foreach (GameRow el in doc.Rows)
         {
             if (!string.Equals(GetString(el, "Name"), bossName, StringComparison.OrdinalIgnoreCase)) continue;
             int regen = GetInt(el, "RegenTime");
@@ -65,10 +65,9 @@ public static class BossCatalog
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(def);
-        if (def.MonsterNumber is { } number && gameData.GetRawTable("Monsters") is { } doc
-            && doc.RootElement.ValueKind == JsonValueKind.Array)
+        if (def.MonsterNumber is { } number && gameData.GetTable("Monsters") is { } doc)
         {
-            foreach (JsonElement el in doc.RootElement.EnumerateArray())
+            foreach (GameRow el in doc.Rows)
             {
                 if (GetInt(el, "Number") != number) continue;
                 if (IsBoss(GetInt(el, "GameLimit"))
@@ -89,10 +88,10 @@ public static class BossCatalog
         return def.RespawnHoursOverride ?? ResolveRegenHours(gameData, def);
     }
 
-    private static int GetInt(JsonElement el, string prop)
-        => el.TryGetProperty(prop, out JsonElement v) && v.TryGetInt32(out int i) ? i : 0;
+    private static int GetInt(GameRow el, string prop)
+        => el.TryGetProperty(prop, out GameValue v) && v.TryGetInt32(out int i) ? i : 0;
 
-    private static string GetString(JsonElement el, string prop)
-        => el.TryGetProperty(prop, out JsonElement v) && v.ValueKind == JsonValueKind.String
+    private static string GetString(GameRow el, string prop)
+        => el.TryGetProperty(prop, out GameValue v) && v.ValueKind == JsonValueKind.String
             ? v.GetString() ?? string.Empty : string.Empty;
 }
