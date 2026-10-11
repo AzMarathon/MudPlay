@@ -814,13 +814,13 @@ public sealed class RemoteCommandManager : IDisposable
 
     // Unconditional hard-blocks — never reply, never explain. These guard against
     // the most destructive misuse paths where any information leakage to the
-    // caller is its own risk. Anything containing "reroll" as a whole token in
-    // command or args is blocked because MajorMUD requires the literal word
-    // reroll for the destructive action.
+    // caller is its own risk. Anything with "reroll" anywhere in the command or
+    // an argument is blocked, part of a longer word included: the block is silent
+    // and costs a caller nothing, so it errs wide where the suicide rules, which
+    // answer, match the exact word.
     private bool IsHardBlocked(string command, string[] args, out string? reason)
     {
-        // reroll — token-level match across command + args. Catches
-        // direct @reroll (unknown command), @do reroll, @party reroll,
+        // Catches a direct @reroll (unknown command), @do reroll, @party reroll,
         // and any other passthrough verb's reroll arg.
         if (ContainsToken(command, args, "reroll"))
         {
