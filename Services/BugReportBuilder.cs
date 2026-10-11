@@ -622,6 +622,9 @@ public static class BugReportBuilder
         string disputed = store.DisputedCount == 0 ? "none disputed"
             : $"{store.DisputedCount} disputed and out of use ("
               + string.Join("; ", store.Disputed.Select(d => $"{d.DiedIn} → {string.Join(" / ", d.Arrivals)}")) + ")";
+        // A reading in use with another seen beside it, and how often each: the
+        // other takes over when it has been seen as often.
+        IReadOnlyList<string> challenged = store.Challenged;
         var odd = svc.LearnedArrivalLands.AtOddsWithTheirLand();
         string exceptions = string.Join("; ", odd.Where(o => o.Exception)
             .Select(o => $"{o.Room} → {o.Own} (its land: {string.Join(" / ", o.Land)})"));
@@ -629,6 +632,7 @@ public static class BugReportBuilder
             .Select(o => $"{o.Room} → {o.Own}, beside {string.Join(" / ", o.Land)}"));
         int contradicted = svc.DeathsContradictingStandardArrivalRooms;
         return $"{store.Count} room(s) for '{svc.GameData.ActiveSet ?? "(no set)"}', {disputed}; "
+            + $"in use with another reading seen beside it: {(challenged.Count == 0 ? "(none)" : string.Join("; ", challenged))}; "
             + $"rooms whose own reading differs from their land's: {(exceptions.Length == 0 ? "(none)" : exceptions)}; "
             + $"lands with two readings: {(twoInOneLand.Length == 0 ? "(none)" : twoInOneLand)}; "
             + $"used by the last hang-up death check: {svc.HangupItems.LastLearnedArrivalUsed ?? "(none)"}; "

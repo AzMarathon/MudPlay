@@ -19,9 +19,16 @@ namespace MudPlay.Services;
 // Each room has one assigned room for its dead, so two readings of one room mean
 // one of them was misread (the owner, 2026-10-11): a display of the wrong room, a
 // room the map took for its look-alike. Every reading is kept with how often it
-// was seen. While none has been seen twice the room is disputed and none is
-// used. The first to be seen a second time stands and the others are dropped, and
-// from then on a single contradicting sighting is dropped against it.
+// was seen, the one in use first.
+//   - Two readings seen once each: the room is disputed and neither is used. The
+//     first to be seen a second time stands, and the others are dropped.
+//   - A reading seen twice or more stays in use against a different sighting,
+//     which is kept beside it as a challenger with its own count. The challenger
+//     takes over when its count reaches the count of the one in use, and the one
+//     it replaced is kept in turn. So a stray sighting changes nothing, and a
+//     reading that was wrong from the start (the same misreading twice), or a
+//     graveyard the board has since moved, is corrected by seeing the right one
+//     as often. Nothing is ever fixed for good, and nothing needs a hand edit.
 //
 // Nothing here may throw into the line that is being read: a death is learned
 // from inside the room display's own handling, and a file that can't be written
@@ -38,14 +45,18 @@ public sealed class LearnedArrivalRoomStore
     private readonly Func<string, string> _fileFor;
     private readonly SharedFileStamp _stamp = new();
     private string? _set;
-    // Room died in → each room its dead were seen to arrive in, and how often.
-    private readonly Dictionary<RoomKey, List<(RoomKey Arrival, int Seen)>> _seen = new();
+    // Room died in → each room its dead were seen to arrive in, the one in use
+    // first. Seen is how often in that room; Nearby how often a death in another
+    // room of its land, one with no reading of its own, ended there too.
+    private readonly Dictionary<RoomKey, List<(RoomKey Arrival, int Seen, int Nearby)>> _seen = new();
     // Sightings made since the last write that reached the disk, replayed over
     // whatever another client has written since.
-    private readonly List<(RoomKey DiedIn, RoomKey Arrival)> _unwritten = new();
-    // How the file on disk stands, so each bad state is said once.
-    private enum Disk { Fine, Unreadable, Newer, Unwritable }
-    private Disk _disk;
+    private readonly List<(RoomKey DiedIn, RoomKey Arrival, bool Nearby)> _unwritten = new();
+    // How the file on disk stands. Each is said once, when it becomes so.
+    //   _unparsed   — it can't be read: set aside before anything is written.
+    //   _newer      — a later client's format: neither read nor written.
+    //   _unwritable — the last write failed.
+    private bool _unparsed, _newer, _unwritable;
 
     //   fileFor — a set's file; AppPaths.LearnedArrivalRoomsFile unless a test
     //             keeps its sets somewhere else.
@@ -54,6 +65,10 @@ public sealed class LearnedArrivalRoomStore
         _log = log;
         _fileFor = fileFor ?? AppPaths.LearnedArrivalRoomsFile;
     }
+
+    // Goes up whenever what is held changes, for a reader that keeps an answer
+    // worked out from it (Game.Recovery.LearnedArrivalLookup).
+    public int Revision { get; private set; }
 
     // The rooms with a reading in use.
     public int Count => _seen.Values.Count(r => !IsDisputed(r));
@@ -74,6 +89,15 @@ public sealed class LearnedArrivalRoomStore
             .Select(e => (e.Key, (IReadOnlyList<RoomKey>)e.Value.Select(r => r.Arrival).ToList()))
             .ToList();
 
+    // The rooms whose reading in use has a challenger, as "room → arrival (times
+    // seen), against arrival (times seen)", for the bug report.
+    public IReadOnlyList<string> Challenged =>
+        _seen.Where(e => !IsDisputed(e.Value) && e.Value.Count > 1)
+            .OrderBy(e => e.Key.Map).ThenBy(e => e.Key.Room)
+            .Select(e => $"{e.Key} → {e.Value[0].Arrival} ({e.Value[0].Seen}), against "
+                + string.Join(", ", e.Value.Skip(1).Select(r => $"{r.Arrival} ({r.Seen})")))
+            .ToList();
+
     // The rooms the dead of this room were seen to arrive in, or null when none
     // was seen or the readings disagree.
     //
@@ -83,9 +107,20 @@ public sealed class LearnedArrivalRoomStore
     // both: the two are kept as one reading.
     public IReadOnlyList<RoomKey>? ArrivalsFor(RoomKey diedIn)
     {
-        if (!_seen.TryGetValue(diedIn, out List<(RoomKey Arrival, int Seen)>? readings) || IsDisputed(readings)) return null;
+        if (!_seen.TryGetValue(diedIn, out List<(RoomKey Arrival, int Seen, int Nearby)>? readings) || IsDisputed(readings))
+            return null;
         return readings[0].Arrival == DefaultArrivals[0] ? DefaultArrivals : new[] { readings[0].Arrival };
     }
+
+    // Whether any death has been seen in this room, in use or disputed.
+    public bool HasReadingOf(RoomKey diedIn) => _seen.ContainsKey(diedIn);
+
+    // How often a death in another room of this room's land, one with no reading
+    // of its own, ended where this room's dead arrive (LearnNearby).
+    public int SeenNearby(RoomKey diedIn) =>
+        _seen.TryGetValue(diedIn, out List<(RoomKey Arrival, int Seen, int Nearby)>? readings) && !IsDisputed(readings)
+            ? readings[0].Nearby
+            : 0;
 
     private static readonly RoomKey[] DefaultArrivals =
     {
@@ -95,7 +130,9 @@ public sealed class LearnedArrivalRoomStore
     // The Earthen Tomb is filed as the Temple: one reading for the pair.
     private static RoomKey Filed(RoomKey arrival) => arrival == DefaultArrivals[1] ? DefaultArrivals[0] : arrival;
 
-    private static bool IsDisputed(List<(RoomKey Arrival, int Seen)> readings) => readings.Count > 1;
+    // Several readings, and the first has not been seen twice: none is in use.
+    private static bool IsDisputed(List<(RoomKey Arrival, int Seen, int Nearby)> readings) =>
+        readings.Count > 1 && readings[0].Seen < 2;
 
     // GameDataCache.ActiveSetChanged: the readings are the set's.
     public void OnActiveSetChanged(string? setName)
@@ -104,9 +141,10 @@ public sealed class LearnedArrivalRoomStore
         _set = string.IsNullOrWhiteSpace(setName) ? null : setName;
         _seen.Clear();
         _unwritten.Clear();
-        _disk = Disk.Fine;
+        _unparsed = _newer = _unwritable = false;
+        Revision++;
         if (_set is null) return;
-        if (TryRead(out Dictionary<RoomKey, List<(RoomKey, int)>> onFile)) Take(onFile);
+        if (TryRead(out Dictionary<RoomKey, List<(RoomKey, int, int)>> onFile)) Take(onFile);
         if (_seen.Count > 0)
             _log?.Info(LogCategory,
                 $"{Count} learned arrival room(s) for '{_set}'{(DisputedCount > 0 ? $", and {DisputedCount} disputed" : "")}.");
@@ -120,12 +158,16 @@ public sealed class LearnedArrivalRoomStore
     {
         if (_set is null) return false;
         bool changed = false;
-        if (_stamp.ChangedOutside(_fileFor(_set)) && TryRead(out Dictionary<RoomKey, List<(RoomKey, int)>> onFile))
+        if (_stamp.ChangedOutside(_fileFor(_set)) && TryRead(out Dictionary<RoomKey, List<(RoomKey, int, int)>> onFile))
         {
             _seen.Clear();
             Take(onFile);
             // What this client saw and couldn't write is not in that file.
-            foreach ((RoomKey diedIn, RoomKey arrival) in _unwritten) Add(diedIn, arrival, quiet: true);
+            foreach ((RoomKey diedIn, RoomKey arrival, bool nearby) in _unwritten)
+            {
+                if (nearby) AddNearby(diedIn, arrival);
+                else Add(diedIn, arrival, quiet: true);
+            }
             _log?.Debug(LogCategory, "re-read: another client on this set learned something");
             changed = true;
         }
@@ -139,30 +181,83 @@ public sealed class LearnedArrivalRoomStore
         if (_set is null) return LearnedArrivalOutcome.NotKept;
         TakeInOutsideChanges();
         LearnedArrivalOutcome outcome = Add(diedIn, arrivedIn, quiet: false);
-        _unwritten.Add((diedIn, arrivedIn));
+        _unwritten.Add((diedIn, arrivedIn, false));
         TryWrite();
         return outcome;
+    }
+
+    // A death seen in diedIn, a room with no reading of its own, ended where the
+    // dead of anchor arrive, anchor being the room of its land whose reading said
+    // so. It is counted there and no entry is made for diedIn: the land's reading
+    // already speaks for it, and an entry for every room died in would make every
+    // later question of the land read them all. False when anchor no longer holds
+    // that reading (another client's write changed it): nothing was counted.
+    public bool LearnNearby(RoomKey anchor, RoomKey diedIn, RoomKey arrivedIn)
+    {
+        if (_set is null) return false;
+        TakeInOutsideChanges();
+        if (!AddNearby(anchor, arrivedIn)) return false;
+        _log?.Info(LogCategory,
+            $"as its land has it: the dead of {diedIn} arrive in {arrivedIn}, like those of {anchor}. Counted there "
+            + $"({SeenNearby(anchor)} such); no entry of its own");
+        _unwritten.Add((anchor, arrivedIn, true));
+        TryWrite();
+        return true;
+    }
+
+    private bool AddNearby(RoomKey anchor, RoomKey arrivedIn)
+    {
+        if (!_seen.TryGetValue(anchor, out List<(RoomKey Arrival, int Seen, int Nearby)>? readings)
+            || IsDisputed(readings) || readings[0].Arrival != Filed(arrivedIn))
+            return false;
+        readings[0] = readings[0] with { Nearby = readings[0].Nearby + 1 };
+        Revision++;
+        return true;
     }
 
     //   quiet — a sighting replayed over a re-read file: it was said when it was made.
     private LearnedArrivalOutcome Add(RoomKey diedIn, RoomKey arrivedIn, bool quiet)
     {
+        Revision++;
         RoomKey filed = Filed(arrivedIn);
-        if (!_seen.TryGetValue(diedIn, out List<(RoomKey Arrival, int Seen)>? readings))
+        if (!_seen.TryGetValue(diedIn, out List<(RoomKey Arrival, int Seen, int Nearby)>? readings))
         {
-            _seen[diedIn] = new List<(RoomKey, int)> { (filed, 1) };
+            _seen[diedIn] = new List<(RoomKey, int, int)> { (filed, 1, 0) };
             if (!quiet) _log?.Info(LogCategory, $"learned: the dead of {diedIn} arrive in {arrivedIn}");
             return LearnedArrivalOutcome.Learned;
         }
 
+        bool wasDisputed = IsDisputed(readings);
+        (RoomKey Arrival, int Seen, int Nearby) inUse = readings[0];
         int at = readings.FindIndex(r => r.Arrival == filed);
-        if (at >= 0)
+        if (at < 0)
         {
-            readings[at] = (filed, readings[at].Seen + 1);
-            if (readings.Count == 1) return LearnedArrivalOutcome.Known;
-            // Disputed, and this reading has now been seen twice: it stands.
+            readings.Add((filed, 1, 0));
+            if (readings.Count == 2 && inUse.Seen < 2)
+            {
+                if (!quiet)
+                    _log?.Warn(LogCategory,
+                        $"The dead of {diedIn} were seen to arrive in {inUse.Arrival} before and in {arrivedIn} now. A room "
+                        + "has one assigned room for its dead, so one of the two was misread. Both are kept and neither is "
+                        + "used until one is seen a second time; that one then stands and the other is dropped.");
+                return LearnedArrivalOutcome.Disputed;
+            }
+            if (wasDisputed) return LearnedArrivalOutcome.Disputed;
+            if (!quiet)
+                _log?.Warn(LogCategory,
+                    $"A death seen in {diedIn} ended in {arrivedIn}, where its dead have been seen to arrive in "
+                    + $"{inUse.Arrival} {inUse.Seen} times. {inUse.Arrival} stays in use; {arrivedIn} is kept beside it, and "
+                    + "takes over if it comes to be seen as often.");
+            return LearnedArrivalOutcome.Challenged;
+        }
+
+        readings[at] = readings[at] with { Seen = readings[at].Seen + 1 };
+        if (at == 0 && !wasDisputed) return LearnedArrivalOutcome.Known;
+        if (wasDisputed)
+        {
+            // Seen a second time while none was in use: it stands, the rest go.
             string dropped = string.Join(", ", readings.Where(r => r.Arrival != filed).Select(r => r.Arrival.ToString()));
-            _seen[diedIn] = new List<(RoomKey, int)> { readings[at] };
+            _seen[diedIn] = new List<(RoomKey, int, int)> { readings[at] };
             if (!quiet)
                 _log?.Info(LogCategory,
                     $"settled: the dead of {diedIn} arrive in {arrivedIn}, seen a second time; the other reading ({dropped}) "
@@ -170,30 +265,30 @@ public sealed class LearnedArrivalRoomStore
             return LearnedArrivalOutcome.Settled;
         }
 
-        if (readings.Count == 1 && readings[0].Seen >= 2)
+        (RoomKey Arrival, int Seen, int Nearby) challenger = readings[at];
+        if (challenger.Seen < inUse.Seen)
         {
             if (!quiet)
-                _log?.Warn(LogCategory,
-                    $"A death seen in {diedIn} ended in {arrivedIn}, but its dead have been seen to arrive in "
-                    + $"{readings[0].Arrival} {readings[0].Seen} times. That reading stands and this one is dropped: a room "
-                    + "has one assigned room for its dead, so one sighting against several is taken for a misreading.");
-            return LearnedArrivalOutcome.Overruled;
+                _log?.Info(LogCategory,
+                    $"seen again: a death in {diedIn} ended in {arrivedIn} ({challenger.Seen} times now), against "
+                    + $"{inUse.Arrival} in use ({inUse.Seen} times). It takes over at {inUse.Seen}");
+            return LearnedArrivalOutcome.Challenged;
         }
-
-        bool wasDisputed = IsDisputed(readings);
-        readings.Add((filed, 1));
-        // Said once, when the room first becomes disputed.
-        if (!quiet && !wasDisputed)
-            _log?.Warn(LogCategory,
-                $"The dead of {diedIn} were seen to arrive in {readings[0].Arrival} before and in {arrivedIn} now. A room has "
-                + "one assigned room for its dead, so one of the two was misread. Both are kept and neither is used until "
-                + "one is seen a second time; that one then stands and the other is dropped.");
-        return LearnedArrivalOutcome.Disputed;
+        // As often seen as the one in use: the later evidence stands, and the
+        // reading it replaces is kept as its challenger.
+        readings.RemoveAt(at);
+        readings.Insert(0, challenger);
+        if (!quiet)
+            _log?.Info(LogCategory,
+                $"changed: the dead of {diedIn} arrive in {arrivedIn}, now seen {challenger.Seen} times, as often as "
+                + $"{inUse.Arrival} ({inUse.Seen} times), which was in use until now and is kept beside it");
+        return LearnedArrivalOutcome.TookOver;
     }
 
-    private void Take(Dictionary<RoomKey, List<(RoomKey, int)>> onFile)
+    private void Take(Dictionary<RoomKey, List<(RoomKey, int, int)>> onFile)
     {
-        foreach ((RoomKey diedIn, List<(RoomKey, int)> readings) in onFile) _seen[diedIn] = readings;
+        foreach ((RoomKey diedIn, List<(RoomKey, int, int)> readings) in onFile) _seen[diedIn] = readings;
+        Revision++;
     }
 
     // ----- the file ------------------------------------------------------
@@ -205,7 +300,7 @@ public sealed class LearnedArrivalRoomStore
     }
 
     // One room of the file: where a death was seen, and each room it was seen to
-    // lead to with how often, rooms as "map/room".
+    // lead to with how often, rooms as "map/room". The reading in use is first.
     private sealed class RoomShape
     {
         public string DiedIn { get; set; } = "";
@@ -216,21 +311,23 @@ public sealed class LearnedArrivalRoomStore
     {
         public string Arrival { get; set; } = "";
         public int Times { get; set; } = 1;
+        // Deaths in other rooms of its land that ended here too (LearnNearby).
+        public int Nearby { get; set; }
     }
 
     // Read the set's file. False when it is there but can't be read, doesn't
     // parse, or is a later client's. The stamp is marked either way, so a file
     // that stays bad is looked at, and said, once.
-    private bool TryRead(out Dictionary<RoomKey, List<(RoomKey, int)>> onFile)
+    private bool TryRead(out Dictionary<RoomKey, List<(RoomKey, int, int)>> onFile)
     {
-        onFile = new Dictionary<RoomKey, List<(RoomKey, int)>>();
+        onFile = new Dictionary<RoomKey, List<(RoomKey, int, int)>>();
         string path = _fileFor(_set!);
         try
         {
             if (!File.Exists(path))
             {
                 _stamp.Mark(path);
-                if (_disk is Disk.Unreadable or Disk.Newer) _disk = Disk.Fine;
+                _unparsed = _newer = false;
                 return true;
             }
             FileShape? file = JsonSerializer.Deserialize<FileShape>(File.ReadAllText(path));
@@ -238,39 +335,51 @@ public sealed class LearnedArrivalRoomStore
             if (file is null || file.Version < 1) throw new JsonException("no version");
             if (file.Version > FileVersion)
             {
-                if (_disk != Disk.Newer)
+                if (!_newer)
                     _log?.Warn(LogCategory,
                         $"'{path}' was written by a later version of the client (format {file.Version}). It is left alone: "
                         + "nothing is read from it, and what is learned now is kept for this session only.");
-                _disk = Disk.Newer;
+                _newer = true;
                 return false;
             }
             foreach (RoomShape room in file.Rooms)
             {
                 if (!RoomKey.TryParseWire(room.DiedIn, out RoomKey diedIn)) continue;
-                List<(RoomKey Arrival, int Seen)> readings = new();
+                List<(RoomKey Arrival, int Seen, int Nearby)> readings = new();
                 foreach (SightingShape sighting in room.Seen)
                 {
                     if (!RoomKey.TryParseWire(sighting.Arrival, out RoomKey arrival)) continue;
                     arrival = Filed(arrival);
                     int already = readings.FindIndex(r => r.Arrival == arrival);
-                    int times = Math.Max(1, sighting.Times);
-                    if (already >= 0) readings[already] = (arrival, readings[already].Seen + times);
-                    else readings.Add((arrival, times));
+                    int times = Math.Max(1, sighting.Times), nearby = Math.Max(0, sighting.Nearby);
+                    if (already >= 0)
+                        readings[already] = (arrival, readings[already].Seen + times, readings[already].Nearby + nearby);
+                    else readings.Add((arrival, times, nearby));
                 }
-                if (readings.Count > 0) onFile[diedIn] = readings;
+                if (readings.Count == 0) continue;
+                // The one in use is first in a file this client wrote. In one put
+                // together by hand, the one seen most is taken for it.
+                int most = readings.Max(r => r.Seen);
+                if (readings[0].Seen < most)
+                {
+                    int lead = readings.FindIndex(r => r.Seen == most);
+                    (RoomKey, int, int) first = readings[lead];
+                    readings.RemoveAt(lead);
+                    readings.Insert(0, first);
+                }
+                onFile[diedIn] = readings;
             }
-            if (_disk is Disk.Unreadable or Disk.Newer) _disk = Disk.Fine;
+            _unparsed = _newer = false;
             return true;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
             _stamp.Mark(path);
-            if (_disk != Disk.Unreadable)
+            if (!_unparsed)
                 _log?.Warn(LogCategory,
                     $"'{path}' can't be read ({ex.Message}). It is left as it is; if something is learned before it reads "
                     + "again, it is set aside under another name first, never written over.");
-            _disk = Disk.Unreadable;
+            _unparsed = true;
             return false;
         }
     }
@@ -280,7 +389,7 @@ public sealed class LearnedArrivalRoomStore
     // seen stays in memory meanwhile.
     private void TryWrite()
     {
-        if (_set is null || _unwritten.Count == 0 || _disk == Disk.Newer) return;
+        if (_set is null || _unwritten.Count == 0 || _newer) return;
         string path = _fileFor(_set);
         try
         {
@@ -288,7 +397,7 @@ public sealed class LearnedArrivalRoomStore
             // A file that doesn't parse may hold everything learned so far, one
             // slip of a hand edit away from reading again. It is moved aside, under
             // a name nothing else has, before anything is written in its place.
-            if (_disk == Disk.Unreadable && File.Exists(path))
+            if (_unparsed && File.Exists(path))
             {
                 string aside = path + ".bad";
                 if (File.Exists(aside)) aside = $"{path}.{DateTime.UtcNow:yyyyMMddHHmmssfff}.bad";
@@ -296,8 +405,8 @@ public sealed class LearnedArrivalRoomStore
                 _log?.Warn(LogCategory,
                     $"'{path}' couldn't be read, so it was set aside as '{aside}' before what was learned now was written. "
                     + "Nothing in it was lost: mend it and put it back to have its rooms again.");
-                _disk = Disk.Fine;
             }
+            _unparsed = false;
 
             FileShape file = new()
             {
@@ -307,7 +416,9 @@ public sealed class LearnedArrivalRoomStore
                     .Select(e => new RoomShape
                     {
                         DiedIn = e.Key.ToString(),
-                        Seen = e.Value.Select(r => new SightingShape { Arrival = r.Arrival.ToString(), Times = r.Seen }).ToList(),
+                        Seen = e.Value
+                            .Select(r => new SightingShape { Arrival = r.Arrival.ToString(), Times = r.Seen, Nearby = r.Nearby })
+                            .ToList(),
                     })
                     .ToList(),
             };
@@ -318,19 +429,21 @@ public sealed class LearnedArrivalRoomStore
             File.Move(temp, path, overwrite: true);
             _stamp.Mark(path);
             _unwritten.Clear();
-            if (_disk == Disk.Unwritable)
+            if (_unwritable)
             {
-                _disk = Disk.Fine;
+                _unwritable = false;
                 _log?.Info(LogCategory, $"'{path}' could be written again: what was learned meanwhile is on file.");
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            if (_disk != Disk.Unwritable)
+            // Said once, whatever else is wrong with the file: a set-aside that
+            // fails is a write that failed.
+            if (!_unwritable)
                 _log?.Warn(LogCategory,
                     $"'{path}' can't be written ({ex.Message}). What was learned is kept for this session and written when "
                     + "the file can be.");
-            if (_disk == Disk.Fine) _disk = Disk.Unwritable;
+            _unwritable = true;
         }
     }
 }

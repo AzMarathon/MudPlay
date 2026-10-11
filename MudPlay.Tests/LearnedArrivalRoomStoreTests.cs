@@ -163,22 +163,131 @@ public sealed class LearnedArrivalRoomStoreTests : IDisposable
         Assert.Equal(new[] { IstaGraveyard }, store.ArrivalsFor(TerraIsta));
     }
 
-    // A reading already seen twice stands against a single sighting of another
-    // room: that one is dropped, and said.
+    // A reading already seen twice stays in use against a single sighting of
+    // another room. That sighting is kept beside it, and said.
     [Fact]
-    public void AReadingSeenTwice_StandsAgainstOneContradictingSighting()
+    public void AReadingSeenTwice_StaysInUseAgainstOneStraySighting()
     {
         LearnedArrivalRoomStore store = Client();
         store.Learn(TerraIsta, IstaGraveyard);
         store.Learn(TerraIsta, IstaGraveyard);
 
-        Assert.Equal(LearnedArrivalOutcome.Overruled, store.Learn(TerraIsta, Elsewhere));
+        Assert.Equal(LearnedArrivalOutcome.Challenged, store.Learn(TerraIsta, Elsewhere));
 
         Assert.Equal(new[] { IstaGraveyard }, store.ArrivalsFor(TerraIsta));
         Assert.Equal((1, 0), (store.Count, store.DisputedCount));
+        Assert.Equal(new[] { (TerraIsta, IstaGraveyard) }, store.Known);
         LogEntry warning = Assert.Single(_log, e => e.Severity == LogSeverity.Warn);
         Assert.Contains("14/1950", warning.Message);
         Assert.Contains("2 times", warning.Message);
+        Assert.Equal(new[] { "14/1813 → 14/1900 (2), against 14/1950 (1)" }, store.Challenged);
+        // The same for a client that starts later: the one in use is first on file.
+        Assert.Equal(new[] { IstaGraveyard }, Client().ArrivalsFor(TerraIsta));
+        // And the reading in use seen again is nothing new.
+        Assert.Equal(LearnedArrivalOutcome.Known, store.Learn(TerraIsta, IstaGraveyard));
+    }
+
+    // No reading is fixed for good. Two sightings of one room and then ten of
+    // another (the first two a misreading made twice, or a graveyard the board has
+    // since moved): the second takes over when it has been seen as often.
+    [Fact]
+    public void TwoSightingsThenTenOfAnother_TheOtherTakesOverAtTwo()
+    {
+        LearnedArrivalRoomStore store = Client();
+        store.Learn(TerraIsta, IstaGraveyard);
+        store.Learn(TerraIsta, IstaGraveyard);
+
+        Assert.Equal(LearnedArrivalOutcome.Challenged, store.Learn(TerraIsta, Elsewhere));
+        Assert.Equal(new[] { IstaGraveyard }, store.ArrivalsFor(TerraIsta));
+
+        Assert.Equal(LearnedArrivalOutcome.TookOver, store.Learn(TerraIsta, Elsewhere));
+        Assert.Equal(new[] { Elsewhere }, store.ArrivalsFor(TerraIsta));
+        LogEntry change = Assert.Single(_log, e => e.Message.StartsWith("changed:"));
+        Assert.Equal(LogSeverity.Info, change.Severity);
+        Assert.Equal("changed: the dead of 14/1813 arrive in 14/1950, now seen 2 times, as often as 14/1900 (2 times), "
+            + "which was in use until now and is kept beside it", change.Message);
+
+        for (int i = 0; i < 8; i++)
+            Assert.Equal(LearnedArrivalOutcome.Known, store.Learn(TerraIsta, Elsewhere));
+        Assert.Equal(new[] { Elsewhere }, store.ArrivalsFor(TerraIsta));
+        Assert.Equal(new[] { "14/1813 → 14/1950 (10), against 14/1900 (2)" }, store.Challenged);
+        Assert.Equal((1, 0), (store.Count, store.DisputedCount));
+        // A client that starts later reads the same.
+        Assert.Equal(new[] { Elsewhere }, Client().ArrivalsFor(TerraIsta));
+        Assert.Equal(new[] { "14/1813 → 14/1950 (10), against 14/1900 (2)" }, Client().Challenged);
+    }
+
+    // Sightings that keep alternating: the room is disputed at one each, the
+    // first seen twice stands, and from then on the other only takes over by
+    // catching up, which the one in use being seen again keeps it from.
+    [Fact]
+    public void AlternatingSightings_TheReadingInUseChangesOnlyWhenTheOtherCatchesUp()
+    {
+        LearnedArrivalRoomStore store = Client();
+        Assert.Equal(LearnedArrivalOutcome.Learned, store.Learn(TerraIsta, IstaGraveyard));
+        Assert.Equal(LearnedArrivalOutcome.Disputed, store.Learn(TerraIsta, Elsewhere));
+        Assert.Null(store.ArrivalsFor(TerraIsta));
+        Assert.Equal(LearnedArrivalOutcome.Settled, store.Learn(TerraIsta, IstaGraveyard));
+
+        // 2 against 1, 3 against 2, 4 against 3: never level, so never changed.
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Equal(LearnedArrivalOutcome.Challenged, store.Learn(TerraIsta, Elsewhere));
+            Assert.Equal(new[] { IstaGraveyard }, store.ArrivalsFor(TerraIsta));
+            Assert.Equal(LearnedArrivalOutcome.Known, store.Learn(TerraIsta, IstaGraveyard));
+        }
+        Assert.Equal(new[] { "14/1813 → 14/1900 (5), against 14/1950 (3)" }, store.Challenged);
+
+        // The other seen twice running draws level and takes over; the first
+        // seen once more draws level again and takes it back.
+        Assert.Equal(LearnedArrivalOutcome.Challenged, store.Learn(TerraIsta, Elsewhere));
+        Assert.Equal(LearnedArrivalOutcome.TookOver, store.Learn(TerraIsta, Elsewhere));
+        Assert.Equal(new[] { Elsewhere }, store.ArrivalsFor(TerraIsta));
+        Assert.Equal(LearnedArrivalOutcome.Known, store.Learn(TerraIsta, Elsewhere));
+        Assert.Equal(LearnedArrivalOutcome.TookOver, store.Learn(TerraIsta, IstaGraveyard));
+        Assert.Equal(new[] { IstaGraveyard }, store.ArrivalsFor(TerraIsta));
+        Assert.Equal(0, store.DisputedCount);
+    }
+
+    // A file put together by hand, with the reading seen most not first: the one
+    // seen most is taken for the one in use.
+    [Fact]
+    public void AFileWithTheMostSeenReadingNotFirst_UsesTheMostSeen()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "paradigm"));
+        File.WriteAllText(FileFor("paradigm"), """
+            { "Version": 1, "Rooms": [ { "DiedIn": "14/1813", "Seen": [
+                { "Arrival": "14/1900", "Times": 1 }, { "Arrival": "14/1950", "Times": 5 } ] } ] }
+            """);
+
+        LearnedArrivalRoomStore store = Client();
+
+        Assert.Equal(new[] { Elsewhere }, store.ArrivalsFor(TerraIsta));
+        Assert.Equal(0, store.DisputedCount);
+    }
+
+    // A death in another room of the land that ends where this room's dead do is
+    // counted on this room's reading, and makes no entry of its own.
+    [Fact]
+    public void ADeathNearbyThatAgrees_IsCountedOnTheReadingItAgreesWith()
+    {
+        LearnedArrivalRoomStore store = Client();
+        RoomKey path = new(14, 1814);
+        store.Learn(TerraIsta, IstaGraveyard);
+        int before = store.Revision;
+
+        Assert.True(store.LearnNearby(TerraIsta, path, IstaGraveyard));
+        Assert.True(store.LearnNearby(TerraIsta, path, IstaGraveyard));
+
+        Assert.Equal(2, store.SeenNearby(TerraIsta));
+        Assert.False(store.HasReadingOf(path));
+        Assert.Equal(1, store.Count);
+        Assert.True(store.Revision > before);
+        Assert.Equal(2, Client().SeenNearby(TerraIsta));
+        // Not what that room's dead do, or a room with nothing in use: not counted.
+        Assert.False(store.LearnNearby(TerraIsta, path, Elsewhere));
+        Assert.False(store.LearnNearby(path, TerraIsta, IstaGraveyard));
+        Assert.Equal(2, store.SeenNearby(TerraIsta));
     }
 
     // Two clients that each saw it differently, neither having read the other's
@@ -215,8 +324,8 @@ public sealed class LearnedArrivalRoomStoreTests : IDisposable
         Assert.Equal(LearnedArrivalOutcome.Known, store.Learn(room, HangupDeathArrivalRooms.Temple));
         Assert.Equal((1, 0), (store.Count, store.DisputedCount));
         Assert.Equal(0, Warnings);
-        // Seen twice by now: a single other room is dropped against it.
-        Assert.Equal(LearnedArrivalOutcome.Overruled, store.Learn(room, Elsewhere));
+        // Seen twice by now: a single other room changes nothing in use.
+        Assert.Equal(LearnedArrivalOutcome.Challenged, store.Learn(room, Elsewhere));
         Assert.Equal(new[] { HangupDeathArrivalRooms.Temple, HangupDeathArrivalRooms.EvilTomb }, store.ArrivalsFor(room));
     }
 
@@ -311,5 +420,33 @@ public sealed class LearnedArrivalRoomStoreTests : IDisposable
         File.Delete(blocked);
         store.TakeInOutsideChanges();
         Assert.Equal(2, Client("blocked").Count);
+    }
+
+    // A file that can't be read and can't be moved aside either: each is said
+    // once, however many heartbeats come and go.
+    [Fact]
+    public void AFileThatCanBeNeitherReadNorSetAside_IsSaidOnce_NotOnEveryHeartbeat()
+    {
+        // A file that doesn't parse, and a folder standing under the name it would
+        // be moved aside to.
+        string path = FileFor("paradigm");
+        Directory.CreateDirectory(path + ".bad");
+        File.WriteAllText(path, "{ not json");
+        LearnedArrivalRoomStore store = Client();
+        Assert.Equal(1, Warnings);
+
+        store.Learn(TerraIsta, IstaGraveyard);
+        Assert.Equal(2, Warnings);
+        for (int i = 0; i < 10; i++) store.TakeInOutsideChanges();
+
+        Assert.Equal(2, Warnings);
+        Assert.Equal("{ not json", File.ReadAllText(path));
+        Assert.Equal(new[] { IstaGraveyard }, store.ArrivalsFor(TerraIsta));
+
+        // The folder goes: the broken file is set aside and the room written.
+        Directory.Delete(path + ".bad");
+        store.TakeInOutsideChanges();
+        Assert.Equal("{ not json", File.ReadAllText(path + ".bad"));
+        Assert.Equal(new[] { IstaGraveyard }, Client().ArrivalsFor(TerraIsta));
     }
 }

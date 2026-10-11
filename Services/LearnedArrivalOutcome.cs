@@ -21,7 +21,11 @@ public enum LearnedArrivalOutcome
     // the others are dropped.
     Settled,
 
-    // It contradicts a reading already seen at least twice. That one stands, and
-    // this one is dropped.
-    Overruled,
+    // It differs from a reading already seen at least twice, which stays in use.
+    // This one is kept beside it with its own count.
+    Challenged,
+
+    // A challenger seen as often as the reading in use: it is the one in use
+    // now, and the one it replaced is kept beside it.
+    TookOver,
 }
