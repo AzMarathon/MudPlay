@@ -221,6 +221,8 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         if (!CanAccept) return;
         string name = LoopName.Trim();
         if (name.Length == 0) { SetStatus("Give the loop a name first.", good: false); return; }
+        // A loop of that name another client saved a moment ago counts.
+        _loops.TakeInOutsideChanges();
         if (_loops.Get(name) is not null) { SetStatus($"A loop named '{name}' already exists — rename this one.", good: false); return; }
         if (!ApplyTypedRooms()) return;
         if (CheckWalkable() is not { } waypoints) return;
