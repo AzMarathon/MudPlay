@@ -795,6 +795,19 @@ public sealed partial class PartyManager : IDisposable
         LeavePartySolo();
     }
 
+    // The leader we asked to come back for us refused, or nobody came in the time a
+    // leader takes such a request (ComebackRequester.FollowGivenUp). Stock ends a
+    // follow at an exit without a line to the follower, so nothing else would clear
+    // the follow we still believe in, and the client would hold its own movement
+    // for good. Cleared as the game's own "no longer following" line clears it
+    // (user, 2026-10-10). A no-op once that line has come, or for another leader.
+    public void NoteFollowGivenUp(string leader)
+    {
+        if (!State.IsInParty || State.SelfIsLeader || State.LeaderName is not { Length: > 0 } ours) return;
+        if (!GivenNameOf(ours).Equals(GivenNameOf(leader), StringComparison.OrdinalIgnoreCase)) return;
+        LeavePartySolo();
+    }
+
     // Entering the train-stats screen is a realm excursion that breaks up our party
     // server-side (see GAME_MECHANICS "Party"). For a FOLLOWER, clear our own stale
     // "following <leader>" roster now — no leave-line reaches our client, so nothing

@@ -175,13 +175,13 @@ public sealed class PartyTrainCoordinator : IDisposable
         Func<bool> telepathsPending,
         Func<DateTimeOffset>? now = null,
         LogService? log = null,
-        Action<string>? expectComeback = null,
-        Action? fetchLeftOnTrip = null)
+        // Told when a trip is over: who set out, and whether it ended by itself.
+        Action<IReadOnlyList<string>, bool>? tripEnded = null)
     {
         ArgumentNullException.ThrowIfNull(party);
         ArgumentNullException.ThrowIfNull(trainer);
         ArgumentNullException.ThrowIfNull(send);
-        _roll = new PartyTrainTripRoll(send, Speaks, ActiveMemberGivens, expectComeback, fetchLeftOnTrip, log);
+        _roll = new PartyTrainTripRoll(send, Speaks, ActiveMemberGivens, tripEnded, log);
         _party = party;
         _trainer = trainer;
         _expPerHour = expPerHour ?? throw new ArgumentNullException(nameof(expPerHour));
@@ -882,7 +882,7 @@ public sealed class PartyTrainCoordinator : IDisposable
             {
                 if (!await WalkAsync(bank))
                 {
-                    _trainer.EndPartyTrip("couldn't reach the bank.");
+                    EndTrip("couldn't reach the bank.");
                     started = false;
                     return;
                 }
@@ -900,7 +900,7 @@ public sealed class PartyTrainCoordinator : IDisposable
                 RoomKey room = new(stop.Trainer.Map, stop.Trainer.Room);
                 if (!await WalkAsync(room))
                 {
-                    _trainer.EndPartyTrip($"couldn't reach {stop.Trainer.Name} ({room.Map}/{room.Room}).");
+                    EndTrip($"couldn't reach {stop.Trainer.Name} ({room.Map}/{room.Room}).");
                     started = false;
                     return;
                 }
@@ -934,7 +934,7 @@ public sealed class PartyTrainCoordinator : IDisposable
                 if (stop.Members.Count > 0) await AwaitMembersDoneAsync();
             }
 
-            _trainer.EndPartyTrip("all stops done.");
+            EndTrip("all stops done.");
             started = false;
             // A member that trained left and rejoined, so it's asked afresh; one that
             // didn't keeps its ask record and only counts again once it pushes a
@@ -948,18 +948,33 @@ public sealed class PartyTrainCoordinator : IDisposable
         }
         finally
         {
-            if (started) _trainer.EndPartyTrip("aborted.");
+            if (started) EndTrip("aborted.");
             _tripRunning = false;
             _cooldownUntil = _now() + TripCooldown;
             _walkTcs = null;
             _awaitingDone = null;
             _doneTcs = null;
+            bool byItself = !_tripTakenOver;
+            _tripTakenOver = false;
             // Last, with the engine put back and the trip no longer running: the
-            // members are told it is over, and whoever it left is gone back for.
-            // However the trip ended: one that couldn't reach its trainer has left
-            // people on the way just the same.
-            _roll.Close();
+            // members are told it is over, and whoever it left is handed on. A trip
+            // that couldn't reach its trainer has left people on the way just the
+            // same, and they are gone back for; one the player took over leaves
+            // them to the player (PartyComebackManager.TrainTripEnded).
+            _roll.Close(byItself);
         }
+    }
+
+    // The trip in hand was taken out of its own hands: its walk was stopped under
+    // it (a Stop, a walk started over it, a death), or the trainer's side of it was
+    // already ended from outside (the second Stop, a run started over it, Reset
+    // States) by the time we came to end it.
+    private bool _tripTakenOver;
+
+    private void EndTrip(string reason)
+    {
+        if (!_trainer.PartyTripActive) _tripTakenOver = true;
+        _trainer.EndPartyTrip(reason);
     }
 
     // Arm the `done` wait, then order each member at this stop to train here.
@@ -1020,7 +1035,12 @@ public sealed class PartyTrainCoordinator : IDisposable
                 tcs.TrySetResult(_currentRoom() == _walkTarget);
                 break;
             case WalkEventKind.Failed:
+                _walkTcs = null;
+                tcs.TrySetResult(false);
+                break;
             case WalkEventKind.Stopped:
+                // Somebody stopped the trip's walk: it didn't fail by itself.
+                _tripTakenOver = true;
                 _walkTcs = null;
                 tcs.TrySetResult(false);
                 break;

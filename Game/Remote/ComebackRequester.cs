@@ -70,8 +70,10 @@ public sealed partial class ComebackRequester : IDisposable
 
     private static readonly TimeSpan DeathWindow = TimeSpan.FromSeconds(10);
 
-    // How long the leader's telepathed answer to our request is watched for.
-    private static readonly TimeSpan AnswerWindow = TimeSpan.FromSeconds(60);
+    // How long a leader who answered that they are coming, or coming later (a train
+    // trip to finish, Auto-Lair's next pass), is waited on before the follow is
+    // given up. The same bound a train trip nobody called off is given.
+    private static readonly TimeSpan PromisedWait = TimeSpan.FromMinutes(15);
 
     // How often a request that couldn't be sent is looked at again.
     private static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(2);
@@ -87,6 +89,7 @@ public sealed partial class ComebackRequester : IDisposable
     private readonly List<IDisposable> _subs = new();
     private readonly DispatcherTimer _settleTimer;
     private readonly DispatcherTimer _retryTimer;
+    private readonly DispatcherTimer _lapseTimer;
 
     private Action<byte[]>? _wireSender;
     private bool _disposed;
@@ -126,13 +129,14 @@ public sealed partial class ComebackRequester : IDisposable
     private string? _heldWhy;
     private DateTimeOffset _heldAt;
 
-    // The leader we asked, while their answer is still watched for.
+    // The leader we asked, while we wait on them: until we follow again, they
+    // refuse, or the wait runs out.
     private string? _askedLeader;
-    private DateTimeOffset _askedAt;
 
     private string? _lastIncident;
     private DateTimeOffset _lastIncidentAt;
     private string? _lastAnswer;
+    private string? _lastGivenUp;
 
     // Test seam for the clock so the windows are deterministic.
     internal Func<DateTimeOffset> NowProvider { get; set; } = static () => DateTimeOffset.Now;
@@ -160,9 +164,18 @@ public sealed partial class ComebackRequester : IDisposable
         {
             if (_lastIncident is null) return "(none this session)";
             string answer = _lastAnswer is null ? string.Empty : $"; leader answered: {_lastAnswer}";
-            return $"{_lastIncidentAt.ToLocalTime():HH:mm:ss} {_lastIncident}{answer}";
+            string givenUp = _lastGivenUp is null ? string.Empty : $"; follow given up: {_lastGivenUp}";
+            return $"{_lastIncidentAt.ToLocalTime():HH:mm:ss} {_lastIncident}{answer}{givenUp}";
         }
     }
+
+    // Told, with the leader and why, when we stop believing we follow them: they
+    // refused our request, or nobody came for it in time. Stock ends a follow at an
+    // exit without a word to the follower, so nothing else would ever end it there,
+    // and the client would hold its own engines for a leader who isn't coming
+    // (user, 2026-10-10). Where the game's own line has ended the follow already
+    // (Paradigm prints one) there is nothing left to tell.
+    public Action<string, string>? FollowGivenUp { get; set; }
 
     // Whether that player is the leader we asked to come back for us, and hasn't
     // declined. A member an exit turned away is out of the party and needs a fresh
@@ -242,6 +255,8 @@ public sealed partial class ComebackRequester : IDisposable
         _settleTimer.Tick += (_, _) => OnSettleElapsed();
         _retryTimer = new DispatcherTimer { Interval = RetryInterval };
         _retryTimer.Tick += (_, _) => OnRetryDue();
+        _lapseTimer = new DispatcherTimer();
+        _lapseTimer.Tick += (_, _) => OnWaitLapsed();
     }
 
     // Bind the outbound wire — the same gate-wrapped sender the other engines use.
@@ -265,6 +280,7 @@ public sealed partial class ComebackRequester : IDisposable
         if (_party is not null) _party.PropertyChanged -= OnPartyChanged;
         _settleTimer.Stop();
         _retryTimer.Stop();
+        _lapseTimer.Stop();
     }
 
     // ----- what we sent ourselves, and what happened to us ---------------
@@ -315,6 +331,7 @@ public sealed partial class ComebackRequester : IDisposable
     {
         CancelSettle();
         DropHeld();
+        StopWaiting();
         ClearEvidence();
         if (BelievedLeader() is not { } leader) return;
         _incidentAnswered = true;
@@ -408,7 +425,10 @@ public sealed partial class ComebackRequester : IDisposable
         if (_followAttemptAt == DateTimeOffset.MinValue || line.IsPromptLine) return;
         string text = line.Text.Trim();
         if (text.Length == 0) return;
-        if (text.StartsWith("Obvious exits:", StringComparison.Ordinal))
+        // A room's exits, or the one line a room too bright to see in is shown as
+        // (the wording blindness sets in with; GAME_MECHANICS "Dark rooms — no name,
+        // no exits, traversal inferred from no bonk").
+        if (text.StartsWith("Obvious exits:", StringComparison.Ordinal) || text == "You are blind!")
         {
             OnArrived();
             return;
@@ -431,9 +451,15 @@ public sealed partial class ComebackRequester : IDisposable
         DropHeld();
         ClearEvidence();
         _incidentAnswered = false;
-        _askedLeader = null;
+        StopWaiting();
         _askedBack = null;
         _typedLeaveAt = DateTimeOffset.MinValue;
+    }
+
+    private void StopWaiting()
+    {
+        _askedLeader = null;
+        _lapseTimer.Stop();
     }
 
     private void ClearEvidence()
@@ -520,6 +546,7 @@ public sealed partial class ComebackRequester : IDisposable
         DateTimeOffset now = NowProvider();
         CancelSettle();
         DropHeld();
+        StopWaiting();
         // The game only says this to someone who was following until now, so it
         // opens a split of its own whatever was decided before it.
         _incidentAnswered = false;
@@ -627,6 +654,7 @@ public sealed partial class ComebackRequester : IDisposable
             DropHeld();
             Record($"{incident}: no @comeback, it couldn't be sent for {RetryWindow.TotalMinutes:0.#} min", now);
             _log?.Info(LogCategory, $"{incident} — the held-back @comeback is dropped: {RetryWindow.TotalMinutes:0.#} min on, {leader} has moved on");
+            GiveUpTheFollow(leader, $"the @comeback couldn't be sent for {RetryWindow.TotalMinutes:0.#} min");
             return;
         }
         if (CannotSendNow(leader) is not null) return;
@@ -657,10 +685,43 @@ public sealed partial class ComebackRequester : IDisposable
         LastSentForTests.Add(bytes);
         _wireSender?.Invoke(bytes);
         _askedLeader = leader;
-        _askedAt = now;
         _askedBack = (leader, now);
         Record($"{incident}: sent `{payload}`", now);
         _log?.Info(LogCategory, $"{incident} — sent {payload}");
+        // A leader takes the request for this long ("If leading, accept @comeback
+        // for"): with no word from them by then, nobody is coming.
+        WaitFor(RetryWindow);
+    }
+
+    private void WaitFor(TimeSpan wait)
+    {
+        _lapseTimer.Stop();
+        _lapseTimer.Interval = wait > TimeSpan.Zero ? wait : PromisedWait;
+        _lapseTimer.Start();
+    }
+
+    // Test seam — the DispatcherTimer doesn't tick under headless xUnit.
+    internal void FireWaitLapsedForTests() => OnWaitLapsed();
+    internal TimeSpan? WaitingForTests => _lapseTimer.IsEnabled ? _lapseTimer.Interval : null;
+
+    private void OnWaitLapsed()
+    {
+        _lapseTimer.Stop();
+        if (_askedLeader is not { } leader) return;
+        _askedLeader = null;
+        GiveUpTheFollow(leader, $"nobody came within {_lapseTimer.Interval.TotalMinutes:0.#} min of the @comeback");
+    }
+
+    // We stop believing we follow that leader, if we still do (FollowGivenUp says
+    // when that is). The leader's invite, if they do come, is taken or not by the
+    // usual rules.
+    private void GiveUpTheFollow(string leader, string why)
+    {
+        if (BelievedLeader() is not { } still || !still.Equals(leader, StringComparison.OrdinalIgnoreCase)) return;
+        _lastGivenUp = why;
+        _log?.Info(LogCategory,
+            $"no longer counting ourselves as following {leader}: {why}. The game ended that follow without a line; our own engines are free again.");
+        FollowGivenUp?.Invoke(leader, why);
     }
 
     private void Withhold(string incident, string why, DateTimeOffset now)
@@ -675,6 +736,7 @@ public sealed partial class ComebackRequester : IDisposable
         _lastIncident = text;
         _lastIncidentAt = now;
         _lastAnswer = null;
+        _lastGivenUp = null;
     }
 
     // Why a left-behind follower is not asking and never will for this split, or
@@ -756,15 +818,12 @@ public sealed partial class ComebackRequester : IDisposable
     // ----- the leader's answer ---------------------------------------------
 
     // The leader's client answers a @comeback with a braced telepath. It is logged
-    // and kept for the bug report; a decline is not argued with.
+    // and kept for the bug report; a decline is not argued with, and ends the
+    // follow we still believe in (GiveUpTheFollow). Any other answer says they are
+    // coming, now or later, and they are waited on for longer.
     private void OnTelepathIn(MatchResult result)
     {
         if (_askedLeader is not { } leader || result.Groups.Count < 2) return;
-        if (NowProvider() - _askedAt > AnswerWindow)
-        {
-            _askedLeader = null;
-            return;
-        }
         if (!result.Groups[0].Trim().Equals(leader, StringComparison.OrdinalIgnoreCase)) return;
         string body = result.Groups[1].Trim();
         if (body.Length < 3 || body[0] != '{' || body[^1] != '}') return;
@@ -774,9 +833,23 @@ public sealed partial class ComebackRequester : IDisposable
         _log?.Info(LogCategory, declined
             ? $"{leader} isn't coming: {answer} — not asking again"
             : $"{leader} answered the @comeback: {answer}");
-        if (!declined) return;
-        _askedLeader = null;
-        _askedBack = null;
+        if (declined)
+        {
+            StopWaiting();
+            _askedBack = null;
+            GiveUpTheFollow(leader, $"{leader} refused the @comeback ({answer})");
+        }
+        else if (LeaderGaveUp().IsMatch(answer))
+        {
+            // They tried and went back to what they were doing. Nobody is coming
+            // now, but an invite of theirs is still one we asked for.
+            StopWaiting();
+            GiveUpTheFollow(leader, $"{leader} came for us and gave up ({answer})");
+        }
+        else
+        {
+            WaitFor(PromisedWait);
+        }
     }
 
     // ----- helpers -----------------------------------------------------------
@@ -811,8 +884,15 @@ public sealed partial class ComebackRequester : IDisposable
     private static partial Regex TypedTalk();
 
     // The answers PartyComebackManager gives when it is not coming. "I can't yet"
-    // is a train trip's: it comes when the training is done.
+    // is not one: a train trip comes when the training is done, and Auto-Lair
+    // invites on its next pass.
     [GeneratedRegex(@"I can't(?! yet)|my party is full|can't find a path|can't come|forget me|going idle",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex LeaderDeclined();
+
+    // The answers it gives when it set out for us and went back to its own
+    // business: the walk failed, or we never followed its invite.
+    [GeneratedRegex(@"can't reach|path failed|follow timed out",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex LeaderGaveUp();
 }

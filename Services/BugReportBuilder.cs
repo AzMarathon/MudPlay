@@ -430,6 +430,14 @@ public static class BugReportBuilder
             Kv(sb, "Left at an exit our loop goes through (not fetched)", string.Join(", ", atGates));
         if (svc.PartyComeback.LeftOnTrainTrip is { Count: > 0 } onTrip)
             Kv(sb, "Left on the train trip (fetched when it ends)", string.Join(", ", onTrip));
+        if (svc.PartyComeback.AwaitedAfterTrainTrip is { Count: > 0 } awaited)
+            Kv(sb, "Left by a train trip, room not known (fetched on their @comeback)", string.Join(", ", awaited));
+        if (svc.PartyComeback.TripFetchOwed is { Count: > 0 } owed)
+            Kv(sb, "Train trip fetch held for the master switch", string.Join(", ", owed));
+        if (svc.PartyComeback.InviteOnSight is { Count: > 0 } onSight)
+            Kv(sb, "Left at an exit by Auto-Lair (invited when a pass finds them)", string.Join(", ", onSight));
+        if (svc.PartyComeback.FetchedAtGates is { Count: > 0 } fetched)
+            Kv(sb, "Fetched once from an exit that may turn them away", string.Join(", ", fetched));
         Kv(sb, "Party train trip we set out on", svc.PartyTrain.TripWeSetOutOn ?? "(none)");
         // Leader-side reconnect reform state — the followers we snapshotted at the
         // last drop and will wait for on reconnect. A "leader sprinted off / didn't

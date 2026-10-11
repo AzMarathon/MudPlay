@@ -52,9 +52,12 @@ namespace MudPlay.Game.Remote;
 //
 // Two cases where nobody is gone back for at once, both the user's rulings of
 // 2026-10-10:
-//   - A party train trip. Neither the game's drop line nor a member's @comeback
-//     stops the trip's walk; each member it leaves is kept with the room they
-//     were left in and fetched when the training is done (FetchLeftOnTrainTrip).
+//   - A train trip: a party train trip, or the leader's own train run with the
+//     party in tow. Neither the game's drop line nor a member's @comeback stops
+//     its walk; each member it leaves is kept with the room they were left in and
+//     fetched when the training is done (TrainTripEnded), from however far. A
+//     trip taken out of its own hands (the user's Stop, a run started over it)
+//     fetches nobody: the pickup is the player's then.
 //   - A loop whose own circuit goes through an exit that turned the member away.
 //     Their @comeback is refused and the loop carries on; the rule, and how the
 //     leader tells an exit's doing from a hold, is above LeftAtAGateOnOurLoop.
@@ -124,6 +127,10 @@ public sealed class PartyComebackManager : IDisposable
     // whether their @ok landed just before that move (so it can't be trusted).
     private bool _leftBehind;
     private bool _okPremature;
+    // The recovery in flight is a train trip's fetch (BeginRecovery says what that
+    // changes), and its room is one we guessed and they haven't named.
+    private bool _tripFetch;
+    private bool _roomUnconfirmed;
 
     // The engine a recovery stopped, kept when that recovery gave up (backtracked
     // and never found them). We're idle only because we went looking, so their own
@@ -263,6 +270,9 @@ public sealed class PartyComebackManager : IDisposable
         // how a loop tells a member an exit of its circuit turned away.
         _tracker.StateChanged += OnRoomChanged;
         _party.ParReplyRead += OnParReplyRead;
+        _loopRunner.Event += OnLoopEvent;
+        _autoLair.ActiveChanged += OnLairActiveChanged;
+        _classifier.EntitiesObserved += OnEntitiesObserved;
         // Path B reply: the probed member's @where answer arrives as a telepath.
         _subs.Add(router.Subscribe(KnownPatterns.ConversationTelepathIn, OnTelepathIn));
 
@@ -304,6 +314,9 @@ public sealed class PartyComebackManager : IDisposable
         _party.MemberLeftBehind -= OnMemberLeftBehind;
         _tracker.StateChanged -= OnRoomChanged;
         _party.ParReplyRead -= OnParReplyRead;
+        _loopRunner.Event -= OnLoopEvent;
+        _autoLair.ActiveChanged -= OnLairActiveChanged;
+        _classifier.EntitiesObserved -= OnEntitiesObserved;
         foreach (IDisposable sub in _subs) sub.Dispose();
         _subs.Clear();
         _followTimer.Stop();
@@ -325,22 +338,45 @@ public sealed class PartyComebackManager : IDisposable
             // "train trips should be excluded"); they are fetched when the training
             // is done, from the room they name. Said once, and only when denials are.
             bool firstWord = _answeredOnTrip.Add(given);
-            NoteLeftOnTrip(given, target);
+            NoteLeftOnTrip(given, target, named: true);
             _log?.Info(LogCategory,
                 $"{given} asked to be fetched{(target is { } t ? $" from {t.Map}/{t.Room}" : "")} during the train trip — kept until the training is done");
             if (firstWord && _engine.WarnOnDenial) ctx.Reply(TrainTripReply);
             return;
         }
-        if (LeftAtAGateOnOurLoop(given, target) is { } from)
+        // Someone a train trip of ours came back without, saying where they are.
+        // The trip was ours, so this is still its fetch: whatever we are doing
+        // now, and from however far.
+        if (TakeAwaitedAfterTrip(given))
         {
-            // Going back would only leave them at the same exit on the next lap
-            // (user, 2026-10-10: on a loop the leader "should not accept a comback
-            // for them, it should reject them"). A denial, so it is said only when
-            // denials are (the remote-command reply policy).
             _log?.Info(LogCategory,
-                $"{given} asked to be fetched from {from.Map}/{from.Room}, where our loop goes through an exit they can't pass — refused, the loop carries on");
-            if (_engine.WarnOnDenial) ctx.Reply(LoopGateRefusal);
+                $"{given}, whom the train trip left, asks to be fetched{(target is { } w ? $" from {w.Map}/{w.Room}" : "")} — going back for them.");
+            BeginRecovery(given, target, ctx.Reply, tripFetch: true);
             return;
+        }
+        (GateVerdict verdict, RoomKey? from, GateStep? step) = GateVerdictForRequest(given, target);
+        switch (verdict)
+        {
+            case GateVerdict.LoopRefuses:
+                // Going back would only leave them at the same exit on the next lap
+                // (user, 2026-10-10: on a loop the leader "should not accept a comback
+                // for them, it should reject them"). A denial, so it is said only when
+                // denials are (the remote-command reply policy).
+                _log?.Info(LogCategory,
+                    $"{given} asked to be fetched{(from is { } f ? $" from {f.Map}/{f.Room}" : "")}, where our loop goes through an exit they can't pass — refused, the loop carries on");
+                if (_engine.WarnOnDenial) ctx.Reply(LoopGateRefusal);
+                return;
+            case GateVerdict.LairInvitesOnSight:
+                // Auto-Lair doesn't break off for them. Said once, and only when
+                // denials are.
+                LeaveToTheNextPass(given, from);
+                if (_lairAnswered.Add(given) && _engine.WarnOnDenial) ctx.Reply(LairGateReply);
+                return;
+            case GateVerdict.WalkEnds when step is { } gate:
+                // Stock: the request is the first we hear of the second drop. The
+                // walk ends, and they are answered by where that leaves us.
+                EndWalkAt(given, gate);
+                break;
         }
         BeginRecovery(given, target, ctx.Reply);
     }
@@ -348,85 +384,227 @@ public sealed class PartyComebackManager : IDisposable
     // The answer to a member our loop left at an exit that doesn't let them through.
     public const string LoopGateRefusal = "I can't, my loop goes through an exit you can't pass";
 
+    // The answer to a member Auto-Lair left at an exit that turned them away. "I
+    // can't yet" is what a follower's client reads as "wait", not as a refusal.
+    public const string LairGateReply = "I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you";
+
     // The answer to a member who asks to be fetched in the middle of a train trip.
     public const string TrainTripReply = "I can't yet, I'm on a train trip. I'll come for you when the training is done";
 
-    // ----- a party train trip (nobody is fetched until it is over) ----------
+    // ----- a train trip (nobody is fetched until it is over) ----------------
 
-    // A party train trip is under way (PartyTrainCoordinator.TripRunning).
+    // A train trip is under way: a party train trip (PartyTrainCoordinator.
+    // TripRunning), or a train or spell-shop run of the leader's own that took the
+    // engine's place with the party in tow (TrainerWalkManager.OwnRunActive).
     public Func<bool>? TrainTripRunning { get; set; }
 
     private bool TrainTripOn => TrainTripRunning?.Invoke() == true;
 
+    // One line for the terminal.
+    public Action<string>? Notice { get; set; }
+
     // Who the trip in hand left on the way, oldest first, with the room each was
-    // left in: the room our step left when the game told us, or the room they
-    // named when they asked.
-    private readonly List<(string Given, RoomKey? Room)> _leftOnTrip = new();
+    // left in: the room our step left when the game told us, or (RoomNamed) the
+    // room they named when they asked.
+    private readonly List<(string Given, RoomKey? Room, bool RoomNamed)> _leftOnTrip = new();
     // Who has been told, this trip, that they will be fetched after training.
     private readonly HashSet<string> _answeredOnTrip = new(StringComparer.OrdinalIgnoreCase);
 
-    // For the bug report: the members a train trip has left on the way so far.
-    public IReadOnlyList<string> LeftOnTrainTrip => _leftOnTrip
-        .Select(l => l.Room is { } r ? $"{l.Given} at {r.Map}/{r.Room}" : $"{l.Given} (room not known)").ToList();
+    // Members a finished trip came back without and whose room we don't have, by
+    // when the trip ended: the game tells a Stock leader nothing of a follower it
+    // drops, and a room of our own guessing can turn out empty. Their @comeback
+    // names it, and is fetched as the trip's own for as long as a @comeback is
+    // taken from a member who has left (ComebackWindow).
+    private readonly Dictionary<string, DateTimeOffset> _awaitedAfterTrip = new(StringComparer.OrdinalIgnoreCase);
 
-    private void NoteLeftOnTrip(string given, RoomKey? room)
+    // A trip that ended with the master switch off: whom it left, and when it
+    // ended. Fetched when the switch is back on (SettleAfterMasterSwitch), if that
+    // is soon enough.
+    private (List<(string Given, RoomKey? Room, bool RoomNamed)> Left, DateTimeOffset At)? _owedTripFetch;
+
+    // For the bug report: the members a train trip has left on the way so far, the
+    // ones a finished trip is waiting to hear from, and a fetch the master switch
+    // is holding.
+    public IReadOnlyList<string> LeftOnTrainTrip => _leftOnTrip.Select(l => Placed(l.Given, l.Room)).ToList();
+    public IReadOnlyList<string> AwaitedAfterTrainTrip => _awaitedAfterTrip.Keys.ToList();
+    public IReadOnlyList<string> TripFetchOwed =>
+        _owedTripFetch is { } owed ? owed.Left.Select(l => Placed(l.Given, l.Room)).ToList() : [];
+
+    private static string Placed(string given, RoomKey? room) =>
+        room is { } r ? $"{given} at {r.Map}/{r.Room}" : $"{given} (room not known)";
+
+    private void NoteLeftOnTrip(string given, RoomKey? room, bool named)
     {
         int at = _leftOnTrip.FindIndex(l => SameName(l.Given, given));
-        if (at < 0) _leftOnTrip.Add((given, room));
-        else if (room is not null) _leftOnTrip[at] = (given, room);
+        if (at < 0) _leftOnTrip.Add((given, room, named && room is not null));
+        // The room they name stands over the one we guessed, never the other way.
+        else if (room is not null && (named || !_leftOnTrip[at].RoomNamed)) _leftOnTrip[at] = (given, room, named);
     }
 
-    // The trip is over and the engine it paused is back. Everyone it left on the
-    // way is fetched now, in the order they were left, through the same pickup as
-    // any member left behind, whatever client they are on and however long ago it
-    // was (user, 2026-10-10: "the leader should realize that and pick them up when
-    // the training is done"). It runs with no walk or loop to go back to as well:
-    // the trip was ours, so the fetch is.
-    public void FetchLeftOnTrainTrip()
+    // Everyone who set out on the last trip that ended by itself, and when it
+    // ended. A Stock leader's own list may still show a follower the game dropped
+    // without a word, so the roll is all that covers them.
+    private (HashSet<string> Names, DateTimeOffset At)? _lastTripRoll;
+
+    private bool TakeAwaitedAfterTrip(string given)
     {
+        DateTimeOffset now = NowProvider();
+        bool awaited = _awaitedAfterTrip.Remove(given, out DateTimeOffset since) && now - since <= ComebackWindow;
+        bool onTheRoll = _lastTripRoll is { } roll && roll.Names.Remove(given) && now - roll.At <= ComebackWindow;
+        return awaited || onTheRoll;
+    }
+
+    // The trip is over and the engine it paused is back.
+    //
+    // byItself: it finished, or failed on its own. Everyone it left on the way is
+    // fetched now, in the order they were left, through the same pickup as any
+    // member left behind, whatever client they are on and however long ago it was
+    // (user, 2026-10-10: "the leader should realize that and pick them up when the
+    // training is done"). The fetch runs with no walk or loop to go back to as
+    // well, and from however far: the trip was ours, so the fetch is.
+    //
+    // Not by itself: the user's second Stop, a run started over it, Reset States,
+    // its walk stopped under it. The player has taken over, and as with a pickup
+    // they took over (2026-10-08) nothing walks back on its own: who was left is
+    // logged and named once in the terminal, and their @comeback is still a
+    // member's, answered by whatever we are doing when it comes.
+    //
+    // setOut: who set out, where the trip kept a roll.
+    public void TrainTripEnded(bool byItself, IReadOnlyList<string> setOut)
+    {
+        ArgumentNullException.ThrowIfNull(setOut);
         _answeredOnTrip.Clear();
-        if (_leftOnTrip.Count == 0) return;
-        List<(string Given, RoomKey? Room)> left = new(_leftOnTrip);
+        List<(string Given, RoomKey? Room, bool RoomNamed)> left = new(_leftOnTrip);
         _leftOnTrip.Clear();
-        if (MasterOff)
+        List<string> roll = setOut.Select(GivenName)
+            .Where(n => n.Length > 0 && !left.Exists(l => SameName(l.Given, n)))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        _lastTripRoll = byItself && roll.Count > 0
+            ? (new HashSet<string>(roll, StringComparer.OrdinalIgnoreCase), NowProvider())
+            : null;
+        // Set out, not following by our list, and not one the game told us it
+        // dropped. Someone standing with us is only waiting for the re-invite a
+        // leader's own train makes necessary.
+        List<string> unplaced = roll.Where(n => !MemberFollowing(n) && !InOurRoom(n)).ToList();
+        if (left.Count == 0 && unplaced.Count == 0) return;
+
+        // However long ago the trip left them, their own request is a member's.
+        foreach ((string given, _, _) in left) _party.ExpectComebackFrom(given);
+        foreach (string given in unplaced) _party.ExpectComebackFrom(given);
+
+        if (!byItself)
         {
+            string names = string.Join(", ", left.Select(l => Placed(l.Given, l.Room)).Concat(unplaced.Select(n => Placed(n, null))));
             _log?.Info(LogCategory,
-                $"the train trip left {string.Join(", ", left.Select(l => l.Given))} on the way, but the master switch is off — not going back for them.");
+                $"the train trip was taken out of its hands; it left {names} — not going back on our own, the pickup is yours. Their @comeback is still taken as a member's.");
+            Notice?.Invoke($"[Train trip ended early - left behind: {names}. Not going back for them on its own]");
             return;
         }
-        foreach ((string given, RoomKey? room) in left)
+
+        DateTimeOffset now = NowProvider();
+        foreach (string given in unplaced)
+        {
+            _awaitedAfterTrip[given] = now;
+            _log?.Info(LogCategory,
+                $"the train trip came back without {given} and the game didn't say where it left them — their @comeback is gone back for, wherever we are then.");
+        }
+        if (left.Count == 0) return;
+        if (MasterOff)
+        {
+            _owedTripFetch = (left, now);
+            _log?.Info(LogCategory,
+                $"the train trip left {string.Join(", ", left.Select(l => Placed(l.Given, l.Room)))}, but the master switch is off — going back for them when it is back on, if that is within {ComebackWindow.TotalMinutes:0.#} min.");
+            return;
+        }
+        FetchLeftOnTrip(left);
+    }
+
+    private void FetchLeftOnTrip(List<(string Given, RoomKey? Room, bool RoomNamed)> left)
+    {
+        foreach ((string given, RoomKey? room, bool named) in left)
         {
             _log?.Info(LogCategory,
                 $"the train trip left {given} {(room is { } r ? $"at {r.Map}/{r.Room}" : "on the way")} — going back for them now the training is done.");
-            BeginRecovery(given, room, TelepathReply(given), evenIdle: true);
+            BeginRecovery(given, room, TelepathReply(given), tripFetch: true, roomUnconfirmed: room is not null && !named);
         }
     }
 
-    // ----- a loop through an exit a member can't pass ------------------------
-    //
-    // A loop would leave such a member at the same exit every lap, so it doesn't go
-    // back for them and refuses their @comeback; a walk-to and Auto-Lair go back
-    // (user, 2026-10-10: "a gate the party member cannot pass"). The rule:
-    //   - Only an exit the loop's own circuit takes, crossed by a step of the loop.
-    //     A gate on the walk to the circuit, on a train trip's walk or crossed by
-    //     hand is not the loop's, and the member is gone back for.
-    //   - Only when the exit is what turned this member away. A member who told us
-    //     they are held or waiting (MemberSignalledHold) was stopped by that. One
-    //     the exit is known to admit (MemberCanPass true: level, class, race, purse
-    //     and item all known and met) was stopped by something else. Both are gone
-    //     back for.
-    //   - Where the leader can't tell, the gated step counts as the cause.
+    // We walked to the room our own step left when the game dropped them, and they
+    // aren't in it. Inviting into an empty room would hold the engine for the whole
+    // follow wait, so the search ends here and they say where they are: that
+    // request is the trip's fetch still.
+    private void NotWhereTheTripLeftThem()
+    {
+        _log?.Info(LogCategory,
+            $"{_senderGiven} isn't in the room the trip left them in — waiting for their @comeback to name a room.");
+        _awaitedAfterTrip[_senderGiven] = NowProvider();
+        _party.ExpectComebackFrom(_senderGiven);
+        _reply("didn't find you where the trip left you — @comeback with your room and I'll come");
+        Resume();
+    }
 
-    // The member has a hold or a wait out with us (@wait, @held), or took one back
-    // a moment ago: whatever stopped them, it wasn't the exit.
+    // ----- a member an exit turned away ----------------------------------------
+    //
+    // An exit that lets through only some (an item, a toll, a level, class, race or
+    // alignment window) can drop a follower behind an engine step of ours. What the
+    // engine then does is the user's ruling for each (2026-10-10):
+    //   - A loop would leave them at the same exit every lap: it carries on and
+    //     refuses their @comeback ("it should reject them").
+    //   - A walk-to, or an errand's walk, goes back and re-invites once ("on a walk
+    //     to, it absolutely should comeback for them"). Turned away at the same exit
+    //     again once the walk is under way again, the walk ends there with a notice
+    //     naming them and the exit, and no second pickup is started ("option A").
+    //     Another gated exit further on gets its own one pickup.
+    //   - Auto-Lair doesn't break off. It carries on and invites them when a pass
+    //     next finds them in a room it enters ("auto-lair will just pick them up
+    //     again on its next pass in the room").
+    //
+    // When the exit is what turned this member away:
+    //   - For a loop, only an exit its own circuit takes, crossed by a step of the
+    //     loop. A gate on the walk to the circuit, on a train trip's walk or crossed
+    //     by hand is not the loop's, and the member is gone back for.
+    //   - Not when they told us they are held or waiting (SignalledHold): that is
+    //     what stopped them, and they are gone back for.
+    //   - Not, for a loop or Auto-Lair, when the exit is known to admit them
+    //     (MemberCanPass true: level, class, race, purse and item all known and
+    //     met). Where the leader can't tell, the gated step counts as the cause.
+    //   - What the game does beats what we hold of them: fetched from an exit once
+    //     and dropped at that same exit again, they are gated there, whatever the
+    //     judge says, until the run is over or they are seen through it.
+
+    // The member has a hold or a wait out with us (@wait, @held): whatever stopped
+    // them, it wasn't the exit.
     public Func<string, bool>? MemberSignalledHold { get; set; }
 
     // Whether the exit would have let this member through, from what we hold of
     // them (MemberGateJudge): true, false, or null when it can't be told.
     public Func<string, RoomExit, bool?>? MemberCanPass { get; set; }
 
+    // An @ok a moment before being left behind reads as a hold too, though on its
+    // face it is a release: they said they were free and then didn't move with us,
+    // so whatever held them still did (the premature-@ok rule, PrematureOkWindow).
+    private bool SignalledHold(string given) =>
+        MemberSignalledHold?.Invoke(given) == true || OkedWithin?.Invoke(given, PrematureOkWindow) == true;
+
+    // An engine step of ours through an exit that lets through only some.
+    private readonly record struct GateStep(RoomKey From, Direction Direction, RoomExit Exit, DateTimeOffset At, bool OnLoopCircuit);
+
+    // A pickup made from such an exit: whom for, under which engine, and when.
+    // Proven once the same exit dropped them again after it.
+    private sealed class GateFetch(string given, GateStep gate, ResumeKind engine, DateTimeOffset at)
+    {
+        public string Given { get; } = given;
+        public RoomKey From { get; } = gate.From;
+        public RoomKey To { get; } = gate.Exit.Target;
+        public ResumeKind Engine { get; } = engine;
+        public DateTimeOffset At { get; set; } = at;
+        public bool Proven { get; set; }
+    }
+
+    private enum GateVerdict { GoBack, LoopRefuses, LairInvitesOnSight, WalkEnds }
+
     // Followers the game told us it dropped right behind a loop step through an
-    // exit of the circuit that turned them away: who, and the room it leads out of.
+    // exit that turned them away: who, and the room it leads out of.
     private readonly Dictionary<string, (RoomKey From, DateTimeOffset At)> _gatedOnLoop =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -434,43 +612,55 @@ public sealed class PartyComebackManager : IDisposable
     // again. For them the judgement was made on that line and stands.
     private readonly HashSet<string> _dropLineSeen = new(StringComparer.OrdinalIgnoreCase);
 
-    // When each gated exit of the circuit was last crossed by a step of the loop,
-    // by the room it leaves, and the exit our latest step took if it was one.
-    private readonly Dictionary<RoomKey, (RoomExit Exit, DateTimeOffset At)> _loopGateCrossed = new();
-    private (RoomKey From, RoomExit Exit)? _lastStepGate;
+    // The latest engine step through each gated exit, by the room it leaves, and
+    // the one our latest step took if it took one.
+    private readonly Dictionary<RoomKey, GateStep> _gateCrossed = new();
+    private GateStep? _lastStepGate;
+
+    private readonly List<GateFetch> _gateFetches = new();
 
     // When each member was last known to be following: their join, or a `par`
     // that listed them. Where the game tells a leader nothing of a drop, a gate
     // crossed since then is the one that could have turned them away.
     private readonly Dictionary<string, DateTimeOffset> _seenFollowingAt = new(StringComparer.OrdinalIgnoreCase);
 
-    // For the bug report: the members our loop left at an exit they can't pass.
+    // Members Auto-Lair left at an exit that turned them away, to be invited when
+    // a pass finds them; when each was last invited that way; and who has had the
+    // one answer to their @comeback.
+    private readonly HashSet<string> _inviteOnSight = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTimeOffset> _invitedOnSightAt = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _lairAnswered = new(StringComparer.OrdinalIgnoreCase);
+    // A room is shown again on a look, a fight's end and a re-display: one invite
+    // per visit is enough.
+    private static readonly TimeSpan OnSightInviteCooldown = TimeSpan.FromSeconds(60);
+
+    // For the bug report: the members our loop left at an exit they can't pass,
+    // the ones Auto-Lair invites on sight, and the exits a pickup was made from.
     public IReadOnlyList<string> LeftAtLoopGates =>
         _gatedOnLoop.Select(kv => $"{kv.Key} at {kv.Value.From.Map}/{kv.Value.From.Room}").ToList();
+    public IReadOnlyList<string> InviteOnSight => _inviteOnSight.ToList();
+    public IReadOnlyList<string> FetchedAtGates => _gateFetches
+        .Select(f => $"{f.Given} from {f.From.Map}/{f.From.Room} ({f.Engine}{(f.Proven ? ", turned away again" : "")})").ToList();
 
-    private bool LoopIsTheEngine =>
-        (_busy ? _resume.Kind : SnapshotRunningEngine().Kind) == ResumeKind.Loop;
+    private ResumeKind EngineInCharge => _busy ? _resume.Kind : SnapshotRunningEngine().Kind;
 
-    // Each room change: was it a step of the running loop through a gated exit of
-    // its own circuit?
+    // Each room change: was it an engine's step through an exit that lets through
+    // only some? A step of our own pickup walk, one made by hand and one with no
+    // engine up cross nothing on an engine's behalf.
     private void OnRoomChanged(RoomTransition transition)
     {
         if (transition.NewRoom is not { } now || transition.PreviousRoom is not { } before || before.Key == now.Key)
             return;
         _lastStepGate = null;
-        if (_loopRunner.State is LoopState.Idle)
+        if (_busy || _tracker.LastMoveWasManual || SnapshotRunningEngine().Kind == ResumeKind.None) return;
+        foreach ((Direction direction, RoomExit exit) in before.Exits)
         {
-            // Stopped for a pickup of ours, the loop is coming back: what it crossed
-            // stands. Stopped for good, it is forgotten.
-            if (!(_busy && _resume.Kind == ResumeKind.Loop)) _loopGateCrossed.Clear();
-            return;
-        }
-        if (_tracker.LastMoveWasManual) return;
-        foreach ((RoomKey from, RoomExit exit) in _loopRunner.CircuitExits())
-        {
-            if (from != before.Key || !exit.AdmitsOnlySome || (exit.Target != now.Key && exit.Landing != now.Key)) continue;
-            _lastStepGate = (from, exit);
-            _loopGateCrossed[from] = (exit, NowProvider());
+            if (!exit.AdmitsOnlySome || (exit.Target != now.Key && exit.Landing != now.Key)) continue;
+            bool onCircuit = _loopRunner.State is not LoopState.Idle
+                && _loopRunner.CircuitExits().Any(c => c.From == before.Key && c.Exit.Target == exit.Target);
+            GateStep step = new(before.Key, direction, exit, NowProvider(), onCircuit);
+            _lastStepGate = step;
+            _gateCrossed[before.Key] = step;
             return;
         }
     }
@@ -479,33 +669,146 @@ public sealed class PartyComebackManager : IDisposable
     {
         DateTimeOffset now = NowProvider();
         foreach (PartyMember m in _party.State.Members)
-            if (!m.IsSelf && !m.IsInvited) _seenFollowingAt[GivenName(m.Name)] = now;
+        {
+            if (m.IsSelf || m.IsInvited) continue;
+            string given = GivenName(m.Name);
+            _seenFollowingAt[given] = now;
+            // Listed as following after an engine step through the exit we once
+            // fetched them from: they are through it, and the next drop there is
+            // judged afresh.
+            _gateFetches.RemoveAll(f => SameName(f.Given, given)
+                && _gateCrossed.TryGetValue(f.From, out GateStep crossed) && crossed.Exit.Target == f.To && crossed.At > f.At);
+        }
     }
 
-    private bool TurnedAwayBy(string given, RoomExit exit) =>
-        MemberSignalledHold?.Invoke(given) != true && MemberCanPass?.Invoke(given, exit) != true;
-
-    // Whether this member's request is for a pickup at an exit our running loop
-    // goes through and they can't: the room to refuse them at. Where the game told
-    // us of the drop, what was judged on that line stands. Where it tells a leader
-    // nothing, the loop's own crossings since the member was last seen following
-    // answer: the room they name, or with no room named the latest one.
-    private RoomKey? LeftAtAGateOnOurLoop(string given, RoomKey? target)
+    // A loop run is over (stopped for good, or failed): whom it was judged to
+    // leave, and what it fetched from where, belong to that run.
+    private void OnLoopEvent(LoopEvent e)
     {
-        if (!LoopIsTheEngine) return null;
-        if (_busy && SameName(given, _senderGiven)) return null;   // already going back for them
-        if (_gatedOnLoop.TryGetValue(given, out var noted) && NowProvider() - noted.At <= ComebackWindow
-            && (target is null || target == noted.From))
-            return noted.From;
-        if (_dropLineSeen.Contains(given)) return null;
+        if (e.Kind != LoopEventKind.Failed && !(e.Kind == LoopEventKind.Stopped && !e.WillResume)) return;
+        _gatedOnLoop.Clear();
+        _gateFetches.RemoveAll(f => f.Engine == ResumeKind.Loop);
+    }
+
+    // Auto-Lair stopped for good: the next pass they were promised isn't coming.
+    private void OnLairActiveChanged(bool active)
+    {
+        if (active || _autoLair.StoppedForResume) return;
+        _inviteOnSight.Clear();
+        _invitedOnSightAt.Clear();
+        _lairAnswered.Clear();
+        _gateFetches.RemoveAll(f => f.Engine == ResumeKind.Lair);
+    }
+
+    // What the engine in charge does about a member dropped behind this gated step
+    // (the rule is at the head of this section).
+    private GateVerdict JudgeGateDrop(string given, GateStep gate, ResumeKind engine, bool signalledHold)
+    {
+        if (signalledHold) return GateVerdict.GoBack;
+        GateFetch? before = _gateFetches.Find(f => SameName(f.Given, given) && f.From == gate.From && f.To == gate.Exit.Target);
+        // Dropped here again, by a step later than the pickup we made from it.
+        bool again = before is not null && (before.Proven || gate.At > before.At);
+        bool admitted = MemberCanPass?.Invoke(given, gate.Exit) == true;
+        GateVerdict verdict = engine switch
+        {
+            ResumeKind.Loop when again || (gate.OnLoopCircuit && !admitted) => GateVerdict.LoopRefuses,
+            ResumeKind.Lair when again || !admitted => GateVerdict.LairInvitesOnSight,
+            ResumeKind.Walker when again => GateVerdict.WalkEnds,
+            _ => GateVerdict.GoBack,
+        };
+        if (verdict == GateVerdict.GoBack)
+        {
+            // We go back for them from this exit: a second drop at it settles it.
+            if (before is null) _gateFetches.Add(new GateFetch(given, gate, engine, NowProvider()));
+            else before.At = NowProvider();
+        }
+        else if (before is { Proven: false })
+        {
+            before.Proven = true;
+            before.At = gate.At;
+            _log?.Info(LogCategory,
+                $"{given} was dropped at the exit out of {gate.From.Map}/{gate.From.Room} again after we went back for them: it doesn't let them through, whatever we hold of them.");
+        }
+        return verdict;
+    }
+
+    // What a member's request is answered with when an exit may be why they were
+    // left: the verdict, and the room and step it is about. Where the game told us
+    // of the drop, what was judged on that line stands. Where it tells a leader
+    // nothing (Stock), the engine's own gated steps since the member was last seen
+    // following answer: the room they name, or with no room named the latest one.
+    private (GateVerdict Verdict, RoomKey? From, GateStep? Step) GateVerdictForRequest(string given, RoomKey? target)
+    {
+        (GateVerdict, RoomKey?, GateStep?) goBack = (GateVerdict.GoBack, null, null);
+        ResumeKind engine = EngineInCharge;
+        if (engine == ResumeKind.None) return goBack;
+        // Already being gone back for, or waiting their turn.
+        if (_busy && SameName(given, _senderGiven)) return goBack;
+        if (_queued.Exists(q => SameName(q.Given, given))) return goBack;
+        if (engine == ResumeKind.Loop && _gatedOnLoop.TryGetValue(given, out var noted)
+            && (target is null || target == noted.From)
+            && (NowProvider() - noted.At <= ComebackWindow
+                || _gateFetches.Exists(f => f.Proven && SameName(f.Given, given) && f.From == noted.From)))
+            return (GateVerdict.LoopRefuses, noted.From, null);
+        if (engine == ResumeKind.Lair && _inviteOnSight.Contains(given))
+            return (GateVerdict.LairInvitesOnSight, null, null);
+        if (_dropLineSeen.Contains(given)) return goBack;
+
         DateTimeOffset since = _seenFollowingAt.GetValueOrDefault(given, DateTimeOffset.MinValue);
+        GateStep? crossed = null;
         if (target is { } named)
-            return _loopGateCrossed.TryGetValue(named, out var crossed) && crossed.At > since
-                && TurnedAwayBy(given, crossed.Exit) ? named : null;
-        (RoomKey From, RoomExit Exit, DateTimeOffset At)? latest = null;
-        foreach (KeyValuePair<RoomKey, (RoomExit Exit, DateTimeOffset At)> kv in _loopGateCrossed)
-            if (latest is not { } l || kv.Value.At > l.At) latest = (kv.Key, kv.Value.Exit, kv.Value.At);
-        return latest is { } last && last.At > since && TurnedAwayBy(given, last.Exit) ? last.From : null;
+        {
+            if (_gateCrossed.TryGetValue(named, out GateStep there)) crossed = there;
+        }
+        else
+        {
+            foreach (GateStep step in _gateCrossed.Values)
+                if (crossed is not { } latest || step.At > latest.At) crossed = step;
+        }
+        if (crossed is not { } gate || gate.At <= since) return goBack;
+        return (JudgeGateDrop(given, gate, engine, SignalledHold(given)), gate.From, gate);
+    }
+
+    private static string Named(GateStep gate) =>
+        $"{gate.Direction.ToLongName()} out of {gate.From.Map}/{gate.From.Room}";
+
+    // The walk went back for them once and the same exit has turned them away
+    // again: it would every time. The walk ends where it stands, the player is
+    // told whom and where, and no second pickup is started (user, 2026-10-10).
+    private void EndWalkAt(string given, GateStep gate)
+    {
+        _log?.Info(LogCategory,
+            $"{given} was turned away again at the exit {Named(gate)}, after we went back for them once — ending the walk here; no second pickup.");
+        Notice?.Invoke($"[Walk ended - {given} can't pass the exit {Named(gate)}; went back for them once already]");
+        if (_walker.State is not WalkState.Idle) _walker.Stop($"{given} can't pass the exit {Named(gate)}");
+    }
+
+    // Auto-Lair carries on without them, and invites them when a pass next finds
+    // them in a room it enters.
+    private void LeaveToTheNextPass(string given, RoomKey? from)
+    {
+        if (!_inviteOnSight.Add(given)) return;
+        _log?.Info(LogCategory,
+            $"{given} was turned away at an exit{(from is { } r ? $" out of {r.Map}/{r.Room}" : "")} — Auto-Lair carries on, and invites them when a pass next finds them.");
+    }
+
+    // A room's occupants were read. One of them may be a member Auto-Lair is to
+    // invite on sight. A `look` into the next room shows who stands there, not here.
+    private void OnEntitiesObserved(RoomEntitiesObservation observation)
+    {
+        if (_inviteOnSight.Count == 0 || _busy || MasterOff) return;
+        if (!_autoLair.IsActive || _tracker.IsPeekSuppressed()) return;
+        DateTimeOffset now = NowProvider();
+        foreach (RoomEntity entity in observation.Entities)
+        {
+            if (entity.Kind != EntityKind.Player) continue;
+            string given = GivenName(entity.ResolvedName);
+            if (!_inviteOnSight.Contains(given) || MemberInParty(given)) continue;
+            if (now - _invitedOnSightAt.GetValueOrDefault(given, DateTimeOffset.MinValue) < OnSightInviteCooldown) continue;
+            _invitedOnSightAt[given] = now;
+            _log?.Info(LogCategory, $"{given} is here — inviting them back, as Auto-Lair's pass found them.");
+            _party.Invite(given);
+        }
     }
 
     private static bool SameName(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
@@ -628,9 +931,23 @@ public sealed class PartyComebackManager : IDisposable
     // room display, so this only has to cover lag.
     private static readonly TimeSpan OwnMoveWindow = TimeSpan.FromSeconds(5);
 
+    // Lets go of the @wait a member has out with us (PartyEssentialHandlers.
+    // ReleaseWait).
+    public Action<string>? ReleaseMemberWait { get; set; }
+
     private void OnMemberLeftBehind(string given)
     {
         if (string.IsNullOrEmpty(given)) return;
+        // Their @wait is let go whatever is decided, since it would park a walk back
+        // to them. What it says about why they were left is read first, here, so
+        // the reading doesn't hang on which handler of the event runs before which.
+        bool signalledHold = SignalledHold(given);
+        DecideForLeftBehind(given, signalledHold);
+        ReleaseMemberWait?.Invoke(given);
+    }
+
+    private void DecideForLeftBehind(string given, bool signalledHold)
+    {
         if (MasterOff) return;
         if (_ownTeleportAt is { } at && NowProvider() - at <= OwnTeleportWindow)
         {
@@ -655,29 +972,40 @@ public sealed class PartyComebackManager : IDisposable
         {
             IReadOnlyList<RoomKey> path = _tracker.GetHistory();
             RoomKey? leftAt = path.Count >= 2 ? path[1] : null;
-            NoteLeftOnTrip(given, leftAt);
+            NoteLeftOnTrip(given, leftAt, named: false);
             _log?.Info(LogCategory,
                 $"{given} was left behind {(leftAt is { } r ? $"at {r.Map}/{r.Room} " : "")}on the train trip — fetching them when the training is done.");
             return;
         }
         _dropLineSeen.Add(given);
-        // A loop that goes through an exit this member can't pass would leave them
-        // there again every lap, so it carries on without them (the rule is above
-        // LeftAtAGateOnOurLoop). Held or too heavy on that same step, they are gone
-        // back for.
-        if (LoopIsTheEngine && !_tracker.LastMoveWasManual && _lastStepGate is { } gate && TurnedAwayBy(given, gate.Exit))
+        // Dropped behind an engine step through an exit that lets through only
+        // some: what the engine does is its own (the rule is at the head of "a
+        // member an exit turned away"). Held or too heavy on that same step, they
+        // are gone back for like anyone.
+        ResumeKind engine = SnapshotRunningEngine().Kind;
+        if (_lastStepGate is { } gate && engine != ResumeKind.None)
         {
-            _gatedOnLoop[given] = (gate.From, NowProvider());
-            _log?.Info(LogCategory,
-                $"{given} was turned away at the exit our loop took out of {gate.From.Map}/{gate.From.Room} — not going back; the loop would leave them there again.");
-            return;
+            switch (JudgeGateDrop(given, gate, engine, signalledHold))
+            {
+                case GateVerdict.LoopRefuses:
+                    _gatedOnLoop[given] = (gate.From, NowProvider());
+                    _log?.Info(LogCategory,
+                        $"{given} was turned away at the exit our loop took out of {gate.From.Map}/{gate.From.Room} — not going back; the loop would leave them there again.");
+                    return;
+                case GateVerdict.LairInvitesOnSight:
+                    LeaveToTheNextPass(given, gate.From);
+                    return;
+                case GateVerdict.WalkEnds:
+                    EndWalkAt(given, gate);
+                    return;
+            }
         }
         // One step can leave several behind (an exit that turns away more than one
         // follower prints the line for each): the others wait their turn.
         if (_busy)
         {
             if (!string.Equals(given, _senderGiven, StringComparison.OrdinalIgnoreCase) && !_tracker.LastMoveWasManual)
-                QueueRecovery(given, null, TelepathReply(given), evenIdle: false);
+                QueueRecovery(given, null, TelepathReply(given), tripFetch: false, roomUnconfirmed: false);
             return;
         }
         if (SnapshotRunningEngine().Kind == ResumeKind.None)
@@ -711,19 +1039,28 @@ public sealed class PartyComebackManager : IDisposable
 
     // Single funnel for both entry paths: gate on party-full + return-distance,
     // decline via @forget if we can't come, else snapshot / stop / walk.
-    // evenIdle: go although no walk, loop or Auto-Lair is running to be put back
-    // afterwards (the fetch that ends a train trip).
+    // tripFetch: the fetch of a member a train trip of ours left. It goes although
+    // no walk, loop or Auto-Lair is running to be put back afterwards, and from
+    // however far: the return-distance limit is for a request out of the blue, and
+    // this one is for a member our own trip walked away from (user, 2026-10-10).
+    // roomUnconfirmed: the room is our own guess (the one our step left when the
+    // game dropped them), to be checked for them on arrival.
     private void BeginRecovery(string senderGiven, RoomKey? target, Action<string> reply,
-        ResumeTarget? carried = null, bool evenIdle = false)
+        ResumeTarget? carried = null, bool tripFetch = false, bool roomUnconfirmed = false)
     {
         if (string.IsNullOrEmpty(senderGiven)) return;
         if (_busy)
         {
-            // The member we're backtracking for now says where they are — go there.
-            if (target is { } there && _phase == ComebackPhase.WalkingBacktrack
-                && string.Equals(senderGiven, _senderGiven, StringComparison.OrdinalIgnoreCase))
+            bool same = string.Equals(senderGiven, _senderGiven, StringComparison.OrdinalIgnoreCase);
+            // On the way to the room we guessed, and they name the same one.
+            if (same && target == _walkTarget && _phase == ComebackPhase.WalkingToRoom) _roomUnconfirmed = false;
+            // The member we're looking for now says where they are — go there.
+            bool guessedElsewhere = _phase == ComebackPhase.WalkingToRoom && _roomUnconfirmed && target != _walkTarget;
+            if (target is { } there && same && (_phase == ComebackPhase.WalkingBacktrack || guessedElsewhere))
             {
-                _log?.Info(LogCategory, $"{senderGiven} is at {there.Map}/{there.Room} — backtrack dropped, walking there");
+                _log?.Info(LogCategory,
+                    $"{senderGiven} is at {there.Map}/{there.Room} — {(guessedElsewhere ? "not where we left them" : "backtrack dropped")}, walking there");
+                _roomUnconfirmed = false;
                 _reply = reply;
                 _backtrack.Clear();
                 _backtrackIndex = 0;
@@ -738,9 +1075,9 @@ public sealed class PartyComebackManager : IDisposable
             // Somebody else is being fetched: this one is next, with the room they
             // name. Without the queue the second of two followers an exit turned
             // away was answered and then never gone back for.
-            if (!string.Equals(senderGiven, _senderGiven, StringComparison.OrdinalIgnoreCase))
+            if (!same)
             {
-                QueueRecovery(senderGiven, target, reply, evenIdle);
+                QueueRecovery(senderGiven, target, reply, tripFetch, roomUnconfirmed);
                 reply($"comeback already in progress — fetching {_senderGiven} first, then you");
                 return;
             }
@@ -782,7 +1119,7 @@ public sealed class PartyComebackManager : IDisposable
                 DeclineAndForget(senderGiven);
                 return;
             }
-            if (hops > ReturnDistanceRooms)
+            if (!tripFetch && hops > ReturnDistanceRooms)
             {
                 reply($"you're {hops} rooms off (limit {ReturnDistanceRooms}) — can't come, forget me");
                 DeclineAndForget(senderGiven);
@@ -796,7 +1133,7 @@ public sealed class PartyComebackManager : IDisposable
         ResumeTarget resume = carried ?? SnapshotRunningEngine();
         if (resume.Kind == ResumeKind.None && TakeParkedResume(senderGiven) is { } parked)
             resume = parked;
-        if (resume.Kind == ResumeKind.None && !evenIdle)
+        if (resume.Kind == ResumeKind.None && !tripFetch)
         {
             reply("I can't I'm idle");
             return;
@@ -806,6 +1143,8 @@ public sealed class PartyComebackManager : IDisposable
         _busy = true;
         _phase = ComebackPhase.Idle;
         _resume = resume;
+        _tripFetch = tripFetch;
+        _roomUnconfirmed = roomUnconfirmed && target is not null;
         RecoveringChanged?.Invoke();
         _senderGiven = senderGiven;
         _reply = reply;
@@ -869,11 +1208,14 @@ public sealed class PartyComebackManager : IDisposable
         // reconnect doesn't keep telepathing @comeback at them.
         ForgetLeaderCallback?.Invoke(given);
         _pendingProbes.Remove(given);
-        // Waiting their turn, or kept for the end of a train trip: neither any more.
+        // Waiting their turn, kept for the end of a train trip, awaited after one,
+        // or to be invited on sight: none of it any more.
         _queued.RemoveAll(q => SameName(q.Given, given));
-        _leftOnTrip.RemoveAll(l => SameName(l.Given, given));
+        ForgetTripMember(given);
         _gatedOnLoop.Remove(given);
         _dropLineSeen.Remove(given);
+        _gateFetches.RemoveAll(f => SameName(f.Given, given));
+        ForgetOnSight(given);
 
         if (wasRecovering)
         {
@@ -915,21 +1257,24 @@ public sealed class PartyComebackManager : IDisposable
 
     // Members waiting for the recovery in flight to end, oldest first: who, the
     // room they named (none: backtrack) and how to answer them.
-    private readonly List<(string Given, RoomKey? Target, Action<string> Reply, bool EvenIdle)> _queued = new();
+    private readonly List<(string Given, RoomKey? Target, Action<string> Reply, bool TripFetch, bool RoomUnconfirmed)> _queued = new();
 
     // For the bug report: who is waiting behind the recovery in flight.
     public IReadOnlyList<string> QueuedRecoveries => _queued.Select(q => q.Given).ToList();
 
-    private void QueueRecovery(string given, RoomKey? target, Action<string> reply, bool evenIdle)
+    private void QueueRecovery(string given, RoomKey? target, Action<string> reply, bool tripFetch, bool roomUnconfirmed)
     {
         int at = _queued.FindIndex(q => string.Equals(q.Given, given, StringComparison.OrdinalIgnoreCase));
         if (at >= 0)
         {
-            // Asked again, perhaps with a room this time: the newer word stands.
-            _queued[at] = (given, target ?? _queued[at].Target, reply, evenIdle || _queued[at].EvenIdle);
+            // Asked again, perhaps with a room this time: the newer word stands, and
+            // a room they name is no longer our guess.
+            var was = _queued[at];
+            _queued[at] = (given, target ?? was.Target, reply, tripFetch || was.TripFetch,
+                target is null ? was.RoomUnconfirmed : roomUnconfirmed);
             return;
         }
-        _queued.Add((given, target, reply, evenIdle));
+        _queued.Add((given, target, reply, tripFetch, roomUnconfirmed && target is not null));
         _log?.Info(LogCategory, $"{given} is left behind too — fetching them after {_senderGiven}");
     }
 
@@ -939,12 +1284,27 @@ public sealed class PartyComebackManager : IDisposable
     {
         while (_queued.Count > 0)
         {
-            (string given, RoomKey? target, Action<string> reply, bool evenIdle) = _queued[0];
+            (string given, RoomKey? target, Action<string> reply, bool tripFetch, bool roomUnconfirmed) = _queued[0];
             _queued.RemoveAt(0);
-            BeginRecovery(given, target, reply, resume, evenIdle);
+            BeginRecovery(given, target, reply, resume, tripFetch, roomUnconfirmed);
             if (_busy) return true;
         }
         return false;
+    }
+
+    private void ForgetTripMember(string given)
+    {
+        _leftOnTrip.RemoveAll(l => SameName(l.Given, given));
+        _awaitedAfterTrip.Remove(given);
+        _lastTripRoll?.Names.Remove(given);
+        _owedTripFetch?.Left.RemoveAll(l => SameName(l.Given, given));
+    }
+
+    private void ForgetOnSight(string given)
+    {
+        _inviteOnSight.Remove(given);
+        _invitedOnSightAt.Remove(given);
+        _lairAnswered.Remove(given);
     }
 
     private void Resume()
@@ -1005,10 +1365,18 @@ public sealed class PartyComebackManager : IDisposable
         _pendingProbes.Clear();
         _queued.Clear();
         _leftOnTrip.Clear();
+        _answeredOnTrip.Clear();
+        _awaitedAfterTrip.Clear();
+        _lastTripRoll = null;
+        _owedTripFetch = null;
         _gatedOnLoop.Clear();
         _dropLineSeen.Clear();
-        _loopGateCrossed.Clear();
+        _gateCrossed.Clear();
+        _gateFetches.Clear();
         _lastStepGate = null;
+        _inviteOnSight.Clear();
+        _invitedOnSightAt.Clear();
+        _lairAnswered.Clear();
         GoIdle();
         if (had) _log?.Info(LogCategory, $"recovery state cleared ({reason})");
     }
@@ -1020,6 +1388,8 @@ public sealed class PartyComebackManager : IDisposable
         _walkTarget = null;
         _leftBehind = false;
         _okPremature = false;
+        _tripFetch = false;
+        _roomUnconfirmed = false;
         _phase = ComebackPhase.Idle;
         _followTimer.Stop();
         _backtrack.Clear();
@@ -1060,7 +1430,15 @@ public sealed class PartyComebackManager : IDisposable
 
     private void OnWalkEvent(WalkEvent e)
     {
-        if (!_busy) return;
+        if (!_busy)
+        {
+            // A walk that is over (arrived, failed, or stopped for good): the one
+            // pickup it made from an exit was that walk's.
+            if (e.Kind is WalkEventKind.Finished or WalkEventKind.Failed
+                || (e.Kind == WalkEventKind.Stopped && !e.WillResume))
+                _gateFetches.RemoveAll(f => f.Engine == ResumeKind.Walker);
+            return;
+        }
         // Our own recovery walks are only ever started on an idle walker, so a
         // Stopped mid-recovery — or a Finished for some other room — means the user
         // (or another engine) took the wheel with a walk of their own. Stand down and
@@ -1082,7 +1460,11 @@ public sealed class PartyComebackManager : IDisposable
         switch (_phase)
         {
             case ComebackPhase.WalkingToRoom:
-                if (e.Kind == WalkEventKind.Finished) ReInviteAndAwait();
+                if (e.Kind == WalkEventKind.Finished)
+                {
+                    if (_roomUnconfirmed && !FollowerHere()) NotWhereTheTripLeftThem();
+                    else ReInviteAndAwait();
+                }
                 else if (e.Kind == WalkEventKind.Failed) { NoteRecoveryFailedToReach(); _reply("path failed — resuming"); Resume(); }
                 break;
             case ComebackPhase.WalkingBacktrack:
@@ -1099,7 +1481,9 @@ public sealed class PartyComebackManager : IDisposable
         // GetHistory() is newest-first: [0] is the current room, [1] the
         // previous, etc. Skip [0] and walk the trail backwards.
         IReadOnlyList<RoomKey> history = _tracker.GetHistory();
-        int budget = Math.Max(1, ReturnDistanceRooms);
+        // A train trip's fetch looks down the whole trail: the return distance
+        // doesn't bound it.
+        int budget = _tripFetch ? history.Count : Math.Max(1, ReturnDistanceRooms);
         for (int i = 1; i < history.Count && _backtrack.Count < budget; i++)
             _backtrack.Add(history[i]);
     }
@@ -1129,13 +1513,16 @@ public sealed class PartyComebackManager : IDisposable
         StepBacktrack();
     }
 
-    private bool FollowerHere()
+    private bool FollowerHere() => InOurRoom(_senderGiven);
+
+    // The room's occupants as last read list that player.
+    private bool InOurRoom(string given)
     {
         if (_classifier.Current is not { } obs) return false;
         foreach (RoomEntity entity in obs.Entities)
         {
             if (entity.Kind == EntityKind.Player
-                && string.Equals(entity.ResolvedName, _senderGiven, StringComparison.OrdinalIgnoreCase))
+                && string.Equals(entity.ResolvedName, given, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
         return false;
@@ -1171,7 +1558,8 @@ public sealed class PartyComebackManager : IDisposable
         _queued.RemoveAll(q => string.Equals(q.Given, GivenName(name), StringComparison.OrdinalIgnoreCase));
         _gatedOnLoop.Remove(GivenName(name));
         _dropLineSeen.Remove(GivenName(name));
-        _leftOnTrip.RemoveAll(l => SameName(l.Given, GivenName(name)));
+        ForgetTripMember(GivenName(name));
+        ForgetOnSight(GivenName(name));
         _seenFollowingAt[GivenName(name)] = NowProvider();
 
         if (!_busy || _phase == ComebackPhase.Idle) return;
@@ -1237,11 +1625,28 @@ public sealed class PartyComebackManager : IDisposable
     // held, not dropped: its walk froze with every other, and its wait for the
     // follow did not time out. Its walk resumes with the rest; this settles a
     // rejoin that was seen meanwhile.
+    //
+    // A train trip that ended meanwhile fetches whom it left now, by the rule a
+    // @comeback kept for the switch is replayed by: only while it is still fresh
+    // (ComebackWindow), since past that the party has long moved on.
     public void SettleAfterMasterSwitch()
     {
-        if (_rejoinedWhileOff is not { } name) return;
-        _rejoinedWhileOff = null;
-        OnMemberFollowConfirmed(name);
+        if (_rejoinedWhileOff is { } name)
+        {
+            _rejoinedWhileOff = null;
+            OnMemberFollowConfirmed(name);
+        }
+        if (_owedTripFetch is not { } owed) return;
+        _owedTripFetch = null;
+        if (owed.Left.Count == 0) return;
+        TimeSpan age = NowProvider() - owed.At;
+        if (age > ComebackWindow)
+        {
+            _log?.Info(LogCategory,
+                $"master switch back on — the train trip that left {string.Join(", ", owed.Left.Select(l => l.Given))} ended {age.TotalMinutes:0.#} min ago, past the {ComebackWindow.TotalMinutes:0.#} min @comeback window: not going back on our own.");
+            return;
+        }
+        FetchLeftOnTrip(owed.Left);
     }
 
     private void OnFollowTimeout(object? sender, EventArgs e)
@@ -1257,6 +1662,15 @@ public sealed class PartyComebackManager : IDisposable
     // Wraps a telepath reply to the probed member in the same { } meta-braces the
     // engine's SendReply uses, so path-B narration reads like any @-command answer.
     private Action<string> TelepathReply(string given) => msg => _wire.Send($"/{given} {{{msg}}}");
+
+    // On our list as following us (an [Invited] row is on the list and isn't).
+    private bool MemberFollowing(string given)
+    {
+        foreach (PartyMember m in _party.State.Members)
+            if (!m.IsSelf && !m.IsInvited && GivenName(m.Name).Equals(given, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
 
     private bool MemberInParty(string given)
     {

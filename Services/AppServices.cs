@@ -8711,13 +8711,16 @@ public sealed class AppServices
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
         // A loop doesn't go back for a member an exit of its circuit turned away.
-        // What tells that from a hold: a wait or hold the member has out with us
-        // (or took back a moment ago), and what we hold of them against the exit's
-        // own conditions (the @level probe, their class and race from `who`, the
-        // last purse they reported, the items handed to them or counted).
-        PartyComeback.MemberSignalledHold = given =>
-            PartyEssentials.WaitingMembers.Contains(given)
-            || PartyEssentials.OkedWithin(given, TimeSpan.FromSeconds(5));
+        // What tells that from a hold: a wait or hold the member has out with us,
+        // and what we hold of them against the exit's own conditions (the @level
+        // probe, their class and race from `who`, the last purse they reported, the
+        // items handed to them or counted).
+        PartyComeback.MemberSignalledHold = given => PartyEssentials.WaitingMembers.Contains(given);
+        // Their pending @wait would park the walk back to them behind the party-wait
+        // gate. Let go by the manager itself, after it has read what the wait says.
+        PartyComeback.ReleaseMemberWait = PartyEssentials.ReleaseWait;
+        PartyComeback.Notice = text =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(text));
         PartyComeback.MemberCanPass = (given, exit) =>
         {
             Models.GameData.PlayerRecord? known = Players.Find(given);
@@ -8728,9 +8731,11 @@ public sealed class AppServices
                 PurseCopper: PartyWealth.LastReading(given),
                 CopiesHeld: itemId => PartyHandOvers.CopiesRememberedFor(given, itemId)));
         };
-        // During a party train trip nobody is gone back for; they are fetched at
-        // its end (PartyTrain is built further down, and read only when asked).
-        PartyComeback.TrainTripRunning = () => PartyTrain?.TripRunning == true;
+        // During a train trip nobody is gone back for; they are fetched at its end.
+        // A party train trip, or the leader's own train or spell run with the
+        // party in tow (both are built further down, and read only when asked).
+        PartyComeback.TrainTripRunning = () =>
+            PartyTrain?.TripRunning == true || TrainerWalk?.OwnRunActive == true;
         // A dropped member's reconnect hold (or their @wait) would park the walk to
         // pick them up — the leader never moves while they wait on it.
         PartyComeback.ReleaseHolds = (given, reason) =>
@@ -8738,8 +8743,6 @@ public sealed class AppServices
             PartyDisconnectMovement.Release(given, reason);
             PartyEssentials.ReleaseWait(given);
         };
-        // Their pending @wait would park the walk back to them behind the party-wait gate.
-        Party.MemberLeftBehind += PartyEssentials.ReleaseWait;
 
         // @where reply → nav-map flash. Recognises the wrapped location reply an
         // @where'd MudPlay client telepaths back and routes it to the (open) map;
@@ -8975,11 +8978,12 @@ public sealed class AppServices
             selfTimeToLevel: () => SelfTimeToLevel().Remaining,
             telepathsPending: () => Telepaths.Queued + Telepaths.InFlight > 0,
             log: Log,
-            // A member a finished trip came back without asks to be fetched now;
-            // that request is honoured as a party member's.
-            expectComeback: given => Party.ExpectComebackFrom(given),
-            // And the ones we know we left on the way are gone back for.
-            fetchLeftOnTrip: () => PartyComeback.FetchLeftOnTrainTrip());
+            // The trip is over: whoever it came back without is gone back for, or
+            // left to the player when the player took the trip over.
+            tripEnded: (setOut, byItself) => PartyComeback.TrainTripEnded(byItself, setOut));
+        // The same for a train or spell run of the leader's own with the party in
+        // tow, which keeps no roll.
+        TrainerWalk.OwnRunOver = byItself => PartyComeback.TrainTripEnded(byItself, []);
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
         PartyLevelProbe.ProgressObserved += PartyTrain.NoteLevelProgress;
@@ -9479,6 +9483,9 @@ public sealed class AppServices
             // During the leader's party train trip the request waits for the trip to
             // end (PartyTrain is built before this).
             inTrainTrip: leader => PartyTrain.InTripOf(leader));
+        // A leader who refused, or never came: the follow the game ended without a
+        // line is ended on our side too.
+        ComebackRequest.FollowGivenUp = (leader, _) => Party.NoteFollowGivenUp(leader);
         // The trip's leader may tell us it is over after an exit has turned us out
         // of the party on our own side.
         RemoteCommands.PartyTrainEligibility = sender => PartyTrain.InTripOf(sender);
