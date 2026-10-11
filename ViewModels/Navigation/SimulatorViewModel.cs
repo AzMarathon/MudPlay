@@ -643,10 +643,17 @@ public sealed partial class SimulatorViewModel : ObservableObject
         if (Routes.Contains(_sketchOption)) SelectedRoute = _sketchOption;
     }
 
+    // How many of a route's rooms its line spells out. An area's tour can be hundreds
+    // of lairs: all of them would crowd the ranking table out of the window, and in a
+    // saved loop's notes run past what @loop send will carry. The loop itself holds
+    // every room.
+    private const int RouteRoomsShown = 20;
+
     // The rooms the run walked between, in order — the waypoints a saved loop gets.
     private static string RouteLine(AreaRank r) =>
         $"{(r.IsLoop ? $"{r.Tour.Count} waypoints" : $"{r.Tour.Count} lairs")}, {r.LapRooms} rooms a lap: " +
-        string.Join(" → ", r.Tour.Select(k => $"{k.Map}/{k.Room}"));
+        string.Join(" → ", r.Tour.Take(RouteRoomsShown).Select(k => $"{k.Map}/{k.Room}")) +
+        (r.Tour.Count > RouteRoomsShown ? $" → … ({r.Tour.Count - RouteRoomsShown} more)" : "");
 
     // Save the picked area's tour as a loop the user can run: the same rooms, in the
     // same order, the simulation walked between (the runner re-routes the legs with

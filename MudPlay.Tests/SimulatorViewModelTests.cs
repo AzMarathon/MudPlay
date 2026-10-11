@@ -195,6 +195,25 @@ public sealed class SimulatorViewModelTests : IDisposable
     }
 
     [Fact]
+    public void AWholeAreasTourIsSavedInFullButItsRouteLineStaysShort()
+    {
+        using Harness h = Build(saveLoops: true);
+        RoomKey[] tour = Enumerable.Range(0, 400).Select(i => new RoomKey(17, 1200 + i)).ToArray();
+        h.Simulator.SelectedRanking = new AreaRank("Plateau", 40, tour, 2000, new LoopSimSummary(new[] { Run }));
+
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+
+        Loop saved = Assert.IsType<Loop>(h.Loops.Get("Plateau (L40 sim)"));
+        Assert.Equal(tour, saved.Waypoints.Select(w => w.Key));
+        string route = h.Simulator.RankStats.First(s => s.Label == "Route").Value;
+        Assert.StartsWith("400 lairs, 2000 rooms a lap: 17/1200 → 17/1201 → ", route);
+        Assert.EndsWith("17/1219 → … (380 more)", route);
+        // Notes that named all 400 rooms were refused by the player it was sent to.
+        Loop received = MudPlay.Game.Remote.LoopShareCodec.Decode(MudPlay.Game.Remote.LoopShareCodec.Encode(saved));
+        Assert.Equal(saved.Notes, received.Notes);
+    }
+
+    [Fact]
     public void ASavedLoopRowOffersNoSave()
     {
         using Harness h = Build();
