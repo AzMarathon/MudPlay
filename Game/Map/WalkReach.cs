@@ -28,36 +28,39 @@ public static class WalkReach
     public static IReadOnlySet<RoomKey> From(RoomGraphManager graph, RoomKey start)
     {
         ArgumentNullException.ThrowIfNull(graph);
-        return graph.Derived($"walk reach {start}", () => Build(graph, start, stayOnMap: false));
+        return graph.Derived($"walk reach {start}", () => Build(graph, start));
     }
 
-    // The same walk kept to the start room's own map: the land a room stands on.
-    // It never steps onto another map, so it doesn't come back from one either;
-    // a stretch of the map reached only through another map is another land.
-    // "Connected rooms ... [that] share map numbers" (the owner, 2026-10-11), for
-    // the rooms a death seen in one room stands for (Recovery.LearnedArrivalLookup).
-    public static IReadOnlySet<RoomKey> OnItsMap(RoomGraphManager graph, RoomKey start)
+    // Whether room is in the land start stands on: the same walk kept to the
+    // start room's own map. It never steps onto another map, so it doesn't come
+    // back from one either; a stretch of the map reached only through another map
+    // is another land. "Connected rooms ... [that] share map numbers" (the owner,
+    // 2026-10-11), for the rooms a death seen in one room stands for
+    // (Recovery.LearnedArrivalLookup). False for a room the graph doesn't have.
+    //
+    // The whole map's lands are worked out together the first time one of its
+    // rooms is asked about (MapLands), and kept with the graph: asking about many
+    // rooms of a map is then a lookup each.
+    public static bool OnItsMap(RoomGraphManager graph, RoomKey start, RoomKey room)
     {
         ArgumentNullException.ThrowIfNull(graph);
-        return graph.Derived($"walk reach on its map {start}", () =>
-        {
-            HashSet<RoomKey> reached = Build(graph, start, stayOnMap: true);
-            // Two rooms that reach each other reach the same rooms, and most of a
-            // land is one such knot: its rooms share one set, where a set each
-            // would be thousands of rooms held once per room asked about.
-            List<(RoomKey Start, HashSet<RoomKey> Reached)> lands =
-                graph.Derived("lands walked", static () => new List<(RoomKey, HashSet<RoomKey>)>());
-            lock (lands)
-            {
-                foreach ((RoomKey other, HashSet<RoomKey> same) in lands)
-                    if (same.Contains(start) && reached.Contains(other)) return same;
-                lands.Add((start, reached));
-            }
-            return reached;
-        });
+        return start.Map == room.Map && Lands(graph, start.Map).Reaches(start, room);
     }
 
-    private static HashSet<RoomKey> Build(RoomGraphManager graph, RoomKey start, bool stayOnMap)
+    // The rooms that reach each other and this one. They have one land between
+    // them, and this is the same object for each of them, so it serves as the
+    // land's name to whoever keeps something per land. Null for a room the graph
+    // doesn't have.
+    public static IReadOnlyList<RoomKey>? KnotOnItsMap(RoomGraphManager graph, RoomKey room)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        return Lands(graph, room.Map).KnotOf(room);
+    }
+
+    private static MapLands Lands(RoomGraphManager graph, int map) =>
+        graph.Derived($"lands of map {map}", () => new MapLands(graph, map));
+
+    private static HashSet<RoomKey> Build(RoomGraphManager graph, RoomKey start)
     {
         HashSet<RoomKey> reached = [];
         if (graph.GetRoom(start) is null) return reached;
@@ -69,7 +72,7 @@ public static class WalkReach
             if (graph.GetRoom(todo.Pop()) is not { } room) continue;
             foreach ((Direction direction, RoomExit exit) in room.Exits)
             {
-                if (exit.Target.Map != room.Key.Map && (stayOnMap || direction == Direction.Teleport)) continue;
+                if (exit.Target.Map != room.Key.Map && direction == Direction.Teleport) continue;
                 if (graph.GetRoom(exit.Target) is not null && reached.Add(exit.Target)) todo.Push(exit.Target);
             }
         }

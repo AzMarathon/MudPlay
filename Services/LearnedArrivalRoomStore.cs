@@ -122,6 +122,17 @@ public sealed class LearnedArrivalRoomStore
             ? readings[0].Nearby
             : 0;
 
+    // Every reading in use with its nearby count, in no order: for a reader that
+    // goes through all of them and has no use for Known's sorting.
+    public IEnumerable<(RoomKey DiedIn, RoomKey Arrival, int Nearby)> InUse
+    {
+        get
+        {
+            foreach ((RoomKey diedIn, List<(RoomKey Arrival, int Seen, int Nearby)> readings) in _seen)
+                if (!IsDisputed(readings)) yield return (diedIn, readings[0].Arrival, readings[0].Nearby);
+        }
+    }
+
     private static readonly RoomKey[] DefaultArrivals =
     {
         Game.Recovery.HangupDeathArrivalRooms.Temple, Game.Recovery.HangupDeathArrivalRooms.EvilTomb,

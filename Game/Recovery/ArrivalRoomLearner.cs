@@ -32,6 +32,11 @@ namespace MudPlay.Game.Recovery;
 // On Stock the list has those rooms; elsewhere they stay unlearned, which costs
 // nothing, since standing in the room it left says nothing of a room like that.
 //
+// A death that ends as the room's land already has it (LearnedArrivalLookup), in
+// a room with no reading of its own, makes no entry for the room: it is counted
+// on the reading it bears out. Only a room's first word and its exceptions get an
+// entry, so the file stays as small as what it says.
+//
 // Where the Stock list is the world's own (an unmodified Stock set, a zone
 // Paradigm shares with Stock) nothing is learned, and a death that ends where the
 // list says is no news. One that ends somewhere the list doesn't allow is:
@@ -202,17 +207,31 @@ public sealed class ArrivalRoomLearner
                 said = true;
             }
         }
-        else if (trust == HangupArrivalListTrust.Paradigm && _inAlbion?.Invoke(diedIn) == true)
+        bool albion = expected is null && trust == HangupArrivalListTrust.Paradigm && _inAlbion?.Invoke(diedIn) == true;
+        if (albion)
         {
             // Albion's dead are known to arrive in the Burial Vault: seeing it adds nothing.
             expected = new[] { HangupDeathArrivalRooms.ParadigmAlbionVault };
             onWhoseWord = "Albion";
             if (Fits(expected)) return;
         }
+        // What the deaths seen in its land say. Not asked in Albion, where a land's
+        // reading is not set against the vault and only the room's own is.
         else if (_lookup.LandSays(diedIn).Arrivals is { } land)
         {
-            expected = land.Select(l => l.Arrival).Distinct().ToList();
-            onWhoseWord = $"a death seen in {land[0].SeenIn}, a room of the same land,";
+            // As its land already has it, and the room has no reading of its own:
+            // the death is counted on the reading it bears out, and no entry is
+            // made for the room. The land goes on speaking for it, and the file
+            // doesn't come to hold every room anyone died in.
+            if (!_store.HasReadingOf(diedIn))
+                foreach (LearnedArrival reading in land)
+                    if (Fits(new[] { reading.Arrival }) && _store.LearnNearby(reading.SeenIn, diedIn, reading.Arrival))
+                        return;
+            if (expected is null)
+            {
+                expected = land.Select(l => l.Arrival).Distinct().ToList();
+                onWhoseWord = $"a death seen in {land[0].SeenIn}, a room of the same land,";
+            }
         }
 
         LearnedArrivalOutcome outcome = _store.Learn(diedIn, arrivedIn);

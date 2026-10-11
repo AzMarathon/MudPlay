@@ -22,7 +22,11 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 14, "Room Number": 1814, "Name": "Terra Ista, Path",
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
-            "N": "0", "S": "14/1813", "E": "0", "W": "0",
+            "N": "14/1815", "S": "14/1813", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 14, "Room Number": 1815, "Name": "Terra Ista, Clearing",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "14/1814", "E": "0", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 14, "Room Number": 1900, "Name": "Isle Shrine",
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
@@ -116,7 +120,8 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         log.EntryAdded += _log.Add;
         _store = new LearnedArrivalRoomStore(log, set => Path.Combine(_root, set, "learned-arrival-rooms.json"));
         _store.OnActiveSetChanged("alpha");
-        _lookup = new LearnedArrivalLookup(_store, room => WalkReach.OnItsMap(graph, room));
+        _lookup = new LearnedArrivalLookup(_store,
+            room => WalkReach.KnotOnItsMap(graph, room), (from, room) => WalkReach.OnItsMap(graph, from, room));
         _board = new StandardListContradictions(() => _realm, () => "alpha", save: () => { }, log);
         _learner = new ArrivalRoomLearner(_tracker, _store, _lookup, () => Trust, graph.CouldBeTakenFor,
             inAlbion: room => room == Kingsport || room == Vault,
@@ -304,7 +309,7 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         _tracker.NoteFollowMove(Direction.N);
         Assert.Equal(RoomConfidence.Pending, _tracker.State.Confidence);
 
-        _tracker.NoteRoomObserved(new RoomObservation("Terra Ista, Path", new HashSet<Direction> { Direction.S }));
+        _tracker.NoteRoomObserved(new RoomObservation("Terra Ista, Path", new HashSet<Direction> { Direction.N, Direction.S }));
 
         Assert.Equal(new RoomKey(14, 1814), _tracker.State.CurrentRoom?.Key);
         Assert.Equal(RoomConfidence.Confirmed, _tracker.State.Confidence);
@@ -471,11 +476,58 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         Assert.Null(_lookup.For(Darkwood));
         Assert.Null(_lookup.For(Kingsport));
 
+        // A death on the path that ends as the land has it makes no entry for the
+        // path: it is counted on the landing's reading, which goes on speaking
+        // for the path, and the land's reading is now borne out by two deaths.
+        Assert.False(_lookup.LandSays(path).Settled);
         DieIn(path);
         _tracker.NoteRoomObserved(ShrineShown);
-        Assert.Equal(new[] { new LearnedArrival(Shrine, path) }, _lookup.For(path));
+        Assert.False(_store.HasReadingOf(path));
+        Assert.Equal((1, 1), (_store.Count, _store.SeenNearby(Landing)));
+        Assert.Equal(new[] { new LearnedArrival(Shrine, Landing) }, _lookup.For(path));
+        Assert.True(_lookup.LandSays(path).Settled);
+        Assert.Contains(_log, e => e.Severity == LogSeverity.Info
+            && e.Message.StartsWith("as its land has it: the dead of 14/1814 arrive in 14/1900, like those of 14/1813"));
         Assert.Equal(0, Warnings);
         Assert.Empty(_lookup.AtOddsWithTheirLand());
+
+        // A room with a reading of its own keeps getting its own counted.
+        DieIn(Landing);
+        _tracker.NoteRoomObserved(ShrineShown);
+        Assert.Equal(1, _store.SeenNearby(Landing));
+        Assert.Equal(1, _store.Count);
+    }
+
+    // Two readings in one land, one each: a death in a third room that ends as
+    // one of them has it is counted there, and that reading becomes the land's.
+    [Fact]
+    public void ADeathThatBearsOutOneOfTwoReadings_MakesItTheLands()
+    {
+        RoomKey path = new(14, 1814), clearing = new(14, 1815);
+        DieIn(Landing);
+        _tracker.NoteRoomObserved(ShrineShown);
+        DieIn(path);
+        _tracker.NoteRoomObserved(VaultShown);
+        Assert.False(_lookup.LandSays(Landing).Settled);
+
+        DieIn(clearing);
+        _tracker.NoteRoomObserved(VaultShown);
+
+        Assert.False(_store.HasReadingOf(clearing));
+        Assert.Equal(1, _store.SeenNearby(path));
+        (IReadOnlyList<LearnedArrival>? land, bool settled) = _lookup.LandSays(Landing);
+        Assert.True(settled);
+        Assert.Equal(new[] { new LearnedArrival(Vault, path) }, land);
+        // The landing is now the exception.
+        (RoomKey room, RoomKey own, _, bool exception) = Assert.Single(_lookup.AtOddsWithTheirLand());
+        Assert.Equal((Landing, Shrine, true), (room, own, exception));
+
+        // A grotto that leads onto the landing, with nothing leading back to it,
+        // is in none of those rooms' lands: a death there is its own reading.
+        RoomKey grotto = new(14, 1902);
+        DieIn(grotto);
+        _tracker.NoteRoomObserved(VaultShown);
+        Assert.Equal(new[] { Vault }, _store.ArrivalsFor(grotto));
     }
 
     // A death in a room of that land that ends somewhere else is "definitely

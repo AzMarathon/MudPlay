@@ -282,6 +282,11 @@ public sealed class RoomGraphManager
     // active.
     public IEnumerable<Room> Rooms => _rooms.Values;
 
+    // Every room's key, for a pass that only sorts rooms by number: the keys
+    // lie side by side, where reading each Room to get its key is a jump apiece
+    // through tens of thousands of them.
+    public IEnumerable<RoomKey> RoomKeys => _rooms.Keys;
+
     // Per-monster lair-size aggregate: for each monster named in a room's lair
     // tag, how many such rooms name it (Count) and the sum / biggest of those
     // rooms' per-room "(Max N)" caps. Built once in BuildSecondaryIndexes (all

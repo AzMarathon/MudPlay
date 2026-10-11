@@ -213,37 +213,77 @@ public sealed class WalkReachTests : IDisposable
     {
         RoomGraphManager graph = NewGraph();
 
-        IReadOnlySet<RoomKey> land = WalkReach.OnItsMap(graph, Vault);
-
         Assert.Equal(
             new HashSet<RoomKey>
             {
                 Vault, new(14, 1072), new(14, 2000), new(14, 2001), new(14, 2002), new(14, 2003),
                 new(14, 2004), new(14, 2005), new(14, 2006),
             },
-            new HashSet<RoomKey>(land));
+            Land(graph, Vault));
         // From the far side of the map's edge it is that map's land, which does
         // not come back.
-        Assert.Equal(new HashSet<RoomKey> { new(2, 11960) },
-            new HashSet<RoomKey>(WalkReach.OnItsMap(graph, new RoomKey(2, 11960))));
+        Assert.Equal(new HashSet<RoomKey> { new(2, 11960) }, Land(graph, new RoomKey(2, 11960)));
+        // A room the graph doesn't have is in no land, its own included.
+        Assert.False(WalkReach.OnItsMap(graph, new RoomKey(14, 9999), new RoomKey(14, 9999)));
+        Assert.False(WalkReach.OnItsMap(graph, Vault, new RoomKey(14, 9999)));
+        Assert.Null(WalkReach.KnotOnItsMap(graph, new RoomKey(14, 9999)));
     }
+
+    // Every room of the graph that is in the land start stands on.
+    private static HashSet<RoomKey> Land(RoomGraphManager graph, RoomKey start) =>
+        new(graph.RoomKeys.Where(room => WalkReach.OnItsMap(graph, start, room)));
 
     // The walk is one way, so the land is told from the room asked about: the
     // docks lead into the crypt and nothing leads back, so the docks' land holds
     // the crypt and the crypt's land doesn't hold the docks. Two rooms that do
-    // reach each other have one land between them, held once.
+    // reach each other have one land between them, and are one knot.
     [Fact]
-    public void TheLandIsToldFromTheRoomAskedAbout_AndRoomsThatReachEachOtherShareOne()
+    public void TheLandIsToldFromTheRoomAskedAbout_AndRoomsThatReachEachOtherAreOneKnot()
     {
         RoomGraphManager graph = NewGraph();
         RoomKey docks = new(14, 759), crypt = new(14, 1072), behindTheDoor = new(14, 2000);
 
-        Assert.Contains(crypt, WalkReach.OnItsMap(graph, docks));
-        Assert.DoesNotContain(docks, WalkReach.OnItsMap(graph, crypt));
-        Assert.Same(WalkReach.OnItsMap(graph, crypt), WalkReach.OnItsMap(graph, behindTheDoor));
-        Assert.NotSame(WalkReach.OnItsMap(graph, crypt), WalkReach.OnItsMap(graph, docks));
+        Assert.True(WalkReach.OnItsMap(graph, docks, crypt));
+        Assert.False(WalkReach.OnItsMap(graph, crypt, docks));
+        Assert.Same(WalkReach.KnotOnItsMap(graph, crypt), WalkReach.KnotOnItsMap(graph, behindTheDoor));
+        Assert.NotSame(WalkReach.KnotOnItsMap(graph, crypt), WalkReach.KnotOnItsMap(graph, docks));
+        Assert.Equal(new HashSet<RoomKey> { crypt, behindTheDoor }, new HashSet<RoomKey>(WalkReach.KnotOnItsMap(graph, crypt)!));
         // The vault leads up into the crypt and nothing leads down again.
-        Assert.DoesNotContain(Vault, WalkReach.OnItsMap(graph, crypt));
+        Assert.False(WalkReach.OnItsMap(graph, crypt, Vault));
+    }
+
+    // A map's lands are cut out in one pass: a long one-way road into a ring of
+    // rooms. Every room of the ring has the ring for its land, and they are one
+    // knot; a room of the road has the rest of the road and the ring; nothing
+    // reaches back up the road. Long enough that a walk kept on the call stack
+    // would not do.
+    [Fact]
+    public void AMapsLands_AreRightForALongRoadIntoARing()
+    {
+        const int road = 6000, ring = 400;
+        System.Text.StringBuilder rooms = new("[");
+        for (int n = 1; n <= road + ring; n++)
+        {
+            // The road runs east; the ring runs east and closes on its first room.
+            int east = n < road + ring ? n + 1 : road + 1;
+            rooms.Append(n == 1 ? "" : ",").Append(
+                $$"""{ "Map Number": 7, "Room Number": {{n}}, "Name": "Stretch {{n}}", "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 5, "N": "0", "S": "0", "E": "7/{{east}}", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }""");
+        }
+        rooms.Append(']');
+        RoomGraphManager graph = NewGraph(rooms.ToString(), "[]");
+
+        HashSet<RoomKey> ofTheRing = Land(graph, new RoomKey(7, road + 1));
+        Assert.Equal(ring, ofTheRing.Count);
+        Assert.Equal(ring, WalkReach.KnotOnItsMap(graph, new RoomKey(7, road + 1))!.Count);
+        Assert.Same(WalkReach.KnotOnItsMap(graph, new RoomKey(7, road + 1)), WalkReach.KnotOnItsMap(graph, new RoomKey(7, road + ring)));
+        Assert.DoesNotContain(new RoomKey(7, road), ofTheRing);
+
+        Assert.Equal(road + ring, Land(graph, new RoomKey(7, 1)).Count);
+        HashSet<RoomKey> fromHalfway = Land(graph, new RoomKey(7, road / 2));
+        Assert.Equal(road / 2 + 1 + ring, fromHalfway.Count);
+        Assert.DoesNotContain(new RoomKey(7, road / 2 - 1), fromHalfway);
+        // The walk that crosses maps agrees, the map having no way off it.
+        Assert.Equal(fromHalfway, new HashSet<RoomKey>(WalkReach.From(graph, new RoomKey(7, road / 2))));
     }
 
     // What the arrival learner asks before taking a typed line for a move: is it

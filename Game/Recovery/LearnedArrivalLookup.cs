@@ -17,22 +17,48 @@ namespace MudPlay.Game.Recovery;
 // A room's own reading always wins for that room. One that differs from its
 // land's is "definitely recorded" (the owner again): it is that room's, and the
 // land keeps its reading for the others. Which of two readings in one land is the
-// land's is told by number: the one held by at least two of its rooms, and by
-// more rooms than any other. Until there is one, a room with no reading of its
-// own takes every reading its land has, any of which is a room to say yes in.
+// land's is told by number: the one borne out by at least two deaths in different
+// rooms, and by more than any other. A room with a reading counts one for it,
+// and so does each death in another room that ended the same way and was counted
+// on that reading without an entry of its own (LearnedArrivalRoomStore.LearnNearby).
+// Until there is one, a room with no reading of its own takes every reading its
+// land has, any of which is a room to say yes in.
+//
+// The answer for a land reads every stored room of the map, and is asked on the
+// UI thread when a hang-up is judged and at each death learned. It is the same
+// for every room of a knot (rooms that reach each other, and so have one land
+// between them), so it is kept by knot until the store changes.
 public sealed class LearnedArrivalLookup
 {
     private readonly LearnedArrivalRoomStore _store;
-    private readonly Func<RoomKey, IReadOnlySet<RoomKey>> _landOf;
+    private readonly Func<RoomKey, object?> _knotOf;
+    private readonly Func<RoomKey, RoomKey, bool> _inLandOf;
+    // What the land says, by knot, as of _answersAt.
+    private readonly Dictionary<object, (IReadOnlyList<LearnedArrival>? Arrivals, bool Settled)> _answers =
+        new(ReferenceEqualityComparer.Instance);
+    private int _answersAt = -1;
 
-    //   landOf — WalkReach.OnItsMap for the active graph. Asked only when a
-    //            hang-up is judged, a death is learned or a bug report is made.
-    public LearnedArrivalLookup(LearnedArrivalRoomStore store, Func<RoomKey, IReadOnlySet<RoomKey>> landOf)
+    //   knotOf   — WalkReach.KnotOnItsMap for the active graph: one object for
+    //              the rooms that reach each other, null for a room the graph
+    //              doesn't have.
+    //   inLandOf — WalkReach.OnItsMap: the second room is in the land of the
+    //              first.
+    public LearnedArrivalLookup(
+        LearnedArrivalRoomStore store, Func<RoomKey, object?> knotOf, Func<RoomKey, RoomKey, bool> inLandOf)
     {
         ArgumentNullException.ThrowIfNull(store);
-        ArgumentNullException.ThrowIfNull(landOf);
+        ArgumentNullException.ThrowIfNull(knotOf);
+        ArgumentNullException.ThrowIfNull(inLandOf);
         _store = store;
-        _landOf = landOf;
+        _knotOf = knotOf;
+        _inLandOf = inLandOf;
+    }
+
+    // RoomGraphManager.GraphReloaded: the knots are other objects now, and answers
+    // kept by the old ones would never be asked for again.
+    public void Forget()
+    {
+        lock (_answers) _answers.Clear();
     }
 
     // The rooms the dead of this room are taken to arrive in, or null when no
@@ -44,30 +70,52 @@ public sealed class LearnedArrivalLookup
 
     // What the deaths seen in the rooms whose land it lies in say, its own among
     // them: what a death there is expected to show.
-    //   Settled — one reading is the land's, held by two rooms or more and by more
-    //             than any other. Otherwise every reading the land has is given.
+    //   Settled — one reading is the land's, borne out by two deaths or more and
+    //             by more than any other. Otherwise every reading the land has is
+    //             given.
     public (IReadOnlyList<LearnedArrival>? Arrivals, bool Settled) LandSays(RoomKey room)
     {
-        // Each reading of the land, by the room it sends its dead to, with the
-        // rooms it was seen in.
-        Dictionary<RoomKey, List<RoomKey>> readings = new();
-        foreach ((RoomKey seenIn, RoomKey arrival) in _store.Known)
+        // A room the graph doesn't have is in no land: only its own reading
+        // speaks for it, and that is not another such room's answer.
+        if (_knotOf(room) is not { } knot) return Work(room);
+        // A bug report can be put together off the thread that judges and learns.
+        lock (_answers)
         {
-            if (seenIn.Map != room.Map || (seenIn != room && !_landOf(seenIn).Contains(room))) continue;
-            if (!readings.TryGetValue(arrival, out List<RoomKey>? rooms)) readings[arrival] = rooms = new List<RoomKey>();
-            rooms.Add(seenIn);
+            if (_answersAt != _store.Revision)
+            {
+                _answers.Clear();
+                _answersAt = _store.Revision;
+            }
+            if (!_answers.TryGetValue(knot, out (IReadOnlyList<LearnedArrival>?, bool) answer))
+                _answers[knot] = answer = Work(room);
+            return answer;
+        }
+    }
+
+    private (IReadOnlyList<LearnedArrival>? Arrivals, bool Settled) Work(RoomKey room)
+    {
+        // Each reading of the land, by the room it sends its dead to: a room it
+        // was seen in (the lowest-numbered, so the answer doesn't turn on the
+        // order they were learned in), and how many deaths bear it out.
+        Dictionary<RoomKey, (RoomKey SeenIn, int Deaths)> readings = new();
+        foreach ((RoomKey seenIn, RoomKey arrival, int nearby) in _store.InUse)
+        {
+            if (seenIn.Map != room.Map || (seenIn != room && !_inLandOf(seenIn, room))) continue;
+            readings[arrival] = readings.TryGetValue(arrival, out (RoomKey SeenIn, int Deaths) reading)
+                ? (seenIn.Room < reading.SeenIn.Room ? seenIn : reading.SeenIn, reading.Deaths + 1 + nearby)
+                : (seenIn, 1 + nearby);
         }
         if (readings.Count == 0) return (null, false);
 
-        int most = readings.Values.Max(rooms => rooms.Count);
-        bool settled = most >= 2 && readings.Values.Count(rooms => rooms.Count == most) == 1;
+        int most = readings.Values.Max(reading => reading.Deaths);
+        bool settled = most >= 2 && readings.Values.Count(reading => reading.Deaths == most) == 1;
         List<LearnedArrival> arrivals = new();
-        foreach ((RoomKey _, List<RoomKey> rooms) in readings)
+        foreach ((RoomKey seenIn, int deaths) in readings.Values.OrderBy(reading => reading.SeenIn.Room))
         {
-            if (settled && rooms.Count != most) continue;
+            if (settled && deaths != most) continue;
             // The store's own answer for the room, so the engine's two default
             // rooms come as the pair they are.
-            foreach (RoomKey arrival in _store.ArrivalsFor(rooms[0])!) arrivals.Add(new LearnedArrival(arrival, rooms[0]));
+            foreach (RoomKey arrival in _store.ArrivalsFor(seenIn)!) arrivals.Add(new LearnedArrival(arrival, seenIn));
         }
         return (arrivals, settled);
     }

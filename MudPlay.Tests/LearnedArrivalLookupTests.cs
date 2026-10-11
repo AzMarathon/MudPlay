@@ -24,7 +24,7 @@ public sealed class LearnedArrivalLookupTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         _store = new LearnedArrivalRoomStore(new LogService(), set => Path.Combine(_root, set, "learned-arrival-rooms.json"));
         _store.OnActiveSetChanged("alpha");
-        _lookup = new LearnedArrivalLookup(_store, LandOf);
+        _lookup = new LearnedArrivalLookup(_store, KnotOf, InLandOf);
     }
 
     public void Dispose()
@@ -35,14 +35,19 @@ public sealed class LearnedArrivalLookupTests : IDisposable
     private static RoomKey Isle(int n) => new(14, 1800 + n);
 
     // The island's rooms reach each other; so do the far shore's. Isle(9) is a
-    // ledge that drops onto the island and can't be climbed back to.
-    private static IReadOnlySet<RoomKey> LandOf(RoomKey room)
+    // ledge that drops onto the island and can't be climbed back to. Rooms
+    // numbered 9000 and up are not on the map at all.
+    private static bool InLandOf(RoomKey from, RoomKey room) =>
+        from.Map == room.Map && from.Room < 9000 && room.Room < 9000
+        && from.Room / 100 == room.Room / 100 && (room.Room % 100 < 9 || room == from);
+
+    // One object for the rooms that reach each other, as the map gives it.
+    private static readonly Dictionary<(int Map, int Hundred, bool Ledge), object> Knots = new();
+    private static object? KnotOf(RoomKey room)
     {
-        HashSet<RoomKey> land = new();
-        int from = room.Room / 100 * 100;
-        for (int n = 0; n < 9; n++) land.Add(new RoomKey(room.Map, from + n));
-        if (room == Isle(9)) land.Add(room);
-        return land;
+        if (room.Room >= 9000) return null;
+        (int, int, bool) knot = (room.Map, room.Room / 100, room.Room % 100 >= 9);
+        lock (Knots) return Knots.TryGetValue(knot, out object? known) ? known : Knots[knot] = new object();
     }
 
     private IEnumerable<RoomKey>? ArrivalsFor(RoomKey room) => _lookup.For(room)?.Select(l => l.Arrival);
@@ -116,6 +121,71 @@ public sealed class LearnedArrivalLookupTests : IDisposable
         Assert.Equal(new[] { Shrine, Chapel }, ArrivalsFor(Isle(3))!.OrderBy(r => r.Room));
         Assert.False(_lookup.LandSays(Isle(3)).Settled);
         Assert.All(_lookup.AtOddsWithTheirLand(), odd => Assert.False(odd.Exception));
+    }
+
+    // A death in a room with no reading of its own that ended as another room's
+    // reading has it is counted on that reading, and counts for the land as a
+    // room with the reading would: one room and one such death make it the land's.
+    [Fact]
+    public void ADeathCountedOnAReading_BearsItOutForTheLand()
+    {
+        _store.Learn(Isle(1), Shrine);
+        _store.Learn(Isle(4), Chapel);
+        Assert.False(_lookup.LandSays(Isle(3)).Settled);
+
+        Assert.True(_store.LearnNearby(Isle(4), Isle(5), Chapel));
+
+        Assert.True(_lookup.LandSays(Isle(3)).Settled);
+        Assert.Equal(new[] { Chapel }, ArrivalsFor(Isle(3)));
+        Assert.Equal(new[] { Chapel }, ArrivalsFor(Isle(5)));
+        Assert.Equal(Isle(1), Assert.Single(_lookup.AtOddsWithTheirLand()).Room);
+    }
+
+    // The land's answer reads every stored room of the map, so it is worked out
+    // once for the rooms that share a land and kept until the store changes or
+    // the map is rebuilt.
+    [Fact]
+    public void TheLandsAnswer_IsWorkedOutOncePerLand_UntilTheStoreOrTheMapChanges()
+    {
+        // How often a stored room's land is asked about: once for each stored
+        // room of the map, each time an answer is worked out.
+        int asked = 0;
+        LearnedArrivalLookup lookup = new(_store, KnotOf, (from, room) =>
+        {
+            asked++;
+            return InLandOf(from, room);
+        });
+        for (int n = 0; n < 6; n++) _store.Learn(Isle(n), n < 4 ? Shrine : Chapel);
+
+        Assert.Equal(new[] { Shrine }, lookup.For(Isle(7))!.Select(l => l.Arrival));
+        Assert.Equal(6, asked);
+
+        // The same land again, from this room and from others of it: nothing
+        // worked out anew.
+        lookup.For(Isle(7));
+        lookup.For(Isle(8));
+        lookup.LandSays(Isle(2));
+        Assert.Equal(6, asked);
+        // Another land is another answer.
+        Assert.Null(lookup.For(new RoomKey(14, 3001)));
+        Assert.Equal(12, asked);
+
+        // The store changes: worked out anew, with the new reading.
+        _store.Learn(Isle(6), Chapel);
+        _store.LearnNearby(Isle(6), Isle(7), Chapel);
+        Assert.False(lookup.LandSays(Isle(8)).Settled);
+        Assert.Equal(12 + 7, asked);
+
+        // The map is rebuilt: the old knots' answers are dropped.
+        lookup.Forget();
+        lookup.LandSays(Isle(8));
+        Assert.Equal(12 + 7 + 7, asked);
+
+        // A room the map doesn't have is in no land, and is not given another
+        // such room's answer.
+        _store.Learn(new RoomKey(14, 9001), Shrine);
+        Assert.Equal(new[] { new LearnedArrival(Shrine, new RoomKey(14, 9001)) }, lookup.LandSays(new RoomKey(14, 9001)).Arrivals);
+        Assert.Null(lookup.LandSays(new RoomKey(14, 9002)).Arrivals);
     }
 
     // A disputed room has no reading in use, and gives its land none.

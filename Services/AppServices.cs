@@ -2369,11 +2369,6 @@ public sealed class AppServices
     // doesn't allow, against the set in play.
     public Game.Recovery.StandardListContradictions StandardListContradictions { get; private set; } = null!;
 
-    // The land a room stands on, for what a death seen in one room says of the
-    // rooms around it (Recovery.LearnedArrivalLookup). Walked the first time it
-    // is asked for, and kept with the graph.
-    private IReadOnlySet<Game.Map.RoomKey> LandOf(Game.Map.RoomKey room) => Game.Map.WalkReach.OnItsMap(RoomGraph, room);
-
     // Paradigm's Albion: the rooms that can be walked to from the Burial Vault,
     // where its dead arrive. The walk is made the first time a hang-up in one of
     // Paradigm's own rooms is judged and kept with the graph (Map.WalkReach).
@@ -10176,7 +10171,14 @@ public sealed class AppServices
         GameData.ActiveSetChanged += LearnedArrivals.OnActiveSetChanged;
         if (GameData.ActiveSet is not null) LearnedArrivals.OnActiveSetChanged(GameData.ActiveSet);
         Tick.HeartbeatElapsed += () => LearnedArrivals.TakeInOutsideChanges();
-        LearnedArrivalLands = new Game.Recovery.LearnedArrivalLookup(LearnedArrivals, LandOf);
+        // The land a room stands on, for what a death seen in one room says of
+        // the rooms around it: a map's lands are worked out the first time one of
+        // its rooms is asked about, and kept with the graph.
+        LearnedArrivalLands = new Game.Recovery.LearnedArrivalLookup(
+            LearnedArrivals,
+            room => Game.Map.WalkReach.KnotOnItsMap(RoomGraph, room),
+            (from, room) => Game.Map.WalkReach.OnItsMap(RoomGraph, from, room));
+        RoomGraph.GraphReloaded += LearnedArrivalLands.Forget;
         StandardListContradictions = new Game.Recovery.StandardListContradictions(
             () => ResolveActiveRealm()?.Realm, () => GameData.ActiveSet,
             () => { if (ResolveActiveBbs() is { } board) Bbs.Save(board); }, Log);
