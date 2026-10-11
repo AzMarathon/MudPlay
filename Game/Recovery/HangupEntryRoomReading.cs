@@ -14,4 +14,7 @@ namespace MudPlay.Game.Recovery;
 //   Albion   — Says is true because the room hung up in is in Paradigm's Albion
 //              (it can be walked to from the Burial Vault), not because a list
 //              names its arrival room.
-public readonly record struct HangupEntryRoomReading(bool? Says, RoomKey? TakenFor = null, bool Albion = false);
+//   Learned  — Says is true because a death was once seen to end in that room
+//              (LearnedArrivalRoomStore), not because a list names it.
+public readonly record struct HangupEntryRoomReading(
+    bool? Says, RoomKey? TakenFor = null, bool Albion = false, bool Learned = false);

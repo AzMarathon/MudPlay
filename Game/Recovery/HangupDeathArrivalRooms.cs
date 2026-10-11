@@ -123,14 +123,39 @@ public static class HangupDeathArrivalRooms
     //   Albion   — it is one of Paradigm's own rooms, and in Albion.
     //   inAlbion — the room can be walked to from ParadigmAlbionVault; asked only
     //              of a room the list doesn't cover, on Paradigm.
+    //   learned  — LearnedArrivalRoomStore.ArrivalsFor: the rooms a death in this
+    //              room was seen to end in.
+    //
+    // What was learned is never set against the list where the list is the
+    // world's own (an unmodified Stock set, a zone Paradigm shares with Stock): it
+    // isn't asked for there. It speaks for the rooms no list covers, and on a
+    // board whose rooms may have been edited it adds a room to the list's.
+    //
+    // A learned room is a room to say yes in and no more, as Albion's is. What was
+    // seen is where a death in that room ends. A hang-up leaves through the
+    // room's leave-the-game room first, and its dead go where THAT room sends
+    // them; the data doesn't carry leave rooms for these rooms, and on Stock alone
+    // 95 rooms name one room for both, so that a hang-up's dead end somewhere
+    // else than a death's. So coming back anywhere else is never "the wrong room".
     public static (IReadOnlyList<RoomKey>? Rooms, bool AllKnown, bool Albion) ArrivalsOn(
-        RoomKey hungUpIn, HangupArrivalListTrust trust, Func<RoomKey, bool>? inAlbion)
+        RoomKey hungUpIn, HangupArrivalListTrust trust, Func<RoomKey, bool>? inAlbion,
+        Func<RoomKey, IReadOnlyList<RoomKey>?>? learned = null)
     {
-        if (ListCovers(hungUpIn, trust)) return (For(hungUpIn), true, false);
-        return trust == HangupArrivalListTrust.Paradigm && inAlbion?.Invoke(hungUpIn) == true
-            ? (AlbionArrivals, false, true)
-            : (null, false, false);
+        bool covered = ListCovers(hungUpIn, trust);
+        IReadOnlyList<RoomKey>? seen = LearnedFor(hungUpIn, trust, learned);
+        if (covered)
+            return (seen is null ? For(hungUpIn) : For(hungUpIn)!.Union(seen).ToList(), true, false);
+
+        bool albion = trust == HangupArrivalListTrust.Paradigm && inAlbion?.Invoke(hungUpIn) == true;
+        if (seen is null) return albion ? (AlbionArrivals, false, true) : (null, false, false);
+        return (albion ? AlbionArrivals.Union(seen).ToList() : seen, false, albion);
     }
+
+    // What was learned for this room, where it is let speak: never where the
+    // list is the world's own.
+    public static IReadOnlyList<RoomKey>? LearnedFor(
+        RoomKey hungUpIn, HangupArrivalListTrust trust, Func<RoomKey, IReadOnlyList<RoomKey>?>? learned) =>
+        ListCovers(hungUpIn, trust) && trust != HangupArrivalListTrust.Unverified ? null : learned?.Invoke(hungUpIn);
 
     // What the first room confirmed on the way back in says of a death by the
     // hang-up: true, that is where its dead arrive; false, a death would have put
@@ -145,7 +170,9 @@ public static class HangupDeathArrivalRooms
     //   - A room the list doesn't cover (ListCovers): on Paradigm, one in Albion
     //     found in the Burial Vault is a yes. Nothing says no for it: a hang-up
     //     goes through the room's leave-the-game room first, and Paradigm's
-    //     aren't in the data. Any other such room says nothing at all.
+    //     aren't in the data. One whose dead were seen to arrive somewhere
+    //     (learned) is a yes there, on the same terms. Any other such room says
+    //     nothing at all.
     // An arena room is a room like any other here: its dead are moved the same way
     // whether the death was the arena's free one or not (HangupDeath.JudgeArena
     // tells those apart).
@@ -164,10 +191,12 @@ public static class HangupDeathArrivalRooms
     //     room it left, so the map never moves. There the room says nothing.
     public static HangupEntryRoomReading Read(
         RoomKey? hungUpIn, RoomKey? enteredIn, HangupArrivalListTrust trust,
-        Func<RoomKey, RoomKey, bool>? couldBeTakenFor = null, Func<RoomKey, bool>? inAlbion = null)
+        Func<RoomKey, RoomKey, bool>? couldBeTakenFor = null, Func<RoomKey, bool>? inAlbion = null,
+        Func<RoomKey, IReadOnlyList<RoomKey>?>? learned = null)
     {
         if (hungUpIn is not { } left || enteredIn is not { } entered) return default;
-        (IReadOnlyList<RoomKey>? arrivals, bool allKnown, bool albion) = ArrivalsOn(left, trust, inAlbion);
+        (IReadOnlyList<RoomKey>? arrivals, bool allKnown, bool albion) = ArrivalsOn(left, trust, inAlbion, learned);
+        IReadOnlyList<RoomKey>? seen = LearnedFor(left, trust, learned);
         if (arrivals is null || arrivals.Contains(left)) return default;
         if (allKnown && Array.IndexOf(LeftThroughTheirArrivalRoom, left) >= 0) return default;
 
@@ -183,9 +212,19 @@ public static class HangupDeathArrivalRooms
         // from one to the other, or tell either from a third that looks the same.
         bool leftLooksLikeIt = ArrivalItLooksLike(left) is not null;
         if (entered == left) return allKnown && !leftLooksLikeIt ? new HangupEntryRoomReading(false) : default;
-        if (arrivals.Contains(entered)) return new HangupEntryRoomReading(true, Albion: albion);
+        // Which of the two it rests on, for the wording: the Burial Vault is
+        // Albion's, any other room of one of Paradigm's own is one a death was
+        // seen to end in.
+        bool ByAlbion(RoomKey arrival) => albion && arrival == ParadigmAlbionVault;
+        bool BySeeing(RoomKey arrival) => seen is not null && seen.Contains(arrival) && !ByAlbion(arrival)
+            && (!allKnown || !For(left)!.Contains(arrival));
+
+        if (arrivals.Contains(entered))
+            return new HangupEntryRoomReading(true, Albion: ByAlbion(entered), Learned: BySeeing(entered));
         if (ArrivalItLooksLike(entered) is { } stoodFor)
-            return leftLooksLikeIt ? default : new HangupEntryRoomReading(true, stoodFor, albion);
+            return leftLooksLikeIt
+                ? default
+                : new HangupEntryRoomReading(true, stoodFor, ByAlbion(stoodFor), BySeeing(stoodFor));
         return new HangupEntryRoomReading(allKnown && trust != HangupArrivalListTrust.Unverified ? false : null);
     }
 }

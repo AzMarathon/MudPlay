@@ -416,6 +416,7 @@ public static class BugReportBuilder
         // Whether the last hang-up the penalty could have killed for was taken
         // for a death, and on what.
         Kv(sb, "Hang-up death check", svc.HangupItems.LastDeathCheck);
+        Kv(sb, "Learned arrival rooms", LearnedArrivalsText(svc));
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
             + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));
@@ -585,20 +586,40 @@ public static class BugReportBuilder
     {
         Game.Recovery.HangupArrivalListTrust trust = svc.HangupArrivalListTrust;
         (IReadOnlyList<Game.Map.RoomKey>? rooms, bool allKnown, bool albion) =
-            Game.Recovery.HangupDeathArrivalRooms.ArrivalsOn(hungUpIn, trust, svc.InParadigmAlbion);
+            Game.Recovery.HangupDeathArrivalRooms.ArrivalsOn(hungUpIn, trust, svc.InParadigmAlbion, svc.LearnedArrivals.ArrivalsFor);
+        IReadOnlyList<Game.Map.RoomKey>? learned =
+            Game.Recovery.HangupDeathArrivalRooms.LearnedFor(hungUpIn, trust, svc.LearnedArrivals.ArrivalsFor);
+        // A room a death was seen to end in, when that is one of them.
+        string seen = learned is null ? "" : $"; learned from a death seen there: {string.Join(" or ", learned)} (says yes, never no)";
         if (albion)
-            return $"its dead arrive in {string.Join(" or ", rooms!)}: Albion (reachable from "
-                + $"{Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault} without a boat); that room says yes, no other says no";
-        if (rooms is null || !allKnown)
+            return $"its dead arrive in {Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault}: Albion (reachable from "
+                + $"{Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault} without a boat); that room says yes, no other says no"
+                + seen;
+        if (rooms is null)
             return trust == Game.Recovery.HangupArrivalListTrust.Paradigm
-                ? "where its dead arrive isn't known (one of Paradigm's own rooms, outside Albion)"
-                : "where its dead arrive isn't known (a room the Stock map file doesn't have)";
-        return $"by the Stock map file its dead arrive in {string.Join(" or ", rooms)}" + trust switch
+                ? "where its dead arrive isn't known (one of Paradigm's own rooms, outside Albion; no death seen there to learn it from)"
+                : "where its dead arrive isn't known (a room the Stock map file doesn't have; no death seen there to learn it from)";
+        if (!allKnown)
+            return "no list has this room" + seen;
+        return $"by the Stock map file its dead arrive in {string.Join(" or ", Game.Recovery.HangupDeathArrivalRooms.For(hungUpIn)!)}" + trust switch
         {
             Game.Recovery.HangupArrivalListTrust.VanillaStock => "",
             Game.Recovery.HangupArrivalListTrust.Paradigm => " (a zone Paradigm shares with Stock)",
             _ => " (not confirmed for this game data: the room it comes back in can say yes, never no)",
-        };
+        } + seen;
+    }
+
+    // What the set has learned of where the dead arrive, from deaths seen: how
+    // many rooms, which are disputed (two readings, neither used), and the pair
+    // the last hang-up death check went by.
+    private static string LearnedArrivalsText(AppServices svc)
+    {
+        LearnedArrivalRoomStore store = svc.LearnedArrivals;
+        string disputed = store.DisputedCount == 0 ? "none disputed"
+            : $"{store.DisputedCount} disputed and out of use ("
+              + string.Join("; ", store.Disputed.Select(d => $"{d.DiedIn} → {string.Join(" / ", d.Arrivals)}")) + ")";
+        return $"{store.Count} room(s) for '{svc.GameData.ActiveSet ?? "(no set)"}', {disputed}; "
+            + $"used by the last hang-up death check: {svc.HangupItems.LastLearnedArrivalUsed ?? "(none)"}";
     }
 
     // Party roster snapshot — who's grouped, their roles, and the pending-invite

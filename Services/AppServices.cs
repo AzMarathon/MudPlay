@@ -657,6 +657,12 @@ public sealed class AppServices
     // MainWindowViewModel.
     public Game.Inventory.HangupItemRecheck HangupItems { get; private set; } = null!;
 
+    // Where the dead of a room were seen to arrive, kept with the game-data set,
+    // and the watcher that learns a pair from a death the client witnesses. The
+    // hang-up death check reads them for the rooms no list covers.
+    public LearnedArrivalRoomStore LearnedArrivals { get; private set; } = null!;
+    public Game.Recovery.ArrivalRoomLearner ArrivalLearner { get; private set; } = null!;
+
     // Leader-side reconnect party reform — the mirror of PartyRejoin. Snapshots the
     // followers we're leading at disconnect and, on the first in-game room after the
     // reconnect, rebases the grace window + holds the loop so a nightly-cleanup
@@ -10096,6 +10102,23 @@ public sealed class AppServices
             BlockedByMasterSwitch = what => AutoModeController.Blocks("Default task", what),
         };
 
+        // Where the dead of a room arrive, learned from the deaths this client sees
+        // and kept with the game-data set, which every board and character on it
+        // shares. Read by the hang-up death check below for the rooms no list
+        // covers. Nothing is sent for it, so the master switch has no say.
+        LearnedArrivals = new LearnedArrivalRoomStore(Log);
+        GameData.ActiveSetChanged += LearnedArrivals.OnActiveSetChanged;
+        if (GameData.ActiveSet is not null) LearnedArrivals.OnActiveSetChanged(GameData.ActiveSet);
+        Tick.HeartbeatElapsed += () => LearnedArrivals.TakeInOutsideChanges();
+        ArrivalLearner = new Game.Recovery.ArrivalRoomLearner(
+            RoomTracker, LearnedArrivals, () => HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion, Log);
+        RoomTracker.PlayerDeathObserved += ArrivalLearner.OnPlayerDied;
+        RoomTracker.StateChanged += ArrivalLearner.OnRoomStateChanged;
+        OutboundMovement.MoveSent += ArrivalLearner.NoteMoveSent;
+        // Out of the game before the room was drawn (the link dropped, the game was
+        // left): the room the next entry shows is not known to be the same one.
+        InGameCapture.InGameChanged += inGame => { if (!inGame) ArrivalLearner.Forget(); };
+
         // What a penalised hang-up dropped, looked for on the way back in. Gated on
         // the realm's own settings, and on Auto-All for anything it sends. Its gets
         // go out through the auto-get engine, and gear that comes back is the
@@ -10160,9 +10183,11 @@ public sealed class AppServices
             // Whether the room the character came back in is where the dead of the
             // room it hung up in arrive. The list is the Stock map file's, and how
             // far it goes depends on the game data (HangupArrivalListTrust). The
-            // graph says which rooms the map can't tell an arrival room from.
+            // graph says which rooms the map can't tell an arrival room from, and
+            // what was learned from deaths seen speaks for the rooms no list covers.
             entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.Read(
-                hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion),
+                hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion,
+                LearnedArrivals.ArrivalsFor),
             roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}");
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();

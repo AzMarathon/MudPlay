@@ -241,6 +241,94 @@ public sealed class HangupDeathArrivalRoomsTests
         static (bool, bool) Rests((IReadOnlyList<RoomKey>? Rooms, bool AllKnown, bool Albion) on) => (on.AllKnown, on.Albion);
     }
 
+    // ----- Rooms whose arrival room was learned -------------------------------
+    //
+    // For a room no list covers, what the client saw is all there is: a death in
+    // Terra Ista (14/1813) ended in 14/1900, and the set remembers it. That is a
+    // room to say yes in, and nothing more.
+
+    private static readonly RoomKey IsleShrine = new(14, 1900);
+
+    private static IReadOnlyList<RoomKey>? Learned(RoomKey room) =>
+        room == TerraIsta || room == Darkwood || room == Kingsport ? new[] { IsleShrine } : null;
+
+    private static HangupEntryRoomReading WithLearned(RoomKey hungUpIn, RoomKey enteredIn, HangupArrivalListTrust trust) =>
+        HangupDeathArrivalRooms.Read(hungUpIn, enteredIn, trust, couldBeTakenFor: null, InAlbion, Learned);
+
+    [Fact]
+    public void AParadigmRoomOutsideAlbion_SaysYesInItsLearnedRoom_AndNothingElsewhere()
+    {
+        HangupEntryRoomReading reading = WithLearned(TerraIsta, IsleShrine, Paradigm);
+
+        Assert.True(reading.Says);
+        Assert.True(reading.Learned);
+        Assert.False(reading.Albion);
+        // A hang-up leaves through the room's leave-the-game room first, which the
+        // data doesn't carry for these rooms: nothing is the wrong room, the room
+        // it left and Albion's vault included.
+        Assert.Null(WithLearned(TerraIsta, TerraIsta, Paradigm).Says);
+        Assert.Null(WithLearned(TerraIsta, new RoomKey(14, 1950), Paradigm).Says);
+        Assert.Null(WithLearned(TerraIsta, Vault, Paradigm).Says);
+        Assert.Null(WithLearned(TerraIsta, Temple, Paradigm).Says);
+        // A room of the same land with nothing learned for it still says nothing:
+        // one room's death teaches that room only.
+        Assert.Null(WithLearned(new RoomKey(14, 1814), IsleShrine, Paradigm).Says);
+    }
+
+    // Where the list is the world's own, a pair on file is not read at all.
+    [Theory]
+    [InlineData(Vanilla)]
+    [InlineData(Paradigm)]
+    public void WhatWasLearned_IsNeverSetAgainstTheList_WhereTheListIsTheWorldsOwn(HangupArrivalListTrust trust)
+    {
+        Assert.Null(HangupDeathArrivalRooms.LearnedFor(Darkwood, trust, Learned));
+        Assert.False(WithLearned(Darkwood, IsleShrine, trust).Says);
+        Assert.True(WithLearned(Darkwood, Temple, trust).Says);
+        Assert.False(WithLearned(Darkwood, Temple, trust).Learned);
+        Assert.Equal(new[] { Temple, EarthenTomb },
+            HangupDeathArrivalRooms.ArrivalsOn(Darkwood, trust, InAlbion, Learned).Rooms);
+    }
+
+    // A Stock board whose rooms may have been edited: the list is Stock's word,
+    // and the room a death was seen to end in is one more to say yes in. The
+    // list's own rooms still say yes, and "it never moved" still says no.
+    [Fact]
+    public void OnAnEditedBoard_TheLearnedRoom_IsOneMoreRoomToSayYesIn()
+    {
+        Assert.Equal(new[] { IsleShrine }, HangupDeathArrivalRooms.LearnedFor(Darkwood, Edited, Learned));
+        HangupEntryRoomReading reading = WithLearned(Darkwood, IsleShrine, Edited);
+        Assert.True(reading.Says);
+        Assert.True(reading.Learned);
+        Assert.True(WithLearned(Darkwood, Temple, Edited).Says);
+        Assert.False(WithLearned(Darkwood, Temple, Edited).Learned);
+        Assert.False(WithLearned(Darkwood, Darkwood, Edited).Says);
+        Assert.Null(WithLearned(Darkwood, new RoomKey(1, 110), Edited).Says);
+    }
+
+    // An Albion room seen to send its dead somewhere else than the Burial Vault:
+    // both rooms say yes, each on its own ground.
+    [Fact]
+    public void AnAlbionRoomWithALearnedRoom_SaysYesInEither()
+    {
+        Assert.Equal(new[] { Vault, IsleShrine }, HangupDeathArrivalRooms.ArrivalsOn(Kingsport, Paradigm, InAlbion, Learned).Rooms);
+        Assert.Equal((true, true, false), Basis(WithLearned(Kingsport, Vault, Paradigm)));
+        Assert.Equal((true, false, true), Basis(WithLearned(Kingsport, IsleShrine, Paradigm)));
+        Assert.Null(WithLearned(Kingsport, Kingsport, Paradigm).Says);
+
+        static (bool, bool, bool) Basis(HangupEntryRoomReading r) => (r.Says == true, r.Albion, r.Learned);
+    }
+
+    // A room seen to send its dead to itself: being there says nothing either way.
+    [Fact]
+    public void ARoomLearnedAsItsOwnArrivalRoom_SaysNothing()
+    {
+        static IReadOnlyList<RoomKey>? Own(RoomKey room) => new[] { room };
+
+        Assert.Null(HangupDeathArrivalRooms.Read(TerraIsta, TerraIsta, Paradigm, null, InAlbion, Own).Says);
+        // On an edited board that takes "it never moved" away too.
+        Assert.Null(HangupDeathArrivalRooms.Read(Darkwood, Darkwood, Edited, null, InAlbion, Own).Says);
+    }
+
     // Hung up in the very room its dead arrive in: being there says nothing.
     [Theory]
     [InlineData(1, 2189)]

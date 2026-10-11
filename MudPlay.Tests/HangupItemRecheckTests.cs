@@ -244,6 +244,9 @@ public sealed class HangupItemRecheckTests
         public Func<RoomKey, RoomKey, bool>? CouldBeTakenFor { get; set; }
         // Paradigm's Albion: the rooms the graph can walk to from the Burial Vault.
         public HashSet<RoomKey> Albion { get; } = new();
+        // What the game-data set has learned from deaths seen: room died in → the
+        // room its dead were seen to arrive in (LearnedArrivalRoomStore).
+        public Dictionary<RoomKey, RoomKey> LearnedArrivals { get; } = new();
         public Dictionary<RoomKey, string> RoomNames { get; } = new();
         public List<MudPlay.Game.Recovery.UnwitnessedDeath> Deaths { get; } = new();
         public HangupItemRecheck Check { get; }
@@ -295,7 +298,8 @@ public sealed class HangupItemRecheckTests
                     !Stock ? MudPlay.Game.Recovery.HangupArrivalListTrust.Paradigm
                     : EditedBoard ? MudPlay.Game.Recovery.HangupArrivalListTrust.Unverified
                     : MudPlay.Game.Recovery.HangupArrivalListTrust.VanillaStock,
-                    CouldBeTakenFor, Albion.Contains),
+                    CouldBeTakenFor, Albion.Contains,
+                    room => LearnedArrivals.TryGetValue(room, out RoomKey seen) ? new[] { seen } : null),
                 roomLabel: room => RoomNames.TryGetValue(room, out string? name) ? $"{name} ({room})" : $"room {room}");
             Check.SetWireSender(_ => { });
         }
@@ -3809,5 +3813,104 @@ public sealed class HangupItemRecheckTests
         o.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
         Assert.Empty(o.Deaths);
         Assert.Contains("which is not where a death by this hang-up puts it", Assert.Single(o.Notices));
+    }
+
+    // ----- A room whose arrival room was learned -------------------------------
+    //
+    // No list says where the dead of Terra Ista arrive. A death the client saw
+    // there ended in a shrine, and the set remembers it (LearnedArrivalRoomStore).
+    // A hang-up in that room, back in the shrine, is back where its dead arrive.
+    // It is a room to say yes in and no more: nothing is "the wrong room" on its
+    // strength, and the room it left is not "never moved".
+
+    private static readonly RoomKey TerraIsta = new(14, 1813);
+    private static readonly RoomKey IsleShrine = new(14, 1900);
+
+    private static Harness WithALearnedArrival()
+    {
+        Harness h = OnParadigm();
+        h.LearnedArrivals[TerraIsta] = IsleShrine;
+        h.RoomNames[IsleShrine] = "Isle Shrine";
+        return h;
+    }
+
+    [Theory]
+    [InlineData(7)]
+    [InlineData(null)]
+    public void ALearnedArrivalRoom_BackThereAfterAHangUp_IsADeath_AndSaysHowItIsKnown(int? livesBefore)
+    {
+        Harness h = WithALearnedArrival();
+        h.StoredAt(-5, Geared, lives: livesBefore, room: new RoomRef(14, 1813));
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: IsleShrine);
+
+        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in Isle Shrine (14/1900), where the dead of room 14/1813 "
+            + "arrive (learned from a death seen there).", Assert.Single(h.Deaths).Message);
+        Assert.Equal("14/1813 → 14/1900", h.Check.LastLearnedArrivalUsed);
+    }
+
+    // Anywhere else, the learned room says nothing: a hang-up leaves through the
+    // room's leave-the-game room first, so its dead needn't end where a death's
+    // do. With a life down the lives decide alone; with no count nothing tells.
+    [Theory]
+    [InlineData(14, 1813)]   // the room it left
+    [InlineData(14, 1950)]   // some other room
+    [InlineData(14, 1077)]   // Albion's vault, which is not this room's
+    public void ALearnedArrivalRoom_NeverSaysNo(int map, int room)
+    {
+        Harness h = WithALearnedArrival();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, TerraIsta);
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: new RoomKey(map, room));
+        Assert.Equal(HangupItemRecheck.DeathMessage, Assert.Single(h.Deaths).Message);
+        Assert.Null(h.Check.LastLearnedArrivalUsed);
+
+        Harness o = WithALearnedArrival();
+        o.StoredAt(-5, Geared, lives: null, room: new RoomRef(14, 1813));
+        o.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: new RoomKey(map, room));
+        Assert.Empty(o.Deaths);
+    }
+
+    // What was learned is never set against the list where the list is the
+    // world's own: a pair on file for Darkwood Forest (a zone Paradigm shares with
+    // Stock, and Stock's own on Stock data) changes nothing.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ALearnedPair_IsNeverSetAgainstTheList_WhereTheListIsTheWorldsOwn(bool stock)
+    {
+        Harness h = WithArrivalRooms(stock);
+        h.LearnedArrivals[Darkwood] = IsleShrine;
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, Darkwood);
+
+        // Back in the learned room, which the list doesn't have: the wrong room.
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: IsleShrine);
+
+        Assert.Empty(h.Deaths);
+        Assert.Contains("which is not where a death by this hang-up puts it", Assert.Single(h.Notices));
+        Assert.Null(h.Check.LastLearnedArrivalUsed);
+    }
+
+    // On a Stock board whose rooms may have been edited the list is only Stock's
+    // word, and what was seen there is one more room to say yes in.
+    [Fact]
+    public void OnAnEditedBoard_ALearnedPair_AddsARoomToSayYesIn()
+    {
+        Harness h = WithArrivalRooms();
+        h.EditedBoard = true;
+        h.LearnedArrivals[Darkwood] = new RoomKey(1, 500);
+        h.StoredAt(-5, Geared, lives: null, room: new RoomRef(1, 109));
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: new RoomKey(1, 500));
+
+        Assert.Contains("(learned from a death seen there)", Assert.Single(h.Deaths).Message);
+
+        // The list's own room still says yes there.
+        Harness o = WithArrivalRooms();
+        o.EditedBoard = true;
+        o.LearnedArrivals[Darkwood] = new RoomKey(1, 500);
+        o.StoredAt(-5, Geared, lives: null, room: new RoomRef(1, 109));
+        o.ComeBack(hp: 200, lives: 6, Snap(), room: HallsOfTheDead);
+        Assert.Contains($"It came back in {BackInTheHalls}.", Assert.Single(o.Deaths).Message);
+        Assert.Null(o.Check.LastLearnedArrivalUsed);
     }
 }

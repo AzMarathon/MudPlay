@@ -354,6 +354,11 @@ public sealed class HangupItemRecheck
     // seen, and what it was taken to mean.
     public string LastDeathCheck { get; private set; } = NoneYet;
 
+    // The learned pair ("died in → arrived in") the last such look went by, when
+    // the room the character came back in said yes on the strength of one; null
+    // when it didn't.
+    public string? LastLearnedArrivalUsed { get; private set; }
+
     // Copies of an item this check has asked the game for and not yet seen arrive:
     // those are coming back, not being acquired. Only while it is picking up. The
     // lists above are a record of how the last check went and say nothing about now.
@@ -794,7 +799,7 @@ public sealed class HangupItemRecheck
 
         bool stock = _stockRealm?.Invoke() ?? false;
         bool? loginLines = stock ? _loginLines || older.LoginLinesSeenSince : null;
-        (bool? entryRoom, string? entryRoomText) = EntryRoom(older);
+        (bool? entryRoom, string? entryRoomText, LastLearnedArrivalUsed) = EntryRoom(older);
         (Recovery.HangupDeathVerdict verdict, string why, bool arena) =
             Verdict(older, hpAtEntry, worn: null, loginLines, takenStillHeld: null, entryRoom, entryRoomText);
         // Without an inventory read the worn and still-held checks that tell a death
@@ -849,6 +854,7 @@ public sealed class HangupItemRecheck
         LastMissing = [];
         LastStillMissing = [];
         LastDeathCheck = NoneYet;
+        LastLearnedArrivalUsed = null;
     }
 
     // RoomTracker.PlayerDeathObserved. The inventory record goes on naming what
@@ -1107,7 +1113,7 @@ public sealed class HangupItemRecheck
         bool? loginLines = stock ? _loginLines || before.LoginLinesSeenSince : null;
         List<(string Name, int Count)> gone = HangupItemPlan.Missing(before.Items, held);
         bool? takenStillHeld = _firstInventory is null ? null : TakenStillHeld(before, held);
-        (bool? entryRoom, string? entryRoomText) = EntryRoom(before);
+        (bool? entryRoom, string? entryRoomText, LastLearnedArrivalUsed) = EntryRoom(before);
         (Recovery.HangupDeathVerdict verdict, string why, bool arena) =
             Verdict(before, hpAtEntry, worn, loginLines, takenStillHeld, entryRoom, entryRoomText);
 
@@ -1183,12 +1189,14 @@ public sealed class HangupItemRecheck
     // the room it came back in isn't known, and an earlier connection that moved
     // on before the map knew the room leaves it unknown for good: this
     // connection's first room is then somewhere the character walked to.
-    private (bool? Says, string? Text) EntryRoom(HeldAtDisconnect before)
+    //   LearnedPair — "died in → arrived in" when the yes rests on a death once
+    //                 seen to end in that room, for the bug report.
+    private (bool? Says, string? Text, string? LearnedPair) EntryRoom(HeldAtDisconnect before)
     {
         RoomKey? entered = before.EntryRoomSince is { } since ? new RoomKey(since.Map, since.Room)
             : before.MovedBeforeEntryRoomKnownSince ? null
             : _entryRoom;
-        if (before.Room is not { } left || entered is not { } here) return (null, null);
+        if (before.Room is not { } left || entered is not { } here) return (null, null, null);
         RoomKey hungUpIn = new(left.Map, left.Room);
         Recovery.HangupEntryRoomReading reading = _entryRoomSays?.Invoke(hungUpIn, here) ?? default;
         string text = reading.Says != true
@@ -1197,8 +1205,11 @@ public sealed class HangupItemRecheck
                 ? $"{Label(here)}, which the map can't tell from {Label(arrival)}, where the dead of {Label(hungUpIn)} arrive"
                 : $"{Label(here)}, where the dead of {Label(hungUpIn)} arrive")
               // Paradigm: no list names this room's arrival room; it is in Albion.
-              + (reading.Albion ? " (Albion: reachable from that room without a boat)" : "");
-        return (reading.Says, text);
+              + (reading.Albion ? " (Albion: reachable from that room without a boat)" : "")
+              // No list names it either: a death seen in that room ended there.
+              + (reading.Learned ? " (learned from a death seen there)" : "");
+        return (reading.Says, text,
+            reading is { Says: true, Learned: true } ? $"{hungUpIn} → {reading.TakenFor ?? here}" : null);
     }
 
     private string Label(RoomKey room) => _roomLabel?.Invoke(room) ?? $"room {room}";
