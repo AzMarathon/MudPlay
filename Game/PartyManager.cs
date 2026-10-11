@@ -34,10 +34,51 @@ public sealed partial class PartyManager : IDisposable
     private readonly MessageRouter _router;
     private LineExtractor? _lines;
     private readonly List<IDisposable> _subs = new();
+    private readonly LogService? _log;
     private bool _disposed;
 
     // Live party state — manager owns every observable field.
     public PartyState State { get; }
+
+    // True on a Stock realm. Stock ends the follow of a member whose follow move
+    // an exit refused and leaves them on the leader's member list, with no line to
+    // either side (GAME_MECHANICS "A follower who can't move is left behind");
+    // Paradigm drops them and says so. Unset reads as Paradigm, where nothing
+    // here differs from what it always did.
+    public Func<bool>? OnStock { get; set; }
+
+    // Stock, follower side: the leader whose member list we are still on though
+    // we follow nobody, by the game's own rule. Set when a follow the game never
+    // ended in words is given up (NoteFollowGivenUp). The roster is the solo one
+    // while this is set: every engine of ours is free, and a `join` of that leader
+    // puts us back with no fresh invite.
+    //
+    // That a `join` then works is read from the Stock DLL and not yet seen in
+    // play; the game's "You must be invited first!" to a join of ours clears this
+    // (NoteNotListedWith), and so does every line that says where we stand.
+    public string? ListedWithLeader { get; private set; }
+
+    private void SetListedWith(string? leader, string why)
+    {
+        if (string.Equals(ListedWithLeader, leader, StringComparison.OrdinalIgnoreCase)) return;
+        string? was = ListedWithLeader;
+        ListedWithLeader = leader;
+        _log?.Info("Party", leader is not null
+            ? $"following nobody, still on {leader}'s member list (Stock): {why}"
+            : $"no longer counted as on {was}'s member list: {why}");
+    }
+
+    // The game refused a `join` of ours to that leader with "You must be invited
+    // first!": we are off their list after all, and only an invite brings us back.
+    public void NoteNotListedWith(string leader)
+    {
+        if (ListedWithLeader is { } listed
+            && GivenNameOf(listed).Equals(GivenNameOf(leader), StringComparison.OrdinalIgnoreCase))
+            SetListedWith(null, "the game answered our join with \"You must be invited first!\"");
+    }
+
+    // Our link dropped. Leaving the game takes a player off every member list.
+    public void NoteLinkDropped() => SetListedWith(null, "the link dropped");
 
     // ----- par-block state machine -----
     private enum ParState { Idle, ReadingRows }
@@ -119,6 +160,7 @@ public sealed partial class PartyManager : IDisposable
         {
             if (string.Equals(_localCharacterName, value, StringComparison.Ordinal)) return;
             _localCharacterName = value;
+            SetListedWith(null, "another character was loaded");
             RefreshSoloSelfRow();
         }
     }
@@ -305,12 +347,13 @@ public sealed partial class PartyManager : IDisposable
     // main-window VM owns it because it lives only for the active terminal
     // session, while the manager is app-level so consumers (the remote-command
     // engine, the PartyWindow) can hold a stable reference.
-    public PartyManager(MessageRouter router, PartyState state)
+    public PartyManager(MessageRouter router, PartyState state, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(state);
         _router = router;
         State   = state;
+        _log    = log;
 
         _subs.Add(_router.Subscribe(KnownPatterns.PartyFollowsYou,     OnFollowsYou));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyYouFollowing,   OnYouFollowing));
@@ -552,6 +595,7 @@ public sealed partial class PartyManager : IDisposable
         State.IsInParty    = true;
         State.SelfIsLeader = true;
         State.LeaderName ??= LocalCharacterName;
+        SetListedWith(null, $"{name} follows us: we lead a party of our own");
         PartyMember joiner = AddOrTouchMember(name);
         // Acceptance — clear any pending invite chip on the same row
         // (added by OnYouInvited when we sent `invite X`). The
@@ -594,6 +638,7 @@ public sealed partial class PartyManager : IDisposable
         State.IsInParty    = true;
         State.SelfIsLeader = true;
         State.LeaderName ??= LocalCharacterName;
+        SetListedWith(null, $"we invited {name}: we lead a party of our own");
         AddSelfIfKnown(isLeader: true);
         AddOrTouchMember(name, isInvited: true);
     }
@@ -607,6 +652,7 @@ public sealed partial class PartyManager : IDisposable
         string leaderName = result.Groups[0];
         if (string.IsNullOrEmpty(leaderName)) return;
         bool wasInParty = State.IsInParty;
+        SetListedWith(null, $"we follow {leaderName}");
         // Same early-set rationale as OnFollowsYou — derived state
         // (IsInParty + LeaderName + SelfIsLeader) needs to be
         // consistent at the moment the CollectionChanged.Add fires
@@ -698,6 +744,8 @@ public sealed partial class PartyManager : IDisposable
     {
         if (result.Groups.Count == 0) return;
         if (string.IsNullOrEmpty(result.Groups[0])) return;
+        // The line is printed by what takes a follower off every member list.
+        SetListedWith(null, "the game said we no longer follow");
         LeavePartySolo();
     }
 
@@ -719,6 +767,7 @@ public sealed partial class PartyManager : IDisposable
         // we're alone.
         _parState = ParState.Idle;
         _parBlockNames.Clear();
+        SetListedWith(null, "the game says we are in no party");
 
         if (IsAlreadySolo())
         {
@@ -791,6 +840,8 @@ public sealed partial class PartyManager : IDisposable
     // through the normal signals.
     public void NoteSelfDropped()
     {
+        // At 0 HP the game takes a player off every member list.
+        SetListedWith(null, "we dropped or died");
         if (IsAlreadySolo()) return;
         LeavePartySolo();
     }
@@ -801,11 +852,20 @@ public sealed partial class PartyManager : IDisposable
     // the follow we still believe in, and the client would hold its own movement
     // for good. Cleared as the game's own "no longer following" line clears it
     // (user, 2026-10-10). A no-op once that line has come, or for another leader.
+    //
+    // On Stock the game has not taken us off that leader's member list: only the
+    // follow ended. So the roster goes solo all the same (the hold on our own
+    // movement is what giving up is for), and the leader is kept as
+    // ListedWithLeader, which is what a `par` of ours and a later `join` are read
+    // against.
     public void NoteFollowGivenUp(string leader)
     {
         if (!State.IsInParty || State.SelfIsLeader || State.LeaderName is not { Length: > 0 } ours) return;
         if (!GivenNameOf(ours).Equals(GivenNameOf(leader), StringComparison.OrdinalIgnoreCase)) return;
+        string given = GivenNameOf(ours);
         LeavePartySolo();
+        if (OnStock?.Invoke() == true)
+            SetListedWith(given, "the follow was given up, and the game ended it without taking us off the list");
     }
 
     // Entering the train-stats screen is a realm excursion that breaks up our party
@@ -941,6 +1001,9 @@ public sealed partial class PartyManager : IDisposable
     private void ApplyMemberDisconnect(string given)
     {
         if (string.IsNullOrEmpty(given)) return;
+        // A leader who leaves the game takes their party with them, lists and all.
+        if (ListedWithLeader is { } listed && GivenNameOf(listed).Equals(given, StringComparison.OrdinalIgnoreCase))
+            SetListedWith(null, $"{given} left the game");
         bool wasMember = false;
         bool wasLeader = false;
         foreach (PartyMember m in State.Members)

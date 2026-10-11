@@ -612,6 +612,12 @@ public static class BugReportBuilder
         Kv(sb, "In party", party.IsInParty.ToString());
         Kv(sb, "Self is leader", party.SelfIsLeader.ToString());
         Kv(sb, "Leader", party.LeaderName ?? "(none)");
+        // Stock: a follower an exit turned away stops following and stays on the
+        // leader's member list. A "why didn't I rejoin" report turns on whether the
+        // client still counted itself as listed.
+        Kv(sb, "Listed, not following (Stock)", svc.Party.ListedWithLeader is { } listedWith
+            ? $"on {listedWith}'s member list, following nobody: a `join` with them in the room puts us back"
+            : "(no)");
         // Blind means a follow move prints no room for the map to confirm against.
         Kv(sb, "Follow mode (set follow)", svc.FollowModes.Mode switch
         {

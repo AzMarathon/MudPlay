@@ -2959,7 +2959,12 @@ public sealed class AppServices
         StatlineReconcile.SetDesiredCommandProvider(
             () => ReadSection<Models.Profile.StatlineSettings>(Profile.Current, "Statline").Command);
         PartyState = new Game.PartyState();
-        Party = new Game.PartyManager(Router, PartyState);
+        Party = new Game.PartyManager(Router, PartyState, Log)
+        {
+            // Stock keeps a follower an exit turned away on the leader's member
+            // list, where Paradigm drops them (GameData is read when asked).
+            OnStock = () => GameData.ActiveRealm != Game.RealmType.ParaMud,
+        };
         // Mirror the local character's live HP/MA into the self party
         // row on every prompt — without this the self row only updates
         // on a par poll, so per-prompt damage between polls doesn't

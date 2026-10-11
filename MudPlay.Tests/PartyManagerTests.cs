@@ -1863,6 +1863,80 @@ public sealed class PartyManagerTests
         p.FeedTestPromptLine();
     }
 
+    // On Stock giving the follow up frees our own engines (the roster is solo),
+    // and the leader is kept: the game has not taken us off their list.
+    [Fact]
+    public void Stock_TheFollowIsGivenUp_RosterGoesSolo_AndTheLeaderIsKeptAsListedWith()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("You are now following Boss."));
+
+        p.NoteFollowGivenUp("Boss");
+
+        Assert.False(p.State.IsInParty);
+        Assert.Null(p.State.LeaderName);
+        Assert.Equal("Boss", p.ListedWithLeader);
+    }
+
+    [Fact]
+    public void Paradigm_TheFollowIsGivenUp_NothingIsKept()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        router.Dispatch(Line("You are now following Boss."));
+
+        p.NoteFollowGivenUp("Boss");
+
+        Assert.False(p.State.IsInParty);
+        Assert.Null(p.ListedWithLeader);
+    }
+
+    // Every line that says where we stand ends the belief.
+    [Theory]
+    [InlineData("You are now following Boss.")]
+    [InlineData("You are now following Other.")]
+    [InlineData("You are no longer following Boss.")]
+    [InlineData("You are not in a party at the present time.")]
+    [InlineData("You have invited Other to follow you.")]
+    [InlineData("Other started to follow you.")]
+    [InlineData("Boss just hung up!!!")]
+    public void Stock_ListedWith_EndsOnTheGamesOwnWord(string line)
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        Assert.Equal("Boss", p.ListedWithLeader);
+
+        router.Dispatch(Line(line));
+
+        Assert.Null(p.ListedWithLeader);
+    }
+
+    [Fact]
+    public void Stock_ListedWith_EndsWhenAJoinIsRefused_OrTheLinkDrops_OrWeDrop()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        p.NoteNotListedWith("Other");
+        Assert.Equal("Boss", p.ListedWithLeader);        // another leader's refusal says nothing
+        p.NoteNotListedWith("Boss");
+        Assert.Null(p.ListedWithLeader);
+
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        p.NoteLinkDropped();
+        Assert.Null(p.ListedWithLeader);
+
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        p.NoteSelfDropped();
+        Assert.Null(p.ListedWithLeader);
+    }
+
     [Fact]
     public void Paradigm_AfterTheFollowIsGivenUp_AParOfInvitedRows_MakesUsTheLeader()
     {
