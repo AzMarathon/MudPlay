@@ -114,7 +114,7 @@ public sealed class TransferChannelsTests
         chat.EntryClassified += e =>
         {
             if (TransferChannels.OwnRequest(e, IsUs) is { } asked)
-                seen.Add((asked.Transfer, TransferChannels.IsUsersOwn(asked.Channel, chat.OutgoingTelepathWasUsers)));
+                seen.Add((asked.Transfer, TransferChannels.IsUsersOwn(e, asked.Channel, chat)));
         };
         play(router, chat);
         return seen;
@@ -154,35 +154,126 @@ public sealed class TransferChannelsTests
     }
 
     // Each of them is started by the user and by nothing else in the client: typed
-    // at the terminal (seen as its row), or sent as a line of the user's by a
-    // window, a macro, a trigger or an event. Those still count.
+    // at the terminal, or sent as a line of the user's by a window, a macro, a
+    // trigger, an event or an alias. Either way the line is told as it goes out as
+    // the user's own, and it counts, with the board showing it back or not.
     [Theory]
     [InlineData("@roomba sync", Transfer.RoombaSync, true)]
     [InlineData("@roomba sync", Transfer.RoombaSync, false)]
     [InlineData("@loop send yes", Transfer.LoopSend, true)]
     [InlineData("@loop send yes", Transfer.LoopSend, false)]
-    public void ATransferRequestTheUserTelepathed_IsTheUsers(string request, Transfer transfer, bool typedAtTheTerminal)
+    public void ATransferRequestTheUserTelepathed_IsTheUsers(string request, Transfer transfer, bool boardShowsItBack)
     {
         var seen = RequestsSeen((router, chat) =>
         {
-            if (typedAtTheTerminal) router.Dispatch(Row($"/mal {request}"));
-            else chat.ObserveOutbound(Sent($"/mal {request}"), usersOwn: true);
+            chat.ObserveOutbound(Sent($"/mal {request}"), usersOwn: true);
+            if (boardShowsItBack) router.Dispatch(Row($"/mal {request}"));
             router.Dispatch(Row("--- Telepath sent to Mallory ---"));
         });
 
         Assert.Equal(new[] { (transfer, true) }, seen);
     }
 
-    // A request on a shared channel comes back with no word of whose send it was,
-    // and is taken as the user's.
+    // A row on the screen says a line was shown, never whose send it was. A
+    // telepathed request known only from its row (nothing was seen going out for
+    // it) is nobody's request.
     [Theory]
-    [InlineData(RemoteChannel.Gangpath, false, true)]
-    [InlineData(RemoteChannel.Local, false, true)]
-    [InlineData(RemoteChannel.Broadcast, false, true)]
-    [InlineData(RemoteChannel.Telepath, false, false)]
-    [InlineData(RemoteChannel.Telepath, true, true)]
-    public void OnlyATelepathSaysWhoseRequestItWas(RemoteChannel channel, bool telepathWasUsers, bool usersOwn) =>
-        Assert.Equal(usersOwn, TransferChannels.IsUsersOwn(channel, telepathWasUsers));
+    [InlineData("@roomba sync", Transfer.RoombaSync)]
+    [InlineData("@loop send yes", Transfer.LoopSend)]
+    [InlineData("@timer sync", Transfer.TimerSync)]
+    public void ATransferRequestKnownOnlyFromTheScreen_IsNotTheUsers(string request, Transfer transfer)
+    {
+        var seen = RequestsSeen((router, _) =>
+        {
+            router.Dispatch(Row($"/Mallory {request}"));
+            router.Dispatch(Row("--- Telepath sent to Mallory ---"));
+        });
+
+        Assert.Equal(new[] { (transfer, false) }, seen);
+    }
+
+    // ----- whose request one on a shared channel was -------------------------
+
+    // Our own line coming back on the gang channel shows that this client said it.
+    // The client says such lines for other players too: a `@do bg @roomba sync`
+    // would otherwise start two minutes in which every `@roombadata` line from
+    // anyone is merged into the item log unreviewed. It is the user's request only
+    // if the user sent it, as a line of their own, in the last few seconds.
+    [Fact]
+    public void ARoombaSyncOnGangpathTheClientSentForAnotherPlayer_IsNotTheUsers()
+    {
+        DateTimeOffset now = new(2026, 8, 4, 12, 0, 0, TimeSpan.Zero);
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        ChatRouter chat = new(router, clock: () => now);
+        ChatLogEntry echo = Line(ChatChannel.Gangpath, "Us", "@roomba sync");
+        Assert.Equal((Transfer.RoombaSync, RemoteChannel.Gangpath), TransferChannels.OwnRequest(echo, IsUs));
+
+        // Her `@do bg @roomba sync`, and the `{ok}` the client telepaths her.
+        chat.ObserveOutbound(Sent("bg @roomba sync"));
+        chat.ObserveOutbound(Sent("/Mallory {ok}"));
+        Assert.False(TransferChannels.IsUsersOwn(echo, RemoteChannel.Gangpath, chat));
+
+        // The user's own, typed or sent by something of theirs.
+        chat.ObserveOutbound(Sent("bg @roomba sync"), usersOwn: true);
+        Assert.True(TransferChannels.IsUsersOwn(echo, RemoteChannel.Gangpath, chat));
+
+        // And only for a few seconds: an echo that comes long after is not it.
+        now += TimeSpan.FromSeconds(20);
+        Assert.False(TransferChannels.IsUsersOwn(echo, RemoteChannel.Gangpath, chat));
+    }
+
+    // The user's line has to carry the request on that channel. The same words by
+    // telepath, by say, or on the broadcast channel are not a gang request; other
+    // words on the gang channel are not this request. A speak form nobody listed
+    // (a board's own say character, a verb spelled another way) is taken for the
+    // channel the echo came on, so a request the user did type still counts.
+    [Theory]
+    [InlineData("bg @roomba sync", true)]
+    [InlineData("BG @Roomba Sync", true)]
+    [InlineData("gb @roomba sync", true)]
+    [InlineData("broadgang @roomba sync", true)]
+    [InlineData("/Bob @roomba sync", false)]
+    [InlineData(".@roomba sync", false)]
+    [InlineData("@roomba sync", false)]
+    [InlineData("br @roomba sync", false)]
+    [InlineData("'@roomba sync", false)]
+    [InlineData("broadcast @roomba sync", false)]
+    [InlineData("bg @roomba torch", false)]
+    [InlineData("bg @timer sync", false)]
+    [InlineData("gsay @roomba sync", true)]
+    public void AUsersLine_IsTheRequest_OnlyWhenItCarriesItOnThatChannel(string usersLine, bool isIt)
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        ChatRouter chat = new(router);
+        chat.ObserveOutbound(Sent(usersLine), usersOwn: true);
+
+        Assert.Equal(isIt, TransferChannels.IsUsersOwn(
+            Line(ChatChannel.Gangpath, "Us", "@roomba sync"), RemoteChannel.Gangpath, chat));
+    }
+
+    // The same for a timer sync said aloud or on the broadcast channel: there it
+    // decides only whether the window opens as a request of the user's.
+    [Theory]
+    [InlineData(RemoteChannel.Local, ChatChannel.Local, ".@timer sync", true)]
+    [InlineData(RemoteChannel.Local, ChatChannel.Local, "@timer sync", true)]
+    [InlineData(RemoteChannel.Local, ChatChannel.Local, "bg @timer sync", false)]
+    [InlineData(RemoteChannel.Broadcast, ChatChannel.Broadcast, "br @timer sync", true)]
+    [InlineData(RemoteChannel.Broadcast, ChatChannel.Broadcast, "-@timer sync", true)]
+    [InlineData(RemoteChannel.Broadcast, ChatChannel.Broadcast, ".@timer sync", false)]
+    public void ATimerSyncOnASharedChannel_IsTheUsers_OnlyWhenTheUserSentItThere(
+        RemoteChannel channel, ChatChannel heardOn, string usersLine, bool isIt)
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        ChatRouter chat = new(router);
+        ChatLogEntry echo = Line(heardOn, heardOn == ChatChannel.Local ? null : "Us", "@timer sync");
+
+        Assert.False(TransferChannels.IsUsersOwn(echo, channel, chat));
+        chat.ObserveOutbound(Sent(usersLine), usersOwn: true);
+        Assert.Equal(isIt, TransferChannels.IsUsersOwn(echo, channel, chat));
+    }
 
     [Fact]
     public void OurOwnRequest_IsKnownByItsEcho_WithTheChannelItWentBy()

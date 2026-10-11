@@ -24,8 +24,13 @@ public sealed class BossTimerSyncCollectorTests
     private static MudPlay.Terminal.LineExtractor.EmittedLine Shown(string text) =>
         new(text, new MudPlay.Terminal.CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
 
-    // What the user types at the terminal is seen as the line the game shows back.
-    private void UserTypes(string line) => _router.Dispatch(Shown(line));
+    // What the user types at the terminal is told as it goes out, as the user's
+    // own; the board then shows the line back.
+    private void UserTypes(string line)
+    {
+        _chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
+        _router.Dispatch(Shown(line));
+    }
 
     // A line the client put on the wire by itself or for another player.
     private void ClientSends(string line) =>

@@ -270,24 +270,27 @@ public sealed class ChatRouterTests
             seen.Select(s => (s.Entry.Speaker!, s.Entry.Message, s.Users)));
     }
 
-    // Whose send it was goes with it to its confirmation: the user's own (typed at
-    // the terminal and seen on screen, or sent by something of theirs), or one the
-    // client made by itself or for another player.
+    // Whose send it was goes with it to its confirmation, and comes only from the
+    // line as it went out: the user's own (typed at the terminal, or sent by
+    // something of theirs), or one the client made by itself or for another player.
+    // A telepath known only from the row the board showed has its text, for the
+    // Conversation window, and is nobody's.
     [Fact]
-    public void TelepathOut_WhoseSendItWas_IsToldWithItsConfirmation()
+    public void TelepathOut_WhoseSendItWas_IsToldWithItsConfirmation_AndNeverFromTheScreen()
     {
         var (router, chat, _) = Setup();
         var seen = Watch(chat);
 
-        router.Dispatch(Line("/Bob @timer sync"));                       // typed
+        chat.ObserveOutbound(Wire("/Bob @timer sync"), usersOwn: true);  // typed, or a window's button
+        router.Dispatch(Line("/Bob @timer sync"));                       // and shown on screen
         router.Dispatch(Line("--- Telepath sent to Bob ---"));
-        chat.ObserveOutbound(Wire("/Sue @timer sync"), usersOwn: true);  // a window's button
-        router.Dispatch(Line("--- Telepath sent to Sue ---"));
         chat.ObserveOutbound(Wire("/Mallory @timer sync"));              // for another player
-        router.Dispatch(Line("/Mallory @timer sync"));                   // and shown on screen as well
+        router.Dispatch(Line("/Mallory @timer sync"));
         router.Dispatch(Line("--- Telepath sent to Mallory ---"));
+        router.Dispatch(Line("/Sue @timer sync"));                       // a row, with no send seen
+        router.Dispatch(Line("--- Telepath sent to Sue ---"));
 
-        Assert.Equal(new[] { true, true, false }, seen.Select(s => s.Users));
+        Assert.Equal(new[] { true, false, false }, seen.Select(s => s.Users));
         Assert.All(seen, s => Assert.Equal("@timer sync", s.Entry.Message));
     }
 
@@ -371,19 +374,20 @@ public sealed class ChatRouterTests
         Assert.DoesNotContain(seen, s => s.Users);
     }
 
-    // A telepath the user really typed is seen only as its row. With lines of the
-    // client's own awaiting their copies and confirmations, it is still the
-    // user's, and is confirmed as theirs by the player it reached.
+    // A telepath the user typed is told as it goes out, as theirs. With lines of
+    // the client's own awaiting their copies and confirmations, it is confirmed as
+    // the user's by the player it reached.
     [Fact]
-    public void TelepathOut_ATypedTelepath_IsStillTheUsers_WithClientSendsPending()
+    public void TelepathOut_ATypedTelepath_IsTheUsers_WithClientSendsPending()
     {
         var (router, chat, _) = Setup();
         var seen = Watch(chat);
 
         chat.ObserveOutbound(Wire("/Sue @health"));
         chat.ObserveOutbound(Wire("/Mallory {ok}"));
-        router.Dispatch(Line("/bo @timer sync"));          // typed
-        router.Dispatch(Line("/Sue @health"));             // the client's copies
+        chat.ObserveOutbound(Wire("/bo @timer sync"), usersOwn: true);   // typed
+        router.Dispatch(Line("/bo @timer sync"));
+        router.Dispatch(Line("/Sue @health"));                           // the client's copies
         router.Dispatch(Line("--- Telepath sent to Sue ---"));
         router.Dispatch(Line("/Mallory {ok}"));
         router.Dispatch(Line("--- Telepath sent to Mallory ---"));
@@ -393,11 +397,59 @@ public sealed class ChatRouterTests
             seen.Select(s => (s.Entry.Speaker!, s.Entry.Message, s.Users)));
     }
 
-    // A row that cannot be told from a copy is not the user's: typed in the very
-    // words the client has just sent, it adds no send. Once that line is no longer
-    // lately sent, the same words typed are the user's again.
+    // The screen is never the word on whose send a line was. A row is shown for
+    // what the client sent for another player the same as for what the user typed,
+    // and not always as it went out. Each of these rows fails to match the line
+    // that was sent, so it is queued for the Conversation window's sake and paired
+    // with a later confirmation; none of them is the user's send.
+    //   - an 8-bit character the terminal draws as another one;
+    //   - a copy that comes after the send has gone stale;
+    //   - a copy cut by an incoming row just before a second slash.
+    [Theory]
+    [InlineData("eight-bit")]
+    [InlineData("late")]
+    [InlineData("cut")]
+    public void TelepathOut_ARowThatDoesNotMatchWhatWasSent_IsStillNotTheUsers(string door)
+    {
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        var (router, chat, _) = Setup(clock: () => now);
+        var seen = Watch(chat);
+        void Confirmed() => router.Dispatch(Line("--- Telepath sent to Mallory ---"));
+
+        switch (door)
+        {
+            case "eight-bit":
+                chat.ObserveOutbound(Wire("/Mallory @timer sync \u0081"));
+                router.Dispatch(Line("/Mallory @timer sync ü"));   // the same byte, as the terminal draws it
+                break;
+            case "late":
+                chat.ObserveOutbound(Wire("/Mallory @timer sync"));
+                now = now.AddSeconds(20);
+                router.Dispatch(Line("/Mallory @timer sync"));
+                break;
+            default:
+                chat.ObserveOutbound(Wire("/Mallory x /Mallory @timer sync"));
+                router.Dispatch(Line("/Mallory x "));
+                router.Dispatch(Line("Sue gossips: hello"));
+                router.Dispatch(Line("/Mallory @timer sync"));
+                break;
+        }
+        Confirmed();
+        // One more line to her, as any answer of the client's would be, and its
+        // confirmation: this is the one the mis-read row used to be credited by.
+        chat.ObserveOutbound(Wire("/Mallory {ok}"));
+        Confirmed();
+        Confirmed();
+
+        Assert.NotEmpty(seen);
+        Assert.DoesNotContain(seen, s => s.Users);
+    }
+
+    // A row in the words of a line just sent is that line's copy and is not queued
+    // again; once the line is no longer lately sent the row is queued, for its
+    // text, and is still nobody's send.
     [Fact]
-    public void TelepathOut_ARowInTheWordsOfALineJustSent_IsTakenForItsCopy_ForAsLongAsThatLineIsPending()
+    public void TelepathOut_ARowInTheWordsOfALineJustSent_IsNotQueuedAgain_AndIsNeverTheUsers()
     {
         DateTimeOffset now = DateTimeOffset.UnixEpoch;
         var (router, chat, _) = Setup(clock: () => now);
@@ -413,7 +465,30 @@ public sealed class ChatRouterTests
         now = now.AddSeconds(30);
         router.Dispatch(Line("/Bob @timer sync"));
         router.Dispatch(Line("--- Telepath sent to Bob ---"));
-        Assert.Equal(("@timer sync", true), (seen[2].Entry.Message, seen[2].Users));
+        Assert.Equal(("@timer sync", false), (seen[2].Entry.Message, seen[2].Users));
+    }
+
+    // The user's own lines of every kind are remembered for a few seconds as they
+    // go out, for a subscriber that sees a request come back on a shared channel
+    // and has to know whether the user sent it. A line the client sent by itself,
+    // and a row on the screen, are not among them.
+    [Fact]
+    public void UserSentLately_KnowsOnlyTheUsersOwnLines_AndOnlyForAWhile()
+    {
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        var (router, chat, _) = Setup(clock: () => now);
+        bool Sent(string line) => chat.UserSentLately(l => l == line);
+
+        chat.ObserveOutbound(Wire("bg @roomba sync"));
+        router.Dispatch(Line("bg @roomba sync"));
+        Assert.False(Sent("bg @roomba sync"));
+
+        chat.ObserveOutbound(Wire("bg @roomba sync"), usersOwn: true);
+        Assert.True(Sent("bg @roomba sync"));
+        Assert.False(Sent("bg @timer sync"));
+
+        now = now.AddSeconds(20);
+        Assert.False(Sent("bg @roomba sync"));
     }
 
     [Fact]

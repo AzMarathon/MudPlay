@@ -73,10 +73,10 @@ public sealed class ChatRouter : IDisposable
     // confirmation (of either kind) so a later, genuinely new send that happens
     // to produce identical text isn't wrongly suppressed.
     //
-    // For a telepath this one-line guard covers only a row typed by the user and
-    // shown twice. The screen copy of a line the client sent is told by the lines
-    // sent lately (_sentLately): there may be several awaiting their copies at
-    // once, and a copy taken for a typed line is a send nobody made.
+    // For a telepath this one-line guard covers only a screen row shown twice
+    // whose send was not seen going out. The screen copy of a line that was is
+    // told by the lines sent lately (_sentLately): there may be several awaiting
+    // their copies at once.
     private string? _lastEnqueuedTelepath;
     private string? _lastEnqueuedDirected;
 
@@ -207,15 +207,15 @@ public sealed class ChatRouter : IDisposable
                 result.Line.Text));
         }));
 
-        // Sniff every dispatched line for the user's /recipient message
-        // pattern so we can attribute the message text when the server's
-        // confirmation arrives.
+        // Sniff every dispatched line for the /recipient message pattern, so a
+        // telepath whose send was not seen going out still has its text when the
+        // server's confirmation arrives.
         _router.LineDispatched += OnLineDispatched;
     }
 
     private void OnLineDispatched(Terminal.LineExtractor.EmittedLine line)
     {
-        TryCaptureTypedTelepath(line.Text);
+        TryCaptureShownTelepath(line.Text);
         TryCaptureDirectedSay(line.Text);
         TryCustomDisconnectLine(line);
         TryActionEmote(line);
@@ -299,12 +299,13 @@ public sealed class ChatRouter : IDisposable
         return _compiledDisconnect;
     }
 
-    // Engine-sent telepaths (party @-command broadcasts, join nags, @roomba
-    // replies) fire complete "/<recipient> <message>\r" bytes through
-    // SendUserInput in one call, so they're captured here immediately —
-    // char-by-char terminal typing never carries a complete line in a single
-    // buffer, so a human-typed telepath is never captured here (only via the
-    // on-screen path below, once the whole typed line finally renders).
+    // Every line on its way to the game is told here as it goes out. Engine-sent
+    // telepaths (party @-command broadcasts, join nags, @roomba replies) and the
+    // user's own whole lines (a window's button, a macro, an alias) arrive as
+    // complete "/<recipient> <message>\r" bytes. What the user types at the
+    // terminal is told here too, as the line their keys made up when its Enter
+    // went out (SentCommandTrail.TypedLineEntered), whether the terminal sent it
+    // whole or a key at a time.
     //
     // An engine-fired reply also tends to land ON SCREEN: the terminal
     // composites it onto the still-live prompt row, and LineExtractor's
@@ -315,23 +316,31 @@ public sealed class ChatRouter : IDisposable
     // capture; without them every engine reply left one extra stale entry in the
     // queue, permanently drifting every later pairing for the rest of the session.
     //
-    // usersOwn: the send is the user's own doing (a window's button, a macro, a
-    // trigger, an event of theirs), as against one the client makes by itself or
-    // for another player's remote command. Carried with the pending telepath to
-    // its confirmation (OutgoingTelepathWasUsers). Nobody vouching, it is not.
+    // usersOwn: the send is the user's own doing (typed at the terminal, a
+    // window's button, a macro, a trigger, an event or an alias of theirs), as
+    // against one the client makes by itself or for another player's remote
+    // command. Carried with the pending telepath to its confirmation
+    // (OutgoingTelepathWasUsers), and remembered for UserSentLately. Nobody
+    // vouching, it is not.
     public void ObserveOutbound(byte[] data, bool usersOwn = false)
     {
         if (data.Length == 0) return;
         string text = System.Text.Encoding.Latin1.GetString(data);
+        DateTimeOffset now = _now();
         foreach (string outLine in text.Split(LineBreaks,
                      StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
+            if (usersOwn)
+            {
+                _usersLinesLately.RemoveAll(s => now - s.At > PendingCaptureStaleAfter);
+                if (_usersLinesLately.Count >= MaxUsersLinesKept) _usersLinesLately.RemoveAt(0);
+                _usersLinesLately.Add((outLine, now));
+            }
             // Every line seen going out is a send, the same words twice included,
             // and its screen copy is expected.
             if (IsTelepathLine(outLine, out _))
             {
                 AddPendingTelepath(outLine, usersOwn);
-                DateTimeOffset now = _now();
                 _sentLately.RemoveAll(s => now - s.At > PendingCaptureStaleAfter);
                 _sentLately.Add((outLine, now));
             }
@@ -339,12 +348,32 @@ public sealed class ChatRouter : IDisposable
         }
     }
 
-    // The telepath lines seen going out lately, for telling their screen copies
-    // from what the user typed (TryCaptureTypedTelepath). Kept for as long as a
-    // pending send is, not until its copy has come: a board may show a line back
-    // more than once, and a copy counted as typed would be a send of the user's
-    // that nobody made.
+    // The telepath lines seen going out lately, so that the row the board shows
+    // back for one is not queued a second time for the Conversation window
+    // (TryCaptureShownTelepath). Kept for as long as a pending send is, not until
+    // its copy has come: a board may show a line back more than once.
     private readonly List<(string Line, DateTimeOffset At)> _sentLately = new();
+
+    // The user's own lines seen going out lately, of every kind, for a subscriber
+    // that has to know whether a request it sees come back on a channel was the
+    // user's doing (UserSentLately). This is the only word there is on whose send
+    // a line was: the line as it went out. What the screen shows afterwards says
+    // what was sent, by this client, and never by whom.
+    private readonly List<(string Line, DateTimeOffset At)> _usersLinesLately = new();
+    private const int MaxUsersLinesKept = 64;
+
+    // Whether the user, by their own doing (typed, or sent by a button, macro,
+    // trigger, event or alias of theirs), has in the last few seconds sent a line
+    // that isTheOne says is the one asked about. The echo of a line of ours on a
+    // shared channel shows that this client said it, not that the user did: the
+    // client also says such lines for other players (a `@do bg …`, a relay-back).
+    public bool UserSentLately(Func<string, bool> isTheOne)
+    {
+        ArgumentNullException.ThrowIfNull(isTheOne);
+        DateTimeOffset now = _now();
+        _usersLinesLately.RemoveAll(s => now - s.At > PendingCaptureStaleAfter);
+        return _usersLinesLately.Exists(s => isTheOne(s.Line));
+    }
 
     private static readonly char[] LineBreaks = { '\r', '\n' };
 
@@ -357,8 +386,9 @@ public sealed class ChatRouter : IDisposable
     // confirmation the server never sends / this client never recognizes) leaves
     // a stale entry, discarded once it's too old to plausibly be the real match.
     //
-    // usersOwn: the line is the user's own doing (typed, or sent by something they
-    // set up), not one the client sent by itself or for another player.
+    // usersOwn: the line was seen going out as the user's own doing. False for one
+    // the client sent by itself or for another player, and for one known only from
+    // a row on the screen.
     private void AddPendingTelepath(string text, bool usersOwn)
     {
         if (!IsTelepathLine(text, out int sp)) return;
@@ -372,20 +402,18 @@ public sealed class ChatRouter : IDisposable
         return space > 1 && space < text.Length - 1;
     }
 
-    // A screen row that reads as a telepath. What the user types at the terminal
-    // goes out key by key and is only ever seen here, as the line the game shows
-    // back, so such a row is a send of the user's, unless it is the screen copy of
-    // a line the client itself sent: that send is pending already, with whose it
-    // was, and counting its copy as typed would make a second send of it and mark
-    // it the user's.
+    // A screen row that reads as a telepath. It is kept for one thing: to give the
+    // Conversation window the text of a telepath whose send was not seen going out
+    // (its confirmation carries only the name). It is never a send of the user's.
+    // A row says a line was shown, not who sent it: the board shows back what the
+    // client sent for another player the same as what the user typed, and not
+    // always as it was sent (cut by an incoming line, wrapped, late, its 8-bit
+    // characters drawn as other ones). Whose send a line was is known only from
+    // the line as it went out (ObserveOutbound).
     //
-    // A copy does not always come whole: a long line wraps, an incoming line cuts
-    // it, the statline is glued in front and stripped. So a row is taken for a
-    // copy when it is a line sent lately, begins one, or one begins it. A row that
-    // cannot be told from a copy is not the user's; the cost is a telepath the
-    // user typed in the same words as one the client has just sent, which is then
-    // shown without its text and asks for nothing.
-    private void TryCaptureTypedTelepath(string text)
+    // A row that is a line sent lately, begins one, or that one begins is that
+    // send's copy and is not queued again.
+    private void TryCaptureShownTelepath(string text)
     {
         if (!IsTelepathLine(text, out _)) return;
         DateTimeOffset now = _now();
@@ -393,8 +421,8 @@ public sealed class ChatRouter : IDisposable
         if (_sentLately.Exists(s => s.Line.StartsWith(text, StringComparison.Ordinal)
                                     || text.StartsWith(s.Line, StringComparison.Ordinal)))
             return;
-        if (text == _lastEnqueuedTelepath) return; // the same typed row seen twice — see _lastEnqueuedTelepath
-        AddPendingTelepath(text, usersOwn: true);
+        if (text == _lastEnqueuedTelepath) return; // the same row seen twice — see _lastEnqueuedTelepath
+        AddPendingTelepath(text, usersOwn: false);
         _lastEnqueuedTelepath = text;
     }
 
@@ -434,8 +462,9 @@ public sealed class ChatRouter : IDisposable
     // confirmation was paired with and that was the user's own. A subscriber that
     // acts on a request the user telepathed (the boss-timer merge window, which
     // takes a timer without a pick only from a player the user asked) reads it
-    // there: a telepath the client sent for another player's remote command, and a
-    // confirmation paired with nothing, are neither.
+    // there: a telepath the client sent for another player's remote command, one
+    // known only from a row on the screen, and a confirmation paired with nothing,
+    // are none of them the user's.
     public bool OutgoingTelepathWasUsers { get; private set; }
 
     // Form is ">Target message" — the directed-say verb. Same pairing rationale as

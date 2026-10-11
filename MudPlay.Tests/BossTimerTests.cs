@@ -651,7 +651,7 @@ public sealed class BossTimerTests : IDisposable
     // opened from the Bosses tab, nothing asked yet); to: who a telepathed one went to.
     // What the window sends goes out as a line of the user's, as it does in the app.
     private (BossTimerSyncViewModel window, BossTimerStore timers) NewSyncWindow(
-        RemoteChannel? askedOn = RemoteChannel.Broadcast, string? to = null)
+        RemoteChannel? askedOn = RemoteChannel.Broadcast, string? to = null, bool byUser = true)
     {
         // The golem is in the game data and not on our list.
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1), ("guardian golem", 51, 24, 1));
@@ -660,7 +660,7 @@ public sealed class BossTimerTests : IDisposable
         _syncBosses = bosses;
         _syncRouter = new MessageRouter();
         DefaultPatterns.Seed(_syncRouter);
-        _syncChat = new ChatRouter(_syncRouter);
+        _syncChat = new ChatRouter(_syncRouter, clock: _syncClock);
         _syncSent.Clear();
         BossTimerSyncViewModel window = new(bosses, timers, cache, _syncChat,
             send: line =>
@@ -669,9 +669,13 @@ public sealed class BossTimerTests : IDisposable
                 _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
             },
             preArmedOn: askedOn, new LogService(), broadcastOff: () => false,
-            isOurName: name => name == "Us", windowActive: _ => { }, preArmedTo: to, onUiThread: act => act());
+            isOurName: name => name == "Us", windowActive: _ => { }, preArmedTo: to, onUiThread: act => act(),
+            preArmedByUser: byUser);
         return (window, timers);
     }
+
+    // The chat log's clock, for a test that lets time pass (null: the real one).
+    private Func<DateTimeOffset>? _syncClock;
 
     // What the merge window put on the wire, the boss list it works on, and the
     // chat log it reads.
@@ -683,8 +687,17 @@ public sealed class BossTimerTests : IDisposable
     private static MudPlay.Terminal.LineExtractor.EmittedLine Shown(string text) =>
         new(text, new MudPlay.Terminal.CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
 
-    // What the user types at the terminal is seen as the line the game shows back.
-    private void UserTypes(string line) => _syncRouter.Dispatch(Shown(line));
+    // What the user types at the terminal is told as it goes out, as the user's
+    // own; the board then shows the line back.
+    private void UserTypes(string line)
+    {
+        _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
+        BoardShows(line);
+    }
+
+    // A row on the screen: the board showing back a line that was sent, whoever
+    // sent it and however it comes out.
+    private void BoardShows(string row) => _syncRouter.Dispatch(Shown(row));
 
     // A line the client put on the wire by itself or for another player.
     private void ClientSends(string line) =>
@@ -781,7 +794,7 @@ public sealed class BossTimerTests : IDisposable
         {
             bool? closedWithWrites = null;
             window.CloseRequested += wrote => closedWithWrites = wrote;
-            Assert.Contains("taken from the player you asked", window.Status);
+            Assert.Contains("taken from Bob, the player your telepath reached", window.Status);
 
             window.Fold(Offers("Bob", RemoteChannel.Telepath, alone: true));
 
@@ -1218,14 +1231,14 @@ public sealed class BossTimerTests : IDisposable
         {
             ClientSends("/Mallory @timer sync");
             ClientSends("/Mallory {ok}");
-            UserTypes("/Mallory @timer sync");   // the board's row for the first
+            BoardShows("/Mallory @timer sync");
             GameConfirms("Mallory");
-            UserTypes("/Mallory {ok}");
+            BoardShows("/Mallory {ok}");
             GameConfirms("Mallory");
             for (int i = 0; i < furtherDos; i++)
             {
                 ClientSends("/Mallory {ok}");
-                UserTypes("/Mallory {ok}");
+                BoardShows("/Mallory {ok}");
                 GameConfirms("Mallory");
             }
 
@@ -1237,9 +1250,69 @@ public sealed class BossTimerTests : IDisposable
         }
     }
 
-    // What the user types at the terminal is seen only as its row. With lines of
-    // the client's own going out around it, it is still the user's request, and the
-    // player the game confirms it reached is adopted from.
+    // The three ways a row on the screen fails to match what the client sent for
+    // her (an 8-bit character drawn as another, a copy that comes late, a copy cut
+    // just before a second slash), each followed by one more line to her and its
+    // confirmation. The row is nobody's send: her data is a pick every time, and
+    // the window was never told a request of the user's reached her.
+    [Theory]
+    [InlineData("eight-bit")]
+    [InlineData("late")]
+    [InlineData("cut")]
+    public void SyncWindow_ARowThatDoesNotMatchWhatTheClientSent_NeverMakesAnyoneAsked(string door)
+    {
+        DateTimeOffset now = new(2026, 8, 4, 12, 0, 0, TimeSpan.Zero);
+        _syncClock = () => now;
+        var (window, timers) = NewSyncWindow(RemoteChannel.Telepath, to: null);
+        using (window)
+        {
+            switch (door)
+            {
+                case "eight-bit":
+                    ClientSends("/Mallory @timer sync \u0081");
+                    BoardShows("/Mallory @timer sync ü");
+                    break;
+                case "late":
+                    ClientSends("/Mallory @timer sync");
+                    now = now.AddSeconds(20);
+                    BoardShows("/Mallory @timer sync");
+                    break;
+                default:
+                    ClientSends("/Mallory x /Mallory @timer sync");
+                    BoardShows("/Mallory x ");
+                    BoardShows("Sue gossips: hello");
+                    BoardShows("/Mallory @timer sync");
+                    break;
+            }
+            GameConfirms("Mallory");
+            ClientSends("/Mallory {ok}");
+            GameConfirms("Mallory");
+            GameConfirms("Mallory");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Mallory");
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal("Mallory", Assert.Single(Assert.Single(window.Rows).Responders).Responder);
+            Assert.Contains("1 to pick, 0 adopted", window.Status);
+        }
+    }
+
+    // A window opened for a request the client sent for another player says so,
+    // and does not call it the user's.
+    [Fact]
+    public void SyncWindow_OpenedForARequestThatWasNotTheUsers_SaysSo()
+    {
+        var (window, _) = NewSyncWindow(RemoteChannel.Gangpath, byUser: false);
+        using (window)
+        {
+            Assert.Contains("this client sent for another player's remote command", window.Status);
+            Assert.DoesNotContain("your @timer sync", window.Status);
+        }
+    }
+
+    // What the user types at the terminal is told as it goes out, as theirs. With
+    // lines of the client's own going out around it, it is the user's request, and
+    // the player the game confirms it reached is adopted from.
     [Fact]
     public void SyncWindow_ATypedRequestAmongClientSends_StillAdoptsFromThePlayerItReached()
     {
@@ -1250,9 +1323,9 @@ public sealed class BossTimerTests : IDisposable
             ClientSends("/Sue @health");
             ClientSends("/Mallory {ok}");
             UserTypes("/bo @timer sync");
-            UserTypes("/Sue @health");
+            BoardShows("/Sue @health");
             GameConfirms("Sue");
-            UserTypes("/Mallory {ok}");
+            BoardShows("/Mallory {ok}");
             GameConfirms("Mallory");
             GameConfirms("Bob");
 

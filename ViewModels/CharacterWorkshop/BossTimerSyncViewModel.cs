@@ -71,15 +71,17 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     // without re-sending it. preArmedTo is the player the game showed a telepathed
     // one reaching, when the telepath was the user's own; null when the client sent
     // it for another player (a relay-back, a `@do`), whose answer is then a pick.
+    // preArmedByUser says which of the two it was, for the window to say.
     public BossTimerSyncViewModel(
         BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send,
-        RemoteChannel? preArmedOn = null, string? preArmedTo = null)
+        RemoteChannel? preArmedOn = null, string? preArmedTo = null, bool preArmedByUser = true)
         : this(bosses, timers, gameData, chat, send, preArmedOn,
             AppServices.Current.Log,
             () => AppServices.Current.RemoteCommands.DisableBroadcastChannel,
             AppServices.Current.RemoteCommands.IsSelfEcho,
             active => AppServices.Current.TimerSyncWindowActive = active,
-            preArmedTo)
+            preArmedTo,
+            preArmedByUser: preArmedByUser)
     {
     }
 
@@ -88,7 +90,8 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     internal BossTimerSyncViewModel(
         BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send,
         RemoteChannel? preArmedOn, LogService log, Func<bool> broadcastOff, Func<string, bool> isOurName,
-        Action<bool> windowActive, string? preArmedTo = null, Action<Action>? onUiThread = null)
+        Action<bool> windowActive, string? preArmedTo = null, Action<Action>? onUiThread = null,
+        bool preArmedByUser = true)
     {
         ArgumentNullException.ThrowIfNull(bosses);
         ArgumentNullException.ThrowIfNull(timers);
@@ -122,9 +125,11 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         {
             _collector.Begin(askedOn, preArmedTo);
             Requested = true;
-            Status = _collector.OnlyTelepathsAsked
-                ? "Collecting responses to your @timer sync — a timer you had none for is taken from the player you asked; you only pick on a conflict…"
-                : "Collecting responses to your @timer sync — pick the timers to take in, then Apply Selected; nothing is written before that…";
+            Status = !preArmedByUser
+                ? "Collecting responses to a @timer sync this client sent for another player's remote command — every timer is a pick: choose, then Apply Selected; nothing is written before that…"
+                : _collector.OnlyTelepathsAsked && !string.IsNullOrWhiteSpace(preArmedTo)
+                    ? $"Collecting responses to your @timer sync — a timer you had none for is taken from {preArmedTo.Trim()}, the player your telepath reached; you only pick on a conflict…"
+                    : "Collecting responses to your @timer sync — pick the timers to take in, then Apply Selected; nothing is written before that…";
         }
     }
 

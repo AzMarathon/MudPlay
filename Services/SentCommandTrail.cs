@@ -182,8 +182,18 @@ public sealed class SentCommandTrail
             lock (_ringLock) { _withheld++; }
             return;
         }
+        if (Withhold?.Invoke() != true) TypedLineEntered?.Invoke(line);
         UserLineSent(line, Origin.Typed);
     }
+
+    // Told each line the user typed at the terminal, as its Enter goes out: the
+    // line their keys made up, whether the terminal sent it whole or a key at a
+    // time. This is the one account of what the user typed that does not come off
+    // the screen, so whatever must know that a line was the user's own typing
+    // (the chat log, for a request telepathed to another client) is told from
+    // here. Not told a line any part of which went by while nothing is kept: it
+    // may be a password.
+    public Action<string>? TypedLineEntered { get; set; }
 
     private void UserLineSent(string line, Origin origin)
     {

@@ -6211,6 +6211,11 @@ public sealed class AppServices
         EngineGate.Trail = SentCommands;
         SentCommands.Withhold = () =>
             !InGameCapture.InGame || SuicidePassword.PasswordEntryLikely || Suicide.SendingPassword;
+        // A line typed at the terminal is the user's own send. The chat log is told
+        // of it from the keys typed, never from the row the board shows back: it
+        // pairs a telepath with its confirmation, and remembers whose send it was.
+        SentCommands.TypedLineEntered = line =>
+            Chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
         // Out to the board's menu with the link still up: nothing automatic may be
         // sent (it would be a menu selection), a typed selection isn't a move, the
         // menu's lines aren't unknown game lines, and its prompt isn't a broken
