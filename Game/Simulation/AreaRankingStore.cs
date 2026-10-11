@@ -77,7 +77,7 @@ public sealed class AreaRankingStore
     {
         ArgumentNullException.ThrowIfNull(ranking);
         SimulatorOwner? dropped = Hold(owner, ranking);
-        if (_files is { } files && AreaRankingFiles.FileFor(owner) is not null)
+        if (_files is { } files && HasFile(owner))
             Enqueue(() =>
             {
                 (string? error, long bytes) = files.Write(owner, ranking);
@@ -85,6 +85,10 @@ public sealed class AreaRankingStore
             });
         return dropped;
     }
+
+    // A pairing with both a set and a character has a file. Whether its names are
+    // fit to make a path is the files' to judge, and to log when they are not.
+    private static bool HasFile(SimulatorOwner owner) => owner.Set is { Length: > 0 } && owner.Character is not null;
 
     private SimulatorOwner? Hold(SimulatorOwner owner, AreaRanking ranking)
     {
@@ -124,7 +128,7 @@ public sealed class AreaRankingStore
     {
         ArgumentNullException.ThrowIfNull(worldNow);
         ArgumentNullException.ThrowIfNull(found);
-        if (_files is not { } files || AreaRankingFiles.FileFor(owner) is null) return;
+        if (_files is not { } files || !HasFile(owner)) return;
         Enqueue(() =>
         {
             AreaRankingFiles.ReadResult read = files.Read(owner, worldNow);

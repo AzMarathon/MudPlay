@@ -435,13 +435,12 @@ public static class AppPaths
     // set's tables and edits sees it: those read the set's own folder, its Loops
     // folder or named files, never its other sub-folders. A ranking is one
     // character's results, so a copy of the set does not carry it.
+    //
+    // The files under it are named by BBS and profile. Only AreaRankingFiles builds
+    // those paths, since it is the one place that checks the names are fit to be
+    // path pieces and that the result stays inside this folder.
     public static string SimulatorRankingsFolder(string setName) =>
         Path.Combine(GameDataSetDir(setName), "Simulator");
-
-    // One character's ranking on a set. The BBS and profile names are the names of
-    // their own folders under BBS/, so they are already fit to be path pieces.
-    public static string SimulatorRankingFile(string setName, string bbsName, string profileName) =>
-        Path.Combine(SimulatorRankingsFolder(setName), bbsName, profileName + ".ranking.json");
 
     // The realm folders whose old quest-guide file a set has already taken in.
     public static string QuestsAdoptedRealmsFile(string setName) =>

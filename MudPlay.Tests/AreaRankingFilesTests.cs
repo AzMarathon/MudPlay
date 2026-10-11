@@ -43,7 +43,15 @@ public sealed class AreaRankingFilesTests : IDisposable
         }
     }
 
-    private const string One = "board/one", Two = "board/two";
+    // BBS names carry the test's own tag: a move or delete by character or BBS walks
+    // every set under the data root, other test classes' included.
+    private string Board => $"board-{_tag}";
+    private string Tavern => $"tavern-{_tag}";
+    private string One => $"{Board}/one";
+    private string Two => $"{Board}/two";
+    private string Renamed => $"{Board}/renamed";
+    private string OtherRenamed => $"other-{_tag}/renamed";
+    private string ElsewhereOne => $"elsewhere-{_tag}/one";
 
     private static readonly RankingWorld World = new(
         LoopSimulator.SimulatorVersion, RankingWorld.TableNames.ToDictionary(t => t, _ => "10:1"), "seed");
@@ -120,7 +128,7 @@ public sealed class AreaRankingFilesTests : IDisposable
         string set = NewSet("a");
         Files().Write(new SimulatorOwner(set, One), Ranking());
 
-        Assert.True(File.Exists(Path.Combine(AppPaths.GameDataSetDir(set), "Simulator", "board", "one.ranking.json")));
+        Assert.True(File.Exists(Path.Combine(AppPaths.GameDataSetDir(set), "Simulator", Board, "one.ranking.json")));
         // Not among the set's own files, where tables are listed and counted.
         Assert.Empty(Directory.EnumerateFiles(AppPaths.GameDataSetDir(set)));
         Assert.Null(AreaRankingFiles.FileFor(new SimulatorOwner(set, null)));
@@ -235,13 +243,13 @@ public sealed class AreaRankingFilesTests : IDisposable
         files.Write(new SimulatorOwner(b, One), Ranking("Marsh"));
         files.Write(new SimulatorOwner(a, Two), Ranking("Fen"));
         // Kept under the new name by whoever had it before.
-        files.Write(new SimulatorOwner(b, "other/renamed"), Ranking("Dunes"));
-        files.Write(new SimulatorOwner(a, "other/renamed"), Ranking("Moor"));
+        files.Write(new SimulatorOwner(b, OtherRenamed), Ranking("Dunes"));
+        files.Write(new SimulatorOwner(a, OtherRenamed), Ranking("Moor"));
 
-        files.MoveCharacter(One, "other/renamed");
+        files.MoveCharacter(One, OtherRenamed);
 
-        Assert.Equal("Hills", files.Read(new SimulatorOwner(a, "other/renamed"), World).Ranking?.Rows[0].Area);
-        Assert.Equal("Marsh", files.Read(new SimulatorOwner(b, "other/renamed"), World).Ranking?.Rows[0].Area);
+        Assert.Equal("Hills", files.Read(new SimulatorOwner(a, OtherRenamed), World).Ranking?.Rows[0].Area);
+        Assert.Equal("Marsh", files.Read(new SimulatorOwner(b, OtherRenamed), World).Ranking?.Rows[0].Area);
         Assert.Equal(default, files.Read(new SimulatorOwner(a, One), World));
         Assert.Equal(default, files.Read(new SimulatorOwner(b, One), World));
         Assert.Equal("Fen", files.Read(new SimulatorOwner(a, Two), World).Ranking?.Rows[0].Area);
@@ -258,21 +266,21 @@ public sealed class AreaRankingFilesTests : IDisposable
         AreaRankingFiles files = Files();
         files.Write(new SimulatorOwner(a, One), Ranking("Hills"));
         files.Write(new SimulatorOwner(b, Two), Ranking("Marsh"));
-        files.Write(new SimulatorOwner(a, "elsewhere/one"), Ranking("Fen"));
+        files.Write(new SimulatorOwner(a, ElsewhereOne), Ranking("Fen"));
         // The loaded character has told of itself first, and is there already.
-        files.MoveCharacter(One, "tavern/one");
+        files.MoveCharacter(One, $"{Tavern}/one");
 
-        files.MoveBbs("board", "tavern");
+        files.MoveBbs(Board, Tavern);
 
-        Assert.Equal("Hills", files.Read(new SimulatorOwner(a, "tavern/one"), World).Ranking?.Rows[0].Area);
-        Assert.Equal("Marsh", files.Read(new SimulatorOwner(b, "tavern/two"), World).Ranking?.Rows[0].Area);
-        Assert.False(Directory.Exists(Path.Combine(AppPaths.SimulatorRankingsFolder(a), "board")));
-        Assert.False(Directory.Exists(Path.Combine(AppPaths.SimulatorRankingsFolder(b), "board")));
+        Assert.Equal("Hills", files.Read(new SimulatorOwner(a, $"{Tavern}/one"), World).Ranking?.Rows[0].Area);
+        Assert.Equal("Marsh", files.Read(new SimulatorOwner(b, $"{Tavern}/two"), World).Ranking?.Rows[0].Area);
+        Assert.False(Directory.Exists(Path.Combine(AppPaths.SimulatorRankingsFolder(a), Board)));
+        Assert.False(Directory.Exists(Path.Combine(AppPaths.SimulatorRankingsFolder(b), Board)));
 
-        files.DeleteBbs("tavern");
-        Assert.Equal(default, files.Read(new SimulatorOwner(a, "tavern/one"), World));
-        Assert.Equal(default, files.Read(new SimulatorOwner(b, "tavern/two"), World));
-        Assert.Equal("Fen", files.Read(new SimulatorOwner(a, "elsewhere/one"), World).Ranking?.Rows[0].Area);
+        files.DeleteBbs(Tavern);
+        Assert.Equal(default, files.Read(new SimulatorOwner(a, $"{Tavern}/one"), World));
+        Assert.Equal(default, files.Read(new SimulatorOwner(b, $"{Tavern}/two"), World));
+        Assert.Equal("Fen", files.Read(new SimulatorOwner(a, ElsewhereOne), World).Ranking?.Rows[0].Area);
     }
 
     [Fact]
@@ -451,26 +459,26 @@ public sealed class AreaRankingFilesTests : IDisposable
 
         // A later client holds none of them in memory: these are profiles not loaded.
         var later = new Client();
-        later.Store.RenameCharacter(One, "board/renamed");
+        later.Store.RenameCharacter(One, Renamed);
         later.Store.ForgetCharacter(Two);
         later.Settle();
 
-        Assert.Equal("Hills", later.Load(new SimulatorOwner(a, "board/renamed"))?.Rows[0].Area);
-        Assert.Equal("Marsh", later.Load(new SimulatorOwner(b, "board/renamed"))?.Rows[0].Area);
+        Assert.Equal("Hills", later.Load(new SimulatorOwner(a, Renamed))?.Rows[0].Area);
+        Assert.Equal("Marsh", later.Load(new SimulatorOwner(b, Renamed))?.Rows[0].Area);
         Assert.Null(later.Load(new SimulatorOwner(a, One)));
         Assert.Null(later.Load(new SimulatorOwner(a, Two)));
 
         // Its BBS renamed, then removed: held in memory or not.
-        later.Store.RenameBbs("board", "tavern");
+        later.Store.RenameBbs(Board, Tavern);
         later.Settle();
-        Assert.Equal("Hills", later.Store.Get(new SimulatorOwner(a, "tavern/renamed"))?.Rows[0].Area);
-        Assert.Null(later.Store.Get(new SimulatorOwner(a, "board/renamed")));
-        Assert.True(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(b, "tavern/renamed"))));
+        Assert.Equal("Hills", later.Store.Get(new SimulatorOwner(a, $"{Tavern}/renamed"))?.Rows[0].Area);
+        Assert.Null(later.Store.Get(new SimulatorOwner(a, Renamed)));
+        Assert.True(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(b, $"{Tavern}/renamed"))));
 
-        later.Store.ForgetBbs("tavern");
+        later.Store.ForgetBbs(Tavern);
         later.Settle();
         Assert.Equal(0, later.Store.Count);
-        Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(a, "tavern/renamed"))));
-        Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(b, "tavern/renamed"))));
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(a, $"{Tavern}/renamed"))));
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(b, $"{Tavern}/renamed"))));
     }
 }
