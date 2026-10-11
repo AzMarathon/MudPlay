@@ -12513,9 +12513,21 @@ public sealed class AppServices
     }
 
     // A room-spell counter as RoomSpellCounterWear weighs it, null for an item the
-    // game data has no wearable record of.
-    private Game.Inventory.RoomSpellCounterItem? DescribeCounterItem(int itemId) =>
-        ItemNames.GetName(itemId) is { Length: > 0 } name ? DescribeGear(itemId, name) : null;
+    // game data has no wearable record of, and for one that negates only room
+    // spells the wear leaves alone (RoomSpellCounterWear.Covers: the crystal
+    // ward). Such an item counts for a route when it is on and not otherwise.
+    private Game.Inventory.RoomSpellCounterItem? DescribeCounterItem(int itemId)
+    {
+        if (ItemNames.GetName(itemId) is not { Length: > 0 } name
+            || GameData.FindRowByNumber("Items", itemId) is not System.Text.Json.JsonElement row)
+            return null;
+        bool covered = false;
+        for (int k = 0; k < 10 && !covered; k++)
+            covered = row.TryGetProperty($"NegateSpell-{k}", out System.Text.Json.JsonElement v)
+                && v.TryGetInt32(out int spell) && spell > 0
+                && Game.Inventory.RoomSpellCounterWear.Covers(spell);
+        return covered ? DescribeGear(itemId, name) : null;
+    }
 
     // The pieces worn in a slot now, both of a pair (fingers, wrists): what a
     // counter going on there could push out, and whether a place is free.

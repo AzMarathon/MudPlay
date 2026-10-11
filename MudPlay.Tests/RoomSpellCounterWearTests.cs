@@ -18,7 +18,7 @@ namespace MudPlay.Tests;
 // neck, 10 / 1 against 0 / 0.
 public sealed class RoomSpellCounterWearTests
 {
-    private const int MagmaHeat = 526, FreezingCold = 5242;
+    private const int MagmaHeat = 526, FreezingCold = 5242, ThiefFilter = 1325;
     private const int Feather = 1000, Amulet = 487, SapphireRing = 433, WinterhideTunic = 3660;
 
     private sealed class World
@@ -62,12 +62,14 @@ public sealed class RoomSpellCounterWearTests
                 ["winterhide tunic"] = (WinterhideTunic, "Torso", EquipmentSlot.Torso, 270, 27),
                 ["platemail"] = (9003, "Torso", EquipmentSlot.Torso, 400, 50),
                 ["leather jerkin"] = (9007, "Torso", EquipmentSlot.Torso, 5, 0),
+                ["crystal ward"] = (3701, "Worn", EquipmentSlot.Neck, 0, 0),
             };
 
         private static readonly Dictionary<int, int[]> Negators = new()
         {
             [MagmaHeat] = new[] { Amulet, Feather },
             [FreezingCold] = new[] { SapphireRing, WinterhideTunic },
+            [ThiefFilter] = new[] { 3701 },
         };
 
         public World()
@@ -502,6 +504,24 @@ public sealed class RoomSpellCounterWearTests
 
         Assert.Empty(w.Sent);
         Assert.Empty(w.Wear.OwnedSnapshot());
+    }
+
+    [Fact]
+    public void TheCrystalWard_IsNotPutOnForTheClassFilterRooms()
+    {
+        // The user's ruling (2026-10-10): not covered.
+        World w = new();
+        w.Pack.Add("crystal ward");
+        w.Line(4);
+        w.Rooms[At(3)] = new Room { Key = At(3), Name = "Guild Hall", Spell = ThiefFilter, Exits = w.Rooms[At(3)].Exits };
+
+        w.Arrive(2);
+        Assert.True(w.Wear.ReadyToEnter(At(3)));
+        w.Arrive(3);
+
+        Assert.Empty(w.Sent);
+        Assert.False(RoomSpellCounterWear.Covers(ThiefFilter));
+        Assert.True(RoomSpellCounterWear.Covers(MagmaHeat));
     }
 
     // ----- a wear that comes to nothing ------------------------------------------
