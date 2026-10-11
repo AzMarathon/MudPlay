@@ -151,20 +151,6 @@ public sealed partial class EventRowViewModel : ObservableObject
     // True when the event's Disabled flag is set (manually or by the reconciler).
     public bool IsDisabled => Source.Disabled;
 
-    private string FormatEvery()
-    {
-        if (Source.EveryAmount is not { } amount || Source.EveryUnit is not { } unit)
-            return "Every —";
-        string label = (amount, unit) switch
-        {
-            (1, EventTimeUnit.Seconds) => "second",
-            (_, EventTimeUnit.Seconds) => "seconds",
-            (1, EventTimeUnit.Minutes) => "minute",
-            (_, EventTimeUnit.Minutes) => "minutes",
-            (1, EventTimeUnit.Hours)   => "hour",
-            (_, EventTimeUnit.Hours)   => "hours",
-            _ => "?",
-        };
-        return $"Every {amount} {label}";
-    }
+    private string FormatEvery() =>
+        EventScheduleText.Period(Source) is { } period ? $"Every {period}" : "Every —";
 }

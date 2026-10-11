@@ -189,22 +189,58 @@ public sealed class EventRemoteHandlerTests : IDisposable
         Assert.DoesNotContain("): 1 ", sent[1]);
     }
 
-    // What an event sends is the user's own: a password typed into a command, a
-    // loop's name. Neither form says any of it.
+    // What an event sends is the user's own: a password typed into a command, the
+    // names of its loop, its Auto-Lair setup, its boss, its rooms. No form says any
+    // of it. The one-event answer does give the schedule the event runs on, which
+    // the owner asked for: a period or a time of day, and nothing typed.
     [Fact]
-    public void NoAnswer_CarriesWhatAnEventSends()
+    public void TheOneEventAnswer_GivesTheSchedule_AndNoAnswerCarriesWhatAnEventSendsOrNames()
     {
         using Rig r = Build();
         r.Events.Add(Command("Log in helper", text: "hunter2secret"));
         r.Events.Add(LoopNobodySaved("Lair loop"));
+        r.Events.Add(new ScheduledEvent
+        {
+            Name = "Boss watch", TriggerType = EventTriggerType.Boss, BossName = "The Warden", BossLeadMinutes = 7,
+            ActionType = EventActionType.AutoLair, AutoLairSetupName = "Crypt circuit",
+            StopBossName = "Old Gatekeeper", Then = EventThenType.Loop, ThenLoopName = "Homeward",
+        });
+        r.Events.Add(new ScheduledEvent
+        {
+            Name = "Nightly haul", TriggerType = EventTriggerType.AtTime, AtTime = "03:15",
+            ActionType = EventActionType.StashTransfer,
+            TransferStash = new RoomRef(9, 413), TransferBank = new RoomRef(1, 2203),
+        });
+        r.Events.Add(new ScheduledEvent
+        {
+            Name = "Go north", TriggerType = EventTriggerType.Every, EveryAmount = 45, EveryUnit = EventTimeUnit.Minutes,
+            ActionType = EventActionType.WalkTo, WalkToTarget = new RoomRef(17, 1488),
+            Then = EventThenType.Event, ThenEventName = "Secret follow-up",
+        });
 
-        string everything = string.Concat(r.Ask("@events"))
-            + string.Concat(r.Ask("@event log in helper"))
+        string asked = string.Concat(r.Ask("@event log in helper"))
             + string.Concat(r.Ask("@event lair loop"))
-            + string.Concat(r.Ask("@event lair loop on"));
+            + string.Concat(r.Ask("@event boss watch"))
+            + string.Concat(r.Ask("@event nightly haul"))
+            + string.Concat(r.Ask("@event 5"));
+        string everything = asked
+            + string.Concat(r.Ask("@events"))
+            + string.Concat(r.Ask("@event lair loop on"))
+            + string.Concat(r.Ask("@event boss watch on"))
+            + string.Concat(r.Ask("@event 3 off"))
+            + string.Concat(r.Ask("@event haul watch"));
 
-        Assert.DoesNotContain("hunter2secret", everything);
-        Assert.DoesNotContain("Gone Loop", everything);
+        Assert.Contains("event 'Log in helper' is on: fires every 30 minutes, sends a command", asked);
+        Assert.Contains("event 'Boss watch' is off (target missing): fires on a boss timer, runs Auto-Lair", asked);
+        Assert.Contains("event 'Nightly haul' is on: fires at 03:15 daily, moves a stash to the bank", asked);
+        Assert.Contains("event 5 'Go north' is on: fires every 45 minutes, walks to a room", asked);
+
+        foreach (string kept in new[]
+        {
+            "hunter2secret", "Gone Loop", "Warden", "Crypt circuit", "Gatekeeper", "Homeward", "Secret follow-up",
+            "413", "2203", "1488", "17/", "9/",
+        })
+            Assert.DoesNotContain(kept, everything);
     }
 
     [Fact]
@@ -222,14 +258,91 @@ public sealed class EventRemoteHandlerTests : IDisposable
     // ----- @event <name> ----------------------------------------------------
 
     [Fact]
-    public void Event_Bare_SaysItsStateAndItsKinds()
+    public void Event_Bare_SaysItsState_ItsSchedule_AndItsKind()
     {
         using Rig r = Build();
         r.Events.Add(BankTrip("Bank run"));
         r.Events.Add(Command("Sell junk", disabled: true));
 
-        Assert.Equal(new[] { Reply("event 'Bank run' is on: fires at a set time, makes a bank trip") }, r.Ask("@event bank run"));
-        Assert.Equal(new[] { Reply("event 'Sell junk' is off: fires on a timer, sends a command") }, r.Ask("@event sell junk"));
+        Assert.Equal(new[] { Reply("event 'Bank run' is on: fires at 21:30 daily, makes a bank trip") }, r.Ask("@event bank run"));
+        Assert.Equal(new[] { Reply("event 'Sell junk' is off: fires every 30 minutes, sends a command") }, r.Ask("@event sell junk"));
+    }
+
+    // The schedule of a trigger that runs on a clock, worded as the Events tab's
+    // When column words it; the kind alone for the triggers that have none, and
+    // for a boss timer, whose boss is not said.
+    [Theory]
+    [InlineData(EventTriggerType.Every, 1, EventTimeUnit.Seconds, null, "fires every 1 second", "Every 1 second")]
+    [InlineData(EventTriggerType.Every, 90, EventTimeUnit.Seconds, null, "fires every 90 seconds", "Every 90 seconds")]
+    [InlineData(EventTriggerType.Every, 1, EventTimeUnit.Minutes, null, "fires every 1 minute", "Every 1 minute")]
+    [InlineData(EventTriggerType.Every, 1, EventTimeUnit.Hours, null, "fires every 1 hour", "Every 1 hour")]
+    [InlineData(EventTriggerType.Every, 12, EventTimeUnit.Hours, null, "fires every 12 hours", "Every 12 hours")]
+    [InlineData(EventTriggerType.AtTime, null, null, "06:05", "fires at 06:05 daily", "At 06:05")]
+    [InlineData(EventTriggerType.AtTime, null, null, "23:59", "fires at 23:59 daily", "At 23:59")]
+    [InlineData(EventTriggerType.Logon, null, null, null, "fires on logon", "On Logon")]
+    [InlineData(EventTriggerType.Logoff, null, null, null, "fires on logoff", "On Logoff")]
+    [InlineData(EventTriggerType.Relog, null, null, null, "fires on re-log", "On Re-log")]
+    [InlineData(EventTriggerType.Boss, null, null, null, "fires on a boss timer", null)]
+    [InlineData(EventTriggerType.State, null, null, null, "fires on a condition", null)]
+    public void Event_Bare_GivesTheSchedule_AsTheEventsTabWordsIt(
+        EventTriggerType trigger, int? amount, EventTimeUnit? unit, string? atTime, string fires, string? tab)
+    {
+        using Rig r = Build();
+        ScheduledEvent e = new()
+        {
+            Name = "Probe", TriggerType = trigger, EveryAmount = amount, EveryUnit = unit, AtTime = atTime,
+            BossName = "The Warden", ActionType = EventActionType.RestUp,
+        };
+        r.Events.Add(e);
+
+        Assert.Equal(new[] { Reply($"event 'Probe' is on: {fires}, rests up") }, r.Ask("@event probe"));
+        // The tab's own words for the same trigger, where it has a schedule to
+        // word: the answer's are those, in lower case.
+        if (tab is not null)
+        {
+            string tabText = new EventRowViewModel(e, isAutoDisabled: false).TimeText;
+            Assert.Equal(tab, tabText);
+            if (trigger is EventTriggerType.Every or EventTriggerType.AtTime)
+                Assert.Contains(char.ToLowerInvariant(tabText[0]) + tabText[1..], fires);
+        }
+    }
+
+    // A time or a period that doesn't parse (a profile edited by hand) is not
+    // sent as it was typed: the kind alone.
+    [Theory]
+    [InlineData(EventTriggerType.AtTime, null, null, "tea time (map 1, room 5)", "fires at a set time")]
+    [InlineData(EventTriggerType.AtTime, null, null, "9:30", "fires at a set time")]
+    [InlineData(EventTriggerType.AtTime, null, null, null, "fires at a set time")]
+    [InlineData(EventTriggerType.Every, 0, EventTimeUnit.Minutes, null, "fires on a timer")]
+    [InlineData(EventTriggerType.Every, -5, EventTimeUnit.Minutes, null, "fires on a timer")]
+    [InlineData(EventTriggerType.Every, null, EventTimeUnit.Minutes, null, "fires on a timer")]
+    [InlineData(EventTriggerType.Every, 5, null, null, "fires on a timer")]
+    public void Event_Bare_AScheduleThatDoesntParse_GivesTheKindAlone(
+        EventTriggerType trigger, int? amount, EventTimeUnit? unit, string? atTime, string fires)
+    {
+        using Rig r = Build();
+        r.Events.Add(new ScheduledEvent
+        {
+            Name = "Probe", TriggerType = trigger, EveryAmount = amount, EveryUnit = unit, AtTime = atTime,
+            ActionType = EventActionType.RestUp,
+        });
+
+        Assert.Equal(new[] { Reply($"event 'Probe' is on: {fires}, rests up") }, r.Ask("@event probe"));
+    }
+
+    // The list doesn't carry the schedule: the name, the number and the state.
+    [Fact]
+    public void Events_TheList_DoesNotGiveTheSchedule()
+    {
+        using Rig r = Build();
+        r.Events.Add(BankTrip("Bank run"));
+        r.Events.Add(Command("Sell junk"));
+
+        string list = Assert.Single(r.Ask("@events"));
+
+        Assert.Equal(Reply("events: 1 Bank run on, 2 Sell junk on"), list);
+        Assert.DoesNotContain("21:30", list);
+        Assert.DoesNotContain("30 minutes", list);
     }
 
     [Fact]
@@ -240,7 +353,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         r.H.Profile.Current!.EventsGloballyDisabled = true;
 
         Assert.Equal(
-            new[] { Reply("event 'Bank run' is on: fires at a set time, makes a bank trip; all events are disabled") },
+            new[] { Reply("event 'Bank run' is on: fires at 21:30 daily, makes a bank trip; all events are disabled") },
             r.Ask("@event bank run"));
     }
 
@@ -252,7 +365,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         ScheduledEvent e = Command("Lights on", disabled: true);
         r.Events.Add(e);
 
-        Assert.Equal(new[] { Reply("event 'Lights on' is off: fires on a timer, sends a command") }, r.Ask("@event lights on"));
+        Assert.Equal(new[] { Reply("event 'Lights on' is off: fires every 30 minutes, sends a command") }, r.Ask("@event lights on"));
         Assert.True(e.Disabled);
 
         Assert.Equal(new[] { Reply("event 'Lights on' switched on") }, r.Ask("@event lights on on"));
@@ -798,7 +911,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
 
         Assert.Equal(new[] { Reply("events: 1 Night stats on, 2 (unnamed) on, 3 Bank run on") }, r.Ask("@events"));
         Assert.Equal(
-            new[] { Reply("event 2 (unnamed) is on: fires on a timer, sends a command") }, r.Ask("@event 2"));
+            new[] { Reply("event 2 (unnamed) is on: fires every 30 minutes, sends a command") }, r.Ask("@event 2"));
         Assert.Equal(new[] { Reply("event 2 (unnamed) switched off") }, r.Ask("@event 2 off"));
         Assert.True(unnamed.Disabled);
         Assert.Equal(new[] { Reply("event 2 (unnamed) is already off") }, r.Ask("@event 2 disable"));
@@ -823,7 +936,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         Assert.StartsWith("switched off by remote @event from Friend (by number 3) at ", r.Events.LastSwitch(bank));
         Assert.Equal(new[] { Reply("event 3 'Bank run' switched on") }, r.Ask("@event #3 on"));
         Assert.Equal(new[] { Reply("event 3 'Bank run' is already on") }, r.Ask("@event 3 on"));
-        Assert.StartsWith($"/{Friend} {{event 3 'Bank run' is on: fires ", Assert.Single(r.Ask("@event #3")));
+        Assert.Equal(new[] { Reply("event 3 'Bank run' is on: fires at 21:30 daily, makes a bank trip") }, r.Ask("@event #3"));
     }
 
     [Fact]

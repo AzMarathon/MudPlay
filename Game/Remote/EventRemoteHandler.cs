@@ -8,7 +8,8 @@ namespace MudPlay.Game.Remote;
 // Events) and switches one on or off.
 //
 //   @events                  every event's number, name and whether it is on.
-//   @event <name>            that one event: on or off, and what kind it is.
+//   @event <name>            that one event: on or off, when it fires and what
+//                            kind of thing it does.
 //   @event <name> on | off   switches it (enable / disable are taken too).
 //   @event <number> …        the same, for the event at that place in the list:
 //                            the way to one with no name, or to one of two that
@@ -20,10 +21,12 @@ namespace MudPlay.Game.Remote;
 // it before this handler runs, so a player without it is told nothing here and
 // can't learn whether an event of some name exists.
 //
-// What an answer may say is kept to the name and the state. An event's command
-// text can hold anything the user typed (a password, a private remark), and its
-// loop, room and boss names are the user's own: none of it goes out. The
-// one-event form names the kinds of its trigger and action in fixed words.
+// What an answer may say: the name, the state, and for the one-event form the
+// kinds of its trigger and action in fixed words, with the schedule a clock
+// trigger runs on ("every 30 minutes", "at 21:30 daily"). The owner asked for
+// the schedule (2026-10-11); the list doesn't carry it. An event's command text
+// can hold anything the user typed (a password, a private remark), and its loop,
+// Auto-Lair setup, room and boss names are the user's own: none of it goes out.
 //
 // A switch is EventManager.SetEnabled: the same per-event flag the edit window
 // sets, saved at once. Failures (no such event, a name that fits several, a
@@ -322,14 +325,24 @@ public sealed class EventRemoteHandler : IDisposable
     private static string MissingWhat(ScheduledEvent e) =>
         e.ActionType == EventActionType.AutoLair ? "its Auto-Lair setup" : "its loop";
 
-    // The kind of trigger and of action, in fixed words: nothing the user typed.
+    // The trigger: its kind in fixed words, and for the two that run on a clock
+    // the schedule itself, built from the event's parsed fields (a period, a time
+    // of day) and never from text as it was typed. A time or period that doesn't
+    // parse falls back to the kind alone. The period is worded where the Events
+    // tab's When column words it, and the time is the HH:mm the tab shows. A boss
+    // timer is only said to be one: which boss is the user's own. A condition has
+    // no schedule to give.
     private static string When(ScheduledEvent e) => e.TriggerType switch
     {
         EventTriggerType.Logon  => "fires on logon",
         EventTriggerType.Logoff => "fires on logoff",
         EventTriggerType.Relog  => "fires on re-log",
-        EventTriggerType.AtTime => "fires at a set time",
-        EventTriggerType.Every  => "fires on a timer",
+        EventTriggerType.AtTime => e.TryParseAtTime() is { } at
+            ? $"fires at {at.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)} daily"
+            : "fires at a set time",
+        EventTriggerType.Every  => e.TryParseEvery() is not null && EventScheduleText.Period(e) is { } period
+            ? $"fires every {period}"
+            : "fires on a timer",
         EventTriggerType.State  => "fires on a condition",
         EventTriggerType.Boss   => "fires on a boss timer",
         _ => "fires on its trigger",

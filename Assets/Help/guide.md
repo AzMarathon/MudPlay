@@ -2532,7 +2532,7 @@ Eleven commands, one for each auto toggle on your toolbar and in Settings → Ge
 **Forms:**
 
 - `@events`: every event's number and name, and whether it is on.
-- `@event bank run`: that one event, on or off, and what kind it is.
+- `@event bank run`: that one event: on or off, when it fires, and what kind of thing it does.
 - `@event bank run off`: switch it off. `disable` is taken for `off`.
 - `@event bank run on`: switch it on. `enable` is taken for `on`.
 - `@event 3`, `@event 3 off`, `@event 3 on`: the same, for the third event in the list.
@@ -2553,7 +2553,7 @@ The last word is read as the switch (`on`, `off`, `enable`, `disable`), unless e
 
 **Who may send it:** a player with **Alter settings**, on any of the three channels. It is the permission `@settings`, `@profile` and the `@auto-…` toggles need: seeing how your client is set up needs the same grant as changing it. A player without it gets the Failure message whatever they typed, and so can't learn whether an event of some name exists.
 
-**What an answer may say.** An event's name, whether it is on, and the *kind* of its trigger and action in fixed words (`fires on a timer`, `sends a command`). Never what it sends, which loop or room it uses, or when it fires: an event's command can hold anything you typed.
+**What an answer may say.** An event's number and name, and whether it is on. The one-event answer adds the *kind* of its trigger and action in fixed words (`fires on logon`, `sends a command`), and for an event on a clock the schedule it runs on: its period (`fires every 30 minutes`) or its time of day (`fires at 21:30 daily`), worded as the Events tab's **When** column words them. The list doesn't give the schedule. No answer says what an event sends, or names its loop, its Auto-Lair setup, its rooms or its boss: an event's command can hold anything you typed, and a boss-timer event is only said to follow a boss timer.
 
 | Reply | When |
 |---|---|
@@ -2562,7 +2562,7 @@ The last word is read as the switch (`on`, `off`, `enable`, `disable`), unless e
 | `events (all disabled): …` | **Disable all events** is ticked on the Events tab. Each event's own state is still shown; none fires until the box is cleared. |
 | any of the above, with `<name> off (target missing)` | That event is off because its saved loop or Auto-Lair setup no longer exists. It can't be switched on from here. |
 | `no events defined` | `@events`, and you have none. |
-| `event '<name>' is on: fires on a timer, makes a bank trip` | `@event <name>`. It reads `is off`, or `is off (target missing)`, for one that is. It ends `; all events are disabled` while **Disable all events** is ticked. |
+| `event '<name>' is on: fires at 21:30 daily, makes a bank trip` | `@event <name>`. It reads `is off`, or `is off (target missing)`, for one that is. It ends `; all events are disabled` while **Disable all events** is ticked. |
 | `event '<name>' switched off` | It was on. It fires no more. |
 | `event '<name>' switched off; the run it has under way finishes` | The same, switched off in the middle of its own run. |
 | `event '<name>' switched on` | It was off. It ends `; all events are disabled, so it won't fire yet` while **Disable all events** is ticked. |
@@ -2577,11 +2577,11 @@ The last word is read as the switch (`on`, `off`, `enable`, `disable`), unless e
 
 Two more refusals carry a usage line. `@event` with nothing after it, or with only `on` or `off`, is refused with `usage: @event <name or number> [on|off]`. `@events` with anything after it is refused with `usage: @events lists them; @event <name or number> on|off switches one`, and nothing is switched: `@events off` does not disable your events.
 
-The kinds an event is described by:
+What the one-event answer describes an event by:
 
 | Part | Reads |
 |---|---|
-| Trigger | `fires on logon`, `fires on logoff`, `fires on re-log`, `fires at a set time`, `fires on a timer`, `fires on a condition`, `fires on a boss timer` |
+| Trigger | `fires on logon`, `fires on logoff`, `fires on re-log`, `fires at 21:30 daily` (its own time), `fires every 30 minutes` (its own period, in seconds, minutes or hours), `fires on a condition`, `fires on a boss timer`. An event whose saved time or period can't be read says `fires at a set time` or `fires on a timer`. |
 | Action | `walks to a room`, `runs a loop`, `runs Auto-Lair`, `sends a command`, `runs a Roomba sweep`, `waits`, `rests up`, `makes a bank trip`, `moves a stash to the bank` |
 
 **Situations:**
