@@ -2519,18 +2519,66 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Single(partyWire, w => w == "invite Tank");
     }
 
+    // The join wait is over, as the clock the helper pinned would never show.
+    private static void LetTheJoinWaitRunOut(Harness h)
+    {
+        DateTimeOffset later = DateTimeOffset.UtcNow.AddSeconds(30);
+        h.Comeback.NowProvider = () => later;
+        h.Comeback.FireJoinFallbackForTests();
+    }
+
+    // Still standing with them when the join wait runs out: invited after all.
     [Fact]
-    public void Stock_AutoLairOnSight_NoFollowAfterTheJoin_InvitesAfterAll()
+    public void Stock_AutoLairOnSight_NoFollowAfterTheJoin_StillInTheRoom_InvitesAfterAll()
     {
         using Harness h = NewHarness(GatedGraphJson);
         h.Comeback.OnStock = () => true;
-        h.Comeback.JoinFirstWait = TimeSpan.Zero;
         List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
 
         AlsoHere(h, "Tank");
         h.Comeback.FireJoinFallbackForTests();
+        Assert.Empty(partyWire);                                 // inside the join wait
+
+        LetTheJoinWaitRunOut(h);
 
         Assert.Equal(1, JoinsAsked(h, "Tank"));
         Assert.Single(partyWire, w => w == "invite Tank");
+    }
+
+    // Auto-Lair has walked on by then: an invite from the next room reaches nobody
+    // we stand with, so none is sent, and the pass that next finds them asks again.
+    [Fact]
+    public void Stock_AutoLairOnSight_WalkedOnBeforeTheJoinWaitRanOut_NoInvite_AndTheNextPassAsksAgain()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.OnStock = () => true;
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+        AlsoHere(h, "Tank");
+
+        AlsoHere(h, "Healer");                                   // the next room: Tank isn't in it
+        LetTheJoinWaitRunOut(h);
+
+        Assert.Empty(partyWire);
+        Assert.Empty(h.Comeback.AskedToJoin);
+        Assert.Equal(new[] { "Tank" }, h.Comeback.InviteOnSight);   // still owed
+
+        AlsoHere(h, "Tank");                                     // a pass finds them again
+        Assert.Equal(2, JoinsAsked(h, "Tank"));
+    }
+
+    // Auto-Lair was stopped: nothing is owed any more, and no invite follows.
+    [Fact]
+    public void Stock_AutoLairOnSight_AutoLairStoppedBeforeTheJoinWaitRanOut_NoInvite()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.OnStock = () => true;
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+        AlsoHere(h, "Tank");
+
+        h.Lair.Stop("test");
+        LetTheJoinWaitRunOut(h);
+
+        Assert.Empty(partyWire);
+        Assert.Empty(h.Comeback.AskedToJoin);
     }
 }

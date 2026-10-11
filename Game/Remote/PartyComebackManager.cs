@@ -895,7 +895,7 @@ public sealed class PartyComebackManager : IDisposable
             if (now - _invitedOnSightAt.GetValueOrDefault(given, DateTimeOffset.MinValue) < OnSightInviteCooldown) continue;
             _invitedOnSightAt[given] = now;
             _log?.Info(LogCategory, $"{given} is here — bringing them back, as Auto-Lair's pass found them.");
-            AskBack(given, removedByAHold: false, inviteAfter: JoinFirstWait);
+            AskBack(given, removedByAHold: false, inviteAfter: JoinFirstWait, onSight: true);
         }
     }
 
@@ -1698,9 +1698,12 @@ public sealed class PartyComebackManager : IDisposable
         return followWait < JoinFirstWait + JoinFirstWait ? followWait / 2 : JoinFirstWait;
     }
 
-    // Stock: the members asked to `join` in an invite's place, and when each is
-    // invited after all if they haven't followed.
-    private readonly Dictionary<string, DateTimeOffset> _askedToJoin = new(StringComparer.OrdinalIgnoreCase);
+    // Stock: the members asked to `join` in an invite's place, when each is invited
+    // after all if they haven't followed, and whether Auto-Lair's pass asked (no
+    // pickup stands with them then, so that invite is only good while they are
+    // still in the room with us).
+    private readonly Dictionary<string, (DateTimeOffset InviteAt, bool OnSight)> _askedToJoin =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly DispatcherTimer _joinFallbackTimer;
 
     // The member a recovery is for had a @wait out with us when they asked.
@@ -1729,7 +1732,7 @@ public sealed class PartyComebackManager : IDisposable
     // The @join is one of the nags Settings → Party "Send @join nags to invited
     // members" governs. Switched off, none is sent here either: the member is
     // invited as before, and on Stock comes back by their own client's join.
-    private void AskBack(string given, bool removedByAHold, TimeSpan inviteAfter)
+    private void AskBack(string given, bool removedByAHold, TimeSpan inviteAfter, bool onSight = false)
     {
         if (!StillOnOurList(given) || removedByAHold)
         {
@@ -1751,7 +1754,7 @@ public sealed class PartyComebackManager : IDisposable
             _party.Invite(given);
             return;
         }
-        _askedToJoin[given] = NowProvider() + inviteAfter;
+        _askedToJoin[given] = (NowProvider() + inviteAfter, onSight);
         _log?.Info(LogCategory,
             $"{given} is still on our list (Stock): told to join by @join, no invite sent. If they aren't following in {inviteAfter.TotalSeconds:0.#}s they are invited, as a member off our list would be.");
         ArmJoinFallback();
@@ -1762,7 +1765,7 @@ public sealed class PartyComebackManager : IDisposable
     {
         _joinFallbackTimer.Stop();
         if (_askedToJoin.Count == 0) return;
-        TimeSpan until = _askedToJoin.Values.Min() - NowProvider();
+        TimeSpan until = _askedToJoin.Values.Min(asked => asked.InviteAt) - NowProvider();
         _joinFallbackTimer.Interval = until > ShortestTick ? until : ShortestTick;
         _joinFallbackTimer.Start();
     }
@@ -1792,8 +1795,19 @@ public sealed class PartyComebackManager : IDisposable
         DateTimeOffset now = NowProvider();
         foreach (string given in _askedToJoin.Keys.ToArray())
         {
-            if (now < _askedToJoin[given]) continue;
+            (DateTimeOffset inviteAt, bool onSight) = _askedToJoin[given];
+            if (now < inviteAt) continue;
             _askedToJoin.Remove(given);
+            // Auto-Lair walked on meanwhile, or was stopped: an invite from here
+            // reaches nobody we stand with. The pass that next finds them asks
+            // again, with no cooldown held against it.
+            if (onSight && (!_autoLair.IsActive || !InOurRoom(given)))
+            {
+                _invitedOnSightAt.Remove(given);
+                _log?.Info(LogCategory,
+                    $"{given} didn't follow after the @join, and {(_autoLair.IsActive ? "is no longer in the room with us" : "Auto-Lair has stopped")}: no invite is sent from here. A pass that finds them asks again.");
+                continue;
+            }
             _log?.Info(LogCategory,
                 $"{given} didn't follow after the @join: inviting them. Either the game told them \"You must be invited first!\" (they were off our list after all), or their client doesn't take our @join.");
             _party.Invite(given);
