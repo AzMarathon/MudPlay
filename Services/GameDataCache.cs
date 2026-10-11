@@ -414,7 +414,13 @@ public sealed class GameDataCache
             }
 
             path = ResolveTablePath(set, tableName);
-            if (path is null || !File.Exists(path)) return null;
+            if (path is null || !File.Exists(path))
+            {
+                // Read earlier in this load, dropped by the idle sweep, and the file
+                // gone since: the stamp was of a table there is no longer.
+                _stamps.Remove(tableName);
+                return null;
+            }
             generation = _generation;
 
             // A read of this table is already running, for a prewarm or for another
@@ -486,17 +492,24 @@ public sealed class GameDataCache
                     ? $"'{tableName}' taken from the prewarm in flight for '{set}'."
                     : $"'{tableName}' loaded for '{set}' ({outcome.Kilobytes} KB on disk, {result.ResidentBytes / 1024} KB held).");
             }
-            else if (outcome.Failure is JsonException ex && _failedTables.Add(tableName))
+            else
             {
-                // Malformed table JSON is an external-data-boundary failure (a bad
-                // MDB import, hand-edited file, etc.), not an app invariant — treat
-                // the table as unavailable rather than crash every consumer that
-                // happens to look it up. Said once: a lookup that was reading the
-                // same file meanwhile finds the table already marked.
-                Log?.Log(LogSeverity.Error, "GameData",
-                    $"'{tableName}' could not be parsed for set '{set}' ({ex.Message}) — " +
-                    "treating it as unavailable until the set is reloaded or re-imported.");
-                notifyParseFailed = true;
+                // No table this time. If one was read earlier in this load (and
+                // dropped by the idle sweep since), its stamp goes: it described a
+                // file the cache can no longer read.
+                _stamps.Remove(tableName);
+                if (outcome.Failure is JsonException ex && _failedTables.Add(tableName))
+                {
+                    // Malformed table JSON is an external-data-boundary failure (a bad
+                    // MDB import, hand-edited file, etc.), not an app invariant — treat
+                    // the table as unavailable rather than crash every consumer that
+                    // happens to look it up. Said once: a lookup that was reading the
+                    // same file meanwhile finds the table already marked.
+                    Log?.Log(LogSeverity.Error, "GameData",
+                        $"'{tableName}' could not be parsed for set '{set}' ({ex.Message}) — " +
+                        "treating it as unavailable until the set is reloaded or re-imported.");
+                    notifyParseFailed = true;
+                }
             }
         }
 
@@ -535,11 +548,21 @@ public sealed class GameDataCache
     }
 
     // The file tableName was last read from in this load of the active set: its
-    // length and last-write time, taken from the open file as it was read. Null for
-    // a table not read since the set's tables were last dropped for re-reading (a
-    // switch, a reload, a re-import), and for one whose file is missing or did not
-    // parse. The idle sweep dropping the table does not forget it; reading the table
-    // again replaces it with the file as that read found it.
+    // length and last-write time, taken from the open file as it was read.
+    //
+    // Read by the saved Simulator rankings, which stamp a ranking with the tables
+    // this client had actually loaded when it was worked out (not with the files on
+    // disk at the moment of saving).
+    //
+    // Null for a table not read since the set's tables were last dropped for
+    // re-reading (a switch, a reload, a re-import), and for one whose latest read
+    // found no file or a file that would not parse, whatever an earlier read found.
+    //
+    // The idle sweep dropping the table does not forget the stamp. When the table
+    // is then read again this answers with THAT read, the latest, not the first of
+    // the load: the rankings keep the first stamp they saw in a load themselves and
+    // take a later one that differs to mean the file changed under the session,
+    // which they could not see if this went on answering with the first.
     internal TableFileStamp? FileStampAsRead(string tableName)
     {
         ArgumentNullException.ThrowIfNull(tableName);

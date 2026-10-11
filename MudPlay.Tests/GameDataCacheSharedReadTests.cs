@@ -352,6 +352,66 @@ public sealed class GameDataCacheSharedReadTests : IDisposable
         Assert.Null(cache.FileStampAsRead("Monsters"));
     }
 
+    // Read, dropped by the idle sweep, and the file gone when the table is asked for
+    // again: there is no table, so no stamp of one either.
+    [Fact]
+    public void FileStampAsRead_IsForgottenWhenTheFileIsGoneAtTheNextRead()
+    {
+        string path = Seed("alpha", "Monsters", Monsters("orc"));
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        cache.GetTable("Monsters");
+        Assert.NotNull(cache.FileStampAsRead("Monsters"));
+
+        cache.EvictIdle(TimeSpan.Zero);
+        File.Delete(path);
+        // Still the dropped table's until the cache looks again.
+        Assert.NotNull(cache.FileStampAsRead("Monsters"));
+        Assert.Null(cache.GetTable("Monsters"));
+
+        Assert.Null(cache.FileStampAsRead("Monsters"));
+    }
+
+    // The same when the file is there and no longer parses.
+    [Fact]
+    public void FileStampAsRead_IsForgottenWhenTheNextReadDoesNotParse()
+    {
+        string path = Seed("alpha", "Monsters", Monsters("orc"));
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        cache.GetTable("Monsters");
+        Assert.NotNull(cache.FileStampAsRead("Monsters"));
+
+        cache.EvictIdle(TimeSpan.Zero);
+        File.WriteAllText(path, "[{\"Name\":\"Go" + (char)0x1E + "blin\"}]");
+        Assert.Null(cache.GetTable("Monsters"));
+
+        Assert.Null(cache.FileStampAsRead("Monsters"));
+        // And it comes back with the table once the file is mended and the set re-read.
+        File.WriteAllText(path, Monsters("troll"));
+        cache.ReloadActiveSet();
+        cache.GetTable("Monsters");
+        Assert.Equal(new FileInfo(path).Length, cache.FileStampAsRead("Monsters")!.Value.Length);
+    }
+
+    // A file that cannot be opened at the next read (an exception to the caller) leaves
+    // no stamp behind either.
+    [Fact]
+    public void FileStampAsRead_IsForgottenWhenTheNextReadThrows()
+    {
+        string path = Seed("alpha", "Monsters", Monsters("orc"));
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        cache.GetTable("Monsters");
+        cache.EvictIdle(TimeSpan.Zero);
+        // Gone between the lookup's check that it is there and its opening it.
+        cache.TableReadStarting = _ => File.Delete(path);
+
+        Assert.ThrowsAny<IOException>(() => cache.GetTable("Monsters"));
+
+        Assert.Null(cache.FileStampAsRead("Monsters"));
+    }
+
     // A table claimed from a prewarm carries the stamp of the file the prewarm read,
     // not of the file on disk when it was claimed.
     [Fact]
