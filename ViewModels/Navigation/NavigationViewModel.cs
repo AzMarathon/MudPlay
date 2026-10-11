@@ -3395,9 +3395,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // Gated on Settings → General "Load last ran loop" (on by default); off
             // restores the old empty-builder behavior. The @loop last remote command is
             // independent of this — it re-runs the last loop regardless.
+            // A loop last run on other game data is not pre-loaded: its rooms are
+            // that set's, and here it would be two clicks from saved under this one.
             bool preloadLast = _services.Resolver
                 .Resolve<Models.Profile.GeneralSettings>("General").LoadLastRanLoop;
-            if (preloadLast && _services.LoopRunner.LastRunLoop is { Waypoints.Count: >= 2 } last)
+            if (preloadLast && _services.LoopRunner.LastRunLoop is { Waypoints.Count: >= 2 } last
+                && string.Equals(_services.LoopRunner.LastRunLoopGameData, _services.RoomGraph.ActiveSet,
+                    StringComparison.OrdinalIgnoreCase))
                 SeedBuilderFromLoop(builder, last);
 
             LoopBuilder = builder;
