@@ -95,10 +95,9 @@ public sealed class RemoteCommandManager : IDisposable
     // () => Stats.HasParsed ? PlayerStats.Lives : (int?)null.
     public Func<int?>? LivesProvider { get; set; }
 
-    // Block @do suicide / @party suicide when remaining lives are at or below
-    // this threshold. Default 5; settable to 0 in Settings.Other to allow forced
-    // suicide through all lives. Max lives in MajorMUD is 9, so the UI clamps this
-    // to 0..9.
+    // Block @suicide when remaining lives are at or below this threshold. Default
+    // 5; settable to 0 in Settings.Other to allow forced suicide through all
+    // lives. Max lives in MajorMUD is 9, so the UI clamps this to 0..9.
     public int MaxSuicideLivesThreshold { get; set; } = 5;
 
     // The local character's own name. Public channels (gangpath / gossip / auction /
@@ -184,10 +183,12 @@ public sealed class RemoteCommandManager : IDisposable
     // Drop @-commands arriving on the Local say channel.
     public bool DisableLocalChannel { get; set; }
 
-    // When true, send FailureMessage back to the originator on per-player denial
-    // / unknown-command / party-whitelist denial. Hard-blocks and user-disabled
-    // paths (master / per-channel) stay silent regardless. Pushed from
-    // TalkSettings.WarnOnInvalidRemoteCommand.
+    // When true, a command that was refused or couldn't be carried out is
+    // answered: FailureMessage on a per-player or party-whitelist denial, the
+    // handler's own reason otherwise (RemoteCommandContext.Refuse). When false,
+    // none of those is sent. A word that is no command, the hard-blocks and the
+    // user-disabled paths (master / per-channel) stay silent regardless. Pushed
+    // from TalkSettings.WarnOnInvalidRemoteCommand.
     public bool WarnOnDenial { get; set; } = true;
 
     // Reply text used by the WarnOnDenial path. Pushed from
@@ -405,7 +406,8 @@ public sealed class RemoteCommandManager : IDisposable
     // Enumerate the catalog commands sender is permitted to issue, given their
     // merged per-player permission grant. Backs the @help handler's reply.
     // Party-whitelist commands (those mapped to PlayerRemoteControls.None — @wait
-    // / @ok / @comeback / @share) are excluded: they're gated by party membership
+    // / @ok / @waiting / @comeback / @forget / @share / @ptrain) are excluded:
+    // they're gated by party membership
     // alone, not an explicit permission flag, so they don't belong in a
     // per-permission command list. Reuses IsAuthorised so the answer always
     // matches what the engine would actually allow. Result follows the catalog's

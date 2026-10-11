@@ -153,7 +153,7 @@ public static class RemoteCommandCatalog
             // @atkprio / @atkorder split the legacy @attack-last verb: one
             // sets the priority target, the other the target-ordering mode.
             // No-arg form queries the current value; an arg sets it. Handler
-            // lives in AtkConfigHandler.cs, writes CombatSettings.
+            // lives in AttackTargetingRemoteHandler.cs, writes CombatSettings.
             ["@atkprio"]      = PlayerRemoteControls.AlterSettings,
             ["@atkorder"]     = PlayerRemoteControls.AlterSettings,
             ["@auto-all"]     = PlayerRemoteControls.AlterSettings,
@@ -213,7 +213,7 @@ public static class RemoteCommandCatalog
             // sub-command dispatch path (Local channel + args) lives
             // in PartyEssentialHandlers.OnParty and gates on
             // IsActivePartyMember + !DisallowPartyDirectives itself.
-            // Hard-blocks (@party suicide, @party reroll) bypass both
+            // Hard-blocks (@party set suicide, @party reroll) bypass both
             // at engine level via IsHardBlocked.
             ["@party"]        = PlayerRemoteControls.QueryHealthStatus,
             ["@share"]        = PlayerRemoteControls.None,

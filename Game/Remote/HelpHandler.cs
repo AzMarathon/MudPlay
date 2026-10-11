@@ -14,8 +14,8 @@ namespace MudPlay.Game.Remote;
 //                      accepted with or without the leading @ (`@help suicide` ==
 //                      `@help @suicide`).
 //
-// Party-whitelist commands (@wait / @ok / @comeback / @share) are excluded from the
-// no-arg list — those aren't permission-gated, so they don't belong in a
+// Party-whitelist commands (@wait / @ok / @waiting / @comeback / @forget / @share /
+// @ptrain) are excluded from the no-arg list — those aren't permission-gated, so they don't belong in a
 // per-permission list — but @help still *describes* them by name. The list is split
 // across multiple telepath replies when it exceeds MaxPayloadChars so no single
 // reply risks server-side truncation. Replies use ctx.Reply, so the engine handles

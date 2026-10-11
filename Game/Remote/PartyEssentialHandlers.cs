@@ -512,8 +512,8 @@ public sealed class PartyEssentialHandlers : IDisposable
     // @party-specific party-member fallback in RemoteCommandManager.IsAuthorised,
     // so this handler fires for (a) any active party member regardless of
     // per-player grants and (b) any non-party caller with an explicit
-    // QueryHealthStatus grant. Hard-blocks for @party suicide / @party reroll fire
-    // at engine level before this handler runs.
+    // QueryHealthStatus grant. Hard-blocks for @party set suicide / @party reroll
+    // fire at engine level before this handler runs.
     private void OnParty(RemoteCommandContext ctx)
     {
         if (ctx.Channel != RemoteChannel.Local || ctx.Args.Count == 0)
