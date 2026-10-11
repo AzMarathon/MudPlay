@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -679,11 +680,64 @@ public sealed class LoopOutsideChangeTests : IDisposable
         }
     }
 
+    // The walk of the tree and the parse of the changed files must stay off the thread
+    // the heartbeat runs on, which in the app is the one that draws the terminal. The
+    // watcher here is the app's own: its walk and its read are the ones it ships with,
+    // and only the hand-back to the "UI thread" is given, the app's being the Avalonia
+    // dispatcher.
     [Fact]
-    public async Task TheWalkAndTheParsingRunOffTheCallingThread()
+    public void TheWalkAndTheParsingRunOffTheCallingThread()
     {
-        int caller = Environment.CurrentManagedThreadId;
-        int walkedOn = caller, readOn = caller;
+        OffThreadRun run = FollowOneChangeFromAThreadOfOurOwn(walk: null, parseOnTheHeartbeatThread: false);
+
+        Assert.True(run.TakenIn);
+        Assert.Equal(0, run.WalksOverBeforeTheHeartbeatReturned);
+        Assert.Equal(new[] { false }, run.ParsedOnTheHeartbeatThread);
+        Assert.True(run.SwappedOnTheHeartbeatThread);
+        // The hold that makes the first of those certain saw the watcher's work start.
+        Assert.True(run.WorkSeenStartingElsewhere > 0);
+    }
+
+    // The check above is only worth having if it can fail: a watcher whose walk stays
+    // on the calling thread, and whose parse goes back to it, is caught by both.
+    [Fact]
+    public void AWalkOrAParseLeftOnTheCallingThread_IsCaught()
+    {
+        OffThreadRun run = FollowOneChangeFromAThreadOfOurOwn(
+            walk: root => Task.FromResult(NavTreeScan.Walk(root, LoopManager.LoopFileSuffix, LairManager.LairFileSuffix)),
+            parseOnTheHeartbeatThread: true);
+
+        Assert.True(run.TakenIn);
+        Assert.Equal(2, run.WalksOverBeforeTheHeartbeatReturned);   // one a beat
+        Assert.Equal(new[] { true }, run.ParsedOnTheHeartbeatThread);
+    }
+
+    private sealed record OffThreadRun(int WalksOverBeforeTheHeartbeatReturned, int WorkSeenStartingElsewhere,
+        bool[] ParsedOnTheHeartbeatThread, bool SwappedOnTheHeartbeatThread, bool TakenIn);
+
+    // A loop file from before waypoints carried their commands. Reading one logs what
+    // the upgrade dropped, from inside the parse, which is how the run below learns
+    // which thread parsed it.
+    private const string OlderLoopJson = """
+        {
+          "SchemaVersion": 2,
+          "Name": "Far",
+          "UserWaypoints": [ { "Map": 1, "Room": 1 }, { "Map": 1, "Room": 2 } ],
+          "Steps": [ { "kind": "command", "Command": "dep 100", "DelayMs": 500 } ]
+        }
+        """;
+
+    // Another client writes a loop; this client's watcher sees it on one beat and
+    // reads it on the next. Every beat is sent from a thread made here, which also
+    // runs whatever the watcher hands back to the "UI thread". No pool thread can be
+    // that thread, so where work ran is never a coincidence of ids, and the test
+    // thread only ever blocks: nothing here is compared across an await.
+    //
+    // walk null is the watcher's own. parseOnTheHeartbeatThread stands in for a
+    // watcher that reads the changed files on the UI thread.
+    private OffThreadRun FollowOneChangeFromAThreadOfOurOwn(Func<string, Task<NavTreeScan>>? walk, bool parseOnTheHeartbeatThread)
+    {
+        TimeSpan patience = TimeSpan.FromSeconds(30);
         LogService log = new();
         RoomGraphManager graph = new(new GameDataCache());
         LoopManager loops = new(new BfsMapper(graph), graph, log);
@@ -691,29 +745,88 @@ public sealed class LoopOutsideChangeTests : IDisposable
         loops.LoadAll(_setName);
         lairs.LoadAll(_setName);
         NavFolderManager folders = new(loops, lairs, log);
-        NavFolderWatcher watcher = new(loops, lairs, folders, log, 1,
-            walk: root => Task.Run(() =>
-            {
-                walkedOn = Environment.CurrentManagedThreadId;
-                return NavTreeScan.Walk(root, LoopManager.LoopFileSuffix, LairManager.LairFileSuffix);
-            }),
-            read: job => Task.Run(() =>
-            {
-                readOn = Environment.CurrentManagedThreadId;
-                return job();
-            }),
-            post: action => action());
 
-        NewLoops().Save(NewLoop("Far"));
-        for (int i = 0; i < 2; i++)
+        using BlockingCollection<Action> handedBack = new();
+        ManualResetEventSlim heartbeatReturned = new(true);
+        Thread heartbeatThread = null!;
+        Exception? thrown = null;
+        int walksOverEarly = 0, startedElsewhere = 0;
+
+        // Raised on a pool thread as the heartbeat's execution context arrives on it,
+        // which is before the work the heartbeat queued there starts. That work is held
+        // until the heartbeat has returned. Without the hold, a walk on a pool thread
+        // could be over before the calling thread reached its await, and would then
+        // look exactly like a walk that never left that thread.
+        AsyncLocal<object?> fromTheHeartbeat = new(change =>
         {
-            watcher.OnHeartbeat();
-            await watcher.InFlight;
+            if (!change.ThreadContextChanged || change.CurrentValue is null || Thread.CurrentThread == heartbeatThread) return;
+            Interlocked.Increment(ref startedElsewhere);
+            heartbeatReturned.Wait(patience);
+        });
+
+        heartbeatThread = new Thread(() =>
+        {
+            fromTheHeartbeat.Value = new object();
+            foreach (Action action in handedBack.GetConsumingEnumerable())
+            {
+                try { action(); }
+                catch (Exception ex) { thrown ??= ex; }
+            }
+        })
+        { IsBackground = true, Name = "test heartbeat thread" };
+
+        // A walk that is over by the time the watcher asks for the UI thread, with the
+        // heartbeat still on that thread's stack, ran on it.
+        Action<Action> post = action =>
+        {
+            if (Thread.CurrentThread == heartbeatThread) Interlocked.Increment(ref walksOverEarly);
+            handedBack.Add(action);
+        };
+        Func<Func<Action>, Task<Action>>? read = !parseOnTheHeartbeatThread ? null : job =>
+        {
+            TaskCompletionSource<Action> done = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            handedBack.Add(() => done.SetResult(job()));
+            return done.Task;
+        };
+        NavFolderWatcher watcher = new(loops, lairs, folders, log, 1, walk, read, post);
+
+        List<bool> parsedOnHeartbeat = new();
+        log.EntryAdded += entry =>
+        {
+            if (!entry.Message.Contains("migration of 'Far'")) return;
+            lock (parsedOnHeartbeat) parsedOnHeartbeat.Add(Thread.CurrentThread == heartbeatThread);
+        };
+        bool swappedOnHeartbeat = false;
+        loops.LoopsChanged += () => swappedOnHeartbeat = Thread.CurrentThread == heartbeatThread;
+
+        heartbeatThread.Start();
+        try
+        {
+            File.WriteAllText(LoopPath("Far"), OlderLoopJson);
+            for (int beat = 0; beat < 2; beat++)
+            {
+                ManualResetEventSlim sent = new(false);
+                handedBack.Add(() =>
+                {
+                    heartbeatReturned.Reset();
+                    try { watcher.OnHeartbeat(); }
+                    finally { heartbeatReturned.Set(); }
+                    sent.Set();
+                });
+                Assert.True(sent.Wait(patience), "the heartbeat never returned");
+                Assert.True(watcher.InFlight.Wait(patience), "the walk and the read never finished");
+            }
+        }
+        finally
+        {
+            handedBack.CompleteAdding();
+            heartbeatThread.Join(patience);
         }
 
-        Assert.NotNull(loops.Get("Far"));
-        Assert.NotEqual(caller, walkedOn);
-        Assert.NotEqual(caller, readOn);
+        Assert.Null(thrown);
+        lock (parsedOnHeartbeat)
+            return new OffThreadRun(walksOverEarly, startedElsewhere, parsedOnHeartbeat.ToArray(), swappedOnHeartbeat,
+                loops.Get("Far") is not null);
     }
 
     // ----- lair setups ----------------------------------------------

@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.176.8**
+> **Version 3.176.10**
 > - Stock: a follower an exit left behind is still on the leader's list, and is now brought back with a `join`, not an invite it never sees
 > - Stock leader: tells that member to `@join` when it reaches them, and invites only if they aren't following 5 s later
 > - Stock follower: joins the leader it asked back by itself on `found you` or on seeing them; on `You must be invited first!` it waits for the invite

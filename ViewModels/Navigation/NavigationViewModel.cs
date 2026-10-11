@@ -115,6 +115,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.TBInfo.StoreReloaded    += RefreshTeleportRooms;
         _services.RoomSpellTeleports.StoreReloaded += RefreshSpellTeleportClasses;
         _services.Loops.LoopsChanged += OnLoopsChanged;
+        _services.Loops.SettingsChanged += OnLoopSettingsChanged;
         _services.Favorites.Changed += OnFavoritesChanged;
         _services.GotoHistory.Changed += RefreshGotoHistory;
         _services.LoopRunner.Event += OnLoopRunnerEvent;
@@ -299,6 +300,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.TBInfo.StoreReloaded    -= RefreshTeleportRooms;
         _services.RoomSpellTeleports.StoreReloaded -= RefreshSpellTeleportClasses;
         _services.Loops.LoopsChanged -= OnLoopsChanged;
+        _services.Loops.SettingsChanged -= OnLoopSettingsChanged;
         _services.Favorites.Changed -= OnFavoritesChanged;
         _services.Profile.ProfileLoaded -= OnProfileChangedRebuildSysopGotos;
         _services.Profile.ProfileMutated -= OnProfileChangedRebuildSysopGotos;
@@ -5236,10 +5238,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     }
 
     // Backs the "Entire Loop Settings" rail flyout's "Only attack in lair
-    // rooms" toggle. Hydrated from the running loop in RebuildCurrentNavRows
-    // (guarded by _suppressLoopSettingWrite so the hydrate write doesn't loop
-    // back into a persist). A user toggle writes through to the live loop +
-    // the .loop file (see OnLoopOnlyAttackInLairRoomsChanged).
+    // rooms" toggle. Hydrated from the running loop (HydrateLoopSettingToggles,
+    // guarded by _suppressLoopSettingWrite so the hydrate write doesn't loop
+    // back into a persist). A user toggle writes through to the live loop and to
+    // this character's settings for it (see KeepRunningLoopSettings).
     [ObservableProperty] private bool _loopOnlyAttackInLairRooms;
     private bool _suppressLoopSettingWrite;
 
@@ -5248,11 +5250,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_suppressLoopSettingWrite) return;
         if (_services.LoopRunner.CurrentLoop is not { } loop) return;
         loop.OnlyAttackInLairRooms = value;             // live effect this observation
-        // Persist only when the loop is catalogued — a transient "Run this
-        // loop" instance isn't on disk, and Save would silently create a file
-        // (breaking the Run-never-writes rule). The flag still applies in-memory.
-        if (_services.Loops.Get(loop.Name) is not null)
-            _services.Loops.Save(loop);
+        KeepRunningLoopSettings(loop);
     }
 
     // The same flyout's "Wait to enter lairs until I can debuff" tick box and its
@@ -5268,8 +5266,32 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_suppressLoopSettingWrite) return;
         if (_services.LoopRunner.CurrentLoop is not { } loop) return;
         loop.LairEntryDebuff = LairEntryDebuffModes.From(LoopWaitToDebuffBeforeLairs, LoopLairDebuffWaitChoice);
-        if (_services.Loops.Get(loop.Name) is not null)
-            _services.Loops.Save(loop);
+        KeepRunningLoopSettings(loop);
+    }
+
+    // The two settings are this character's, kept on its profile by loop name, so a
+    // tick here never writes the loop file, which every character on the game data
+    // shares. A loop that was never saved has nowhere to keep them (SetSettings
+    // leaves it alone) and runs with them in memory.
+    private void KeepRunningLoopSettings(Loop loop) =>
+        _services.Loops.SetSettings(loop.Name, loop.OwnSettings);
+
+    private void HydrateLoopSettingToggles(Loop loop)
+    {
+        _suppressLoopSettingWrite = true;
+        LoopOnlyAttackInLairRooms = loop.OnlyAttackInLairRooms;
+        LoopWaitToDebuffBeforeLairs = LairEntryDebuffModes.IsOn(loop.LairEntryDebuff);
+        LoopLairDebuffWaitChoice = LairEntryDebuffModes.ChoiceOf(loop.LairEntryDebuff);
+        _suppressLoopSettingWrite = false;
+    }
+
+    // The character's settings for a loop changed somewhere else (the loop editor's
+    // Save, a loop accepted from another player, another character loading): show
+    // the running loop's. AppServices has brought them to the running loop by now;
+    // it subscribed first.
+    private void OnLoopSettingsChanged(string? name)
+    {
+        if (_services.LoopRunner.CurrentLoop is { } loop) HydrateLoopSettingToggles(loop);
     }
 
     // The CURRENT NAV header's "Details…" button opens the route the engine is
@@ -5438,11 +5460,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 // Hydrate the bound "only attack in lair rooms" toggle from the loop
                 // without triggering a write-back — it backs both the approach view's
                 // synthetic settings row and the running green list's ⚙ button.
-                _suppressLoopSettingWrite = true;
-                LoopOnlyAttackInLairRooms = loop.OnlyAttackInLairRooms;
-                LoopWaitToDebuffBeforeLairs = LairEntryDebuffModes.IsOn(loop.LairEntryDebuff);
-                LoopLairDebuffWaitChoice = LairEntryDebuffModes.ChoiceOf(loop.LairEntryDebuff);
-                _suppressLoopSettingWrite = false;
+                HydrateLoopSettingToggles(loop);
 
                 // Approach phase (incl. a pause taken mid-approach — IsApproachInFlight):
                 // read-only itinerary of JUST the walk-to the loop's entry — the loop-wide

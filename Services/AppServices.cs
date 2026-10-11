@@ -2670,6 +2670,7 @@ public sealed class AppServices
     // BBS changes.
     public Game.Map.LoopManager Loops { get; private set; } = null!;
     public LoopFavoritesStore LoopFavorites { get; private set; } = null!;
+    public LoopSettingsStore LoopSettings { get; private set; } = null!;
 
     // MegaMUD .mp loop-file importer. Stateless w.r.t. the
     // profile; takes the active RoomGraph at construct
@@ -8391,6 +8392,9 @@ public sealed class AppServices
         // game data's loops in hand; it plugs into both managers.
         LoopFavorites = new LoopFavoritesStore(Profile, Loops, Lairs, ProfileGameDataSet, Log);
 
+        // So is how each loop is run: only attack in lair rooms and the lair wait.
+        LoopSettings = new LoopSettingsStore(Profile, Loops, Log);
+
         // Shared folder CRUD over the Loops directory (loops + lairs
         // live in the same on-disk tree). Owns the filesystem move once
         // and reloads both managers, instead of either racing the dir.
@@ -10101,6 +10105,13 @@ public sealed class AppServices
             IsMasterSwitchOff = () => AutoModeController.KillSwitchEngaged,
         };
 
+        // A loop held outside the catalogue can be a copy the catalogue no longer
+        // holds (a snapshot of the last run, a loop re-read from disk under a run).
+        // A change to the character's settings for a loop, or another character
+        // loading, reaches those too, or a run would start or go on with the
+        // settings the copy was made with. Hooked up here, once every holder exists.
+        Loops.SettingsChanged += name => Loops.CopySettingsTo(LoopsHeldApartFromTheCatalogue(), name);
+
         // EventScheduler. Owns the AtTime ticker +
         // per-event Every-timers + connection-aware Logon / Re-log
         // latch. Subscribes to the stable WirePromptScanner singleton
@@ -11721,6 +11732,16 @@ public sealed class AppServices
     // current room, or the direction isn't a graph exit (a command / boat / special
     // step). Feeds the pre-move gear swap for boss / lair rooms.
     public Game.Map.LairEntryDebuffHold LairDebuffHold { get; private set; } = null!;
+
+    // Every loop some engine holds on to outside the loop catalogue: the runner's
+    // (running, last run, staged, to restart after a reconnect), the one waiting on
+    // its walk-to, and the one a running event goes back to.
+    private IEnumerable<Game.Map.Loop> LoopsHeldApartFromTheCatalogue()
+    {
+        foreach (Game.Map.Loop held in LoopRunner.HeldLoops) yield return held;
+        if (LoopHandoff.Pending is { } waitingOnItsWalk) yield return waitingOnItsWalk;
+        if (Events.ResumeLoop is { } eventGoesBackTo) yield return eventGoesBackTo;
+    }
 
     // How the running loop wants its next step taken with respect to the debuff:
     // the loop's own setting when that step enters a lair we would fight in and the

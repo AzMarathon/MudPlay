@@ -606,6 +606,9 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         Loop snapshot = new(saveName, running.Waypoints)
         {
             Notes = running.Notes ?? string.Empty,
+            // The settings the run has are the ones this character keeps for the
+            // saved loop; left out, the save would put both back to off.
+            OwnSettings = running.OwnSettings,
         };
         _loops.Save(snapshot);
         // Re-stamp the live runner's loop name so subsequent edits

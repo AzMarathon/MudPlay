@@ -1,6 +1,6 @@
 # Version history
 
-## 3.176.8
+## 3.176.10
 
 - Stock: a follower an exit left behind is still on the leader's list, and is now brought back with a `join`, not an invite it never sees
 - Stock leader: tells that member to `@join` when it reaches them, and invites only if they aren't following 5 s later
@@ -10,6 +10,12 @@
 - Stock: a loop's invite wait that runs out no longer uninvites a member who was following before
 - Stock: after a follow is given up, a `par` of `[Invited]` rows no longer makes the follower a party leader
 - Paradigm unchanged
+
+## 3.176.3
+
+- A loop's Only attack in lair rooms and Wait to enter lairs settings are now each character's own; a loop a character hasn't set them for runs with what the loop file holds
+- Ticking either no longer rewrites the shared loop file
+- `@loop send`: a loop whose name you already have is rejected when it is the same loop, and saved as `<name> 2` when it differs; your own loop and its settings are never changed
 
 ## 3.176.1
 

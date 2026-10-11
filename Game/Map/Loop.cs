@@ -62,15 +62,46 @@ public sealed class Loop
     // game-data lair rooms (Room.HasLair) — every other room behaves as if
     // auto-combat were off and is walked through. A per-waypoint DoNotAttack
     // still suppresses even a lair room; a triggered rest still clears any
-    // suppressed room so it can rest. Defaults false, so older loop files
-    // behave as before. Toggled from the Edit Loop window and the "Entire Loop
-    // Settings" entry in the nav rail.
+    // suppressed room so it can rest. Toggled from the Edit Loop window and the
+    // "Entire Loop Settings" entry in the nav rail.
+    //
+    // This and LairEntryDebuff below are the loaded character's, not the loop's: two
+    // characters run the same loop file each their own way (user, 2026-10-10). They
+    // are kept on the profile (LoopSettingsStore) and stamped on by LoopManager, as
+    // Favorite is. On a loop handed to LoopManager.Save they are what the character
+    // wants for it, and Save keeps them for the character, not in the file.
+    [JsonIgnore]
     public bool OnlyAttackInLairRooms { get; set; }
 
     // Loop-wide: wait one step short of a lair until the combat profile's pre-attack
-    // debuff can be cast, and how (LairEntryDebuffMode). Off by default, so older
-    // loop files behave as before. Set from the same places as the option above.
+    // debuff can be cast, and how (LairEntryDebuffMode). The character's, as above.
+    [JsonIgnore]
     public LairEntryDebuffMode LairEntryDebuff { get; set; }
+
+    // The two settings as the loop file holds them, from while they were shared by
+    // everyone on the game data. A character that has set neither for this loop runs
+    // it with these, so every loop behaves as it did; nothing a character changes is
+    // written here, and they are written back as found so the others still find them.
+    [JsonPropertyName("OnlyAttackInLairRooms")]
+    public bool SharedOnlyAttackInLairRooms { get; set; }
+
+    [JsonPropertyName("LairEntryDebuff")]
+    public LairEntryDebuffMode SharedLairEntryDebuff { get; set; }
+
+    // The pair above as one value, and the character's pair.
+    [JsonIgnore]
+    public LoopOwnSettings SharedSettings
+    {
+        get => new(SharedOnlyAttackInLairRooms, SharedLairEntryDebuff);
+        set => (SharedOnlyAttackInLairRooms, SharedLairEntryDebuff) = (value.OnlyAttackInLairRooms, value.LairEntryDebuff);
+    }
+
+    [JsonIgnore]
+    public LoopOwnSettings OwnSettings
+    {
+        get => new(OnlyAttackInLairRooms, LairEntryDebuff);
+        set => (OnlyAttackInLairRooms, LairEntryDebuff) = (value.OnlyAttackInLairRooms, value.LairEntryDebuff);
+    }
 
     // Folder this loop lives under inside the BBS Loops directory, relative
     // to it, using / separators (e.g. "Sewers/Lower"). Empty = the Loops

@@ -597,6 +597,11 @@ public sealed class EventManager : IDisposable
     // _driving hid the event from the handlers.
     private string? _drivenFailure;
 
+    // The loop the running event goes back to, or null. It is held here, apart from
+    // the loop runner, from the moment the event takes over until it hands back, so
+    // a change to the character's settings for that loop has to be brought to it.
+    public Loop? ResumeLoop => (_run?.Resume as EventResumePlan.Loop)?.SavedLoop;
+
     // One line for the bug report: the running event, how far along it is, and
     // what it goes back to.
     public string RunSummary => _run is not { } r

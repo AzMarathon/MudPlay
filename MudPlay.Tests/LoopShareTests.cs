@@ -20,16 +20,16 @@ public sealed class LoopShareTests : IDisposable
     // Loops persist under the set's Loops/ folder in the real app data root (AppPaths
     // caches it at static init), so each test uses its own set name and deletes it.
     private readonly string _setName = "test-set-" + Guid.NewGuid().ToString("N")[..12];
+    private readonly string _bbs = "test-loopshare-" + Guid.NewGuid().ToString("N")[..12];
     private DateTimeOffset _now = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
 
     public void Dispose()
     {
-        try
+        foreach (string folder in new[] { Path.Combine(AppPaths.GameDataRoot, _setName), AppPaths.BbsFolder(_bbs) })
         {
-            string setFolder = Path.Combine(AppPaths.GameDataRoot, _setName);
-            if (Directory.Exists(setFolder)) Directory.Delete(setFolder, recursive: true);
+            try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
+            catch { /* best-effort cleanup of the per-test set and its one profile */ }
         }
-        catch { /* best-effort cleanup of the per-test set */ }
     }
 
     private LoopManager NewLoops()
@@ -103,10 +103,18 @@ public sealed class LoopShareTests : IDisposable
         Assert.Equal(2, decoded.Waypoints.Count);
     }
 
+    // The way of waiting is the character's own for each loop now, not the loop
+    // file's: a received loop's mode is kept on the receiving character's profile,
+    // and the file, which every character on the game data reads, holds off.
     [Fact]
-    public void Receive_PriorityBuffWaitLoop_IsSavedWithItsMode()
+    public void Receive_PriorityBuffWaitLoop_IsSavedWithItsMode_AsTheReceivingCharactersOwn()
     {
         var (receiver, loops, _) = NewReceiver();
+        Directory.CreateDirectory(AppPaths.ProfileFolder(_bbs, "Receiver"));
+        File.WriteAllText(AppPaths.CharacterProfileFile(_bbs, "Receiver"), """{ "Name": "Receiver", "SchemaVersion": 8 }""");
+        ProfileService profile = new();
+        LoopSettingsStore settings = new(profile, loops);
+        profile.Load(_bbs, "Receiver");
         Loop sent = SampleLoop();
         sent.LairEntryDebuff = LairEntryDebuffMode.WaitForPriorityBuffs;
 
@@ -114,6 +122,17 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in DataLines(sent)) receiver.Ingest(Tele("Raijin", line));
 
         Assert.Equal(LairEntryDebuffMode.WaitForPriorityBuffs, loops.Get("King's Road")!.LairEntryDebuff);
+        Assert.True(settings.HasOwn("King's Road"));
+        Assert.Equal("WaitForPriorityBuffs", profile.Current!.LoopSettings!["King's Road"].LairEntryDebuff);
+
+        // Read again from what was saved: the mode comes back from the profile, and
+        // the loop file holds none.
+        LoopManager reread = NewLoops();
+        Assert.Equal(LairEntryDebuffMode.Off, reread.Get("King's Road")!.SharedLairEntryDebuff);
+        ProfileService profileAgain = new();
+        _ = new LoopSettingsStore(profileAgain, reread);
+        profileAgain.Load(_bbs, "Receiver");
+        Assert.Equal(LairEntryDebuffMode.WaitForPriorityBuffs, reread.Get("King's Road")!.LairEntryDebuff);
     }
 
     [Fact]
@@ -344,8 +363,10 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in DataLines(SampleLoop())) receiver.Ingest(Tele("Raijin", line));
 
         Assert.Equal("9/1", loops.Get("King's Road")!.Waypoints[0].Room);   // ours untouched
-        Assert.Equal(3, loops.Get("King's Road (from Raijin)")!.Waypoints.Count);
-        Assert.Equal("[Received loop 'King's Road' 3 rooms from Raijin, saved as 'King's Road (from Raijin)']", notices.Single());
+        Assert.Equal(3, loops.Get("King's Road 2")!.Waypoints.Count);
+        string theirs = LoopSignature.ShortOf(SampleLoop()), ours = LoopSignature.ShortOf(loops.Get("King's Road")!);
+        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin, saved as 'King's Road 2' ({theirs}): "
+            + $"your 'King's Road' is a different loop ({ours})]", notices.Single());
     }
 
     [Fact]
@@ -358,7 +379,8 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in DataLines(SampleLoop())) receiver.Ingest(Tele("Raijin", line));
 
         Assert.Single(loops.Loops);
-        Assert.Equal("[Received loop 'King's Road' 3 rooms from Raijin, already have it]", notices.Single());
+        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin, already have it ({LoopSignature.ShortOf(SampleLoop())})]",
+            notices.Single());
     }
 
     [Fact]
