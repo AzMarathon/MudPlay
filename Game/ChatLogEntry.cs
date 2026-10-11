@@ -10,7 +10,8 @@ namespace MudPlay.Game;
 //   the recipient instead), broadcasts (operator's name lives in Speaker),
 //   realm-events with no named subject, or own yells where the speaker is the
 //   local player. Specific semantics per channel are documented inline in
-//   ChatRouter.
+//   ChatRouter. A yell heard from the next room does not name the yeller; its
+//   Speaker is the word the game prints, "Someone", and RawText keeps the direction.
 // Message: the message text. For realm events this is a short verb phrase
 //   ("entered the Realm" / "left the Realm" / "disconnected").
 // RawText: the original LineExtractor.EmittedLine.Text so downstream consumers

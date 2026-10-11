@@ -171,8 +171,8 @@ public sealed class ChatRouter : IDisposable
                   ChatChannel.Gangpath,       groupPlayer: 0, groupMessage: 1);
         Subscribe(router, KnownPatterns.ConversationBroadcast,
                   ChatChannel.Broadcast,      groupPlayer: 0, groupMessage: 1);
-        // Yell combines "X yells …" + "You yell …". The player group is
-        // empty in the self-yell case; ClassifyAndEmit handles that.
+        // Yell combines every form: "You yell …" (player group empty → speaker null =
+        // us), "From X (Yelling): …", and "Someone yells from …" (speaker "Someone").
         Subscribe(router, KnownPatterns.ConversationYell,
                   ChatChannel.Yell,           groupPlayer: 0, groupMessage: 1);
 
