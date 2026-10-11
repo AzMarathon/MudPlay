@@ -10,8 +10,9 @@ namespace MudPlay.Services;
 
 // One imported game-data table, held in the compact form GameTableReader fills
 // straight from the table's JSON file. The parsed JSON document is never kept: it
-// cost five to ten times the file's size, and Monsters and Items sit in memory for
-// the whole session because combat and inventory code look rows up on every line.
+// takes four to ten times the memory this form does, and Monsters and Items sit in
+// memory for the whole session because combat and inventory code look rows up on
+// every line.
 //
 // Nothing is lost against the file. A row keeps its fields in file order, each with
 // the JSON kind it was written as, and a number keeps its exact text ("7.0" is not
@@ -39,8 +40,8 @@ public sealed class GameTable
     internal sealed class Shape
     {
         public readonly string[] Names;
-        // A name written twice in one row resolves to its last field, as it did in
-        // the parsed document.
+        // A name written twice in one row resolves to its last field, the rule
+        // System.Text.Json's own lookup follows.
         public readonly Dictionary<string, int> Positions;
 
         public Shape(string[] names)
@@ -225,8 +226,12 @@ public sealed class GameTable
     private static readonly string[] SmallNumbers = Enumerable.Range(0, 1024)
         .Select(n => n.ToString(CultureInfo.InvariantCulture)).ToArray();
 
-    // The value as JSON text. A number comes back exactly as the file wrote it; a
-    // string is re-escaped the way the importer writes one.
+    // The value as JSON text. A number, and a nested object or array, come back
+    // exactly as the file wrote them. A string does not keep the file's spelling: it
+    // is encoded afresh from its text, which matches the file wherever the file
+    // escaped as this encoder does (all the importer writes) and differs where it
+    // did not (an escape nothing required, lowercase hex digits, a character past
+    // the BMP written raw). No caller asks for a string's raw text.
     internal string GetRawText(int cell) => _kinds[cell] switch
     {
         Int32Cell => (uint)_values[cell] < (uint)SmallNumbers.Length

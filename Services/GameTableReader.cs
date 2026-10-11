@@ -10,10 +10,10 @@ namespace MudPlay.Services;
 
 // Fills a GameTable from a table's JSON file in one pass over the bytes, a block at
 // a time, so neither the whole file nor a parsed document is ever in memory (Rooms
-// is 22 MB on disk and was 54 MB parsed).
+// is 22 MB on disk and 54 MB as a parsed document).
 //
 // The file is what the importer writes: an array of flat objects. Anything else
-// well-formed is still read without loss or complaint, as the parsed document was:
+// well-formed is still read without loss or complaint:
 // a top level that is not an array gives a table with no rows, an array element
 // that is not an object gives a row with no fields, and a field holding a nested
 // object or array keeps that value's exact JSON text. Malformed JSON, or text that

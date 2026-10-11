@@ -2,8 +2,8 @@ using System.Text.Json;
 
 namespace MudPlay.Services;
 
-// One field's value in a GameTable row. Reads answer exactly as the parsed JSON
-// value did, wrong-kind reads included: asking a string for a number throws
+// One field's value in a GameTable row. Its reads follow System.Text.Json's
+// JsonElement, wrong-kind reads included: asking a string for a number throws
 // InvalidOperationException, and a number that is not whole fails TryGetInt32.
 public readonly struct GameValue
 {
@@ -35,7 +35,9 @@ public readonly struct GameValue
 
     public bool TryGetDouble(out double value) => Table.TryGetDouble(_cell, out value);
 
-    // The value as JSON text; a number exactly as the file wrote it.
+    // The value as JSON text: a number or a nested value exactly as the file wrote
+    // it, a string encoded afresh from its text (GameTable.GetRawText says where
+    // that parts from the file).
     public string GetRawText() => Table.GetRawText(_cell);
 
     // A string's own text, a number's or nested value's JSON text, "True" / "False",

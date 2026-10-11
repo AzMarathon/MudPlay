@@ -111,8 +111,7 @@ public sealed class MonsterSpawnIndex
     {
         try
         {
-            // mayEvictRaw: false — see EnsureBuilt. Reading the shared table off
-            // this thread is fine; disposing it is not.
+            // mayEvictRaw: false is a leftover with nothing left to guard; see EnsureBuilt.
             EnsureBuilt(mayEvictRaw: false);
         }
         catch (Exception ex)
@@ -124,12 +123,14 @@ public sealed class MonsterSpawnIndex
         }
     }
 
-    // mayEvictRaw gates the post-build EvictTable("Monsters"): only a build on the
-    // caller's own thread hands the table back to the cache's idle sweep. The
-    // warm-up's worker thread leaves that to the ~20 other consumers reading the
-    // same table from the UI thread; it is reclaimed either way, since
-    // MonsterCatalog, RoomGraphManager, SeeHiddenIndex and friends all evict
-    // "Monsters" too.
+    // mayEvictRaw gates the post-build EvictTable("Monsters"). It no longer guards
+    // anything: it kept the warm-up's worker thread from evicting when evicting
+    // disposed a document other threads were still reading, and EvictTable now only
+    // marks the table for the cache's idle sweep, which is safe from any thread. In
+    // practice the build is the warm-up's (every set change starts one) and passes
+    // false; a query that beats the warm-up to the build passes true. Either way
+    // the table is handed back, since MonsterCatalog, RoomGraphManager,
+    // SeeHiddenIndex and friends all evict "Monsters" too.
     private Snapshot EnsureBuilt(bool mayEvictRaw = true)
     {
         string? active = _cache.ActiveSet;
