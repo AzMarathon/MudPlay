@@ -65,8 +65,11 @@ namespace MudPlay.Game.Map;
 // off, it shouldnt automatically swap gear" (user, 2026-10-10). Off, no `use`, no
 // re-raise and no "out of" say goes out, and no latch or timer is stamped, so
 // when the switch comes back on the next arrival or lapse acts afresh. It only
-// ever acts when a checkspell hazard and a carried source item coincide during a
-// live walk — ours, or the leader's we're following.
+// ever acts when a checkspell hazard and a carried source item coincide: on a live
+// walk (ours, or the leader's we're following), and for a character standing in a
+// countered room with nothing moving it, where the cast pass keeps the buff up by
+// the same clock ("if auto master toggle is on, yes, if off, no", user,
+// 2026-10-10). The "out of" say and the halt stay a walk's.
 public sealed class AutoHazardCounterProvisioner
 {
     // True (and counted) while the master switch is off; asked right before
@@ -533,9 +536,10 @@ public sealed class AutoHazardCounterProvisioner
         left = null;
         where = null;
         if (_pausedAt is not null) return null;
-        // Only on a live walk, ours or the leader's: standing in a hazard room with
-        // nothing running is the player's own business.
-        if (!_walkActive() && !_followingLeader()) return null;
+        // No walk has to be running: asked whether the refresh should also run for a
+        // character standing in a countered room by hand, "if auto master toggle is
+        // on, yes, if off, no" (user, 2026-10-10). The switch is asked by whoever
+        // offers and sends this. With nothing planned the list is the room we stand in.
         if (_roomsAhead?.Invoke() is not { Count: > 0 } rooms) return null;
 
         // The window and the look ahead buy the search for a room with no NPCs. With

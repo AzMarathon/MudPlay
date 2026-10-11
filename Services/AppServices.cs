@@ -11217,7 +11217,8 @@ public sealed class AppServices
 
     // The room the character stands in, then the rooms the running walk or loop
     // plans to enter next: where the hazard counter looks for a room its buff matters
-    // in. A follower has no plan of its own, so for it this is the one room.
+    // in. A follower has no plan of its own, nor has a character standing where the
+    // player left it, so for them this is the one room.
     private IReadOnlyList<Game.Map.RoomKey> HazardRoomsAhead()
     {
         if (RoomTracker.State.CurrentRoom is not { } here) return Array.Empty<Game.Map.RoomKey>();

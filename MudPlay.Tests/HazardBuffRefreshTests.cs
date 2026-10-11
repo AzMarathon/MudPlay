@@ -401,15 +401,75 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Assert.Contains(f.LogLines, l => l.StartsWith("due: `use waterskin` — the buff is off or not known to be on"));
     }
 
-    // Standing in a hazard room with nothing running is the player's own business.
-    [Fact]
-    public void NoWalkAndNotFollowing_NothingIsDue()
+    // Standing in a countered room by hand, with no walk or loop and no leader: "if
+    // auto master toggle is on, yes, if off, no" (user, 2026-10-10). Same clock, same
+    // windows.
+    [Theory]
+    [InlineData(true, 1739, false, false)]
+    [InlineData(true, 1740, true, false)]
+    [InlineData(true, 1785, true, true)]
+    [InlineData(false, 1784, false, false)]
+    [InlineData(false, 1785, true, true)]
+    public void StandingInACounteredRoomByHand_TheRefreshRunsOnTheSameClock(
+        bool autoSneak, int secondsOn, bool due, bool mustGoNow)
     {
-        Field f = new() { WalkActive = false };
+        Field f = new() { WalkActive = false, AutoSneak = autoSneak };
+        f.Engine.OnServerLine(SwigLine);
+
+        f.Advance(secondsOn);
+
+        Assert.Equal(due ? ("use waterskin", mustGoNow) : null, f.Engine.DueNow());
+    }
+
+    // A follower carried into the desert drinks on arrival, and the same clock then
+    // keeps the buff up for it.
+    [Fact]
+    public void AFollower_DrinksOnArrival_AndIsKeptUpByTheSameClock()
+    {
+        Field f = new() { WalkActive = false, Following = true };
+
+        f.Engine.OnArrivedInRoom(Dunes);
+        Assert.Equal(new[] { "use waterskin" }, f.Wire);
         Assert.Null(f.Engine.DueNow());
 
-        f.Following = true;
-        Assert.NotNull(f.Engine.DueNow());
+        f.Advance(1785);
+        Assert.Equal(("use waterskin", true), f.Engine.DueNow());
+    }
+
+    [Fact]
+    public void StandingByHand_TheSwitchDecides_AndElsewhereNothingIsDue()
+    {
+        Field f = new() { WalkActive = false };
+
+        f.Switch.TurnOff();
+        Assert.False(f.Engine.FireDue(sneakKept: false));
+        Assert.Empty(f.Wire);
+
+        f.Switch.TurnOn();
+        Assert.True(f.Engine.FireDue(sneakKept: false));
+        Assert.Equal(new[] { "use waterskin" }, f.Wire);
+
+        f.Engine.Forget("test");
+        f.RoomsAhead = new() { Oasis };
+        Assert.Null(f.Engine.DueNow());
+    }
+
+    // The lapse line with nothing moving the character: the line sends nothing of
+    // its own (the say and the halt are a walk's), the buff counts as off, and the
+    // refresh is due where the character stands.
+    [Fact]
+    public void LapseLine_StandingByHand_CountsTheBuffAsOff_AndTheRefreshIsDue()
+    {
+        Field f = new();
+        f.Engine.OnApproachingRoom(Dunes);          // walked in
+        f.Engine.OnServerLine(SwigLine);
+        f.WalkActive = false;                       // and stopped there
+        f.Advance(100);
+
+        f.Engine.OnServerLine(ThirstLine);
+
+        Assert.Single(f.Wire);
+        Assert.Equal(("use waterskin", true), f.Engine.DueNow());
     }
 
     // One `use` per window: once it has gone out nothing more is due until the next.
@@ -770,6 +830,18 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Assert.Equal(1, p.CastFired);
         Assert.Null(p.Director.Evaluate());         // the round's cast is spent
         Assert.Single(p.Field.Wire);
+    }
+
+    // Nothing has to be moving the character: standing in the desert, the pass keeps
+    // the buff up.
+    [Fact]
+    public void Pass_StandingByHand_SendsTheDueUse()
+    {
+        using Pass p = new();
+        p.Field.WalkActive = false;
+
+        Assert.Equal("use waterskin", p.Director.Evaluate());
+        Assert.Equal(new[] { "use waterskin" }, p.Field.Wire);
     }
 
     // With a sneak being kept the `use` waits like any buff: the pass holds it, the
