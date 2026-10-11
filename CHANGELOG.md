@@ -1,5 +1,13 @@
 # Version history
 
+## 3.179.13
+
+- An emote package can no longer write an image outside the folder it is unpacked into; two images with one file name keep the first
+- The holding folder for refused names is no longer listed as a game-data set, BBS or profile
+- A profile pointing at a game-data set name that can't be a folder gets no set and the log says why; a realm name that can't be a folder gets no realm data folder
+- A navigation sub-folder name can't lead outside the Loops folder
+- An update download's name is kept to one file name in the update's work folder
+
 ## 3.179.12
 
 - A BBS, realm, profile or game-data set name that can't be a folder's name is refused wherever a path is made from it; a name like `..` could delete a BBS with its characters, or the whole data folder
