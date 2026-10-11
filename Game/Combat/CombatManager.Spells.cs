@@ -91,8 +91,9 @@ public sealed partial class CombatManager
     private Func<string?>? _inBetweenEvaluator;
     // Spends the CastingDirector's one-between-round-cast slot when the pre-attack
     // debuff fires directly (bypassing Evaluate), so the director can't queue a
-    // second between-round cast the same round. Optional — no-ops until set.
-    private Action? _markBetweenRoundSlotUsed;
+    // second between-round cast the same round. Told which debuff it was, for a
+    // listener that waits on that send. Optional — no-ops until set.
+    private Action<string>? _markBetweenRoundSlotUsed;
     // Reads whether the director's one-between-round-cast slot is ALREADY spent this
     // round, so the pre-attack debuff can stand down instead of firing a doomed cast
     // into a spent slot (which draws "already cast this round" and latches the block
@@ -358,8 +359,8 @@ public sealed partial class CombatManager
     // Wire the callback that spends the CastingDirector's one-between-round-cast
     // slot when the pre-attack debuff fires directly (bypassing Evaluate).
     // Optional — the pre-attack debuff still fires without it, but the director
-    // won't know the slot is used.
-    public void SetBetweenRoundSlotMarker(Action marker)
+    // won't know the slot is used. It is given the debuff's cast code.
+    public void SetBetweenRoundSlotMarker(Action<string> marker)
     {
         ArgumentNullException.ThrowIfNull(marker);
         _markBetweenRoundSlotUsed = marker;
@@ -1300,7 +1301,7 @@ public sealed partial class CombatManager
         // fired directly (not via Evaluate), so without this the director could
         // queue a SECOND between-round cast this round and draw the "already cast
         // this round" rejection.
-        _markBetweenRoundSlotUsed?.Invoke();
+        _markBetweenRoundSlotUsed?.Invoke(decision.Spell!);
         // Fire the combat attack in the SAME round, right behind the debuff, instead
         // of waiting for the debuff's *Combat Off* (a whole wasted combat round —
         // report paradigm-20260825-103417). The between-round debuff and the combat

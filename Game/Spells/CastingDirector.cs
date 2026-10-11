@@ -663,19 +663,28 @@ public sealed class CastingDirector : IDisposable
     // priorityBuffCast (LairEntryDebuffHold.NotePriorityBuffCast) tells it of each one
     // sent, and holdPriorityBuff (LairEntryDebuffHold.HoldsPriorityBuff) names the
     // ones it has given up waiting for and holds too. Both name a buff as BuffsDue does.
+    // ordinaryBuffCast (LairEntryDebuffHold.NoteOrdinaryBuffCast) tells it a buff not
+    // ticked priority went out, and debuffSent (LairEntryDebuffHold.NoteDebuffSent)
+    // that the combat profile's debuff did, by either of its two ways out: that is
+    // when the hold lets the buffs through again.
     public void SetLairEntryBuffHold(Func<bool> holdBuffs, Func<bool>? holdOrdinaryBuffs = null,
-        Action<string>? priorityBuffCast = null, Func<string, bool>? holdPriorityBuff = null)
+        Action<string>? priorityBuffCast = null, Func<string, bool>? holdPriorityBuff = null,
+        Action? ordinaryBuffCast = null, Action<string>? debuffSent = null)
     {
         ArgumentNullException.ThrowIfNull(holdBuffs);
         _lairEntryBuffHold = holdBuffs;
         _lairEntryOrdinaryBuffHold = holdOrdinaryBuffs;
         _lairEntryPriorityBuffCast = priorityBuffCast;
         _lairEntryPriorityBuffHeld = holdPriorityBuff;
+        _lairEntryOrdinaryBuffCast = ordinaryBuffCast;
+        _lairEntryDebuffSent = debuffSent;
     }
     private Func<bool>? _lairEntryBuffHold;
     private Func<bool>? _lairEntryOrdinaryBuffHold;
     private Action<string>? _lairEntryPriorityBuffCast;
     private Func<string, bool>? _lairEntryPriorityBuffHeld;
+    private Action? _lairEntryOrdinaryBuffCast;
+    private Action<string>? _lairEntryDebuffSent;
 
     // Connected, in the game and alive: the state every decision needs first.
     private bool CanDecide =>
@@ -2099,7 +2108,7 @@ public sealed class CastingDirector : IDisposable
             {
                 if (TryFireItemCast(cand.Spell, cand.RecastMarginSec))
                 {
-                    NotePriorityBuffCast(category, cand);
+                    NoteBuffCast(category, cand);
                     return cand.Spell;
                 }
                 continue; // unresolved / non-buff item — let a later category try
@@ -2155,7 +2164,11 @@ public sealed class CastingDirector : IDisposable
 
             // Combat-sourced debuff landed — advance the combat engine's
             // once-per-room / once-per-target bookkeeping so it won't re-fire.
-            if (category == SpellCategory.Debuffing) _combatDebuffCommit?.Invoke();
+            if (category == SpellCategory.Debuffing)
+            {
+                _combatDebuffCommit?.Invoke();
+                _lairEntryDebuffSent?.Invoke(cand.Spell);
+            }
 
             if (isSelfHeal)
                 _lastSelfHealCast = (cand.Spell, _state.Hp, _state.Ma, _now());
@@ -2178,7 +2191,7 @@ public sealed class CastingDirector : IDisposable
                 // re-stages one if the fresh roll is still below threshold).
                 if (string.Equals(cand.Spell, _pendingManaRegenReroll, StringComparison.OrdinalIgnoreCase))
                     _pendingManaRegenReroll = null;
-                NotePriorityBuffCast(category, cand);
+                NoteBuffCast(category, cand);
             }
 
             _log?.Combat(LogCategory,
@@ -2193,11 +2206,22 @@ public sealed class CastingDirector : IDisposable
         return null;
     }
 
-    // A loop standing outside a lair for its priority buffs counts each one that goes
-    // out (and says so on the always-on log, where its wait is).
-    private void NotePriorityBuffCast(SpellCategory category, CastCandidate cast)
+    // A loop's lair-entry hold follows the buffs that go out: one standing outside a
+    // lair for its priority buffs counts each (and says so on the always-on log, where
+    // its wait is), and any buff going out is a buff it held getting its cast.
+    private void NoteBuffCast(SpellCategory category, CastCandidate cast)
     {
         if (category == SpellCategory.PriorityBuffing) _lairEntryPriorityBuffCast?.Invoke(BuffName(cast));
+        else _lairEntryOrdinaryBuffCast?.Invoke();
+    }
+
+    // The combat engine sent its pre-attack debuff itself, not through a decision
+    // pass: the round's between-round cast is spent, and a lair-entry hold keeping
+    // buffs back for that debuff can let them through.
+    public void NotePreAttackDebuffSent(string spell)
+    {
+        MarkBetweenRoundSlotUsed();
+        _lairEntryDebuffSent?.Invoke(spell);
     }
 
     // Combat-diagnostics view of the between-round queue: every DUE candidate the

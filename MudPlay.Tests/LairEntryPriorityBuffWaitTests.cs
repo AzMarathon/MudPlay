@@ -83,10 +83,12 @@ public sealed class LairEntryPriorityBuffWaitTests
                 // As the app reads it: nothing to wait for with a fight already on.
                 debuffMana: () => DebuffMinMana is { } min && !State.InCombat
                     ? ("dbuf", min, State.Ma, State.MaxMa)
-                    : null);
+                    : null,
+                inCombat: () => State.InCombat);
             Director.SetLairEntryBuffHold(
                 () => Hold.BlockingBuffs, () => Hold.BlockingOrdinaryBuffs,
-                Hold.NotePriorityBuffCast, Hold.HoldsPriorityBuff);
+                Hold.NotePriorityBuffCast, Hold.HoldsPriorityBuff,
+                Hold.NoteOrdinaryBuffCast, Hold.NoteDebuffSent);
 
             // Healthy and full of mana, so only what a test sets up is due. The buffs
             // are added after this, so nothing is cast until a test runs a pass.
@@ -97,8 +99,25 @@ public sealed class LairEntryPriorityBuffWaitTests
             State.HasPromptData = true;
         }
 
-        public void AddBuff(string spell, bool priority) =>
-            Buffs.Slots.Add(new BuffSlot { Spell = spell, CastOnSelf = true, PriorityBuff = priority });
+        public void AddBuff(string spell, bool priority, bool duringCombat = false) =>
+            Buffs.Slots.Add(new BuffSlot
+            {
+                Spell = spell, CastOnSelf = true, PriorityBuff = priority, BlessDuringCombat = duringCombat,
+            });
+
+        // The scheduler's passes that wait for HP to settle after a hit, as the app
+        // runs them: queued, and run by the test when their time has come.
+        public List<Action> SettledPasses { get; } = new();
+
+        public void HoldPassesUntilHpSettles() =>
+            Director.SetSettledPassScheduler((_, run) => SettledPasses.Add(run));
+
+        public void RunSettledPasses()
+        {
+            Action[] due = SettledPasses.ToArray();
+            SettledPasses.Clear();
+            foreach (Action run in due) run();
+        }
 
         public bool Held => Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffGate);
 
@@ -697,6 +716,123 @@ public sealed class LairEntryPriorityBuffWaitTests
         block.AddBuff("star", priority: true);
         Assert.True(block.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells));
         Assert.Null(block.Director.Evaluate());
+    }
+
+    // ----- When the held buffs are let through again ----------------
+
+    // In the lair the buffs are held for the debuff, through the fight if need be.
+    // The moment it is sent they are let through: the next free cast is a buff's, by
+    // the buff's own "during combat" setting, whatever the way of waiting.
+    [Theory]
+    [InlineData(LairEntryDebuffMode.WaitForSpells)]
+    [InlineData(LairEntryDebuffMode.BlockSpells)]
+    [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
+    public void DebuffSentInTheLair_AnOrdinaryBuffGoesOutAtTheNextFreeCast(LairEntryDebuffMode mode)
+    {
+        using Harness h = new();
+        Assert.True(h.Hold.ReadyToEnter(mode, new RoomKey(1, 100)));   // nothing due at the door: straight in
+        h.AddBuff("plai", priority: false, duringCombat: true);       // comes due as the fight starts
+        h.State.InCombat = true;
+        h.NextRound(seconds: 6);
+        Assert.Null(h.Director.Evaluate());                 // six seconds into the fight: still held for the debuff
+
+        h.DebuffOwed = "dbuf";
+        Assert.Equal("dbuf", h.Director.Evaluate());
+        Assert.Contains("debuff dbuf sent: buffs released", h.InfoLog("Loop"));
+        Assert.False(h.Hold.BlockingBuffs);
+
+        h.NextRound();
+        Assert.Equal("plai", h.Director.Evaluate());        // the next free cast, mid-fight
+        Assert.Equal(new[] { "dbuf", "plai" }, h.CastsSent);
+    }
+
+    // The combat engine sends its pre-attack debuff itself on a fresh engage, not
+    // through a pass of the scheduler; the scheduler is told, and so is the hold.
+    [Fact]
+    public void PreAttackDebuffSentByTheCombatEngine_ReleasesTheBuffsToo()
+    {
+        using Harness h = new();
+        Assert.True(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, new RoomKey(1, 100)));
+        h.AddBuff("plai", priority: false, duringCombat: true);
+        h.State.InCombat = true;
+
+        h.Director.NotePreAttackDebuffSent("dbuf");
+
+        Assert.Contains("debuff dbuf sent: buffs released", h.InfoLog("Loop"));
+        Assert.Null(h.Director.Evaluate());                 // the debuff took this round's cast
+        h.NextRound();
+        Assert.Equal("plai", h.Director.Evaluate());
+    }
+
+    // A lair with nothing to debuff (the debuff's conditions aren't met, or it is
+    // refused): no debuff goes out, and the buffs are let through as the fight ends.
+    // The hold is back at the next lair's doorstep.
+    [Fact]
+    public void NoDebuffGoesOutInTheLair_TheBuffsAreReleasedAsTheFightEnds_AndHeldAgainAtTheNextDoorstep()
+    {
+        using Harness h = new();
+        h.AddBuff("plai", priority: false);                 // out of combat only
+        Assert.True(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, new RoomKey(1, 100)));
+        h.State.InCombat = true;
+        h.NextRound(seconds: 10);
+        Assert.Null(h.Director.Evaluate());
+
+        h.State.InCombat = false;                           // the kill: the scheduler's pass, and the hold is off
+
+        Assert.Equal(new[] { "plai" }, h.CastsSent);
+        Assert.Contains("buffs released: the fight in the lair ended with no debuff sent", h.InfoLog("Loop"));
+
+        h.AddBuff("late", priority: false);                 // due as the loop comes to the next lair
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, new RoomKey(1, 101)));
+        h.NextRound();
+        Assert.Null(h.Director.Evaluate());                 // held again: plai had its cast, none is owed
+        h.Poll();
+        Assert.False(h.Held);
+        Assert.Equal(new[] { "plai" }, h.CastsSent);
+    }
+
+    // Six lairs side by side, each a one-round kill whose last hit and kill arrive
+    // together, so the scheduler's pass at the kill waits for HP to settle and the
+    // loop is at the next doorstep first. Buffs that only cast out of combat used to
+    // be held at every one and never went out. Each doorstep now lets one go before
+    // it holds them again.
+    [Theory]
+    [InlineData(LairEntryDebuffMode.BlockSpells)]
+    [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
+    public void SixLairsSideBySide_TheHeldBuffsStillGoOut_OneAtEachDoorstep(LairEntryDebuffMode mode)
+    {
+        using Harness h = new();
+        h.HoldPassesUntilHpSettles();
+        h.AddBuff("pla1", priority: false);
+        h.AddBuff("pla2", priority: false);
+        List<int> castsAfterEachLair = new();
+
+        for (int lair = 1; lair <= 6; lair++)
+        {
+            RoomKey door = new(1, 100 + lair);
+            bool straightIn = h.Hold.ReadyToEnter(mode, door);  // asked the moment the last fight ended
+            h.Now = h.Now.AddMilliseconds(450);
+            h.RunSettledPasses();                               // the scheduler's pass, after the ask
+            if (!straightIn)
+            {
+                h.Poll();
+                h.NextRound(); h.Poll();
+                Assert.True(h.Hold.ReadyToEnter(mode, door));
+            }
+            h.State.Hp = 200;
+            castsAfterEachLair.Add(h.CastsSent.Count);
+
+            h.Now = h.Now.AddSeconds(2);                        // the step lands on the lair's monster
+            h.State.InCombat = true;
+            h.NextRound(seconds: 4);
+            h.State.Hp = 180;                                   // its hit ...
+            h.State.InCombat = false;                           // ... and its death, in one burst
+        }
+
+        Assert.Equal(new[] { "pla1", "pla2" }, h.CastsSent);
+        // None at the first door (nothing had been held yet), one at each of the next
+        // two, and no more waiting once both are up.
+        Assert.Equal(new[] { 0, 1, 2, 2, 2, 2 }, castsAfterEachLair);
     }
 
     // Asking what is due must change nothing. A reroll staged while Block spells holds

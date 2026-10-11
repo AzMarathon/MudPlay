@@ -5434,7 +5434,7 @@ public sealed class AppServices
         // the attack spell" ordering). Only exercised when a debuff is actually
         // due, so a normal engage is untouched.
         Combat.SetInBetweenEvaluator(CastDirector.Evaluate);
-        Combat.SetBetweenRoundSlotMarker(CastDirector.MarkBetweenRoundSlotUsed);
+        Combat.SetBetweenRoundSlotMarker(CastDirector.NotePreAttackDebuffSent);
         Combat.SetBetweenRoundSlotQuery(() => CastDirector.BetweenRoundSlotUsed);
         // A between-round survival cast stops our auto-attack; let the combat
         // engine resume the weapon attack on the resulting *Combat Off*
@@ -8364,11 +8364,14 @@ public sealed class AppServices
             buffsDue: priority => CastDirector.BuffsDue(priority),
             stillWanted: LairWaitStillWanted,
             healOrCureDue: () => CastDirector.HealOrCureDue(),
-            debuffMana: LairEntryDebuffMana);
+            debuffMana: LairEntryDebuffMana,
+            inCombat: () => PlayerState.InCombat);
         CastDirector.SetLairEntryBuffHold(
             () => LairDebuffHold.BlockingBuffs, () => LairDebuffHold.BlockingOrdinaryBuffs,
             buff => LairDebuffHold.NotePriorityBuffCast(buff),
-            buff => LairDebuffHold.HoldsPriorityBuff(buff));
+            buff => LairDebuffHold.HoldsPriorityBuff(buff),
+            () => LairDebuffHold.NoteOrdinaryBuffCast(),
+            spell => LairDebuffHold.NoteDebuffSent(spell));
         // A loop that stops or fails never asks again, so its wait is ended here rather
         // than left to the hold's own next look.
         LoopRunner.Event += e =>
