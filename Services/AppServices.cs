@@ -15752,9 +15752,19 @@ public sealed class AppServices
         return (bbs, realm);
     }
 
-    // The active realm's data folder (AppPaths.RealmFolder), or null with no BBS.
-    public string? ActiveRealmFolder() =>
-        ResolveActiveRealm() is { } r ? AppPaths.RealmFolder(r.Bbs.Name, r.Realm.Name) : null;
+    // The active realm's data folder (AppPaths.RealmFolder), or null with no BBS, or
+    // when a name in the way can't be a folder (a bbs.json can hold any text): the
+    // stores keyed on the realm then hold nothing, as with no BBS, instead of sharing
+    // AppPaths' holding folder for refused names.
+    public string? ActiveRealmFolder()
+    {
+        if (ResolveActiveRealm() is not { } r) return null;
+        if (PathGuard.Child(AppPaths.BbsDir, r.Bbs.Name) is not null
+            && PathGuard.Child(AppPaths.RealmsDir(r.Bbs.Name), r.Realm.Name) is not null)
+            return AppPaths.RealmFolder(r.Bbs.Name, r.Realm.Name);
+        PathGuard.Refuse("Finding the active realm's data folder", "realm name", r.Realm.Name);
+        return null;
+    }
 
     // Whether the loaded character has the "Sysop status" power on the active BBS
     // — the Settings → BBS credentials checkbox. Sysop powers are granted to an
@@ -15957,8 +15967,22 @@ public sealed class AppServices
     // The game-data set the loaded profile runs on: its realm's, else the default.
     // Read straight from the settings, so it is right inside a profile-load handler
     // that runs before the set has been switched.
-    private string? ProfileGameDataSet() =>
-        ResolveActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
+    //
+    // A name that can't be a folder in the game-data folder is no set: null, with the
+    // reason in the program log, rather than a name every store keyed on the set
+    // would be handed.
+    private string? ProfileGameDataSet()
+    {
+        string? set = ResolveActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
+        string? usable = GameData.UsableSet(set, out string? whyNot);
+        if (whyNot is null) return usable;
+        // Asked again on every profile event: said once for each name met.
+        if (!string.Equals(Interlocked.Exchange(ref _unusableGameDataSetSaid, set), set, StringComparison.Ordinal))
+            Log.Warn("GameData", $"This profile's game data set {PathGuard.Show(set)} can't be used, so no game data is loaded: {whyNot}");
+        return null;
+    }
+
+    private string? _unusableGameDataSetSaid;
 
     // Drop any persisted reference to a just-deleted game-data set so a
     // later resolve doesn't point GameData at a folder

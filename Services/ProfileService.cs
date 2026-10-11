@@ -913,16 +913,21 @@ public sealed class ProfileService
             // (a listing can only hand back such a name off a broken filesystem) is
             // left out: nothing listed here may be a name that leads elsewhere.
             string bbs = Path.GetFileName(bbsFolder);
-            if (string.IsNullOrEmpty(bbs) || !BbsUsable("Listing profiles", bbs)) continue;
+            if (string.IsNullOrEmpty(bbs) || IsRefusedHolder(bbs) || !BbsUsable("Listing profiles", bbs)) continue;
             foreach (string charFolder in ProfileFoldersIn(AppPaths.BbsProfilesDir(bbs)))
             {
                 string name = Path.GetFileName(charFolder);
-                if (string.IsNullOrEmpty(name) || !PairUsable("Listing profiles", bbs, name)) continue;
+                if (string.IsNullOrEmpty(name) || IsRefusedHolder(name) || !PairUsable("Listing profiles", bbs, name)) continue;
                 if (!File.Exists(AppPaths.CharacterProfileFile(bbs, name))) continue;
                 yield return new ProfileRef(bbs, name);
             }
         }
     }
+
+    // The folder AppPaths gives a name it refused is a holding place, never a BBS or
+    // a character, whatever it came to hold.
+    private static bool IsRefusedHolder(string folderName)
+        => folderName.Equals(AppPaths.RefusedName, StringComparison.OrdinalIgnoreCase);
 
     // A BBS with no profiles folder has no profiles. Read rather than checked for first:
     // another client sharing the data folder can rename or remove a BBS between a

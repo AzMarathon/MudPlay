@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
 
@@ -114,10 +115,22 @@ public static class NavFolders
 
     // Absolute on-disk directory for stored folder under rootDir, translating
     // Separator to the platform separator. Returns rootDir for the empty root.
+    //
+    // Each segment is joined on its own and must be a folder directly inside the one
+    // before (PathGuard.Child): a segment such as "C:" would otherwise replace the
+    // whole path on Windows. A folder with such a segment gets a path in the root
+    // where nothing is (AppPaths.RefusedName) rather than the root itself: the
+    // callers that delete or move the folder it names would take the root with it.
     public static string ToDirectory(string rootDir, string? folder)
     {
-        string[] segs = Segments(folder);
-        return segs.Length == 0 ? rootDir : Path.Combine(rootDir, Path.Combine(segs));
+        string dir = rootDir;
+        foreach (string seg in Segments(folder))
+        {
+            if (PathGuard.Child(dir, seg) is { } next) { dir = next; continue; }
+            PathGuard.Refuse("A navigation folder", "folder name", seg);
+            return Path.Combine(rootDir, AppPaths.RefusedName);
+        }
+        return dir;
     }
 
     // Every ancestor folder of the given paths, including the paths themselves,

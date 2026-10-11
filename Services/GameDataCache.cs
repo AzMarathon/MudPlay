@@ -240,10 +240,22 @@ public sealed partial class GameDataCache
         if (!Directory.Exists(GameDataRoot)) return Array.Empty<string>();
         return Directory.GetDirectories(GameDataRoot)
             .Select(Path.GetFileName)
-            .Where(static n => !string.IsNullOrEmpty(n))
+            .Where(static n => !string.IsNullOrEmpty(n)
+                               && !n.Equals(AppPaths.RefusedName, StringComparison.OrdinalIgnoreCase))
             .Select(static n => n!)
             .OrderBy(static n => n, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    // name when it can be a set of this cache: blank (no set chosen), a plain name
+    // imported yet or not, or a folder already there. Null when it can't, with
+    // whyNot saying so; SwitchSet refuses the same names.
+    public string? UsableSet(string? name, out string? whyNot)
+    {
+        whyNot = null;
+        if (string.IsNullOrWhiteSpace(name) || PathGuard.Usable(GameDataRoot, name)) return name;
+        whyNot = PathGuard.WhyNotPlain(name, "game-data set name") ?? "it isn't a folder in the game data folder.";
+        return null;
     }
 
     // Table names currently held for ActiveSet. Empty before any GetTable call;
