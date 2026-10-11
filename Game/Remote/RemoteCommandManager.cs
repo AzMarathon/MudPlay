@@ -335,6 +335,7 @@ public sealed class RemoteCommandManager : IDisposable
 
         string normalised = command.Trim().ToLowerInvariant();
         if (!normalised.StartsWith('@')) normalised = "@" + normalised;
+        normalised = RemoteCommandCatalog.WithoutEmphasis(normalised);
         string[] argv = args?.ToArray() ?? [];
 
         if (IsHardBlocked(normalised, argv, out string? blockReason))
@@ -477,11 +478,12 @@ public sealed class RemoteCommandManager : IDisposable
             return;
         }
 
-        // Parse: command = first whitespace token (lower-cased for the
-        // registry lookup); args = remaining tokens.
+        // Parse: command = first whitespace token (the registry lookup ignores
+        // case), less a trailing `!` (`@stop!` is `@stop`, as the catalog reads
+        // it); args = remaining tokens.
         string[] tokens = entry.Message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (tokens.Length == 0) return;
-        string command = tokens[0];
+        string command = RemoteCommandCatalog.WithoutEmphasis(tokens[0]);
         string[] args = tokens.Length > 1 ? tokens[1..] : Array.Empty<string>();
 
         // Reserved announce tokens (party ailment sync, etc.) are consumed by
@@ -635,7 +637,8 @@ public sealed class RemoteCommandManager : IDisposable
         string payload = message[1..].Trim();
         string[] tokens = payload.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (tokens.Length == 0 || tokens[0].Length < 2) return;   // a bare "&@"
-        string command = tokens[0];
+        // Looked up as the dispatcher would read it; sent back as it was typed.
+        string command = RemoteCommandCatalog.WithoutEmphasis(tokens[0]);
         string[] args = tokens[1..];
 
         if (IsHardBlocked(command, args, out string? reason))

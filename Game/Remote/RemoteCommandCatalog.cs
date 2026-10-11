@@ -323,12 +323,14 @@ public static class RemoteCommandCatalog
     public static bool TryGetCategory(string command, out PlayerRemoteControls category)
     {
         if (string.IsNullOrEmpty(command)) { category = default; return false; }
-        string key = command;
-        // Strip a trailing `!` so an emphatic wire form matches the bare
-        // command name in the catalog.
-        if (key[^1] == '!') key = key[..^1];
-        return Map.TryGetValue(key, out category);
+        return Map.TryGetValue(WithoutEmphasis(command), out category);
     }
+
+    // The command word less one trailing `!`: `@stop!` is `@stop` said with
+    // emphasis. The catalog, the dispatcher and the local API all read a command
+    // word through here, so the three agree on what was sent.
+    public static string WithoutEmphasis(string command) =>
+        command.Length > 2 && command[^1] == '!' ? command[..^1] : command;
 
     // Look up a command's help. Accepts the name with or without the leading `@`
     // (so `@help suicide` and `@help @suicide` both resolve) and strips a trailing
