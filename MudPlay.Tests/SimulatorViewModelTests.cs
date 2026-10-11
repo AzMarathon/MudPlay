@@ -132,6 +132,11 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.Equal(held, h.Loops.Get("Hills - Caves (L40 sim)")?.Waypoints.Select(w => w.Key));
         Assert.Contains("L40", saved.Notes);
         Assert.Contains("1/2 → 1/1", saved.Notes);
+        // Saved as it was simulated: fighting everywhere, no lair wait, for this
+        // character and in the file the others read.
+        Assert.Equal(default, saved.OwnSettings);
+        Assert.Equal(default, saved.SharedSettings);
+        Assert.Contains("both Entire Loop Settings off", saved.Notes);
         Assert.Equal("Hills - Caves (L40 sim) 2", h.Simulator.SelectedRoute?.Loop?.Name);
     }
 

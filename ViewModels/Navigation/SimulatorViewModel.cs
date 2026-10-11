@@ -749,6 +749,10 @@ public sealed partial class SimulatorViewModel : ObservableObject
         if (run is not null)
             lines.Add($"Walk pace {run.Step:0.00} s a room; ranked from {run.From.Map}/{run.From.Room}.");
         lines.Add($"Route: {RouteLine(r)}.");
+        // The simulator fights whatever is in each room it walks and never waits at a
+        // lair's door, which is this loop as saved; the figures stop holding once
+        // either setting is turned on for it.
+        lines.Add("Simulated fighting in every room on the way, with no wait to enter lairs: both Entire Loop Settings off, as saved.");
         lines.Add($"The simulation judged level gates at L{r.Level}; run it there, since the loop walks the gates as they are when it starts.");
         return string.Join("\n", lines);
     }
