@@ -1,5 +1,10 @@
 # Version history
 
+## 3.177.7
+
+- Switching game-data sets: the indexes built from each set (monster drops and spawns, room hazards, quest steps and others) build several times faster and allocate a fraction of the memory; the first item window and first room hover after a load no longer pause to read the Rooms table back
+- Program log shows how long the per-set indexes took on each set load
+
 ## 3.177.2
 
 - Simulator area ranking: **Save as loop** turns a ranked area's tour into a saved loop you can run, with how it was tested in the loop's notes
