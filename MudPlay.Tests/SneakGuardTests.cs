@@ -176,6 +176,22 @@ public sealed class SneakGuardTests
     public void CanWait_OnlyPlainCommands(string command, bool canWait) =>
         Assert.Equal(canWait, SneakBreakingCommands.CanWait(command));
 
+    // A `break` or an attack a party member relays (`@do`, `@party`) sets or lifts
+    // the user's break hold as it goes out, with the member's name read off the
+    // handler while it is sending. A line taken for later goes out when that name is
+    // gone, so none of these may ever wait.
+    [Theory]
+    [InlineData("break")]
+    [InlineData("bre")]
+    [InlineData("a giant rat")]
+    [InlineData("attack giant rat")]
+    [InlineData("bash giant rat")]
+    [InlineData("kick giant rat")]
+    [InlineData("bs giant rat")]
+    [InlineData("mmis giant rat")]
+    public void CanWait_NeverABreakOrAnAttack(string command) =>
+        Assert.False(SneakBreakingCommands.CanWait(command));
+
     [Fact]
     public void Equipment_HeldSwap_ReRunsWhenReleased()
     {

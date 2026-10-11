@@ -101,6 +101,13 @@ public sealed record Room
     internal static readonly IReadOnlyDictionary<Direction, RoomExit> EmptyExits
         = new ReadOnlyDictionary<Direction, RoomExit>(new Dictionary<Direction, RoomExit>());
 
+    // Whether command, as a whole line, is one of the commands an exit of this room
+    // answers to (`go path`, `jump pool`): typed here it is a move through that
+    // exit, whatever its first word means anywhere else.
+    public bool HasExitCommand(string command) =>
+        Exits.Values.Any(exit => exit.TextCommands is { } commands
+            && commands.Contains(command, StringComparer.OrdinalIgnoreCase));
+
     // True when at least one outbound exit carries RoomExitHint.Trap. The map UI
     // renders a red half-connector glyph on the trapped exit, and the walker
     // routes through TrapDisarmManager before stepping in that direction.

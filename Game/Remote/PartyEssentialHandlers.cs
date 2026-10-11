@@ -573,9 +573,19 @@ public sealed class PartyEssentialHandlers : IDisposable
             _ => string.Join(" ", ctx.Args),
         };
         byte[] bytes = Encoding.Latin1.GetBytes(local + "\r");
-        _wireSender(bytes);
+        RelayingFor = GivenName(ctx.Sender);
+        try { _wireSender(bytes); }
+        finally { RelayingFor = null; }
         PartyDirectiveRelayed?.Invoke(GivenName(ctx.Sender), local);
     }
+
+    // Whose `@party <command>` is going out right now, while it is being sent; null
+    // otherwise. A `break` relayed this way holds the combat engine's attack as a
+    // `@do break` does, and a relayed attack lifts it (user, 2026-10-10); the
+    // outbound observer that reads the line needs to know it is one of these, and
+    // whose (DoHandler.SendingFor is the same for `@do`). Read at the wire, so a
+    // line the send gate dropped holds nothing.
+    public string? RelayingFor { get; private set; }
 
     // A member's `@party <command>` was just put on our wire: who sent it and the
     // command as sent. Most are no concern of the follow (a hand-over before an

@@ -2420,6 +2420,10 @@ public sealed class AppServices
     // on the *Combat Off* it draws mid-fight. Hooked from SendUserInput, typed lines only.
     public Game.Combat.OutboundGearObserver OutboundGear { get; private set; } = null!;
 
+    // Sniffs the user's own `break`, which holds Combat's attack on that monster, and
+    // the attack of theirs that lets it go. Hooked from SendUserInput, their lines only.
+    public Game.Combat.OutboundBreakObserver OutboundBreak { get; private set; } = null!;
+
     // Classifies a cast-code as a combat spell (round energy 1–1000) vs an in-between
     // spell — drives whether a hand-typed cast is a user override or keeps the resume.
     public Game.Combat.CombatSpellIndex CombatSpells { get; private set; } = null!;
@@ -4519,6 +4523,8 @@ public sealed class AppServices
         // CastResponse (seeded "^M^M" = two carriage returns) to unstick it. Subscribes
         // BEFORE the roster-resync below so Combat.CurrentTarget — its fallback identity
         // when the death carried no candidates — is still set.
+        _tempDeathBurst = new Game.Combat.TempDeathBurst(n => TempDeathSpellOf(n) is not null);
+        RoomClassifier.EntitiesObserved += _tempDeathBurst.NoteRoomListed;
         MonsterDeath.MonsterDied += FireTempDeathResponse;
         // Summon-on-death recheck. MUST subscribe to MonsterDied BEFORE the roster-
         // resync handler below: on a kill whose DeathSpell summons, it asserts a
@@ -5055,10 +5061,7 @@ public sealed class AppServices
                 text.Length <= 40 && text[^1] != '.' && ItemNames.FindByName(text) is not null,
             // A named exit ("go manhole") prints its own passage flavour, which the
             // game data doesn't carry; the room's exit commands identify the cause.
-            isRoomExitCommand: command =>
-                RoomTracker.State.CurrentRoom is { } room
-                && room.Exits.Values.Any(exit => exit.TextCommands is { } commands
-                    && commands.Contains(command, StringComparer.OrdinalIgnoreCase)));
+            isRoomExitCommand: IsExitCommandHere);
         // Subscribed after the message and candidate stores' own loads, so the queue is
         // re-checked against the set's freshly loaded catalogue.
         GameData.ActiveSetChanged += _ => PruneMessageCandidatesWhenIdle();
@@ -5465,14 +5468,36 @@ public sealed class AppServices
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
         CombatSpells = new Game.Combat.CombatSpellIndex(GameData);
         Combat.SetCombatSpellPredicate(CombatSpells.IsCombatSpell);
-        // A hand-typed PHYSICAL attack (a / at / att / aa / bash / smash / sm / sma / bs)
-        // is likewise a user override — the observer forwards every recognised verb and
-        // Combat drops its own swing's echo via a one-shot claim.
+        // A hand-typed PHYSICAL attack (any word of AttackCommandWords) is likewise a
+        // user override — the observer forwards every recognised verb and Combat
+        // drops its own swing's echo via a one-shot claim. A line that is a text exit
+        // of the room we stand in is a move, whatever its first word (`jump pool`).
         OutboundAttack = new Game.Combat.OutboundAttackObserver(
-            (verb, target) => Combat.NoteAttackCommandObserved(verb, target));
+            (verb, target) => Combat.NoteAttackCommandObserved(verb, target),
+            isExitCommandHere: IsExitCommandHere);
         // A hand-typed eq / wear / wield / rem mid-fight stops the fight like a cast:
         // arm the re-attack for the *Combat Off* it draws.
         OutboundGear = new Game.Combat.OutboundGearObserver(Combat.NoteTypedGearCommand);
+        // The user's own `break` holds the engine's attack on the monster it was
+        // fighting until they attack again, it dies or leaves, or we leave the room
+        // (user, 2026-10-10). The hold is the combat manager's; what follows is what
+        // it needs told from outside.
+        OutboundBreak = new Game.Combat.OutboundBreakObserver(
+            isAttackSpell: CombatSpells.IsCombatSpell,
+            onBreak: Combat.NoteUserBreak,
+            onAttack: Combat.NoteUserAttack,
+            isExitCommandHere: IsExitCommandHere);
+        Combat.UserBreakHoldNotice += text => WriteTerminalNotice($"[{text}]");
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewRoom?.Key != t.PreviousRoom?.Key) Combat.NoteRoomLeft(RoomTracker.LastMoveSentAt);
+        };
+        Profile.ProfileLoaded += _ => Combat.ClearUserBreakHold("another profile was loaded");
+        // The room read a held monster's silent round asked for is sent from here
+        // when another re-display's cooldown held it back.
+        Tick.HeartbeatElapsed += Combat.OnHeartbeat;
+        // On Stock a room spell's kill prints *Combat Off* and the spell runs on.
+        Combat.SetStockRealmProbe(() => GameData.ActiveRealm != Game.RealmType.ParaMud);
         Tick.CombatTickElapsed += Combat.OnCombatTick;
         // Count attack-spell MaxCasts off Combat's own ConfirmedAttackCastCount —
         // incremented directly off each observed cast-result line — instead of
@@ -5602,7 +5627,10 @@ public sealed class AppServices
             isSolo:          () => !PartyState.IsInParty,
             onRecovered:     Combat.ResumeAfterShadowRest);
         Combat.SetShadowRestSuppression(() => Health.ShadowRestHolding);
-        CombatTracker.SetCombatHeldOnPurposeProbe(() => Health.ShadowRestHolding);
+        // Likewise a monster left standing by the user's own `break`: the quiet is
+        // what they asked for, and the watchdog's force-clear would let a walk leave.
+        CombatTracker.SetCombatHeldOnPurposeProbe(
+            () => Health.ShadowRestHolding || Combat.AttackHeldByUserBreak);
         SneakGuard.SetShadowRestProbe(() => Health.ShadowRestHolding);
         Health.SetSneakKeptProbe(() => SneakGuard.Holds);
         Health.SetMeditateWhilePoisonedProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
@@ -11917,9 +11945,21 @@ public sealed class AppServices
     private bool SendGameCommandRaw(string command)
     {
         if (_rawWireSend is null || string.IsNullOrWhiteSpace(command)) return false;
-        _rawWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r"));
+        SendingEngineRawCommand = true;
+        try { _rawWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r")); }
+        finally { SendingEngineRawCommand = false; }
         return true;
     }
+
+    // Whether a line is a text exit of the room the tracker has us in.
+    private bool IsExitCommandHere(string command) =>
+        RoomTracker.State.CurrentRoom is { } room && room.HasExitCommand(command);
+
+    // True while SendGameCommandRaw is sending. The raw wire goes round the
+    // EngineSendGate, so to an outbound observer its lines look typed; the `break`
+    // `sys goto` sends ahead of a jump is the client's, not the user's, and must not
+    // be taken for the one that holds the combat engine's attack.
+    public bool SendingEngineRawCommand { get; private set; }
 
     // Send a command line to the server as if the user typed it (CR appended),
     // riding the raw engine wire-sender. Used by the Calculators tab's "Parse
@@ -12141,51 +12181,60 @@ public sealed class AppServices
         // The nudge is ours to send, not the game's to need: with the master
         // switch off the stall runs its length, or the user's own Enter ends it.
         if (AutoModeController.KillSwitchEngaged) return;
-        // The response and the coin hold are for a death that did stall the room. A
-        // room spell's kill among several kinds may not be the one with the death
-        // spell, so it is answered only when the room listed a single kind.
-        if (evt.RoomSpellRoster is { Count: > 1 }) return;
-        foreach (int num in DyingMonsterNumbers(evt))
+        // One response, one coin hold: TempDeathBurst answers a room spell's kills
+        // once however many of the listed monsters the round killed.
+        if (_tempDeathBurst.KindToAnswer(evt, DyingMonsterNumbers(evt)) is not { } num) return;
+        if (TempDeathSpellOf(num) is not var (deathSpell, spellName)) return;
+        string occasion = evt.RoomSpellRoster is null
+            ? "death-cast"
+            : "death-cast among our room spell's kills, answered once for the room";
+
+        // The coin get went out on the drop line, before the death was known,
+        // so the game threw it away. Once the death spell has run out the room
+        // is drawn again, and the coins still lying there are asked for then.
+        Cash.NoteDeathStall();
+        TimeSpan stall = DeathStallOf(num);
+        if (stall > TimeSpan.Zero && Cash.HasUnansweredGet)
+            HoldThroughDeathStall(stall, "coins dropped at the kill",
+                () => _engineWireSend?.Invoke(new[] { (byte)'\r' }));
+
+        foreach (Models.GameData.MessageRecord r in Messages.Messages)
         {
-            int deathSpell = MonsterCatalog.Get(num)?.DeathSpell ?? 0;
-            if (deathSpell <= 0) continue;
-            string? spellName = GameData.FindNameByNumber("Spells", deathSpell);
-            if (!Game.Combat.TempDeathResponse.IsTempSpell(spellName)) continue;
-            // The coin get went out on the drop line, before the death was known,
-            // so the game threw it away. Once the death spell has run out the room
-            // is drawn again, and the coins still lying there are asked for then.
-            Cash.NoteDeathStall();
-            TimeSpan stall = DeathStallOf(num);
-            if (stall > TimeSpan.Zero && Cash.HasUnansweredGet)
-                HoldThroughDeathStall(stall, "coins dropped at the kill",
-                    () => _engineWireSend?.Invoke(new[] { (byte)'\r' }));
-
-            foreach (Models.GameData.MessageRecord r in Messages.Messages)
-            {
-                if (string.IsNullOrEmpty(r.CastResponse) || r.Links is null) continue;
-                bool linked = false;
-                foreach (Models.GameData.GameDataLink l in r.Links)
-                    if (l.Table == "Spells" && l.Number == deathSpell) { linked = true; break; }
-                if (!linked) continue;
-                if (Game.Combat.TempDeathResponse.ExpandToWireBytes(r.CastResponse) is not { } bytes) continue;
-                _engineWireSend(bytes);
-                Log.Info("TempDeath",
-                    $"'{spellName}' (#{deathSpell}) death-cast — sent cast response to unstick the engine");
-                return;   // one response per death
-            }
-
-            // No message record names a response for this one (37 of the Paradigm
-            // bosses' temp spells had none): the same two carriage returns every
-            // listed one is given.
-            if (Game.Combat.TempDeathResponse.ExpandToWireBytes(Game.Combat.TempDeathResponse.DefaultResponse)
-                is { } fallback)
-            {
-                _engineWireSend(fallback);
-                Log.Info("TempDeath",
-                    $"'{spellName}' (#{deathSpell}) death-cast — no cast response on record, sent the default to unstick the engine");
-                return;
-            }
+            if (string.IsNullOrEmpty(r.CastResponse) || r.Links is null) continue;
+            bool linked = false;
+            foreach (Models.GameData.GameDataLink l in r.Links)
+                if (l.Table == "Spells" && l.Number == deathSpell) { linked = true; break; }
+            if (!linked) continue;
+            if (Game.Combat.TempDeathResponse.ExpandToWireBytes(r.CastResponse) is not { } bytes) continue;
+            _engineWireSend(bytes);
+            Log.Info("TempDeath",
+                $"'{spellName}' (#{deathSpell}) {occasion} — sent cast response to unstick the engine");
+            return;
         }
+
+        // No message record names a response for this one (37 of the Paradigm
+        // bosses' temp spells had none): the same two carriage returns every
+        // listed one is given.
+        if (Game.Combat.TempDeathResponse.ExpandToWireBytes(Game.Combat.TempDeathResponse.DefaultResponse)
+            is { } fallback)
+        {
+            _engineWireSend(fallback);
+            Log.Info("TempDeath",
+                $"'{spellName}' (#{deathSpell}) {occasion} — no cast response on record, sent the default to unstick the engine");
+        }
+    }
+
+    // The room-spell bookkeeping behind FireTempDeathResponse. Set in the
+    // constructor, ahead of the death subscription that reads it.
+    private readonly Game.Combat.TempDeathBurst _tempDeathBurst;
+
+    // A monster's DeathSpell when it is one of the silent "... temp" spells.
+    private (int Number, string Name)? TempDeathSpellOf(int monsterNumber)
+    {
+        int deathSpell = MonsterCatalog.Get(monsterNumber)?.DeathSpell ?? 0;
+        if (deathSpell <= 0) return null;
+        string? name = GameData.FindNameByNumber("Spells", deathSpell);
+        return Game.Combat.TempDeathResponse.IsTempSpell(name) ? (deathSpell, name!) : null;
     }
 
     // The Monsters-table Number for a boss whose BossDef didn't carry one — resolved
@@ -14531,6 +14580,7 @@ public sealed class AppServices
     {
         // Movement engines first, so nothing below races a live walk.
         MovementControl.Stop();
+        Combat.ClearUserBreakHold("states were reset");
         GhSweep.Stop(reason);
         Walker.ReleaseAbandonedCombatHold();
         LoopRunner.ClearPendingReconnectResume();
