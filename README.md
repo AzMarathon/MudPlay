@@ -1,11 +1,16 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.172.0**
-> - Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay
-> - Members who are short are handed exactly what they lack when you can spare it and your coins make the amount; the step waits for the game to confirm it
-> - Otherwise the route goes round the toll, or the walk or loop ends naming the toll and who can't pay
-> - A member paid for at a toll that still turned them away is not paid for twice there
+> **Version 3.173.0**
+> - Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held
+> - Held buffs are let through once the debuff has gone out in the lair, two rounds into its fight at the latest, and held again at the next lair's door
+> - A buff held at one lair with no cast since gets one cast at the next door first
+> - Every lair wait also holds while mana is under what the debuff needs: its Min mana per cast, never less than the spell's cost, the higher of the two debuffs' (nav chip: Waiting for Mana to Debuff); mana-regen buffs still go out
+> - A fight at the doorstep holds no buff
+> - At a lair's door a buff you can't pay for is passed over for the next due one
+> - A lair wait ends at once when the loop is stopped or paused, or Auto-Combat or the master switch goes off
+> - Entire Loop Settings offers the lair wait while a loop walks to its first room
+> - Program log and bug report say what a lair wait is for, what it holds back and why it ended
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
