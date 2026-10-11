@@ -99,17 +99,16 @@ public sealed partial class SimulatorViewModel : ObservableObject
     // still that set's rooms, stays. The store drops what it kept for the set by
     // itself (AreaRankingStore.NoteActiveSet), told by the app and not from here,
     // since no Simulator need be open when a set is read in again.
+    //
+    // The character is read with the set. A profile load changes both, the set
+    // first: taken one at a time, the pairing in between (the new set with the
+    // character just left) would be listed and logged though nobody is ever it.
     public void GameDataChanged(string? set)
     {
-        if (!string.Equals(set, _owner.Set, StringComparison.OrdinalIgnoreCase))
-        {
-            if (_sketch() is { HasClicks: true } sketch) sketch.Clear();
-            ChangeOwner(_owner with { Set = set });
-            return;
-        }
-        _rankCts?.Cancel();
-        ClearSimulation(alsoCheck: true);
-        ShowRanking(null);
+        bool readAgain = string.Equals(set, _owner.Set, StringComparison.OrdinalIgnoreCase);
+        if (!readAgain && _sketch() is { HasClicks: true } sketch) sketch.Clear();
+        ChangeOwner(new SimulatorOwner(set, _character()));
+        if (readAgain) ShowRanking(null);
     }
 
     // Another character was loaded, or the loaded one closed: a result is one
@@ -142,14 +141,15 @@ public sealed partial class SimulatorViewModel : ObservableObject
         _rankCts?.Cancel();
         ClearSimulation(alsoCheck: true);
         if (owner == _owner) return;
-        bool listed = Rankings.Count > 0;
+        // Each line says only what happened, since a profile swap passes through "no
+        // character" on its way to the next one.
+        if (Rankings.Count > 0)
+            _log?.Info("Simulator", $"the area ranking for {_owner.Label} is off the list: it is {owner.Label} now");
         _owner = owner;
         AreaRanking? own = _rankings.Get(owner);
         ShowRanking(own, kept: true);
         if (own is not null)
-            _log?.Info("Simulator", $"now {owner.Label}: listing the area ranking made on it at L{own.Level} ({own.Rows.Count} options)");
-        else if (listed)
-            _log?.Info("Simulator", $"now {owner.Label}: no area ranking was made on it, so the list is empty");
+            _log?.Info("Simulator", $"listing the area ranking kept for {owner.Label}, made at L{own.Level} ({own.Rows.Count} options)");
     }
 
     // List a ranking (null: none). No row is picked: picking one puts its tour on

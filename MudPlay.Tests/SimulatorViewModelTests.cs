@@ -52,6 +52,9 @@ public sealed class SimulatorViewModelTests : IDisposable
         public required LoopManager Loops { get; init; }
         public required GameDataCache Cache { get; init; }
         public required AreaRankingStore Rankings { get; init; }
+        public required LogService Log { get; init; }
+        // What the Simulator has written to the program log.
+        public string[] Said => Log.Snapshot().Where(e => e.Source == "Simulator").Select(e => e.Message).ToArray();
         // The loaded profile as the Simulator reads it; null is the default profile.
         public string? Character { get; set; } = One;
         // The character's level as the last `stat` gave it; 0 before any.
@@ -117,7 +120,8 @@ public sealed class SimulatorViewModelTests : IDisposable
             made.NoteActiveSet(cache.ActiveSet);
             cache.ActiveSetChanged += set => made.NoteActiveSet(set);
         }
-        sim = new SimulatorViewModel(resolver, loops, cache, null, simulation, null, () => session,
+        var log = new LogService();
+        sim = new SimulatorViewModel(resolver, loops, cache, null, simulation, log, () => session,
             (rooms, name) => { session.LoadRoute(rooms, name); return null; }, store,
             () => harness is null ? One : harness.Character);
         session.RouteChanged += sim.SketchChanged;
@@ -126,7 +130,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         return harness = new Harness
         {
             Timers = timers, Resolver = resolver, Session = session, Simulator = sim, Loops = loops,
-            Cache = cache, Rankings = store,
+            Cache = cache, Rankings = store, Log = log,
         };
     }
 
@@ -402,6 +406,29 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.Equal(twos.Rows, h.Simulator.Rankings);
         h.Cache.SwitchSet("beta");
         Assert.Empty(h.Simulator.Rankings);
+    }
+
+    [Fact]
+    public void AProfileLoadThatAlsoSwitchesGameDataGoesStraightToTheNewPairing()
+    {
+        using Harness h = Build();
+        AreaRanking inBetween = Ranking("Fen"), twos = Ranking("Marsh");
+        h.Finish(Ranking("Hills"));
+        h.Rankings.Keep(new SimulatorOwner("beta", One), inBetween);
+        h.Rankings.Keep(new SimulatorOwner("beta", Two), twos);
+
+        // The second profile is the loaded one by the time its game data is applied,
+        // and the Simulator hears of the game data before it hears of the load.
+        h.Character = Two;
+        h.Cache.SwitchSet("beta");
+        Assert.Equal(twos.Rows, h.Simulator.Rankings);
+        h.Simulator.CharacterChanged();
+        Assert.Equal(twos.Rows, h.Simulator.Rankings);
+
+        // Nothing was listed, or logged as listed, for the first character on beta.
+        Assert.DoesNotContain(h.Said, m => m.StartsWith("listing") && m.Contains($"'{One}'"));
+        Assert.Single(h.Said, m => m.StartsWith($"listing the area ranking kept for game data 'beta', character '{Two}'"));
+        Assert.Single(h.Said, m => m.StartsWith($"the area ranking for game data 'alpha', character '{One}' is off the list"));
     }
 
     [Fact]
