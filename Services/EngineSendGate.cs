@@ -173,6 +173,9 @@ public sealed class EngineSendGate
         if (_replaySender is not { } send) return;
         if (IsBareMovementCommand(cmd)) return;
         SendAsClient(send, cmd);
+        // Reported like the send it repeats: the fumbled one never ran, so this is
+        // the one that ends a sneak.
+        _sent?.Invoke(LastClientCommandText!);
     }
 
     // True when the bytes are just a bare movement direction (with its trailing CR) —

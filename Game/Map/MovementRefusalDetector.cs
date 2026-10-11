@@ -41,9 +41,14 @@ public sealed partial class MovementRefusalDetector : IDisposable
         _isConfuseFumbleLine = isConfuseFumbleLine;
         _isActiveHoldLine = isActiveHoldLine;
         _lines.LineEmitted += OnLineEmitted;
+        _tracker.CommandMoveRefused += OnCommandMoveRefused;
     }
 
-    public void Dispose() => _lines.LineEmitted -= OnLineEmitted;
+    public void Dispose()
+    {
+        _lines.LineEmitted -= OnLineEmitted;
+        _tracker.CommandMoveRefused -= OnCommandMoveRefused;
+    }
 
     internal void FeedTestLine(string text, DateTimeOffset? when = null)
         => HandleLine(text, when ?? DateTimeOffset.UtcNow);
@@ -127,10 +132,19 @@ public sealed partial class MovementRefusalDetector : IDisposable
         // typed command in flight, since several of these lines also answer
         // ordinary commands. A cardinal in flight falls through: two of the lines
         // are also item-exit refusals.
-        if (RoomCommandRefused().IsMatch(text) && _tracker.NoteCommandMoveRefused(when))
+        if (RoomCommandRefused().IsMatch(text))
         {
-            _log?.Info("MoveRefusal", $"room command refused: {text.Trim()}");
-            return;
+            // The tracker says whether a command is in flight by raising
+            // CommandMoveRefused ahead of its revert; OnCommandMoveRefused reads
+            // this there, while the exit refused can still be told.
+            _priceRefusalInHand = PriceRefusal().IsMatch(text);
+            bool reverted = _tracker.NoteCommandMoveRefused(when);
+            _priceRefusalInHand = false;
+            if (reverted)
+            {
+                _log?.Info("MoveRefusal", $"room command refused: {text.Trim()}");
+                return;
+            }
         }
 
         // A gated exit or room turned the move away. Only while a move is Pending:
@@ -139,6 +153,10 @@ public sealed partial class MovementRefusalDetector : IDisposable
         if (ExitGateRefused().IsMatch(text))
         {
             if (_tracker.State.Confidence != RoomConfidence.Pending) return;
+            // Ahead of the revert: the walker re-plans off the revert, and by then
+            // the toll gate must already know of the refusal.
+            if (TollRefusal().Match(text) is { Success: true } toll)
+                PaidCrossingRefused?.Invoke(_tracker.ExitInFlight()?.Exit, TollCopper(toll));
             _tracker.NoteMoveBlocked(when);
             _log?.Info("MoveRefusal", $"exit refused: {text.Trim()}");
             return;
@@ -241,6 +259,49 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*(?:" + DefaultPatterns.ExitGateRefusals + @")\s*$",
         RegexOptions.CultureInvariant)]
     private static partial Regex ExitGateRefused();
+
+    // A move of ours was turned away for want of coin, at a toll or by an NPC who
+    // charges for a transport. Carries the exit refused, null when the move couldn't
+    // be tied to one, and the price the line named in copper, null when it names
+    // none we can value.
+    //
+    // A toll's line words the bar as "N gold crowns" whatever coins would have paid
+    // it (GAME_MECHANICS "Toll exits"); any other coin wording is left unvalued. An
+    // NPC's line names no figure, so its price is the fare the data has on the exit.
+    public event Action<RoomExit?, long?>? PaidCrossingRefused;
+
+    // True while the line in hand is the price refusal of a room command.
+    private bool _priceRefusalInHand;
+
+    private void OnCommandMoveRefused()
+    {
+        if (!_priceRefusalInHand) return;
+        // Only for an exit that charges: the same line answers a `price` on a
+        // command that goes nowhere.
+        if (_tracker.ExitInFlight() is { } crossing && crossing.Exit.FareCopper > 0)
+            PaidCrossingRefused?.Invoke(crossing.Exit, crossing.Exit.FareCopper);
+    }
+
+    // The one `price` refusal on record for a command that teleports: the Stock
+    // 1.11p message, matched on both realms like the rest of RoomCommandRefused
+    // (GAME_MECHANICS "Room-command refusals"). A fare whose line names another
+    // message is refused in words nothing records, and is left to the walker's
+    // ordinary handling of a refused command.
+    [GeneratedRegex(
+        @"^\s*He says, ""I may be old, but I count quite well and you are short!""\s*$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex PriceRefusal();
+
+    private static long? TollCopper(Match toll) =>
+        toll.Groups["coin"].Value is "gold crown" or "gold crowns"
+        && long.TryParse(toll.Groups["n"].Value, out long gold)
+            ? gold * 100
+            : null;
+
+    [GeneratedRegex(
+        @"^\s*You do not have enough to cover the toll of (?<n>\d+) (?<coin>.+)\.\s*$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex TollRefusal();
 
     [GeneratedRegex(
         @"^\s*You can't see well enough to move[.!]?\s*$",

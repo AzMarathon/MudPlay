@@ -74,6 +74,12 @@ public static class DefaultPatterns
         // space before the failure suffix; the optional space covers both realms.
         yield return new RegexPattern(KnownPatterns.UserHideFailed,     @"^Attempting to hide\.\.\. ?You don't think you are hidden\.");
         yield return new RegexPattern(KnownPatterns.UserHideInitiate,   @"^Attempting to hide\.\.\.$");
+        // The Stock engine's own wording for a hide refused outright, and its wait
+        // refusal (GAME_MECHANICS "Hiding — sneak vs hide, the hide state machine, and
+        // search reveals").
+        yield return new RegexPattern(KnownPatterns.UserHideRefused,
+            @"^You (?:can't seem to move anywhere to hide|are too stunned to move anywhere to hide)!");
+        yield return new RegexPattern(KnownPatterns.UserMustWait,       @"^You must wait before you may do that!");
 
         // ----- Room light ------------------------------------------------
         // Only the two "can't see" lines; prefix-anchored so trailing

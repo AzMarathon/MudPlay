@@ -24,6 +24,8 @@ public sealed class LevelIgnoringFilter(IRoomFilter inner, int? atLevel = null) 
     public bool IsPoorOddsDoor(in RoomExit exit) => inner.IsPoorOddsDoor(in exit);
 
     public string? DescribeDoorRefusal(in RoomExit exit) => inner.DescribeDoorRefusal(in exit);
+    public string? DescribePurseFor(in RoomExit exit) => inner.DescribePurseFor(in exit);
+    public bool IsOwnPurseShort(in RoomExit exit) => inner.IsOwnPurseShort(in exit);
     public int DoorRuleStamp => inner.DoorRuleStamp;
 
     public ExitBlockReason DescribeExitBlock(in RoomExit exit)

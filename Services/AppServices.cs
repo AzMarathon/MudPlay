@@ -620,6 +620,9 @@ public sealed class AppServices
 
     // Sends one `i` after a death, when the character stands in a room again.
     public Game.Inventory.PostDeathInventoryRefresh InventoryAfterDeath { get; private set; } = null!;
+
+    // The `i` a refused toll or fare asks for, kept owed while it can't be sent.
+    public Game.Inventory.OwedPurseRead PurseRead { get; private set; } = null!;
     public Game.Remote.PathReplyTracker PathReply { get; private set; } = null!;
     public Game.Remote.LeaderBossTravelProbe LeaderBossTravel { get; private set; } = null!;
 
@@ -2392,11 +2395,17 @@ public sealed class AppServices
     // gate, and hand-typed lines through SendUserInput (report
     // paradigm-20260928-163051: a typed `sea` left the client believing it still
     // sneaked, so sneak keeping held every buff for a quarter of an hour).
-    public void NoteSentForSneak(string command)
-    {
-        if (Game.Stealth.SneakBreakingCommands.EndsSneak(command, shadowRest: CharacterHasShadowRest()))
-            Stealth.NoteSneakBroken($"'{command.Trim()}'");
-    }
+    //
+    // The same commands end a hide, a few excepted. An item command (`use`, `read`,
+    // `eat`, `drink`, `light`) ends either only when the item's spell is cast, which
+    // _itemUseStealth reads off the pack and the game data.
+    //
+    // Each command is reported here once: a typed line by SendUserInput, the client's
+    // own by the send gate.
+    public void NoteSentForSneak(string command) =>
+        Stealth.NoteCommandSent(command, CharacterHasShadowRest, _itemUseStealth);
+
+    private Game.Stealth.ItemUseStealthRule? _itemUseStealth;
 
     // Sniffs a hand-typed PHYSICAL attack verb so Combat treats it as a user override
     // (holds the auto attack until next round). Hooked from SendUserInput.
@@ -5493,6 +5502,10 @@ public sealed class AppServices
         // detects silent loss on room change, and sends `sneak` /
         // `hide` per AutoMode toggles.
         Stealth = new Game.Stealth.StealthManager(Router, PlayerState, Log);
+        _itemUseStealth = new Game.Stealth.ItemUseStealthRule(
+            HeldItemNames,
+            name => Game.Stealth.ItemUseFactsIndex.Lookup(GameData, name),
+            debug: line => Log.Debug(Game.Stealth.StealthManager.LogCategory, line));
         Stealth.SetSneakHoldForHeal(() => Health.IsGateFleeing && CastDirector.IsEmergencyHealDue);
         // A buff cast mid-rest doesn't re-sneak unless ShadowRest keeps it through the rest.
         Stealth.SetReSneakSkipForRest(() => (Health.IsRecoveringRest || Health.RestInFlight) && !Health.UsesShadowRest);
@@ -8058,6 +8071,7 @@ public sealed class AppServices
         // runs before the typed bytes go out, so the `sn` leaves ahead of them). After
         // the gear hook above: equipping ends a sneak, so any swap goes out first.
         OutboundMovement.MoveSent += Stealth.NoteTypedMove;
+        OutboundMovement.DirectionalMoveSent += Stealth.NoteDirectionalMoveSent;
         // Every move re-opens the backstab surprise round, typed moves included.
         OutboundMovement.MoveSent += Combat.NoteMoveSent;
         OutboundMovement.MoveSent += CombatTracker.NoteMoveSent;
@@ -8642,6 +8656,79 @@ public sealed class AppServices
             if (RoomTracker.State.CurrentRoom is not null) InventoryAfterDeath.OnRoomKnown();
         };
         Profile.ProfileLoaded += _ => InventoryAfterDeath.Reset();
+        // Sent into a held send gate, or with the character out of the game (a link
+        // dropped from the board's menu lets the gate go), the `i` was lost and
+        // never asked again.
+        InventoryAfterDeath.SendHeld = () => EngineGate.IsLocked || !InGameCapture.InGame;
+
+        // The toll gate hears of the death too, with the room died in (an arena
+        // death takes nothing). The stale record above reads as "purse unknown",
+        // which a toll is not refused on, and the coin is known gone: until the
+        // re-read lands a walk from the graveyard would head for a toll it can't pay
+        // (report paradigm-20261010-145529).
+        RoomTracker.PlayerDeathObserved += () => Movement.NoteDeath(
+            RoomTracker.LastDeathRoom,
+            tookNothing: Game.Recovery.ArenaDeathRooms.DeathTookNothing(
+                RoomTracker.LastDeathRoom, Death.LastDeathSavedInColliseum,
+                paradigm: GameData.ActiveRealm == Game.RealmType.ParaMud));
+        Movement.TripUnderWayProbe = () => MovementControl.IsActive;
+        MovementControl.StateChanged += () =>
+        {
+            if (MovementControl.IsIdle) Movement.NoteTripEnded();
+        };
+        GameData.ActiveSetChanged += _ => Movement.ForgetRefusedCrossings();
+
+        // The read a refused toll asks for: owed while the master switch is off,
+        // the character is out of the game or the send gate is held, and sent when
+        // that ends (SendOwedInventoryReads).
+        PurseRead = new Game.Inventory.OwedPurseRead(
+            held: () => AutoModeController.Blocks("Info polls") || EngineGate.IsLocked || !InGameCapture.InGame,
+            send: () =>
+            {
+                Log.Info(Game.Inventory.InventoryManager.LogCategory,
+                    "Re-reading the inventory: the game refused a toll or fare the purse on record covered.");
+                SendGameCommand("i");
+            },
+            schedule: uiOneShot);
+        // In this order: the gate believes the record again before a re-plan held
+        // for the read (below) is let go by it.
+        Inventory.FullInventoryParsed += () =>
+        {
+            Movement.NotePurseRead();
+            PurseRead.Settle();
+        };
+        Profile.ProfileLoaded += _ => PurseRead.Settle();
+        EngineGate.Released += SendOwedInventoryReads;
+        InGameCapture.InGameChanged += inGame =>
+        {
+            if (inGame) SendOwedInventoryReads();
+        };
+        // A walk's or a loop's re-plan after a refused toll waits for that read.
+        Walker.SetPurseReadWait(PurseRead.WaitForAnswer);
+        LoopRunner.SetPurseReadWait(PurseRead.WaitForAnswer);
+
+        // A walk or loop with no route for want of a toll or fare says so on the
+        // terminal. Once per reason until a walk gets going: an engine that keeps
+        // asking for the same trip would otherwise repeat it.
+        string? lastUnpaidNotice = null;
+        void NoticeUnpaid(string notice)
+        {
+            if (notice == lastUnpaidNotice) return;
+            lastUnpaidNotice = notice;
+            // Posted: a re-plan can fail from inside the emulator's message pump.
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(notice));
+        }
+        Walker.SetUnpaidCrossingHandler((destination, reason) =>
+        {
+            string where = RoomGraph.GetRoom(destination)?.Name is { Length: > 0 } name
+                ? $"{destination} ({name})" : destination.ToString();
+            NoticeUnpaid($"[Navigation: no walk to {where} - {reason}]");
+        });
+        LoopRunner.SetUnpaidCrossingHandler(reason => NoticeUnpaid($"[Navigation: {reason}]"));
+        Walker.Event += e =>
+        {
+            if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;
+        };
 
         // A held or knocked-down character can't walk and isn't dragged by a leader,
         // so a move that lands proves a latched hold is stale (its wear-off line was
@@ -10296,6 +10383,9 @@ public sealed class AppServices
         // A loop the last reconnect set aside, not restarted while the switch was
         // off. Behind the freeze still, so its first step waits for the holds.
         LoopRunner.ResumeAfterMasterSwitch();
+        // Ahead of the release: the walk it frees plans on a purse that is being
+        // read, with its tolls closed, not on one known to be wrong.
+        SendOwedInventoryReads();
         MovementControl.ReleaseFromAutoAll();
         DeathRecovery.OnAutoAllRestored();
     }
@@ -11670,6 +11760,30 @@ public sealed class AppServices
         if (_engineWireSend is null || string.IsNullOrWhiteSpace(command)) return false;
         _engineWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r"));
         return true;
+    }
+
+    // MovementRefusalDetector.PaidCrossingRefused. The exit is closed to routes from
+    // here on, and when the purse on record covered the price the record is wrong
+    // (coin can go with nothing printed, as a room script's price does:
+    // GAME_MECHANICS "How a charge takes coins, and when the purse is re-bucketed"):
+    // the toll gate stops believing it at once and the inventory is read again, one
+    // `i` for the refusal. With Auto-All off the move was the user's own and nothing
+    // is sent (user, 2026-10-10); the read is owed until the switch is back on.
+    public void OnPaidCrossingRefused(Game.Map.RoomExit? crossing, long? namedCopper)
+    {
+        if (!Movement.NoteCrossingRefused(crossing, namedCopper)) return;
+        PurseRead.Ask();
+    }
+
+    // The inventory reads still owed (after a death, after a refused toll) go out
+    // now if they may: the master switch is back on, or the send gate has let go.
+    // One `i` serves both.
+    private void SendOwedInventoryReads()
+    {
+        bool deathReadDue = InventoryAfterDeath.Due;
+        if (deathReadDue && RoomTracker.State.CurrentRoom is not null) InventoryAfterDeath.OnRoomKnown();
+        if (deathReadDue && !InventoryAfterDeath.Due) PurseRead.CoveredByAnotherRead();
+        else PurseRead.Retry();
     }
 
     // A Grab-All boss's loot just hit the floor: fire a blind `get <item>` for every
