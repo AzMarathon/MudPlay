@@ -90,4 +90,24 @@ public sealed class ItemUseTeleportResolverTests : IDisposable
         (JsonDocument doc, KnownSpellCatalog catalog, TBInfoStore store) = NewSet(PotionItems, PotionSpells, tb);
         Assert.Empty(ItemUseTeleportResolver.Enumerate(doc, catalog, store));
     }
+
+    // Rows are sifted by their raw text before any slot is read, so a casting item
+    // has to be found however its row is spaced, and a 43 that isn't an ability
+    // slot's code (another column's value, part of a longer number, inside a text)
+    // must not make an item cast.
+    [Theory]
+    [InlineData("""{"Number":992,"Name":"potion","Abil-0":43,"AbilVal-0":607}""", true)]          // no spaces
+    [InlineData("{ \"Number\": 992, \"Name\": \"potion\", \"Abil-3\" :\t43 , \"AbilVal-3\": 607 }", true)]   // tab after the colon
+    [InlineData("{ \"Number\": 992, \"Name\": \"potion\", \"AbilVal-0\": 607, \"Abil-0\":\n  43\n}", true)]   // 43 on its own line, last
+    [InlineData("""{ "Number": 43, "Name": "rock", "Weight": 43, "Abil-0": 44, "AbilVal-0": 607 }""", false)]   // 43 elsewhere
+    [InlineData("""{ "Number": 992, "Name": "rock", "Abil-0": 430, "AbilVal-0": 607 }""", false)]
+    [InlineData("""{ "Number": 992, "Name": "Abil-0: 43", "Abil-0": 143, "AbilVal-0": 607 }""", false)]
+    [InlineData("""{ "Number": 992, "Name": "rock", "Abil-0": "43", "AbilVal-0": 607 }""", false)]   // a text, not a number
+    public void CastingItemIsFound_HoweverTheRowIsWritten(string row, bool casts)
+    {
+        (JsonDocument doc, KnownSpellCatalog catalog, TBInfoStore store) =
+            NewSet("[ " + row + " ]", PotionSpells, PotionTbInfo);
+
+        Assert.Equal(casts ? 1 : 0, ItemUseTeleportResolver.Enumerate(doc, catalog, store).Count());
+    }
 }

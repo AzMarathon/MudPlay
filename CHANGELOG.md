@@ -1,6 +1,6 @@
 # Version history
 
-## 3.176.4
+## 3.177.0
 
 - The client learns where a room's dead arrive from a death it sees, and keeps it with the game-data set for every client on it
 - Hang-up death check: back in a learned room counts as where the dead arrive, for rooms no list covers (never as "the wrong room", never over the Stock list)
@@ -8,6 +8,11 @@
 - Paradigm: the dungeon rooms of map 1 (1/2171 to 1/2188) go by the Stock list: their dead arrive in the Temple
 - Paradigm: Albion takes in the rooms only a room command on the same map reaches (Chamber of Wisdom, Castle Courtyard)
 - Bug report shows the learned arrival rooms, the disputed ones, and the pair the last check used
+
+## 3.176.1
+
+- Switching game data sets is quicker: the room map's doors, teleports, boats and lookups build about three times faster, with far less memory churned
+- Program log: the room map's load line says how long the build took
 
 ## 3.176.0
 

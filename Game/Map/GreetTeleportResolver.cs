@@ -82,7 +82,7 @@ public static class GreetTeleportResolver
     // Follow the directive block a greet keyword points at (through empty-Action
     // LinkTo hops) and report its teleport destination + level floor + class gate.
     // Only the first non-empty block is scanned, mirroring
-    // GuardDoorCommandResolver.TryResolveExit.
+    // GuardDoorCommandResolver.ReadExits.
     //
     // A block is often a class-branch TABLE — one `class N:<effects>` line per
     // class, and usually only ONE of them teleports (the barmaid's `adventure`:

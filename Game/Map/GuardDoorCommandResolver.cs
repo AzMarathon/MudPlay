@@ -49,12 +49,25 @@ public static class GuardDoorCommandResolver
         ArgumentNullException.ThrowIfNull(store);
         if (greetNumber <= 0 || hostRoomNumber <= 0) yield break;
 
+        foreach (GuardDoorCommand command in Read(store, greetNumber, monsterName).For(hostRoomNumber))
+            yield return command;
+    }
+
+    // Every exit a monster's greet keywords can operate, in any room, read once. A
+    // lair monster stands in hundreds of rooms and its greet reads the same in each
+    // one, so the graph build reads it per monster and asks For per room.
+    public static GreetDoors Read(TBInfoStore store, int greetNumber, string? monsterName)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (greetNumber <= 0) return GreetDoors.None;
+
         string noun = AskTarget(monsterName);
-        if (noun.Length == 0) yield break;
+        if (noun.Length == 0) return GreetDoors.None;
 
         TBInfoEntry? greet = ResolveGreetBlock(store, greetNumber, new HashSet<int>());
-        if (greet is null || string.IsNullOrEmpty(greet.Action)) yield break;
+        if (greet is null || string.IsNullOrEmpty(greet.Action)) return GreetDoors.None;
 
+        List<GreetDoors.Keyword>? keywords = null;
         foreach (string raw in greet.Action.Split('\n'))
         {
             string line = raw.Trim();
@@ -68,11 +81,40 @@ public static class GuardDoorCommandResolver
             int pointer = LeadingInt(line[(colon + 1)..]);
             if (pointer <= 0) continue;
 
-            if (TryResolveExit(store, pointer, hostRoomNumber, new HashSet<int>(),
-                    out Direction dir, out int abilityGate))
-            {
-                yield return new GuardDoorCommand($"ask {noun} {keyword}", dir, abilityGate);
-            }
+            if (ReadExits(store, pointer, new HashSet<int>()) is { } exits)
+                (keywords ??= new()).Add(new GreetDoors.Keyword($"ask {noun} {keyword}", exits));
+        }
+        return keywords is null ? GreetDoors.None : new GreetDoors(keywords);
+    }
+
+    // The door keywords of one greet: for each, the exits it operates, as
+    // (room, direction, ability gate) in the order the greet lists them.
+    public sealed class GreetDoors
+    {
+        internal readonly record struct Keyword(
+            string Command, List<(int Room, Direction Direction, int AbilityGate)> Exits);
+
+        internal static readonly GreetDoors None = new(new List<Keyword>());
+
+        private readonly List<Keyword> _keywords;
+
+        internal GreetDoors(List<Keyword> keywords) => _keywords = keywords;
+
+        // True when no keyword of the greet operates an exit anywhere.
+        public bool IsEmpty => _keywords.Count == 0;
+
+        // The commands that open an exit of hostRoomNumber: per keyword, the first
+        // exit it operates in that room.
+        public IEnumerable<GuardDoorCommand> For(int hostRoomNumber)
+        {
+            if (hostRoomNumber <= 0) yield break;
+            foreach (Keyword keyword in _keywords)
+                foreach ((int room, Direction direction, int abilityGate) in keyword.Exits)
+                {
+                    if (room != hostRoomNumber) continue;
+                    yield return new GuardDoorCommand(keyword.Command, direction, abilityGate);
+                    break;
+                }
         }
     }
 
@@ -93,26 +135,26 @@ public static class GuardDoorCommandResolver
     }
 
     // Walk the directive block a greet keyword points at (through empty-Action
-    // LinkTo hops) and report the first remoteaction that operates an exit of
-    // hostRoomNumber, plus any checkability ability gate seen on the way. Only the
-    // pointed block (and its empty-Action LinkTo chain) is scanned — a non-empty
-    // block that carries no matching remoteaction is a dead end for our purposes.
-    private static bool TryResolveExit(TBInfoStore store, int number, int hostRoomNumber,
-        HashSet<int> visited, out Direction direction, out int abilityGate)
+    // LinkTo hops) and list every remoteaction in it as the exit it operates, each
+    // with the checkability ability gate seen before it. Only the pointed block (and
+    // its empty-Action LinkTo chain) is scanned — a non-empty block that carries no
+    // remoteaction is a dead end for our purposes, reported as null.
+    private static List<(int Room, Direction Direction, int AbilityGate)>? ReadExits(
+        TBInfoStore store, int number, HashSet<int> visited)
     {
-        direction = default;
-        abilityGate = 0;
         int depth = 0;
         while (number > 0 && depth++ < MaxDepth && visited.Add(number))
         {
             TBInfoEntry? entry = store.GetEntry(number);
-            if (entry is null) return false;
+            if (entry is null) return null;
             if (string.IsNullOrEmpty(entry.Action))
             {
                 number = entry.LinkTo;
                 continue;
             }
 
+            List<(int Room, Direction Direction, int AbilityGate)>? exits = null;
+            int abilityGate = 0;
             foreach (string raw in entry.Action.Split('\n'))
             {
                 foreach (string tokenRaw in raw.Split(':'))
@@ -124,17 +166,15 @@ public static class GuardDoorCommandResolver
                         if (abil > 0) abilityGate = abil;
                     }
                     else if (token.StartsWith("remoteaction ", StringComparison.OrdinalIgnoreCase)
-                             && TryParseRemoteAction(token, out int targetRoom, out Direction dir)
-                             && targetRoom == hostRoomNumber)
+                             && TryParseRemoteAction(token, out int targetRoom, out Direction dir))
                     {
-                        direction = dir;
-                        return true;
+                        (exits ??= new()).Add((targetRoom, dir, abilityGate));
                     }
                 }
             }
-            return false;
+            return exits;
         }
-        return false;
+        return null;
     }
 
     // `remoteaction <room> <msg> <var> <dir>` — room is the 1st integer after the
