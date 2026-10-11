@@ -19,6 +19,7 @@ public sealed class BossTimerSyncCollector : IDisposable
 {
     private readonly ChatRouter _chat;
     private readonly LogService? _log;
+    private readonly Func<bool> _broadcastOff;
     private bool _collecting;
     private bool _disposed;
 
@@ -26,11 +27,15 @@ public sealed class BossTimerSyncCollector : IDisposable
 
     public event Action<BossTimerSyncResponse>? ResponseReceived;
 
-    public BossTimerSyncCollector(ChatRouter chat, LogService? log = null)
+    // broadcastOff: the Talk tab's "Disallow @commands from broadcast". Ticked, the
+    // broadcast channel is not listened to at all, for answers no more than for
+    // requests: it is public, and off until the user opens it.
+    public BossTimerSyncCollector(ChatRouter chat, LogService? log = null, Func<bool>? broadcastOff = null)
     {
         ArgumentNullException.ThrowIfNull(chat);
         _chat = chat;
         _log = log;
+        _broadcastOff = broadcastOff ?? (static () => false);
         _chat.EntryClassified += Ingest;
     }
 
@@ -68,6 +73,7 @@ public sealed class BossTimerSyncCollector : IDisposable
         // one the request went out on: a responder who is sneaking answers a said
         // request by telepath.
         if (!TransferChannels.Allows(Transfer.TimerSync, e.Channel)) return;
+        if (e.Channel == ChatChannel.Broadcast && _broadcastOff()) return;
         if (e.Speaker is not { Length: > 0 } sender) return;
         if (!TryParse(e.Message, out int index, out int count, out string blob)) return;
 

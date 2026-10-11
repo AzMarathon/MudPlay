@@ -70,6 +70,9 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
 
     [ObservableProperty] private bool _disallowRemoteFromLocal;
 
+    // Ticked unless the user opens the channel: it is public.
+    [ObservableProperty] private bool _disallowRemoteFromBroadcast = true;
+
     [ObservableProperty] private bool _warnOnInvalidRemoteCommand = true;
 
     [ObservableProperty] private string _remoteCommandFailureMessage = "command invalid or not allowed";
@@ -470,6 +473,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
             DisallowRemoteFromTelepaths      = DisallowRemoteFromTelepaths,
             DisallowRemoteFromGangpaths      = DisallowRemoteFromGangpaths,
             DisallowRemoteFromLocal          = DisallowRemoteFromLocal,
+            DisallowRemoteFromBroadcast      = DisallowRemoteFromBroadcast,
             WarnOnInvalidRemoteCommand       = WarnOnInvalidRemoteCommand,
             RemoteCommandFailureMessage      = RemoteCommandFailureMessage ?? string.Empty,
             GreetPlayersWhenFirstMet         = GreetPlayersWhenFirstMet,
@@ -535,6 +539,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
         DisallowRemoteFromTelepaths     = dto.DisallowRemoteFromTelepaths;
         DisallowRemoteFromGangpaths     = dto.DisallowRemoteFromGangpaths;
         DisallowRemoteFromLocal         = dto.DisallowRemoteFromLocal;
+        DisallowRemoteFromBroadcast     = dto.DisallowRemoteFromBroadcast;
         WarnOnInvalidRemoteCommand      = dto.WarnOnInvalidRemoteCommand;
         RemoteCommandFailureMessage     = dto.RemoteCommandFailureMessage;
         GreetPlayersWhenFirstMet        = dto.GreetPlayersWhenFirstMet;
@@ -600,6 +605,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
         engine.DisableTelepathChannel  = dto.DisallowRemoteFromTelepaths;
         engine.DisableGangpathChannel  = dto.DisallowRemoteFromGangpaths;
         engine.DisableLocalChannel     = dto.DisallowRemoteFromLocal;
+        engine.DisableBroadcastChannel = dto.DisallowRemoteFromBroadcast;
         engine.WarnOnDenial            = dto.WarnOnInvalidRemoteCommand;
         engine.FailureMessage          = dto.RemoteCommandFailureMessage ?? string.Empty;
 
@@ -631,6 +637,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     partial void OnDisallowRemoteFromTelepathsChanged(bool value)     => MarkDirty();
     partial void OnDisallowRemoteFromGangpathsChanged(bool value)     => MarkDirty();
     partial void OnDisallowRemoteFromLocalChanged(bool value)         => MarkDirty();
+    partial void OnDisallowRemoteFromBroadcastChanged(bool value)     => MarkDirty();
     partial void OnWarnOnInvalidRemoteCommandChanged(bool value)      => MarkDirty();
     partial void OnRemoteCommandFailureMessageChanged(string value)   => MarkDirty();
     partial void OnGreetPlayersWhenFirstMetChanged(bool value)        => MarkDirty();

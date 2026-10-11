@@ -88,6 +88,32 @@ public sealed class BossTimerSyncCollectorTests
         Assert.Equal("Bob", Assert.Single(got).Sender);
     }
 
+    // With the broadcast channel switched off on the Talk tab it is not listened
+    // to at all: answers heard there are passed over, and the other channels are
+    // read as ever.
+    [Fact]
+    public void WithTheBroadcastChannelSwitchedOff_AResponseHeardThereIsPassedOver()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        bool off = true;
+        BossTimerSyncCollector c = new(new ChatRouter(router), broadcastOff: () => off);
+        List<BossTimerSyncResponse> got = new();
+        c.ResponseReceived += got.Add;
+        c.Begin();
+        var timers = new[] { new BossTimerSyncRecord(1, "a", T("2026-08-22T01:00:00Z")) };
+
+        FeedResponse(c, "Bob", timers, 6, ChatChannel.Broadcast);
+        Assert.Empty(got);
+
+        FeedResponse(c, "Sue", timers, 6, ChatChannel.Gangpath);
+        Assert.Equal("Sue", Assert.Single(got).Sender);
+
+        off = false;   // unticked while the window is open
+        FeedResponse(c, "Bob", timers, 6, ChatChannel.Broadcast);
+        Assert.Equal(2, got.Count);
+    }
+
     [Theory]
     [InlineData(ChatChannel.Gossip)]
     [InlineData(ChatChannel.Yell)]

@@ -185,6 +185,12 @@ public sealed class RemoteCommandManager : IDisposable
     // Drop @-commands arriving on the Local say channel.
     public bool DisableLocalChannel { get; set; }
 
+    // Drop @-commands arriving on the numbered broadcast channel. Off-limits unless
+    // the user opens it (user, 2026-10-11: "it should be defaulted disallowed"): the
+    // channel is public, anyone can join one. The asking side of a transfer keeps
+    // to it too: with this set, nothing heard on that channel is taken either.
+    public bool DisableBroadcastChannel { get; set; } = true;
+
     // When true, a command that was refused or couldn't be carried out is
     // answered: FailureMessage on a per-player or party-whitelist denial, the
     // handler's own reason otherwise (RemoteCommandContext.Refuse). When false,
@@ -497,10 +503,12 @@ public sealed class RemoteCommandManager : IDisposable
         // unknown-command denial path and bounce a reply at the sender.
         if (_ignored.Contains(command)) return;
 
-        // The broadcast channel carries no remote command but the three transfers:
-        // one of them is allowed there, and the other two are answered with where
-        // they do work. Anything else said on it is passed over without a word, as
-        // everything on it was before it carried any of them.
+        // The broadcast channel was opened for the three transfers and for nothing
+        // else: one of them may go by it, and the other two are answered there with
+        // where they do work, as on any channel they do not use (user, 2026-10-11:
+        // "refusals should be sent on the same channel received"). No other remote
+        // command is read on it: it is passed over without a word, as everything
+        // said there was before the channel carried any of them.
         if (channel.Value == RemoteChannel.Broadcast && TransferChannels.Identify(command, args) is null) return;
 
         // Ahead of every block and denial below, so nothing here answers while
@@ -789,6 +797,7 @@ public sealed class RemoteCommandManager : IDisposable
         RemoteChannel.Telepath => DisableTelepathChannel,
         RemoteChannel.Gangpath => DisableGangpathChannel,
         RemoteChannel.Local    => DisableLocalChannel,
+        RemoteChannel.Broadcast => DisableBroadcastChannel,
         _                      => false,
     };
 
@@ -813,8 +822,8 @@ public sealed class RemoteCommandManager : IDisposable
     // Tell a player what became of something they sent because the user here asked
     // for it: a loop taken with `@loop send`. It answers no command of theirs, so no
     // handler's context carries it, but it leaves the way every reply does (braced,
-    // plain ASCII, on that channel, by telepath in place of a say while sneaking).
-    // Returns whether it was sent.
+    // plain ASCII), and by telepath: a loop goes by telepath only, and so does what
+    // is said about it. Returns whether it was sent.
     //
     // What holds it back:
     // - The master switch. With it off nothing goes out by itself, this included.
@@ -826,17 +835,17 @@ public sealed class RemoteCommandManager : IDisposable
     // Neither the "disallow all remote commands" setting nor a channel's own off
     // switch applies: those stop players' commands from being obeyed, and this is
     // the end of something the user started.
-    public bool SendOutcome(RemoteChannel channel, string recipient, string text, bool failed)
+    public bool SendOutcome(string recipient, string text, bool failed)
     {
         if (string.IsNullOrWhiteSpace(recipient) || string.IsNullOrWhiteSpace(text)) return false;
         if (BlockedByMasterSwitch?.Invoke($"answer to {recipient}: {text}") == true) return false;
         if (failed)
         {
             if (!WarnOnDenial) return false;
-            SendDenialReply(channel, recipient, specificReason: text);
+            SendDenialReply(RemoteChannel.Telepath, recipient, specificReason: text);
             return true;
         }
-        SendReply(channel, recipient, text);
+        SendReply(RemoteChannel.Telepath, recipient, text);
         return true;
     }
 

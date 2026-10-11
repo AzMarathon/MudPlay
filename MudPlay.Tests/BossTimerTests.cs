@@ -501,9 +501,14 @@ public sealed class BossTimerTests : IDisposable
         RemoteCommandManager engine = new(chat, party, players);
         players.RecordObservation("Bob", null, null, null, null, null, null, Now);
         players.EditCustomization("Bob", new PlayerCustomization(RemoteControls: PlayerRemoteControls.QueryBossTimers));
-        _ = new BossTimerQueryHandler(engine, store, timers, cache);
+        // The broadcast channel opened, as with its Talk-tab box unticked.
+        engine.DisableBroadcastChannel = false;
+        _ = new BossTimerQueryHandler(engine, store, timers, cache, clock: () => _handlerNow);
         return (engine, timers);
     }
+
+    // The handler's clock: it spaces out its answers on the broadcast channel.
+    private DateTimeOffset _handlerNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     private static ChatLogEntry Telepath(string msg) =>
         new(Now, ChatChannel.TelepathIncoming, "Bob", msg, $"Bob telepaths: {msg}");
@@ -557,6 +562,67 @@ public sealed class BossTimerTests : IDisposable
 
         Assert.All(engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)),
             line => Assert.StartsWith("/Bob {@timerdata ", line));
+    }
+
+    // On the broadcast channel an answer is several lines to everyone there, from
+    // every client the asker may ask. One a minute to each asker: asked again
+    // sooner, the answer is one line saying so (by the Warn setting), not the data.
+    [Fact]
+    public void TimerSync_OnTheBroadcastChannel_IsAnsweredOnceAMinuteToEachAsker()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+        ChatLogEntry Asks(string who, ChatChannel channel = ChatChannel.Broadcast) =>
+            new(Now, channel, who, "@timer sync", "raw");
+        string[] Sent()
+        {
+            string[] wire = engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToArray();
+            engine.LastSentForTests.Clear();
+            return wire;
+        }
+
+        void SentTheTimers(string opening)
+        {
+            string[] wire = Sent();
+            Assert.NotEmpty(wire);
+            Assert.All(wire, line => Assert.StartsWith(opening + "{@timerdata ", line));
+        }
+
+        engine.DispatchForTests(Asks("Bob"));
+        SentTheTimers("br ");
+
+        _handlerNow += TimeSpan.FromSeconds(59);
+        engine.DispatchForTests(Asks("Bob"));
+        Assert.Equal("br {@timer sync answered here less than a minute ago - ask again shortly}\r", Sent().Single());
+
+        // With the Warn setting off the second ask draws nothing at all.
+        engine.WarnOnDenial = false;
+        engine.DispatchForTests(Asks("Bob"));
+        Assert.Empty(Sent());
+        engine.WarnOnDenial = true;
+
+        // The bound is on that channel alone: the same player is answered by telepath.
+        engine.DispatchForTests(Asks("Bob", ChatChannel.TelepathIncoming));
+        SentTheTimers("/Bob ");
+
+        // A minute after the answer, it is given again.
+        _handlerNow += TimeSpan.FromSeconds(1);
+        engine.DispatchForTests(Asks("Bob"));
+        SentTheTimers("br ");
+    }
+
+    // The broadcast channel is off until the user opens it: nothing asked there is
+    // read, timers included.
+    [Fact]
+    public void TimerSync_OnTheBroadcastChannelSwitchedOff_IsNotAnswered()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+        engine.DisableBroadcastChannel = true;
+
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer sync", "raw"));
+
+        Assert.Empty(engine.LastSentForTests);
     }
 
     // On the broadcast channel only the sync is followed: the readable report is an

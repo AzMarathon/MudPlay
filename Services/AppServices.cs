@@ -15487,6 +15487,7 @@ public sealed class AppServices
         RemoteCommands.DisableTelepathChannel = dto.DisallowRemoteFromTelepaths;
         RemoteCommands.DisableGangpathChannel = dto.DisallowRemoteFromGangpaths;
         RemoteCommands.DisableLocalChannel    = dto.DisallowRemoteFromLocal;
+        RemoteCommands.DisableBroadcastChannel = dto.DisallowRemoteFromBroadcast;
         RemoteCommands.WarnOnDenial           = dto.WarnOnInvalidRemoteCommand;
         RemoteCommands.FailureMessage         = dto.RemoteCommandFailureMessage ?? string.Empty;
     }
@@ -15499,6 +15500,7 @@ public sealed class AppServices
         RemoteCommands.DisableTelepathChannel = defaults.DisallowRemoteFromTelepaths;
         RemoteCommands.DisableGangpathChannel = defaults.DisallowRemoteFromGangpaths;
         RemoteCommands.DisableLocalChannel    = defaults.DisallowRemoteFromLocal;
+        RemoteCommands.DisableBroadcastChannel = defaults.DisallowRemoteFromBroadcast;
         RemoteCommands.WarnOnDenial           = defaults.WarnOnInvalidRemoteCommand;
         RemoteCommands.FailureMessage         = defaults.RemoteCommandFailureMessage ?? string.Empty;
     }

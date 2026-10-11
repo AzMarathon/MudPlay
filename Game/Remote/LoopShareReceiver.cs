@@ -67,15 +67,14 @@ public sealed class LoopShareReceiver : IDisposable
     private string? _expectedSender;
     private bool _disposed;
 
-    // Sends the sender our one answer when a transfer is over: the channel (always
-    // telepath), their name, the text, and whether it is a failure. False when it
-    // was held back (the master switch, or the Warn setting for a failure):
-    // RemoteCommandManager.SendOutcome.
-    private readonly Func<RemoteChannel, string, string, bool, bool>? _tell;
+    // Telepaths the sender our one answer when a transfer is over: their name, the
+    // text, and whether it is a failure. False when it was held back (the master
+    // switch, or the Warn setting for a failure): RemoteCommandManager.SendOutcome.
+    private readonly Func<string, string, bool, bool>? _tell;
 
     public LoopShareReceiver(ChatRouter chat, LoopManager loops, Action<string> notice,
         LogService? log = null, Func<DateTimeOffset>? clock = null,
-        Func<RemoteChannel, string, string, bool, bool>? tell = null)
+        Func<string, string, bool, bool>? tell = null)
     {
         ArgumentNullException.ThrowIfNull(chat);
         ArgumentNullException.ThrowIfNull(loops);
@@ -103,7 +102,7 @@ public sealed class LoopShareReceiver : IDisposable
     private void Tell(string sender, string? code, string outcome, bool failed = false)
     {
         if (_tell is null) return;
-        bool told = _tell(RemoteChannel.Telepath, sender, LoopShareHandler.ResultLine(code, outcome), failed);
+        bool told = _tell(sender, LoopShareHandler.ResultLine(code, outcome), failed);
         _log?.Info("LoopShare", told
             ? $"told {sender}: {outcome}"
             : $"{sender} was not told ({outcome}): the master switch is off"

@@ -44,6 +44,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     // players on the numbered channel you have joined.
     public IReadOnlyList<string> Channels { get; } =
         new[] { "Gang", "Telepath (to…)", "Local (say)", "Broadcast (br)" };
+    private const int BroadcastChoice = 3;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TelepathTargetEnabled))]
     private int _channelIndex;
@@ -71,7 +72,8 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         _send = send;
         _realm = gameData.ActiveRealm;
 
-        _collector = new BossTimerSyncCollector(chat, AppServices.Current.Log);
+        _collector = new BossTimerSyncCollector(chat, AppServices.Current.Log,
+            broadcastOff: () => AppServices.Current.RemoteCommands.DisableBroadcastChannel);
         _collector.ResponseReceived += OnResponse;
         AppServices.Current.TimerSyncWindowActive = true;   // suppress a duplicate auto-open
 
@@ -89,6 +91,15 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     [RelayCommand]
     private void SendRequest()
     {
+        // With the broadcast channel switched off on the Talk tab the answers would
+        // not be read, so nothing is asked there. The choice stays in the list and
+        // says what to do, as the telepath choice does with no name entered.
+        if (ChannelIndex == BroadcastChoice && AppServices.Current.RemoteCommands.DisableBroadcastChannel)
+        {
+            Status = "Broadcast is switched off: untick \"Disallow @commands from broadcast\" on Settings → Talk, then request again.";
+            return;
+        }
+
         _collector.Begin();
         Requested = true;
 
@@ -97,7 +108,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         {
             1 => $"/{TelepathTarget.Trim()} {request}",   // telepath to a named player
             2 => $".{request}",                            // local say
-            3 => $"br {request}",                          // the numbered channel's speak verb
+            BroadcastChoice => $"br {request}",            // the numbered channel's speak verb
             _ => $"bg {request}",                          // gang (default)
         };
         _send(wire);

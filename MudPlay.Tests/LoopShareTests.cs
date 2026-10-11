@@ -190,7 +190,7 @@ public sealed class LoopShareTests : IDisposable
         List<string> notices = new();
         List<string> told = new();
         LoopShareReceiver receiver = new(new ChatRouter(router), loops, notices.Add, clock: () => _now,
-            tell: (_, _, text, _) => { told.Add(text); return true; });
+            tell: (_, text, _) => { told.Add(text); return true; });
         string blob = Pack("{\"n\":\"x\\u001b[2J\",\"w\":[{\"r\":\"1/1\"},{\"r\":\"1/2\"}]}");
 
         receiver.NoteSendConfirmed("Raijin");
@@ -516,7 +516,8 @@ public sealed class LoopShareTests : IDisposable
 
     // ----- the asker's client answers the sender ---------------------------
 
-    private sealed record Told(RemoteChannel Channel, string To, string Text, bool Failed);
+    // One telepathed answer: who to, what, and whether as a failure.
+    private sealed record Told(string To, string Text, bool Failed);
 
     private (LoopShareReceiver Receiver, LoopManager Loops, List<Told> Told) NewAnsweringReceiver()
     {
@@ -525,7 +526,7 @@ public sealed class LoopShareTests : IDisposable
         LoopManager loops = NewLoops();
         List<Told> told = new();
         LoopShareReceiver receiver = new(new ChatRouter(router), loops, _ => { }, clock: () => _now,
-            tell: (channel, to, text, failed) => { told.Add(new Told(channel, to, text, failed)); return true; });
+            tell: (to, text, failed) => { told.Add(new Told(to, text, failed)); return true; });
         return (receiver, loops, told);
     }
 
@@ -544,13 +545,13 @@ public sealed class LoopShareTests : IDisposable
         string code = LoopSignature.ShortOf(sent);
 
         Transfer(receiver, sent);
-        Assert.Equal(new Told(RemoteChannel.Telepath, "Raijin", $"@loopresult {code} saved as 'King's Road'", Failed: false),
+        Assert.Equal(new Told("Raijin", $"@loopresult {code} saved as 'King's Road'", Failed: false),
             told.Single());
 
         // The same loop again: turned away, and the sender hears which loop it is here.
         told.Clear();
         Transfer(receiver, sent, id: "c3d4");
-        Assert.Equal(new Told(RemoteChannel.Telepath, "Raijin", $"@loopresult {code} already have it as 'King's Road'", false),
+        Assert.Equal(new Told("Raijin", $"@loopresult {code} already have it as 'King's Road'", false),
             told.Single());
 
         // A different loop of that name: the sender hears the name it was saved under.
@@ -585,7 +586,7 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in DataLines(ours)) receiver.Ingest(Tele("Raijin", line));
 
         Assert.NotNull(loops.Get("Ours"));
-        Assert.Equal(new Told(RemoteChannel.Telepath, "Raijin", $"@loopresult {LoopSignature.ShortOf(ours)} saved as 'Ours'", false),
+        Assert.Equal(new Told("Raijin", $"@loopresult {LoopSignature.ShortOf(ours)} saved as 'Ours'", false),
             told.Single());
     }
 
@@ -690,7 +691,7 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in DataLines(asked)) receiver.Ingest(Tele("Raijin", line));
 
         Assert.NotNull(loops.Get("King's Road"));
-        Assert.Equal(new Told(RemoteChannel.Telepath, "Raijin", $"@loopresult {LoopSignature.ShortOf(asked)} saved as 'King's Road'", false),
+        Assert.Equal(new Told("Raijin", $"@loopresult {LoopSignature.ShortOf(asked)} saved as 'King's Road'", false),
             told.Single());
     }
 
@@ -773,7 +774,7 @@ public sealed class LoopShareTests : IDisposable
         receiver.NoteSendConfirmed("Raijin");
         foreach (string line in DataLines(arrived)) receiver.Ingest(Tele("Raijin", line));
 
-        Assert.Equal(new Told(RemoteChannel.Telepath, "Raijin",
+        Assert.Equal(new Told("Raijin",
             $"@loopresult {LoopSignature.ShortOf(arrived)} not saved: it is not the loop offered ({LoopSignature.ShortOf(offered)}) - send it again",
             Failed: true), told.Single());
 
@@ -781,7 +782,7 @@ public sealed class LoopShareTests : IDisposable
         receiver.NoteSendConfirmed("Raijin");
         receiver.Ingest(Tele("Raijin", $"{{{LoopShareHandler.DataToken} a1b2 1/1 AAAA}}"));
 
-        Assert.Equal(new Told(RemoteChannel.Telepath, "Raijin", "@loopresult - not saved: it arrived damaged - send it again", true),
+        Assert.Equal(new Told("Raijin", "@loopresult - not saved: it arrived damaged - send it again", true),
             told.Single());
         Assert.Empty(loops.Loops);
     }
@@ -801,29 +802,18 @@ public sealed class LoopShareTests : IDisposable
     private static string[] Wire(RemoteCommandManager engine) =>
         engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToArray();
 
-    // The answer leaves as every remote reply does: braced, to the sender's given
-    // name, on that channel, and by telepath in place of a say while sneaking.
+    // The answer leaves as every remote reply does, braced and to the sender's given
+    // name, and by telepath: a loop goes by telepath only, and so does what is said
+    // about it.
     [Fact]
-    public void Answer_GoesOutAsARemoteReply()
+    public void Answer_GoesOutAsARemoteReply_ByTelepath()
     {
         RemoteCommandManager engine = Engine();
+
         // A two-word name is addressed by its first word, as the game wants it.
-        Assert.True(engine.SendOutcome(RemoteChannel.Telepath, "Raijin Surname", "@loopresult 9da659db saved as 'X'", failed: false));
-        Assert.True(engine.SendOutcome(RemoteChannel.Gangpath, "Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
-        Assert.True(engine.SendOutcome(RemoteChannel.Local, "Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
-        Assert.True(engine.SendOutcome(RemoteChannel.Broadcast, "Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
+        Assert.True(engine.SendOutcome("Raijin Surname", "@loopresult 9da659db saved as 'X'", failed: false));
 
-        Assert.Equal(new[]
-        {
-            "/Raijin {@loopresult 9da659db saved as 'X'}\r",
-            "bg {@loopresult 9da659db saved as 'X'}\r",
-            ">Raijin {@loopresult 9da659db saved as 'X'}\r",
-            "br {@loopresult 9da659db saved as 'X'}\r",
-        }, Wire(engine));
-
-        RemoteCommandManager sneaking = Engine(stealthed: true);
-        sneaking.SendOutcome(RemoteChannel.Local, "Raijin", "@loopresult 9da659db saved as 'X'", failed: false);
-        Assert.Equal("/Raijin {@loopresult 9da659db saved as 'X'}\r", Wire(sneaking).Single());
+        Assert.Equal("/Raijin {@loopresult 9da659db saved as 'X'}\r", Wire(engine).Single());
     }
 
     // What became of a loop the user accepted is an answer, not a refusal: the Warn
@@ -833,24 +823,24 @@ public sealed class LoopShareTests : IDisposable
     public void Answer_IsHeldBackByTheMasterSwitch_AndAFailureByTheWarnSetting()
     {
         RemoteCommandManager warnOff = Engine(warn: false);
-        Assert.True(warnOff.SendOutcome(RemoteChannel.Telepath, "Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
-        Assert.False(warnOff.SendOutcome(RemoteChannel.Telepath, "Raijin", "@loopresult - not saved", failed: true));
+        Assert.True(warnOff.SendOutcome("Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
+        Assert.False(warnOff.SendOutcome("Raijin", "@loopresult - not saved", failed: true));
         Assert.Equal("/Raijin {@loopresult 9da659db saved as 'X'}\r", Wire(warnOff).Single());
 
         RemoteCommandManager warnOn = Engine(warn: true);
-        Assert.True(warnOn.SendOutcome(RemoteChannel.Telepath, "Raijin", "@loopresult - not saved", failed: true));
+        Assert.True(warnOn.SendOutcome("Raijin", "@loopresult - not saved", failed: true));
         Assert.Equal("/Raijin {@loopresult - not saved}\r", Wire(warnOn).Single());
 
         RemoteCommandManager switchedOff = Engine(masterSwitchOff: true);
-        Assert.False(switchedOff.SendOutcome(RemoteChannel.Telepath, "Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
-        Assert.False(switchedOff.SendOutcome(RemoteChannel.Telepath, "Raijin", "@loopresult - not saved", failed: true));
+        Assert.False(switchedOff.SendOutcome("Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
+        Assert.False(switchedOff.SendOutcome("Raijin", "@loopresult - not saved", failed: true));
         Assert.Empty(Wire(switchedOff));
 
         // "Disallow all remote commands" stops players' commands being obeyed; the
         // answer ends something the user started, and still goes.
         RemoteCommandManager disallowed = Engine();
         disallowed.MasterDisable = true;
-        Assert.True(disallowed.SendOutcome(RemoteChannel.Telepath, "Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
+        Assert.True(disallowed.SendOutcome("Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
     }
 
     // The answer must be nothing to any client but the sender's `@loop send`: not a

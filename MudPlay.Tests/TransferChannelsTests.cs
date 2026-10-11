@@ -135,19 +135,23 @@ public sealed class TransferChannelsTests
         public List<string> Ran { get; } = new();
         public LogService Log { get; } = new();
 
-        public Engine(bool warn = true, bool masterSwitchOff = false)
+        // broadcastOpen: the Talk tab's "Disallow @commands from broadcast" unticked.
+        // everyCommand: a handler for every command in the catalogue, not only the
+        // three that have a transfer form.
+        public Engine(bool warn = true, bool masterSwitchOff = false, bool broadcastOpen = true, bool everyCommand = false)
         {
             MessageRouter router = new();
             DefaultPatterns.Seed(router);
             PlayerDatabase players = new();
             players.RecordObservation("Friend", null, null, null, null, null, null, Now);
-            players.EditCustomization("Friend", new PlayerCustomization(RemoteControls: PlayerRemoteControls.All));
+            players.EditCustomization("Friend", new PlayerCustomization(RemoteControls: (PlayerRemoteControls)~0));
             players.RecordObservation("Stranger", null, null, null, null, null, null, Now);
             Commands = new RemoteCommandManager(new ChatRouter(router), new PartyState(), players, Log)
             {
                 WarnOnDenial = warn,
                 BlockedByMasterSwitch = _ => masterSwitchOff,
                 SelfNameProvider = () => "Us",
+                DisableBroadcastChannel = !broadcastOpen,
             };
             // Stand-ins that answer as the real handlers do for a channel they use,
             // and refuse as they do for one they don't.
@@ -155,6 +159,23 @@ public sealed class TransferChannelsTests
             Register("@roomba", PlayerRemoteControls.QueryItemLocation, Transfer.RoombaSync);
             Register("@loop", PlayerRemoteControls.MovePlayer, Transfer.LoopSend);
             Commands.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus, ctx => { Ran.Add("@health"); ctx.Reply("HP=1/1"); });
+            if (!everyCommand) return;
+
+            // Every other command answers, refuses and then fails, so that whichever
+            // of the three a real handler does would show on the wire.
+            foreach (string command in RemoteCommandCatalog.Help.Keys)
+            {
+                if (command is "@timer" or "@roomba" or "@loop" or "@health") continue;
+                RemoteCommandCatalog.TryGetCategory(command, out PlayerRemoteControls category);
+                Commands.RegisterHandler(command, category, ctx =>
+                {
+                    Ran.Add(command);
+                    ctx.Reply("an answer");
+                    ctx.Refuse("a refusal");
+                    throw new InvalidOperationException("a handler that fails");
+                });
+            }
+            Commands.RegisterPrefixHandler("@equip-", PlayerRemoteControls.ExecuteCommands, ctx => { Ran.Add("@equip-"); ctx.Reply("an answer"); });
         }
 
         private void Register(string command, PlayerRemoteControls category, Transfer transfer) =>
@@ -251,6 +272,84 @@ public sealed class TransferChannelsTests
         disallowed.Commands.MasterDisable = true;
         disallowed.Commands.DispatchForTests(Broadcast("Friend", "@timer sync"));
         Assert.Empty(disallowed.Ran);
+    }
+
+    // The channel is public, so it is not listened to until the user opens it: the
+    // Talk tab's "Disallow @commands from broadcast" starts ticked.
+    [Fact]
+    public void TheBroadcastChannel_IsOffUntilTheUserOpensIt()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        Assert.True(new RemoteCommandManager(new ChatRouter(router), new PartyState(), new PlayerDatabase()).DisableBroadcastChannel);
+
+        Engine e = new(broadcastOpen: false);
+        e.Commands.DispatchForTests(Broadcast("Friend", "@timer sync"));
+        e.Commands.DispatchForTests(Broadcast("Friend", "@roomba sync"));
+        e.Commands.DispatchForTests(Broadcast("Stranger", "@timer sync"));
+
+        Assert.Empty(e.Ran);
+        Assert.Empty(e.Wire);
+    }
+
+    // Everything the engine can put on the broadcast channel, for every command in
+    // the catalogue and for words that are no command, in every form a line takes,
+    // from a player with every permission and from one with none. With the box
+    // ticked: nothing. Unticked: the data of the one transfer that goes by that
+    // channel, the "works by … only" refusal of the other two, and the Failure
+    // message to a player without the permission for one of the three; the last
+    // two by the Warn setting. No other command is read there, so none is answered,
+    // refused or relayed, and a handler is never run for one.
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void OnTheBroadcastChannel_OnlyTheThreeTransfersAreEverAnswered(bool open, bool warn)
+    {
+        string[] words = RemoteCommandCatalog.Help.Keys
+            .Concat(new[] { "@nosuchcommand", "@", "@timerdata", "@loopdata", "@loopresult", "@roombadata", "hello", "{@timer" })
+            .ToArray();
+        string[] tails = { "", " sync", " send kings road", " send yes", " sync reroll", " reroll", " x", " sync}" };
+        Engine e = new(warn: warn, broadcastOpen: open, everyCommand: true);
+        int lines = 0;
+
+        foreach (string sender in new[] { "Friend", "Stranger" })
+        foreach (string word in words)
+        foreach (string tail in tails)
+        foreach (string line in new[] { word + tail, word + "!" + tail, "&" + word + tail })
+        {
+            e.Commands.LastSentForTests.Clear();
+            e.Ran.Clear();
+
+            e.Commands.DispatchForTests(Broadcast(sender, line));
+
+            (string[] expected, bool handlerRuns) = ExpectedOnBroadcast(sender, line, open, warn);
+            Assert.True(expected.SequenceEqual(e.Wire),
+                $"'{line}' from {sender} (open {open}, warn {warn}) sent [{string.Join(" | ", e.Wire)}], expected [{string.Join(" | ", expected)}]");
+            Assert.True(handlerRuns == (e.Ran.Count == 1),
+                $"'{line}' from {sender} (open {open}, warn {warn}) ran [{string.Join(" | ", e.Ran)}]");
+            lines++;
+        }
+        Assert.True(lines > 2000, $"only {lines} lines were tried");
+    }
+
+    // What a line on the broadcast channel puts on the wire, and whether a handler
+    // is run for it at all: only for one of the three transfers, from a player who
+    // holds its permission.
+    private static (string[] Wire, bool HandlerRuns) ExpectedOnBroadcast(string sender, string line, bool open, bool warn)
+    {
+        string[] none = Array.Empty<string>();
+        if (!open || line.StartsWith('&')) return (none, false);
+        string[] tokens = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string command = tokens[0].TrimEnd('!');
+        string[] args = tokens[1..];
+        if (!command.StartsWith('@') || TransferChannels.Identify(command, args) is not { } transfer) return (none, false);
+        // A blocked word anywhere in the line is never answered, on any channel.
+        if (args.Contains("reroll")) return (none, false);
+        if (sender == "Stranger") return (warn ? new[] { "br {command invalid or not allowed}\r" } : none, false);
+        if (transfer == Transfer.TimerSync) return (new[] { "br {data}\r" }, true);
+        return (warn ? new[] { $"br {{{TransferChannels.Refusal(transfer)}}}\r" } : none, true);
     }
 
     // ----- each transfer, each channel, through the engine -----------------

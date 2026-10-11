@@ -4092,6 +4092,15 @@ public partial class MainWindowViewModel : ObservableObject
             Dispatcher.UIThread.Post(() => AppServices.Current.WriteTerminalNotice($"[{where}]"));
             return;
         }
+        // The broadcast channel is not listened to while its Talk-tab box is ticked,
+        // whatever a transfer allows: the answers would not be read.
+        if (asked.Channel == Game.Remote.RemoteChannel.Broadcast && AppServices.Current.RemoteCommands.DisableBroadcastChannel)
+        {
+            AppServices.Current.Log.Info("Transfers", $"our own {e.Message.Trim()} went out on the broadcast channel, which is switched off on the Talk tab; nothing will be taken from it.");
+            Dispatcher.UIThread.Post(() => AppServices.Current.WriteTerminalNotice(
+                "[the broadcast channel is switched off for @commands: Settings → Talk → Disallow @commands from broadcast]"));
+            return;
+        }
         switch (asked.Transfer)
         {
             case Game.Remote.Transfer.TimerSync:

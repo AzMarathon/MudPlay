@@ -42,6 +42,25 @@ public sealed class TalkSectionViewModelTests
         Assert.Equal("nope", back.RemoteCommandFailureMessage);
     }
 
+    // The broadcast channel is the one channel that starts switched off: it is
+    // public, so it is listened to only once the user unticks its box. A profile
+    // saved before the setting existed has no such field and reads as switched off;
+    // an unticked box is kept through a save.
+    [Fact]
+    public void BroadcastChannel_IsDisallowedByDefault_AndForAProfileFromBeforeTheSetting()
+    {
+        Assert.True(new TalkSettings().DisallowRemoteFromBroadcast);
+
+        TalkSettings? older = JsonSerializer.Deserialize<TalkSettings>(
+            """{ "DisallowRemoteFromTelepaths": false, "DisallowRemoteFromGangpaths": true, "DisallowRemoteFromLocal": false }""");
+        Assert.True(older!.DisallowRemoteFromBroadcast);
+        Assert.True(older.DisallowRemoteFromGangpaths);
+
+        TalkSettings? opened = JsonSerializer.Deserialize<TalkSettings>(
+            JsonSerializer.Serialize(new TalkSettings { DisallowRemoteFromBroadcast = false }));
+        Assert.False(opened!.DisallowRemoteFromBroadcast);
+    }
+
     [Fact]
     public void TalkSettings_Defaults_AreSafeAndPermissive()
     {

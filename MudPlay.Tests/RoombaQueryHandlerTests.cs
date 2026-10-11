@@ -344,6 +344,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         var (engine, players, locations) = SetupWithItems();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
         locations.RecordRoom(new RoomKey(1, 100), new[] { "3 torch" });
+        engine.DisableBroadcastChannel = false;   // the broadcast channel opened on the Talk tab
 
         engine.DispatchForTests(Heard(channel, "Friend", "@roomba sync"));
 
