@@ -174,22 +174,26 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
         Simulator = new SimulatorViewModel(
             _services.ExpResolver, _services.Loops, _services.GameData, _services.Movement,
-            _services.LoopSimulationSource, _services.Log, () => ExpEstimator, ShowSimulatedRouteOnMap);
+            _services.LoopSimulationSource, _services.Log, () => ExpEstimator, ShowSimulatedRouteOnMap,
+            _services.SimulatorRankings, SimulatorCharacter());
         _services.SimulatorSnapshotProvider = () => Simulator.ToSnapshot();
         _services.NavigationModeProvider = DescribeModeForReport;
-        // A character simulation was played with the old character / game data.
-        _services.Profile.ProfileLoaded += OnProfileLoadedDropSimulation;
-        _services.GameData.ActiveSetChanged += OnActiveSetDropSimulation;
+        // The Simulator's results are one character's on one game-data set: it is
+        // told when either changes, and shows that pairing's own or nothing.
+        _services.Profile.ProfileLoaded += OnSimulatorCharacterLoaded;
+        _services.Profile.ProfileClosed += OnSimulatorCharacterClosed;
+        _services.GameData.ActiveSetChanged += OnSimulatorGameDataChanged;
     }
 
-    // A ranking is for the character it started with, so a swap stops it too (a set
-    // switch already does, through the graph reload).
-    private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _)
-    {
-        Simulator.CancelRanking();
-        Simulator.ClearSimulation(alsoCheck: true);
-    }
-    private void OnActiveSetDropSimulation(string? _) => Simulator.ClearSimulation(alsoCheck: true);
+    // The loaded character as the Simulator keys its results: the profile under its
+    // BBS, since one name on two BBSes is two characters. Null for the default
+    // profile, which is no character.
+    private string? SimulatorCharacter() =>
+        _services.Profile.CurrentProfileName is { } name ? $"{_services.Profile.CurrentBbsName}/{name}" : null;
+
+    private void OnSimulatorCharacterLoaded(Models.Profile.CharacterProfile _) => Simulator.CharacterChanged(SimulatorCharacter());
+    private void OnSimulatorCharacterClosed() => Simulator.CharacterChanged(SimulatorCharacter());
+    private void OnSimulatorGameDataChanged(string? set) => Simulator.GameDataChanged(set);
 
     // The Simulator window's state: it plays saved loops or the estimator's sketch,
     // so it lives here with the Navigation window rather than with the estimator.
@@ -318,8 +322,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Lairs.SetupsChanged    -= OnSetupsChanged;
         _services.NavFolders.FoldersChanged -= OnNavFoldersChanged;
         _services.Macros.Macros.CollectionChanged -= OnMacrosCollectionChanged;
-        _services.Profile.ProfileLoaded -= OnProfileLoadedDropSimulation;
-        _services.GameData.ActiveSetChanged -= OnActiveSetDropSimulation;
+        _services.Profile.ProfileLoaded -= OnSimulatorCharacterLoaded;
+        _services.Profile.ProfileClosed -= OnSimulatorCharacterClosed;
+        _services.GameData.ActiveSetChanged -= OnSimulatorGameDataChanged;
     }
 
     // Loops + lairs share the on-disk folder tree; a folder add / rename /

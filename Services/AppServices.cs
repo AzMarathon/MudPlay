@@ -2704,6 +2704,11 @@ public sealed class AppServices
     // view-model that owns it; null until a Navigation window has opened.
     public Func<Game.Simulation.SimulatorSnapshot?>? SimulatorSnapshotProvider { get; set; }
 
+    // The Simulator's finished area rankings, by the game data and character each was
+    // made on. Here and not on the Simulator's view-model, which goes with the
+    // Navigation window: a ranking is the pairing's for as long as the client runs.
+    public Game.Simulation.AreaRankingStore SimulatorRankings { get; } = new();
+
     // The Navigation window's mode and loop-builder state, for the bug report. Set by
     // the window's view model while it is open; cleared when it closes.
     public Func<string>? NavigationModeProvider { get; set; }
@@ -8385,6 +8390,17 @@ public sealed class AppServices
             Loops.LoadAll(GameData.ActiveSet);
             Lairs.LoadAll(GameData.ActiveSet);
         }
+
+        // The Simulator's rankings follow the set too, but nothing reloads: a switch
+        // leaves each set's where they are. The active set's name coming round again
+        // is that set read in afresh, and what was ranked on its old tables is stale.
+        SimulatorRankings.NoteActiveSet(GameData.ActiveSet);
+        GameData.ActiveSetChanged += setName =>
+        {
+            int stale = SimulatorRankings.NoteActiveSet(setName);
+            if (stale > 0)
+                Log.Info("Simulator", $"game data '{setName}' was read in again: {stale} area ranking(s) made on it dropped as stale");
+        };
 
         // Which loops and auto-lair setups are favourites is each character's own.
         // Built after the first LoadAll above so a profile already loaded finds its
