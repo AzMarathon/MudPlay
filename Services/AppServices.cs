@@ -3844,7 +3844,7 @@ public sealed class AppServices
         MonsterSpawns = new MonsterSpawnIndex(GameData, Log);
         GameData.ActiveSetChanged += _ => Task.Run(MonsterSpawns.Warm);
         if (GameData.ActiveSet is not null) Task.Run(MonsterSpawns.Warm);
-        GameData.ActiveSetChanged += TBInfo.OnActiveSetChanged;
+        GameData.ActiveSetChanged += TimedSetIndex("textblocks", TBInfo.OnActiveSetChanged);
         if (GameData.ActiveSet is not null)
             TBInfo.OnActiveSetChanged(GameData.ActiveSet);
 
@@ -3867,7 +3867,8 @@ public sealed class AppServices
 
         // RoomFloorItemIndex — the room→floor-item (`roomitem`) mapping for the
         // Navigation Room Info panel. Reads TBInfo's typed entries like ItemSources;
-        // lazy and self-invalidating, so no ActiveSetChanged subscription.
+        // self-invalidating, so no ActiveSetChanged subscription, and warmed with the
+        // game-data lists once the room graph has loaded (WarmGameDataLists).
         RoomFloorItems = new RoomFloorItemIndex(GameData, TBInfo, Log);
 
         // Shared item-record opener — opens the item edit dialog by Number from any
@@ -3952,14 +3953,14 @@ public sealed class AppServices
         // the keyed-door FSM can resolve KeyItemId → in-game name and
         // send `use <name> <dir>`.
         ItemNames = new ItemNameStore(GameData, Log);
-        GameData.ActiveSetChanged += ItemNames.OnActiveSetChanged;
+        GameData.ActiveSetChanged += TimedSetIndex("item names", ItemNames.OnActiveSetChanged);
         if (GameData.ActiveSet is not null)
             ItemNames.OnActiveSetChanged(GameData.ActiveSet);
 
         // ShopStockIndex — item id → shops stocking it, from Shops.json.
         // Feeds PathItemShopRouter's "who sells this?" lookup.
         ShopStock = new ShopStockIndex(GameData, Log);
-        GameData.ActiveSetChanged += ShopStock.OnActiveSetChanged;
+        GameData.ActiveSetChanged += TimedSetIndex("shop stock", ShopStock.OnActiveSetChanged);
         if (GameData.ActiveSet is not null)
             ShopStock.OnActiveSetChanged(GameData.ActiveSet);
 
@@ -3967,21 +3968,21 @@ public sealed class AppServices
         // from Monsters.json. Feeds MonsterDropRouter's "who drops this, and
         // where?" lookup for items no shop sells.
         MonsterDrops = new MonsterDropIndex(GameData, Log);
-        GameData.ActiveSetChanged += MonsterDrops.OnActiveSetChanged;
+        GameData.ActiveSetChanged += TimedSetIndex("monster drops", MonsterDrops.OnActiveSetChanged);
         if (GameData.ActiveSet is not null)
             MonsterDrops.OnActiveSetChanged(GameData.ActiveSet);
 
         // RoomHazardIndex — room-entry Spell → item(s) that make the room safe,
         // from Rooms/Spells/Items/TBInfo. Feeds the walker's hazard-gating pass.
         RoomHazards = new RoomHazardIndex(GameData, Log);
-        GameData.ActiveSetChanged += RoomHazards.OnActiveSetChanged;
+        GameData.ActiveSetChanged += TimedSetIndex("room hazards", RoomHazards.OnActiveSetChanged);
         if (GameData.ActiveSet is not null)
             RoomHazards.OnActiveSetChanged(GameData.ActiveSet);
 
         // RoomBuffStripIndex — room-entry Spell that removes/dispels buffs on
         // entry, from Rooms/Spells. Feeds CastingDirector's buff-suppression gate.
         RoomBuffStrip = new RoomBuffStripIndex(GameData, Log);
-        GameData.ActiveSetChanged += RoomBuffStrip.OnActiveSetChanged;
+        GameData.ActiveSetChanged += TimedSetIndex("room buff strips", RoomBuffStrip.OnActiveSetChanged);
         if (GameData.ActiveSet is not null)
             RoomBuffStrip.OnActiveSetChanged(GameData.ActiveSet);
 
@@ -3989,16 +3990,18 @@ public sealed class AppServices
         // the map's by-teleport overlay. Subscribed after TBInfo and RoomGraph above:
         // it reads the set's rooms and textblocks through them.
         RoomSpellTeleports = new RoomSpellTeleportIndex(GameData, RoomGraph, SpellCatalog, TBInfo, Log);
-        GameData.ActiveSetChanged += RoomSpellTeleports.OnActiveSetChanged;
+        GameData.ActiveSetChanged += TimedSetIndex("room-spell teleports", RoomSpellTeleports.OnActiveSetChanged);
         if (GameData.ActiveSet is not null)
             RoomSpellTeleports.OnActiveSetChanged(GameData.ActiveSet);
 
         // RoomSpellDamageIndex — room-entry Spell → damages whoever stands there, for
         // the no-rest-in-a-damaging-room rule. Subscribed here for the same reason.
         RoomSpellDamage = new RoomSpellDamageIndex(GameData, RoomGraph, SpellCatalog, TBInfo, Log);
-        GameData.ActiveSetChanged += RoomSpellDamage.OnActiveSetChanged;
+        GameData.ActiveSetChanged += TimedSetIndex("room-spell damage", RoomSpellDamage.OnActiveSetChanged);
         if (GameData.ActiveSet is not null)
             RoomSpellDamage.OnActiveSetChanged(GameData.ActiveSet);
+        // After the last of the per-set indexes timed above.
+        GameData.ActiveSetChanged += LogSetIndexTimes;
 
         // Room tracker. Resets to Unknown on every
         // graph reload because per-room references are invalidated
@@ -10627,6 +10630,32 @@ public sealed class AppServices
         }
     }
 
+    // What each per-set index took to rebuild in the set load under way. The
+    // rebuilds run one after another on the thread that switches the set, so the
+    // list needs no lock; the last of them logs the list and empties it.
+    private readonly List<(string Name, double Ms)> _setIndexTimes = new();
+
+    private Action<string?> TimedSetIndex(string name, Action<string?> rebuild) => set =>
+    {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        rebuild(set);
+        _setIndexTimes.Add((name, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
+    };
+
+    // One line per set load: a "the switch froze the window" report can tell from it
+    // whether these indexes were the time, and which of them.
+    private void LogSetIndexTimes(string? set)
+    {
+        if (set is not null && _setIndexTimes.Count > 0)
+        {
+            static string Ms(double ms) => ms.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+            Log.Info("GameData",
+                $"Per-set indexes for '{set}' rebuilt in {Ms(_setIndexTimes.Sum(t => t.Ms))} ms on the switching thread: "
+                + string.Join(", ", _setIndexTimes.OrderByDescending(t => t.Ms).Select(t => $"{t.Name} {Ms(t.Ms)}")) + ".");
+        }
+        _setIndexTimes.Clear();
+    }
+
     private void WarmGameDataLists()
     {
         try
@@ -10634,6 +10663,14 @@ public sealed class AppServices
             Game.GameData.TrainerCatalog.Enumerate(GameData);
             Game.GameData.BankCatalog.Enumerate(GameData);
             Game.Map.LevelGatedRooms.Compute(RoomGraph);
+            // Both read the Rooms table, which is in memory while a set loads and
+            // dropped a few minutes on: left to the first item window opened or room
+            // hovered, each read all of it back on the UI thread first.
+            Game.GameData.ItemUsedOnIndex.Warm(GameData);
+            RoomFloorItems.Warm();
+            // Reading Rooms here restarts its idle clock, and it is the largest
+            // table: hand it back so these two builds don't hold it minutes longer.
+            GameData.EvictTable("Rooms");
         }
         catch (InvalidOperationException ex)
         {

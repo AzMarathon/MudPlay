@@ -360,4 +360,22 @@ public sealed class GameTableTests
 
         Assert.InRange(table.ResidentBytes, 1, json.Length / 2);
     }
+
+    // The in-place search answers what Contains on the value's own string does.
+    [Fact]
+    public void A_search_in_place_finds_what_the_string_holds()
+    {
+        GameRow row = TestRows.Row(
+            """{ "Script": "ask sword:giveability 50 1\ngive café 125:text 3", "Empty": "", "Null": null, "Whole": 50 }""");
+        GameValue Field(string name) => row.TryGetProperty(name, out GameValue v) ? v : throw new KeyNotFoundException(name);
+
+        foreach (string needle in new[] { "50", "125", "1\ngive", "café", "é 1", "text 3", "", "51", "250", "cafe", "éé" })
+            Assert.Equal(Field("Script").GetString()!.Contains(needle, StringComparison.Ordinal),
+                Field("Script").ValueContains(Encoding.UTF8.GetBytes(needle)));
+        Assert.True(Field("Empty").ValueContains(""u8));
+        Assert.False(Field("Empty").ValueContains("5"u8));
+        Assert.False(Field("Null").ValueContains(""u8));
+        Assert.False(Field("Null").ValueContains("null"u8));
+        Assert.Throws<InvalidOperationException>(() => Field("Whole").ValueContains("50"u8));
+    }
 }

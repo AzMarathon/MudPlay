@@ -1,13 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.179.8**
-> - `@loop send` now works by telepath only; asked or confirmed on another channel it says so and sends nothing
-> - `@roomba sync` now works by telepath or gangpath only, no longer by say
-> - `@timer sync` also works on the broadcast channel (`br`), as a fourth choice in Sync Timers; timers heard there are always a pick, never adopted on arrival
-> - Settings → Talk: new "Disallow @commands from broadcast", ticked by default; untick it on both clients to sync timers there
-> - Sync Timers reads answers only on the channel you asked on (after a say, telepathed answers too)
-> - On the broadcast channel the client answers each player once a minute and four players a minute in all
+> **Version 3.179.9**
+> - Switching game-data sets: the indexes built from each set (monster drops and spawns, room hazards, quest steps and others) build several times faster and allocate a fraction of the memory; the first item window and first room hover after a load no longer pause to read the Rooms table back
+> - Program log shows how long the per-set indexes took on each set load
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

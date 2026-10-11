@@ -286,6 +286,23 @@ public sealed class MonsterCatalog
     private const int DropSlots = 10;
     private const int AbilitySlots = 10;
 
+    private static readonly string[] AttTypeFields = NumberedFields.Of("AttType-", AttackSlots);
+    private static readonly string[] AttAccFields = NumberedFields.Of("AttAcc-", AttackSlots);
+    private static readonly string[] AttMaxFields = NumberedFields.Of("AttMax-", AttackSlots);
+    private static readonly string[] AttMinFields = NumberedFields.Of("AttMin-", AttackSlots);
+    private static readonly string[] AttNameFields = NumberedFields.Of("AttName-", AttackSlots);
+    private static readonly string[] AttPercentFields = NumberedFields.Of("Att%-", AttackSlots);
+    private static readonly string[] AttTruePercentFields = NumberedFields.Of("AttTrue%-", AttackSlots);
+    private static readonly string[] AttEnergyFields = NumberedFields.Of("AttEnergy-", AttackSlots);
+    private static readonly string[] AttHitSpellFields = NumberedFields.Of("AttHitSpell-", AttackSlots);
+    private static readonly string[] MidSpellFields = NumberedFields.Of("MidSpell-", MidSpellSlots);
+    private static readonly string[] MidSpellPercentFields = NumberedFields.Of("MidSpell%-", MidSpellSlots);
+    private static readonly string[] MidSpellLevelFields = NumberedFields.Of("MidSpellLVL-", MidSpellSlots);
+    private static readonly string[] DropItemFields = NumberedFields.Of("DropItem-", DropSlots);
+    private static readonly string[] DropPercentFields = NumberedFields.Of("DropItem%-", DropSlots);
+    private static readonly string[] AbilFields = NumberedFields.Of("Abil-", AbilitySlots);
+    private static readonly string[] AbilValFields = NumberedFields.Of("AbilVal-", AbilitySlots);
+
     private readonly GameDataCache _cache;
     private Dictionary<int, MonsterCatalogEntry>? _byNumber;
     // Spell Number → AttType (element), built alongside the catalog off the same
@@ -389,23 +406,23 @@ public sealed class MonsterCatalog
         List<MonsterAttackSlot> attacks = new();
         for (int i = 0; i < AttackSlots; i++)
         {
-            int type = ReadInt(row, $"AttType-{i}");
+            int type = ReadInt(row, AttTypeFields[i]);
             if (type is < 1 or > 3) continue;
-            int accuracy = ReadInt(row, $"AttAcc-{i}");
-            int castLevel = ReadInt(row, $"AttMax-{i}");   // Type 2: AttMax holds the cast level
+            int accuracy = ReadInt(row, AttAccFields[i]);
+            int castLevel = ReadInt(row, AttMaxFields[i]);   // Type 2: AttMax holds the cast level
             (int dmgMin, int dmgMax) = type == 2
                 ? ResolveSpellDamage(accuracy, castLevel, resolveFormula)
                 : (0, 0);
             attacks.Add(new MonsterAttackSlot(
-                Name: ReadString(row, $"AttName-{i}"),
+                Name: ReadString(row, AttNameFields[i]),
                 Type: type,
-                Percent: ReadInt(row, $"Att%-{i}"),
-                TruePercent: ReadDouble(row, $"AttTrue%-{i}"),
-                MinDamage: ReadInt(row, $"AttMin-{i}"),
-                MaxDamage: ReadInt(row, $"AttMax-{i}"),
+                Percent: ReadInt(row, AttPercentFields[i]),
+                TruePercent: ReadDouble(row, AttTruePercentFields[i]),
+                MinDamage: ReadInt(row, AttMinFields[i]),
+                MaxDamage: ReadInt(row, AttMaxFields[i]),
                 Accuracy: accuracy,
-                Energy: ReadInt(row, $"AttEnergy-{i}"),
-                HitSpell: ReadInt(row, $"AttHitSpell-{i}"),
+                Energy: ReadInt(row, AttEnergyFields[i]),
+                HitSpell: ReadInt(row, AttHitSpellFields[i]),
                 SpellDmgMin: dmgMin,
                 SpellDmgMax: dmgMax,
                 SpellMagicRes: type == 2 ? ResolveSpellMagicRes(accuracy, resolveFormula) : null));
@@ -418,12 +435,12 @@ public sealed class MonsterCatalog
         int cumulative = 0;
         for (int i = 0; i < MidSpellSlots; i++)
         {
-            int spellId = ReadInt(row, $"MidSpell-{i}");
+            int spellId = ReadInt(row, MidSpellFields[i]);
             if (spellId == 0) continue;
-            int threshold = ReadInt(row, $"MidSpell%-{i}");
+            int threshold = ReadInt(row, MidSpellPercentFields[i]);
             int delta = threshold - cumulative;
             cumulative = threshold;
-            int level = ReadInt(row, $"MidSpellLVL-{i}");
+            int level = ReadInt(row, MidSpellLevelFields[i]);
             (int mdMin, int mdMax) = ResolveSpellDamage(spellId, level, resolveFormula);
             midSpells.Add(new MonsterMidSpellSlot(spellId, delta, level, mdMin, mdMax,
                 ResolveSpellMagicRes(spellId, resolveFormula)));
@@ -432,9 +449,9 @@ public sealed class MonsterCatalog
         List<MonsterDropSlot> drops = new();
         for (int i = 0; i < DropSlots; i++)
         {
-            int itemId = ReadInt(row, $"DropItem-{i}");
+            int itemId = ReadInt(row, DropItemFields[i]);
             if (itemId == 0) continue;
-            drops.Add(new MonsterDropSlot(itemId, ReadInt(row, $"DropItem%-{i}")));
+            drops.Add(new MonsterDropSlot(itemId, ReadInt(row, DropPercentFields[i])));
         }
 
         List<MonsterAbilitySlot> abilities = new();
@@ -443,9 +460,9 @@ public sealed class MonsterCatalog
         bool nonLiving = false;
         for (int i = 0; i < AbilitySlots; i++)
         {
-            int code = ReadInt(row, $"Abil-{i}");
+            int code = ReadInt(row, AbilFields[i]);
             if (code == 0) continue;
-            int val = ReadInt(row, $"AbilVal-{i}");
+            int val = ReadInt(row, AbilValFields[i]);
             abilities.Add(new MonsterAbilitySlot(code, val));
 
             if (IsElementalResistCode(code) && val != 0) resists[code] = val;

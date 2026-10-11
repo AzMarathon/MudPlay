@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using MudPlay.Game.Map;
 
 namespace MudPlay.Services;
@@ -55,9 +54,6 @@ public sealed class MonsterSpawnIndex
     // Serialises builders so two threads racing the same set build once, not twice.
     private readonly object _buildGate = new();
     private volatile Snapshot? _snapshot;
-
-    private static readonly Regex s_roomTokenRegex
-        = new(@"(\d+)/(\d+)", RegexOptions.Compiled);
 
     // Monsters on the Unobtainable list, which the room readouts leave out. Checked at
     // query time rather than folded into the build: the rule needs the room graph, which
@@ -148,6 +144,7 @@ public sealed class MonsterSpawnIndex
 
     private Snapshot Build(string? active, bool mayEvictRaw)
     {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         var summonedAt = new Dictionary<RoomKey, List<int>>();
         var placedAt = new Dictionary<RoomKey, List<int>>();
         var assignedAt = new Dictionary<RoomKey, List<int>>();
@@ -160,16 +157,15 @@ public sealed class MonsterSpawnIndex
         }
         else
         {
-            // Per-room dedup trackers, one HashSet alongside each List<int> above —
-            // discarded once the build returns. A room with many "Summoned By" hits
-            // (a common "Group: m/r" roam token shared by thousands of monster
-            // records) used to dedup via List<int>.Contains, an O(n) scan on every
-            // insert that made a single hot room's build cost O(n²). On Paradigm's
-            // ~215k-token Monsters.json that was a real ~29 s UI-thread stall
-            // (paradigm-20260911-231808); a HashSet makes the check O(1).
-            var summonedSeen = new Dictionary<RoomKey, HashSet<int>>();
-            var placedSeen = new Dictionary<RoomKey, HashSet<int>>();
-            var assignedSeen = new Dictionary<RoomKey, HashSet<int>>();
+            // A room's list must not name a monster twice. A room with many "Summoned
+            // By" hits (a common "Group: m/r" roam token shared by thousands of
+            // monster records) once checked that with List<int>.Contains, an O(n) scan
+            // on every insert that made a single hot room's build cost O(n²): on
+            // Paradigm's ~215k-token Monsters.json a real ~29 s UI-thread stall
+            // (paradigm-20260911-231808). The rows come one monster at a time, so a
+            // repeat within a row is the list's last entry, and only a Number the
+            // table carries on two rows needs the scan.
+            var numbersSeen = new HashSet<int>();
 
             int linked = 0;
             foreach (GameRow row in doc.Rows)
@@ -181,27 +177,35 @@ public sealed class MonsterSpawnIndex
                     || summonEl.ValueKind != JsonValueKind.String) continue;
                 string? text = summonEl.GetString();
                 if (string.IsNullOrEmpty(text)) continue;
+                bool numberRepeats = !numbersSeen.Add(id);
 
                 // Each comma-separated part carries at most one "map/room" token plus
-                // the keyword that classifies it. Split first so the keyword and its
-                // room stay associated (a bare regex sweep loses that pairing).
-                foreach (string part in text.Split(','))
+                // the keyword that classifies it. Taken part by part so the keyword and
+                // its room stay associated (a sweep of the whole field loses that pairing).
+                ReadOnlySpan<char> rest = text;
+                while (true)
                 {
-                    Match m = s_roomTokenRegex.Match(part);
-                    if (!m.Success) continue;
-                    if (!int.TryParse(m.Groups[1].Value, out int map) || map <= 0) continue;
-                    if (!int.TryParse(m.Groups[2].Value, out int room) || room <= 0) continue;
-                    RoomKey key = new(map, room);
+                    int comma = rest.IndexOf(',');
+                    ReadOnlySpan<char> part = comma < 0 ? rest : rest[..comma];
+                    int at = 0;
+                    if (RoomTokens.TryNext(part, ref at, out int map, out int room) && map > 0 && room > 0)
+                    {
+                        RoomKey key = new(map, room);
 
-                    AddTo(summonedAt, summonedSeen, key, id);   // permissive set — every token
-                    linked++;
+                        AddTo(summonedAt, key, id, numberRepeats);   // permissive set — every token
+                        linked++;
 
-                    bool isLair = part.Contains("(lair)", StringComparison.OrdinalIgnoreCase);
-                    if (isLair) continue;          // lair members come from the room's Lair tag
-                    if (part.Contains("Group", StringComparison.OrdinalIgnoreCase))
-                        AddTo(assignedAt, assignedSeen, key, id);   // "Group:" (non-lair) → roam / random
-                    else
-                        AddTo(placedAt, placedSeen, key, id);       // "Room m/r" (or an unkeyworded ref) → placed fixture
+                        // Lair members come from the room's Lair tag.
+                        if (!part.Contains("(lair)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (part.Contains("Group", StringComparison.OrdinalIgnoreCase))
+                                AddTo(assignedAt, key, id, numberRepeats);   // "Group:" (non-lair) → roam / random
+                            else
+                                AddTo(placedAt, key, id, numberRepeats);     // "Room m/r" (or an unkeyworded ref) → placed fixture
+                        }
+                    }
+                    if (comma < 0) break;
+                    rest = rest[(comma + 1)..];
                 }
             }
 
@@ -210,7 +214,8 @@ public sealed class MonsterSpawnIndex
             if (mayEvictRaw) _cache.EvictTable("Monsters");
             _log?.Log(LogSeverity.Info, "MonsterSpawnIndex",
                 $"Built spawn index — {summonedAt.Count} room(s) host {linked} monster reference(s) "
-                + $"({placedAt.Count} placed, {assignedAt.Count} assigned).");
+                + $"({placedAt.Count} placed, {assignedAt.Count} assigned), "
+                + $"in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms.");
         }
 
         return new Snapshot
@@ -222,17 +227,16 @@ public sealed class MonsterSpawnIndex
         };
     }
 
-    // Append id to map[key], first-seen order, using the paired seen[key] set for
-    // an O(1) "already have it" check instead of scanning the growing list.
-    private static void AddTo(
-        Dictionary<RoomKey, List<int>> map, Dictionary<RoomKey, HashSet<int>> seen, RoomKey key, int id)
+    // Append id to map[key] unless it is there, first-seen order. The row being read
+    // is the only one adding id, so its earlier add to this list, if any, is the last
+    // entry; numberRepeats says an earlier row carried the same Number, and then the
+    // whole list is checked.
+    private static void AddTo(Dictionary<RoomKey, List<int>> map, RoomKey key, int id, bool numberRepeats)
     {
-        if (!seen.TryGetValue(key, out HashSet<int>? set))
-            seen[key] = set = new HashSet<int>();
-        if (!set.Add(id)) return;
-
         if (!map.TryGetValue(key, out List<int>? list))
             map[key] = list = new List<int>();
+        else if (list[^1] == id || (numberRepeats && list.Contains(id)))
+            return;
         list.Add(id);
     }
 }

@@ -214,6 +214,7 @@ public sealed class ItemSourceIndex
         }
         else
         {
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
             BuildContainers(containers);
             BuildGivers(givers);
             roomCommandItems = CompleteRoomGiversFromItemSources(givers);
@@ -225,8 +226,9 @@ public sealed class ItemSourceIndex
                 $"{givers.Count} textblock-given item(s) and " +
                 $"{summonDrops.Count} summon-dropped item(s) from '{active}'" +
                 (roomCommandItems > 0
-                    ? $"; {roomCommandItems} item(s) list room-command sources."
-                    : "; no room-command sources in this export."));
+                    ? $"; {roomCommandItems} item(s) list room-command sources"
+                    : "; no room-command sources in this export") +
+                $"; {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms.");
         }
 
         return new Snapshot
@@ -486,8 +488,8 @@ public sealed class ItemSourceIndex
             List<int>? drops = null;
             for (int slot = 0; slot < 10; slot++)
             {
-                if (!TryInt(row, $"DropItem-{slot}", out int itemId) || itemId <= 0) continue;
-                if (!TryInt(row, $"DropItem%-{slot}", out int pct) || pct < GuaranteedDropPercent)
+                if (!TryInt(row, MonsterDropIndex.DropItemFields[slot], out int itemId) || itemId <= 0) continue;
+                if (!TryInt(row, MonsterDropIndex.DropPercentFields[slot], out int pct) || pct < GuaranteedDropPercent)
                     continue;
                 (drops ??= new List<int>()).Add(itemId);
             }

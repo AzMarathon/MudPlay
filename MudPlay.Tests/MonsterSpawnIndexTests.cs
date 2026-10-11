@@ -78,6 +78,29 @@ public sealed class MonsterSpawnIndexTests : IDisposable
         Assert.Equal(new[] { 1 }, spawns.PlacedMonsterIdsAt(new RoomKey(1, 1)));
     }
 
+    // The build tells a repeat within one monster's row by the list's last entry. A
+    // Number carried by two rows, with another monster's row between them, puts the
+    // repeat further back, and it must still be found.
+    [Fact]
+    public void DedupsAMonsterNumberCarriedByTwoRows()
+    {
+        const string json = """
+            [
+              { "Number": 1, "Name": "orc", "Summoned By": "Room 1/1, Group: 2/2, Group(lair): 3/3" },
+              { "Number": 2, "Name": "wolf", "Summoned By": "Room 1/1, Group: 2/2, Group(lair): 3/3" },
+              { "Number": 1, "Name": "orc again", "Summoned By": "Group: 2/2, Room 1/1, Room 4/4, Group(lair): 3/3" }
+            ]
+            """;
+        GameDataCache cache = NewCache("alpha", json);
+        MonsterSpawnIndex spawns = new(cache);
+
+        Assert.Equal(new[] { 1, 2 }, spawns.PlacedMonsterIdsAt(new RoomKey(1, 1)));
+        Assert.Equal(new[] { 1, 2 }, spawns.AssignedMonsterIdsAt(new RoomKey(2, 2)));
+        Assert.Equal(new[] { 1, 2 }, spawns.MonsterIdsSummonedAt(new RoomKey(3, 3)));
+        Assert.Equal(new[] { 1 }, spawns.PlacedMonsterIdsAt(new RoomKey(4, 4)));
+        Assert.Equal(new[] { 1, 2 }, spawns.MonsterIdsSummonedAt(new RoomKey(1, 1)));
+    }
+
     // Regression for paradigm-20260911-231808: a single room referenced by many
     // distinct monster records used to dedup via a List<int>.Contains scan on
     // every insert, turning a hot room into an O(n²) build (a real ~29 s

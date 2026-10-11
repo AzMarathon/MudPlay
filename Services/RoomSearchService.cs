@@ -40,9 +40,6 @@ namespace MudPlay.Services;
 // are BfsMapper's own concern to cache.
 public sealed class RoomSearchService
 {
-    private static readonly Regex SummonedRoomRegex
-        = new(@"(\d+)/(\d+)", RegexOptions.Compiled);
-
     // "Summoned By: Spell #491" — the spell another NPC casts to summon this
     // monster (used to borrow the summoner's placement when the target isn't
     // itself placed in a room).
@@ -505,10 +502,10 @@ public sealed class RoomSearchService
                     || summonEl.ValueKind != JsonValueKind.String) continue;
                 string? text = summonEl.GetString();
                 if (string.IsNullOrEmpty(text)) continue;
-                foreach (Match m in SummonedRoomRegex.Matches(text))
+                int at = 0;
+                while (RoomTokens.TryNext(text, ref at, out int mn, out int rn))
                 {
-                    if (!int.TryParse(m.Groups[1].Value, out int mn) || mn <= 0) continue;
-                    if (!int.TryParse(m.Groups[2].Value, out int rn) || rn <= 0) continue;
+                    if (mn <= 0 || rn <= 0) continue;
                     AddMonsterRoom(map, seen, id, new RoomKey(mn, rn));
                 }
             }
@@ -577,10 +574,10 @@ public sealed class RoomSearchService
                 if (text.Length == 0) continue;
 
                 bool addedRoom = false;
-                foreach (Match m in SummonedRoomRegex.Matches(text))
+                int at = 0;
+                while (RoomTokens.TryNext(text, ref at, out int mn, out int rn))
                 {
-                    if (int.TryParse(m.Groups[1].Value, out int mn) && mn > 0
-                        && int.TryParse(m.Groups[2].Value, out int rn) && rn > 0)
+                    if (mn > 0 && rn > 0)
                     {
                         AddMonsterRoom(placed, seen, id, new RoomKey(mn, rn));
                         addedRoom = true;

@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using MudPlay.Game.Map;
 
 namespace MudPlay.Services;
@@ -19,7 +18,7 @@ namespace MudPlay.Services;
 // field, which lists the rooms the monster (including its lair group)
 // populates — a single authoritative source that covers both fixed
 // placements and lair spawns, so the room graph's Room.RawLairTag need not be
-// parsed here. All (map)/(room) tokens are regex-extracted (the field carries
+// parsed here. Every (map)/(room) token is taken (the field carries
 // occasional malformed tokens — a truncated oup:, a map-less Group: 102 —
 // which a digits/digits match skips naturally).
 //
@@ -42,12 +41,14 @@ public sealed class MonsterDropIndex
 
     private const int DropSlots = 10;
 
+    // A monster's drop slots: the item in each, and the chance beside it.
+    internal static readonly string[] DropItemFields = NumberedFields.Of("DropItem-", DropSlots);
+    internal static readonly string[] DropPercentFields = NumberedFields.Of("DropItem%-", DropSlots);
+
     private readonly GameDataCache _cache;
     private readonly LogService? _log;
     private readonly Dictionary<int, List<MonsterDrop>> _droppersByItem = new();
     private readonly Dictionary<int, List<RoomKey>> _spawnRoomsByMonster = new();
-
-    private static readonly Regex s_roomToken = new(@"(\d+)/(\d+)", RegexOptions.Compiled);
 
     // Set the index was last built from, or null if empty.
     public string? ActiveSet { get; private set; }
@@ -119,9 +120,9 @@ public sealed class MonsterDropIndex
             bool droppedAny = false;
             for (int slot = 0; slot < DropSlots; slot++)
             {
-                if (!TryReadInt(row, $"DropItem-{slot}", out int itemId) || itemId <= 0)
+                if (!TryReadInt(row, DropItemFields[slot], out int itemId) || itemId <= 0)
                     continue;
-                TryReadInt(row, $"DropItem%-{slot}", out int pct);
+                TryReadInt(row, DropPercentFields[slot], out int pct);
                 if (!_droppersByItem.TryGetValue(itemId, out List<MonsterDrop>? drops))
                     _droppersByItem[itemId] = drops = new List<MonsterDrop>();
                 drops.Add(new MonsterDrop(monsterId, name, pct));
@@ -156,7 +157,7 @@ public sealed class MonsterDropIndex
     // Extract the distinct (map)/(room) spawn sites from a monster's raw
     // "Summoned By" field, or null when it names none. The field carries
     // occasional malformed tokens (a truncated oup:, a map-less Group: 102);
-    // the digits/digits regex skips those naturally. Shared with ItemSourceIndex,
+    // a digits/digits match skips those naturally. Shared with ItemSourceIndex,
     // which resolves a giver monster's location off the same field.
     public static List<RoomKey>? ParseSummonedByRooms(string? text)
     {
@@ -165,10 +166,10 @@ public sealed class MonsterDropIndex
         // A wandering monster can list thousands of rooms; checking the list itself
         // for each one made that quadratic.
         HashSet<RoomKey>? seen = null;
-        foreach (Match m in s_roomToken.Matches(text))
+        int at = 0;
+        while (RoomTokens.TryNext(text, ref at, out int map, out int room))
         {
-            if (!int.TryParse(m.Groups[1].Value, out int map) || map <= 0) continue;
-            if (!int.TryParse(m.Groups[2].Value, out int room) || room <= 0) continue;
+            if (map <= 0 || room <= 0) continue;
             RoomKey key = new(map, room);
             rooms ??= new List<RoomKey>();
             seen ??= new HashSet<RoomKey>();

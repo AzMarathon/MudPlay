@@ -1,5 +1,10 @@
 # Version history
 
+## 3.179.9
+
+- Switching game-data sets: the indexes built from each set (monster drops and spawns, room hazards, quest steps and others) build several times faster and allocate a fraction of the memory; the first item window and first room hover after a load no longer pause to read the Rooms table back
+- Program log shows how long the per-set indexes took on each set load
+
 ## 3.179.8
 
 - `@loop send` now works by telepath only; asked or confirmed on another channel it says so and sends nothing

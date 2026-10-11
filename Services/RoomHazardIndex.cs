@@ -225,6 +225,11 @@ public sealed class RoomHazardIndex
     private const int SpellAbilSlots = 10;   // Spells: Abil-0..9
     private const int ItemAbilSlots = 20;    // Items:  Abil-0..19
     private const int NegateSlots = 10;      // Items:  NegateSpell-0..9
+
+    // Long enough for either table's Abil slots.
+    private static readonly string[] AbilFields = NumberedFields.Of("Abil-", ItemAbilSlots);
+    private static readonly string[] AbilValFields = NumberedFields.Of("AbilVal-", ItemAbilSlots);
+    private static readonly string[] NegateSpellFields = NumberedFields.Of("NegateSpell-", NegateSlots);
     private const int AbilDamage = 1;
     private const int AbilCastsSp = 43;
     private const int AbilTextBlock = SpellTextBlock.AbilityCode;
@@ -766,8 +771,8 @@ public sealed class RoomHazardIndex
             int[] val = new int[SpellAbilSlots];
             for (int k = 0; k < SpellAbilSlots; k++)
             {
-                TryReadInt(row, $"Abil-{k}", out abil[k]);
-                TryReadInt(row, $"AbilVal-{k}", out val[k]);
+                TryReadInt(row, AbilFields[k], out abil[k]);
+                TryReadInt(row, AbilValFields[k], out val[k]);
             }
 
             // A large class of room-entry hazards (the ice cavern's rope+grapple
@@ -831,13 +836,13 @@ public sealed class RoomHazardIndex
 
             for (int k = 0; k < NegateSlots; k++)
             {
-                if (TryReadInt(row, $"NegateSpell-{k}", out int spell) && spell > 0)
+                if (TryReadInt(row, NegateSpellFields[k], out int spell) && spell > 0)
                     Add(negatorsBySpell, spell, itemId);
             }
             for (int k = 0; k < ItemAbilSlots; k++)
             {
-                if (TryReadInt(row, $"Abil-{k}", out int a) && a == AbilCastsSp
-                    && TryReadInt(row, $"AbilVal-{k}", out int spell) && spell > 0)
+                if (TryReadInt(row, AbilFields[k], out int a) && a == AbilCastsSp
+                    && TryReadInt(row, AbilValFields[k], out int spell) && spell > 0)
                     Add(castersBySpell, spell, itemId);
             }
         }
