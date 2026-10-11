@@ -1,5 +1,10 @@
 # Version history
 
+## 3.177.6
+
+- The room map holds its exits in a compact form: about 37 MB less memory with a Paradigm set loaded (16 MB on Stock)
+- Finding a route and laying out the map allocate half the memory they did
+
 ## 3.177.2
 
 - Simulator area ranking: **Save as loop** turns a ranked area's tour into a saved loop you can run, with how it was tested in the loop's notes

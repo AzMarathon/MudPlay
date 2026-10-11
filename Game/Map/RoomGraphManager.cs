@@ -1511,8 +1511,8 @@ public sealed class RoomGraphManager
     private readonly record struct RowRead(
         Room? Room, List<MultiActionExitData.ActionCell>? Actions, Dictionary<Direction, string>? Modifiers);
 
-    // exits is the reading thread's own and comes back empty; texts is the one
-    // thing the readers share (see Shared).
+    // exits belongs to the reading thread and is empty before and after each row;
+    // texts is the one thing the readers share (see Shared).
     private static RowRead ReadRow(GameRow row, RoomExitSet.Builder exits, ConcurrentDictionary<string, string> texts)
     {
         if (!TryReadInt(row, "Map Number", out int map)) return default;
