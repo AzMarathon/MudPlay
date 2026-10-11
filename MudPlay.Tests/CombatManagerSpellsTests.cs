@@ -3373,6 +3373,44 @@ public sealed class CombatManagerSpellsTests
         Assert.DoesNotContain("blast", h.AllSent);   // attack deferred to the resume
     }
 
+    // A listener keeping the round's between-round cast for the debuff (a loop's
+    // lair-entry hold) is told when an engage has none to cast, and which debuff it
+    // was when one goes out. Not when the debuff is only put off behind another cast.
+    [Fact]
+    public void Engage_TellsWhetherADebuffWentOutAheadOfTheAttack()
+    {
+        using Harness none = new();
+        int noDebuff = 0;
+        none.Combat.SetNoDebuffOnEngageSink(() => noDebuff++);
+        none.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        none.AddMonster(1, "giant rat");
+        none.Feed("Also here: giant rat.");
+        Assert.Equal(1, noDebuff);                   // no debuff set: the attack goes with nothing ahead of it
+        Assert.Contains("blast", none.AllSent);
+
+        using Harness sent = new();
+        List<string> debuffs = new();
+        noDebuff = 0;
+        sent.Combat.SetNoDebuffOnEngageSink(() => noDebuff++);
+        sent.Combat.SetBetweenRoundSlotMarker(debuffs.Add);
+        sent.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
+        sent.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        sent.AddMonster(1, "giant rat");
+        sent.Feed("Also here: giant rat.");
+        Assert.Equal(new[] { "curse" }, debuffs);    // sent, and named
+        Assert.Equal(0, noDebuff);
+
+        using Harness putOff = new();
+        noDebuff = 0;
+        putOff.Combat.SetNoDebuffOnEngageSink(() => noDebuff++);
+        putOff.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
+        putOff.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        putOff.Combat.SetInBetweenEvaluator(() => "heal");   // a heal takes the cast: the debuff is still coming
+        putOff.AddMonster(1, "giant rat");
+        putOff.Feed("Also here: giant rat.");
+        Assert.Equal(0, noDebuff);
+    }
+
     // ----- backstab gate -----------------------------------------------
 
     [Fact]

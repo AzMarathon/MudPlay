@@ -1,12 +1,35 @@
 # Version history
 
-## 3.172.1
+## 3.174.1
 
 - No fight is opened from a room you are stepping out of (a swing at you, a hit line, a room re-run); the attack used to land in the next room
 - A lair entered that way opens with its debuff, then the room attack
 - A step with no landing or refusal within 3 s counts as not taken: the attacker is fought back where you stand
 - Bug report shows an engage held for a move in flight
 - bug reports addressed: paradigm-20261010-231540
+
+## 3.174.0
+
+- Timers of the buffs on you stop while you are out of the game (dropped link, relog, the board's menu) and run on with the time they had left
+- None of yours is recast for time spent away; a buff on a party member keeps its real end, as before
+- A whole-party buff stands still on you only: in a party it is recast when it would have run out had you not left
+- Your own buffs' time left is saved with the character and put back after MudPlay is closed
+- A client killed while in the game saves none, and buffs afresh
+- Changing profile with a character in the game tosses its buff timers
+- A buff's wear-off line is read after a reconnect or a restart; a hang-up death found late drops the buffs carried over
+- Bug report says whether the timers are running or standing still, and what a load put back
+
+## 3.173.0
+
+- Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held
+- Held buffs are let through once the debuff has gone out in the lair, two rounds into its fight at the latest, and held again at the next lair's door
+- A buff held at one lair with no cast since gets one cast at the next door first
+- Every lair wait also holds while mana is under what the debuff needs: its Min mana per cast, never less than the spell's cost, the higher of the two debuffs' (nav chip: Waiting for Mana to Debuff); mana-regen buffs still go out
+- A fight at the doorstep holds no buff
+- At a lair's door a buff you can't pay for is passed over for the next due one
+- A lair wait ends at once when the loop is stopped or paused, or Auto-Combat or the master switch goes off
+- Entire Loop Settings offers the lair wait while a loop walks to its first room
+- Program log and bug report say what a lair wait is for, what it holds back and why it ended
 
 ## 3.172.0
 
@@ -105,7 +128,7 @@
 - A room spell's kills count one each as they happen (session kills, lair timer, drop re-look, summon re-scan)
 - A command's `*Combat Off*` is recognised with a prompt or other lines between it and the echo
 - Program log notes a `*Combat Off*` that answers a command
-- bug reports addressed: paradigm-20261010-145330
+- bug reports addressed: paradigm-20261010-145330, paradigm-20261010-215619
 
 ## 3.167.12
 
