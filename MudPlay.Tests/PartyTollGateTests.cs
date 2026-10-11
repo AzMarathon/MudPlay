@@ -1115,6 +1115,60 @@ public sealed class PartyTollGateTests : IDisposable
         Assert.Equal(500, rig.Wealth.LastReading("Cal"));
     }
 
+    // ----- turned at more than one crossing ---------------------------------------------------
+
+    private static string RoomJson(int room, string name, string n = "0", string s = "0", string e = "0", string w = "0") =>
+        $$"""
+          { "Map Number": 1, "Room Number": {{room}}, "Name": "{{name}}",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "{{n}}", "S": "{{s}}", "E": "{{e}}", "W": "{{w}}",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        """;
+
+    private static string RoomsJson(params string[] rooms) => "[" + string.Join(",", rooms) + "]";
+
+    //   1/1 ─E (Toll: 5)─ 1/2 ─E (Toll: 5)─ 1/3 ─E (Toll: 5)─ 1/4, and round each toll:
+    //   1/n ─N─ 1/1n ─E─ 1/2n ─S─ 1/(n+1)
+    private static readonly string ThreeTollsEachWithAWayRoundJson = RoomsJson(
+        RoomJson(1, "A1", n: "1/11", e: "1/2 (Toll: 5)"),
+        RoomJson(2, "A2", n: "1/12", e: "1/3 (Toll: 5)"),
+        RoomJson(3, "A3", n: "1/13", e: "1/4 (Toll: 5)"),
+        RoomJson(4, "A4"),
+        RoomJson(11, "B1", e: "1/21"), RoomJson(21, "C1", s: "1/2"),
+        RoomJson(12, "B2", e: "1/22"), RoomJson(22, "C2", s: "1/3"),
+        RoomJson(13, "B3", e: "1/23"), RoomJson(23, "C3", s: "1/4"));
+
+    // Three tolls on one walk, each closed to the party at its own gate and each
+    // with a way round: the walk goes round all three. The turns are counted from
+    // the last step that landed, not over the whole walk.
+    [Fact]
+    public void AWalkTurnedAtThreeTollsOnItsWay_GoesRoundEachOfThem()
+    {
+        Rig rig = NewRig(ThreeTollsEachWithAWayRoundJson);
+        HashSet<RoomKey> closed = new();
+        rig.Filter.PartyTollClosedProbe = exit => closed.Contains(exit.Target);
+        rig.Walker.SetTollStepCheck((_, _, exit) =>
+        {
+            closed.Add(exit.Target);
+            return PartyTollGate.StepVerdict.Closed;
+        });
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(rig.Walker.WalkTo(new RoomKey(1, 4)));
+
+        for (int toll = 1; toll <= 3; toll++)
+        {
+            rig.Tracker.NoteRoomObserved(Obs($"B{toll}", Direction.E));
+            rig.Tracker.NoteRoomObserved(Obs($"C{toll}", Direction.S));
+            rig.Tracker.NoteRoomObserved(toll < 3 ? Obs($"A{toll + 1}", Direction.N, Direction.E) : Obs("A4"));
+        }
+
+        Assert.Equal(new[] { "n", "e", "s", "n", "e", "s", "n", "e", "s" }, rig.Moves);
+        Assert.Null(rig.WalkFailure);
+        Assert.Empty(rig.Notices);
+        Assert.Equal(WalkState.Idle, rig.Walker.State);
+        Assert.Contains(rig.WalkEvents, e => e.Kind == WalkEventKind.Finished);
+    }
+
     // ----- the setting --------------------------------------------------------------------
 
     // Off until ticked: a short member is handed nothing, the toll is closed to the

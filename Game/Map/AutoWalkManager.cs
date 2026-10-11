@@ -2463,8 +2463,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (_destination is not { } dest) return false;
         // Counted against the walk's re-plans: a plan that came back through the
         // same crossing would otherwise turn here for ever. The turns have a count
-        // of their own as well, because the re-plan sends its first step before it
-        // hands the re-plan count back, and that step can be this crossing again.
+        // of their own as a backstop: the re-plan sends its first step before it
+        // hands the re-plan count back, so a check that closes a crossing the
+        // planner still routes through would recurse without one. In the app both
+        // answers come from PartyTollGate's one judgement, so only a check wired
+        // apart from the filter gets there. Both counts start again at each step
+        // that lands (ClearReplanCounts): a walk turns at as many crossings as it meets.
         if (_replanCount >= MaxReplansPerWalk || _crossingTurns >= MaxReplansPerWalk)
         {
             FailUnpaid(dest, $"stopped at {toll}: the party can't all pay it");
@@ -2479,6 +2483,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
     }
 
     private int _crossingTurns;
+
+    private void ClearReplanCounts()
+    {
+        _replanCount = 0;
+        _crossingTurns = 0;
+    }
 
     // The party's purses, asked for as this walk was planned, have been read
     // (PartyWealthTracker.RoundSettled). If what is left of the route goes through a
@@ -3421,7 +3431,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         {
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -3697,7 +3707,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _sailingPlace = null;
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -3731,7 +3741,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _sailingPlace = null;
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -3759,7 +3769,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _awaitingSysGotoArrival = false;
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -3789,7 +3799,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _awaitingSysGotoArrival = false;
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -3852,7 +3862,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             ClearGreetTeleportWait();
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -4151,7 +4161,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             ClearGreetTeleportWait();
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
