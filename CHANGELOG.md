@@ -4,7 +4,9 @@
 
 - Simulator: an area ranking belongs to the game data and character it was made on; a switch lists that pairing's own ranking or none, and switching back lists the first again
 - Nothing ranked on one game data can be picked, drawn on the map or saved as a loop under another; a game-data switch also clears the estimator's sketch
-- Rankings are kept while the client runs (the last eight), through closing the Navigation window; importing or re-picking a set drops the ones made on it
+- Rankings are kept while the client runs (the last eight), through closing the Navigation window and a rename of the character; a set imported again, deleted, re-picked or changed in Manage Sets loses the ones made on it
+- A ranking listed again says when it was made and at what level, and is marked once the character has levelled since
+- A loop being built is dropped, with a notice, when the game data changes to another set; the Edit Loop window won't save or take a room until its own game data is active again
 - Bug report: the Simulator section names the game data and character its results are for
 
 ## 3.178.1
