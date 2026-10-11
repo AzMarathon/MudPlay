@@ -167,6 +167,64 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Assert.Contains(f.LogLines, l => l.Contains("buff tracking reset (death)"));
     }
 
+    // "buffs survive disconnects, relogs", and "as soon as we've disconnected all
+    // timers need to be paused until we're back in the game, then they all resume"
+    // (user, 2026-10-10): the time away is not taken off the buff.
+    [Fact]
+    public void DroppedLink_StopsTheClock_AndItRunsOnWithWhatItHadLeft()
+    {
+        Field f = new();
+        f.Engine.OnServerLine(SwigLine);
+        f.Advance(1000);                            // 800 s left
+
+        f.Engine.Pause();
+        f.Advance(5000);                            // away for longer than the buff lasts
+        Assert.Null(f.Engine.DueNow());
+        Assert.Contains("800 s left when it paused", f.Engine.DescribeTracking()[1]);
+
+        f.Engine.Resume();
+        Assert.Null(f.Engine.DueNow());             // still 800 s
+        f.Advance(739);
+        Assert.Null(f.Engine.DueNow());
+        f.Advance(1);                               // 60 s left: the window opens
+        Assert.Equal(("use waterskin", false), f.Engine.DueNow());
+        Assert.Contains(f.LogLines, l => l.StartsWith("buff clock paused (the link dropped) — buff 300 has 800 s left"));
+        Assert.Contains(f.LogLines, l => l.StartsWith("buff clock resumed after 5000 s away — buff 300 has 800 s left"));
+    }
+
+    // Until the first prompt back in the game nothing is sent: what is on the screen
+    // is the board's login, not the game.
+    [Fact]
+    public void WhileTheLinkIsDown_NothingIsSent()
+    {
+        Field f = new();
+        f.Engine.Pause();
+
+        f.Engine.OnApproachingRoom(Dunes);
+        Assert.False(f.Engine.FireDue(sneakKept: false));
+        Assert.Empty(f.Wire);
+
+        f.Engine.Resume();
+        f.Engine.OnApproachingRoom(Dunes);
+        Assert.Single(f.Wire);
+    }
+
+    // A death while the link was down (a hang-up death, worked out at the login)
+    // still ends the buff.
+    [Fact]
+    public void ADeathWhileTheLinkWasDown_EndsTheBuff()
+    {
+        Field f = new();
+        f.Engine.OnServerLine(SwigLine);
+        f.Engine.Pause();
+
+        f.Engine.Forget("death");
+        f.Engine.Resume();
+        f.Engine.OnApproachingRoom(Dunes);
+
+        Assert.Equal(new[] { "use waterskin" }, f.Wire);
+    }
+
     // "dying or walking through a room that purges buffs, negate magic" (user,
     // 2026-10-10): the buff has no wear-off line, so the room's own spell says it.
     [Fact]

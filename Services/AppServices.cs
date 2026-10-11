@@ -7914,10 +7914,16 @@ public sealed class AppServices
         AutoHazardCounterProvisioner.SneakSpentHere += CombatTracker.NoteSilentSneakLoss;
         // What is believed about the buff is dropped wherever it can't be vouched
         // for: a death wipes it, and a new profile or game-data set is another
-        // character or other data. (A dropped link forgets it too, from
-        // MainWindowViewModel's disconnect handler.)
+        // character or other data. A death that happened while the link was down is
+        // the inferred one, raised for a verdict reached at the login only: one
+        // reached later would wipe a buff raised since (as for the cast pass's
+        // timers).
         RoomTracker.PlayerDeathObserved += () => AutoHazardCounterProvisioner.Forget("death");
         RoomTracker.PlayerDeathInferred += () => AutoHazardCounterProvisioner.Forget("death");
+        // A dropped link only stops its clock (MainWindowViewModel's disconnect
+        // handler, beside the cast pass's own pause); the first prompt back in the
+        // game starts it again. No-op unless a drop paused it.
+        PromptScanner.PromptObserved += _ => AutoHazardCounterProvisioner.Resume();
         Profile.ProfileLoaded += _ => AutoHazardCounterProvisioner.Forget("profile loaded");
         GameData.ActiveSetChanged += _ => AutoHazardCounterProvisioner.Forget("game data changed");
         // Every arrival: a room whose own spell strips the buff ends it, and a

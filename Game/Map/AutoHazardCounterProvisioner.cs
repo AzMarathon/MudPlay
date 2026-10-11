@@ -20,8 +20,13 @@ namespace MudPlay.Game.Map;
 //  • On since — a `use` this engine sends stamps it at the send, and the buff
 //    spell's own line (the swig) stamps it again when it shows, for a `use` typed by
 //    hand as much as for ours. The waterskin buff has no wear-off line, so the end
-//    is worked out from the duration. A death, a dropped link, a new profile and a
-//    new game-data set forget it: unknown counts as off when a hazard room is next.
+//    is worked out from the duration. A death, a room whose spell strips it, negate
+//    magic, a new profile and a new game-data set forget it: unknown counts as off
+//    when a hazard room is next. A dropped link does not: "buffs survive
+//    disconnects, relogs", and "as soon as we've disconnected all timers need to be
+//    paused until we're back in the game, then they all resume" (user, 2026-10-10),
+//    so the clock stops at the drop and runs on from the first prompt back in the
+//    game with the time it had left (Pause / Resume).
 //  • The window — with Auto-Sneak on, inside RefreshWindowSeconds of the end, and
 //    with a countered room here or a few planned steps ahead, the refresh is offered
 //    to the between-round cast scheduler (CastingDirector.SetClientUseSource), which
@@ -148,6 +153,10 @@ public sealed class AutoHazardCounterProvisioner
     // more is sent for the item until that count changes or the buff's line shows.
     private readonly Dictionary<int, int> _refusedAtCount = new();
 
+    // When the link dropped, null while it is up and we are back in the game. The
+    // buffs' clocks stand still from then, and nothing is sent.
+    private DateTimeOffset? _pausedAt;
+
     // Buff-line watchers for every known counter, built on first use and dropped by
     // Forget so a new game-data set rebuilds them.
     private List<(int BuffSpell, Func<string, bool> Match)>? _buffLines;
@@ -257,9 +266,45 @@ public sealed class AutoHazardCounterProvisioner
         RemainingOf(counter, now) is not { } left
         || left <= TimeSpan.FromSeconds(counter.DurationSeconds > 0 ? RefreshWindowSeconds : ForcedLeadSeconds);
 
-    // Forget what is believed about every buff: a death wipes them, and across a
-    // dropped link, a new profile or a new game-data set nothing here can be vouched
-    // for. Unknown counts as off when a hazard room is next.
+    // The moment the buffs' clocks are read at: the drop, while the link is down.
+    private DateTimeOffset Clock() => _pausedAt ?? _now();
+
+    // The link dropped. The character's buffs stay on it and stop running down until
+    // it is back in the game, so the clocks stop here. The answer to a `use` still
+    // in flight went with the link.
+    public void Pause()
+    {
+        if (_pausedAt is not null) return;
+        _pausedAt = _now();
+        _pending = null;
+        _awaitingSwig = false;
+        if (_on.Count > 0)
+            _log?.Info(LogCategory, $"buff clock paused (the link dropped) — {TimeLeftText()}, held until back in the game");
+    }
+
+    // The first prompt back in the game: the clocks run on with what they had left.
+    public void Resume()
+    {
+        if (_pausedAt is not { } since) return;
+        _pausedAt = null;
+        TimeSpan away = _now() - since;
+        foreach (int buffSpell in _on.Keys.ToList())
+            _on[buffSpell] = (_on[buffSpell].OnSince + away, _on[buffSpell].Confirmed);
+        if (_on.Count > 0)
+            _log?.Info(LogCategory, $"buff clock resumed after {(int)away.TotalSeconds} s away — {TimeLeftText()}");
+    }
+
+    private string TimeLeftText()
+    {
+        DateTimeOffset now = Clock();
+        return string.Join(", ", _on.Select(on => CounterOf(on.Key) is { } c
+            ? $"buff {on.Key} has {(int)(on.Value.OnSince + DurationOf(c) - now).TotalSeconds} s left"
+            : $"buff {on.Key} is on"));
+    }
+
+    // Forget what is believed about every buff: a death wipes them, and a new
+    // profile or a new game-data set is another character or other data. Unknown
+    // counts as off when a hazard room is next.
     public void Forget(string why)
     {
         bool known = _on.Count > 0;
@@ -373,6 +418,9 @@ public sealed class AutoHazardCounterProvisioner
     // is out of charges or was refused, or the send gate is up.
     private int? SourceToUse(in RoomHazardIndex.BuffCounter counter)
     {
+        // Not back in the game yet: whatever is on the screen is not the game's.
+        if (_pausedAt is not null) return null;
+
         // A passive immunity guard (the desert sunstone wristband) makes the whole
         // hazard a no-op just by being POSSESSED — carried or worn, no `use` needed
         // (user-confirmed: the player only has to have it). Spending a waterskin
@@ -484,6 +532,7 @@ public sealed class AutoHazardCounterProvisioner
         mustGoNow = false;
         left = null;
         where = null;
+        if (_pausedAt is not null) return null;
         // Only on a live walk, ours or the leader's: standing in a hazard room with
         // nothing running is the player's own business.
         if (!_walkActive() && !_followingLeader()) return null;
@@ -765,14 +814,18 @@ public sealed class AutoHazardCounterProvisioner
     // to be on.
     public IReadOnlyList<string> DescribeTracking()
     {
-        DateTimeOffset now = _now();
+        DateTimeOffset now = Clock();
         List<string> lines = new();
+        if (_pausedAt is { } since && _on.Count > 0)
+            lines.Add($"clocks paused since {since.ToLocalTime():HH:mm:ss} (the link dropped); they run on from the first prompt back in the game");
         foreach ((int buffSpell, (DateTimeOffset onSince, bool confirmed)) in _on)
         {
             RoomHazardIndex.BuffCounter? counter = CounterOf(buffSpell);
-            string ends = counter is { } c
-                ? $"runs out {(onSince + DurationOf(c)).ToLocalTime():HH:mm:ss} (in {(int)(onSince + DurationOf(c) - now).TotalSeconds} s)"
-                : "length unknown";
+            // On since is the start its clock now counts from: after a drop, moved on
+            // by the time away.
+            string ends = counter is not { } c ? "length unknown"
+                : _pausedAt is not null ? $"{(int)(onSince + DurationOf(c) - now).TotalSeconds} s left when it paused"
+                : $"runs out {(onSince + DurationOf(c)).ToLocalTime():HH:mm:ss} (in {(int)(onSince + DurationOf(c) - now).TotalSeconds} s)";
             lines.Add($"buff {buffSpell}: on since {onSince.ToLocalTime():HH:mm:ss} "
                 + (confirmed ? "(its line was seen)" : "(a `use` went out; its line not seen)")
                 + $", {ends}; {Refreshed()}"
