@@ -296,6 +296,28 @@ public sealed class RoomGraphManager
     // the tracker does not hold the name it has for one against what is printed.
     public bool IsUnnamedInData(RoomKey key) => _unnamedInData.Contains(key);
 
+    // Whether a room the data names bears this name and has every exit shown: the
+    // display may then be that room's, seen with an exit of its own left out (a
+    // closed door, an unsearched hidden exit), and is not taken for a room the
+    // data leaves unnamed. Rooms the data leaves unnamed don't count, whatever
+    // they are called by now: the rooms of one house can share a name, and would
+    // each stand in the way of the next. Unreachable rooms don't either (see
+    // ConfigureUnreachable): the character can't be in one.
+    public bool DataNamesRoomShowing(string name, IReadOnlySet<Direction> exits)
+    {
+        ArgumentNullException.ThrowIfNull(exits);
+        if (string.IsNullOrEmpty(name) || !_byName.TryGetValue(name, out List<Room>? rooms)) return false;
+        uint observedMask = MaskFromSet(exits);
+        foreach (Room room in rooms)
+        {
+            if (_unnamedInData.Contains(room.Key)) continue;
+            if ((observedMask & room.ExitMask) != observedMask) continue;
+            if (_isUnreachable is { } excluded && excluded(room.Key)) continue;
+            return true;
+        }
+        return false;
+    }
+
     private Room Rename(Room existing, string name)
     {
         DropFromIndexes(existing);
