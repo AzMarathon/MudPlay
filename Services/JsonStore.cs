@@ -27,12 +27,16 @@ internal static class JsonStore
     // Read and deserialize T from path. Returns null if the file does not
     // exist. Throws with the file path in the message if the JSON is
     // malformed — corrupt configuration is loud, not silent.
-    public static T? Load<T>(string path) where T : class
+    public static T? Load<T>(string path) where T : class => Load<T>(path, Options);
+
+    // As Load, in another form than the shared one: a large file the program alone
+    // reads is kept compact, not laid out for a hand edit.
+    public static T? Load<T>(string path, JsonSerializerOptions options) where T : class
     {
         if (ReadWithRetry(path) is not { } json) return null;
         try
         {
-            return JsonSerializer.Deserialize<T>(json, Options);
+            return JsonSerializer.Deserialize<T>(json, options);
         }
         catch (JsonException ex)
         {
@@ -44,7 +48,10 @@ internal static class JsonStore
     // Serialize value to JSON and write it to path, creating any missing
     // parent directories. Write is atomic via temp-file + rename so a crash
     // mid-write can't leave a half-written file on disk.
-    public static void Save<T>(string path, T value) where T : class
+    public static void Save<T>(string path, T value) where T : class => Save(path, value, Options);
+
+    // As Save, in another form than the shared one (see Load).
+    public static void Save<T>(string path, T value, JsonSerializerOptions options) where T : class
     {
         string? dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
@@ -57,7 +64,7 @@ internal static class JsonStore
         // File.Move renamed it away, and the second threw FileNotFoundException on the
         // now-gone temp. With distinct temps each rename just overwrites the target.
         string tmp = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
-        string json = JsonSerializer.Serialize(value, Options);
+        string json = JsonSerializer.Serialize(value, options);
         try
         {
             File.WriteAllText(tmp, json);
