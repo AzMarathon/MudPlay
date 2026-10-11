@@ -385,7 +385,7 @@ public sealed class RemoteCommandManager : IDisposable
         };
 
         _log?.Log(LogSeverity.Info, "RemoteCmd",
-            $"Local invocation:{normalised}{(argv.Length > 0 ? " " + string.Join(' ', argv) : "")}");
+            $"Local invocation: {normalised}{(argv.Length > 0 ? " " + string.Join(' ', argv) : "")}");
         try { registration.Handler(ctx); }
         catch (Exception ex)
         {
