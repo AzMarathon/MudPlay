@@ -267,13 +267,32 @@ public sealed class ProfileManagementTests : IDisposable
         var svc = new ProfileService();
         svc.CreateProfile(_bbsA, "original");
         svc.Load(_bbsA, "original");
-        var stillThere = new List<bool>();
-        svc.ProfileRenamed += (bbs, name) => stillThere.Add(svc.Exists(bbs!, name!));
+        var copies = new List<bool>();
+        svc.ProfileRenamed += (bbs, name) => copies.Add(svc.LoadedIsACopyOf(bbs, name));
 
         svc.SaveAs(_bbsA, "copy");
         svc.MoveProfile(_bbsA, "copy", _bbsA, "renamed");
 
-        Assert.Equal(new[] { true, false }, stillThere);
+        Assert.Equal(new[] { true, false }, copies);
+    }
+
+    // A rename that only changes capitals moves the folder wherever folders are told
+    // apart by them, so it is told like any other rename, and is not a copy.
+    [Fact]
+    public void ARenameThatOnlyChangesCapitals_IsToldAsARename()
+    {
+        // Where they aren't, the destination "already exists" and there is no such rename.
+        if (Directory.Exists(AppPaths.BbsFolder(_bbsA.ToUpperInvariant()))) return;
+        var svc = new ProfileService();
+        svc.CreateProfile(_bbsA, "walker");
+        svc.Load(_bbsA, "walker");
+        var told = new List<(string? Name, bool Copy)>();
+        svc.ProfileRenamed += (bbs, name) => told.Add((name, svc.LoadedIsACopyOf(bbs, name)));
+
+        svc.MoveProfile(_bbsA, "walker", _bbsA, "Walker");
+
+        Assert.Equal(new[] { ((string?)"walker", false) }, told);
+        Assert.Equal("Walker", svc.CurrentProfileName);
     }
 
     // ----- Profiles that are not loaded, and ones that are gone ----------

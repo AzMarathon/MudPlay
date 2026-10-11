@@ -267,12 +267,33 @@ public sealed class AreaRankingFiles
         {
             if (to is null) { TryDelete(source); return; }
             if (Split(to) is not var (toBbs, toProfile) || FileIn(set, toBbs, toProfile) is not { } dest) return;
-            if (!File.Exists(source)) { TryDelete(dest); return; }
+            // A rename that only changes capitals is a rename where the file system
+            // tells the two spellings apart, and the same file where it doesn't: what
+            // sits under the new spelling is then this character's own, not another's.
+            bool capitalsOnly = string.Equals(from, to, StringComparison.OrdinalIgnoreCase);
+            if (string.Equals(source, dest, StringComparison.Ordinal)) return;
+            if (!File.Exists(source))
+            {
+                if (!capitalsOnly) TryDelete(dest);
+                return;
+            }
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
             File.Move(source, dest, overwrite: true);
             Rekey(dest, to);
+            RemoveIfEmpty(Path.GetDirectoryName(source)!);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { TryDelete(source); }
+    }
+
+    // A BBS folder the last file was moved out of is not left behind.
+    private static void RemoveIfEmpty(string folder)
+    {
+        try
+        {
+            if (Directory.Exists(folder) && !Directory.EnumerateFileSystemEntries(folder).Any())
+                Directory.Delete(folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* an empty folder left behind is harmless */ }
     }
 
     // A BBS was renamed: every character under it is now under the new name. File

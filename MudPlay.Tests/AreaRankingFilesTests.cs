@@ -448,6 +448,32 @@ public sealed class AreaRankingFilesTests : IDisposable
     }
 
     [Fact]
+    public void ARenameThatOnlyChangesCapitals_MovesTheFile_SoALaterClientFindsIt()
+    {
+        string set = NewSet("a");
+        string capitals = $"{Board}/ONE";
+        var first = new Client();
+        AreaRanking made = Ranking("Hills");
+        first.Store.Keep(new SimulatorOwner(set, One), made);
+        first.Settle();
+
+        // Nothing to carry in memory, which matches names without case.
+        Assert.Equal(0, first.Store.RenameCharacter(One, capitals));
+        first.Settle();
+        Assert.Same(made, first.Store.Get(new SimulatorOwner(set, capitals)));
+
+        // On disk the file is under the new spelling, to the letter.
+        string kept = AreaRankingFiles.FileFor(new SimulatorOwner(set, capitals))!;
+        Assert.Contains(Path.GetFileName(kept), Directory.EnumerateFiles(Path.GetDirectoryName(kept)!).Select(Path.GetFileName));
+        Assert.Equal("Hills", new Client().Load(new SimulatorOwner(set, capitals))?.Rows[0].Area);
+
+        // Said twice, or with nothing under the old spelling, it loses nothing.
+        first.Store.RenameCharacter(One, capitals);
+        first.Settle();
+        Assert.Equal("Hills", new Client().Load(new SimulatorOwner(set, capitals))?.Rows[0].Area);
+    }
+
+    [Fact]
     public void ACharacterRenamedMovedOrDeleted_TakesItsFilesOrLosesThem_WhetherOrNotHeldInMemory()
     {
         string a = NewSet("a"), b = NewSet("b");

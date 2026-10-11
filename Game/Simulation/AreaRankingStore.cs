@@ -160,16 +160,23 @@ public sealed class AreaRankingStore
     // which that name no longer is, and are dropped; nothing is left under the old
     // name for the next character to be given it. Returns how many held in memory
     // were carried.
+    //
+    // A name that only changes its capitals is the same character to memory, which
+    // matches names without case, and carries nothing. Its file is still moved: a
+    // file system that tells the two spellings apart would otherwise keep it under
+    // the old one, where it is not looked for again.
     public int RenameCharacter(string? from, string? to)
     {
-        if (string.Equals(from, to, StringComparison.OrdinalIgnoreCase)) return 0;
-        _kept.RemoveAll(k => string.Equals(k.Owner.Character, to, StringComparison.OrdinalIgnoreCase));
+        if (string.Equals(from, to, StringComparison.Ordinal)) return 0;
+        bool capitalsOnly = string.Equals(from, to, StringComparison.OrdinalIgnoreCase);
+        if (!capitalsOnly)
+            _kept.RemoveAll(k => string.Equals(k.Owner.Character, to, StringComparison.OrdinalIgnoreCase));
         int carried = 0;
         for (int i = 0; i < _kept.Count; i++)
         {
             if (!string.Equals(_kept[i].Owner.Character, from, StringComparison.OrdinalIgnoreCase)) continue;
             _kept[i] = (_kept[i].Owner with { Character = to }, _kept[i].Ranking);
-            carried++;
+            if (!capitalsOnly) carried++;
         }
         if (_files is { } files) Enqueue(() => files.MoveCharacter(from, to));
         return carried;

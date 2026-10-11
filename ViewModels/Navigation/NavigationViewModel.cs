@@ -200,7 +200,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // (none yet); a rename or move is the same one under another name.
     private void OnSimulatorCharacterRenamed(string? oldBbs, string? oldName)
     {
-        if (_services.ProfileStillThere(oldBbs, oldName)) Simulator.CharacterChanged();
+        if (_services.Profile.LoadedIsACopyOf(oldBbs, oldName)) Simulator.CharacterChanged();
         else Simulator.CharacterRenamed();
     }
     private void OnSimulatorStatRead(LastKnownStats _) => Simulator.CharacterRead();
