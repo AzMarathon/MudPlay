@@ -23,6 +23,9 @@ public static partial class WhereReplyParser
     {
         room = default;
         if (string.IsNullOrEmpty(message)) return false;
+        // A `@loop send` line names a loop, and a loop can be named after a room,
+        // "(map 1, room 5)" and all: it says nothing of where its sender stands.
+        if (LoopShareHandler.IsLoopSendMessage(message)) return false;
         Match m = ReplyPattern().Match(message);
         if (!m.Success) return false;
         if (!int.TryParse(m.Groups[1].Value, out int map) || map <= 0) return false;

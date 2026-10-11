@@ -138,6 +138,15 @@ public sealed class LoopShareHandler
             || OpensWith(inner, OfferOpening) || OpensWith(inner, SendingOpening) || OpensWith(inner, StoppedOpening);
     }
 
+    // The same, for a reply as it arrives, braces and all.
+    public static bool IsLoopSendMessage(string message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        string body = message.Trim();
+        if (body.Length >= 2 && body[0] == '{' && body[^1] == '}') body = body[1..^1].Trim();
+        return IsLoopSendLine(body);
+    }
+
     private static bool OpensWith(string text, string opening) =>
         text.StartsWith(opening, StringComparison.OrdinalIgnoreCase);
 
