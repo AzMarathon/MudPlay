@@ -1842,4 +1842,39 @@ public sealed class PartyManagerTests
         p.NoteFollowGivenUp("Boss");          // the game's line came first
         Assert.False(p.State.IsInParty);
     }
+
+    // ----- a follower an exit refused: Stock keeps them on the leader's list -----
+    //
+    // GAME_MECHANICS "A follower who can't move is left behind". With the realm
+    // probe unset or false (Paradigm) nothing differs from what it always was.
+
+    // What a follower still on the old leader's list, and following nobody, is
+    // printed for `par` (GAME_MECHANICS "`par` output block"): no "You are
+    // following" line, the listed members as [Invited], its own row last.
+    private static void ParOfAListedFollower(MessageRouter router, PartyManager p)
+    {
+        router.Dispatch(Line("The following people are in your travel party:"));
+        p.FeedTestLines(new[]
+        {
+            "  Boss Hogg                      (Warrior)    [Invited]",
+            "  Other Guy                      (Mage)       [Invited]",
+            "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Midrank",
+        });
+        p.FeedTestPromptLine();
+    }
+
+    [Fact]
+    public void Paradigm_AfterTheFollowIsGivenUp_AParOfInvitedRows_MakesUsTheLeader()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        Assert.False(p.State.IsInParty);
+
+        ParOfAListedFollower(router, p);
+
+        Assert.True(p.State.IsInParty);
+        Assert.True(p.State.SelfIsLeader);
+        Assert.Contains(p.State.Members, m => m.Name == "Boss Hogg" && m.IsInvited);
+    }
 }

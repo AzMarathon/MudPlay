@@ -1561,4 +1561,23 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Empty(givenUp);
         Assert.Equal(1, h.Sent);
     }
+
+    // ----- joining the leader ourselves (Stock) ---------------------------------
+    //
+    // GAME_MECHANICS "A follower who can't move is left behind": on Stock a
+    // follower an exit refused is still on the leader's list, and an invite to
+    // someone on the list prints them nothing. With the realm probe unset or
+    // false (Paradigm) nothing differs from what it always was.
+
+    [Fact]
+    public void Paradigm_TheLeaderSaysItFoundUs_WeSendNothing_AndWaitForTheInvite()
+    {
+        using Harness h = NewFollower();
+        AskedOnStock(h);
+
+        h.Feed("Boss telepaths: {found you - re-inviting Me}");
+
+        Assert.Equal(1, h.Sent);                       // the @comeback, and nothing since
+        Assert.DoesNotContain("join Boss", h.Wire);
+    }
 }
