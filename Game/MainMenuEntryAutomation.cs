@@ -72,6 +72,12 @@ public sealed class MainMenuEntryAutomation : IDisposable
     private Avalonia.Threading.DispatcherTimer? _startupTimer;
     private int _startupIndex;
     private bool _awaitingFirstRoom;
+
+    // For a bug report: the game entry in progress, or null.
+    public string? DescribePending() =>
+        !_awaitingFirstRoom && _armedUntilUtc <= DateTime.UtcNow ? null
+        : (_armedUntilUtc > DateTime.UtcNow ? $"armed until {_armedUntilUtc.ToLocalTime():HH:mm:ss}" : "not armed")
+          + (_awaitingFirstRoom ? ", awaiting the first room" : string.Empty);
     private bool _disposed;
 
     // Startup refresh sent once the first in-game room display confirms we

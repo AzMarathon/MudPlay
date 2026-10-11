@@ -44,6 +44,7 @@ public sealed class WireBuffer
 
         lock (_gate)
         {
+            NoteArrival(_totalBytes);
             _totalBytes += data.Length;
 
             // If the incoming run is bigger than the ring, only the tail
@@ -98,7 +99,53 @@ public sealed class WireBuffer
             Array.Clear(_ring);
             _head = 0;
             _count = 0;
+            _marks.Clear();
+            LastClearedAt = DateTimeOffset.Now;
         }
         BufferChanged?.Invoke();
+    }
+
+    // When the buffer was last emptied by hand (the Wire Inspector's Clear).
+    public DateTimeOffset? LastClearedAt { get; private set; }
+
+    // ----- Arrival times --------------------------------------------------
+    // The wire has no clock of its own, so nothing in it could be lined up with
+    // the log or the scrollback. Each read's arrival is noted against the byte it
+    // began at, at most once per MarkSpacing: enough to place any line to within
+    // a fraction of a second, without a mark for every packet of a busy fight.
+
+    public readonly record struct ArrivalMark(long Offset, DateTimeOffset At);
+
+    private static readonly TimeSpan MarkSpacing = TimeSpan.FromMilliseconds(250);
+    private const int MaxMarks = 4096;
+    private readonly Queue<ArrivalMark> _marks = new();
+    private DateTimeOffset _lastMarkAt = DateTimeOffset.MinValue;
+
+    private void NoteArrival(long offset)
+    {
+        DateTimeOffset now = DateTimeOffset.Now;
+        if (now - _lastMarkAt < MarkSpacing) return;
+        _lastMarkAt = now;
+        if (_marks.Count >= MaxMarks) _marks.Dequeue();
+        _marks.Enqueue(new ArrivalMark(offset, now));
+    }
+
+    // The live bytes, the offset (in TotalBytes terms) of the first of them, and
+    // the arrival marks that fall inside them.
+    public byte[] Snapshot(out long startOffset, out ArrivalMark[] marks)
+    {
+        lock (_gate)
+        {
+            startOffset = _totalBytes - _count;
+            long start = startOffset;
+            marks = _marks.Where(m => m.Offset >= start).ToArray();
+            byte[] result = new byte[_count];
+            if (_count == 0) return result;
+            int from = (_head - _count + Capacity) % Capacity;
+            int firstRun = Math.Min(_count, Capacity - from);
+            Array.Copy(_ring, from, result, 0, firstRun);
+            if (firstRun < _count) Array.Copy(_ring, 0, result, firstRun, _count - firstRun);
+            return result;
+        }
     }
 }

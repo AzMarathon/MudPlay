@@ -278,6 +278,14 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
             + $"priority buffs due: {JoinOrNone(WaitedFor())}; other buffs due: {JoinOrNone(HeldBack())})" + last;
     }
 
+    // For a bug report's list of pending work: that the hold is up, and no more,
+    // or null. What it is waiting on is Describe's to say, which the report
+    // prints once, with the loop.
+    public string? DescribePending() =>
+        _waiting ? "waiting outside a lair (see Movement engine: Lair-entry debuff wait)"
+        : EntryHoldStands ? "has the go-ahead, buffs held (see Movement engine: Lair-entry debuff wait)"
+        : null;
+
     // ----- The loop's ask ----------------------------------------------
 
     // May the loop take its step into a lair now? False holds the walker; the hold

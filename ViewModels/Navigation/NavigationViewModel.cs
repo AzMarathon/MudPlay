@@ -3788,38 +3788,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 if (BuildWalkToStatus() is { } stepLine)
                     _services.Log?.Debug("Navigation", stepLine);
                 break;
-            case WalkEventKind.Failed:
-                // A blocked walk is a lifecycle event an operator needs to see with
-                // its full reason (which door/room/key) — Info, not just the chip.
-                if (!string.IsNullOrWhiteSpace(e.Detail))
-                    _services.Log?.Info("Navigation", $"walk-to failed: {e.Detail}");
-                break;
-            case WalkEventKind.Finished:
-                // How the walk ENDED is as much a lifecycle event as how it started —
-                // without it the log shows a walk-to begin with no matching arrival, so
-                // a later reader can't tell whether the walker reached its goal or is
-                // still parked. (This gap is why a nav bug report couldn't say what the
-                // engine had been doing.)
-                _services.Log?.Info("Navigation", $"walk-to arrived{DescribeWalkDest(e)}.");
-                break;
-            case WalkEventKind.Stopped:
-                _services.Log?.Info("Navigation",
-                    $"walk-to stopped{DescribeWalkDest(e)}"
-                    + (string.IsNullOrWhiteSpace(e.Detail) ? "." : $": {e.Detail}"));
-                break;
+            // How a walk ended (failed, arrived, stopped) is logged by the walker
+            // itself, so the line is there with this window closed too.
         }
 
         RefreshFromWalker();
-    }
-
-    // " at 16/239 - Underground Lake" for a walk event that carries a destination
-    // key, else "" — used to name the room in the arrival / stop lifecycle log lines.
-    private string DescribeWalkDest(WalkEvent e)
-    {
-        if (e.Destination is not { } key) return string.Empty;
-        return _services.RoomGraph.GetRoom(key) is { } room
-            ? $" at {key} - {room.DisplayName}"
-            : $" at {key}";
     }
 
     // Refresh the boat countdown label each second while a sail is in flight;

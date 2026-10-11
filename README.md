@@ -1,14 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.174.6**
-> - Hang-up death check reads the room you come back in: where that room's dead arrive agrees with a death; back where you left rules one out, and so does any other room on unmodified Stock data and the zones Paradigm shares with Stock
-> - Lives not read before the hang-up: back stripped where the dead arrive is now recorded as a death; owning nothing a death takes, the room alone is enough
-> - Paradigm: back in the Burial Vault (14/1077) after hanging up in Albion (any room you can walk to from it without a boat) counts as where the dead arrive
-> - The death record and notice name the room you came back in
-> - A hang-up while dropped in an arena room is recorded as an arena death (nothing lost, no pile), on any realm, with or without a lives count from before
-> - Sysop god lives asks no life back after an arena death, on either realm
-> - Bug report shows where the stored list's dead arrive, how far that is trusted, and the room come back in
+> **Version 3.175.2**
+> - A room title or prayer line shown mid-fight is no longer read as a miss (Wire Inspector's Classified tags; a monster's attack under a `break` hold); only dark cyan is one
+> - Classified: your room spell's damage line is tagged `You Hit`, not `Monster Hit (you)`
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
@@ -75,7 +70,7 @@ Profiles, per-BBS settings, global settings, imported game data, and logs each l
 MudPlay has a **built-in bug reporter** that snapshots the client's state at the moment of the problem — far more useful than describing it from memory. Please use it when filing an issue:
 
 1. **Capture** — click **Bug Report** in the menu bar (or right-click the terminal → **Bug report…**), type a short description, and confirm.
-2. MudPlay writes `<realm>-<timestamp>.md` to your **Desktop**: your settings, character name/stats/inventory, movement-engine state, the program log, and ~750 lines of scrollback — all frozen at click time.
+2. MudPlay writes `<realm>-<timestamp>.md` to your **Desktop**: your settings, character name/stats/inventory, movement-engine state, the program log, and up to 3,000 lines of scrollback — all frozen at click time.
 3. **File the issue** at **https://github.com/Tehshortbus/MudPlay/issues/new**, and **attach the `.md` file**.
 
 A short description still helps me target it faster, and you can review the report before sending. ***It does NOT include your BBS login name, password, or logon-menu steps.***

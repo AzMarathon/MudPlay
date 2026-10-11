@@ -44,6 +44,9 @@ public sealed class ShortcutSourceCoordinator
     private readonly LogService? _log;
 
     private Phase _phase = Phase.Idle;
+
+    // For a bug report: the shortcut-item trip in progress, or null.
+    public string? DescribePending() => _phase == Phase.Idle ? null : $"phase {_phase}";
     private int _itemId;
     private RoomKey _dest;
     private RoomKey _source;

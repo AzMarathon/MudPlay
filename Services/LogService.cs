@@ -11,13 +11,23 @@ namespace MudPlay.Services;
 // Subscribers that touch UI state must marshal via Dispatcher.UIThread.Post
 // themselves.
 //
-// Capacity defaults to 2000 entries; oldest entries are overwritten on
-// wraparound. The size knob is exposed in Settings.Display; the constructor
+// Capacity defaults to DefaultCapacity entries (the running client asks for
+// SessionCapacity); oldest entries are overwritten on wraparound. The size knob is exposed in Settings.Display; the constructor
 // takes the initial value.
 public sealed class LogService
 {
     // Default ring-buffer capacity. Overridable via the constructor.
     public const int DefaultCapacity = 2000;
+
+    // The running client's capacity. Sized from the bug report's 1 MB budget: at
+    // the ~100 bytes an entry prints as, 4,000 entries are ~400 KB of the report,
+    // and at the ~8 entries a second a busy session logs they reach back about
+    // eight minutes.
+    public const int SessionCapacity = 4000;
+
+    // Warn and Error entries are also kept in a ring of their own, so a burst of
+    // routine lines can't push the one warning that mattered out of reach.
+    public const int ProblemCapacity = 200;
 
     private readonly object _gate = new();
     private readonly LogEntry[] _ring;
@@ -25,6 +35,10 @@ public sealed class LogService
     private int _count;         // live entries in the ring (≤ Capacity)
     private long _totalAppended;  // monotonic append ordinal; see TotalAppended
     private LogEntry? _latest;
+    private readonly LogEntry[] _problems = new LogEntry[ProblemCapacity];
+    private int _problemHead;
+    private int _problemCount;
+    private DateTimeOffset? _lastClearedAt;
 
     // Fired after each successful Log call, on the producer's thread.
     public event Action<LogEntry>? EntryAdded;
@@ -166,9 +180,36 @@ public sealed class LogService
             if (_count < Capacity) _count++;
             _totalAppended++;
             _latest = entry;
+            if (severity is LogSeverity.Warn or LogSeverity.Error)
+            {
+                _problems[_problemHead] = entry;
+                _problemHead = (_problemHead + 1) % ProblemCapacity;
+                if (_problemCount < ProblemCapacity) _problemCount++;
+            }
         }
 
         EntryAdded?.Invoke(entry);
+    }
+
+    // The Warn and Error entries still held, oldest first. They outlive the main
+    // ring's copy of them.
+    public LogEntry[] SnapshotProblems()
+    {
+        lock (_gate)
+        {
+            LogEntry[] result = new LogEntry[_problemCount];
+            int start = (_problemHead - _problemCount + ProblemCapacity) % ProblemCapacity;
+            for (int i = 0; i < _problemCount; i++)
+                result[i] = _problems[(start + i) % ProblemCapacity];
+            return result;
+        }
+    }
+
+    // When the log was last emptied by hand (the Log pane's Clear), or null. A
+    // reader of a short log needs to know it was cut, not quiet.
+    public DateTimeOffset? LastClearedAt
+    {
+        get { lock (_gate) { return _lastClearedAt; } }
     }
 
     // Copy the live entries out in oldest-to-newest order. Returns a fresh
@@ -243,6 +284,10 @@ public sealed class LogService
             _head = 0;
             _count = 0;
             _latest = null;
+            Array.Clear(_problems);
+            _problemHead = 0;
+            _problemCount = 0;
+            _lastClearedAt = DateTimeOffset.Now;
             // _totalAppended deliberately survives: a consumer polling with a
             // sequence cursor must never see it go backwards. Resetting would make
             // every entry after a Clear look older than what the caller already
