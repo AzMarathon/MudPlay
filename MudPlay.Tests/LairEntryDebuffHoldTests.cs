@@ -323,10 +323,11 @@ public sealed class LairEntryDebuffHoldTests
             "no priority buff went out for 18 seconds (priority buffs still due: stuck)"));
     }
 
-    // One buff sent again and again is not taking (refused, or rerolling without end):
-    // its third send is the last the wait allows, however recently it went out.
+    // One buff sent again and again is not taking (refused, or rerolling without end).
+    // Its third send is its last here: that buff alone is given up on and held back
+    // like the buffs not ticked priority, and the wait goes on for the others.
     [Fact]
-    public void WaitForPriorityBuffs_OneBuffSentThreeTimes_EndsTheWait_AndSaysWhich()
+    public void WaitForPriorityBuffs_OneBuffSentThreeTimes_IsGivenUpOn_TheWaitGoesOnForTheRest()
     {
         Harness h = new() { SlotUsed = true, CastDue = true };
         h.PriorityDue.Add("star");
@@ -335,20 +336,75 @@ public sealed class LairEntryDebuffHoldTests
         CastPriorityBuff(h, "star");
         CastPriorityBuff(h, "other");               // a different buff doesn't count against it
         CastPriorityBuff(h, "star");
-        Assert.False(h.Hold.BlockingBuffs);         // twice: still let through
+        Assert.False(h.Hold.HoldsPriorityBuff("star"));   // twice: still let through
 
         Assert.Equal(3, LairEntryDebuffHold.MaxSendsOfOnePriorityBuff);
         CastPriorityBuff(h, "star");
-        Assert.True(h.Held);
-        Assert.True(h.Hold.BlockingBuffs);          // three times: no more casts ahead of the debuff
+        Assert.True(h.Hold.HoldsPriorityBuff("star"));    // three times: held back from here on
+        Assert.False(h.Hold.HoldsPriorityBuff("other"));
+        Assert.False(h.Hold.BlockingBuffs);         // the other priority buffs still get their turn
+        Assert.Contains(h.LoopLog, m => m.StartsWith(
+            "priority buff star went out 3 times outside this lair, the most one may"));
+        Assert.Contains("priority buff star cast again while waiting outside the lair (sent 2 times)", h.LoopLog);
 
-        h.SlotUsed = false;
+        CastPriorityBuff(h, "late");                // one of the others, a round later
+        Assert.True(h.Held);
+
+        h.SlotUsed = false;                         // nothing but star left due, and star is held
+        h.CastDue = false;
         h.Poll();
 
         Assert.False(h.Held);
-        Assert.Contains(h.LoopLog, m => m.StartsWith(
-            "priority buff star went out 3 times in this wait, the most one may (priority buffs still due: star)"));
-        Assert.Contains("priority buff star cast again while waiting outside the lair (sent 2 times)", h.LoopLog);
+        Assert.Contains("no priority buff is due (held back after 3 sends: star) and the between-round cast "
+            + "is free — entering the lair", h.LoopLog);
+    }
+
+    // A step that doesn't land is asked for again, which starts a new wait. What the
+    // last one learned outside the same lair still stands: the buff given up on stays
+    // held, and its sends aren't counted from nothing. Another lair starts clean.
+    [Fact]
+    public void WaitForPriorityBuffs_ReAskForTheSameLair_KeepsWhatWasGivenUpOn_AnotherLairForgetsIt()
+    {
+        RoomKey lair = new(1, 100), nextLair = new(1, 101);
+        Harness h = new() { SlotUsed = true, CastDue = true };
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs, lair));
+        for (int send = 1; send <= 3; send++) CastPriorityBuff(h, "star");
+        h.SlotUsed = false; h.CastDue = false;
+        h.Poll();
+        Assert.False(h.Held);
+
+        h.Now = h.Now.AddSeconds(6);                // the step never landed
+        h.SlotUsed = true;
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs, lair));
+        Assert.True(h.Hold.HoldsPriorityBuff("star"));
+        Assert.Contains("given up on: star", h.Hold.Describe());
+
+        h.SlotUsed = false; h.Poll();               // in, and on to the next lair
+        h.SlotUsed = true;
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs, nextLair));
+        Assert.False(h.Hold.HoldsPriorityBuff("star"));
+        Assert.Contains("sent: none; given up on: none", h.Hold.Describe());
+    }
+
+    // The 18 seconds are waited out once outside a lair, not again at each re-ask.
+    [Fact]
+    public void WaitForPriorityBuffs_TimeRanOutOnce_IsNotWaitedOutAgainForTheSameLair()
+    {
+        RoomKey lair = new(1, 100);
+        Harness h = new() { CastDue = true };
+        h.PriorityDue.Add("stuck");
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs, lair));
+        h.Now = h.Now.AddSeconds(19);
+        h.Poll();
+        Assert.False(h.Held);
+
+        h.Now = h.Now.AddSeconds(6);                // the step never landed; stuck is still due
+        Assert.True(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs, lair));
+        Assert.False(h.Held);
+
+        h.Now = h.Now.AddSeconds(6);                // another lair: its own 18 seconds
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs, new RoomKey(1, 101)));
+        Assert.True(h.Held);
     }
 
     // A priority buff cast with no priority-buff wait on is nothing to this hold, so the
@@ -384,7 +440,8 @@ public sealed class LairEntryDebuffHoldTests
         Assert.Contains("waiting outside the lair until the debuff can be cast — casting priority buffs first "
             + "(due: star); other buffs held back (due: plai)", h.LoopLog);
         Assert.StartsWith("waiting (Wait for priority buff spells; 0s, 0/18s since a priority buff went out; "
-            + "sent: none; buffs not ticked priority held; priority buffs due: star; other buffs due: plai)",
+            + "sent: none; given up on: none; buffs not ticked priority held; "
+            + "priority buffs due: star; other buffs due: plai)",
             h.Hold.Describe());
 
         h.Now = h.Now.AddSeconds(4);

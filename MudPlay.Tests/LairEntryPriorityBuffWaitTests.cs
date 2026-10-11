@@ -71,7 +71,8 @@ public sealed class LairEntryPriorityBuffWaitTests
                 buffsDue: Director.BuffsDue,
                 stillWanted: () => LoopStillAtTheDoor);
             Director.SetLairEntryBuffHold(
-                () => Hold.BlockingBuffs, () => Hold.BlockingOrdinaryBuffs, Hold.NotePriorityBuffCast);
+                () => Hold.BlockingBuffs, () => Hold.BlockingOrdinaryBuffs,
+                Hold.NotePriorityBuffCast, Hold.HoldsPriorityBuff);
 
             // Healthy and full of mana, so only what a test sets up is due. The buffs
             // are added after this, so nothing is cast until a test runs a pass.
@@ -330,9 +331,10 @@ public sealed class LairEntryPriorityBuffWaitTests
     }
 
     // The game refuses the buff every time, so it is due again every round and each
-    // send restarts the 18 seconds. Its third send is the last the wait allows.
+    // send restarts the 18 seconds. Its third send is the last it gets outside this
+    // lair, however often the step in is asked for again.
     [Fact]
-    public void PriorityBuffRefusedEveryRound_EndsTheWaitAtItsThirdSend_AndTheLogSaysSo()
+    public void PriorityBuffRefusedEveryRound_IsGivenUpOnAtItsThirdSend_AndNotSentAgainOnAReAsk()
     {
         using Harness h = new();
         h.AddBuff("star", priority: true);
@@ -349,9 +351,48 @@ public sealed class LairEntryPriorityBuffWaitTests
 
         Assert.False(h.Held);                               // a fourth send is not waited for
         Assert.Null(h.Director.Evaluate());                 // nor made: buffs are held for the step in
-        Assert.Equal(new[] { "star", "star", "star" }, h.CastsSent);
         Assert.Contains(h.InfoLog("Loop"), m => m.StartsWith(
-            "priority buff star went out 3 times in this wait, the most one may (priority buffs still due: star)"));
+            "priority buff star went out 3 times outside this lair, the most one may"));
+
+        for (int reAsk = 1; reAsk <= 3; reAsk++)
+        {
+            h.NextRound(seconds: 6);                        // the step never landed
+            Assert.True(h.AskToEnter());                    // star is due, but no longer waited for
+            Assert.Null(h.Director.Evaluate());
+        }
+        Assert.Equal(new[] { "star", "star", "star" }, h.CastsSent);
+    }
+
+    // A priority roll spell set to reroll without end goes out every round. It gets
+    // its three sends, then the next priority buff gets its turn, and the staged
+    // reroll is cast after the fight like any held buff.
+    [Fact]
+    public void PriorityRollSpellRerollingWithoutEnd_IsGivenUpOn_AndTheNextPriorityBuffIsStillCast()
+    {
+        using Harness h = new();
+        h.AddBuff("flux", priority: true);
+        h.AddBuff("sta2", priority: true);
+
+        Assert.False(h.AskToEnter());
+        Assert.Equal("flux", h.Director.Evaluate());
+        h.Poll();
+        h.NextRound(); h.Director.RequestManaRegenReroll("flux"); h.Poll();   // rolled low: the second send
+        h.NextRound(); h.Director.RequestManaRegenReroll("flux"); h.Poll();   // and the third
+        Assert.Equal(new[] { "flux", "flux", "flux" }, h.CastsSent);
+
+        h.NextRound(); h.Director.RequestManaRegenReroll("flux");             // low again: sta2 goes instead
+        h.Poll();
+        Assert.Equal("sta2", h.CastsSent[^1]);
+        h.NextRound(); h.Poll();
+
+        Assert.False(h.Held);
+        Assert.Equal(4, h.CastsSent.Count);
+        Assert.Equal("no priority buff is due (held back after 3 sends: flux) and the between-round cast is free "
+            + "— entering the lair", h.InfoLog("Loop").Last());
+
+        Assert.True(h.Hold.ReadyToEnter(LairEntryDebuffMode.Off));            // in, fought, moved on
+        h.NextRound(seconds: 6);
+        Assert.Equal("flux", h.Director.Evaluate());                          // the reroll it still owed
     }
 
     // Stop pressed with five priority buffs still to go: the wait ends at its next

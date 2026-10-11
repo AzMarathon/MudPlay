@@ -8223,10 +8223,11 @@ public sealed class AppServices
             },
             log: Log,
             buffsDue: priority => CastDirector.BuffsDue(priority),
-            stillWanted: () => LairEntryDebuffModeForNextStep() != Game.Map.LairEntryDebuffMode.Off);
+            stillWanted: () => LairEntryDebuffModeForNextStep(out _) != Game.Map.LairEntryDebuffMode.Off);
         CastDirector.SetLairEntryBuffHold(
             () => LairDebuffHold.BlockingBuffs, () => LairDebuffHold.BlockingOrdinaryBuffs,
-            buff => LairDebuffHold.NotePriorityBuffCast(buff));
+            buff => LairDebuffHold.NotePriorityBuffCast(buff),
+            buff => LairDebuffHold.HoldsPriorityBuff(buff));
         // A loop that stops or fails never asks again, so its wait is ended here rather
         // than left to the hold's own next look.
         LoopRunner.Event += e =>
@@ -8238,7 +8239,8 @@ public sealed class AppServices
         {
             // A "rest up here" room holds the step until the rest is done.
             if (Health.HoldForRestHere()) return false;
-            if (!LairDebuffHold.ReadyToEnter(LairEntryDebuffModeForNextStep())) return false;
+            Game.Map.LairEntryDebuffMode lairWait = LairEntryDebuffModeForNextStep(out Game.Map.RoomKey? lair);
+            if (!LairDebuffHold.ReadyToEnter(lairWait, lair)) return false;
             PreMoveGearOnce(ref _loopPreMoveGearFor, LoopRunner.PeekNextPlannedDirection());
             return Stealth.ReadyToMoveSneaking();
         });
@@ -11195,14 +11197,17 @@ public sealed class AppServices
     // How the running loop wants its next step taken with respect to the debuff:
     // the loop's own setting when that step enters a lair we would fight in and the
     // combat profile has a debuff to cast on entry, else Off (nothing to wait for).
-    private Game.Map.LairEntryDebuffMode LairEntryDebuffModeForNextStep()
+    // lair is the room that step enters.
+    private Game.Map.LairEntryDebuffMode LairEntryDebuffModeForNextStep(out Game.Map.RoomKey? lair)
     {
+        lair = null;
         if (LoopRunner.CurrentLoop is not { LairEntryDebuff: not Game.Map.LairEntryDebuffMode.Off } loop)
             return Game.Map.LairEntryDebuffMode.Off;
         if (!IsAutoCombatEnabled) return Game.Map.LairEntryDebuffMode.Off;
         if (NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()) is not { } next
             || RoomGraph.GetRoom(next) is not { HasLair: true })
             return Game.Map.LairEntryDebuffMode.Off;
+        lair = next;
         // A lair the loop is told not to fight in gets no debuff either.
         if (Game.Map.LoopCombatSuppression.IsSuppressed(loop, next, currentIsLair: true))
             return Game.Map.LairEntryDebuffMode.Off;

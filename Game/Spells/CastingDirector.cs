@@ -660,19 +660,22 @@ public sealed class CastingDirector : IDisposable
     // profile's pre-attack debuff. Heals and cures still go out. Optional.
     // holdOrdinaryBuffs (LairEntryDebuffHold.BlockingOrdinaryBuffs) holds only the
     // buffs not ticked "Priority buff": the loop is letting the priority ones go first,
-    // and priorityBuffCast (LairEntryDebuffHold.NotePriorityBuffCast) tells it of each
-    // one sent, named as BuffsDue names it.
+    // priorityBuffCast (LairEntryDebuffHold.NotePriorityBuffCast) tells it of each one
+    // sent, and holdPriorityBuff (LairEntryDebuffHold.HoldsPriorityBuff) names the
+    // ones it has given up waiting for and holds too. Both name a buff as BuffsDue does.
     public void SetLairEntryBuffHold(Func<bool> holdBuffs, Func<bool>? holdOrdinaryBuffs = null,
-        Action<string>? priorityBuffCast = null)
+        Action<string>? priorityBuffCast = null, Func<string, bool>? holdPriorityBuff = null)
     {
         ArgumentNullException.ThrowIfNull(holdBuffs);
         _lairEntryBuffHold = holdBuffs;
         _lairEntryOrdinaryBuffHold = holdOrdinaryBuffs;
         _lairEntryPriorityBuffCast = priorityBuffCast;
+        _lairEntryPriorityBuffHeld = holdPriorityBuff;
     }
     private Func<bool>? _lairEntryBuffHold;
     private Func<bool>? _lairEntryOrdinaryBuffHold;
     private Action<string>? _lairEntryPriorityBuffCast;
+    private Func<string, bool>? _lairEntryPriorityBuffHeld;
 
     // Connected, in the game and alive: the state every decision needs first.
     private bool CanDecide =>
@@ -2687,7 +2690,11 @@ public sealed class CastingDirector : IDisposable
         if (_lairEntryBuffHold?.Invoke() == true) return null;
         if (!priority && _lairEntryOrdinaryBuffHold?.Invoke() == true) return null;
 
-        foreach (CastCandidate due in DueBuffs(health, priority)) return due;
+        // A priority buff that loop has given up waiting for is held as well; the next
+        // due one takes its place.
+        foreach (CastCandidate due in DueBuffs(health, priority))
+            if (!(priority && _lairEntryPriorityBuffHeld?.Invoke(BuffName(due)) == true))
+                return due;
         return null;
     }
 
