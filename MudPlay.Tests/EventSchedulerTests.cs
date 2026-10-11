@@ -413,6 +413,69 @@ public sealed class EventSchedulerTests
         Assert.True(next.Value <= DateTime.Now.AddSeconds(30));
     }
 
+    private static ScheduledEvent EveryMinutes(string name, int minutes) =>
+        new()
+        {
+            Name = name,
+            TriggerType = EventTriggerType.Every,
+            EveryAmount = minutes,
+            EveryUnit = EventTimeUnit.Minutes,
+            ActionType = EventActionType.Command,
+            CommandText = "stat",
+        };
+
+    // Switching one event off and on is no reason to start another's period over:
+    // an hourly event would never fire beside one switched every few minutes.
+    [Fact]
+    public void SwitchingOneEvent_LeavesAnotherEventsCountdownRunning()
+    {
+        var (events, scheduler, prompt, _) = Build();
+        ScheduledEvent hourly = EveryMinutes("hourly", 60);
+        ScheduledEvent switched = EveryMinutes("switched", 10);
+        events.Add(hourly);
+        events.Add(switched);
+        scheduler.NotifyConnected();
+        prompt.Append(PromptBytes);
+        DateTime? hourlyDue = scheduler.GetNextFire(hourly);
+        DateTime? switchedDue = scheduler.GetNextFire(switched);
+        Assert.NotNull(hourlyDue);
+        Assert.NotNull(switchedDue);
+
+        Thread.Sleep(30);       // so a countdown started over would read later
+        Assert.Equal(EventManager.SwitchResult.SwitchedOff, events.SetEnabled(switched, false, "test"));
+
+        Assert.Null(scheduler.GetNextFire(switched));
+        Assert.Equal(hourlyDue, scheduler.GetNextFire(hourly));
+
+        Assert.Equal(EventManager.SwitchResult.SwitchedOn, events.SetEnabled(switched, true, "test"));
+
+        Assert.Equal(hourlyDue, scheduler.GetNextFire(hourly));
+        // Its own period starts from the moment it was switched back on.
+        Assert.True(scheduler.GetNextFire(switched) > switchedDue);
+    }
+
+    // An edit puts a different event in the place, and that still starts every
+    // countdown over, as it always has.
+    [Fact]
+    public void EditingAnEvent_StillRestartsTheCountdowns()
+    {
+        var (events, scheduler, prompt, _) = Build();
+        ScheduledEvent hourly = EveryMinutes("hourly", 60);
+        ScheduledEvent edited = EveryMinutes("edited", 10);
+        events.Add(hourly);
+        events.Add(edited);
+        scheduler.NotifyConnected();
+        prompt.Append(PromptBytes);
+        DateTime? hourlyDue = scheduler.GetNextFire(hourly);
+
+        Thread.Sleep(30);
+        ScheduledEvent replacement = EveryMinutes("edited", 20);
+        events.Replace(edited, replacement);
+
+        Assert.True(scheduler.GetNextFire(hourly) > hourlyDue);
+        Assert.NotNull(scheduler.GetNextFire(replacement));
+    }
+
     // ----- Dispose ----------------------------------------------------
 
     [Fact]
