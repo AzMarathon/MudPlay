@@ -16,8 +16,10 @@ namespace MudPlay.Services.Api;
 //
 // THE PRODUCER THREAD IS NEVER TOUCHED BY A SOCKET. Events originate wherever
 // they happen — LogService fires on the producer's thread (the Telnet read loop,
-// or the UI thread via MessageRouter), gates fire on the UI thread — so a write
-// that blocked would block THEM. A socket write blocks as soon as the reader
+// or the UI thread via MessageRouter), gates fire on the UI thread — and reach
+// Send from LocalApiMaskedEvents' pump, which masks the account details first.
+// Either way a write that blocked would block its caller. A socket write
+// blocks as soon as the reader
 // stops draining (a suspended process, `curl | head`, a stalled tunnel), and the
 // kernel buffer fills in kilobytes; with a direct write, a single stalled reader
 // froze the whole app, and asserting a movement gate performed a blocking socket
@@ -136,11 +138,9 @@ public sealed class LocalApiEvents : IDisposable
         if (TryFrame(eventName, payload) is { } frame) Write(id, frame);
     }
 
-    // Serialisation has to be guarded, not just the write. Send runs on the
-    // producer's thread — the Telnet read loop, or the UI thread — reached
-    // through LogService.EntryAdded, which invokes subscribers unguarded. A
-    // throw here (a lone surrogate off the wire reaching a log message, a
-    // converter fault) would surface in the pump loop or crash the UI thread,
+    // Serialisation has to be guarded, not just the write. A throw here (a lone
+    // surrogate off the wire reaching a log message, a converter fault) would
+    // surface in whichever loop called Send (the masking pump, the heartbeat),
     // for an event nobody needs that badly.
     private string? TryFrame(string eventName, object payload)
     {
