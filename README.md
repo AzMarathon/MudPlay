@@ -1,14 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.21**
-> - After a death, walks and loops avoid tolls, fares and sailings until the inventory is re-read; an arena death takes nothing
-> - A toll or fare the game refuses isn't sent twice; it reopens once you carry the price
-> - A walk with no way round an unpayable toll says so on the terminal
-> - A loop over an unpayable toll isn't started, and stops if refused mid-lap (it could crash the client)
-> - A sailing you can't pay for isn't walked to
-> - The purse re-read after a refusal or a death stays owed until it goes out
-> - Program log and bug report show the purse a toll was judged on
+> **Version 3.167.22**
+> - Loops: a third way to wait before a lair, Wait for priority buff spells: due Priority buffs are cast first, other buffs held until after the fight
+> - Program log and bug report say what a lair wait is for, what it holds back and why it ended
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

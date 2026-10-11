@@ -1,5 +1,10 @@
 # Version history
 
+## 3.167.22
+
+- Loops: a third way to wait before a lair, Wait for priority buff spells: due Priority buffs are cast first, other buffs held until after the fight
+- Program log and bug report say what a lair wait is for, what it holds back and why it ended
+
 ## 3.167.21
 
 - After a death, walks and loops avoid tolls, fares and sailings until the inventory is re-read; an arena death takes nothing
