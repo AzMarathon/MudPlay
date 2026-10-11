@@ -689,9 +689,28 @@ public sealed class PartyEssentialHandlers : IDisposable
             return;
         }
         if (_wireSender is null) return;
+        // Our own client may have joined that leader a moment ago by itself (a
+        // Stock follower does on the leader's "found you"): one join is enough.
+        //
+        // This holds on every realm, and for a join this handler sent itself: a
+        // second @join from the same leader inside ComebackRequester's reply
+        // window (3 s) sends nothing. That is safe because the game has answered
+        // the first join by then or is about to, and no client sends two @joins
+        // that close together (the nag's shortest cadence is seconds apart, 10 s
+        // by default); the next one a leader sends is taken as usual.
+        if (JoinAlreadySent?.Invoke(senderGiven) == true) return;
         byte[] bytes = Encoding.Latin1.GetBytes($"join {senderGiven}\r");
         _wireSender(bytes);
+        JoinSent?.Invoke(senderGiven);
     }
+
+    // Told with the leader's given name when an @join had us send `join <leader>`,
+    // so whoever reads the game's answer to a join knows this one was sent.
+    public Action<string>? JoinSent { get; set; }
+
+    // Whether a `join` to that leader went out a moment ago from elsewhere in the
+    // client (ComebackRequester.JoinJustSentTo).
+    public Func<string, bool>? JoinAlreadySent { get; set; }
 
     // True when the given name is the leader we currently believe we're following.
     // A telepath from that leader asking us to (re)join / (re)invite means our

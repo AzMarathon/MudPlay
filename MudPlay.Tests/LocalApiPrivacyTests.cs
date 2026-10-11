@@ -206,12 +206,14 @@ public sealed class LocalApiPrivacyTests
             () => { Interlocked.Increment(ref built); return Task.FromResult(Scrubber()); },
             anyoneListening: () => true, sink.Send, gather: TimeSpan.FromMilliseconds(200));
 
-        // Forty entries over about 80 ms: one gathering, or two if the clock is unkind.
+        // Forty entries posted in one go, well inside one gathering. (They used to
+        // be spaced by Task.Delay(2), which under a loaded thread pool resumes tens
+        // of milliseconds late and ran the forty over several gatherings: that
+        // timed the scheduler, not the batching.)
         for (int i = 0; i < 40; i++)
         {
             int n = i;
             events.Post("log", s => new { message = s.Apply($"entry {n} {Password}") });
-            await Task.Delay(2);
         }
 
         (string Name, string Json)[] sent = await sink.WaitForAsync(40);

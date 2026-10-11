@@ -863,6 +863,8 @@ public static class DefaultPatterns
             @"^You are no longer following (?<player>\w+)\.?\s*$");
         yield return new RegexPattern(KnownPatterns.PartyDissolved,
             @"^You are not in a party at the present time\.?\s*$");
+        yield return new RegexPattern(KnownPatterns.PartyMustBeInvited,
+            @"^You must be invited first!\s*$");
 
         // ----- Per-member rank changes (Playpen-verified, 2026-06-02) ---
         // When another party member reranks, the game prints one of three
