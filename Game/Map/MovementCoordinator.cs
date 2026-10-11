@@ -190,6 +190,12 @@ public sealed class MovementCoordinator
     // window, and is capped by its owner just past it. Engine-wait tier.
     public const string PartyItemCountGate = "PartyItemCount";
 
+    // Asserted by PartyTollGate at a toll exit a leader's engine is about to step
+    // through, while the followers' purses are asked for and while coin handed to
+    // those who are short waits for the game to confirm it. Ends with the @wealth
+    // window or the last confirmation, each bounded by its owner.
+    public const string PartyTollGate = "PartyToll";
+
     // Asserted by PartyFollowerMovementGate while the local character is a
     // party follower (in a party but not the leader). MajorMUD movement is
     // leader-driven — the leader walks and the game drags followers along — so
@@ -271,6 +277,14 @@ public sealed class MovementCoordinator
     // every move is refused until the weight is back under it, usually when the
     // debuff that cut the max wears off (GAME_MECHANICS "Too heavy to move (over max encumbrance)").
     public const string TooHeavyGate = "TooHeavy";
+
+    // Asserted by AutoHazardCounterProvisioner from a hazard counter's `use` sent
+    // ahead of a step into the room it protects in (the desert waterskin at its last
+    // call) until the game answers it, so the step goes in with the buff on. A `use`
+    // refused because the round's cast was already made keeps it for that round,
+    // until the next round's cast has sent it again. Capped both ways, so a `use` the
+    // game never answers can't strand the route. Engine-wait tier.
+    public const string HazardBuffGate = "HazardBuff";
 
     private const int HistoryCapacity = 200;
 

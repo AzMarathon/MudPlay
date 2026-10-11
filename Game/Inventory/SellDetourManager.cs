@@ -344,9 +344,17 @@ public sealed class SellDetourManager : IDisposable
         DetouringChanged?.Invoke();
         if (!DriveWalk(shop))
         {
-            _log?.Warn(LogCategory, $"can't reach {shop} — carrying on");
-            foreach (Candidate c in _candidates())
-                if (c.Shops.Contains(shop)) _refused.Add((c.Number, shop));
+            // No route for want of a toll or fare is "not now", not "never": the
+            // purse, or the party's, can cover it on a later detour, so the shop is
+            // passed over this time and not written off.
+            if (_walker.LastUnpaidFailure == shop)
+                _log?.Info(LogCategory, $"can't pay the way to {shop} just now — passing it over this time");
+            else
+            {
+                _log?.Warn(LogCategory, $"can't reach {shop} — carrying on");
+                foreach (Candidate c in _candidates())
+                    if (c.Shops.Contains(shop)) _refused.Add((c.Number, shop));
+            }
             Next();
         }
     }

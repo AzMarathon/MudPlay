@@ -68,6 +68,8 @@ public static class NavActivity
         // A walk that hasn't set off: the one hold that answers "why isn't it moving?"
         // at the very start, so it gets a chip though it lasts seconds.
         (MovementCoordinator.PartyItemCountGate, "asking the party who holds an item", NavActivityKind.Waiting, true),
+        // A walk standing at a toll gate with the party: the same question there.
+        (MovementCoordinator.PartyTollGate, "checking the party can pay a toll", NavActivityKind.Waiting, true),
         (MovementCoordinator.FollowerGate, "following leader", NavActivityKind.Waiting, false),
         // Auto-engines kill switch off — a queued walk / loop / lair is planned but
         // held here until Auto-All is restored; the single most common "why isn't it
@@ -89,6 +91,7 @@ public static class NavActivity
         (MovementCoordinator.SummonDeathSettleGate, "checking for a summon", NavActivityKind.Moving, false),
         (MovementCoordinator.DeathStallGate, "waiting to loot", NavActivityKind.Waiting, false),
         (MovementCoordinator.LairDebuffGate, "Waiting to Debuff", NavActivityKind.Waiting, true),
+        (MovementCoordinator.HazardBuffGate, "raising a hazard buff", NavActivityKind.Waiting, false),
     ];
 
     public static (string Text, NavActivityKind Kind) Describe(

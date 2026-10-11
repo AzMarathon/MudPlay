@@ -1192,7 +1192,7 @@ public sealed class PartyTrainCoordinator : IDisposable
             return;
         }
         foreach ((string currency, long count) in coins)
-            _send($"give {count} {(currency == "runic" ? _runicName() : currency)} to {recipient}");
+            _send(Cash.CoinGiveCommand.For(currency, count, recipient, _runicName()));
         _log?.Info(LogCategory, given >= copper
             ? $"Gave {recipient} {given:N0} copper toward training."
             : $"Gave {recipient} {given:N0} of {copper:N0} copper asked — all we could spare.");

@@ -55,17 +55,22 @@ public sealed class MovementFilter : IRoomFilter
     // can't afford. When null we don't gate — same rule as an unknown level.
     public Func<long?>? WealthProvider { get; set; }
 
-    // Supplies the party's minimum on-hand wealth (copper) when this character
-    // is leading a party, or null when solo, not leading, or our own wallet is
-    // unknown. Wired by AppServices to
-    // Game.Remote.PartyWealthTracker. When non-null it takes precedence over
-    // WealthProvider in IsTollGateBlocked: BFS routes the party around a toll a
-    // member can't afford, instead of walking the leader through and stranding
-    // them at the gate. A toll is per-crosser, so this is a genuine second gate
-    // over the self-only wallet check. Demand-driven — the tracker only probes
-    // @wealth when this is invoked, i.e. only while BFS evaluates a toll exit,
-    // and treats a member who hasn't reported fresh wealth as unaffordable.
+    // Supplies the party's minimum confirmed on-hand wealth (copper) when this
+    // character is leading a party, or null when solo, not leading, or our own
+    // wallet is unknown. Wired by AppServices to
+    // Game.Remote.PartyWealthTracker.MinWealth. For fares (an NPC's transport, a
+    // boat): when non-null it takes precedence over WealthProvider in
+    // CannotAfford, so a fare a follower is known to be short of is not taken. A
+    // follower nobody has read is not counted. Toll exits don't read it: the party
+    // at a toll is PartyTollClosedProbe's.
     public Func<long?>? PartyWealthProvider { get; set; }
+
+    // Whether the party this character leads can't be taken through a toll exit,
+    // and in what words: wired by AppServices to Game.Map.PartyTollGate, which
+    // asks every follower's purse at the toll and pays for those who are short
+    // when we can spare it. Unset, or solo, a toll is judged on our own purse alone.
+    public Func<RoomExit, bool>? PartyTollClosedProbe { get; set; }
+    public Func<RoomExit, string?>? PartyTollClosedReason { get; set; }
 
     // Supplies the player's own class Number (Classes.Number, 1-15), or null
     // when the class isn't parsed yet. Wired by AppServices to the live
@@ -690,12 +695,23 @@ public sealed class MovementFilter : IRoomFilter
         // A toll is phrased in gold crowns but any coin mix totalling N*100
         // copper passes — so the fold-to-copper conversion is here, not in the
         // shared wallet check.
-        return IsRefusedCrossing(in exit) || CannotAfford((long)exit.TollGold * 100);
+        return IsRefusedCrossing(in exit) || OwnPurseCannotAfford((long)exit.TollGold * 100)
+            || PartyTollClosedProbe?.Invoke(exit) == true;
+    }
+
+    // A toll against our own purse: what a trip has set aside isn't spent on it,
+    // an unread purse refuses nothing, and a purse known to be wrong (PurseDoubt)
+    // pays nothing. The followers' purses are PartyTollClosedProbe's to judge.
+    private bool OwnPurseCannotAfford(long cost)
+    {
+        if (cost <= 0) return false;
+        if (_tollGateForcedClosed || _purseDoubt != PurseDoubt.None) return true;
+        return SparePurse() is { } spare && spare < cost;
     }
 
     // An NPC ask-transport charges its fare to every person who asks, so it gates on
-    // the same party-or-self wallet check as a toll — the party only routes through it
-    // when its poorest member can pay. The fare is already copper. Stands down with the
+    // the party-or-self wallet check — the party only routes through it when its
+    // poorest known member can pay. The fare is already copper. Stands down with the
     // toll gate while WarmForRoute plans the paid-crossings-permitted route.
     private bool IsFareGateBlocked(in RoomExit exit)
     {
@@ -703,16 +719,14 @@ public sealed class MovementFilter : IRoomFilter
         return IsRefusedCrossing(in exit) || CannotAfford(exit.FareCopper);
     }
 
-    // Party-or-self affordability: true when the crosser can't cover `cost`
-    // copper. Party branch (PartyWealthTracker.MinWealth folds in our own wallet
-    // too) routes around a cost a member can't meet rather than stranding them
-    // at the gate; a member who hasn't reported fresh wealth counts as
-    // unaffordable. Returns false (don't gate) when solo / not leading / own
-    // wallet unknown — same "don't refuse on what we can't evaluate" rule as an
-    // unknown level — except while the record is known to be wrong (PurseDoubt),
-    // when nothing is affordable. Demand-driven: invoked only for a toll exit, an
-    // NPC transport fare, or a boat fare, so nothing polls unless one is actually
-    // in play. Shared by the toll, transport-fare, and boat-fare gates.
+    // Party-or-self affordability of a fare: true when the crosser can't cover
+    // `cost` copper. Party branch (PartyWealthTracker.MinWealth folds in our own
+    // wallet too) keeps the party off a fare a member is known to be short of; a
+    // member nobody has read is not counted. Returns false (don't gate) when solo
+    // / not leading / own wallet unknown — same "don't refuse on what we can't
+    // evaluate" rule as an unknown level — except while the record is known to be
+    // wrong (PurseDoubt), when nothing is affordable. Shared by the
+    // transport-fare and boat-fare gates; a toll exit has OwnPurseCannotAfford.
     private bool CannotAfford(long cost)
     {
         if (cost <= 0) return false;
@@ -881,8 +895,9 @@ public sealed class MovementFilter : IRoomFilter
 
     // Whether what this exit charges is beyond OUR purse, as against a party
     // member's: the purse in doubt, a refusal standing, or the record short. A
-    // crossing only a follower can't pay is left to the party rules, which walk on
-    // with a warning.
+    // follower's purse is judged apart: at a toll by PartyTollGate, and for a fare
+    // by the poorest known purse, where a sole-crossing sailing still sails with
+    // its warning.
     public bool IsOwnPurseShort(in RoomExit exit)
     {
         long cost = CostOf(in exit);
@@ -907,14 +922,18 @@ public sealed class MovementFilter : IRoomFilter
                 ? $"the game refused it, naming {CurrencyFormat.Full(named)}: {DescribeOwnPurse(named, carried)}"
                 : $"the game refused it, naming {CurrencyFormat.Full(named)}, and the purse isn't known (inventory not read)";
         }
-        return DescribePurse(cost);
+        bool toll = exit.Hint == RoomExitHint.Toll && exit.TollGold > 0;
+        // A toll our own purse covers and the party's doesn't: who is short, and
+        // why they aren't paid for.
+        if (toll && !IsOwnPurseShort(in exit) && PartyTollClosedReason?.Invoke(exit) is { } party) return party;
+        return DescribePurse(cost, partyPurse: !toll);
     }
 
     // The same with nothing to pay, for the bug report, with the crossings a
     // refusal has put a price on.
     public string DescribePurse()
     {
-        string purse = DescribePurse(cost: 0);
+        string purse = DescribePurse(cost: 0, partyPurse: true);
         if (_refusedCrossings.Count == 0) return purse;
         return purse + "; refused crossings: " + string.Join(", ", _refusedCrossings.Select(r =>
             $"into {r.Key.Target} ("
@@ -923,7 +942,9 @@ public sealed class MovementFilter : IRoomFilter
             + ")"));
     }
 
-    private string DescribePurse(long cost)
+    // partyPurse: the cost is a fare's, judged on the party's poorest known purse
+    // when one leads; a toll is described on our own.
+    private string DescribePurse(long cost, bool partyPurse)
     {
         switch (_purseDoubt)
         {
@@ -932,7 +953,7 @@ public sealed class MovementFilter : IRoomFilter
             case PurseDoubt.Refused:
                 return "the game refused a toll or fare the client took the purse to cover, so none is taken until the inventory is read again (type i)";
         }
-        if (PartyWealthProvider?.Invoke() is { } partyMin)
+        if (partyPurse && PartyWealthProvider?.Invoke() is { } partyMin)
             return $"the party's poorest known purse holds {CurrencyFormat.Full(partyMin)}{Short(cost - partyMin)}";
         if (WealthProvider?.Invoke() is not { } wealth)
             return "the purse isn't known (inventory not read), so tolls and fares aren't refused on it";

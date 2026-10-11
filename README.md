@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.171.0**
+> **Version 3.173.0**
 > - Bug report: your login name, login password and suicide password are masked everywhere in it, and in a crash report
 > - Bug report: racist and other offensive words on chat lines are masked, in the report only
-> - Bug report: a list of every command sent, held or dropped, with who sent it
+> - Bug report: a list of every command sent, held or dropped, with who sent it (typed, an alias, a window, the Local API, an engine, a macro / trigger / event, a route step)
 > - Bug report: Holds and waits near the top: the send gate, each movement gate with who raised it and since when, time in state for every engine, what each is waiting on
 > - Bug report: the whole program log with millisecond times; warnings and errors kept apart so routine lines can't push them out; 3,000 lines of scrollback
 > - Bug report: the build, when the client started, your system, the connection, open windows, pending work, triggers / aliases / macros, remote-command permissions, death history
@@ -12,7 +12,12 @@
 > - The wire sections follow the Wire Inspector's tick boxes and show when each read arrived
 > - The last 2 to 4 minutes of the program log are always on disk, for a hang or a forced kill (Logs folder, `…-recent-a.log` / `-b.log`)
 > - Program log: a startup block, a status line every 3 minutes, and how a walk ended even with the Navigation window closed
-> - `@suicide` sends the stored password only when the game asks for it>
+> - `@suicide` sends the stored password only when the game asks for it
+> - A custom statline counts as the game prompt, for `@suicide` and for the list of commands sent
+> - Local API: `/log`, `/scrollback` and `/events` mask the same account details; `/scrollback` sends only rows from inside the game
+> - Chat masking follows a chat line onto its next row only where the terminal wrapped it; game text is never changed
+> - The last-minutes log never holds the client on a stalled disk, and says what it dropped
+>
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
 
@@ -78,7 +83,7 @@ Profiles, per-BBS settings, global settings, imported game data, and logs each l
 MudPlay has a **built-in bug reporter** that snapshots the client's state at the moment of the problem — far more useful than describing it from memory. Please use it when filing an issue:
 
 1. **Capture** — click **Bug Report** in the menu bar (or right-click the terminal → **Bug report…**), type a short description, and confirm.
-2. MudPlay writes `<realm>-<timestamp>.md` to your **Desktop**: your settings, character name/stats/inventory, movement-engine state, the program log, and ~750 lines of scrollback — all frozen at click time.
+2. MudPlay writes `<realm>-<timestamp>.md` to your **Desktop**: your settings, character name/stats/inventory, movement-engine state, the program log, and up to 3,000 lines of scrollback — all frozen at click time.
 3. **File the issue** at **https://github.com/Tehshortbus/MudPlay/issues/new**, and **attach the `.md` file**.
 
 A short description still helps me target it faster, and you can review the report before sending. ***It does NOT include your BBS login name, password, or logon-menu steps.***
