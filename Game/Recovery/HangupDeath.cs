@@ -20,18 +20,20 @@ namespace MudPlay.Game.Recovery;
 //     the first room confirmed on the way in, before it has moved, is where the
 //     dead of the room it hung up in arrive, and it hung up somewhere else
 //     (HangupDeathArrivalRooms; the owner, 2026-10-10: "we'll know immediately
-//     upon logging in"). That alone is not enough: it must also come back
-//     stripped of what a death takes, which is what tells it from a character
-//     that walked there on another client.
-// HP and the pack never say it by themselves, and neither does the room it stands
-// in later: all change by playing on, and the list they are compared with can be
+//     upon logging in"). It must also come back stripped of what a death takes,
+//     which is what tells it from a character that walked there on another
+//     client; a character that owned nothing a death takes has nothing to be
+//     stripped of, and for it the room is enough (the owner, 2026-10-10).
+// HP and the pack never say it, and neither does a room the character has walked
+// to since: all change by playing on, and the list they are compared with can be
 // older than the hang-up.
 //
 // What else is seen can only take a death away again. A life can be lost on
 // another client between two sessions of this one, and that death is not this
 // hang-up's. A death by this hang-up leaves marks the entry shows:
 //   - the first room confirmed is where its dead arrive. Standing where it left,
-//     or (on Stock, whose list this is) anywhere else, it was not killed here.
+//     or anywhere else where the list of those rooms is the world's own
+//     (HangupArrivalListTrust), it was not killed here.
 //   - HP at the first prompt is above 0 and not under what the character left
 //     with: a death sets it to the maximum.
 //   - nothing a death takes is still held: it takes every item but those that
@@ -103,17 +105,20 @@ public static class HangupDeath
     //                    held at the first inventory read; null when the list has
     //                    nothing a death takes, what it held isn't known, or no
     //                    inventory has been read.
-    //   entryRoom      — HangupDeathArrivalRooms.EntrySays for the first room
-    //                    confirmed on the way back in: true where the dead of the
-    //                    room it hung up in arrive, false where a death by this
-    //                    hang-up would not have left it, null when it says nothing.
+    //   entryRoom      — HangupDeathArrivalRooms.Read for the first room confirmed
+    //                    on the way back in: true where the dead of the room it
+    //                    hung up in arrive, false where a death by this hang-up
+    //                    would not have left it, null when it says nothing.
     //   entryRoomText  — that room and whose dead arrive there, for the wording:
     //                    "Temple, Halls of the Dead (1/2189), where the dead of
-    //                    Darkwood Forest (1/1200) arrive".
+    //                    Darkwood Forest (1/109) arrive".
+    //   ownedNothing   — the list is known to have held nothing a death takes: no
+    //                    such item and no coin. takenStillHeld is null then, with
+    //                    nothing to look for.
     public static (HangupDeathVerdict Verdict, string Why) Judge(
         int? hpAtDrop, int? maxHpAtDrop, int? hpShareTop, int? hpAtEntry,
         int? livesBefore, int? livesNow, bool? worn, bool? loginLines, bool? takenStillHeld,
-        bool? entryRoom = null, string? entryRoomText = null)
+        bool? entryRoom = null, string? entryRoomText = null, bool ownedNothing = false)
     {
         if (hpAtDrop is not { } dropHp)
             return (HangupDeathVerdict.NotSuspected, "HP wasn't known when the character left the game");
@@ -137,16 +142,20 @@ public static class HangupDeath
             // No count to compare. The room it came back in says it, when the pack
             // agrees: stripped of what a death takes, nothing worn, and on Stock
             // the board's lines printed. A character that only walked there on
-            // another client still holds its gear. The record needs the lives it
-            // has now, so a `stat` is still waited for.
-            if (entryRoom == true && takenStillHeld == false && worn != true && loginLines != false)
+            // another client still holds its gear. One that owned nothing a death
+            // takes can't be stripped, and the room is enough for it. The record
+            // needs the lives it has now, so a `stat` is still waited for.
+            if (entryRoom == true && (takenStillHeld == false || ownedNothing) && worn != true && loginLines != false)
                 return livesNow is null
                     ? (HangupDeathVerdict.NeedsLives, "no `stat` has given the lives on this connection")
                     : (HangupDeathVerdict.Died,
-                        $"it came back in {entryRoomText ?? "the room its dead arrive in"}, with nothing left of what a "
-                        + "death takes (its lives weren't read on the connection it left the game on)");
-            return (HangupDeathVerdict.Unsure,
-                "its lives weren't read on the connection it left the game on, and only a life lost tells a death");
+                        $"it came back in {entryRoomText ?? "the room its dead arrive in"}, "
+                        + (ownedNothing ? "and held nothing a death takes when it left" : "with nothing left of what a death takes")
+                        + " (its lives weren't read on the connection it left the game on)");
+            return (HangupDeathVerdict.Unsure, entryRoom == true
+                ? $"it came back in {entryRoomText ?? "the room its dead arrive in"}, but its lives weren't read on the "
+                  + "connection it left the game on and what it holds doesn't bear a death out"
+                : "its lives weren't read on the connection it left the game on, and only a life lost tells a death");
         }
         if (livesNow is not { } now)
             return saysNo is not null
@@ -195,11 +204,19 @@ public static class HangupDeath
     // ordinary death (on Stock the arena switch can be off, and an arena room is
     // then a room like any other). A character still dropped was not killed.
     //
+    // An arena death costs no life, so it is recorded without a count from before
+    // the hang-up (the owner, 2026-10-10). One corner is told and not recorded:
+    // the hang-up was one the realm penalises, so an ordinary death is possible
+    // too (an arena room with the board's arenas switched off), and neither mark
+    // that would tell the two apart can be read: no count from before to find
+    // unchanged, and nothing a death takes to find still held.
+    //
     // The record carries a count read on this connection, as Judge's does.
     //   takenStillHeld / entryRoom / entryRoomText — as Judge's.
+    //   ordinaryDeathPossible — the realm's settings penalise that hang-up.
     public static (HangupDeathVerdict Verdict, string Why) JudgeArena(
         int? hpAtDrop, int? hpAtEntry, int? livesBefore, int? livesNow, bool? takenStillHeld,
-        bool? entryRoom, string? entryRoomText)
+        bool? entryRoom, string? entryRoomText, bool ordinaryDeathPossible)
     {
         if (hpAtDrop is not <= 0)
             return (HangupDeathVerdict.NotSuspected, "the character wasn't dropped when it left the game");
@@ -209,6 +226,13 @@ public static class HangupDeath
             return (HangupDeathVerdict.NotSuspected, "it came back dropped");
         if (takenStillHeld == false)
             return (HangupDeathVerdict.NotSuspected, "it came back with nothing left of what a death takes, where an arena death takes nothing");
+        // The room says it died. Whether it was the arena's death or an ordinary
+        // one, with a life gone, nothing here can say.
+        if (ordinaryDeathPossible && livesBefore is null && takenStillHeld is null)
+            return (HangupDeathVerdict.Unsure,
+                $"it left the game dropped in an arena room and came back in {entryRoomText ?? "the room that arena's dead arrive in"}, "
+                + "but this realm penalises that hang-up, its lives weren't read on the connection it left on, and what it "
+                + "held then doesn't tell an arena death, which takes nothing, from an ordinary one");
         if (livesNow is not { } now)
             return (HangupDeathVerdict.NeedsLives, "no `stat` has given the lives on this connection");
         if (livesBefore is { } before && now < before)

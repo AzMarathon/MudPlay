@@ -2301,6 +2301,15 @@ public sealed class AppServices
     // any cached room references.
     public Game.Map.RoomGraphManager RoomGraph { get; private set; } = null!;
 
+    // How far the Stock map file's list of where the dead arrive goes for the
+    // active game data: Paradigm by its Info row (Legit 2), an unmodified Stock
+    // set by Legit 1 with Custom "Default", and anything else (a board whose
+    // sysop may have edited its rooms, or no set) unverified.
+    public Game.Recovery.HangupArrivalListTrust HangupArrivalListTrust =>
+        GameData.ActiveRealm == Game.RealmType.ParaMud ? Game.Recovery.HangupArrivalListTrust.Paradigm
+        : GameData.ActiveSetIsVanillaStock ? Game.Recovery.HangupArrivalListTrust.VanillaStock
+        : Game.Recovery.HangupArrivalListTrust.Unverified;
+
     // The teleport spots in the loaded game data, for the
     // setting that says which of them automatic walks may use. Worked out from the
     // room graph on first use and again after the graph reloads.
@@ -10041,10 +10050,11 @@ public sealed class AppServices
             recordDeath: RoomTracker.NoteUnwitnessedDeath,
             staysOnDeath: EveryItemOfThisNameStaysOnDeath,
             // Whether the room the character came back in is where the dead of the
-            // room it hung up in arrive. The list is Stock's own, and trusted less
-            // on any other realm (HangupDeathArrivalRooms).
-            entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.EntrySays(
-                hungUpIn, enteredIn, stock: GameData.ActiveRealm == Game.RealmType.Stock),
+            // room it hung up in arrive. The list is the Stock map file's, and how
+            // far it goes depends on the game data (HangupArrivalListTrust). The
+            // graph says which rooms the map can't tell an arrival room from.
+            entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.Read(
+                hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor),
             roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}");
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();

@@ -10,8 +10,9 @@ public enum HangupDeathVerdict
     NotSuspected,
 
     // It died after the link was gone: exactly one life fewer and nothing the
-    // entry showed says otherwise, or, with no count from before, back stripped in
-    // the room its dead arrive in. From JudgeArena: the arena's death, which took
+    // entry showed says otherwise, or, with no count from before, back in the
+    // room its dead arrive in stripped of what a death takes (or having owned
+    // nothing of the kind). From JudgeArena: the arena's death, which took
     // nothing.
     Died,
 

@@ -102,7 +102,9 @@ public sealed class HangupDeathTests
         bool? worn = false, bool? loginLines = true, bool? takenStillHeld = false) =>
         HangupDeath.Judge(hpAtDrop, 200, share, hpAtEntry, livesBefore, livesNow, worn, loginLines, takenStillHeld).Verdict;
 
-    // Only a life lost says "died": exactly one, both counts read from the game.
+    // A life lost says "died": exactly one, both counts read from the game. These
+    // give no room it came back in, so the lives speak alone (the room's part is
+    // under "The room it came back in" below).
     [Fact]
     public void ExactlyOneLifeFewer_IsADeath()
     {
@@ -144,10 +146,11 @@ public sealed class HangupDeathTests
         Assert.Equal(HangupDeathVerdict.Unsure, Verdict(livesNow: 5));
     }
 
-    // HP, the room and the pack never say "died". Without the lives now, a `stat`
-    // is what is needed; without the lives from before, nothing will tell.
+    // HP and the pack never say "died". Without the lives now, a `stat` is what is
+    // needed; without the lives from before, and with no room it came back in to
+    // go by (none is given here), nothing will tell.
     [Fact]
-    public void WithoutBothCounts_NothingSaysDied()
+    public void WithoutBothCounts_AndNoRoomToGoBy_NothingSaysDied()
     {
         Assert.Equal(HangupDeathVerdict.NeedsLives, Verdict(livesNow: null));
         Assert.Equal(HangupDeathVerdict.Unsure, Verdict(livesBefore: null));
@@ -289,18 +292,52 @@ public sealed class HangupDeathTests
         Assert.Equal(HangupDeathVerdict.NeedsLives, RoomVerdict(entryRoom: true, livesBefore: null, livesNow: null).Verdict);
     }
 
-    // The room alone never records a death: a character that walked to the temple
-    // on another client and left the game there still holds its gear, and one
-    // whose list had nothing a death takes can't be told from it.
+    // The room doesn't record a death against what the pack says: a character
+    // that walked to the temple on another client and left the game there still
+    // holds its gear. Nor where what it held isn't known.
     [Theory]
     [InlineData(true, false, true)]     // something a death takes is still held
-    [InlineData(null, false, true)]     // the list had nothing a death takes, or isn't known
+    [InlineData(null, false, true)]     // what it held isn't known
     [InlineData(false, true, true)]     // something is still worn
     [InlineData(false, false, false)]   // Stock, and the board's lines weren't printed
-    public void LivesNotReadBefore_TheRoomAlone_IsNotEnough(bool? takenStillHeld, bool? worn, bool? loginLines) =>
-        Assert.Equal(HangupDeathVerdict.Unsure,
-            RoomVerdict(entryRoom: true, livesBefore: null, worn: worn, loginLines: loginLines,
-                takenStillHeld: takenStillHeld).Verdict);
+    public void LivesNotReadBefore_TheRoomAlone_IsNotEnough(bool? takenStillHeld, bool? worn, bool? loginLines)
+    {
+        (HangupDeathVerdict verdict, string why) = RoomVerdict(entryRoom: true, livesBefore: null, worn: worn,
+            loginLines: loginLines, takenStillHeld: takenStillHeld);
+
+        Assert.Equal(HangupDeathVerdict.Unsure, verdict);
+        Assert.Contains($"it came back in {InTheTemple}", why);
+        Assert.Contains("what it holds doesn't bear a death out", why);
+    }
+
+    // A character that owned nothing a death takes (no such item, no coin) has
+    // nothing to be stripped of. For it the room is enough (the owner,
+    // 2026-10-10), and every "no" that still applies is kept.
+    [Fact]
+    public void LivesNotReadBefore_OwningNothingADeathTakes_TheRoomIsEnough()
+    {
+        (HangupDeathVerdict Verdict, string Why) Naked(
+            bool? entryRoom = true, int? hpAtEntry = 200, int? livesNow = 6, bool? worn = false, bool? loginLines = true) =>
+            HangupDeath.Judge(-5, 200, 50, hpAtEntry, livesBefore: null, livesNow, worn, loginLines,
+                takenStillHeld: null, entryRoom, InTheTemple, ownedNothing: true);
+
+        (HangupDeathVerdict verdict, string why) = Naked();
+        Assert.Equal(HangupDeathVerdict.Died, verdict);
+        Assert.Contains($"it came back in {InTheTemple}, and held nothing a death takes when it left", why);
+        // The record still needs a count read on this connection.
+        Assert.Equal(HangupDeathVerdict.NeedsLives, Naked(livesNow: null).Verdict);
+
+        // What still says no: the room, HP at the first prompt, a piece worn,
+        // the board's lines on Stock.
+        Assert.Equal(HangupDeathVerdict.Unsure, Naked(entryRoom: null).Verdict);
+        Assert.Equal(HangupDeathVerdict.Alive, Naked(entryRoom: false).Verdict);
+        Assert.Equal(HangupDeathVerdict.Alive, Naked(hpAtEntry: -5).Verdict);
+        Assert.Equal(HangupDeathVerdict.Unsure, Naked(worn: true).Verdict);
+        Assert.Equal(HangupDeathVerdict.Unsure, Naked(loginLines: false).Verdict);
+        // With both counts read the lives decide, as for anyone.
+        Assert.Equal(HangupDeathVerdict.Alive,
+            HangupDeath.Judge(-5, 200, 50, 200, 7, 7, false, true, null, true, InTheTemple, ownedNothing: true).Verdict);
+    }
 
     // With no life known lost, a room a death wouldn't have left it in closes the
     // question, as HP at the first prompt does.
@@ -334,23 +371,51 @@ public sealed class HangupDeathTests
     private const string InTheArenaHalls =
         "Training Grounds, Halls of the Dead (16/542), where the dead of Training Grounds (16/500) arrive";
 
+    // penalised: the realm's settings penalise that hang-up, so an ordinary death
+    // is possible too (the board's arenas switched off).
     private static (HangupDeathVerdict Verdict, string Why) ArenaVerdict(
         int? hpAtDrop = -5, int? hpAtEntry = 150, int? livesBefore = 7, int? livesNow = 7, bool? takenStillHeld = true,
-        bool? entryRoom = true) =>
-        HangupDeath.JudgeArena(hpAtDrop, hpAtEntry, livesBefore, livesNow, takenStillHeld, entryRoom, InTheArenaHalls);
+        bool? entryRoom = true, bool penalised = false) =>
+        HangupDeath.JudgeArena(hpAtDrop, hpAtEntry, livesBefore, livesNow, takenStillHeld, entryRoom, InTheArenaHalls,
+            ordinaryDeathPossible: penalised);
 
-    [Fact]
-    public void DroppedInAnArenaRoom_BackWhereItsDeadArrive_IsAnArenaDeath_WithNoLifeLost()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DroppedInAnArenaRoom_BackWhereItsDeadArrive_IsAnArenaDeath_WithNoLifeLost(bool penalised)
     {
-        (HangupDeathVerdict verdict, string why) = ArenaVerdict();
+        (HangupDeathVerdict verdict, string why) = ArenaVerdict(penalised: penalised);
 
         Assert.Equal(HangupDeathVerdict.Died, verdict);
         Assert.Equal($"it left the game dropped in an arena room and came back in {InTheArenaHalls}, its lives still 7", why);
         // The count from before wasn't read: an arena death takes none, so the one
-        // read now is the record's.
-        Assert.Equal(HangupDeathVerdict.Died, ArenaVerdict(livesBefore: null, livesNow: 6).Verdict);
-        // The list had nothing a death takes, or isn't known; HP not read at the first prompt.
-        Assert.Equal(HangupDeathVerdict.Died, ArenaVerdict(takenStillHeld: null, hpAtEntry: null).Verdict);
+        // read now is the record's. Something a death takes is still held, which an
+        // ordinary death would not have left.
+        Assert.Equal(HangupDeathVerdict.Died, ArenaVerdict(livesBefore: null, livesNow: 6, penalised: penalised).Verdict);
+        // The pack can't say, but the lives are unchanged; HP not read at the first prompt.
+        Assert.Equal(HangupDeathVerdict.Died, ArenaVerdict(takenStillHeld: null, hpAtEntry: null, penalised: penalised).Verdict);
+    }
+
+    // An arena death costs no life, so it is recorded with no count from before
+    // (the owner, 2026-10-10), even when the pack can't say either. The one
+    // corner told and not recorded: that hang-up is one the realm penalises, so
+    // with the board's arenas off it would have been an ordinary death, and
+    // neither the lives nor the pack can tell the two apart.
+    [Fact]
+    public void AnArenaDeath_WithNoCountAndAPackThatCantSay_IsRecorded_UnlessAnOrdinaryDeathIsPossible()
+    {
+        Assert.Equal(HangupDeathVerdict.Died,
+            ArenaVerdict(livesBefore: null, livesNow: 6, takenStillHeld: null).Verdict);
+        Assert.Equal(HangupDeathVerdict.NeedsLives,
+            ArenaVerdict(livesBefore: null, livesNow: null, takenStillHeld: null).Verdict);
+
+        (HangupDeathVerdict verdict, string why) =
+            ArenaVerdict(livesBefore: null, livesNow: 6, takenStillHeld: null, penalised: true);
+        Assert.Equal(HangupDeathVerdict.Unsure, verdict);
+        Assert.Contains("this realm penalises that hang-up", why);
+        Assert.Contains("doesn't tell an arena death, which takes nothing, from an ordinary one", why);
+        Assert.Equal(HangupDeathVerdict.Unsure,
+            ArenaVerdict(livesBefore: null, livesNow: null, takenStillHeld: null, penalised: true).Verdict);
     }
 
     [Fact]

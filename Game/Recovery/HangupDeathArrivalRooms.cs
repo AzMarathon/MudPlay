@@ -16,9 +16,12 @@ namespace MudPlay.Game.Recovery;
 // through it and differs from an ordinary death's for the rooms that have one
 // (GAME_MECHANICS "Hang-up / lost carrier").
 //
-// Paradigm runs the same world with more of its own. Whether it sends its dead to
-// the same rooms is not confirmed, so there the list is only trusted to say "yes,
-// that is where they arrive" and "it never moved", never "that is the wrong room".
+// How far the list goes depends on the game data (HangupArrivalListTrust). It is
+// the world of an unmodified Stock set. Paradigm sends the dead of the rooms it
+// shares with Stock to the same rooms (the owner, 2026-10-10), and has rooms of
+// its own the list doesn't cover, for which one arrival room is known. A Stock
+// board's sysop can edit its rooms, so there the list is not trusted to say
+// "that is the wrong room".
 public static class HangupDeathArrivalRooms
 {
     // Rooms that name a room for their dead: (map, first room, last room, the room
@@ -63,6 +66,13 @@ public static class HangupDeathArrivalRooms
     public static readonly RoomKey Temple = new(1, 2189);
     public static readonly RoomKey EvilTomb = new(1, 142);
 
+    // Paradigm: where the dead of Albion (Kingsport and the areas attached to it)
+    // arrive, the Burial Vault (the owner, 2026-10-10). Which rooms are Albion
+    // isn't in the game data, so it stands as a room the dead of any of
+    // Paradigm's own rooms may arrive in, and never as the only one.
+    public static readonly RoomKey ParadigmAlbionVault = new(14, 1077);
+    private static readonly RoomKey[] ParadigmOwnArrivals = { ParadigmAlbionVault };
+
     // The rooms a character killed by a hang-up in this room can arrive in, or
     // null for a room the list doesn't cover.
     public static IReadOnlyList<RoomKey>? For(RoomKey hungUpIn)
@@ -78,22 +88,62 @@ public static class HangupDeathArrivalRooms
     // What the first room confirmed on the way back in says of a death by the
     // hang-up: true, that is where its dead arrive; false, a death would have put
     // the character somewhere else; null, nothing.
-    //   - Nothing when either room isn't known, or the list doesn't cover the room.
+    //   - Nothing when either room isn't known.
     //   - Nothing for a hang-up in a room that is its own dead's arrival room, or
     //     whose leave-the-game room is.
     //   - Standing in the room it left: no death moved it.
-    //   - Anywhere else that is not an arrival room: no death by this hang-up, on
-    //     Stock. On Paradigm nothing, the list being Stock's.
+    //   - Anywhere else that is not an arrival room: no death by this hang-up,
+    //     where the list is that world's (an unmodified Stock set, or Paradigm
+    //     for the rooms it shares with Stock). On other game data nothing.
+    //   - A room the list doesn't cover (Paradigm's own, or any room past
+    //     Stock's): on Paradigm, back in the one arrival room known for those is
+    //     a yes; everything else is nothing, the room's own arrival room not
+    //     being known. Off Paradigm nothing at all.
     // An arena room is a room like any other here: its dead are moved the same way
     // whether the death was the arena's free one or not (HangupDeath.JudgeArena
     // tells those apart).
-    public static bool? EntrySays(RoomKey? hungUpIn, RoomKey? enteredIn, bool stock)
+    //
+    // The map knows a room by its name and the exits it prints, so the room it
+    // confirms is not always the room the character stands in. Where an arrival
+    // room has a look-alike (couldBeTakenFor, RoomGraphManager.CouldBeTakenFor:
+    // the arrival room's display fits it), the map can put a character that is in
+    // the arrival room in the look-alike instead:
+    //   - 11/35 Portal Room prints only its south exit (its portals are text
+    //     exits), which is exactly what 11/37 Portal Room has, so the map lands
+    //     on 11/37. Coming back there, having hung up somewhere that doesn't
+    //     look like it, is coming back where the dead arrive.
+    //   - 15/2057 and its arrival room 15/2056 are both Dark Cave with a south
+    //     exit. A character killed in 15/2057 shows the map the display of the
+    //     room it left, so the map never moves. There the room says nothing.
+    public static HangupEntryRoomReading Read(
+        RoomKey? hungUpIn, RoomKey? enteredIn, HangupArrivalListTrust trust,
+        Func<RoomKey, RoomKey, bool>? couldBeTakenFor = null)
     {
-        if (hungUpIn is not { } left || enteredIn is not { } entered) return null;
-        if (For(left) is not { } arrivals || arrivals.Contains(left)) return null;
-        if (Array.IndexOf(LeftThroughTheirArrivalRoom, left) >= 0) return null;
-        if (entered == left) return false;
-        if (arrivals.Contains(entered)) return true;
-        return stock ? false : null;
+        if (hungUpIn is not { } left || enteredIn is not { } entered) return default;
+        IReadOnlyList<RoomKey>? listed = For(left);
+        IReadOnlyList<RoomKey>? arrivals =
+            listed ?? (trust == HangupArrivalListTrust.Paradigm ? ParadigmOwnArrivals : null);
+        if (arrivals is null || arrivals.Contains(left)) return default;
+        if (Array.IndexOf(LeftThroughTheirArrivalRoom, left) >= 0) return default;
+        // Only a room the list covers has every room its dead can arrive in
+        // known, which is what a "no" rests on.
+        bool allKnown = listed is not null;
+
+        RoomKey? ArrivalItLooksLike(RoomKey room)
+        {
+            if (couldBeTakenFor is null) return null;
+            foreach (RoomKey arrival in arrivals)
+                if (couldBeTakenFor(arrival, room)) return arrival;
+            return null;
+        }
+
+        // The room left looks like the arrival room: the map can't show a move
+        // from one to the other, or tell either from a third that looks the same.
+        bool leftLooksLikeIt = ArrivalItLooksLike(left) is not null;
+        if (entered == left) return allKnown && !leftLooksLikeIt ? new HangupEntryRoomReading(false) : default;
+        if (arrivals.Contains(entered)) return new HangupEntryRoomReading(true);
+        if (ArrivalItLooksLike(entered) is { } stoodFor)
+            return leftLooksLikeIt ? default : new HangupEntryRoomReading(true, stoodFor);
+        return new HangupEntryRoomReading(allKnown && trust != HangupArrivalListTrust.Unverified ? false : null);
     }
 }

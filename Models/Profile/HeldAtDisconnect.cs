@@ -68,6 +68,12 @@ public sealed class HeldAtDisconnect
     // the character moved: where the hang-up left it, or where its dead arrive.
     public RoomRef? EntryRoomSince { get; set; }
 
+    // Such a connection sent a move before the map had confirmed any room, so the
+    // room the character came back in was never seen and it no longer stands
+    // there. The first room of a later connection is then not that room, and
+    // must not be read as it.
+    public bool MovedBeforeEntryRoomKnownSince { get; set; }
+
     // HP and max HP as the statline last showed them, or null when they weren't
     // known. At or below 0 the character was dropped.
     public int? Hp { get; set; }

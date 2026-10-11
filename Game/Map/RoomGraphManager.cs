@@ -313,6 +313,26 @@ public sealed class RoomGraphManager
                && keys.Count == 1;
     }
 
+    // Whether the map can take the room display of shown for other: the two bear
+    // the same name, and every exit shown prints on its exits line is an exit of
+    // other. That is the test a position match makes (RoomTracker.MatchesPredicted),
+    // and the exact (Name, ExitMask) search lands on such a room when shown itself
+    // has exits its display leaves out: an exit taken by a text command, or a
+    // hidden one, is in the graph and on no exits line. So a character standing in
+    // shown can be confirmed in other. False for a room with itself, and for a
+    // room the graph doesn't have.
+    public bool CouldBeTakenFor(RoomKey shown, RoomKey other)
+    {
+        if (shown == other) return false;
+        if (!_rooms.TryGetValue(shown, out Room? room) || !_rooms.TryGetValue(other, out Room? twin)) return false;
+        if (!string.Equals(room.Name, twin.Name, StringComparison.OrdinalIgnoreCase)) return false;
+        uint printed = 0;
+        foreach ((Direction direction, RoomExit exit) in room.Exits)
+            if (exit.Hint != RoomExitHint.Text && !MpFile.MegaMudHash.IsHidden(exit.Hint))
+                printed |= 1u << (int)direction;
+        return (printed & twin.ExitMask) == printed;
+    }
+
     // Rebuild the graph from setName's Rooms.json. Pass null to clear. Safe to
     // call repeatedly; idempotent on no-op transitions (same set still fires
     // GraphReloaded because the caller may have re-imported the underlying

@@ -224,11 +224,23 @@ public static class BugReportBuilder
               + $", {heldList.Worn?.Count ?? 0} worn, {heldList.Coins?.TotalCoinCount ?? 0} coin(s)"
               // Where a death by a hang-up in that room would put the character, and
               // what an earlier connection that judged nothing saw of the way back in.
+              // The list is the Stock map file's, and the row says how far it is
+              // trusted for the active game data.
               + (heldList.Room is { } hungUpIn
-                  ? "; its dead arrive in " + (Game.Recovery.HangupDeathArrivalRooms.For(new Game.Map.RoomKey(hungUpIn.Map, hungUpIn.Room)) is { } arrivals
-                      ? string.Join(" or ", arrivals) : "(not known for this room)")
+                  ? "; by the Stock map file its dead arrive in "
+                    + (Game.Recovery.HangupDeathArrivalRooms.For(new Game.Map.RoomKey(hungUpIn.Map, hungUpIn.Room)) is { } arrivals
+                        ? string.Join(" or ", arrivals) + svc.HangupArrivalListTrust switch
+                        {
+                            Game.Recovery.HangupArrivalListTrust.VanillaStock => "",
+                            Game.Recovery.HangupArrivalListTrust.Paradigm => " (Paradigm shares these rooms with Stock)",
+                            _ => " (not confirmed for this game data: the room it comes back in can say yes, never no)",
+                        }
+                        : svc.HangupArrivalListTrust == Game.Recovery.HangupArrivalListTrust.Paradigm
+                            ? $"(a room that file doesn't have; on Paradigm {Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault} is the one arrival room known for such rooms)"
+                            : "(a room that file doesn't have)")
                   : "")
               + (heldList.EntryRoomSince is { } cameBack ? $"; came back in {cameBack.Map}/{cameBack.Room} on a connection since" : "")
+              + (heldList.MovedBeforeEntryRoomKnownSince ? "; a connection since moved before the room it came back in was known" : "")
             : "(none)");
         // Whether the last hang-up the penalty could have killed for was taken
         // for a death, and on what.
