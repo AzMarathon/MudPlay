@@ -92,6 +92,14 @@ public sealed class PartyWealthTracker
         _readings[GivenName(givenName)] = (copper, _clock());
     }
 
+    // What a member last said they hold, in copper, however old the reading; null
+    // when they have never been read. For a judgement made after the fact (did a
+    // toll turn them away a moment ago?), where the last word is all there is.
+    public long? LastReading(string givenName) =>
+        !string.IsNullOrEmpty(givenName) && _readings.TryGetValue(GivenName(givenName), out (long Copper, DateTime At) r)
+            ? r.Copper
+            : null;
+
     // The party's minimum CONFIRMED on-hand wealth in copper, or null when the
     // party gate shouldn't apply (solo, not leading, or our own wallet unknown).
     // Pure cache read — MovementFilter calls this per toll exit during BFS, so it

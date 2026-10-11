@@ -1,5 +1,17 @@
 # Version history
 
+## 3.168.0
+
+- A follower left behind sends `@comeback`: a follow that failed at an exit, the leader seen leaving without it, or (Stock) its own `par` showing the leader `[Invited]`
+- No `@comeback` after an uninvite, a typed `leave`, a move of your own, a death or a teleport split
+- One request per split; it waits out Auto-All off or a party train trip, then goes out
+- The leader asked back is rejoined on its invite, whatever Join party if invited says
+- A party follower never flees: low HP or mana, Hit and Run, a failed backstab, PvP, a Flee monster
+- `[Invited]` rows in `par` no longer make a follower's client think it leads
+- Leader: followers left behind together are fetched one after the other
+- At an exit that turns a member away: a loop refuses, Auto-Lair invites on its next pass, a walk-to goes back once then ends; a Stock follower whose leader refuses or never comes stops following
+- Party train: nothing stops the trip, members hold their request, and the leader fetches everyone it left when the training is done (not after a trip you ended yourself)
+
 ## 3.167.21
 
 - After a death, walks and loops avoid tolls, fares and sailings until the inventory is re-read; an arena death takes nothing
