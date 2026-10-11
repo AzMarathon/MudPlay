@@ -1845,6 +1845,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // A room command that only works in an empty room waits for the room to
         // clear instead of going out to be refused.
         if (HeldForEmptyRoom(step, alreadySent: false)) return;
+        if (step is MoveLoopStep tollMove && TurnedAsideAtToll(tollMove)) return;
         // Auto-sneak wants a sneak in place before we step; it holds the coordinator
         // meanwhile and the resume re-drives this step.
         if (step is MoveLoopStep && _moveReadyCheck?.Invoke() == false) return;
@@ -1857,6 +1858,49 @@ public sealed class LoopRunner : IRecoverableEngine
             case MoveLoopStep move:    SendMove(move);    break;
             case CommandLoopStep cmd:  SendCommand(cmd);  break;
         }
+    }
+
+    // Asked before a step through a toll exit (PartyTollGate.BeforeTollStep), as
+    // the walker asks it (AutoWalkManager.TurnedAsideAtToll). Hold: a movement gate
+    // is up and the resume re-drives the step. Closed: the party can't be taken
+    // through, so the loop is planned again from here with that exit shut, round
+    // it where a way exists and to a stop naming it where none does (UnpaidRefusalFor).
+    private Func<RoomKey, Direction, RoomExit, PartyTollGate.StepVerdict>? _tollStepCheck;
+    public void SetTollStepCheck(Func<RoomKey, Direction, RoomExit, PartyTollGate.StepVerdict> check)
+    {
+        ArgumentNullException.ThrowIfNull(check);
+        _tollStepCheck = check;
+    }
+
+    private bool _turningAtToll;
+
+    private bool TurnedAsideAtToll(MoveLoopStep step)
+    {
+        if (_tollStepCheck is not { } check || _loop is not { } loop) return false;
+        if (_tracker.State.CurrentRoom is not { } room
+            || !room.Exits.TryGetValue(step.Direction, out RoomExit exit)
+            || exit.Hint != RoomExitHint.Toll || exit.TollGold <= 0)
+            return false;
+        switch (check(room.Key, step.Direction, exit))
+        {
+            case PartyTollGate.StepVerdict.Go:
+                return false;
+            case PartyTollGate.StepVerdict.Hold:
+                return true;
+        }
+        string toll = PaidCrossingDescriber.Describe(room.Key, step.Direction, in exit, RoomNameOf);
+        // The plan made for it came straight back to the same toll: it would for ever.
+        if (_turningAtToll)
+        {
+            FailStep($"stopped at {toll}: the party can't all pay it");
+            return true;
+        }
+        _log?.Info("LoopRunner",
+            $"step {_index + 1}/{_expandedSteps.Count}: {toll} isn't taken with the party; planning the loop again without it");
+        _turningAtToll = true;
+        try { StartInternal(loop, isRecovery: true); }
+        finally { _turningAtToll = false; }
+        return true;
     }
 
     private void SendMove(MoveLoopStep step)

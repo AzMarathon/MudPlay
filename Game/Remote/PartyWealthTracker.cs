@@ -3,58 +3,62 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Remote;
 
-// Demand-driven party-wealth gate for path planning. Unlike the level tracker —
-// which keeps every member's level warm on every roster change because level is
-// stable — wealth drifts constantly with loot / spend, so it is NOT kept warm.
-// It's polled only when a route actually needs it: Probe fires an @wealth round
-// only when the walker/loop is about to walk a route that crosses a (Toll: N)
-// exit. No toll on the planned path, no poll.
+// What a leader's client knows of its followers' purses, for the crossings that
+// charge each crosser. Unlike the level tracker, which keeps every member's level
+// warm because a level is stable, wealth drifts with loot and spending, so it is
+// asked for only when a route needs it and believed only briefly.
 //
-// The synchronous gate and the async probe are decoupled through the reading
-// cache. Two distinct entry points:
-//   MinWealth — a pure cache read. MovementFilter calls it per-exit while BFS
-//     evaluates a toll, and it answers from the last poll's readings without
-//     touching the wire. This is why it must NOT probe: BFS explores off-path
-//     toll edges too (any toll edge inside the search frontier, in any
-//     direction), so probing from here would fire an @wealth for a toll the
-//     party will never actually walk through.
-//   Probe — the route-scoped trigger. The walk-start sites
-//     (AutoWalkManager / LoopRunner) call MovementFilter.WarmForRoute, which
-//     probes ONLY when the tolls-permitted shortest route actually crosses a
-//     toll. Debounced (via the post seam, since it touches the wire) so one
-//     expansion of a multi-segment loop fires at most one round-trip.
+// Two users, with two rules:
+//   - NPC fares and boat fares (MinWealth): the party's poorest CONFIRMED purse. A
+//     follower with no fresh reading is skipped, not counted as broke, so a fare
+//     is refused only when someone known can't pay it.
+//   - Toll exits (FreshPurse, Verify): every follower is asked before the party
+//     steps through one, and one who doesn't answer counts as unable to pay
+//     (user, 2026-10-10). PartyTollGate holds the step, asks here and decides.
 //
-// A follower with no fresh reading is NOT treated as broke — we don't block a
-// toll on a wallet we simply haven't read. Instead the walk-start Probe fires an
-// @wealth round for the missing readings and the gate folds in only the members
-// we've confirmed, blocking the toll only when self or a KNOWN follower can't
-// cover it. So a party that can afford the toll walks it on the first pass
-// instead of detouring while the probe warms up; a follower confirmed short by a
-// reply routes the party around on the next evaluation. (There's a one-pass
-// window before the reply lands where an unread-but-broke follower could be led
-// to the toll — accepted: tolls are rare, and the probe closes the window fast.)
+// Nothing here touches the wire from a route search. MinWealth and FreshPurse are
+// cache reads: BFS explores toll and fare edges the party will never walk, so a
+// probe from there would ask about crossings nobody takes. Probe is the
+// route-scoped ask (MovementFilter.WarmForRoute, only when the route a walk would
+// take crosses a paid exit), and Verify the ask at the toll itself.
 //
-// Self wealth is folded in from the same live snapshot MovementFilter's self-only
-// branch reads; when our own wallet is unknown the gate stands down (returns
-// null → self-only branch, which also won't refuse on an unknown wallet), matching
-// the established "an unknown wallet never refuses a walk" rule for self.
+// Our own purse is folded into MinWealth from the same live snapshot
+// MovementFilter's self-only branch reads; when it is unknown MinWealth stands
+// down (null), matching "an unknown wallet never refuses a walk".
 public sealed class PartyWealthTracker
 {
+    // What is known of one follower's purse, as far as a toll about to be crossed
+    // goes. Unasked: no answer and no ask that could have had one. Silent: asked,
+    // and no usable answer came inside the probe's window. Read: they said.
+    public enum PurseKnowledge { Unasked, Silent, Read }
+
     private readonly PartyState _party;
     private readonly PartyWealthProbe _probe;
     private readonly Func<long?> _selfWealth;
     private readonly Action<Action> _post;
     private readonly Func<DateTime> _clock;
     private readonly LogService? _log;
-    private readonly Dictionary<string, (long Copper, DateTime At)> _readings =
-        new(StringComparer.OrdinalIgnoreCase);
-    private DateTime _lastPollAt = DateTime.MinValue;
 
-    // A reading older than this is treated as absent (gates the toll), and a poll
-    // older than this re-fires on the next MinWealth. One window governs both:
-    // wealth drifts, so a reading only stays trustworthy briefly, and the same
-    // horizon debounces the demand-poll so a single BFS (many toll-exit probes)
-    // fires at most one @wealth round-trip.
+    // Guards the readings and the silences: a route can be planned off the UI
+    // thread while a reply lands on it.
+    private readonly object _readingsLock = new();
+    private readonly Dictionary<string, (long Copper, DateTime At, long Seq)> _readings =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (DateTime At, long Seq)> _silent =
+        new(StringComparer.OrdinalIgnoreCase);
+    // Readings and silences are numbered as they land, and ExpireReadings voids
+    // everything numbered so far: a clock can't order two things in one instant.
+    private long _seq;
+    private long _expiredThrough;
+
+    private DateTime _lastPollAt = DateTime.MinValue;
+    private bool _queryInFlight;
+    private readonly List<Action> _onSettled = new();
+
+    // A reading older than this is treated as absent, and a route-scoped poll
+    // older than this re-fires on the next Probe. One window governs both: wealth
+    // drifts, so a reading only stays trustworthy briefly, and the same horizon
+    // debounces the poll so one route expansion fires at most one @wealth round.
     public TimeSpan FreshnessWindow { get; set; } = TimeSpan.FromSeconds(30);
 
     public PartyWealthTracker(
@@ -89,44 +93,104 @@ public sealed class PartyWealthTracker
     public void Record(string givenName, long copper)
     {
         if (string.IsNullOrEmpty(givenName)) return;
-        _readings[GivenName(givenName)] = (copper, _clock());
+        string given = GivenName(givenName);
+        lock (_readingsLock)
+        {
+            _readings[given] = (copper, _clock(), ++_seq);
+            _silent.Remove(given);
+        }
     }
 
     // What a member last said they hold, in copper, however old the reading; null
     // when they have never been read. For a judgement made after the fact (did a
     // toll turn them away a moment ago?), where the last word is all there is.
-    public long? LastReading(string givenName) =>
-        !string.IsNullOrEmpty(givenName) && _readings.TryGetValue(GivenName(givenName), out (long Copper, DateTime At) r)
-            ? r.Copper
-            : null;
+    public long? LastReading(string givenName)
+    {
+        if (string.IsNullOrEmpty(givenName)) return null;
+        lock (_readingsLock)
+            return _readings.TryGetValue(GivenName(givenName), out (long Copper, DateTime At, long Seq) r) ? r.Copper : null;
+    }
 
     // The party's minimum CONFIRMED on-hand wealth in copper, or null when the
     // party gate shouldn't apply (solo, not leading, or our own wallet unknown).
-    // Pure cache read — MovementFilter calls this per toll exit during BFS, so it
-    // must not touch the wire (BFS explores off-path toll edges the party never
-    // walks; the route-scoped Probe handles the actual poll). A follower with no
-    // fresh reading is skipped, not counted as broke: we fold in only self plus
-    // the members we've confirmed, so the toll blocks only when someone KNOWN
-    // can't cover it. The walk-start Probe fetches the missing readings so a
-    // later pass gates on the confirmed figure.
+    // For fares, which are refused only on a purse someone has reported: a
+    // follower with no fresh reading is skipped, not counted as broke.
     public long? MinWealth()
     {
-        if (!_party.IsInParty || !_party.SelfIsLeader) return null;
+        if (!Leading) return null;
         if (_selfWealth() is not { } self) return null;   // our own wallet unknown → stand down
 
         long min = self;
         DateTime now = _clock();
-        foreach (PartyMember m in _party.Members)
+        lock (_readingsLock)
         {
-            if (m.IsSelf || string.IsNullOrEmpty(m.Name)) continue;
-            string given = GivenName(m.Name);
-            if (_readings.TryGetValue(given, out (long Copper, DateTime At) r)
-             && now - r.At <= FreshnessWindow)
-                min = Math.Min(min, r.Copper);
-            // else: unread / stale follower — don't gate on an unknown wallet;
-            // the walk-start Probe warms it for a later confirmed evaluation.
+            foreach (PartyMember m in _party.Members)
+            {
+                if (m.IsSelf || string.IsNullOrEmpty(m.Name)) continue;
+                if (_readings.TryGetValue(GivenName(m.Name), out (long Copper, DateTime At, long Seq) r)
+                 && now - r.At <= FreshnessWindow)
+                    min = Math.Min(min, r.Copper);
+            }
         }
         return min;
+    }
+
+    // Whether this character leads a party: the only case in which anyone else's
+    // purse is ours to check.
+    public bool Leading => _party.IsInParty && _party.SelfIsLeader;
+
+    // The members who cross with us, by given name: everyone listed but ourselves
+    // and those invited and not yet following.
+    public IReadOnlyList<string> Followers()
+    {
+        List<string> followers = new();
+        foreach (PartyMember m in _party.Members)
+        {
+            if (m.IsSelf || m.IsInvited || string.IsNullOrEmpty(m.Name)) continue;
+            followers.Add(GivenName(m.Name));
+        }
+        return followers;
+    }
+
+    // What a follower's purse is known to hold as far as a toll goes: their answer
+    // or their silence, whichever is later, while it is inside the freshness window
+    // and no toll has been crossed since (ExpireReadings).
+    public (PurseKnowledge Knowledge, long Copper) FreshPurse(string givenName)
+    {
+        if (string.IsNullOrEmpty(givenName)) return (PurseKnowledge.Unasked, 0);
+        string given = GivenName(givenName);
+        DateTime now = _clock();
+        lock (_readingsLock)
+        {
+            bool read = _readings.TryGetValue(given, out (long Copper, DateTime At, long Seq) r)
+                && r.Seq > _expiredThrough && now - r.At <= FreshnessWindow;
+            bool silent = _silent.TryGetValue(given, out (DateTime At, long Seq) s)
+                && s.Seq > _expiredThrough && now - s.At <= FreshnessWindow;
+            if (read && (!silent || r.Seq > s.Seq)) return (PurseKnowledge.Read, r.Copper);
+            return silent ? (PurseKnowledge.Silent, 0) : (PurseKnowledge.Unasked, 0);
+        }
+    }
+
+    // Coin we handed a follower and saw the game confirm: they hold at least that
+    // on top of what they last said, or at least that when they said nothing.
+    public void NoteGiven(string givenName, long copper)
+    {
+        if (string.IsNullOrEmpty(givenName) || copper <= 0) return;
+        string given = GivenName(givenName);
+        long held = FreshPurse(given) is (PurseKnowledge.Read, long had) ? had : 0;
+        lock (_readingsLock)
+        {
+            _readings[given] = (held + copper, _clock(), ++_seq);
+            _silent.Remove(given);
+        }
+    }
+
+    // The party has just gone through a toll: every purse paid, or its owner was
+    // turned away, so nothing said before it answers for the next one. The
+    // readings stay for LastReading, which wants the last word whatever its age.
+    public void ExpireReadings()
+    {
+        lock (_readingsLock) _expiredThrough = _seq;
     }
 
     // The master switch (true = off): off, no @wealth round-trip is started. The
@@ -135,19 +199,65 @@ public sealed class PartyWealthTracker
     public Func<bool>? MasterSwitchOff { get; set; }
 
     // Fire an @wealth probe when the last one is older than the freshness window.
-    // Fire-and-forget on the UI thread; the replies land via Record for the next
-    // plan. Debounced so one route expansion (a multi-segment loop can hit
-    // several toll legs) fires at most one round-trip. Called route-scoped from
-    // MovementFilter.WarmForRoute — only when the tolls-permitted shortest route
-    // actually crosses a toll — so nothing polls on an off-path toll edge.
+    // The replies land via Record, and whoever gave none is noted silent, for the
+    // check at the toll. Debounced so one route expansion (a multi-segment loop
+    // can hit several toll legs) fires at most one round-trip. Called
+    // route-scoped from MovementFilter.WarmForRoute, so nothing polls for a paid
+    // exit that is only inside the search frontier.
     public void Probe()
     {
         if (MasterSwitchOff?.Invoke() == true) return;
+        if (_clock() - _lastPollAt < FreshnessWindow) return;
+        _log?.Info("PartyWealth", "A toll or fare is on the planned route: asking the party's purses (@wealth).");
+        StartQuery();
+    }
+
+    // Ask every member's purse now and run onSettled when the round is over: all
+    // have answered, or the probe's window has passed. A round already under way
+    // is joined, not doubled. With the master switch off nobody is asked and
+    // onSettled runs at once.
+    public void Verify(Action onSettled)
+    {
+        ArgumentNullException.ThrowIfNull(onSettled);
+        if (MasterSwitchOff?.Invoke() == true)
+        {
+            onSettled();
+            return;
+        }
+        _onSettled.Add(onSettled);
+        if (!_queryInFlight) StartQuery();
+    }
+
+    private void StartQuery()
+    {
+        _queryInFlight = true;
+        _lastPollAt = _clock();
+        // Posted: the ask goes on the wire outside the planning or step-sending
+        // call that wanted it.
+        _post(() => _probe.Query(OnQueryComplete));
+    }
+
+    private void OnQueryComplete(PartyWealthProbe.PartyWealthResult result)
+    {
         DateTime now = _clock();
-        if (now - _lastPollAt < FreshnessWindow) return;
-        _lastPollAt = now;
-        _log?.Info("PartyWealth", "Toll on the planned route — probing party @wealth.");
-        _post(() => _ = _probe.QueryAsync());
+        List<string> unanswered = new();
+        lock (_readingsLock)
+        {
+            foreach (string given in Followers())
+            {
+                if (result.WealthByMember.ContainsKey(given)) continue;
+                _silent[given] = (now, ++_seq);
+                unanswered.Add(given);
+            }
+        }
+        if (unanswered.Count > 0)
+            _log?.Info("PartyWealth",
+                $"No purse read from {string.Join(", ", unanswered)} inside the @wealth window: counted as unable to pay a toll.");
+
+        _queryInFlight = false;
+        Action[] waiting = _onSettled.ToArray();
+        _onSettled.Clear();
+        foreach (Action settled in waiting) settled();
     }
 
     private static string GivenName(string name)

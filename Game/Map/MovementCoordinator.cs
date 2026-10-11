@@ -183,6 +183,12 @@ public sealed class MovementCoordinator
     // window, and is capped by its owner just past it. Engine-wait tier.
     public const string PartyItemCountGate = "PartyItemCount";
 
+    // Asserted by PartyTollGate at a toll exit a leader's engine is about to step
+    // through, while the followers' purses are asked for and while coin handed to
+    // those who are short waits for the game to confirm it. Ends with the @wealth
+    // window or the last confirmation, each bounded by its owner.
+    public const string PartyTollGate = "PartyToll";
+
     // Asserted by PartyFollowerMovementGate while the local character is a
     // party follower (in a party but not the leader). MajorMUD movement is
     // leader-driven — the leader walks and the game drags followers along — so

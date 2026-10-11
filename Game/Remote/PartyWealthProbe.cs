@@ -66,6 +66,8 @@ public sealed partial class PartyWealthProbe : IDisposable
         public readonly Dictionary<string, long> Wealth = new(StringComparer.OrdinalIgnoreCase);
         public readonly TaskCompletionSource<PartyWealthResult> Tcs =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Told the result where the query completes, on the thread it completes on.
+        public Action<PartyWealthResult>? OnComplete;
     }
 
     private readonly PartyBroadcaster _broadcaster;
@@ -136,11 +138,27 @@ public sealed partial class PartyWealthProbe : IDisposable
     // Broadcast @wealth to the party and complete once every member replies or
     // QueryWindow elapses. Returns an empty result immediately when the party
     // has no one else to ask.
-    public Task<PartyWealthResult> QueryAsync()
-    {
-        if (_disposed) return Task.FromResult(PartyWealthResult.Empty);
+    public Task<PartyWealthResult> QueryAsync() => Begin(onComplete: null);
 
-        PendingQuery pending = new();
+    // The same round-trip for a caller that must act on the answer where it lands
+    // (the toll check holds a walk's step for it): onComplete runs once, when every
+    // member has replied or QueryWindow elapses, and at once when there is nobody
+    // to ask.
+    public void Query(Action<PartyWealthResult> onComplete)
+    {
+        ArgumentNullException.ThrowIfNull(onComplete);
+        Begin(onComplete);
+    }
+
+    private Task<PartyWealthResult> Begin(Action<PartyWealthResult>? onComplete)
+    {
+        if (_disposed)
+        {
+            onComplete?.Invoke(PartyWealthResult.Empty);
+            return Task.FromResult(PartyWealthResult.Empty);
+        }
+
+        PendingQuery pending = new() { OnComplete = onComplete };
         foreach (PartyMember m in _party.Members)
         {
             if (m.IsSelf) continue;
@@ -150,7 +168,10 @@ public sealed partial class PartyWealthProbe : IDisposable
         pending.Expected = pending.Remaining.Count;
 
         if (pending.Expected == 0)
+        {
+            onComplete?.Invoke(PartyWealthResult.Empty);
             return Task.FromResult(PartyWealthResult.Empty);
+        }
 
         _pending.Add(pending);
         _broadcaster.Broadcast("@wealth");
@@ -163,12 +184,14 @@ public sealed partial class PartyWealthProbe : IDisposable
         if (_disposed) return;
         _disposed = true;
         _chat.EntryClassified -= OnChatEntry;
-        foreach (PendingQuery p in _pending.ToArray())
+        PendingQuery[] open = _pending.ToArray();
+        _pending.Clear();
+        foreach (PendingQuery p in open)
         {
             p.Completed = true;
             p.Tcs.TrySetResult(PartyWealthResult.Empty);
+            p.OnComplete?.Invoke(PartyWealthResult.Empty);
         }
-        _pending.Clear();
     }
 
     private void OnChatEntry(ChatLogEntry entry)
@@ -213,11 +236,13 @@ public sealed partial class PartyWealthProbe : IDisposable
         _pending.Remove(p);
 
         int replied = p.Expected - p.Remaining.Count;
-        p.Tcs.TrySetResult(new PartyWealthResult(
+        PartyWealthResult result = new(
             p.Expected, replied,
-            new Dictionary<string, long>(p.Wealth, StringComparer.OrdinalIgnoreCase)));
+            new Dictionary<string, long>(p.Wealth, StringComparer.OrdinalIgnoreCase));
+        p.Tcs.TrySetResult(result);
         _log?.Info("PartyWealth",
             $"@wealth — {replied}/{p.Expected} replied, {p.Wealth.Count} wallets known.");
+        p.OnComplete?.Invoke(result);
     }
 
     private void DefaultArmWindow(Action onElapsed)

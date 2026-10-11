@@ -623,6 +623,10 @@ public sealed class AppServices
 
     // The `i` a refused toll or fare asks for, kept owed while it can't be sent.
     public Game.Inventory.OwedPurseRead PurseRead { get; private set; } = null!;
+
+    // A leader's check at a toll exit: every follower's purse asked, the short
+    // ones paid for when we can spare it, the exit closed to the party otherwise.
+    public Game.Map.PartyTollGate PartyToll { get; private set; } = null!;
     public Game.Remote.PathReplyTracker PathReply { get; private set; } = null!;
     public Game.Remote.LeaderBossTravelProbe LeaderBossTravel { get; private set; } = null!;
 
@@ -8709,6 +8713,43 @@ public sealed class AppServices
         {
             if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;
         };
+
+        // A party at a toll exit (user, 2026-10-10): every follower's purse is
+        // asked before the leader's engine steps through, whoever is short or
+        // silent is handed the coin when we can spare it, and otherwise the exit
+        // is closed to the party, so the route goes round or the walk ends saying
+        // why. What we spare leaves our own toll and a trip's reserved fees alone.
+        PartyToll = new Game.Map.PartyTollGate(
+            PartyWealth,
+            ownPurse: () => Inventory.IsLoaded ? Inventory.Snapshot.Currency.TotalCopperValue : (long?)null,
+            reservedCopper: () => Movement.ReservedCopper,
+            holdings: () => Inventory.IsLoaded ? Inventory.Snapshot.Currency : null,
+            runicName: () => Currency.RunicName,
+            send: cmd => SendGameCommand(cmd),
+            assertGate: reason => MovementCoordinator.AssertGate(
+                Game.Map.MovementCoordinator.PartyTollGate, nameof(PartyToll), reason),
+            clearGate: reason => MovementCoordinator.ClearGate(
+                Game.Map.MovementCoordinator.PartyTollGate, nameof(PartyToll), reason),
+            schedule: uiOneShot,
+            roomName: key => RoomGraph.GetRoom(key)?.Name,
+            log: Log)
+        {
+            MasterSwitchOff = MasterSwitchOff("Party polls"),
+            // Read when asked: the comeback manager is built further down.
+            WentBackFor = (given, from, to) => PartyComeback.WentBackFor(given, from, to),
+        };
+        Movement.PartyTollClosedProbe = exit => PartyToll.Closes(in exit);
+        Movement.PartyTollClosedReason = exit => PartyToll.DescribeClosed(in exit);
+        Walker.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
+        LoopRunner.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
+        Inventory.CoinsGivenAway += (recipient, copper) => PartyToll.OnCoinsGivenAway(recipient, copper);
+        Inventory.GiveRefused += recipient => PartyToll.OnGiveRefused(recipient);
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.PreviousRoom is { } left && t.NewRoom is { } now && left.Key != now.Key)
+                PartyToll.NoteRoomChanged(left, now.Key);
+        };
+        Profile.ProfileLoaded += _ => PartyToll.Reset();
 
         // A held or knocked-down character can't walk and isn't dragged by a leader,
         // so a move that lands proves a latched hold is stale (its wear-off line was

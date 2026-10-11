@@ -2365,6 +2365,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // clear instead of going out to be refused.
         if (HeldForEmptyRoom(_path[_index], alreadySent: false)) return;
         if (HaltsBeforeBossRoom(_path[_index])) return;
+        if (TurnedAsideAtToll(_path[_index])) return;
 
         WalkStep step = _path[_index];
         // Auto-sneak wants a sneak in place before we step; it holds the coordinator
@@ -2389,6 +2390,48 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 SendSysGotoStep(sysGoto);
                 break;
         }
+    }
+
+    // Asked before a step through a toll exit, with the room, the way and the exit
+    // (PartyTollGate.BeforeTollStep): a leader's party is checked there, every
+    // member's purse, before anyone is charged. Hold means a movement gate is up
+    // and the resume re-drives this step; Closed means the party can't be taken
+    // through, and the walk plans again with that exit shut to it.
+    private Func<RoomKey, Direction, RoomExit, PartyTollGate.StepVerdict>? _tollStepCheck;
+    public void SetTollStepCheck(Func<RoomKey, Direction, RoomExit, PartyTollGate.StepVerdict> check)
+    {
+        ArgumentNullException.ThrowIfNull(check);
+        _tollStepCheck = check;
+    }
+
+    private bool TurnedAsideAtToll(WalkStep step)
+    {
+        if (_tollStepCheck is not { } check || step is not MoveStep move) return false;
+        if (_tracker.State.CurrentRoom is not { } room
+            || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)
+            || exit.Hint != RoomExitHint.Toll || exit.TollGold <= 0)
+            return false;
+        switch (check(room.Key, move.Direction, exit))
+        {
+            case PartyTollGate.StepVerdict.Go:
+                return false;
+            case PartyTollGate.StepVerdict.Hold:
+                return true;
+        }
+        if (_destination is not { } dest) return false;
+        string toll = PaidCrossingDescriber.Describe(room.Key, move.Direction, in exit, RoomNameOf);
+        // Counted against the walk's re-plans: a plan that came back through the
+        // same toll would otherwise turn here for ever.
+        if (_replanCount >= MaxReplansPerWalk)
+        {
+            Raise(new WalkEvent(WalkEventKind.Failed, $"stopped at {toll}: the party can't all pay it", _destination));
+            Reset();
+            return true;
+        }
+        _replanCount++;
+        _log?.Info("Walker", $"step {_index + 1}: {toll} isn't taken with the party; re-planning without it");
+        ReplanInPlace(dest);
+        return true;
     }
 
     // True when the step's exit demands an item we lack AND an acquisition for it

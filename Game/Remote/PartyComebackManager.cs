@@ -644,6 +644,13 @@ public sealed class PartyComebackManager : IDisposable
     public IReadOnlyList<string> FetchedAtGates => _gateFetches
         .Select(f => $"{f.Given} from {f.From.Map}/{f.From.Room} ({f.Engine}{(f.Proven ? ", turned away again" : "")})").ToList();
 
+    // Whether we went back for this member from this exit on the run under way: the
+    // pickup JudgeGateDrop noted, which stands until they are seen through the exit
+    // or the run is over. PartyTollGate asks it before paying a member's toll a
+    // second time at the exit that turned them away.
+    public bool WentBackFor(string given, RoomKey from, RoomKey to) =>
+        _gateFetches.Exists(f => SameName(f.Given, given) && f.From == from && f.To == to);
+
     private ResumeKind EngineInCharge => _busy ? _resume.Kind : SnapshotRunningEngine().Kind;
 
     // Each room change: was it an engine's step through an exit that lets through

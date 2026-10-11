@@ -202,6 +202,11 @@ public sealed partial class InventoryManager : IDisposable
     // what a party member was handed is remembered from it and not from the send.
     public event Action<string, int, string>? ItemGivenAway;
 
+    // The game confirmed a coin hand-over of ours: (recipient as the line names
+    // them, what the coins it counted are worth in copper). The count is the
+    // game's, which on Stock is what the recipient had room to keep.
+    public event Action<string, long>? CoinsGivenAway;
+
     // The game refused a give of ours. Carries the player the line names, or null
     // for the refusal that names nobody. A give waiting to be confirmed stops
     // waiting on it rather than on a timer.
@@ -787,7 +792,7 @@ public sealed partial class InventoryManager : IDisposable
         // for `give`, and the full coin noun ("30 gold crowns") for `share`.
         Match coinsAway = GaveCoinsAwayRegex().Match(line);
         if (coinsAway.Success
-            && TryApplyCoinHandOver(coinsAway.Groups[1].Value, coinsAway.Groups[2].Value, -1))
+            && TryApplyCoinHandOver(coinsAway.Groups[2].Value, coinsAway.Groups[3].Value, -1, coinsAway.Groups[1].Value))
             return;
 
         Match coinsIn = ReceivedCoinsRegex().Match(line);
@@ -804,7 +809,8 @@ public sealed partial class InventoryManager : IDisposable
 
         Match handedCoinsAway = HandedCoinsAwayRegex().Match(line);
         if (handedCoinsAway.Success && CoinNounSuffixRegex().IsMatch(handedCoinsAway.Groups[2].Value)
-            && TryApplyCoinHandOver(handedCoinsAway.Groups[1].Value, handedCoinsAway.Groups[2].Value, -1))
+            && TryApplyCoinHandOver(handedCoinsAway.Groups[1].Value, handedCoinsAway.Groups[2].Value, -1,
+                handedCoinsAway.Groups[3].Value))
             return;
 
         // Failed give: "You don't have a torch to give." — no state change (we
@@ -1347,12 +1353,19 @@ public sealed partial class InventoryManager : IDisposable
         return true;
     }
 
-    private bool TryApplyCoinHandOver(string countText, string coin, int sign)
+    // givenTo: the recipient a hand-over of ours names; null for coins handed to us.
+    private bool TryApplyCoinHandOver(string countText, string coin, int sign, string? givenTo = null)
     {
         if (HandOverCoinNoun(coin) is not { } noun || !int.TryParse(countText, out int count))
             return false;
         lock (_lock) AdjustCurrency(noun, sign * count);
         Changed?.Invoke();
+        // The noun's first word is the metal CurrencyHoldings.ToCopper keys on.
+        if (givenTo is not null)
+        {
+            int space = noun.IndexOf(' ');
+            CoinsGivenAway?.Invoke(givenTo, CurrencyHoldings.ToCopper(space > 0 ? noun[..space] : noun, count));
+        }
         return true;
     }
 
@@ -1792,11 +1805,11 @@ public sealed partial class InventoryManager : IDisposable
     [GeneratedRegex(@"^\S+ gives you (\d+) ([^.]+)$")]
     private static partial Regex HandedCoinsRegex();
 
-    [GeneratedRegex(@"^You give (\d+) ([^.]+) to [^\s.]+$")]
+    [GeneratedRegex(@"^You give (\d+) ([^.]+) to ([^\s.]+)$")]
     private static partial Regex HandedCoinsAwayRegex();
 
     // A coin hand-over: count, then the coin. Giver and recipient are one word.
-    [GeneratedRegex(@"^You gave \S+ (\d+) (.+?)\.?$")]
+    [GeneratedRegex(@"^You gave (\S+) (\d+) (.+?)\.?$")]
     private static partial Regex GaveCoinsAwayRegex();
 
     [GeneratedRegex(@"^\S+ gave you (\d+) (.+?)\.?$")]
