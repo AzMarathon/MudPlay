@@ -1376,7 +1376,7 @@ The sender's client puts the code of the loop it is about to send on its offer. 
 - **`verified`**: they are the same. The loop you have is the loop that was offered.
 - **does not match the loop offered**: they differ, so the loop was damaged on the way or lines of another transfer got in. It is **not saved**; ask again.
 - **`not verified: no code came with the offer`**: the sender's client is older than the code. The loop is taken as it always was, unchecked.
-- **`not verified: its lair wait is one this client does not know and was taken as off`**: the sender's client is newer than yours and the loop uses a way of waiting yours doesn't have. It is saved with the lair wait off, as before, and can't be checked because of that one difference.
+- **`not verified: it uses a setting this version does not know`**: the sender's client is newer than yours and the loop's lair wait is a way of waiting yours doesn't have. It is saved with the lair wait off, as before, and can't be checked because of that one difference.
 
 When the transfer is over **your client tells the sender what became of it**, once, on the channel the loop came by: saved (and under which name), already held (and as which loop), or not saved and why. The sender's client shows that in the sender's terminal with whether your code is the code it sent, so both of you can see the two ends hold the same loop. What holds the answer back: with **your master switch off** nothing is sent (the loop is still taken, since you typed the yes); and a **not saved** answer is a failure answer, so it goes only when **Warn sender on invalid / denied remote command** (Settings → Talk) is on. Saved and already-held answers go whatever that setting says. The answer is sent like any remote reply: in braces, and by telepath in place of a say while you are sneaking.
 
@@ -1395,7 +1395,7 @@ Clients on an older version:
 - **Master switch off on the client asked:** ignored, no answer.
 - **Master switch off on the asking client:** the loop is still taken and saved (you typed the yes), but the sender is not told what became of it. The program log says so.
 - **The loop was changed between the offer and your yes:** it is not sent, and you are told to ask again (when the sender's Warn setting is on).
-- **On gangpath or say, the answer goes to that channel too.** A client there that sent the same player another loop in the last ten minutes takes the answer as being about its own, and shows it with the codes not matching. Use telepath.
+- **On gangpath or say, the answer goes to that channel too**, where every client hears it. A sending client there takes it as its own only when the code in it is the code of the loop it sent that player; an answer with any other code, or with none, is somebody else's and is passed over. So on those channels the sender's notice appears for a loop that arrived as sent, and a *not saved* answer shows only as the line itself. By telepath every answer is shown, a differing code as the mismatch it is. Use telepath.
 - **On the sending client's screen:** the outgoing lines, then the notice with the asker's answer. Its program log notes who asked for which loop, the yes or no, the send, and the answer with both codes.
 
 #### @lair

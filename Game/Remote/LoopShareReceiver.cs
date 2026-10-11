@@ -82,6 +82,12 @@ public sealed class LoopShareReceiver : IDisposable
     // players see the two ends hold the same loop, or that it has to be sent again
     // (user, 2026-10-11). An older sender's client shows the line and does nothing
     // with it.
+    //
+    // Every transfer that completes gets exactly one answer, the two that fail
+    // before a loop is in hand included: lines that could not be put together, and
+    // nowhere to save (decided 2026-10-11). With the master switch off the loop is
+    // still taken, the user having typed the yes, and the sender is not told: with
+    // that switch off nothing goes out by itself (decided 2026-10-11).
     private void Tell(RemoteChannel channel, string sender, string? code, string outcome, bool failed = false)
     {
         if (_tell is null) return;
@@ -190,8 +196,9 @@ public sealed class LoopShareReceiver : IDisposable
         {
             // Its lair wait is a later version's and was read as off, so the loop in
             // hand differs from the one offered in that setting, knowingly. Taken as
-            // it always was, unchecked.
-            verification = "not verified: its lair wait is one this client does not know and was taken as off";
+            // it always was, unchecked, and the notice says why (decided 2026-10-11;
+            // the other course was to turn it away as not the loop offered).
+            verification = "not verified: it uses a setting this version does not know";
         }
         else if (offered is null)
         {

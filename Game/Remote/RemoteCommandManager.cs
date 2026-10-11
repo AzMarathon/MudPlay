@@ -808,7 +808,7 @@ public sealed class RemoteCommandManager : IDisposable
     //
     // What holds it back:
     // - The master switch. With it off nothing goes out by itself, this included.
-    //   The loop is still taken: the user typed the yes.
+    //   The loop is still taken: the user typed the yes (decided 2026-10-11).
     // - failed, with the Warn setting off. "It did not arrive, send again" is a
     //   failure answer and follows that setting like every other.
     // An answer that says what was done with what the user accepted (saved, or

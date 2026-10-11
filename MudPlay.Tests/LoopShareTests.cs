@@ -446,7 +446,8 @@ public sealed class LoopShareTests : IDisposable
         receiver.Ingest(Tele("Raijin", $"{{{LoopShareHandler.DataToken} a1b2 1/1 {blob}}}"));
 
         Assert.Equal(LairEntryDebuffMode.Off, loops.Get("Later")!.LairEntryDebuff);
-        Assert.Contains("not verified: its lair wait is one this client does not know", notices.Single());
+        Assert.Equal($"[Received loop 'Later' 2 rooms from Raijin ({LoopSignature.ShortOf(loops.Get("Later")!)}, "
+            + "not verified: it uses a setting this version does not know)]", notices.Single());
     }
 
     // The asker said yes to the loop as it was offered. Changed since, it is not
@@ -729,6 +730,38 @@ public sealed class LoopShareTests : IDisposable
         _now += TimeSpan.FromMinutes(11);
         share.NoteChat(Tele("Raijin", $"{{@loopresult {code} saved as 'King's Road'}}"));
         Assert.Empty(notices);
+    }
+
+    // On gangpath or say the answer is heard by every client there. One with another
+    // code is about somebody else's loop: passed over without a word, and the answer
+    // to ours is still taken when it comes.
+    [Theory]
+    [InlineData(ChatChannel.Gangpath)]
+    [InlineData(ChatChannel.Local)]
+    public void Sender_OnASharedChannel_TakesOnlyAnAnswerWithTheCodeItSent(ChatChannel channel)
+    {
+        var (share, notices, code) = SenderThatSent(SampleLoop());
+        ChatLogEntry Heard(string msg) => new(DateTimeOffset.UnixEpoch, channel, "Raijin", msg, $"Raijin: {msg}");
+
+        share.NoteChat(Heard("{@loopresult 0123abcd saved as 'Some other loop'}"));
+        share.NoteChat(Heard("{@loopresult 0123abcd not saved: it is not the loop offered (4567cdef) - send it again}"));
+        share.NoteChat(Heard("{@loopresult - not saved: it arrived damaged - send it again}"));
+        Assert.Empty(notices);
+
+        share.NoteChat(Heard($"{{@loopresult {code} saved as 'King's Road'}}"));
+        Assert.Equal($"[Raijin on loop 'King's Road': saved as 'King's Road' (code {code}, the same as sent)]", notices.Single());
+    }
+
+    // By telepath an answer can only be about the loop we sent that player, so one
+    // with no code (it could not be read there) is shown too.
+    [Fact]
+    public void Sender_ByTelepath_ShowsAnAnswerThatHasNoCode()
+    {
+        var (share, notices, _) = SenderThatSent(SampleLoop());
+
+        share.NoteChat(Tele("Raijin", "{@loopresult - not saved: it arrived damaged - send it again}"));
+
+        Assert.Equal("[Raijin on loop 'King's Road': not saved: it arrived damaged - send it again]", notices.Single());
     }
 
     // The words are another player's client's: shown as plain text, and not at length.

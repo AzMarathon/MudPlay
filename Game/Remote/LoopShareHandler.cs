@@ -230,6 +230,14 @@ public sealed class LoopShareHandler
     // player is shown and logged, with whether their code for the loop is ours: the
     // same code at both ends is the same loop at both ends. Nothing is sent back,
     // so two clients can never answer each other in a circle.
+    //
+    // The answer comes on the channel the loop went by (the reply policy), so on
+    // gangpath or say every client there sees it. One that sent that same player
+    // another loop would show it as a mismatch of its own. So on a shared channel an
+    // answer is ours only when its code is the code we sent that player; any other
+    // is somebody else's transfer and is passed over without a word, our own send
+    // still waiting for its answer. By telepath it can only be about ours, and a
+    // code that differs is shown as the mismatch it is (decided 2026-10-11).
     public void NoteChat(ChatLogEntry e)
     {
         if (e.Channel is not (ChatChannel.TelepathIncoming or ChatChannel.Gangpath or ChatChannel.Local)) return;
@@ -237,16 +245,20 @@ public sealed class LoopShareHandler
         if (!TryParseResult(e.Message, out string? theirCode, out string outcome)) return;
 
         string given = Given(asker);
-        if (!_sent.Remove(given, out (string Name, string Signature, DateTimeOffset At) sent)
+        if (!_sent.TryGetValue(given, out (string Name, string Signature, DateTimeOffset At) sent)
             || _now() - sent.At > ResultAwaited)
         {
+            _sent.Remove(given);
             _log?.Debug("LoopShare", $"ignoring {ResultToken} from {asker} — no loop was sent to them lately");
             return;
         }
+        bool sameCode = theirCode is not null && sent.Signature.StartsWith(theirCode, StringComparison.Ordinal);
+        if (e.Channel != ChatChannel.TelepathIncoming && !sameCode) return;
+        _sent.Remove(given);
 
         string ourCode = LoopSignature.Short(sent.Signature);
         string codes = theirCode is null ? string.Empty
-            : sent.Signature.StartsWith(theirCode, StringComparison.Ordinal) ? $" (code {theirCode}, the same as sent)"
+            : sameCode ? $" (code {theirCode}, the same as sent)"
             : $" (code {theirCode}, NOT the code sent, {ourCode})";
         _log?.Info("LoopShare", $"{given} answered about loop '{sent.Name}' [{ourCode}]: {outcome}{codes}.");
         _notice?.Invoke($"[{given} on loop '{sent.Name}': {outcome}{codes}]");
