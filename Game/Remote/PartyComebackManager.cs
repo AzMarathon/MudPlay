@@ -58,9 +58,11 @@ namespace MudPlay.Game.Remote;
 //     fetched when the training is done (TrainTripEnded), from however far. A
 //     trip taken out of its own hands (the user's Stop, a run started over it)
 //     fetches nobody: the pickup is the player's then.
-//   - A loop whose own circuit goes through an exit that turned the member away.
-//     Their @comeback is refused and the loop carries on; the rule, and how the
-//     leader tells an exit's doing from a hold, is above LeftAtAGateOnOurLoop.
+//   - An exit that turned the member away. A loop whose own circuit goes through
+//     it refuses their @comeback and carries on, Auto-Lair carries on and invites
+//     them when a pass finds them, and a walk-to goes back once. The rule, and how
+//     the leader tells an exit's doing from a hold, is at the head of "a member an
+//     exit turned away".
 public sealed class PartyComebackManager : IDisposable
 {
     private const string LogCategory = "Comeback";

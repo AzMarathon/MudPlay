@@ -40,8 +40,13 @@ namespace MudPlay.Game.Remote;
 // logged and not asked a second time. A request that can't go out at the time
 // (the master switch off, the send gate held, the leader's party train trip
 // still under way) goes out when that clears, while the split is still fresh. A
-// dropped link hands the split to
-// PartyRejoinCoordinator, which sends the reconnect's own request.
+// dropped link hands the split to PartyRejoinCoordinator, which sends the
+// reconnect's own request.
+//
+// When nobody is coming (the leader refused, set out and gave up, or neither
+// answered nor came in time), the follow we may still believe in is given up
+// (FollowGivenUp says why that is needed): the one thing here that changes what
+// this client does next, and still nothing that moves the character.
 public sealed partial class ComebackRequester : IDisposable
 {
     private const string LogCategory = "Comeback";
@@ -74,6 +79,10 @@ public sealed partial class ComebackRequester : IDisposable
     // trip to finish, Auto-Lair's next pass), is waited on before the follow is
     // given up. The same bound a train trip nobody called off is given.
     private static readonly TimeSpan PromisedWait = TimeSpan.FromMinutes(15);
+
+    // The least a leader is given to answer, whatever the window is set to (at 0
+    // it means "no reconnect rejoin", not "nobody ever answers").
+    private static readonly TimeSpan ShortestWait = TimeSpan.FromMinutes(1);
 
     // How often a request that couldn't be sent is looked at again.
     private static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(2);
@@ -696,7 +705,7 @@ public sealed partial class ComebackRequester : IDisposable
     private void WaitFor(TimeSpan wait)
     {
         _lapseTimer.Stop();
-        _lapseTimer.Interval = wait > TimeSpan.Zero ? wait : PromisedWait;
+        _lapseTimer.Interval = wait < ShortestWait ? ShortestWait : wait;
         _lapseTimer.Start();
     }
 
