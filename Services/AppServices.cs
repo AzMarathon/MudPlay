@@ -3944,7 +3944,10 @@ public sealed class AppServices
 
         // Death-message detector — bound to the per-session
         // LineExtractor by MainWindowViewModel.AttachLineExtractor.
-        Death = new Game.DeathDetector(RoomTracker, Log);
+        Death = new Game.DeathDetector(RoomTracker, Log)
+        {
+            IsParadigm = () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+        };
 
         // "There is no exit in that direction!" → demote tracker to
         // Suspect so the next observation re-resolves via candidate
@@ -5326,7 +5329,15 @@ public sealed class AppServices
             characterName: () => PlayerStats.Name,
             send: cmd => SendGameCommand(cmd),
             log: Log);
-        RoomTracker.PlayerDeathObserved += SysopGodLife.OnDeath;
+        // Not for a death the Stock engine answered with its colliseum line: that
+        // one leaves the lives as they were (GAME_MECHANICS "Death threshold &
+        // consequences"), and the command would add a life that was never spent.
+        RoomTracker.PlayerDeathObserved += () =>
+        {
+            if (!Death.LastDeathSavedInColliseum) SysopGodLife.OnDeath();
+            else if (SysopGodLivesEnabledHere())
+                Log.Info("SysopGodLife", "A colliseum death spends no life: no life is asked back.");
+        };
 
         // "Sysop goto": gate `sys goto <name>` (per-BBS power + active-combat block +
         // table + level) and, on a fired jump, re-anchor position when the landing
@@ -8756,10 +8767,7 @@ public sealed class AppServices
         // re-read lands a walk from the graveyard would head for a toll it can't pay
         // (report paradigm-20261010-145529).
         RoomTracker.PlayerDeathObserved += () => Movement.NoteDeath(
-            RoomTracker.LastDeathRoom,
-            tookNothing: Game.Recovery.ArenaDeathRooms.DeathTookNothing(
-                RoomTracker.LastDeathRoom, Death.LastDeathSavedInColliseum,
-                paradigm: GameData.ActiveRealm == Game.RealmType.ParaMud));
+            RoomTracker.LastDeathRoom, RoomTracker.LastDeathTookNothing);
         Movement.TripUnderWayProbe = () => MovementControl.IsActive;
         MovementControl.StateChanged += () =>
         {

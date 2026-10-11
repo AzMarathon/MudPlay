@@ -17,6 +17,10 @@
 - Periodic Damage Room Spells: Paradigm's desert rows show desert damage, 5–20, cast without the waterskin buff
 - Periodic Damage Room Spells: chaos storm and the drowning spells show their set damage, no "more with level"
 
+## 3.168.1
+
+- An arena death is recorded with nothing lost: no deathpile, no recovery, no re-wear
+
 ## 3.168.0
 
 - A follower left behind sends `@comeback`: a follow that failed at an exit, the leader seen leaving without it, or (Stock) its own `par` showing the leader `[Invited]`
