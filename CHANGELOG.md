@@ -14,6 +14,10 @@
 - Stock: a room spell is left running through the `*Combat Off*` after its kill
 - Temp-death response goes out once for a room spell's kills, mixed rooms included
 
+## 3.169.1
+
+- Help: remote @-commands rewritten as a full reference (forms, matching, replies, situations)
+
 ## 3.169.0
 
 - A carried item that negates a room's spell is worn for you (phoenix feather, else magma amulet, against magma heat)
