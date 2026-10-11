@@ -31,7 +31,7 @@
 
         <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource ChromeFgMutedBrush}"
-                       Text="Request boss timers from other clients on a channel. Asked on gang, say or broadcast, where several players may answer, nothing is written as it arrives: each timer that differs from yours is a pick, and Apply Selected writes the ones you chose. Asked by telepath of one player, and of nobody on a shared channel in this window, a timer for a boss you track and hold no timer for is taken at once from that player; from anyone else it is a pick. A timer that matches yours is left alone, and nothing overwrites a timer you hold unless you choose it."/>
+                       Text="Request boss timers from other clients on a channel. Each answer to your request is compared with the timer you hold: one for a boss you track and hold no timer for is merged in as it arrives; one that matches yours is left alone. One that differs from yours is synced (it replaces yours) when you asked a single player by telepath and it is that player's answer; asked where several players can answer (gang, say, broadcast, or more than one player), the differing timers are listed and you pick which to keep, then Apply Selected. Timers that answer no request of yours are only ever listed."/>
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <ComboBox ItemsSource="{Binding Channels}" SelectedIndex="{Binding ChannelIndex}" Width="150"/>
                 <TextBox Text="{Binding TelepathTarget}" PlaceholderText="player" Width="120"
@@ -62,7 +62,7 @@
                                 <StackPanel Spacing="4">
                                     <TextBlock Text="{Binding BossName}" FontWeight="SemiBold"
                                                Foreground="{StaticResource ChromeFgBrush}"/>
-                                    <!-- A resolved row (auto-adopted / already in sync) just shows its status. -->
+                                    <!-- A resolved row (merged in / synced / already in sync) just shows its status. -->
                                     <TextBlock Text="{Binding ResolvedStatus}" FontSize="12"
                                                IsVisible="{Binding !HasConflict}"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>

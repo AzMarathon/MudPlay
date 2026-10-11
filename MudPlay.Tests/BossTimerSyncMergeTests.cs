@@ -5,10 +5,9 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // The merge-classification rules behind the sync window: a tracked boss we hold no timer
-// for is adopted outright when one player was asked and is a pick when several could
-// answer, a matching timer is a no-op, and a genuine disagreement (or an untracked
-// boss) surfaces a manual pick. Plus the row-VM state transitions that decide whether
-// a row shows the picker or a resolved status line.
+// for is adopted outright, a matching timer is a no-op, and only a genuine disagreement
+// (or an untracked boss) surfaces a manual pick. Plus the row-VM state transitions that
+// decide whether a row shows the picker or a resolved status line.
 public sealed class BossTimerSyncMergeTests
 {
     private static readonly DateTimeOffset T = new(2026, 8, 24, 0, 13, 0, TimeSpan.Zero);
@@ -37,23 +36,30 @@ public sealed class BossTimerSyncMergeTests
         => Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
             BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3)));
 
-    // The one outcome that writes without a pick is a pick unless the offer is the
-    // answer of the one player a telepath asked: from anyone else, or with a request
-    // out where several players listen (gang, say, broadcast), it is offered as a
-    // choice. The outcomes that write nothing are the same whoever it is from.
+    // What an offer is to the requests the user made decides the two outcomes that
+    // write without a pick. None held: merged in when it answers a request of the
+    // user's, listed when it answers none. Differs from ours: synced when it is the
+    // answer of the one player asked, listed otherwise. The same timer, and a boss
+    // off our list, come out the same whoever it is from.
     [Theory]
-    [InlineData(false, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
-    [InlineData(true, BossTimerSyncViewModel.TimerMergeKind.AutoMerge)]
-    internal void A_timer_we_would_adopt_outright_is_a_pick_unless_one_player_was_asked(
-        bool askedOfSenderAlone, BossTimerSyncViewModel.TimerMergeKind expected)
+    [InlineData(MudPlay.Game.Remote.TimerSyncStanding.TheOneAsked,
+        BossTimerSyncViewModel.TimerMergeKind.AutoMerge, BossTimerSyncViewModel.TimerMergeKind.Sync)]
+    [InlineData(MudPlay.Game.Remote.TimerSyncStanding.OneOfSeveral,
+        BossTimerSyncViewModel.TimerMergeKind.AutoMerge, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
+    [InlineData(MudPlay.Game.Remote.TimerSyncStanding.NotAsked,
+        BossTimerSyncViewModel.TimerMergeKind.Conflict, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
+    internal void What_is_written_without_a_pick_goes_by_what_the_offer_answers(
+        MudPlay.Game.Remote.TimerSyncStanding standing,
+        BossTimerSyncViewModel.TimerMergeKind noneHeld, BossTimerSyncViewModel.TimerMergeKind differs)
     {
-        Assert.Equal(expected, BossTimerSyncViewModel.Classify(ours: null, tracked: true, offer: T, askedOfSenderAlone));
+        Assert.Equal(noneHeld, BossTimerSyncViewModel.Classify(ours: null, tracked: true, offer: T, standing));
+        Assert.Equal(differs, BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3), standing));
         Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.InSync,
-            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddSeconds(20), askedOfSenderAlone));
+            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddSeconds(20), standing));
         Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
-            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3), askedOfSenderAlone));
+            BossTimerSyncViewModel.Classify(ours: null, tracked: false, offer: T, standing));
         Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
-            BossTimerSyncViewModel.Classify(ours: null, tracked: false, offer: T, askedOfSenderAlone));
+            BossTimerSyncViewModel.Classify(ours: T, tracked: false, offer: T.AddHours(3), standing));
     }
 
     // A row brought up to a timer of ours that moved: the default pick is chosen
@@ -76,7 +82,7 @@ public sealed class BossTimerSyncMergeTests
     }
 
     // The default pick is headed by what it does: with no timer of ours there is
-    // nothing to keep, and once one is adopted there is.
+    // nothing to keep, and once one is merged in there is, shown with whose it was.
     [Fact]
     public void The_default_pick_reads_take_none_until_we_hold_a_timer()
     {
@@ -86,6 +92,29 @@ public sealed class BossTimerSyncMergeTests
         row.MarkAutoMerged("Bob", T, "Aug 24 00:13");
 
         Assert.Equal("Keep ours", row.KeepOursLabel);
+        Assert.Equal("Aug 24 00:13 · merged in from Bob", row.OursText);
+    }
+
+    // A synced row holds the responder's timer as ours and says whose it was. What
+    // had matched the timer it replaced is no longer said to match.
+    [Fact]
+    public void Synced_row_shows_a_status_and_holds_the_new_timer()
+    {
+        BossTimerSyncRowViewModel row = new("ok", 300, "ok", null, T, "Aug 24 00:13");
+        row.MarkInSync("Sue");
+
+        row.MarkSynced("Bob", T.AddHours(3), "Aug 24 03:13");
+
+        Assert.False(row.HasConflict);
+        Assert.True(row.WasSynced);
+        Assert.False(row.WasAutoMerged);
+        Assert.Equal(T.AddHours(3), row.OursKilledAt);
+        Assert.Equal("Synced to Bob's timer — Aug 24 03:13", row.ResolvedStatus);
+        Assert.Equal("Aug 24 03:13 · synced from Bob", row.OursText);
+        Assert.Empty(row.Responders);
+
+        row.MarkInSync("Ann");
+        Assert.Equal("Synced to Bob's timer — Aug 24 03:13", row.ResolvedStatus);
     }
 
     [Theory]

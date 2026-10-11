@@ -7,11 +7,12 @@ using CommunityToolkit.Mvvm.Input;
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One boss in the sync merge table. A row is either RESOLVED — its offered timer was
-// auto-adopted (we held none, and one player was asked) or already matched what we
-// hold — in which case it shows a muted status line and no buttons; or a CONFLICT — a
-// responder's timer differs from ours, the boss isn't in our list yet, or we hold no
-// timer and several players could answer — in which case it shows the "keep ours"
-// default plus a pick button per differing responder. Only conflict rows need a decision;
+// merged in (we held none), synced (ours differed, and it is the answer of the one
+// player asked) or already matched what we hold — in which case it shows a muted
+// status line and no buttons; or a CONFLICT — a responder's timer differs from ours
+// where several can answer, the boss isn't in our list yet, or the offer answers no
+// request of the user's — in which case it shows the "keep ours" default plus a pick
+// button per differing responder. Only conflict rows need a decision;
 // SelectedKilledAt is what the Apply button writes for them (null = keep ours).
 public sealed partial class BossTimerSyncRowViewModel : ObservableObject
 {
@@ -34,11 +35,13 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
     // the default is to take none of the timers offered.
     public string KeepOursLabel => OursKilledAt is null ? "Take none" : "Keep ours";
 
-    // A conflict row shows the picker; a resolved row (auto-adopted / already in sync)
-    // shows ResolvedStatus instead. WasAutoMerged records that we wrote a timer we had
-    // none for, so the parent can count adoptions separately from in-sync no-ops.
+    // A conflict row shows the picker; a resolved row (merged in / synced / already in
+    // sync) shows ResolvedStatus instead. WasAutoMerged records that we wrote a timer
+    // we had none for and WasSynced that one of ours was replaced, so the parent can
+    // count each apart from in-sync no-ops.
     [ObservableProperty] private bool _hasConflict;
     [ObservableProperty] private bool _wasAutoMerged;
+    [ObservableProperty] private bool _wasSynced;
     [ObservableProperty] private string _resolvedStatus = string.Empty;
 
     private readonly List<string> _inSyncWith = new();
@@ -77,16 +80,29 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
         ResolvedStatus = string.Empty;
     }
 
-    // We held no timer for this boss and adopted the offer outright — the store write
+    // We held no timer for this boss and the offer was merged in — the store write
     // already happened; this just reflects it and advances our effective timer so a later
-    // differing offer is measured against what we now hold.
+    // differing offer is measured against what we now hold, and shown beside whose it was.
     public void MarkAutoMerged(string responder, DateTimeOffset killedAt, string text)
     {
         OursKilledAt = killedAt;
         OnPropertyChanged(nameof(KeepOursLabel));
-        OursText = text;
+        OursText = $"{text} · merged in from {responder}";
         WasAutoMerged = true;
-        if (!HasConflict) ResolvedStatus = $"Adopted {responder}'s timer — {text}";
+        if (!HasConflict) ResolvedStatus = $"Merged in {responder}'s timer — {text}";
+    }
+
+    // We held another timer for this boss and it was replaced by the offer of the
+    // one player asked. The store write already happened. What had matched the old
+    // timer no longer does.
+    public void MarkSynced(string responder, DateTimeOffset killedAt, string text)
+    {
+        OursKilledAt = killedAt;
+        OnPropertyChanged(nameof(KeepOursLabel));
+        OursText = $"{text} · synced from {responder}";
+        WasSynced = true;
+        _inSyncWith.Clear();
+        if (!HasConflict) ResolvedStatus = $"Synced to {responder}'s timer — {text}";
     }
 
     // The boss was not on our list when the row was built and is on it now, under
@@ -110,7 +126,7 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
         OnPropertyChanged(nameof(KeepOursLabel));
         OursText = oursText;
         _inSyncWith.Clear();
-        if (!HasConflict && !WasAutoMerged) ResolvedStatus = string.Empty;
+        if (!HasConflict && !WasAutoMerged && !WasSynced) ResolvedStatus = string.Empty;
         KeepOurs();
     }
 
@@ -118,7 +134,7 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
     public void MarkInSync(string responder)
     {
         if (!_inSyncWith.Contains(responder)) _inSyncWith.Add(responder);
-        if (!HasConflict && !WasAutoMerged)
+        if (!HasConflict && !WasAutoMerged && !WasSynced)
             ResolvedStatus = $"Already in sync with {string.Join(", ", _inSyncWith)}";
     }
 

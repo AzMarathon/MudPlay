@@ -5,12 +5,25 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Remote;
 
-// One responder's fully-reassembled, decoded timer set, and the channel it came by.
-// AskedOfSenderAlone: it came by telepath from a player we telepathed the request
-// to, and nothing has been asked on a channel others listen on. Only such a set is
-// one player's answer to one question; any other is one of several that may come.
+// What a responder's set is to the requests the user made while collecting.
+public enum TimerSyncStanding
+{
+    // No answer to a request of the user's: it came on a channel only the client
+    // asked on, for another player's remote command, or by telepath from a player
+    // the user did not ask. Nothing of it is written without a pick.
+    NotAsked,
+    // An answer to a request of the user's that several players can answer, or
+    // did: on gangpath, say or the broadcast channel, or by telepath when more than
+    // one player was asked or a shared channel is being listened on as well.
+    OneOfSeveral,
+    // The answer of the one player the user telepathed, with nothing else asked.
+    TheOneAsked,
+}
+
+// One responder's fully-reassembled, decoded timer set, the channel it came by, and
+// what it is to the requests the user made.
 public readonly record struct BossTimerSyncResponse(
-    string Sender, IReadOnlyList<BossTimerSyncRecord> Records, RemoteChannel Channel, bool AskedOfSenderAlone);
+    string Sender, IReadOnlyList<BossTimerSyncRecord> Records, RemoteChannel Channel, TimerSyncStanding Standing);
 
 // Requester side of @timer sync: scrapes the `@timerdata <i>/<n> <blob>` reply lines off
 // ChatRouter (they ride the chat as ordinary text — the remote engine ignores the
@@ -37,9 +50,11 @@ public sealed class BossTimerSyncCollector : IDisposable
 
     private readonly Dictionary<string, Partial> _partial = new(StringComparer.OrdinalIgnoreCase);
 
-    // The channels our requests have gone out on while collecting, and the players
-    // a request was telepathed to, by given name.
+    // The channels our requests have gone out on while collecting, whoever they
+    // were sent for: these are listened on. Of them, the shared ones the user
+    // asked on; and the players a telepath of the user's reached, by given name.
     private readonly HashSet<RemoteChannel> _askedOn = new();
+    private readonly HashSet<RemoteChannel> _usersAskedOn = new();
     private readonly HashSet<string> _telepathed = new(StringComparer.OrdinalIgnoreCase);
 
     public event Action<BossTimerSyncResponse>? ResponseReceived;
@@ -67,22 +82,32 @@ public sealed class BossTimerSyncCollector : IDisposable
     // are still read. Whether the request came from the window's button or was
     // typed by hand makes no difference; Ingest tells of the typed ones.
     //
+    // byUser: the request was the user's own, not one the client sent for another
+    // player's remote command (a relay-back, a `@do`, a `@party` relay). The channel
+    // is listened on either way; only an answer to a request of the user's is ever
+    // written without a pick.
+    //
     // telepathReached: the player a telepath of the user's reached, as the game's
-    // own `--- Telepath Sent to <Name> ---` names them; that player's answer is then
-    // theirs alone. Never the name as typed: a typed name may be the first letters
-    // of a player's, the game says whose it took them for, and a telepath whose
-    // letters fit two players reaches neither (GAME_MECHANICS "Telepath throttle
-    // and per-telepath acknowledgement"). Until the game has named who a telepath
-    // reached, nobody was asked, and every answer is one of several.
+    // own `--- Telepath Sent to <Name> ---` names them. Never the name as typed: a
+    // typed name may be the first letters of a player's, the game says whose it
+    // took them for, and a telepath whose letters fit two players reaches neither
+    // (GAME_MECHANICS "Telepath throttle and per-telepath acknowledgement"). Until
+    // the game has named who a telepath reached, nobody was asked by telepath.
     //
     // A responder whose set has been delivered may send again for the new request.
     // One whose set is half here keeps what has arrived.
-    public void Begin(RemoteChannel askedOn, string? telepathReached = null)
+    public void Begin(RemoteChannel askedOn, string? telepathReached = null, bool byUser = true)
     {
         _collecting = true;
         _askedOn.Add(askedOn);
-        if (askedOn == RemoteChannel.Telepath && !string.IsNullOrWhiteSpace(telepathReached))
+        if (askedOn != RemoteChannel.Telepath)
+        {
+            if (byUser) _usersAskedOn.Add(askedOn);
+        }
+        else if (byUser && !string.IsNullOrWhiteSpace(telepathReached))
+        {
             _telepathed.Add(RemoteCommandManager.GivenName(telepathReached.Trim()));
+        }
         foreach (string delivered in _partial.Where(p => p.Value.Done).Select(p => p.Key).ToList())
             _partial.Remove(delivered);
     }
@@ -92,12 +117,15 @@ public sealed class BossTimerSyncCollector : IDisposable
         _collecting = false;
         _partial.Clear();
         _askedOn.Clear();
+        _usersAskedOn.Clear();
         _telepathed.Clear();
     }
 
-    // True while every request made has been a telepath to a named player: the
-    // case in which an asked player's answer is theirs alone.
-    public bool OnlyTelepathsAsked => _askedOn.Count == 1 && _askedOn.Contains(RemoteChannel.Telepath);
+    // True while the one thing asked is a telepath, of one player the game has
+    // named: the case in which that player's answer replaces a timer of ours that
+    // differs, with no pick.
+    public bool OnePlayerAsked =>
+        _askedOn.Count == 1 && _askedOn.Contains(RemoteChannel.Telepath) && _telepathed.Count == 1;
 
     public void Dispose()
     {
@@ -124,14 +152,15 @@ public sealed class BossTimerSyncCollector : IDisposable
         if (TransferChannels.OwnRequest(e, _isOurName) is { Transfer: Transfer.TimerSync } own)
         {
             if (!TransferChannels.Allows(Transfer.TimerSync, own.Channel)) return;
-            // The player a telepathed request reached was asked only when the
-            // confirmation is that request's own and the request was the user's
-            // (ChatRouter.OutgoingTelepathWasUsers, which pairs a confirmation with
-            // the send addressed to the player it names). A telepath the client
-            // sent for another player (a relay-back, a `@do`) asks nobody on the
-            // user's behalf: its channel is listened on, its answer is a pick.
-            bool asked = own.Channel == RemoteChannel.Telepath && _chat.OutgoingTelepathWasUsers;
-            Begin(own.Channel, asked ? e.Speaker : null);
+            // Whose request it was is asked of the one place that knows, the lines
+            // the user sent as they went out (TransferChannels.IsUsersOwn): for a
+            // telepath, its confirmation is of a send of the user's to the player
+            // it names; for a shared channel, the user sent these words there just
+            // now. One the client sent for another player (a relay-back, a `@do`)
+            // asks nobody on the user's behalf: its channel is listened on, and
+            // nothing that answers it is written without a pick.
+            bool byUser = TransferChannels.IsUsersOwn(e, own.Channel, _chat);
+            Begin(own.Channel, own.Channel == RemoteChannel.Telepath ? e.Speaker : null, byUser);
             return;
         }
 
@@ -169,7 +198,7 @@ public sealed class BossTimerSyncCollector : IDisposable
         // A set is as public as its most public piece: one line of it on the
         // broadcast channel, and it is a set heard there, wherever the last came.
         RemoteChannel cameBy = p.OnBroadcast ? RemoteChannel.Broadcast : heardOn;
-        ResponseReceived?.Invoke(new BossTimerSyncResponse(sender, records, cameBy, AskedOfSenderAlone(cameBy, sender)));
+        ResponseReceived?.Invoke(new BossTimerSyncResponse(sender, records, cameBy, StandingOf(cameBy, sender)));
     }
 
     // An answer comes back on the channel it was asked on (RemoteCommandManager
@@ -181,16 +210,25 @@ public sealed class BossTimerSyncCollector : IDisposable
         _askedOn.Contains(heardOn)
         || (heardOn == RemoteChannel.Telepath && _askedOn.Contains(RemoteChannel.Local));
 
-    // Whether a set is the answer of the one player a question was put to: it came
-    // by telepath, from a player a request was telepathed to, and no request has
-    // gone out on a channel others listen on. Once one has, whatever the order, a
-    // telepath may be a sneaking client's answer to a say and every player there
-    // may answer with a different timer. A telepath from a player nobody asked is
-    // taken like any other, and is no one's answer to our question.
-    private bool AskedOfSenderAlone(RemoteChannel heardOn, string sender) =>
-        heardOn == RemoteChannel.Telepath
-        && OnlyTelepathsAsked
-        && _telepathed.Contains(RemoteCommandManager.GivenName(sender));
+    // What a set is to the requests the user made (TimerSyncStanding), as things
+    // stand when it is complete.
+    //
+    // On a shared channel it answers the user's request there, or nobody's. By
+    // telepath it is the asked player's own answer when that player is the only
+    // thing asked; one of several when more players were asked, when a shared
+    // channel is listened on as well, or when the user said the request aloud (a
+    // sneaking client answers a say by telepath, and anyone in the room may be
+    // that client); and no answer at all from a player the user did not ask.
+    private TimerSyncStanding StandingOf(RemoteChannel heardOn, string sender)
+    {
+        if (heardOn != RemoteChannel.Telepath)
+            return _usersAskedOn.Contains(heardOn) ? TimerSyncStanding.OneOfSeveral : TimerSyncStanding.NotAsked;
+        bool asked = _telepathed.Contains(RemoteCommandManager.GivenName(sender));
+        if (asked && OnePlayerAsked) return TimerSyncStanding.TheOneAsked;
+        return asked || _usersAskedOn.Contains(RemoteChannel.Local)
+            ? TimerSyncStanding.OneOfSeveral
+            : TimerSyncStanding.NotAsked;
+    }
 
     // Parse "@timerdata <i>/<n> <blob>", tolerating the {} the remote reply path wraps a
     // reply in. The blob is a single spaceless base64url token, so a 3-way split keeps it

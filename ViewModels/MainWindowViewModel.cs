@@ -4133,7 +4133,7 @@ public partial class MainWindowViewModel : ObservableObject
                 // the user's (ChatRouter pairs the confirmation with the send
                 // addressed to that player, and says whose it was). One the client
                 // sent for another player (a relay-back, a `@do`) still opens the
-                // window, which says so, and every answer to it is a pick.
+                // window, which says so, and every answer to it is only listed.
                 OpenTimerSyncWindow(asked.Channel,
                     asked.Channel == Game.Remote.RemoteChannel.Telepath && usersOwn ? e.Speaker : null, usersOwn);
                 break;

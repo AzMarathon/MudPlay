@@ -461,7 +461,7 @@ public sealed class ChatRouter : IDisposable
     // True while EntryClassified is being raised for an outgoing telepath that the
     // confirmation was paired with and that was the user's own. A subscriber that
     // acts on a request the user telepathed (the boss-timer merge window, which
-    // takes a timer without a pick only from a player the user asked) reads it
+    // writes a telepathed timer without a pick only from a player the user asked) reads it
     // there: a telepath the client sent for another player's remote command, one
     // known only from a row on the screen, and a confirmation paired with nothing,
     // are none of them the user's.
