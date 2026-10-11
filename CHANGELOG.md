@@ -3,10 +3,11 @@
 ## 3.180.0
 
 - Simulator: area rankings are kept between sessions, one file for each character on each game data, read back when that character and game data are next on show
-- A saved ranking is dropped, not listed, when the game data's tables, the monster seed or the Simulator itself has changed since, or after 180 days
-- A kept ranking says what has changed in the character since (stats or gear, spells, settings, game-data edits, reach), or that the character hasn't been read yet, and is shown muted
+- A saved ranking is dropped, not listed, when the game data's tables, the monster seed or the Simulator itself has changed since, or after 180 days; it is stamped with the data this client loaded, not the files as they are now
+- A kept ranking says what has changed since (stats or gear, spells, settings, game-data edits, reach, your loops), or that the character hasn't been read on this connection, and is shown muted
+- The mark follows the character while the ranking is on show: set and cleared at each `stat`, inventory, level change and save
 - A renamed or moved character keeps its saved rankings; a deleted one's are deleted; a copy of a character or of a set's edits gets none
-- Bug report: where the listed ranking came from, its age and what it is marked for
+- Bug report: where the listed ranking came from, its age, what it is marked for, and whether the character has been read
 
 ## 3.179.8
 
