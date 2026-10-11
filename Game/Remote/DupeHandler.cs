@@ -146,12 +146,12 @@ public sealed class DupeHandler : IDisposable
         ctx.Reply($"{dest.GivenName} now has your query, roomba, and quest permissions");
     }
 
-    // Failure replies obey the WarnOnDenial master gate (remote-command reply policy);
-    // the log line is written either way so the refusal is visible to the user.
+    // Failure replies are refusals (remote-command reply policy); the log line is
+    // written either way so the refusal is visible to the user.
     private void Refuse(RemoteCommandContext ctx, string reason)
     {
         _log?.Log(LogSeverity.Info, "RemoteCmd", $"@dupe from {ctx.Sender} refused: {reason}.");
-        if (_engine.WarnOnDenial) ctx.Reply(reason);
+        ctx.Refuse(reason);
     }
 
     // Telepaths carry the given name only while player rows may hold "Given Family",

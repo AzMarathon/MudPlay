@@ -90,6 +90,18 @@ public sealed class CastCoordinator : IDisposable
     private bool _lastCastWasAttackSlot;
     private bool _disposed;
 
+    // Where the two cast clocks stand, for a bug report's "why didn't it cast".
+    public string DescribeState()
+    {
+        static string At(DateTimeOffset t) =>
+            t == DateTimeOffset.MinValue ? "never" : t.ToLocalTime().ToString("HH:mm:ss.fff");
+        return $"last attack-slot cast {At(_lastAttackSentAt)}, last between-round cast {At(_lastBetweenRoundSentAt)}, "
+            + $"last spell sent {_lastSpellSent ?? "(none)"} ({(_lastCastWasAttackSlot ? "attack slot" : "between-round slot")}); "
+            + (_castBlocked
+                ? $"block latched at {At(_castBlockedSince)} when the game refused a cast (it is lifted at the next cast attempt, so an old time here is a latch nobody has tested since, not a cast still refused)"
+                : "no block latched");
+    }
+
     // Fires after a cast command was successfully written to the wire. Carries the
     // literal command line (no trailing CR).
     public event Action<string>? CastSent;

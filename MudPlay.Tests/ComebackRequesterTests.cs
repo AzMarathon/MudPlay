@@ -1412,6 +1412,66 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.True(h.Requester.IsLeaderWeAsked("Boss"));
     }
 
+    // Every answer a leader gives that says it is coming, now or later, in the
+    // words this version sends and with the long dash older ones sent.
+    [Theory]
+    [InlineData("coming to your location for pickup")]
+    [InlineData("backtracking up to 12 room(s) to find you")]
+    [InlineData("comeback already in progress")]
+    [InlineData("comeback already in progress - fetching Tank first, then you")]
+    [InlineData("comeback already in progress — fetching Tank first, then you")]
+    [InlineData("I can't yet, I'm on a train trip. I'll come for you when the training is done")]
+    [InlineData("I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you")]
+    [InlineData("didn't find you where the trip left you - @comeback with your room and I'll come")]
+    [InlineData("found you - re-inviting Me")]
+    [InlineData("found you — re-inviting Me")]
+    [InlineData("got you - resuming")]
+    [InlineData("got you - waiting for your @ok")]
+    public void Stock_ARecognisedComingAnswer_IsWaitedOnForLonger(string answer)
+    {
+        using Harness h = NewFollower();
+        List<string> givenUp = AskedOnStock(h);
+
+        h.Feed($"Boss telepaths: {{{answer}}}");
+
+        Assert.Empty(givenUp);
+        Assert.Equal(TimeSpan.FromMinutes(15), h.Requester.WaitingForTests);
+    }
+
+    // The leader's own constants are among them: what it sends is what we read.
+    [Fact]
+    public void TheLeadersOwnAnswers_AreRecognised()
+    {
+        Assert.True(PartyComebackManager.SaysComingOrLater(PartyComebackManager.ComingForPickup));
+        Assert.True(PartyComebackManager.SaysComingOrLater(PartyComebackManager.AlreadyInProgress));
+        Assert.True(PartyComebackManager.SaysComingOrLater(PartyComebackManager.TrainTripReply));
+        Assert.True(PartyComebackManager.SaysComingOrLater(PartyComebackManager.LairGateReply));
+        Assert.False(PartyComebackManager.SaysComingOrLater(PartyComebackManager.LoopGateRefusal));
+    }
+
+    // Anything else in braces from the leader promises nothing: a generic denial
+    // (a leader that doesn't take our @comeback), the reply to some other command,
+    // free text. The wait already running is left as it is, not stretched.
+    [Theory]
+    [InlineData("command invalid or not allowed")]
+    [InlineData("HP=120/150,MA=40/60")]
+    [InlineData("idle; Town Square (map 1, room 1); no ailments")]
+    [InlineData("ok")]
+    [InlineData("be right there after this fight")]
+    public void Stock_AnyOtherBracedTelepath_LeavesTheWaitAlone(string other)
+    {
+        using Harness h = NewFollower();
+        List<string> givenUp = AskedOnStock(h);
+        Assert.Equal(h.Requester.RetryWindow, h.Requester.WaitingForTests);
+
+        h.Feed($"Boss telepaths: {{{other}}}");
+
+        Assert.Empty(givenUp);
+        Assert.True(h.Party.IsInParty);
+        Assert.Equal(h.Requester.RetryWindow, h.Requester.WaitingForTests);
+        Assert.True(h.Requester.IsLeaderWeAsked("Boss"));
+    }
+
     // Nobody answers and nobody comes inside the time a leader takes the request.
     [Fact]
     public void Stock_NobodyComesWithinTheWindow_TheFollowIsGivenUp()

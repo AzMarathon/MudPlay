@@ -7,8 +7,8 @@ namespace MudPlay.Game.Remote;
 // Recognises an incoming MudPlay @where reply telepath and announces the room it
 // reports, so the navigation map can flash the target square. When you `@where`
 // another MudPlay user, their client answers with a wrapped location reply
-// ("Fujin telepaths: {Adventurer's Guild, Universal Trainer (map 1, room 1376);
-// exit s: west}"); WhereReplyParser pins the map/room out of it.
+// ("Scout telepaths: {Adventurer's Guild, Universal Trainer (map 1, room 1376);
+// exits: west}"); WhereReplyParser pins the map/room out of it.
 //
 // Fire-and-forget: it just raises TargetLocated. The nav map decides whether to
 // act (it only highlights while its window is open). Any telepath NOT in the

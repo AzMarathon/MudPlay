@@ -244,6 +244,8 @@ Exemptions: monsters whose Game Data relationship is **Flee** or **Hangup**, and
 
 Self-defense is also suppressed while you're on a **walk-to** — an evil character crossing a guarded town, say, keeps running to their destination rather than stopping to fight the guards (a losing trade at low levels). It stays active when you're **idle, looping, or Auto-Lairing** (all farming/holding, where fighting back is what you want).
 
+**A swing as you leave the room is not answered from there.** Once your own move has been sent, an attack sent after it would run in the room you land in, at whatever is there. So a monster that swings at you in that moment is left to the next room: if it follows you in, that room's fight opens as any other does (the pre-attack debuff first, then the attack); if your move is refused, it is fought back where you stand. A move counts as on its way for three seconds: if neither the next room nor a refusal has shown by then, the game never took the step, and whatever attacked you is fought back where you stand.
+
 **Monsters that pass you in a doorway.** A monster can enter the room you're just leaving after you've sent your move but before the next room appears. That monster is in the room behind you, so MudPlay doesn't attack it, and the room you arrive in decides what you fight. If your move is refused and you stay put, it attacks the arrival as normal.
 
 ## Targeting
@@ -965,8 +967,9 @@ How the line is read:
 - **Words are split at spaces.** Extra spaces are dropped; a name of several words is put back together with single spaces.
 - **Your own lines don't count.** Your client never obeys something you said, telepathed or gangpathed yourself.
 - **An `@` word that is no command is left alone.** Someone saying `@because` in gang chat gets no answer from anyone.
+- **A `!` straight after the command word is ignored.** `@stop!` is `@stop`.
 
-You can't telepath a command to yourself. To run one on your own client, use `POST /command` of the **Local control API** (under *Settings Menu*): it skips the permission check and hands you the replies. To make another player's client send a command to you, put `&` in front of it: see **Sending a command back to yourself (`&@`)**.
+You can't telepath a command to yourself. To run one on your own client, use `POST /command` of the **Local control API** (under *Settings Menu*): it skips the permission check and hands you the replies, a refusal's reason included, whatever the Warn setting says. To make another player's client send a command to you, put `&` in front of it: see **Sending a command back to yourself (`&@`)**.
 
 ### Who is obeyed
 
@@ -975,8 +978,11 @@ Your client goes through these checks in this order. The first one that stops a 
 1. **Disallow all remote control commands** (Settings → Talk). While it is on, no command is read and nothing is answered.
 2. **The channel.** Settings → Talk has one switch each for telepaths, gangpaths and say. A command on a switched-off channel is dropped without an answer.
 3. **The master switch (Auto-All).** While it is off, `@auto-all` is the only remote command followed. Every other one is dropped without an answer, whoever sent it. A follower's `@wait` and `@ok` are still noted, and a party member's `@comeback` is kept and answered when the switch comes back on. See **The master switch (Auto-All)** under *Automation*.
-4. **The words that are always refused.** See **Always refused** below.
-5. **The permission.** The sender must hold the permission the command needs, or the command must be one any party member may send.
+4. **The words that are always refused,** `reroll` and `@party set suicide`. Dropped without an answer. See **Always refused** below.
+5. **An `@` word that is no command.** Left alone, without an answer.
+6. **The permission.** The sender must hold the permission the command needs, or the command must be one any party member may send. A sender who doesn't gets the Failure message and nothing else: every check that answers with a reason of its own comes after this one, so it can tell a stranger nothing about you.
+7. **The suicide rules,** for a sender who holds the permission: `@do` with the word `suicide`, and the lives rule of `@suicide`. See **Always refused** and **@suicide**.
+8. **The command itself.** It is carried out, or it answers why it couldn't be.
 
 **Permissions** are granted per player, and saved with your character. Open **Game Data Browser → Players**, open the player, and tick boxes in the remote-control grid. There are sixteen:
 
@@ -1020,12 +1026,17 @@ Everything else a party member sends needs its box, like anyone else's. In parti
 - a gangpath is answered on gangpath, for the whole gang to read;
 - a say is answered with a say directed at the sender. A character that is sneaking or hidden answers by telepath instead, because saying anything would end the sneak.
 
-**Refusals follow one setting.** Settings → Talk → **Warn sender on invalid / denied remote command** (on by default) decides whether a refused command is answered at all:
+**Refusals follow one setting.** Settings → Talk → **Warn sender on invalid / denied remote command** (on by default) decides whether a command that was refused, or that couldn't be carried out, is answered at all:
 
 - On: the sender gets the reason when the client has a specific one, otherwise the **Failure message** from the same tab (default `command invalid or not allowed`). An empty Failure message sends nothing.
-- Off: no refusal is sent.
+- Off: no refusal is sent. That covers every kind: no permission, a name that matches nothing or several things, a missing word, nothing to do, a state the client hasn't read yet.
 
 In the reply tables of the command topics, a row that begins **Refusal:** is sent only while that setting is on. Every other row is sent whatever it is set to. The usual refusal, "the sender doesn't hold the permission", gets the Failure message.
+
+**Two kinds of answer are not refusals,** and are sent with the setting off too:
+
+- **A result,** however empty: `no one` from `@who`, `nothing on the ground here` from `@what`, `expired` from `@timer`, `no record of …` from `@roomba`.
+- **An answer another MudPlay client is waiting on.** A follower's client reads its leader's answers to `@comeback` to know whether to give the follow up, keep waiting, or expect the leader; a walk reads the result of the `@trap` it asked for; a leader's stash transfer waits on each member's `@get-stash` and `@deposit-all` answer; its route planning counts a member's `wealth unknown` or `level unknown` as an answer. Silenced, the asking client would sit out its whole wait for an answer that was never coming. Each topic says which of its answers these are.
 
 **Some commands answer later, not at once:**
 
@@ -1038,7 +1049,7 @@ In the reply tables of the command topics, a row that begins **Refusal:** is sen
 
 **Pacing.** The server throttles telepaths: fire several at once and the later ones come back `--- Telepath Not Sent ---`. MudPlay sends every telepath (its own command traffic and replies, and the ones you type) at least 100 ms apart, and resends any the server refuses, up to three tries. Other commands (movement, attacks, casts) are never held behind a telepath. A long list (`@inv`, `@help`, `@timer`) is split over several replies. The big data replies (`@loop send`, `@roomba sync`) go out one line every 0.8 seconds; if the game says you are typing too quickly, the client waits three seconds and sends the last line again.
 
-**The long dash.** Some replies are written with a long dash (—). The game's character set has none, so on your screen it arrives as `?`: `room 599 needs a map ? try e.g. 1/599`.
+**Plain characters only.** Every reply is sent in plain ASCII, which is all the game's line carries safely. Where a reply has to carry a name with something else in it (a loop you named with a long dash, say), that character is spelled plainly (`-`) or, failing that, sent as `?`.
 
 **On the receiving side** nothing pops up. A plain query leaves no trace but the reply itself, which shows in your terminal as the telepath or say your client sent. A command that makes your client act shows there too, as whatever it sent to the game. Commands that change something are written to the program log with the sender's name (`@do`, `@kill`, the `@auto-…` toggles, `@atkprio`, `@atkorder`, `@reset`, `@dupe`, `@get-stash`, a loop send, a `&@` relay). A refused command is logged only with Debug diagnostics on.
 
@@ -1053,19 +1064,20 @@ In the reply tables of the command topics, a row that begins **Refusal:** is sen
 
 ### Always refused
 
-These are checked before the permission, so no grant gets around them.
+No grant gets around these.
 
-- **`reroll`.** A command with `reroll` anywhere in it, in the command word or in what follows, is dropped. No answer is sent, whatever the Warn setting says, so nobody can probe for it.
+- **`reroll`.** A command with `reroll` anywhere in it, in the command word or in what follows, is dropped. It is checked before the permission, and no answer is sent, whatever the Warn setting says, so nobody can probe for it.
 - **`@party set suicide`** is dropped the same way.
-- **`@do` with `suicide` anywhere after it** is answered `@do suicide is not allowed, use @suicide` (a **Refusal**) and nothing is sent to the game.
-- **Any other command with `suicide` in it**, apart from `@help` and `@party`, is held to the lives rule of `@suicide` before anything else is looked at: see **@suicide**.
+- **`@do` with the word `suicide`** among what it would send is answered `@do suicide is not allowed, use @suicide` (a **Refusal**) and nothing is sent to the game. This is checked after the permission: a sender without Execute commands gets the Failure message like for any other `@do`. Only the word itself counts, with or without punctuation or quotes around it (`suicide!`, `"suicide"`); `@do say suicidal` is sent.
+
+No other command is touched for having `suicide` among its words: `@have suicide note` is an ordinary `@have`.
 
 ### Sending a command back to yourself (`&@`)
 
 Put `&` in front of a remote command (`&@invite`, `&@where`, `&@wealth`) and the player you send it to **sends that command back to you**, on the channel it arrived on: a telepath, a gangpath line or a say directed at you. Your own client then takes it as a command from them, under the permissions *you* grant *them*. It is the way to make another player ask something of you: telling a party member `&@invite` makes them send you `@invite`, and your client invites them.
 
 - **Who may ask:** the player relaying it must grant you **Execute commands**, the box `@do` needs. A `@do` could already put the same line on the wire.
-- **What is relayed:** only a command their client knows, with whatever follows it, sent bare (no braces). Anything else, or a bare `&@`, is ignored without an answer. `reroll` and `@party set suicide` are dropped here too.
+- **What is relayed:** only a command their client knows, with whatever follows it, sent bare (no braces). Anything else, or a bare `&@`, is ignored without an answer. `reroll` and `@party set suicide` are dropped here too. A relay asked for on say goes back by telepath when the relaying character is sneaking or hidden, as a reply would.
 - **Replies:** none when it works: the relayed command is the answer, and your client's reply to it goes to them. Without the grant: the Failure message (a **Refusal**). With their master switch off: nothing, `&@auto-all` included, since it asks their client to send something.
 - **On gangpath or say** everyone there sees both lines: every MudPlay client that grants you Execute commands relays the command, and any client that grants the relaying player that command runs it too. Use telepath when you want one player to relay it, and only to you.
 - A bare `@help` lists `&@<command>` when you hold that grant, and `@help &@` describes it.
@@ -1145,9 +1157,9 @@ The six movement commands (`@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@r
 
 Three rules hold for `@goto`, `@loop` and `@lair` alike:
 
-- **A new movement command replaces what is running.** A loop, an Auto-Lair run or a walk-to already under way is stopped for it, and the program log names the sender (`superseded by remote @ from <sender>`).
+- **A new movement command replaces what is running.** A loop, an Auto-Lair run or a walk-to already under way is stopped for it, and the program log names the sender (`superseded by remote @ from <sender>`). The one exception is `@lair` sent to a running Auto-Lair, which keeps the run (see **@lair**).
 - **It overrides an `@stop`.** After `@stop`, an `@goto`, `@loop` or `@lair` drops the pause and starts moving at once. Use `@rego` only to carry on with the same thing you paused.
-- **The reply says the movement was started, not that it arrived.** Ask `@path` or `@status` to follow it.
+- **The reply says the movement was started, not that it arrived.** Ask `@path` or `@status` to follow it. A start that was turned down is answered with the reason, as a **Refusal**: "started" is only ever said of a movement that did start.
 
 #### @goto
 
@@ -1178,19 +1190,21 @@ Words are split at spaces and at `, / - ' . ; : ( ) [ ]`. A word matches as part
 | `walking to <room name> (<map>/<room>)` | One room matched and the walk started. |
 | `walking to boss <name> (<map>/<room>)` | A boss matched and the walk started. |
 | `walking to boss <name>, stopping just outside (<map>/<room>)` | The same, for a boss marked to stop before its room. |
-| `did you mean: <room> (<map>/<room>), <room> (<map>/<room>)?` | Two or three rooms matched. Send again with the map/room. |
-| `too many room matches (<n>) for '<text>'` | More than three rooms matched. |
-| `'<text>' matches <n> GOTO locations: '<label>', '<label>'` | Several favourites matched. Up to four are named. |
-| `'<text>' matches <n> bosses: <name>, <name>` | Several bosses matched. Up to four are named. |
-| `no path to GOTO '<label>'` · `no path to <room name>` · `no path to <boss>` | The place was found but no route could be planned. |
-| `<boss> has no known room on this map` | None of the boss's rooms is in your map data. |
-| `room <n> needs a map — try e.g. 1/<n>` | A bare room number was sent. |
-| `no match for '<text>'` | Nothing matched. |
-| `@goto requires a destination` | Nothing followed `@goto`. |
+| `already at GOTO '<label>' (<map>/<room>)` · `already at <room name> (<map>/<room>)` · `already at boss <name> (<map>/<room>)` | You are standing in the room asked for. Nothing is walked. |
+| `did you mean: <room> (<map>/<room>), <room> (<map>/<room>)?` | **Refusal:** two or three rooms matched. Send again with the map/room. |
+| `too many room matches (<n>) for '<text>'` | **Refusal:** more than three rooms matched. |
+| `'<text>' matches <n> GOTO locations: '<label>', '<label>'` | **Refusal:** several favourites matched. Up to four are named. |
+| `'<text>' matches <n> bosses: <name>, <name>` | **Refusal:** several bosses matched. Up to four are named. |
+| `no path to GOTO '<label>'` · `no path to <room name>` · `no path to <boss>` | **Refusal:** the place was found but no route could be planned. |
+| `<boss> has no known room on this map` | **Refusal:** none of the boss's rooms is in your map data. |
+| `room <n> needs a map - try e.g. 1/<n>` | **Refusal:** a bare room number was sent. |
+| `no match for '<text>'` | **Refusal:** nothing matched. |
+| `@goto requires a destination` | **Refusal:** nothing followed `@goto`. |
 | the Failure message | **Refusal:** the sender doesn't hold Move player. |
 
 **Situations:**
 
+- **Asked while you are mid-step:** your client plans the walk only once the move in hand has landed, so the answer comes a moment later, and is `walking to …` or `no path to …` as the plan turns out. If another walk takes over before then, nothing is answered.
 - **Already walking somewhere:** the new destination replaces the old one.
 - **Looping or in Auto-Lair:** that run is stopped, then the walk starts. It is not put back afterwards.
 - **Paused by `@stop`:** the pause is dropped.
@@ -1242,16 +1256,17 @@ Only the loops in your own Loops list (for the game data set you have loaded) ar
 
 | Reply | When |
 |---|---|
-| `starting loop '<name>' (<n> rooms)` | One saved loop matched. `<n>` is the number of rooms saved in the loop. |
-| `looping <n> rooms` | A room list was given. |
-| `restarting last loop '<name>' (<n> rooms)` | `@loop last`, and a loop has run this session. |
-| `no loop has run yet this session` | `@loop last`, and none has. |
-| `no saved loop named '<text>'` | No loop matched the name. |
-| `'<text>' matches <n> loops: '<name>', '<name>'` | Several loops matched. Up to four are named; nothing starts. |
-| `@loop requires a name, coordinate list, or 'last'` | Nothing followed `@loop`. |
+| `starting loop '<name>' (<n> rooms)` | One saved loop matched, and it started. `<n>` is the number of rooms saved in the loop. |
+| `looping <n> rooms` | A room list was given, and it started. |
+| `restarting last loop '<name>' (<n> rooms)` | `@loop last`, a loop has run this session, and it started again. |
+| `loop '<name>' not started: <reason>` (or `not started: <reason>` when the reason names the loop) | **Refusal:** the loop was found but could not be run. The reason is the loop engine's own. |
+| `no loop has run yet this session` | **Refusal:** `@loop last`, and none has. |
+| `no saved loop named '<text>'` | **Refusal:** no loop matched the name. |
+| `'<text>' matches <n> loops: '<name>', '<name>'` | **Refusal:** several loops matched. Up to four are named; nothing starts. |
+| `@loop requires a name, coordinate list, or 'last'` | **Refusal:** nothing followed `@loop`. |
 | the Failure message | **Refusal:** the sender doesn't hold Move player. |
 
-**The reply is sent as soon as the loop is found.** It does not wait to see whether the loop could really begin, and nothing more is sent if it couldn't. A loop is not run when it has fewer than two rooms, when one of its rooms can't be entered by any route, when one of its legs can only be crossed by paying a toll or fare you can't pay, or when none of it can be reached from where you stand. The receiver's program log says which. To check, send `@path` a moment later: a loop that started answers `running loop '<name>'; …`, one that didn't answers `not moving`, with or without a `last ran` tail.
+**"Starting" means it started.** A loop is not run when it has fewer than two rooms, when one of its rooms can't be entered by any route, when one of its legs can only be crossed by paying a toll or fare you can't pay, or when none of it can be reached from where you stand. Then the answer is `… not started:` with that reason, for example `loop '@loop from Leader' not started: no reachable waypoint from 1/9`. A loop that can be told beforehand it won't run (a room no route enters, an unpayable crossing) is refused before anything is stopped for it, so what you were doing carries on. The other reasons are only found by trying, after what was running has been stopped.
 
 **When something is already running:**
 
@@ -1281,21 +1296,21 @@ Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clien
 **From asking to saved**, with Leader asking Scout for a loop:
 
 1. Leader sends `/Scout @loop send kings road`. Scout's client finds the loop and answers `{preparing to send: King's Road, yes to confirm, no to deny}`. Nothing has been sent yet. The offer is Leader's alone, and a new ask from Leader replaces it.
-2. Leader answers `/Scout @loop send yes` within two minutes. After that the offer has lapsed and a `yes` is answered `no loop send pending — use @loop send <name> first`.
+2. Leader answers `/Scout @loop send yes` within two minutes. After that the offer has lapsed and a `yes` is answered `no loop send pending - use @loop send <name> first`.
 3. Scout's client answers `{sending loop 'King's Road' (42 rooms, 3 lines)}` and then sends the loop as that many `{@loopdata <id> <i>/<k> <data>}` lines, 0.8 seconds apart.
 4. Leader's client collects the lines. When the last one is in, it rebuilds the loop, saves it to Leader's Loops list, and prints a notice in Leader's terminal.
 
 | Reply from the client asked | When |
 |---|---|
 | `preparing to send: <loop name>, yes to confirm, no to deny` | A loop was found by name, or you are running one and the bare form was sent. |
-| `not running a loop — @loop send <name> for a saved one` | The bare form, and no loop is running. |
-| `no saved loop named '<text>'` | The name matched nothing. |
-| `'<text>' matches <n> loops: '<name>', '<name>'` | The name matched several loops. |
+| `not running a loop - @loop send <name> for a saved one` | **Refusal:** the bare form, and no loop is running. |
+| `no saved loop named '<text>'` | **Refusal:** the name matched nothing. |
+| `'<text>' matches <n> loops: '<name>', '<name>'` | **Refusal:** the name matched several loops. |
 | `sending loop '<name>' (<n> rooms, <k> lines)` | `yes`, with an offer still open. `1 line` when the loop fits one. |
 | `@loopdata <id> <i>/<k> <data>` | The loop itself, line `<i>` of `<k>`. |
-| `no loop send pending — use @loop send <name> first` | `yes`, with no offer open or one older than two minutes. |
+| `no loop send pending - use @loop send <name> first` | **Refusal:** `yes`, with no offer open or one older than two minutes. |
 | `loop send of '<name>' cancelled` | `no`, with an offer open. |
-| `no loop send pending` | `no`, with none open. |
+| `no loop send pending` | **Refusal:** `no`, with none open. |
 | the Failure message | **Refusal:** the sender doesn't hold Move player. |
 
 | Notice in the asker's terminal | When |
@@ -1333,16 +1348,21 @@ Starts Auto-Lair on one of your saved lair setups, or on a list of rooms.
 |---|---|
 | `auto-lair '<name>': <n> lairs` | The saved setup was found and Auto-Lair started. |
 | `auto-lair: <n> lairs` | A room list was given and Auto-Lair started. |
-| `auto-lair failed to start` | The rooms were marked but Auto-Lair would not start on them. |
-| `no saved lair setup named '<text>'` | No setup has exactly that name. A single map/room, or a list written with spaces only, ends here too. |
-| `@lair requires a name or coordinate list` | Nothing followed `@lair`. |
+| `auto-lair updated: <n> lairs` | Auto-Lair was already running on other lairs. The run carries on with the new ones. |
+| `auto-lair already running (<n> lairs)` | Auto-Lair was already running on exactly these lairs. Nothing was changed. It ends `, paused` when an `@stop` is holding the run. |
+| `auto-lair not started: it needs at least two lair rooms` | **Refusal:** the setup, or the list, comes to fewer than two different rooms. |
+| `auto-lair not started: I don't know what room I'm in` | **Refusal:** your client has no room to set out from. |
+| `auto-lair failed to start` | **Refusal:** the rooms were marked but Auto-Lair would not start on them. |
+| `no saved lair setup named '<text>'` | **Refusal:** no setup has exactly that name. A single map/room, or a list written with spaces only, ends here too. |
+| `@lair requires a name or coordinate list` | **Refusal:** nothing followed `@lair`. |
 | the Failure message | **Refusal:** the sender doesn't hold Move player. |
 
 **Situations:**
 
-- **Your marked lairs are replaced.** The lairs you had marked are cleared and the new ones marked in their place. A saved setup brings its own respawn times with it.
-- **Looping, walking, or in another Auto-Lair run:** that is stopped first.
-- **Paused by `@stop`:** the pause is dropped.
+- **Your marked lairs are replaced, once it is going to start.** The lairs you had marked are cleared and the new ones marked in their place. A saved setup brings its own respawn times with it. A request refused with one of the two `not started` answers leaves your marks and whatever is running untouched.
+- **Looping or walking:** that is stopped first.
+- **Auto-Lair already running** is never stopped and started over. Asked for other lairs (or other respawn times), the marks are swapped under the run: it keeps going, and the lairs it keeps hold their respawn clocks. Asked for the lairs it already has, nothing is touched at all.
+- **Paused by `@stop`:** the pause is dropped when Auto-Lair starts or its lairs change. A request for the lairs it already has leaves the pause in place; use `@rego` to carry on.
 - **Master switch off:** ignored, no answer.
 
 #### @stop
@@ -1381,7 +1401,7 @@ Lifts the pause that `@stop` or the Pause button set, and carries on with what w
 | `loop '<name>' already running` | No pause of yours was in place, and a loop is running. |
 | `auto-lair already running (<n> lairs)` | The same, in Auto-Lair. |
 | `already walking to <room name> (<map>/<room>)` | The same, on a walk-to. |
-| `nothing to resume` | No pause, and nothing running. |
+| `nothing to resume` | **Refusal:** no pause, and nothing running. |
 | the Failure message | **Refusal:** the sender doesn't hold Move player. |
 
 **Situations:**
@@ -1401,7 +1421,7 @@ Reports the room you are in.
 | `<room name> (map <m>, room <r>); exits: <exit>, <exit>` | Your room is known. Exits are spelled out (`north`, `southeast`, `up`). |
 | `<room name> (map <m>, room <r>); exits: none` | The room has no exits in your map data. |
 | `map <m>, room <r> (not in map data)` | Paradigm: the game gave your position, and that room isn't in your map data. |
-| `Location unknown` | Your client doesn't know where you are. |
+| `Location unknown` | **Refusal:** your client doesn't know where you are. |
 | the Failure message | **Refusal:** the sender doesn't hold Query location. |
 
 **Situations:**
@@ -1475,7 +1495,7 @@ Has you disarm a trap in one direction, for the sender.
 | `ok` | The answer to `@trap stop`. |
 | `missing direction (e.g. @trap n)` | **Refusal:** nothing followed `@trap`. |
 | `unknown direction '<text>'` | **Refusal:** the word is not a direction. |
-| `can't disarm — no Traps skill` | **Refusal:** you have no Traps skill. Sent on telepath and gangpath only. |
+| `can't disarm - no Traps skill` | **Refusal:** you have no Traps skill. Sent on telepath and gangpath only. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
 
 **Situations:**
@@ -1535,10 +1555,10 @@ Two rewrites are made before sending. `@party meditate` sends `medi`. `@party go
 | Reply | When |
 |---|---|
 | nothing | The `invite` or `join` was sent to the game. |
-| `Can't invite — I'm mortally wounded; being dragged by <name>.` | `@invite`, and you are down. Sent whatever the Warn setting says. |
-| `Can't invite — I'm mortally wounded; nobody is dragging me.` | The same, when nobody is dragging you. |
-| `Can't join — I'm mortally wounded; being dragged by <name>.` (or `…; nobody is dragging me.`) | `@join`, and you are down. |
-| `My Party is full, <name>, <name> are following me.` | `@invite`, and your roster already holds six. |
+| `Can't invite - I'm mortally wounded; being dragged by <name>.` | **Refusal:** `@invite`, and you are down. |
+| `Can't invite - I'm mortally wounded; nobody is dragging me.` | **Refusal:** the same, when nobody is dragging you. |
+| `Can't join - I'm mortally wounded; being dragged by <name>.` (or `…; nobody is dragging me.`) | **Refusal:** `@join`, and you are down. |
+| `My party is full: <name>, <name> are following me.` | **Refusal:** `@invite`, and your roster already holds six. |
 | `I'm following <leader>; denied.` | **Refusal:** you are following someone. |
 | `I'm following someone; denied.` | **Refusal:** the same, when the leader's name isn't known. |
 | the Failure message | **Refusal:** the sender doesn't hold Request invite. |
@@ -1599,32 +1619,34 @@ Both are taken on any of the three channels.
 |---|---|
 | `coming to your location for pickup` | A room was named, it is within reach, and the walk has started. Also when you were already backtracking for them and they now name their room. |
 | `backtracking up to <n> room(s) to find you` | No room was named. You walk back along your own path, up to **Return distance (rooms)**. |
-| `found you — re-inviting <name>` | You reached them and sent the invite. |
-| `got you — resuming` | They follow you again. What you were doing is put back. |
-| `got you — waiting for your @ok` | They follow again, and they were left behind because they couldn't move. Your client also telepaths them `@waiting`. |
-| `got you — your last @ok was too early, waiting the full <n>s` | The same, when their last `@ok` came just before they failed to move. |
-| `follow timed out — resuming anyway` | They never followed after the invite. |
+| `found you - re-inviting <name>` | You reached them and sent the invite. |
+| `got you - resuming` | They follow you again. What you were doing is put back. |
+| `got you - waiting for your @ok` | They follow again, and they were left behind because they couldn't move. Your client also telepaths them `@waiting`. |
+| `got you - your last @ok was too early, waiting the full <n>s` | The same, when their last `@ok` came just before they failed to move. |
+| `follow timed out - resuming anyway` | They never followed after the invite. |
 | `comeback already in progress` | You are already on your way to them. |
-| `comeback already in progress — fetching <name> first, then you` | You are fetching someone else. They are next. |
+| `comeback already in progress - fetching <name> first, then you` | You are fetching someone else. They are next. |
 | `I can't I'm idle` | You have no walk, loop or Auto-Lair running to come back from. |
-| `my party is full — can't take you back` | Your roster holds six. Your client also telepaths them `@forget`. |
-| `you're <n> rooms off (limit <m>) — can't come, forget me` | The room they named is farther than **Return distance (rooms)**. `@forget` follows. |
-| `can't find a path to you — you're on your own` | No route to the room they named. `@forget` follows. |
-| `tried reaching you 2x and couldn't — forget me` | Two walks to them failed already. `@forget` follows. |
-| `can't reach <map>/<room> — resuming` | The walk to them could not be started. |
-| `path failed — resuming` | The walk to them failed on the way. |
-| `no path history to backtrack — going idle` | No room was named and your client has no trail to walk back along. |
-| `backtrack path failed — going idle` | The walk back failed on the way. |
-| `couldn't find you after backtracking — going idle` | You walked the whole trail back and did not see them. |
-| `didn't find you where the trip left you — @comeback with your room and I'll come` | After a train trip, they were not in the room it left them in. |
+| `my party is full - can't take you back` | Your roster holds six. Your client also telepaths them `@forget`. |
+| `you're <n> rooms off (limit <m>) - can't come, forget me` | The room they named is farther than **Return distance (rooms)**. `@forget` follows. |
+| `can't find a path to you - you're on your own` | No route to the room they named. `@forget` follows. |
+| `tried reaching you 2x and couldn't - forget me` | Two walks to them failed already. `@forget` follows. |
+| `can't reach <map>/<room> - resuming` | The walk to them could not be started. |
+| `path failed - resuming` | The walk to them failed on the way. |
+| `no path history to backtrack - going idle` | No room was named and your client has no trail to walk back along. |
+| `backtrack path failed - going idle` | The walk back failed on the way. |
+| `couldn't find you after backtracking - going idle` | You walked the whole trail back and did not see them. |
+| `didn't find you where the trip left you - @comeback with your room and I'll come` | After a train trip, they were not in the room it left them in. |
+| `I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you` | **Refusal:** in Auto-Lair, where an exit on your way turned them away. Said once. They are invited when your next pass finds them, answered or not. |
+| `I can't yet, I'm on a train trip. I'll come for you when the training is done` | **Refusal:** you are on a train trip. Said once. They are fetched when it ends, answered or not. |
 | `I can't, my loop goes through an exit you can't pass` | **Refusal:** your loop goes through an exit that turned them away. The loop carries on. |
-| `I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you` | **Refusal:** the same in Auto-Lair. Said once. |
-| `I can't yet, I'm on a train trip. I'll come for you when the training is done` | **Refusal:** you are on a train trip. Said once; they are fetched when it ends. |
 | the Failure message | **Refusal:** the sender is not one of the players listed above. |
+
+**Every row but the last four is sent whatever the Warn setting says.** The follower's client reads these answers: a "can't" (`I can't`, `my party is full`, `can't find a path`, `can't come`, `forget me`, `going idle`) ends its wait at once, a pickup that failed (`can't reach`, `path failed`, `follow timed out`) ends it too, and an answer that says you are coming, now or later (`coming to your location`, `backtracking up to`, `comeback already in progress`, `found you`, `got you`, `didn't find you`, `I can't yet`), has it wait for you for up to 15 minutes. Anything else you telepath it in braces (the reply to some other command, or the Failure message of a leader who doesn't take its `@comeback`) is not an answer to the request and changes nothing: the wait it was already on runs as before. Left unanswered, it would wait out its whole window. That is why the words in those answers never change. The last four are refusals like any other: with the Warn setting off the follower hears nothing, and its own wait runs out as if the leader were away.
 
 | Reply to `@forget` | When |
 |---|---|
-| `forgetting <name> — resuming` | You were on your way to them. The walk is dropped and what you were doing is put back. |
+| `forgetting <name> - resuming` | You were on your way to them. The walk is dropped and what you were doing is put back. |
 | `forgetting <name>` | You were not. |
 | the Failure message | **Refusal:** the sender is not one of the players listed above. |
 
@@ -1633,6 +1655,7 @@ Both are taken on any of the three channels.
 - **What the pickup does to your own movement.** Your loop, Auto-Lair or walk-to is stopped for the walk back and started again afterwards. An `I can't yet` is a wait, not a no: a MudPlay follower's client keeps waiting on it.
 - **`@forget` clears both sides.** Each drops the other from its roster memory, so the leader stops inviting them on sight and the follower stops asking.
 - **Answers to a pickup the leader started by itself** (a member the game dropped, or one who came back into the game) go by telepath. Answers to a `@comeback` go on the channel it came in on.
+- **`@forget` and `@waiting` always go by telepath,** whatever channel the `@comeback` came in on. They are commands, and every client that hears one acts on it: said aloud or gangpathed, a leader's `@forget` would make every follower in earshot drop that leader.
 - **Master switch off:** a `@comeback` from someone you would go back for is kept, and answered when the switch comes back on if it is no older than **If leading, accept @comeback for (min)**. `@forget` is ignored.
 - **The rules a leader follows** (how far, how long, train trips, exits that turn a member away) are under Settings → Party: **If leading, wait only (s)**, **Return distance (rooms)** and **If leading, accept @comeback for (min)**.
 
@@ -1648,7 +1671,7 @@ Has you attack a named target now, for the sender.
 
 **How the target is found:**
 
-- **A player who is in your room:** on a realm with PvP switched on, a fight with that player starts, by your Settings → PvP rules. It doesn't start when PvP is off, when that player is in your party, or when you are already in a fight with another player.
+- **A player who is in your room:** on a realm with PvP switched on, a fight with that player starts, by your Settings → PvP rules. It doesn't start when PvP is off, when that player is in your party, or when you are already in a fight with another player. Then nothing is attacked at all: the name is not passed on to your combat engine, and the sender is told why.
 - **Anything else** goes to your combat engine. If a monster in your room has exactly that name (ignoring case), it becomes your target and this round is fought the way your combat settings would fight any single target (weapon, attack spell or backstab). If no monster in the room, as your client last read it, has that full name (a shortened name counts as no match), your normal attack command is sent with the text as typed, and the game decides what it means.
 
 **Who may send it:** a player with **Execute commands**, on any of the three channels. Party membership alone is not enough.
@@ -1656,6 +1679,9 @@ Has you attack a named target now, for the sender.
 | Reply | When |
 |---|---|
 | nothing | The target was taken. The attack is the answer. |
+| `not attacking <name>: PvP is off` | **Refusal:** the name is a player in your room, and PvP is off. |
+| `not attacking <name>: they are in my party` | **Refusal:** the name is a member of your own party. |
+| `not attacking <name>: I'm fighting <other player>` | **Refusal:** you are already in a fight with another player. |
 | the Failure message | **Refusal:** nothing followed `@kill`. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
 
@@ -1710,15 +1736,15 @@ Reports your combat profiles, or switches to one. See **Combat profiles (quick-s
 
 | Reply | When |
 |---|---|
-| `{Current: 1)Fire, On Standby: 2)Cold, 3)Lightning}` | Bare `@profile`. A profile with no name reads `unnamed`. This one reply arrives inside a second pair of braces. |
-| `Combat profile <n> (<name>) — multi: <code> · debuff: <code> · normal: <code>` | The switch was made. Each spell slot that is set is shown by its cast code, from `multi`, `multi2`, `AoE-debuff`, `debuff`, `normal`, `alt` and `drain`. With no slot set it ends `no spells set`; a profile with no name reads `Combat profile <n> — …`. |
+| `Current: 1)Fire, On Standby: 2)Cold, 3)Lightning` | Bare `@profile`. A profile with no name reads `unnamed`. |
+| `Combat profile <n> (<name>) - multi: <code>, debuff: <code>, normal: <code>` | The switch was made. Each spell slot that is set is shown by its cast code, from `multi`, `multi2`, `AoE-debuff`, `debuff`, `normal`, `alt` and `drain`. With no slot set it ends `no spells set`; a profile with no name reads `Combat profile <n> - …`. |
 | `no combat profiles configured` | **Refusal:** bare `@profile`, and you have none. |
 | `no combat profile matches '<text>'` | **Refusal:** no profile name holds what was typed. |
 | the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
 
 **Situations:**
 
-- **On your own screen:** every switch prints the same one-line summary in your terminal.
+- **On your own screen:** every switch prints the same summary in your terminal, with a long dash after the profile and dots between the slots. The copy sent to the asker uses a hyphen and commas (see **Plain characters only**).
 - **Master switch off:** ignored, no answer.
 
 ### Health, rest and escape
@@ -1735,7 +1761,7 @@ Reports your hit points and mana as your statline last showed them.
 | `HP=<now>/<max>,KAI=<now>/<max>` | A kai user. |
 | `HP=<now>/<max>` | A character with neither. |
 | the same, ending `, Resting` or `, Meditating` | You are resting or meditating. |
-| `HP unknown — no prompt observed yet` | Your client hasn't read a statline yet this session. |
+| `HP unknown - no prompt observed yet` | **Refusal:** your client hasn't read a statline yet this session. |
 | the Failure message | **Refusal:** the sender is neither on your party roster nor holds Query health/status. |
 
 **Situations:**
@@ -1758,7 +1784,7 @@ Reports what you are doing, where you are, and your ailments, in one line. The p
 | `idle; Town Square (map 1, room 1); no ailments` | Standing about. |
 | `running loop 'Black Fortress', fighting; Dark Hall (map 5, room 10); ailments: poisoned` | In a fight on a loop, poisoned. |
 | `walking to 6/1249; Rocky Path (map 9, room 747); 72 steps left; no ailments` | On a walk-to. |
-| `Status unknown` | Your client hasn't read a statline yet this session. |
+| `Status unknown` | **Refusal:** your client hasn't read a statline yet this session. |
 | the Failure message | **Refusal:** the sender is neither on your party roster nor holds Query health/status. |
 
 **Situations:**
@@ -1772,7 +1798,7 @@ Reports how many lives you have left.
 | Reply | When |
 |---|---|
 | `<n> lives remaining` | Your stat screen has been read this session. `1 life remaining` for one. |
-| `lives unknown` | It hasn't, so there is no number your client would vouch for. |
+| `lives unknown` | **Refusal:** it hasn't, so there is no number your client would vouch for. |
 | the Failure message | **Refusal:** the sender is neither on your party roster nor holds Query health/status. |
 
 #### @heal
@@ -1841,7 +1867,7 @@ Lists what you carry that someone looking at you can't see: your pack and your k
 | `carrying: <item>, <item>; keys: <key>, <key>` | It all fits one line. With no keys the `keys:` part is left out, and the other way round. |
 | `carrying (1/3): <item>, <item>` and so on, then `keys: <key>, <key>` | Too long for one line: the full list is sent over several replies, the pack first and then the keys. |
 | `carrying nothing` | An empty pack and no keys. |
-| `inventory not parsed yet (type i)` | Your inventory has not been read yet. |
+| `inventory not parsed yet (type i)` | **Refusal:** your inventory has not been read yet. |
 | the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
 
 #### @have
@@ -1858,13 +1884,13 @@ Says whether you hold an item, and how many.
 |---|---|
 | `yes - <n>x '<text>'` | At least one match. `<n>` is the total across everything that matched. |
 | `no - nothing matching '<text>'` | No match. |
-| `usage: @have <item name>` | Nothing followed `@have`. |
-| `inventory not parsed yet (type i)` | Your inventory has not been read yet. |
+| `usage: @have <item name>` | **Refusal:** nothing followed `@have`. |
+| `inventory not parsed yet (type i)` | **Refusal:** your inventory has not been read yet. |
 | the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
 
 **Situations:**
 
-- **The asking side:** a MudPlay leader whose route needs an item asks the party `@have <item>` by itself and has a member with a spare hand it over.
+- **The asking side:** a MudPlay leader whose route needs an item asks the party `@have <item>` by itself and has a member with a spare hand it over. It reads the `yes - …` and `no - …` answers, which are sent whatever the Warn setting says.
 
 #### @what
 
@@ -1884,12 +1910,12 @@ Reports the coins you carry.
 |---|---|
 | `<n> platinum, <n> gold, <n> silver, <n> copper (= <total> copper)` | You carry coins. Only the kinds you hold are named, largest first (runic first of all, under your board's name for it). The total is their worth in copper. |
 | `no coins on hand` | You carry none. |
-| `wealth unknown - parse inventory first (type i)` | Your inventory has not been read yet. |
+| `wealth unknown - parse inventory first (type i)` | Your inventory has not been read yet. Sent whatever the Warn setting says: a leader's toll check reads it. |
 | the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
 
 **Situations:**
 
-- **The asking side:** a MudPlay leader about to take the party through a toll asks every member `@wealth` by itself, and routes around the toll when a member can't pay.
+- **The asking side:** a MudPlay leader about to take the party through a toll asks every member `@wealth` by itself, and pays for a member who is short when it can spare the coin or goes round the toll when it can't (see **A party at a toll** under *The Navigation window*).
 
 #### @enc
 
@@ -1898,7 +1924,7 @@ Reports your encumbrance.
 | Reply | When |
 |---|---|
 | `Encumbrance <now>/<max> (<n>%) - <bracket>` | Your inventory has been read. `<bracket>` is the game's word for how loaded you are. |
-| `encumbrance unknown - parse inventory first (type i)` | It has not. |
+| `encumbrance unknown - parse inventory first (type i)` | **Refusal:** it has not. |
 | the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
 
 #### @uses
@@ -1917,9 +1943,9 @@ Reports the charges left on your limited-use items.
 | `item uses - <item>: <n>, <item>: ?` | Bare. A `?` is an item known to be limited-use whose charges have not been read yet. |
 | `no limited-use items carried` | Bare, and you hold none. |
 | `<item>: <n> use(s) remaining` | The named item, with its charges known. |
-| `<item>: charges not read yet` | A limited-use item whose charges have not been read. |
-| `<item> isn't a limited-use item` | The item matched but has no charges to count. |
-| `no carried item matches '<text>'` | Nothing you hold matches. |
+| `<item>: charges not read yet` | **Refusal:** a limited-use item whose charges have not been read. |
+| `<item> isn't a limited-use item` | **Refusal:** the item matched but has no charges to count. |
+| `no carried item matches '<text>'` | **Refusal:** nothing you hold matches. |
 | the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
 
 **Situations:**
@@ -1940,10 +1966,10 @@ Reports the daily charges left on your transport tokens (Paradigm).
 
 | Reply | When |
 |---|---|
-| `token charges — <place>: <n>, <place>: <n>` | Bare. |
+| `token charges - <place>: <n>, <place>: <n>` | Bare. |
 | `no token charges read yet (hold transport tokens and log in on Paradigm)` | Bare, and none has been read. |
 | `token of <place>: <n> use(s) remaining` | The named token's charges are known. |
-| `no charge count for a token of <place> — not held, or not read yet` | They are not. The place is echoed as typed. |
+| `no charge count for a token of <place> - not held, or not read yet` | **Refusal:** they are not. The place is echoed as typed. |
 | the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
 
 #### @get-all
@@ -1985,10 +2011,10 @@ Empty your character out. `@drop-all` drops things on the floor; `@hide-all` hid
 | `dropping <n> keys` | `keys`. |
 | any of the above, ending `(keeping <k> that can't be dropped: <item>, <item>)` | Some items were left out because the game won't let go of them. |
 | `nothing to drop` | There was nothing of that kind to drop. |
-| `inventory not parsed yet (type i)` | Your inventory has not been read yet. |
+| `inventory not parsed yet (type i)` | **Refusal:** your inventory has not been read yet. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
 
-`@hide-all` answers with the same lines, reading `hiding` for `dropping` and `nothing to hide` for `nothing to drop`. Its "keeping" tail reads `can't be hideped`. A word after the command that is not `full`, `coins` or `keys`, or more than one word, is answered with the usage line: `usage: @drop-all [full|coins|keys] (bare = unworn items)`, or the same for `@hide-all`.
+`@hide-all` answers with the same lines, reading `hiding` for `dropping` and `nothing to hide` for `nothing to drop`. Its "keeping" tail reads `can't be hidden`. A word after the command that is not `full`, `coins` or `keys`, or more than one word, is refused with the usage line: `usage: @drop-all [full|coins|keys] (bare = unworn items)`, or the same for `@hide-all`.
 
 **Situations:**
 
@@ -2007,12 +2033,14 @@ Levels the coin you carry to your keep-on-hand amount (Settings → Cash + Items
 | `depositing <n> copper (keeping <k>)` | You carry more than the amount. `dep <n>` was sent. |
 | `withdrawing <n> copper (up to <k> on hand)` | You carry less. `with <n>` was sent. |
 | `already at keep-on-hand (<k> copper)` | You carry exactly the amount. Nothing was sent. |
-| `wealth unknown - parse inventory first (type i)` | Your inventory has not been read yet. |
+| `not in a bank - nothing deposited` | Your client is sure of the room you are in, and it is not a bank. Nothing was sent. |
+| `wealth unknown - parse inventory first (type i)` | Your inventory has not been read yet. Nothing was sent. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
 
 **Situations:**
 
-- **Not in a bank:** your client doesn't check where you are. It sends the command and answers `depositing …` or `withdrawing …` all the same; what the game makes of it is not reported back.
+- **Not in a bank:** `depositing …` and `withdrawing …` are said only when the command was really sent. In a room your client is sure is not a bank, nothing is sent and the answer is `not in a bank - nothing deposited`. When it can't be sure (it doesn't know your room, it is still working out which room you are in, or the game data lists no banks at all), it sends the command as before; what the game makes of it is not reported back.
+- **Every answer but the Failure message is sent whatever the Warn setting says.** A leader's stash transfer waits on each member's answer and moves on only when it has one.
 - **The sending side:** a MudPlay leader's stash transfer telepaths this to each member at the bank (see **Moving a stash into a bank**).
 - **Master switch off:** ignored, no answer.
 
@@ -2028,7 +2056,7 @@ Searches the room you are in and takes the coin the search shows, up to your own
 | `ok - took <amount>, left <amount>` | Some was taken and some left behind. |
 | `ok - found no coin here` | The search showed none. |
 | `ok - at my coin weight limit, took nothing` | Coin was shown but your limits allowed none of it. |
-| `busy with a coin errand of my own - try again shortly` | **Refusal:** you are already on a `@get-stash`, a stash transfer or a train-funding stop of your own. |
+| `busy with a coin errand of my own - try again shortly` | You are already on a `@get-stash`, a stash transfer or a train-funding stop of your own. Sent whatever the Warn setting says: the leader that asked is waiting on an answer. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
 
 **Situations:**
@@ -2061,8 +2089,8 @@ Wears one of your saved gear sets, or saves what you are wearing into one. Gear 
 | `no gear set '<word>'` | **Refusal:** no set answers to that word. |
 | `no default gear set configured` | **Refusal:** `@equip-all`, and you have no Default set. |
 | `busy equipping` | **Refusal:** a gear swap is already running. |
-| `busy equipping — try again when the swap finishes` | **Refusal:** `update`, in the middle of a swap. |
-| `haven't read my inventory yet — try again after an 'i'` | **Refusal:** `update`, before your inventory has been read. An unread inventory would empty the set. |
+| `busy equipping - try again when the swap finishes` | **Refusal:** `update`, in the middle of a swap. |
+| `haven't read my inventory yet - try again after an 'i'` | **Refusal:** `update`, before your inventory has been read. An unread inventory would empty the set. |
 | `usage: @equip <set> [update]` | **Refusal:** nothing followed `@equip`. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
 
@@ -2083,9 +2111,9 @@ Splits the coins you carry evenly across your party.
 | Reply | When |
 |---|---|
 | `sharing coins among <n> party members` | At least one kind of coin was shared out. |
-| `nothing to share (too few coins to split)` | You hold fewer coins of every kind than there are members. |
-| `no party members to share with` | Nobody else is on your roster. |
-| `wealth unknown - parse inventory first (type i)` | Your inventory has not been read yet. |
+| `nothing to share (too few coins to split)` | **Refusal:** you hold fewer coins of every kind than there are members. |
+| `no party members to share with` | **Refusal:** nobody else is on your roster. |
+| `wealth unknown - parse inventory first (type i)` | **Refusal:** your inventory has not been read yet. |
 | the Failure message | **Refusal:** the sender is not on your party roster. |
 
 **Situations:**
@@ -2109,14 +2137,14 @@ The reply is sent when the run has finished, not when it starts.
 | Reply | When |
 |---|---|
 | `Trained to level <n>.` | One `train`, and it worked. |
-| `Can't train — you've progressed too far for this trainer.` | One `train`, refused by this trainer. |
-| `Can't train — not enough money for training.` | One `train`, and you can't pay. |
-| `Nothing to train.` | One `train`, and no level was gained. |
+| `Can't train - you've progressed too far for this trainer.` | **Refusal:** one `train`, refused by this trainer. |
+| `Can't train - not enough money for training.` | **Refusal:** one `train`, and you can't pay. |
+| `Nothing to train.` | **Refusal:** one `train`, and no level was gained. |
 | `I've trained <n> levels.` | Auto-train, with at least one level gained. `1 level` for one. |
-| `Couldn't train any levels.` | Auto-train, with none gained. |
+| `Couldn't train any levels.` | **Refusal:** Auto-train, with none gained. |
 | either of the two above, with `, unable to train further`, `, out of money` or `, training stalled` before the full stop | Why the run ended. |
 | either, with `, <n> remain` | You still have that many banked levels. |
-| either, with `, CP allocated through level <n>` | Your CP plan was applied. |
+| either, with `, CP allocated through level <n>` | Your CP plan was applied. A run that gained no level but applied the plan did something, so it is answered and not refused. |
 | `busy training` | **Refusal:** a training run of yours is already under way. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
 
@@ -2186,9 +2214,9 @@ The `@` on `@help` itself is needed, like on every remote command: a plain `help
 |---|---|
 | `@version, @health, @status, @lives, @help, …` | Bare. Only the commands this sender would be obeyed on are listed. A long list is sent as several replies of up to 200 characters. `&@<command>` is added when the sender holds Execute commands. |
 | `(type @help <command> for its syntax)` | Bare, after the list. |
-| `<form> — <description>` | A command was named. |
-| `&@<command> — sends @<command> back to you, so your client runs it as if I'd sent it (e.g. &@invite makes me ask you for a party invite)` | `@help &@`. |
-| `no such command '<text>' — try @help for the list` | The word is not a command. |
+| `<form> - <description>` | A command was named. |
+| `&@<command> - sends @<command> back to you, so your client runs it as if I'd sent it (e.g. &@invite makes me ask you for a party invite)` | `@help &@`. |
+| `no such command '<text>' - try @help for the list` | **Refusal:** the word is not a command. |
 | the Failure message | **Refusal:** the sender doesn't hold Query version. |
 
 **Situations:**
@@ -2227,7 +2255,7 @@ Reports your level and experience.
 |---|---|
 | `Level <n>, <exp> exp, <n> to next level` | Your stat screen and the `exp` line have both been read. |
 | `Level <n>, <exp> exp, exp-to-next unknown (type exp)` | The `exp` line has not. |
-| `level unknown - parse a stat screen first (type stat)` | Your stat screen has not been read yet. |
+| `level unknown - parse a stat screen first (type stat)` | Your stat screen has not been read yet. Sent whatever the Warn setting says: a leader's level check reads it. |
 | the Failure message | **Refusal:** the sender doesn't hold Query experience. |
 
 **Situations:**
@@ -2275,9 +2303,9 @@ Reports quest progress: which quests are marked complete on your Quests tab and,
 | `<quest> 1, 2, 3 marked complete. Abil: <flag> step <n>` | One quest, with the flag read from the game. |
 | the same, ending `(<k> newly marked)` | That reading proved more parts done, and they were marked. |
 | `<quest> 1, 2 marked complete. Abil: <flag> unavailable` | The game was asked and gave no value for that flag. |
-| `no quest matches "<text>"` | The name matched nothing. |
-| `<n> flag(s) read, <k> newly marked — <list>` | `@quest update` worked. `, <j> in progress advanced` is added when part-finished quests moved on. The list is the bare form's. |
-| `nothing to check — <list>` | `@quest update`, with no flag left to read. |
+| `no quest matches "<text>"` | **Refusal:** the name matched nothing. |
+| `<n> flag(s) read, <k> newly marked - <list>` | `@quest update` worked. `, <j> in progress advanced` is added before the hyphen when part-finished quests moved on. The list is the bare form's. |
+| `nothing to check - <list>` | `@quest update`, with no flag left to read. |
 | `can't read quest flags here (stock needs sys-god access)` | **Refusal:** `@quest update` on Stock without sys-god access. |
 | `a quest flag read is already running` | **Refusal:** `@quest update` while another read is under way. |
 | `quest flag read failed` | **Refusal:** `@quest update`, and the read broke off. |
@@ -2360,9 +2388,9 @@ Reports where an item was last seen in your gang house, from the Roomba item log
 | Reply | When |
 |---|---|
 | `total: 5x rope and grapple - seen in 15/12 (3), 15/13 (2) - last scanned 2026-08-30 09:22 MST` | One line per matching item, up to five. Each room is followed by the number seen there; after ten rooms the rest are counted (`, +<n> more`). The time is that of the newest sighting, in your own time zone. |
-| `<n> more matching item(s) — refine your search` | More than five items matched. |
+| `<n> more matching item(s) - refine your search` | More than five items matched. |
 | `no record of "<text>"` | Nothing in the log matches. |
-| `usage: @roomba <item name>` | Nothing followed `@roomba`. |
+| `usage: @roomba <item name>` | **Refusal:** nothing followed `@roomba`. |
 | `@roombadata <data>` | `@roomba sync`: room labels first, then the sightings, then a last line reading `@roombadata Sync Complete`. One line every 0.8 seconds. |
 | the Failure message | **Refusal:** the sender doesn't hold Query Roomba. |
 
@@ -2484,13 +2512,14 @@ Sends a command to the game as if you had typed it. This is the highest-trust co
 |---|---|
 | `ok` | The command was sent to the game. It says nothing about what the game made of it. |
 | nothing | A bare `@do`. |
-| `@do suicide is not allowed, use @suicide` | **Refusal:** `suicide` appears anywhere after `@do`. Nothing is sent to the game. |
+| `@do suicide is not allowed, use @suicide` | **Refusal:** one of the words after `@do` is `suicide`. Nothing is sent to the game. |
 | nothing | `reroll` appears anywhere in the line. Nothing is sent, and nothing is answered. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
 
 **Situations:**
 
-- **The two refusals come before the permission check,** so they apply to anyone, with or without the box.
+- **`reroll` is dropped for anyone,** with or without the box, before anything else is looked at. It is matched anywhere, inside a longer word too.
+- **The `suicide` refusal is for a sender who holds the box.** The permission is checked first, so a player without Execute commands gets the Failure message whatever followed `@do`, and learns nothing else. The word must be `suicide` itself, anywhere after `@do`; punctuation or quotes around it don't hide it (`suicide!`, `"suicide"`, `suicide;`). A longer word is not it: `@do say suicidal` is sent like any other command.
 - **Master switch off:** ignored, no answer.
 - **`@do break` holds your attack.** A `break` sent this way puts the attack hold on your character exactly as a `break` you type does: Auto-Combat stops attacking the monster it was fighting and attacks nothing else in the room. An attack sent the same way (`@do a orc`) lifts the hold, as an attack of your own would. Your terminal shows `[Attack on <monster> held by Leader's @do break: attack to carry on]` when the hold goes on and `[Attack hold on <monster> ended: …]` when it ends, and the program log and a bug report name Leader as the one who asked. What the hold does and how it ends is under *Combat → The round loop*, **Stopping the fight yourself**.
 - **On your own screen:** each `@do` is written to the program log with the sender's name and the command.
@@ -2501,14 +2530,15 @@ Kills your character, using the suicide password MudPlay captured from your own 
 
 **Who may send it:** a player with **Elevated Commands**, on any of the three channels.
 
-**The lives rule comes first.** Settings → Other → **Block @suicide commands when lives ≤** (default 5) is checked before anything else, the permission included:
+**The permission comes first, then the lives rule.** A sender without Elevated Commands gets the Failure message and nothing else. For a sender who holds it, Settings → Other → **Block @suicide commands when lives ≤** (default 5) is checked next:
 
 | Reply | When |
 |---|---|
+| the Failure message | **Refusal:** the sender doesn't hold Elevated Commands. Your lives are not mentioned. |
 | `suicide blocked, <n> lives <= threshold <m>` | **Refusal:** your lives are at or below the number set. |
 | `suicide blocked, lives unknown to client` | **Refusal:** your stat screen has not been read this session, so your client can't tell. |
 
-Past that rule, and with the permission held:
+Past both:
 
 | Reply | When |
 |---|---|
@@ -2517,13 +2547,12 @@ Past that rule, and with the permission held:
 | nothing | No password is stored and the game confirms none is set: `suicide` is sent. |
 | `Suicide failed, password set in game but not stored.` | **Refusal:** no password is stored, but the game has one. Run `set suicide` yourself so MudPlay can capture it. |
 | `@suicide already in-flight, try again shortly` | **Refusal:** a second `@suicide` arrived while the first was still checking for a password. |
-| the Failure message | **Refusal:** the sender doesn't hold Elevated Commands. |
 
 **Situations:**
 
 - **With no password stored,** your client sends `pro` first and reads the answer up to the next statline to learn whether the game has a suicide password set.
-- **The lives rule answers anyone.** Because it is checked first, a player with no permission at all who sends `@suicide` while you are at or below the number is told your lives count, if the Warn setting is on. With the number at `0`, the rule stops only a character whose stat screen has not been read yet.
-- **The same rule covers any command with `suicide` in it,** other than `@help` and `@party`: `@have suicide note` is refused the same way while your lives are low or unknown.
+- **The lives rule answers only a sender you trust with the command.** A player without Elevated Commands is never told your lives count. With the number at `0`, the rule stops only a character whose stat screen has not been read yet.
+- **The rule is `@suicide`'s alone.** No other command is held to it for having `suicide` among its words: `@have suicide note` is an ordinary `@have`.
 - **Master switch off:** ignored, no answer.
 
 #### @dupe
@@ -3143,7 +3172,7 @@ Your death history. **How did I Die?** replays the backscroll from the moment of
 
 Recovery matches your realm: on **Paradigm** it recovers your `corpse` in one command; on **Stock**, where death scatters your items loose on the floor (and overflows into other rooms when that floor is full), it `get`s each item back.
 
-**An arena death leaves no pile.** Dying in an arena takes no item, coin or key, so there is nothing to go back for. The death is still in the history (time, room, lives), marked **Recovered** with the note *Arena death: nothing was lost.* and with nothing listed under *Equipped at death* or *Inventory lost*. Nothing walks back to the room, no `recover corpse` or `get` is sent, and nothing is re-worn for it; gear that was waiting for Auto-All to come back on is still put on then. On **Paradigm** an arena death is one in an arena room (the Training Grounds, the Arena Practice Rooms, the Dwarven Arena, the arena passages of map 11). On **Stock** it is a death the game answers with *But, because you were in a colliseum, you have been saved.*: with the board's arenas switched off, a death in one of those rooms prints the ordinary lines and drops a pile like any other. MudPlay still reads your inventory once at the graveyard, as after any death.
+**An arena death leaves no pile.** Dying in an arena takes no item, coin or key, so there is nothing to go back for. The death is still in the history (time, room, lives), marked **Recovered** with the note *Arena death: nothing was lost.* and with nothing listed under *Equipped at death* or *Inventory lost*. Nothing walks back to the room, no `recover corpse` or `get` is sent, and nothing is re-worn for it, since everything you wore is still on; gear that was waiting for Auto-All to come back on is still put on then. On **Paradigm** an arena death is one in an arena room (the Training Grounds, the Arena Practice Rooms, the Dwarven Arena, the arena passages of map 11). On **Stock** it is a death the game answers with *But, because you were in a colliseum, you have been saved.*: with the board's arenas switched off, a death in one of those rooms prints the ordinary lines and drops a pile like any other. MudPlay still reads your inventory once at the graveyard, as after any death. It spends no life on either realm, so **Sysop god lives** asks none back for it. **A hang-up while dropped in an arena room** is an arena death too, one nobody sees: MudPlay works it out when you come back in and adds it here the same way, with nothing lost (*Hang-up penalties on this realm → A hang-up that killed you*, **Dropped in an arena room**).
 
 On **Paradigm** the corpse is recovered the moment you arrive in the death room, whether the walk ends there or only passes through: the room's own display is read as it prints. If the room is shown without your corpse, the pile is marked **Missing** (looted or decayed), with a note saying which display that came from, and nothing is sent. Only the death room's own display decides that: the floor of the next room you walk into, or of a room you `look` into, never does.
 
@@ -3190,7 +3219,7 @@ A bug report lists what the latest pile is still missing, the sweep's rooms in o
 
 Finally, if the only thing left un-recovered is **currency**, the death counts as fully recovered: coins are picked up as cash automatically (never `get`-ed), so they never leave a pile stuck at "partly recovered".
 
-**A death you never saw.** On a realm whose settings say a hang-up is penalised, hanging up (or losing the link) while dropped, or low enough on HP for the penalty to finish you, kills the character after the connection is gone. MudPlay works that out when you come back in and adds the death here like any other, with the room you were in, the time the link dropped, and the pile taken from what you held then and don't now. Its death line begins *Killed by the hang-up penalty (not seen: worked out on entering the game).* and adds that the room and time are where this client last had the character: if you played it from another client in between, the pile is where it died then. It has no **How did I Die?** replay. **Recover Now** and **Auto-Recover Deathpiles** treat it as any other record. The rule it goes by, and what happens when it can't tell, are under *Hang-up penalties on this realm → A hang-up that killed you*.
+**A death you never saw.** On a realm whose settings say a hang-up is penalised, hanging up (or losing the link) while dropped, or low enough on HP for the penalty to finish you, kills the character after the connection is gone. MudPlay works that out when you come back in and adds the death here like any other, with the room you were in, the time the link dropped, and the pile taken from what you held then and don't now. Its death line begins *Killed by the hang-up penalty (not seen: worked out on entering the game).* and adds that the room and time are where this client last had the character: if you played it from another client in between, the pile is where it died then. When you came back standing where the dead of that room wake, the line names that room too. It has no **How did I Die?** replay. **Recover Now** and **Auto-Recover Deathpiles** treat it as any other record. The rule it goes by, and what happens when it can't tell, are under *Hang-up penalties on this realm → A hang-up that killed you*.
 
 ## Character Info and Calculators
 
@@ -3620,7 +3649,8 @@ The item's right-hand info pane is also interactive:
 - **Dropped by** lists the monsters that drop it as links to their records;
 - **Placed in** lists the rooms whose floor holds it, each a link to the room record with its own **Queue Walking here →** (so a room-only item like a quest box shows exactly where to find it).
 - **Room command** lists the commands that can **hand the item over when typed in a room** — `pry coffin — 18.6%`, `mine ore / mine vein / mine copper vein — 25%` — each with the rooms it works in as the same room links. Commands joined with `/` are alternatives. A percentage is the chance per use, an estimate from the game data; `?%` means it's random with no figure; no percentage means the command gives the item outright. What else a command needs (an item to hold or hand in, a level, a price) isn't shown here; it's in the room's command record. A long room list shows the first six with **Show all N rooms**. This group only appears for game data exported by **Nightmare Redux for Linux**, which is the one that lists these; every other export works exactly as before and simply has no such group. When an item has this group, **Given by** lists only the NPCs that hand it over; the rooms are all here.
-- A room you **blacklisted** (Game Data → Modify Blacklist…, or right-click it on the map) is left out of **Placed in**, **Room command** and **Given by**; a command with no room left isn't listed.
+- **Used on** appears on any item that some exit's game data names as the one needed to pass: a key on a locked door, an item to carry across (`rope and grapple`, a `room ticket`), a ticket. It lists every such exit, one line each, as the room, its map/room number, the direction and the word the exit uses (`Jail Cell - 1/42 - south (Key)`), sorted by map and room. Both sides of a door that names the key are two lines. Each line links to the room record and offers **Queue Walking here →**; a long list shows the first six with **Show all N uses**. After the exits come the **room actions that need the item held** — a lever, a rubbed orb, a titanium fork aimed at a wall — one line per action: the room, its map/room number, the commands to type (alternatives joined with `/`) and the exit the data says they open, ending in `(Action)` (`Underground Lake - 8/398 - rub bloodstone orb / hold bloodstone orb / rub orb opens south (Action)`). When the exit is in another room that room is named too (`… opens north in Gate - 7/5`), and when the data names no exit the action can be attached to the line just gives the commands. An item no exit names and no action asks for has no such section. A **cast-on-walk** spell that checks for an item isn't listed.
+- A room you **blacklisted** (Game Data → Modify Blacklist…, or right-click it on the map) is left out of **Placed in**, **Room command**, **Used on** and **Given by**; a command with no room left isn't listed.
 
 **For a monster** you can set its **Landmass**, **Region** and **Area** (three type-ahead boxes over the labels already in use — pick one or type a new name; blank means *not set*), its **Relationship** and **Priority** (under *Fighting it*, with **Don't backstab**), and pin its whole **single-target combat chain** for that species in the *Attacks on this monster* table, rung-for-rung with the Settings → Combat spell grid. The window has no splitter to drag and remembers its size and position. Like every other field, the location is saved to the tier you pick in **Use**; a box that still shows the shipped label saves nothing, so an updated shipped label still reaches every monster you haven't re-filed yourself (and clearing a box goes back to the shipped label rather than blanking it):
 
@@ -4151,9 +4181,36 @@ Press **F5** to open the **Wire Inspector** — a troubleshooting view of the da
 - **Auto-scroll** keeps the panes pinned to the newest bytes, and **Sync scroll** ties the Raw and Stripped panes' scrolling together.
 - **Find next** locates a term in the Stripped pane, and **Export raw… / Export stripped… / Export classified…** save any pane to a file.
 
-Reach for this when reporting a display or parsing glitch — it shows exactly what arrived on the wire. Because **Raw and Classified are on by default**, a **Bug Report** attaches the last 750 lines of each unless you turn them off — so a combat-recognition problem lands with the exact wire and the engine's read of every combat line and death.
+Reach for this when reporting a display or parsing glitch — it shows exactly what arrived on the wire. A **Bug Report** includes the Raw and Classified sections only while their boxes here are ticked (both are ticked when the client starts): the last 750 lines of each, the raw one with the time each read arrived. Untick a box and that section is left out. They are never added on their own and don't count toward the report's size.
 
-**A bug report leaves your login out.** The report's **Scrollback** and raw-wire sections copy only what was written while you were inside the game: from your first game prompt, until you disconnect or exit to the board's menus, and again from the next game prompt. The menu itself isn't copied. So the board's login screen, with your account name on it, isn't in a report even when it's still on your terminal or in the Backscroll window, which go on showing everything. A report made before you've entered the game says the section was left out. The program log section was already safe: what you type isn't logged, and the automatic login logs only the prompts it waits for, not what it sends.
+## Bug Report
+
+**Bug Report** (the toolbar button, or right-click the terminal → *Bug report…*) freezes the client's state at the moment you click, asks you what went wrong, and writes a Markdown file to your Desktop named for the realm and the time. Attach that file to an issue. Click it as soon as you see the problem: the report reaches back several minutes, not hours.
+
+**What it contains**, in this order:
+
+- **Your description**, then **Session** and **Client and connection**: the build and when the client was started, your system, the connection, which diagnostics were on, the open windows, and where the log files are.
+- **Holds and waits**: everything that can make the client sit still. The send gate and what it dropped, every movement gate with who raised it, why and since when, how long each engine has been in its state, and what each is waiting on. **Pending work** lists what the smaller engines have queued.
+- **The live state**: player, party, inventory, movement and navigation, combat, spells.
+- **What is configured**: combat profiles, room markers, the Workshop, your triggers, aliases and macros, who may send you remote commands, your deaths, changed keybindings, monster and item overrides, every setting.
+- **The histories, last, each oldest first** so the incident is at the end: warnings and errors (kept apart, so routine lines can't push them out), **Commands sent** (every command the client sent, held or dropped, with who sent it: `typed` at the terminal, `alias` for a step of an alias, `window` for a button, link or input box in one of MudPlay's windows such as the Conversation input, the toolbar or the Party window, `api` for the Local API's send, an `engine` by name, `user` for a macro, trigger or event, `route` for a walk or loop step), the whole program log with millisecond times, and up to 3,000 lines of scrollback. Then the wire sections, if ticked.
+
+A report stays under about 1 MB without the wire sections. If it would be larger, the oldest entries of the largest history are left out and that section's heading says how many.
+
+**What is never in a report.**
+
+- **Your login name, login password and suicide password.** Each is written as `[redacted]` wherever it appears: in the scrollback, the wire, the log, the commands sent, a trigger's text, a setting, even your own description. A trigger, alias or macro that contains one is left out whole. These are the details **saved in MudPlay** for the character: a login you type by hand each time isn't known to the client, and the report's Session section says when none are saved. A password that is also an ordinary word is masked inside other words too. A very short value is masked only where it stands as a word of its own. A login name that is the same as your character's name in the game is left, since every player sees that name, and Session says so. If the saved details can't be read at all, no report is written and the terminal says why. One case is not recognised: a value the game itself breaks in two by printing another line in the middle of echoing it. That takes the game echoing your typing a key at a time while something else arrives, which the client's normal line-at-a-time typing doesn't do.
+- **Anything you type at a prompt that isn't the game's own.** The list of commands sent keeps a line of yours (typed, or sent from an alias, a window or the Local API) only when it went out at the normal game prompt: the statline set in Settings → Statline, whatever shape you gave it. If the game is printing a statline that setting doesn't describe, typed lines are withheld until the two agree. With a statline that prints over two rows (one with `%n` in it), every typed line is withheld: the prompt is never on the one row the client looks at. A line typed at a password prompt, a menu or a question is listed as *typed at a prompt: withheld*, with its time and no text, so a new suicide password you are setting is never kept. The row of `*` the game prints as a suicide password is typed is written as `[redacted]` too, whatever its length and whether or not the password is saved in MudPlay, so a report doesn't show how long it is.
+- **Your login screen.** The scrollback and raw wire copy only what was written while you were inside the game: from your first game prompt, until you disconnect or exit to the board's menus, and again from the next game prompt. The list of commands sent keeps nothing typed outside the game or while a suicide password is being entered. The terminal and the Backscroll window go on showing everything.
+- **The Local API token.**
+
+Your character's name, the BBS and its address, and other players' names and chat are in a report: they are what anyone in the game can see.
+
+**Offensive words in chat are masked, in the report only.** On player chat lines (gossip, auction, gangpath, telepath, broadcast, yell, say, and your own chat commands), racial, ethnic, religious, homophobic, transphobic and ableist slurs and the strongest sexual profanity are written as `[censored]`. Ordinary swearing is left. Whole words only, so a word that merely contains one is untouched, and game text (room, monster, item and combat lines) is never changed. Your terminal, the Conversation window and the log files on your machine are not censored.
+
+**After a hang or a forced kill** there is no client left to make a report. Send the **last-minutes log** instead: two small files in the **Logs** folder of your app data folder, named `…-recent-a.log` and `…-recent-b.log` with the time the client started and its process number. Between them they always hold at least the last three minutes of the program log (three to six), each opening with the build and system it came from. They are written as the client runs (never more than 1 MB each) and the three most recent clients' pairs are kept. Writing them never slows the client: if the disk stalls, the oldest waiting entries are let go and the file says how many were dropped once it is writing again, and if the files can't be written at all the program log says so once. If **Auto-collect logs** is on, the full `…-program.log` in the same folder is written instead and is the one to send. A report's Client and connection section names the folder and the files, and so does a crash report. These files are not censored or masked: they stay on your machine until you choose to send them, and like the program log they hold no login.
+
+**An `@suicide` from a trusted player** sends your stored suicide password only when the game is seen asking for it, within ten seconds of `suicide`. Until then nothing automatic is sent (a telepath already queued, or one being resent, waits too and goes out after), and if you (or anything else) send a line first, the request is cancelled: the game takes that line as the password, and the stored one is not sent after it. If the game refuses the command or doesn't ask, the password is never sent. The sender is told each time (unless *Warn on invalid remote command* is off).
 
 **At the board's menu the client stands down.** If you `exit` the game to the board's menu without disconnecting, MudPlay stops sending anything on its own until you're back in: no party poll, buffs, sneaking, statline repair or loop steps, since at the menu each would be read as a menu selection. What you type still goes through, and `e` to enter the realm isn't mistaken for a step east. Everything resumes at your first game prompt.
 
@@ -4199,8 +4256,8 @@ All of this is stored under a single MudPlay data folder (`~/.local/share/MudPla
 | `/state/full` | Every section a bug report captures, as JSON — add `?format=markdown` for the familiar rendered form. Builds the whole report, so repeat calls within a second reuse the previous one; poll `/state` instead if you want a fast tick. |
 | `/gates` | Recent pause/resume history: which gate, **who asserted it**, why, and when. |
 | `/log` | The program log, filterable by `severity=` (comma-separated names) and `source=`, with a `since=` cursor for tailing. |
-| `/scrollback` | The terminal transcript tail, with per-line timestamps. |
-| `/events` | A live stream (Server-Sent Events) of log entries and gate changes as they happen. |
+| `/scrollback` | The terminal transcript tail, with per-line timestamps. Only rows written **while in the game**, as in a bug report: a board's login screen is never sent. |
+| `/events` | A live stream (Server-Sent Events) of log entries and gate changes as they happen. If the stream has to leave events out it says so with a `lost` event carrying the count and the reason. |
 | `/loops` | Every saved loop with its area, room and lair-room counts, median and max exp of what spawns on it, the hardest-hitting monster, and the toughest three. |
 | `/loops/{name}` | One loop in full — each waypoint with its room name and the monsters at that stop. |
 | `/rooms/{map}/{room}` | A room: name, exits, its lair tag, and its monsters grouped as lair / placed / assigned, exactly as the map's ROOM INFO panel groups them. |
@@ -4221,6 +4278,8 @@ curl -H "Authorization: Bearer $(cat ~/.local/share/MudPlay/.apitoken)" \
 ```
 
 (On macOS the path is `~/Library/Application Support/MudPlay/.apitoken`.)
+
+**Account details are masked here too.** The login name, login password and suicide password saved in MudPlay are written as `[redacted]` in `/state/full`, `/gates`, `/log`, `/scrollback` and `/events`, exactly as in a bug report (see *Bug Report*). The masks are made fresh for each answer from what is saved at that moment and are not kept (`/events` makes them once for each batch of events, a fraction of a second apart). If the saved details can't be read, `/gates`, `/log` and `/scrollback` answer *503* rather than send text they couldn't mask, and `/events` leaves those events out and says so. Chat is not censored here: that is for reports posted in public.
 
 **Issuing commands.** Beyond reading, the API can act:
 
@@ -4651,7 +4710,7 @@ Because a `sys st` dump is much larger than Paradigm's one-line `room` reply (8+
 - it won't ask while a move you've already sent is still unconfirmed (the answer would describe the room you just left);
 - it stays out of the way while a teleport maze is being solved, since the maze solver does its own position fixing.
 
-**Sysop god lives** — when this character dies, MudPlay automatically sends **`sys god <your name> add life`** to restore the life just spent. One send per death; refused (and harmless) without real god access.
+**Sysop god lives** — when this character dies, MudPlay automatically sends **`sys god <your name> add life`** to restore the life just spent. One send per death; refused (and harmless) without real god access. Nothing is sent after an **arena death**, on either realm: it spends no life, so there is none to ask back.
 
 **Sysop goto** — lets you teleport to a named location with the game's **`sys goto <location>`** command, and adds a **Sys Gotos** flyout to the terminal right-click menu (and Walk menu), plus the room right-click menu on the Navigation map, listing your configured locations.
 
@@ -4741,15 +4800,21 @@ Where the record shows up:
 
 **A hang-up that killed you.** A board that penalises a hang-up kills a character that hangs up while dropped (at or below 0 HP), and one that is standing when the HP it takes puts the character under the death threshold. It does this after the link is gone, so you never see a death line: you come back standing in the temple at full HP with a life less and your gear in a pile where you fell. MudPlay works this out on the way back in and records the death, so Death Recovery can go for the pile.
 
-- **When it looks.** Only when the list it keeps (the one described above, which also holds your HP and max HP, lives, coins, what you wore and whether you were in a fight) says the hang-up **could have killed**, by this realm's settings. That takes two things. First, the settings penalise that hang-up: the master switch is ticked and you were in a fight with a player (one under way, or a player attacked you in the last 30 seconds); or **Also penalised in combat with monsters (PvE)** is ticked and you were in a fight with a monster (in combat, or a hostile one in the room); or **Also penalised outside a fight (every hang-up)** is ticked too. Second, you were **dropped**, or your HP was no more than the top **HP lost (%)** figure of that side, taken of your max HP (at 50% and 500 max HP: 250 HP or less); with that figure at 0, only a dropped character counts. It needs no **Items dropped** figure, so it runs on a realm that takes HP only. **Only a dropped link counts as a hang-up.** Leaving by the game's own exit command (`x`, the meditation, *Your character has been saved.*) is not one: the board takes nothing for it, and MudPlay looks into nothing afterwards, whatever your HP was.
-- **What counts as a death: a life lost, and nothing else.** Exactly one life fewer than you left the game with is a death. The same number, or more, is not. Your HP, the room you are in and what is in your pack never count as one: all three change just by playing on. Both counts have to come from the game. The one "before" is on the list only if a `stat` was read on the connection you left on (the login sends one); the one "now" comes from a `stat` read on this connection. When something changes your lives with no screen saying so (a life asked back by **Sysop god lives**, a level trained), MudPlay sends a `stat` a few seconds later to read them again, under Auto-All; until one is read the count is treated as not known.
+- **When it looks.** Only when the list it keeps (the one described above, which also holds your HP and max HP, lives, coins, what you wore and whether you were in a fight) says the hang-up **could have killed**, by this realm's settings. That takes two things. First, the settings penalise that hang-up: the master switch is ticked and you were in a fight with a player (one under way, or a player attacked you in the last 30 seconds); or **Also penalised in combat with monsters (PvE)** is ticked and you were in a fight with a monster (in combat, or a hostile one in the room); or **Also penalised outside a fight (every hang-up)** is ticked too. Second, you were **dropped**, or your HP was no more than the top **HP lost (%)** figure of that side, taken of your max HP (at 50% and 500 max HP: 250 HP or less); with that figure at 0, only a dropped character counts. It needs no **Items dropped** figure, so it runs on a realm that takes HP only. **Only a dropped link counts as a hang-up.** Leaving by the game's own exit command (`x`, the meditation, *Your character has been saved.*) is not one: the board takes nothing for it, and MudPlay looks into nothing afterwards, whatever your HP was. One case is looked into on any realm, whatever these settings say: a hang-up while dropped in an arena room (**Dropped in an arena room**, below).
+- **What counts as a death: a life lost, and the room you come back in.** Exactly one life fewer than you left the game with is a death, when the room you come back in doesn't say otherwise (next point). The same number, or more, is not. Your HP and what is in your pack never count as one, and neither does a room you have walked to since: all of them change just by playing on. Both counts have to come from the game. The one "before" is on the list only if a `stat` was read on the connection you left on (the login sends one); the one "now" comes from a `stat` read on this connection. When something changes your lives with no screen saying so (a life asked back by **Sysop god lives**, a level trained), MudPlay sends a `stat` a few seconds later to read them again, under Auto-All; until one is read the count is treated as not known.
+- **The room you come back in.** A death moves you to where the dead of that room wake: hang up low in Darkwood Forest and die of it, and you log back in standing in the *Temple, Halls of the Dead*. MudPlay takes the **first room its map is sure of on the way in, before any move has gone out** (not a room you reached afterwards), and reads it like this. **Where the dead of the room you hung up in wake, and you hung up somewhere else:** that is where a death by this hang-up puts you. **The room you left the game in:** no death moved you, so a life that is gone was lost somewhere else. **Any other room:** the same, where the list of those rooms is that world's own (next point); elsewhere it says nothing. It says nothing either when the map wasn't sure of the room before you moved (on this connection, or on an earlier one that came and went without the check running), or when you hung up in the very room your dead wake in (or one of two rooms on map 17 that leave the game through it).
+  - **How far the list goes.** The list of where the dead wake is read off the Stock game files, so it depends on your game data. On an **unmodified Stock set** (the one whose Info says Legit 1 and Custom *Default*) it is trusted in full. On **Paradigm** it is trusted in full for the zones Paradigm shares with Stock. Paradigm's own rooms aren't on it: map 18, the rooms it added to the other maps, and the Stock room numbers it uses for other places (all of maps 5 and 14, and a few rooms elsewhere). For those only one waking room is known, the *Burial Vault* (14/1077), where the dead of **Albion** wake, and Albion is every room you can walk to from the Burial Vault without taking a boat. Hang up in one of those and come back in the Burial Vault, and that is a yes; no other room says anything for them, the room you left included. Paradigm's own rooms outside Albion (Port Blackwater, Terra Ista, Terra Fuego, Tal'kiran, Shadowmere and the rest) have no known waking room, so there the room you come back in says nothing and your lives decide alone. On **any other game data** (a Stock board whose sysop may have edited its rooms, or no set loaded) the list says "yes, that is the room" and "you never moved", and never "that is the wrong room".
+  - **Rooms the map can't tell apart.** The map knows a room by its name and the exits it shows, and two waking rooms have a look-alike. The *Portal Room* the dead of map 11's arena wake in shows only its south exit, exactly like another *Portal Room* beside it, and the map puts you in that one: coming back there counts as coming back where your dead wake, and the notice names both rooms. A *Dark Cave* on map 15 looks like the *Dark Cave* its dead wake in, so the map never sees you move: there the room says nothing.
+  - **With both lives counts read**, the lives decide and the room has to agree: a life gone, but back where you left, is not recorded and you are told.
+  - **With no count from before the hang-up**, the room can say it: back where your dead wake **with nothing left of what a death takes** (and nothing worn; on Stock, the board's hang-up line printed), the death is recorded, with the lives a `stat` on this connection gives. A character walked to the temple from another client and left there stands in the same room, still holding its gear, which is why the pack has to agree. **If you owned nothing a death takes** when you left (no item but those that stay with you, and no coin) there is nothing to come back stripped of, and the room is enough. If what you held isn't known, it stays "can't tell".
 - **When the lives haven't been read.** The login's own `stat` normally gives them. If none has been read when your inventory comes in, MudPlay sends one `stat` itself, but only with Auto-All on and while it is still holding movement for the check. Once it has let go of the hold (Auto-All off, the 3-minute wait at the board's menu, Reset States) it sends nothing more: the question stays open, nothing is held, one terminal notice says so, and **typing `stat` and `i` answers it** at any time on that connection. It is judged on what you came in with (your HP at the first prompt, your pack at the first inventory read), not on what you have become since. If the link drops before a `stat` is read, nothing is recorded.
-- **A life lost somewhere else is not this hang-up's.** If you played the character from another client in between and died there, the life is gone but not to this hang-up, and MudPlay can't judge it. It records nothing, and says so on the terminal, when a life is gone but what you came in with says it wasn't lost here. On both realms: your HP at the first prompt was 0 or less, under what you left with, or exactly what you left with short of full (a death sets HP to full); anything you held when you left that a death takes is still held at the first inventory read, coins included (a death takes every item but those that stay with you, such as loyal ones, so holding even one of the rest means you got your pile back somewhere; a torch burnt meanwhile doesn't change that); or any piece is still worn at that read (a death takes everything off, on Paradigm as on Stock; whether a cursed piece that stays with you comes off on Paradigm isn't known, and it is treated as it is on Stock). On Stock also: the board didn't print *Last time you were on, you disconnected while playing.* since the hang-up (it prints that on the first entry after a hang-up it didn't let go free, and on no other). Paradigm isn't known to print it, so it isn't asked for there. If the `stat` screen names a different character from the one the list was written for (a profile copied or shared between characters), the list is left alone without a word.
-- **What it records.** The same record a death you saw makes, in **Death Recovery**: the room you were in when the link dropped, that time, your lives now, and as the pile what you held then and didn't hold at the first inventory read (worn pieces with their slots, so Auto-Equip on recovery can put them back on; everything else by name and count, your keys and lit light included; and your coins). What stayed with you isn't on it. In place of a death line it reads *Killed by the hang-up penalty (not seen: worked out on entering the game). The room and time are where this client last had the character in the game.* There is no **How did I Die?** replay for it, since nothing was on screen, and no death sound, since it happened minutes ago. If the link dropped before any inventory was read on that connection, the record's room and time are still that hang-up's. The usual case is the quick one: a hang-up left you dropped, you came back dropped with the monster still there, and MudPlay hung up again at the first prompt. That second hang-up is the one that kills, and the death is recorded where and when it happened, with your lives and what you held taken from the list of the first hang-up (which is known not to have killed, since you came back dropped). When what you held can't be known that way (you had moved on since entering, or the realm's penalty drops items), the record lists no pile and says so. And if an earlier hang-up was still waiting to be looked into when that happened, it is settled then: recorded if a `stat` had already shown the life gone (on Stock only; off Stock, with no inventory read to separate it from a life lost on another client, it is told, not recorded), and otherwise said on the terminal to be past telling. The first hang-up's lives are not carried when you came back with more HP than you left with, since only a death does that.
+- **A life lost somewhere else is not this hang-up's.** If you played the character from another client in between and died there, the life is gone but not to this hang-up, and MudPlay can't judge it. It records nothing, and says so on the terminal, when a life is gone but what you came in with says it wasn't lost here. On both realms: you came back in the room you left (or, where the list is trusted for it, in any room that isn't where your dead wake: *The room you come back in*, above); your HP at the first prompt was 0 or less, under what you left with, or exactly what you left with short of full (a death sets HP to full); anything you held when you left that a death takes is still held at the first inventory read, coins included (a death takes every item but those that stay with you, such as loyal ones, so holding even one of the rest means you got your pile back somewhere; a torch burnt meanwhile doesn't change that); or any piece is still worn at that read (a death takes everything off, on Paradigm as on Stock; whether a cursed piece that stays with you comes off on Paradigm isn't known, and it is treated as it is on Stock). On Stock also: the board didn't print *Last time you were on, you disconnected while playing.* since the hang-up (it prints that on the first entry after a hang-up it didn't let go free, and on no other). Paradigm isn't known to print it, so it isn't asked for there. If the `stat` screen names a different character from the one the list was written for (a profile copied or shared between characters), the list is left alone without a word.
+- **What it records.** The same record a death you saw makes, in **Death Recovery**: the room you were in when the link dropped, that time, your lives now, and as the pile what you held then and didn't hold at the first inventory read (worn pieces with their slots, so Auto-Equip on recovery can put them back on; everything else by name and count, your keys and lit light included; and your coins). What stayed with you isn't on it. In place of a death line it reads *Killed by the hang-up penalty (not seen: worked out on entering the game). The room and time are where this client last had the character in the game.* When the room you came back in is where your dead wake, the line goes on to name it (*It came back in Temple, Halls of the Dead (1/2189), where the dead of Darkwood Forest (1/109) arrive.*), and so does the terminal notice. There is no **How did I Die?** replay for it, since nothing was on screen, and no death sound, since it happened minutes ago. If the link dropped before any inventory was read on that connection, the record's room and time are still that hang-up's. The usual case is the quick one: a hang-up left you dropped, you came back dropped with the monster still there, and MudPlay hung up again at the first prompt. That second hang-up is the one that kills, and the death is recorded where and when it happened, with your lives and what you held taken from the list of the first hang-up (which is known not to have killed, since you came back dropped). When what you held can't be known that way (you had moved on since entering, or the realm's penalty drops items), the record lists no pile and says so. And if an earlier hang-up was still waiting to be looked into when that happened, it is settled then: recorded if a `stat` had already shown the life gone (on Stock, or anywhere when you had come back where your dead wake; otherwise off Stock, with no inventory read to separate it from a life lost on another client, it is told, not recorded), and otherwise said on the terminal to be past telling. The first hang-up's lives are not carried when you came back with more HP than you left with, since only a death does that.
 - **What happens then.** One terminal notice says you died to the hang-up penalty, where MudPlay last had you, and that **Recover Now** goes for the pile. When this is worked out at the login, while movement is still held: loops, walks and Auto-Lair are stopped, as after any death, the loop set aside when the link dropped is not restarted, and a default task still waiting to start (it waits for your party after a reconnect) is called off for that connection, so nothing walks a stripped character out of the temple; your own buff timers are cleared (a death wipes them; they were only paused when the link dropped). **When it is worked out later** (MudPlay had let go of the hold, or the `stat` that answered came long after), you have been playing since: the death is recorded and you are told, and your loop and your buff timers are left alone. Either way, with **Sysop god lives** on the life is asked back, unless Auto-All is off. The item pickup above does **not** run: what is missing is your deathpile, and it is neither picked up from this room nor reported as dropped. With **Auto-Recover Deathpiles** on, the pile is grabbed when you next walk into that room, as for any death.
-- **When it can't tell.** MudPlay records **nothing**, and says so once on the terminal with what it saw, when: no `stat` was read on the connection you left on, so there is no count to compare with; two or more lives are gone, more than one hang-up costs; or a life is gone but not to this hang-up (above). A death is never guessed. If you are still in the room you left, the item pickup then runs as usual; anywhere else it stands down, since what is missing may be a deathpile. The same holds while the question is still open. **One thing it can't tell apart at all:** if you played the character from another client in between and that session itself ended in a death by a hang-up, you come back stripped with a life less exactly as if this client's hang-up had done it. The record is then made where MudPlay last had you, which is why it says so in its own words and the notice adds that the pile is where you died if you played elsewhere since.
-- **What it can't know.** Whether you were in a fight is MudPlay's own reading when the link dropped; if the board saw you attacked and MudPlay didn't, a realm without the **every hang-up** box ticked is not checked. A room the board treats as free costs nothing: in a protected room (when you aren't being attacked) you come back with the HP you left with; in an arena a dropped character comes back standing where the dead wake, with its HP put back and its lives unchanged. Neither is a death, and nothing is recorded. The board's death threshold is its own setting and MudPlay relies on no figure for it, which is why a low HP only makes it look, and your lives decide. On Stock a room can name another room that a character who hangs up there is put in, and the death then happens in that other room; the record still names the room you were in, since nothing tells MudPlay of the move.
-- **Where to see it.** The terminal notice; the program log's `[HangupItems]` lines (HP and lives then, HP at the first prompt, lives now, what was worn, the board's lines, what is gone, and the verdict); and a bug report's Session section, where **Held list on file** shows the list's HP, lives and fight, **Hang-up death check** the last verdict and what it went by, and **Hang-up item check** says while a death is still to be judged.
+- **When it can't tell.** MudPlay records **nothing**, and says so once on the terminal with what it saw, when: no `stat` was read on the connection you left on, so there is no count to compare with, and the room you came back in with what you hold doesn't settle it either; two or more lives are gone, more than one hang-up costs; or a life is gone but not to this hang-up (above). A death is never guessed. If you are still in the room you left, the item pickup then runs as usual; anywhere else it stands down, since what is missing may be a deathpile. The same holds while the question is still open. **One thing it can't tell apart at all:** if you played the character from another client in between and that session itself ended in a death by a hang-up, you come back stripped with a life less exactly as if this client's hang-up had done it. The record is then made where MudPlay last had you, which is why it says so in its own words and the notice adds that the pile is where you died if you played elsewhere since.
+- **Dropped in an arena room.** A hang-up while you are dropped (0 HP or less) in an arena room (the Training Grounds, the Arena Practice Rooms, the Dwarven Arena, the arena passages of map 11) is an **arena death**: the game puts your HP back and moves you to where that arena's dead wake, and takes no life, no item and no coin. MudPlay looks into it on **any** realm, penalty settings or none, holding movement at the login as for the other check. Your lives can't say it, since none is lost, so **the room you come back in decides**: the first room the map is sure of on the way in, before any move has gone out, is where the dead of that arena room wake (and isn't the room you hung up in), and you aren't still dropped. It needs a `stat` read on this connection for the record's lives, and asks for one as above; it does **not** need a lives count from before the hang-up, since an arena death costs no life. Paradigm is treated as Stock here. It is then recorded as an arena death: in the history with **nothing lost**, marked **Recovered**, no pile, nothing for **Recover Now** to do, and no life asked back by **Sysop god lives**. Its line begins *Died in an arena room after the link went down (not seen: worked out on entering the game).* and names the room you came back in. Loops, walks and Auto-Lair are stopped and your buff timers cleared when it is found at the login, as for any death; gear waiting to go back on is kept, being still in your pack. **When it isn't taken for one:** a life is gone, or nothing is left of what a death takes. That is an ordinary death (on Stock the board can have its arenas switched off, and an arena room is then a room like any other), and it goes by the rule above, pile and all. You come back in the room you left, or still dropped: no death at all. **When it can't tell:** the room you came back in wasn't confirmed before you moved, or you hung up in the very room that arena's dead wake in (the Training Grounds' Halls of the Dead, and one Arena Practice Room on map 17); nothing is recorded then. And one case is **told, not recorded**: this realm's settings penalise that hang-up (so with the board's arenas off it would have been an ordinary death), your lives weren't read before it, and what you held can't say either. One thing it can't tell apart: a character healed and walked to that room from another client, and left there.
+- **What it can't know.** Whether you were in a fight is MudPlay's own reading when the link dropped; if the board saw you attacked and MudPlay didn't, a realm without the **every hang-up** box ticked is not checked. A protected room, which the board treats as free when you aren't being attacked, costs nothing: you come back with the HP you left with, no death, and nothing is recorded. The board's death threshold is its own setting and MudPlay relies on no figure for it, which is why a low HP only makes it look, and your lives and the room you come back in decide. On Stock a room can name another room that a character who hangs up there is put in, and the death then happens in that other room; the record still names the room you were in, since nothing tells MudPlay of the move.
+- **Where to see it.** The terminal notice; the program log's `[HangupItems]` lines (HP and lives then, HP at the first prompt, lives now, what was worn, the board's lines, the room you came back in and what it says, what is gone, and the verdict); and a bug report's Session section, where **Held list on file** shows the list's HP, lives and fight, whether it was an arena room, where its dead arrive by the Stock files and how far that is trusted for your game data, and the room an earlier connection came back in (or that it moved before the room was known), **Hang-up death check** the last verdict and what it went by, and **Hang-up item check** says while a death is still to be judged.
 
 ### Boss cleanup time / Boss cleanup zone
 
@@ -5791,12 +5856,12 @@ Settings → Talk.
 ### Warn sender on invalid / denied remote command
 
 **Default:** On
-**What it does:** The master gate for replies to a refused `@`-command. When on, most refusals send a reply back (a specific reason when there is one, otherwise the generic message below); when off, refusals are silent. Some things are never answered, whatever this is set to: an `@` word that is no command at all, the hard-blocked ones (anything with `reroll` in it, and `@party set suicide`), and every command while the master switch (Auto-All) is off. Which replies of each command count as refusals is in its topic under *Remote @-commands*.
+**What it does:** The master gate for replies to a refused `@`-command: one the sender may not use, one that was mistyped or missing a word, and one your client could not carry out. When on, every refusal sends a reply back (a specific reason when there is one, otherwise the generic message below); when off, every refusal is silent. Some things are never answered, whatever this is set to: an `@` word that is no command at all, the hard-blocked ones (anything with `reroll` in it, and `@party set suicide`), and every command while the master switch (Auto-All) is off. And a few answers are always sent, because another MudPlay client is waiting on them to carry on: a leader's answers to `@comeback` (all but a loop's `I can't` at an exit and the two `I can't yet` answers, which are refusals), and the answers to `@trap`, `@wealth`, `@level`, `@have`, `@get-stash` and `@deposit-all`. Which replies of each command count as refusals is in its topic under *Remote @-commands*.
 
 ### Failure message
 
 **Default:** `"command invalid or not allowed"`
-**What it does:** The generic text sent back for a refused command that has no more specific reason (most often: the sender lacks the permission), when a reply is sent at all (see above). Left empty, no generic refusal is sent.
+**What it does:** The generic text sent back for a refused command that has no more specific reason (most often: the sender lacks the permission), when a reply is sent at all (see above). A sender without the permission is always given this text and never a reason, so a stranger learns nothing about your character from it. Left empty, no generic refusal is sent.
 
 ### Greet players when first met
 
@@ -6252,11 +6317,11 @@ With more than one able member, the first to report the way clear moves you on, 
 
 **A leader on a loop may refuse.** If the leader's loop itself goes through the exit that turned you away, coming back would only leave you there again next lap, so its client answers `I can't, my loop goes through an exit you can't pass` and carries on. A leader on a walk-to comes back for you once (and ends its walk if the same exit turns you away again), and so does a looping leader when the exit wasn't what stopped you (you were held or too heavy on that step) or wasn't part of its loop.
 
-**A leader who comes later.** A leader on a train trip answers `I can't yet, I'm on a train trip. I'll come for you when the training is done`, and comes when the trip ends by itself; if the leader's player ends the trip by hand, nobody is fetched automatically and regrouping is up to the two of you. A leader on Auto-Lair that an exit separated you from answers `I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you`. Neither is a refusal: your client keeps waiting, for up to 15 minutes.
+**A leader who comes later.** A leader on a train trip answers `I can't yet, I'm on a train trip. I'll come for you when the training is done`, and comes when the trip ends by itself; if the leader's player ends the trip by hand, nobody is fetched automatically and regrouping is up to the two of you. A leader on Auto-Lair that an exit separated you from answers `I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you`. Neither is a refusal: your client keeps waiting, for up to 15 minutes. (A leader who has switched off **Warn sender on invalid / denied remote command** says neither; your client then waits its ordinary time, and the leader still comes or invites as it would have.)
 
 **One request per split.** After asking, your client asks nothing more until you are following again. The leader's client answers by telepath, and the answer is written to the program log. A leader with no walk, loop or Auto-Lair running answers `I can't I'm idle` and stays put. A leader who is too far, has a full party or can't find a path says so and sends `@forget`. Nothing here ever walks your own character to the leader.
 
-**When nobody is coming.** On Paradigm the game ends your follow with its own line. On Stock an exit that turns you away ends it without a word, so your client would go on believing it follows, holding its own walk, loop and Auto-Lair for a leader who isn't coming. So once the leader refuses your request (idle, its loop, too far, party full, no path), or sets out and gives up, or nobody answers and nobody comes within the Party tab's *If leading, accept @comeback for* time, **your client stops counting itself as a follower**: the party is cleared as if the game had said you no longer follow, your own engines are free again, and flee and hang-up rules are a solo character's. The program log says why. `I can't yet` is not a refusal, and neither is any answer that says the leader is on its way: then your client waits 15 minutes before giving up. If the leader does come and invites you later, the invite is handled as usual: taken on **Join party if invited** after a refusal, and taken as one you asked for otherwise (see **Rejoining**).
+**When nobody is coming.** On Paradigm the game ends your follow with its own line. On Stock an exit that turns you away ends it without a word, so your client would go on believing it follows, holding its own walk, loop and Auto-Lair for a leader who isn't coming. So once the leader refuses your request (idle, its loop, too far, party full, no path), or sets out and gives up, or nobody answers and nobody comes within the Party tab's *If leading, accept @comeback for* time, **your client stops counting itself as a follower**: the party is cleared as if the game had said you no longer follow, your own engines are free again, and flee and hang-up rules are a solo character's. The program log says why. `I can't yet` is not a refusal, and neither is any answer that says the leader is on its way: then your client waits 15 minutes before giving up. Any other braced telepath from the leader (the reply to another command, or a plain `command invalid or not allowed`) is not taken for a promise and leaves the wait as it was. If the leader does come and invites you later, the invite is handled as usual: taken on **Join party if invited** after a refusal, and taken as one you asked for otherwise (see **Rejoining**).
 
 The program log (source `Comeback`) says what showed you were left behind each time a request goes out, and why each time one is held back. The bug report's Party section carries the last such incident and the leader's answer.
 

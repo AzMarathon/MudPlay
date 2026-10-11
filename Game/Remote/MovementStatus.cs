@@ -53,11 +53,12 @@ public readonly record struct MovementStatus(
     // wait / manual pause) rather than stepping — so @status / @path can say why it's
     // stopped instead of reporting "walking" for a walk that isn't actually moving.
     bool Paused = false,
-    // The specific reason the walker is paused, in plain words ("resting (low HP)",
-    // "meditating (low mana)", "held", "party asked to wait", "paused" for a manual pause,
-    // "fighting"). Resolved by the caller from the MovementCoordinator's gates (via
-    // NavActivity) — MovementStatus stays UI-agnostic and just carries the string. Null
-    // when not paused (or the reason couldn't be resolved), where the phrase says "paused".
+    // The specific reason the walker is paused: "paused" for a manual pause,
+    // "fighting", or the hold's label as the Navigation window shows it ("Low HP",
+    // "Low MANA", "Held", "@Wait", "Too heavy", …). Resolved by the caller from the
+    // MovementCoordinator's gates (via NavActivity) — MovementStatus stays UI-agnostic
+    // and just carries the string. Null when not paused (or the reason couldn't be
+    // resolved), where the phrase says "paused".
     string? PauseReason = null)
 {
     // Snapshot the running movement engine. Priority Lair → Loop → Walker mirrors

@@ -828,8 +828,14 @@ public sealed partial class ComebackRequester : IDisposable
 
     // The leader's client answers a @comeback with a braced telepath. It is logged
     // and kept for the bug report; a decline is not argued with, and ends the
-    // follow we still believe in (GiveUpTheFollow). Any other answer says they are
-    // coming, now or later, and they are waited on for longer.
+    // follow we still believe in (GiveUpTheFollow). An answer that says they are
+    // coming, now or later, is waited on for longer.
+    //
+    // Anything else in braces from that leader is not an answer to the request: a
+    // reply to some other command of ours, or the generic denial of a leader that
+    // doesn't take our @comeback at all. It promises nothing, so the wait already
+    // running is left as it is; taking it for a promise held a follower for the
+    // long wait behind a leader who had just said no.
     private void OnTelepathIn(MatchResult result)
     {
         if (_askedLeader is not { } leader || result.Groups.Count < 2) return;
@@ -837,13 +843,10 @@ public sealed partial class ComebackRequester : IDisposable
         string body = result.Groups[1].Trim();
         if (body.Length < 3 || body[0] != '{' || body[^1] != '}') return;
         string answer = body[1..^1].Trim();
-        bool declined = LeaderDeclined().IsMatch(answer);
-        _lastAnswer = answer;
-        _log?.Info(LogCategory, declined
-            ? $"{leader} isn't coming: {answer} — not asking again"
-            : $"{leader} answered the @comeback: {answer}");
-        if (declined)
+        if (LeaderDeclined().IsMatch(answer))
         {
+            _lastAnswer = answer;
+            _log?.Info(LogCategory, $"{leader} isn't coming: {answer} — not asking again");
             StopWaiting();
             _askedBack = null;
             GiveUpTheFollow(leader, $"{leader} refused the @comeback ({answer})");
@@ -852,12 +855,21 @@ public sealed partial class ComebackRequester : IDisposable
         {
             // They tried and went back to what they were doing. Nobody is coming
             // now, but an invite of theirs is still one we asked for.
+            _lastAnswer = answer;
+            _log?.Info(LogCategory, $"{leader} answered the @comeback: {answer}");
             StopWaiting();
             GiveUpTheFollow(leader, $"{leader} came for us and gave up ({answer})");
         }
+        else if (PartyComebackManager.SaysComingOrLater(answer))
+        {
+            _lastAnswer = answer;
+            _log?.Info(LogCategory, $"{leader} answered the @comeback: {answer}");
+            WaitFor(PromisedWait);
+        }
         else
         {
-            WaitFor(PromisedWait);
+            _log?.Info(LogCategory,
+                $"{leader} telepathed {{{answer}}} while we wait on the @comeback — not an answer to it, the wait stands");
         }
     }
 

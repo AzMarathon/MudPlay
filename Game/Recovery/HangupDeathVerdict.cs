@@ -1,18 +1,23 @@
 namespace MudPlay.Game.Recovery;
 
-// What HangupDeath.Judge makes of a hang-up the penalty could have killed for.
+// What HangupDeath.Judge makes of a hang-up the penalty could have killed for, and
+// HangupDeath.JudgeArena of one made while dropped in an arena room.
 public enum HangupDeathVerdict
 {
     // The realm doesn't penalise the hang-up, or the character had more HP than
-    // the penalty takes: nothing to judge.
+    // the penalty takes: nothing to judge. From JudgeArena: not an arena death,
+    // and Judge is asked.
     NotSuspected,
 
-    // It died after the link was gone: exactly one life fewer, and nothing the
-    // entry showed says otherwise.
+    // It died after the link was gone: exactly one life fewer and nothing the
+    // entry showed says otherwise, or, with no count from before, back in the
+    // room its dead arrive in stripped of what a death takes (or having owned
+    // nothing of the kind). From JudgeArena: the arena's death, which took
+    // nothing.
     Died,
 
     // It did not: no life was lost, or it came back with the HP of a character
-    // that wasn't killed.
+    // that wasn't killed, or in a room a death wouldn't have left it in.
     Alive,
 
     // The lives now aren't known yet. A `stat` read on this connection settles it.

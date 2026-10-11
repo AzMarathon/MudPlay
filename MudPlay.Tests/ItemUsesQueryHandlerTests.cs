@@ -229,6 +229,20 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
         Assert.Equal("no limited-use items carried", Reply(engine));
     }
 
+    // Holding none is a result, not a failure: it is answered with denials
+    // silenced too.
+    [Fact]
+    public void Bare_NoChargedItems_IsAnsweredWithDenialsSilenced()
+    {
+        var (engine, players) = Engine();
+        Seed(players, "Bob");
+        engine.WarnOnDenial = false;
+
+        engine.DispatchForTests(Telepath("Bob", "@uses"));
+
+        Assert.Equal("no limited-use items carried", Reply(engine));
+    }
+
     // ----- readout best-match ---------------------------------------------
 
     [Fact]

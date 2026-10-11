@@ -800,6 +800,7 @@ public partial class MainWindowViewModel : ObservableObject
     // enough to look live without burning cycles. State sourced from
     // AppServices.Tick (combat) + AppServices.Regen (HP / MA).
     private readonly DispatcherTimer _statusTickRefresh;
+    private readonly DispatcherTimer _engineStateSample;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CaptureMenuLabel))]
@@ -846,6 +847,15 @@ public partial class MainWindowViewModel : ObservableObject
         // character mode the moment the box appears. Cheap: pre-filtered on the
         // stat-box marker and skipped entirely once armed.
         Emulator.ScreenUpdated += OnScreenUpdatedForTrainerMenu;
+        Emulator.ScreenUpdated += OnScreenUpdatedForSuicidePrompt;
+        // A typed line is kept in the sent-command trail only when it was typed
+        // at the game's own prompt: what answers any other prompt may be a
+        // password, and the game's prompts for those reach us too late to know.
+        // The prompt is whatever Settings -> Statline makes it, so the row is
+        // asked of the pattern built from that setting.
+        AppServices.Current.SentCommands.TypedAtGamePrompt =
+            line => SentCommandTrail.RowIsGamePrompt(
+                CursorRowText(), line, AppServices.Current.CurrentStatlinePromptRegex);
 
         // Feed the crash reporter a live-state snapshot so a fatal fault's
         // Crash-<timestamp>.md carries the same scrollback / log / engine dump a
@@ -854,6 +864,8 @@ public partial class MainWindowViewModel : ObservableObject
         CrashReporter.RegisterStateProvider(() =>
             BugReportBuilder.RenderStateOnly(
                 BugReportBuilder.Capture(AppServices.Current, Emulator)));
+        CrashReporter.RegisterTextFilter(document =>
+            BugReportBuilder.BuildScrubber(AppServices.Current).Apply(document));
 
         // 100 ms refresh — matches TickEngine's internal cadence so the
         // countdown ticks down by 0.1 s each repaint instead of jumping
@@ -875,6 +887,25 @@ public partial class MainWindowViewModel : ObservableObject
             RefreshLocationSlot();
         };
         _statusTickRefresh.Start();
+
+        // Once a second: note how long each engine has been in its state (for a
+        // bug report's "Holds and waits"), and let the heartbeat decide whether
+        // its next status line is due.
+        BugReportHoldsAndWaits.RegisterProbes(AppServices.Current);
+        _engineStateSample = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = EngineStateWatch.SampleInterval,
+        };
+        _engineStateSample.Tick += (_, _) =>
+        {
+            DateTimeOffset now = DateTimeOffset.Now;
+            AppServices.Current.StateWatch.Sample(now);
+            AppServices.Current.Heartbeat.Tick(now);
+            AppServices.Current.Suicide.CheckTimeout();
+        };
+        _engineStateSample.Start();
+        AppServices.Current.Heartbeat.LogStartup(
+            AppServices.Current.GameData.ActiveSet, AppServices.Current.Settings.Current.LastUsedProfile?.Name);
         RefreshStatusBarTicks();
 
         // Mirror RoomTracker into the status-bar location slot so the
@@ -1381,6 +1412,9 @@ public partial class MainWindowViewModel : ObservableObject
         // calls SendUserInput directly via the local-input buffer
         // flush.
         Action<byte[]> engineSend = AppServices.Current.EngineGate.WrapEngineSender(SendUserInput);
+        // Each engine is handed the same sender under its own name, which the
+        // sent-command trail prints beside every command it puts out.
+        Action<byte[]> Named(string sender) => AppServices.Current.EngineGate.Named(engineSend, sender);
 
         // A move step put on the wire while the gate was locked is silently dropped;
         // when the last hold clears, re-drive any step the walker is still stalled
@@ -1393,13 +1427,13 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Combat-gated-entry handler sends `break` on refusal — needs the same
         // gate-wrapped wire path.
-        _combatEntryRefusalHandler.SetWireSender(engineSend);
-        AppServices.Current.AlignmentCheck.SetWireSender(engineSend);
+        _combatEntryRefusalHandler.SetWireSender(Named("CombatEntryRefusal"));
+        AppServices.Current.AlignmentCheck.SetWireSender(Named("AlignmentCheck"));
 
         // Auto-invite on reconnect needs a wire-sender to send
         // "invite <name>" when a disconnected member returns within the
         // grace window AND we're the party leader.
-        AppServices.Current.Party.SetWireSender(engineSend);
+        AppServices.Current.Party.SetWireSender(Named("Party"));
 
         // Macro dispatcher needs a wire-send callback before it can fire.
         // TerminalControl + ConversationWindow's input both call into the
@@ -1412,38 +1446,38 @@ public partial class MainWindowViewModel : ObservableObject
         // menu's Equip entries apply a gear set through the Equipment Manager, which
         // re-attacks after its own swap.)
         Action<byte[]> userCommandSend = AppServices.Current.EngineGate.MarkUserCommands(engineSend);
-        AppServices.Current.MacroDispatcher.SetSender(userCommandSend);
+        AppServices.Current.MacroDispatcher.SetSender(AppServices.Current.EngineGate.Named(userCommandSend, "Macro"));
 
         // Bind the same gate-wrapped wire path to the EventManager so
         // Command-action events route through SendUserInput like every
         // other engine.
-        AppServices.Current.Events.SetWireSender(userCommandSend);
+        AppServices.Current.Events.SetWireSender(AppServices.Current.EngineGate.Named(userCommandSend, "Event"));
 
         // Trigger engine subscribes to the LineExtractor for game-message
         // dispatch (chat + system-log subscriptions wired in its ctor) and
         // borrows the same wire sender so a fired trigger's Response goes
         // through the canonical SendUserInput path.
         AppServices.Current.Triggers.AttachLineExtractor(Lines);
-        AppServices.Current.Triggers.SetSender(userCommandSend);
+        AppServices.Current.Triggers.SetSender(AppServices.Current.EngineGate.Named(userCommandSend, "Trigger"));
 
         // Remote-command engine borrows the same wire-sender so a handler's
         // ctx.Reply(text) routes through SendUserInput exactly like a
         // typed command would. The PartyEssentialHandlers also need their
         // own copy for the @party <sub> → local-command relay (uses the
         // wire-sender directly, bypassing ctx.Reply).
-        AppServices.Current.RemoteCommands.SetWireSender(engineSend);
-        AppServices.Current.PartyEssentials.SetWireSender(engineSend);
+        AppServices.Current.RemoteCommands.SetWireSender(Named("RemoteCommands"));
+        AppServices.Current.PartyEssentials.SetWireSender(Named("PartyEssentials"));
         // Settings → Talk auto-greet — needs the wire-sender to emit
         // greet/look at newly-seen non-party players.
-        AppServices.Current.Greet.SetWireSender(engineSend);
+        AppServices.Current.Greet.SetWireSender(Named("Greet"));
         // Settings → Talk reactive-look — needs the wire-sender to emit
         // look-back / look-on-arrival at other players.
-        AppServices.Current.PlayerLook.SetWireSender(engineSend);
+        AppServices.Current.PlayerLook.SetWireSender(Named("PlayerLook"));
 
         // Sysop room-status probe. Deliberately on the gate-wrapped sender that
         // routes through SendUserInput: the parser arms off the outbound bytes,
         // so a probe sent on the raw engine path would come back unrecognised.
-        AppServices.Current.SysStatus.SetWireSender(engineSend);
+        AppServices.Current.SysStatus.SetWireSender(Named("SysStatus"));
         // A user-typed `@timer sync` (instead of the Bosses-tab "Sync Timers…" button)
         // should still surface the responses — auto-open the merge window when we see
         // our own request go out on chat. See OnChatForTimerSync.
@@ -1456,50 +1490,50 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Chat.EntryClassified += OnChatForLoopShare;
         // Poller needs the same wire-sender to send @health round-trip
         // requests and the periodic par poll.
-        AppServices.Current.PartyPoller.SetWireSender(engineSend);
+        AppServices.Current.PartyPoller.SetWireSender(Named("PartyPoller"));
         // Once-a-day party stats probe sends @level + @version on the same path.
-        AppServices.Current.PartyProbe.SetWireSender(engineSend);
+        AppServices.Current.PartyProbe.SetWireSender(Named("PartyProbe"));
         // Ally-drop rescue sends `aid <name>` + `/<given> @health` on the same
         // gate-wrapped path (held while WE are mortally wounded, like every engine).
-        AppServices.Current.AllyDropped.SetWireSender(engineSend);
+        AppServices.Current.AllyDropped.SetWireSender(Named("AllyDropped"));
         // Emit @wait when we start resting and @ok when we finish, so
         // the party leader's pause-gate can react.
-        AppServices.Current.PartyRest.SetWireSender(engineSend);
-        AppServices.Current.TooHeavyWait.SetWireSender(engineSend);
+        AppServices.Current.PartyRest.SetWireSender(Named("PartyRest"));
+        AppServices.Current.TooHeavyWait.SetWireSender(Named("TooHeavyWait"));
         // Outbound ailment-sync — the say-announce (".@poisoned" etc.)
         // rides the same engine sender; the @wait/@ok side routes through
         // PartyRest's sender bound just above.
-        AppServices.Current.AilmentSync.SetWireSender(engineSend);
+        AppServices.Current.AilmentSync.SetWireSender(Named("AilmentSync"));
         // Auto-Exp-Reset + panic / kill broadcasts go through
         // PartyBroadcaster.
-        AppServices.Current.PartyBroadcaster.SetWireSender(engineSend);
+        AppServices.Current.PartyBroadcaster.SetWireSender(Named("PartyBroadcaster"));
         // AutoPartyManager — consumes per-player InviteToPartyIfSeen
         // and JoinPartyIfInvited flags, sends `invite <given>` and
         // `follow <given>` over the wire.
-        AppServices.Current.AutoParty.SetWireSender(engineSend);
+        AppServices.Current.AutoParty.SetWireSender(Named("AutoParty"));
         // HangupHandler — sends the configured GameExitCommand when
         // an authorised sender telepaths @hangup.
-        AppServices.Current.Hangup.SetWireSender(engineSend);
+        AppServices.Current.Hangup.SetWireSender(Named("Hangup"));
         // RelogHandler — same exit command, but arms RelogSignal so the
         // Disconnected handler forces a reconnect-and-login cycle.
-        AppServices.Current.Relog.SetWireSender(engineSend);
+        AppServices.Current.Relog.SetWireSender(Named("Relog"));
         // DivertHandler — repeats incoming telepaths to a target while
         // @divert is active; rides the same gate-wrapped pipeline.
-        AppServices.Current.Divert.SetWireSender(engineSend);
+        AppServices.Current.Divert.SetWireSender(Named("Divert"));
         // Follower-side @comeback. Telepaths @comeback to the leader
         // when the party walks off without us; rides the same
         // gate-wrapped pipeline.
-        AppServices.Current.ComebackRequest.SetWireSender(engineSend);
-        AppServices.Current.LeaderBossTravel.SetWireSender(engineSend);
+        AppServices.Current.ComebackRequest.SetWireSender(Named("ComebackRequest"));
+        AppServices.Current.LeaderBossTravel.SetWireSender(Named("LeaderBossTravel"));
         // Follower-side reconnect auto-rejoin — telepaths @comeback + @invite
         // to re-form the party after a drop; same gate-wrapped pipeline.
-        AppServices.Current.PartyRejoin.SetWireSender(engineSend);
+        AppServices.Current.PartyRejoin.SetWireSender(Named("PartyRejoin"));
         // Leader-side reconnect recovery — telepaths the @where probe + decline
         // @forget when re-collecting a returning member; same pipeline.
-        AppServices.Current.PartyComeback.SetWireSender(engineSend);
+        AppServices.Current.PartyComeback.SetWireSender(Named("PartyComeback"));
         // Death-recovery auto-grab (`get`) + auto-equip (`wear` / `hold`)
         // ride the same gate-wrapped pipeline as the other engines.
-        AppServices.Current.DeathRecovery.SetWireSender(engineSend);
+        AppServices.Current.DeathRecovery.SetWireSender(Named("DeathRecovery"));
         // Auto-train is the ONE automation allowed to type on the `train stats`
         // screen — entering the form (`train stats`) raises the TrainerScreenGate
         // hold that silences every other engine, so its own `train stats` + each
@@ -1507,38 +1541,38 @@ public partial class MainWindowViewModel : ObservableObject
         // un-wrapped SendUserInput (same escape hatch the low-HP hangup uses);
         // ObserveOutbound still fires on this path, so the `train stats` send is
         // what arms the tracker and raises the gate in the first place.
-        AppServices.Current.AutoTrain.SetWireSender(SendUserInput);
+        AppServices.Current.AutoTrain.SetWireSender(AppServices.Current.EngineGate.Named(SendUserInput, "AutoTrain"));
         // It also reads the form it is about to type into: the trained stats and CP
         // Left stand on the terminal grid, which only this session holds.
         AppServices.Current.AutoTrain.SetScreenReader(BuildVisibleScreenText);
         // TrainerWalk sends `train` / `stat` only OUTSIDE the form (bare `train`
         // has no Point Cost Chart, so it never raises MenuOwnsKeyboard; `stat`
         // fires post-training), so it stays on the gate-wrapped pipeline.
-        AppServices.Current.TrainerWalk.SetWireSender(engineSend);
+        AppServices.Current.TrainerWalk.SetWireSender(Named("TrainerWalk"));
         // Level-up announcer broadcasts "I can now train to level: N" on
         // the configured channel through the same gate-wrapped pipeline.
-        AppServices.Current.LevelUp.SetWireSender(engineSend);
+        AppServices.Current.LevelUp.SetWireSender(Named("LevelUp"));
         // CombatManager sends `attack <target>` on target pick via the
         // same engine-send pipeline; the gate-wrapped sender prevents
         // the swing command from landing mid-password-entry on a stale
         // combat round.
-        AppServices.Current.Combat.SetWireSender(engineSend);
+        AppServices.Current.Combat.SetWireSender(Named("Combat"));
         AppServices.Current.Combat.SetWireHoldProbe(() => AppServices.Current.EngineGate.IsLocked);
         // CombatStateTracker sends `break` before releasing the walker when the
         // user toggles auto-attack off mid-fight (CombatSettings.BreakBeforeFleeing).
-        AppServices.Current.CombatTracker.SetWireSender(engineSend);
+        AppServices.Current.CombatTracker.SetWireSender(Named("CombatTracker"));
         // Post-death graveyard resync — a CR to re-observe the respawn room if it
         // hasn't landed shortly after death. Wire-send only (not a move), so it
         // rides engineSend even though the death halt holds the movement gate.
-        AppServices.Current.PlayerDeathHalt.SetWireSender(engineSend);
+        AppServices.Current.PlayerDeathHalt.SetWireSender(Named("PlayerDeathHalt"));
         // HealthManager sends rest / stand / pre- / post-rest commands
         // via the same gate-wrapped engine pipeline.
-        AppServices.Current.Health.SetWireSender(engineSend);
+        AppServices.Current.Health.SetWireSender(Named("Health"));
         // The emergency low-HP hangup is the one Health send that must survive
         // an EngineSendGate hold — a mortally-wounded character can still hang
         // up, and that hold is exactly what a drop raises. Bind it to the raw,
         // un-wrapped SendUserInput so the escape hangup pierces the gate.
-        AppServices.Current.Health.SetHangupWireSender(SendUserInput);
+        AppServices.Current.Health.SetHangupWireSender(AppServices.Current.EngineGate.Named(SendUserInput, "Health (hang-up)"));
         // After the exit command goes out, close the carrier ourselves rather
         // than waiting on the server to notice — see RequestHangupDisconnect.
         AppServices.Current.Health.SetHangupDisconnect(RequestHangupDisconnect);
@@ -1548,7 +1582,7 @@ public partial class MainWindowViewModel : ObservableObject
         // are honoured at any HP — mortally-wounded included — so the jump (and the
         // wimpy escape built on it) must survive the EngineSendGate hold, exactly like
         // the emergency hangup above. Same un-wrapped SendUserInput.
-        AppServices.Current.SetRawWireSender(SendUserInput);
+        AppServices.Current.SetRawWireSender(AppServices.Current.EngineGate.Named(SendUserInput, "Client (raw sender)"));
         // CastCoordinator's `c <spell> [target]` emits still respect the
         // suicide-password / trainer-menu lockouts (gate-wrapped), but ride
         // the raw send, NOT engineSend — engineSend funnels through
@@ -1556,91 +1590,92 @@ public partial class MainWindowViewModel : ObservableObject
         // hand-typed cast and would otherwise mistake the combat engine's own
         // announce for one (see SendEngineWireRaw).
         AppServices.Current.Cast.SetWireSender(
-            AppServices.Current.EngineGate.WrapEngineSender(SendEngineWireRaw));
+            AppServices.Current.EngineGate.Named(
+                AppServices.Current.EngineGate.WrapEngineSender(SendEngineWireRaw), "Cast"));
         // Mana-regen reroll engine's `abil 145` query + cooldown-bypassing
         // recast ride the same gate-wrapped pipeline as the cast engine.
-        AppServices.Current.SetEngineWireSender(engineSend);
+        AppServices.Current.SetEngineWireSender(Named("Client (shared sender)"));
         // Item-cast buff sequencer's wield/use/wield commands ride the
         // same gate-wrapped pipeline as the other engines.
-        AppServices.Current.ItemCast.SetWireSender(engineSend);
+        AppServices.Current.ItemCast.SetWireSender(Named("ItemCast"));
         // EquipmentManager's paced `wear` commands ride the same
         // gate-wrapped pipeline (@equip <set> set-apply).
-        AppServices.Current.Equipment.SetWireSender(engineSend);
+        AppServices.Current.Equipment.SetWireSender(Named("Equipment"));
         // CashManager's `get all <coin>` commands ride the gate-wrapped
         // pipeline like the other engines.
-        AppServices.Current.Cash.SetWireSender(engineSend);
+        AppServices.Current.Cash.SetWireSender(Named("Cash"));
         // AutoGetItemsManager's `get <name>` commands ride the same
         // gate-wrapped pipeline.
-        AppServices.Current.AutoGetItems.SetWireSender(engineSend);
+        AppServices.Current.AutoGetItems.SetWireSender(Named("AutoGetItems"));
         // The hang-up item check's own two sends, `i` and a room redisplay; its
         // gets go out through the auto-get engine above.
-        AppServices.Current.HangupItems.SetWireSender(engineSend);
+        AppServices.Current.HangupItems.SetWireSender(Named("HangupItems"));
         // The loot-automation engines — AutoDiscard's `drop`, AutoBuy's `buy`,
         // AutoSell's `sell` — all ride the same gate-wrapped pipeline.
-        AppServices.Current.AutoDiscard.SetWireSender(engineSend);
-        AppServices.Current.AutoBuy.SetWireSender(engineSend);
-        AppServices.Current.AutoSell.SetWireSender(engineSend);
+        AppServices.Current.AutoDiscard.SetWireSender(Named("AutoDiscard"));
+        AppServices.Current.AutoBuy.SetWireSender(Named("AutoBuy"));
+        AppServices.Current.AutoSell.SetWireSender(Named("AutoSell"));
         // Base auto-search — the per-room `sea` rides the same gate-wrapped
         // pipeline so it can't land mid-password-prompt.
-        AppServices.Current.AutoSearch.SetWireSender(engineSend);
+        AppServices.Current.AutoSearch.SetWireSender(Named("AutoSearch"));
         // Let the route picker's "Search en route" card flip the master Auto-Search
         // toggle on for its leg (and back off when the counter lands) through the same
         // observable the toolbar/menu drive, so the badge + persistence stay in sync.
         AppServices.Current.SetAutoSearchEnabled = on => IsAutoSearchActive = on;
         // Active auto-light — the route's `use <light>` / `rem <old>` swap
         // rides the same gate-wrapped pipeline.
-        AppServices.Current.AutoLightProvisioner.SetWireSender(engineSend);
+        AppServices.Current.AutoLightProvisioner.SetWireSender(Named("AutoLightProvisioner"));
         // Auto-light provisioning detour — the `buy <light>` at the shop rides
         // the same gate-wrapped pipeline.
-        AppServices.Current.AutoLightShopRouter.SetWireSender(engineSend);
+        AppServices.Current.AutoLightShopRouter.SetWireSender(Named("AutoLightShopRouter"));
         // Hazard-buff provisioning — the `use <waterskin>` that raises a
         // checkspell hazard buff rides the same gate-wrapped pipeline.
-        AppServices.Current.AutoHazardCounterProvisioner.SetWireSender(engineSend);
+        AppServices.Current.AutoHazardCounterProvisioner.SetWireSender(Named("AutoHazardCounterProvisioner"));
         // Shop-source routing — the `buy <item>` at the detour shop
         // rides the same gate-wrapped pipeline.
-        AppServices.Current.PathItemShopRouter.SetWireSender(engineSend);
+        AppServices.Current.PathItemShopRouter.SetWireSender(Named("PathItemShopRouter"));
         // Give-source routing — the `ask <npc> <keyword>` / room-CMD give
         // command at the detour giver rides the same gate-wrapped pipeline.
-        AppServices.Current.PathItemGiveRouter.SetWireSender(engineSend);
+        AppServices.Current.PathItemGiveRouter.SetWireSender(Named("PathItemGiveRouter"));
         // Summon-source routing — the room-CMD summon keyword and the post-kill
         // `look` re-survey ride the same gate-wrapped pipeline.
-        AppServices.Current.PathItemSummonRouter.SetWireSender(engineSend);
+        AppServices.Current.PathItemSummonRouter.SetWireSender(Named("PathItemSummonRouter"));
         // Party-inventory deferral — the `@party give` / `@do give`
         // hand-off rides the same gate-wrapped pipeline. The @have probe
         // itself broadcasts through the already-bound PartyBroadcaster.
-        AppServices.Current.PartyPathItemGate.SetWireSender(engineSend);
+        AppServices.Current.PartyPathItemGate.SetWireSender(Named("PartyPathItemGate"));
         // StashRoomManager's `hide N <coin>` commands ride the same
         // gate-wrapped pipeline.
-        AppServices.Current.Stash.SetWireSender(engineSend);
+        AppServices.Current.Stash.SetWireSender(Named("Stash"));
         // Roomba Mode's `get`/`drop` sort-phase commands ride the same
         // gate-wrapped pipeline.
-        AppServices.Current.GhSweep.SetWireSender(engineSend);
+        AppServices.Current.GhSweep.SetWireSender(Named("Roomba"));
         // Auto-deposit reroute's bank `dep` command rides the same
         // gate-wrapped pipeline.
-        AppServices.Current.AutoDeposit.SetWireSender(engineSend);
+        AppServices.Current.AutoDeposit.SetWireSender(Named("AutoDeposit"));
         // @drop-all / @deposit-all / @share emit drop / dep / with / give
         // on the same gate-wrapped pipeline.
-        AppServices.Current.InventoryAction.SetWireSender(engineSend);
+        AppServices.Current.InventoryAction.SetWireSender(Named("InventoryAction"));
         // @heal receive side polls `par` so CastingDirector heals the
         // requester off fresh party HP.
-        AppServices.Current.Heal.SetWireSender(engineSend);
+        AppServices.Current.Heal.SetWireSender(Named("Heal"));
         // Cluster 3 — StealthManager's auto-sneak / auto-hide commands.
-        AppServices.Current.Stealth.SetWireSender(engineSend);
+        AppServices.Current.Stealth.SetWireSender(Named("Stealth"));
         // @do passthrough — gate-wrapped because a malicious caller's
         // payload shouldn't be able to land mid-suicide-password entry.
-        AppServices.Current.Do.SetWireSender(engineSend);
+        AppServices.Current.Do.SetWireSender(Named("Do"));
         // @trap auto-disarm — gate-wrapped (same reason).
-        AppServices.Current.TrapDisarm.SetWireSender(engineSend);
+        AppServices.Current.TrapDisarm.SetWireSender(Named("TrapDisarm"));
         // Party trap delegation — `look <name>` race probes + `.@trap <dir>`
         // say broadcasts ride the same gate-wrapped pipeline.
-        AppServices.Current.TrapDelegation.SetWireSender(engineSend);
+        AppServices.Current.TrapDelegation.SetWireSender(Named("TrapDelegation"));
         // DoorOpenManager wire-sender — gate-wrapped so the bash/pick
         // sequence can't land in a password-entry prompt. Walker
         // routes door exits through Door.Enqueue at step-send time.
-        AppServices.Current.Door.SetWireSender(engineSend);
+        AppServices.Current.Door.SetWireSender(Named("Door"));
         // LeaderDoorAssistManager — same gate-wrapped sender so helping the
         // leader force a door can't fire mid-password-prompt.
-        AppServices.Current.LeaderDoorAssist.SetWireSender(engineSend);
+        AppServices.Current.LeaderDoorAssist.SetWireSender(Named("LeaderDoorAssist"));
         AppServices.Current.DetourCombat.HoldChanged += OnDetourCombatHold;
         AppServices.Current.PyramidSolver.RunThroughChanged += OnPyramidRunThrough;
         AppServices.Current.Walker.SetDoorEnqueuer(AppServices.Current.Door.Enqueue);
@@ -1652,7 +1687,7 @@ public partial class MainWindowViewModel : ObservableObject
         // HiddenExitRevealManager — same gate-wrapped sender so the
         // sea loop can't land mid-password-prompt. Walker routes
         // SearchableHidden exits here.
-        AppServices.Current.HiddenSearch.SetWireSender(engineSend);
+        AppServices.Current.HiddenSearch.SetWireSender(Named("HiddenSearch"));
         AppServices.Current.Walker.SetHiddenSearchEnqueuer(AppServices.Current.HiddenSearch.Enqueue);
         AppServices.Current.Walker.SetHiddenSearchStopper(AppServices.Current.HiddenSearch.StopAll);
         // Loop runner shares the same reveal FSM so a hidden exit mid-circuit is
@@ -1662,7 +1697,7 @@ public partial class MainWindowViewModel : ObservableObject
         // WinchManager — same gate-wrapped sender so the pull + poll `l` can't land
         // mid-password-prompt. Both engines route a winch gate here so it's pulled +
         // waited-open instead of firing the move blindly into a still-closed gate.
-        AppServices.Current.Winch.SetWireSender(engineSend);
+        AppServices.Current.Winch.SetWireSender(Named("Winch"));
         AppServices.Current.Walker.SetWinchEnqueuer(AppServices.Current.Winch.Enqueue);
         AppServices.Current.Walker.SetWinchStopper(AppServices.Current.Winch.StopAll);
         AppServices.Current.LoopRunner.SetWinchEnqueuer(AppServices.Current.Winch.Enqueue);
@@ -1741,11 +1776,11 @@ public partial class MainWindowViewModel : ObservableObject
         // blast moves through a password-entry prompt. Their sends are route steps,
         // which sneak keeping never takes for later.
         Action<byte[]> routeSend = AppServices.Current.EngineGate.WrapEngineSender(SendUserInput, routeSteps: true);
-        AppServices.Current.Walker.SetWireSender(routeSend);
-        AppServices.Current.LoopRunner.SetWireSender(routeSend);
+        AppServices.Current.Walker.SetWireSender(AppServices.Current.EngineGate.Named(routeSend, "Walker"));
+        AppServices.Current.LoopRunner.SetWireSender(AppServices.Current.EngineGate.Named(routeSend, "LoopRunner"));
         // Paradigm position resolver — its `rm` re-sync ride the same
         // gate-wrapped pipeline so it can't land mid-password-prompt.
-        AppServices.Current.ParadigmResync.SetWireSender(engineSend);
+        AppServices.Current.ParadigmResync.SetWireSender(Named("ParadigmResync"));
         // The tracker asks the game to show the room when a step through a
         // teleporting exit wasn't followed by the displays the game owes it: a bare
         // Enter, through the same gate.
@@ -1759,30 +1794,30 @@ public partial class MainWindowViewModel : ObservableObject
         // Teleport-maze solver — its look-peeks + reshuffle moves ride the same
         // gate-wrapped pipeline. The RoomParsed feed that drives its relocalize
         // is subscribed below beside the RoomDisplayParser.
-        AppServices.Current.MazeSolver.SetWireSender(engineSend);
+        AppServices.Current.MazeSolver.SetWireSender(Named("MazeSolver"));
         // Pyramid solver — its climb moves + door/sphinx commands ride the same
         // gate-wrapped pipeline.
-        AppServices.Current.PyramidSolver.SetWireSender(engineSend);
+        AppServices.Current.PyramidSolver.SetWireSender(Named("PyramidSolver"));
         // Summon-on-death CR recheck rides the same gate-wrapped pipeline.
-        AppServices.Current.SummonSettle.SetWireSender(engineSend);
+        AppServices.Current.SummonSettle.SetWireSender(Named("SummonSettle"));
         // Recovery gate's tier-3 look-sweep rides the same gate-wrapped pipeline
         // so its `look <dir>` peeks can't land mid-password-prompt.
-        AppServices.Current.Recovery.SetWireSender(engineSend);
+        AppServices.Current.Recovery.SetWireSender(Named("Recovery"));
         // SuicideHandler — bypasses the engine gate because it OWNS
         // the suicide flow (and needs its `suicide` + password sends
         // to land even while SuicidePasswordTracker has the gate
         // locked for the password-prompt phase). Uses the raw
         // SendUserInput, not the wrapped engineSend.
-        AppServices.Current.Suicide.SetWireSender(SendUserInput);
+        AppServices.Current.Suicide.SetWireSender(AppServices.Current.EngineGate.Named(SendUserInput, "Suicide"));
         // MainMenuEntryAutomation — same sender; armed below when
         // LoginAutomator's LoggedIntoGame fires (only point in the
         // session where the entry command is allowed to auto-fire).
-        AppServices.Current.MainMenuEntry.SetWireSender(engineSend);
+        AppServices.Current.MainMenuEntry.SetWireSender(Named("MainMenuEntry"));
         // StatlineReconciler — gate-wrapped so a `set statline` resend can't
         // land mid-password-prompt. Armed unconditionally on every connect
         // (below) so the live statline reconciles to the editor regardless of
         // whether login was automated.
-        AppServices.Current.StatlineReconcile.SetWireSender(engineSend);
+        AppServices.Current.StatlineReconcile.SetWireSender(Named("StatlineReconcile"));
 
         // CleanupLogoutOrchestrator — proactive log-off on the nightly
         // shutdown warning. Safe = room clear of killable NPCs AND not
@@ -1790,7 +1825,7 @@ public partial class MainWindowViewModel : ObservableObject
         // the active BBS's ReconnectAfterCleanup toggle (same switch the
         // predictive reconnect scheduler reads), and uses the user-
         // initiated disconnect path so the reconnect still arms afterward.
-        AppServices.Current.CleanupLogout.SetWireSender(engineSend);
+        AppServices.Current.CleanupLogout.SetWireSender(Named("CleanupLogout"));
         AppServices.Current.CleanupLogout.SetSafePredicate(
             () => !AppServices.Current.CombatTracker.HasEngageableHostiles
                 && !AppServices.Current.PlayerState.InCombat);
@@ -3754,6 +3789,24 @@ public partial class MainWindowViewModel : ObservableObject
     // stalled the walker after training (it advanced one room per manual `rm`).
     // Presence is tracked unconditionally (even while armed) so the falling edge is
     // seen; the box must actually leave and reappear before it can re-arm.
+    // An @suicide with a stored password answers the game's password prompt, which
+    // has no line end until answered and so is only ever seen on the cursor's row.
+    private void OnScreenUpdatedForSuicidePrompt()
+    {
+        Game.Remote.SuicideHandler suicide = AppServices.Current.Suicide;
+        if (!suicide.AwaitingPasswordPrompt) return;
+        suicide.ObserveCursorRow(CursorRowText());
+    }
+
+    // What the terminal shows on the row the cursor is on: where a prompt that is
+    // waiting for an answer stands.
+    private string CursorRowText()
+    {
+        TerminalScreen screen = Emulator.Screen;
+        int row = Math.Clamp(screen.CursorY, 0, screen.Rows - 1);
+        return TranscriptSnapshot.RowText(screen.Row(row));
+    }
+
     private void OnScreenUpdatedForTrainerMenu()
     {
         bool onScreen = ScreenShowsStatBoxMarker();
@@ -3795,6 +3848,22 @@ public partial class MainWindowViewModel : ObservableObject
         return sb.ToString();
     }
 
+    // Where the line SendUserInput is carrying came from, when it is the user's
+    // but not from the terminal's keyboard: an alias's step, a window, the local
+    // API. Null for the keyboard. Only the sent-command trail reads it; to every
+    // other observer these lines are the user's own, as before.
+    private SentCommandTrail.Origin? _userLineOrigin;
+
+    // SendUserInput for a line the user sent some other way than by typing it at
+    // the terminal, so the trail can say which.
+    private void SendUserInputAs(SentCommandTrail.Origin origin, byte[] data)
+    {
+        SentCommandTrail.Origin? outer = _userLineOrigin;
+        _userLineOrigin = origin;
+        try { SendUserInput(data); }
+        finally { _userLineOrigin = outer; }
+    }
+
     // Send raw key bytes from the terminal control to the server. Called
     // by the view's UserInput handler; no-op if not connected.
     public void SendUserInput(byte[] data)
@@ -3806,7 +3875,29 @@ public partial class MainWindowViewModel : ObservableObject
         // Suicide-password capture — during the AwaitingNewPassword
         // state, the next bytes the user types ARE the password. We
         // peek here (the bytes still flow to the server unchanged).
-        AppServices.Current.SuicidePassword.ObserveOutbound(data);
+        // Whether the line is the user's own (typed, an alias, a window, the local
+        // API) and not an engine's decides what a typed `suicide` covers.
+        EngineSendGate sendGate = AppServices.Current.EngineGate;
+        AppServices.Current.SuicidePassword.ObserveOutbound(data,
+            usersOwn: !sendGate.SendingClientCommand && sendGate.CurrentSender is null);
+        // Sent-command trail. A line a wrapped sender is putting out is already
+        // in it (the gate records each command once); what reaches here unwrapped
+        // is typed, or a named sender going round the gate.
+        // An @suicide waiting to answer the game's password prompt: any other
+        // line that goes out first is what the game takes as the password, so
+        // the stored one must not follow it.
+        AppServices.Current.Suicide.NoteLineSent(data);
+        if (!sendGate.SendingClientCommand)
+        {
+            if (sendGate.CurrentSender is { } pastGate)
+                AppServices.Current.SentCommands.Record(
+                    System.Text.Encoding.Latin1.GetString(data).TrimEnd('\r', '\n', '\0'),
+                    SentCommandTrail.Origin.Engine, pastGate, SentCommandTrail.Outcome.Sent, "goes round the send gate");
+            else if (_userLineOrigin is { } origin)
+                AppServices.Current.SentCommands.ObserveUserLine(data, origin);
+            else
+                AppServices.Current.SentCommands.ObserveTyped(data);
+        }
         // Stat-screen parser — gates on outbound `stat` so chat lines
         // containing "Strength: 60" or similar can't bleed into the
         // PlayerStats snapshot.
@@ -4052,7 +4143,9 @@ public partial class MainWindowViewModel : ObservableObject
     // the chat panel feeds the game the same way as typing in the terminal
     // does. Also scans the typed verb for heal-shaped commands so the regen
     // tracker can gate any HP / MA upticks during the artifact grace window.
-    public void SendUserText(string text)
+    // origin is where the text came from (a window, the local API), for the
+    // sent-command trail: nothing typed at the terminal comes this way.
+    public void SendUserText(string text, SentCommandTrail.Origin origin)
     {
         if (string.IsNullOrEmpty(text)) return;
 
@@ -4063,10 +4156,10 @@ public partial class MainWindowViewModel : ObservableObject
         // (untrimmed), preserving prior behavior. Each resulting line is
         // then alias-expanded + sent on its own.
         foreach (string line in MacroStore.SplitTypedInput(text))
-            SendOneUserLine(line);
+            SendOneUserLine(line, origin);
     }
 
-    private void SendOneUserLine(string text)
+    private void SendOneUserLine(string text, SentCommandTrail.Origin origin)
     {
         // Alias check first — first-word match, case-insensitive. When
         // an enabled alias's name matches, the engine returns the
@@ -4079,7 +4172,9 @@ public partial class MainWindowViewModel : ObservableObject
                 if (LooksLikeHealShapedCommand(step))
                     AppServices.Current.Regen.RecordArtifact();
                 byte[] stepBytes = System.Text.Encoding.Latin1.GetBytes(step + "\r\n");
-                SendUserInput(stepBytes);
+                // What goes out is the alias's text, not what was entered: the
+                // trail names it so, wherever the alias was entered.
+                SendUserInputAs(SentCommandTrail.Origin.Alias, stepBytes);
             }
             return;
         }
@@ -4090,14 +4185,14 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         byte[] bytes = System.Text.Encoding.Latin1.GetBytes(text + "\r\n");
-        SendUserInput(bytes);
+        SendUserInputAs(origin, bytes);
     }
 
     // Toolbar "EXP" button — send the in-game "exp" command exactly as if the
     // player typed it (alias expansion + wire send). No-ops harmlessly when
     // disconnected (SendUserInput drops it with no socket).
     [RelayCommand]
-    private void SendExp() => SendOneUserLine("exp");
+    private void SendExp() => SendOneUserLine("exp", SentCommandTrail.Origin.Window);
 
     // Heuristic: does line start with a verb that usually moves HP or MA
     // upward? Conservative — false positives just waste a few seconds of
@@ -4335,7 +4430,16 @@ public partial class MainWindowViewModel : ObservableObject
     {
         Services.AppServices svc = Services.AppServices.Current;
 
-        BugReportBuilder.BugReportCapture capture = BugReportBuilder.Capture(svc, Emulator);
+        BugReportBuilder.BugReportCapture capture;
+        try { capture = BugReportBuilder.Capture(svc, Emulator); }
+        catch (BugReportBuilder.PrivacyException ex)
+        {
+            // Nothing is written that couldn't be masked; the user is told why,
+            // on the terminal and in the log.
+            svc.Log.Error("BugReport", ex.Message);
+            Dispatcher.UIThread.Post(() => svc.WriteTerminalNotice(ex.Message));
+            return;
+        }
 
         string? description = await svc.Dialogs
             .OpenWindowAsync<BugReportDialogViewModel, string>(new BugReportDialogViewModel());
@@ -4374,7 +4478,7 @@ public partial class MainWindowViewModel : ObservableObject
             DataContext = new ConversationViewModel(
                 AppServices.Current.ChatHistory,
                 AppServices.Current.CommandHistory,
-                SendUserText,
+                text => SendUserText(text, SentCommandTrail.Origin.Window),
                 ClearChatlog,
                 Application.Current,
                 AppServices.Current.Resolver.Resolve<Models.Profile.TalkSettings>("Talk"),
@@ -4401,7 +4505,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             DataContext = new PartyViewModel(
                 AppServices.Current.PartyState,
-                SendUserInput),
+                data => SendUserInputAs(SentCommandTrail.Origin.Window, data)),
         };
         window.Closed += (_, _) => _partyWindow = null;
         _partyWindow = window;
@@ -6239,10 +6343,10 @@ public partial class MainWindowViewModel : ObservableObject
         // re-latches to the authoritative value (a stale max is what strands a rest).
         Game.Inventory.EquipResult equip =
             AppServices.Current.Equipment.ApplyByTrigger(Models.Profile.EquipTriggerType.Default);
-        SendUserText("health");
+        SendUserText("health", SentCommandTrail.Origin.Window);
         // Re-observe the room so the trackers and the post-force-clear rest hold
         // settle on what's actually here.
-        SendUserInput(System.Text.Encoding.Latin1.GetBytes("\r"));
+        SendUserInputAs(SentCommandTrail.Origin.Window, System.Text.Encoding.Latin1.GetBytes("\r"));
         AppServices.Current.Health.Evaluate();
 
         AppServices.Current.Log.Info(Game.Conditions.ConditionTracker.LogCategory,

@@ -84,6 +84,12 @@ public sealed class AutoBuyManager : IDisposable
     private string? _awaitingArg;
     private DateTimeOffset _sentAt;
 
+    // For a bug report: the buy in progress, or null.
+    public string? DescribePending() =>
+        _queue.Count == 0 && _active < 0 ? null
+        : $"{_queue.Count} order(s) queued, order {_active + 1} active"
+          + (_awaitingArg is { } arg ? $", awaiting the game's answer for '{arg}' since {_sentAt.ToLocalTime():HH:mm:ss}" : string.Empty);
+
     // How long a `buy` is taken to be still unanswered. A buy is answered at once
     // unless an action delay or commands queued ahead hold it for a second or two
     // (BulkCommandPacer has the queue's rules); past this a nameless refusal is

@@ -25,6 +25,9 @@ public sealed class KillHandlerTests
         public PlayerDatabase Players { get; }
         public List<string> Retargets { get; } = new();
 
+        // What the order's taker answers; null (the order was taken) by default.
+        public string? Refusal { get; set; }
+
         public Setup()
         {
             MessageRouter router = new();
@@ -33,7 +36,7 @@ public sealed class KillHandlerTests
             PartyState party = new();
             Players = new PlayerDatabase();
             Engine = new RemoteCommandManager(chat, party, Players);
-            Handler = new KillHandler(Engine, name => Retargets.Add(name));
+            Handler = new KillHandler(Engine, name => { Retargets.Add(name); return Refusal; });
         }
 
         public void Dispose() => Handler.Dispose();
@@ -105,6 +108,32 @@ public sealed class KillHandlerTests
         s.Engine.DispatchForTests(Telepath("Tank", "@kill"));
 
         Assert.Empty(s.Retargets);
+        Assert.Empty(s.Engine.LastSentForTests);
+    }
+
+    // An order that wasn't taken (a player we won't fight) is refused with the
+    // taker's reason, under the Warn setting.
+    [Fact]
+    public void Kill_NotTaken_RefusesWithTheReason()
+    {
+        using Setup s = new() { Refusal = "not attacking Bob: PvP is off" };
+        SeedPlayer(s.Players, "Tank", PlayerRemoteControls.ExecuteCommands);
+
+        s.Engine.DispatchForTests(Telepath("Tank", "@kill Bob"));
+
+        Assert.Equal("/Tank {not attacking Bob: PvP is off}\r",
+            Encoding.Latin1.GetString(Assert.Single(s.Engine.LastSentForTests)));
+    }
+
+    [Fact]
+    public void Kill_NotTaken_IsSilentWhenWarnOff()
+    {
+        using Setup s = new() { Refusal = "not attacking Bob: PvP is off" };
+        SeedPlayer(s.Players, "Tank", PlayerRemoteControls.ExecuteCommands);
+        s.Engine.WarnOnDenial = false;
+
+        s.Engine.DispatchForTests(Telepath("Tank", "@kill Bob"));
+
         Assert.Empty(s.Engine.LastSentForTests);
     }
 

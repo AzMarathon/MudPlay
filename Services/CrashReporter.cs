@@ -34,6 +34,13 @@ public static class CrashReporter
     // exception, just without the state dump.
     public static void RegisterStateProvider(Func<string?> provider) => _stateProvider = provider;
 
+    // The whole crash document passes through this before it is written: the
+    // account-detail scrub a bug report gets, since a crash report is posted the
+    // same way. If it throws, the document is not written at all rather than
+    // written unmasked.
+    private static Func<string, string>? _textFilter;
+    public static void RegisterTextFilter(Func<string, string> filter) => _textFilter = filter;
+
     // Wire the two out-of-band failure channels. UI-thread crashes escape the
     // Avalonia run loop instead and are caught by Guard.
     public static void Install()
@@ -128,6 +135,23 @@ public static class CrashReporter
         Kv(sb, "Source", source);
         Kv(sb, "OS", Safe(() => RuntimeInformation.OSDescription));
         Kv(sb, "Runtime", Safe(() => RuntimeInformation.FrameworkDescription));
+        Kv(sb, "Build", Safe(() => ClientEnvironment.Build));
+        Kv(sb, "Client started", Safe(() => $"{ClientEnvironment.ProcessStart:yyyy-MM-dd HH:mm:ss}, process {ClientEnvironment.ProcessId}"));
+        // The log files outlive the process: say where they are, in case this
+        // document's own state dump below could not be made.
+        Kv(sb, "Log folder", Safe(() => BugReportContext.HomeRelative(AppPaths.LogsDir)));
+        Kv(sb, "Log to send with this", Safe(() =>
+        {
+            AppServices? svc = AppServices.CurrentOrNull;
+            if (svc is null) return "(the client had not finished starting)";
+            // With Auto-collect on, the last-minutes files stopped when it went
+            // on: the full program log is the record, not they.
+            if (svc.LogDiagnostics.AutoCollectLogs)
+                return "the full program log: " + (svc.ProgramLog.CurrentPath is { } full ? Path.GetFileName(full) : "(not open)");
+            return svc.RecentLog.CurrentFiles is { Count: > 0 } files
+                ? "the last-minutes log: " + string.Join(" and ", files.Select(Path.GetFileName))
+                : "(nothing was logged)";
+        }));
         sb.Append('\n');
 
         sb.Append("## Exception\n\n");
@@ -142,21 +166,35 @@ public static class CrashReporter
         else
             sb.Append("## State\n\n_(client state unavailable — the crash happened before the UI was ready, or state capture itself failed)_\n");
 
-        return sb.ToString();
+        return _textFilter is { } filter ? filter(sb.ToString()) : sb.ToString();
     }
 
     // Walk the inner-exception chain so a wrapped fault (AggregateException, a
     // rethrow, etc.) shows every layer, not just the outermost message.
-    private static void AppendException(StringBuilder sb, Exception ex)
+    private static void AppendException(StringBuilder sb, Exception ex, int depth = 0)
     {
         for (Exception? e = ex; e is not null; e = e.InnerException)
         {
             sb.Append("**").Append(e.GetType().FullName).Append("**: ")
               .Append(e.Message).Append("\n\n```\n")
               .Append(e.StackTrace ?? "(no stack trace)").Append("\n```\n\n");
+            // An AggregateException's InnerException is only the first of its
+            // faults: a task that failed twice over shows every one.
+            if (e is AggregateException { InnerExceptions.Count: > 1 } aggregate && depth < MaxAggregateDepth)
+            {
+                for (int i = 0; i < aggregate.InnerExceptions.Count; i++)
+                {
+                    sb.Append("Fault ").Append(i + 1).Append(" of ").Append(aggregate.InnerExceptions.Count).Append(":\n\n");
+                    AppendException(sb, aggregate.InnerExceptions[i], depth + 1);
+                }
+                return;
+            }
             if (e.InnerException is not null) sb.Append("Caused by:\n\n");
         }
     }
+
+    // Aggregates nested inside aggregates are followed this far and no further.
+    private const int MaxAggregateDepth = 4;
 
     private static string? SafeState()
     {

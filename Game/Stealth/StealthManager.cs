@@ -326,6 +326,19 @@ public sealed class StealthManager : IDisposable
     // StateChanged event.
     public StealthState State => _stateValue;
 
+    // The sneak holds and waits that are up right now, for a bug report.
+    public IReadOnlyList<string> DescribeWaits()
+    {
+        List<string> waits = new();
+        if (_cooldownHoldSince is { } cooldown) waits.Add($"sneak-cooldown hold since {cooldown.ToLocalTime():HH:mm:ss}");
+        if (_settleHold) waits.Add($"settle hold since {_settleSince.ToLocalTime():HH:mm:ss}");
+        if (_castHold) waits.Add($"cast hold since {_castHoldSince.ToLocalTime():HH:mm:ss}");
+        if (_awaitingArrivalConfirm) waits.Add("the arrival that confirms a sneak");
+        if (_sneakRetries > 0) waits.Add($"{_sneakRetries} sneak retry(ies)");
+        if (_followed) waits.Add("followed" + (_followedHere ? " into this room" : string.Empty));
+        return waits;
+    }
+
     // Fires after every confirmed FSM transition (including silent-loss to Idle).
     // Args: old state, new state.
     public event Action<StealthState, StealthState>? StateChanged;

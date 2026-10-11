@@ -338,12 +338,14 @@ public sealed class PartyComebackManager : IDisposable
         {
             // The trip's own walk is not stopped for anyone (user, 2026-10-10:
             // "train trips should be excluded"); they are fetched when the training
-            // is done, from the room they name. Said once, and only when denials are.
+            // is done, from the room they name. Said once, and only when denials
+            // are (user, 2026-10-10: it "should match whether the refusals are
+            // verbose or silent").
             bool firstWord = _answeredOnTrip.Add(given);
             NoteLeftOnTrip(given, target, named: true);
             _log?.Info(LogCategory,
                 $"{given} asked to be fetched{(target is { } t ? $" from {t.Map}/{t.Room}" : "")} during the train trip — kept until the training is done");
-            if (firstWord && _engine.WarnOnDenial) ctx.Reply(TrainTripReply);
+            if (firstWord) ctx.Refuse(TrainTripReply);
             return;
         }
         // Someone a train trip of ours came back without, saying where they are.
@@ -363,16 +365,19 @@ public sealed class PartyComebackManager : IDisposable
                 // Going back would only leave them at the same exit on the next lap
                 // (user, 2026-10-10: on a loop the leader "should not accept a comback
                 // for them, it should reject them"). A denial, so it is said only when
-                // denials are (the remote-command reply policy).
+                // denials are, though the follower's client reads it to give the
+                // follow up at once (user, 2026-10-10: it "should match whether the
+                // refusals are verbose or silent"). Unanswered, the follower gives
+                // up when its own window runs out.
                 _log?.Info(LogCategory,
                     $"{given} asked to be fetched{(from is { } f ? $" from {f.Map}/{f.Room}" : "")}, where our loop goes through an exit they can't pass — refused, the loop carries on");
-                if (_engine.WarnOnDenial) ctx.Reply(LoopGateRefusal);
+                ctx.Refuse(LoopGateRefusal);
                 return;
             case GateVerdict.LairInvitesOnSight:
                 // Auto-Lair doesn't break off for them. Said once, and only when
                 // denials are.
                 LeaveToTheNextPass(given, from);
-                if (_lairAnswered.Add(given) && _engine.WarnOnDenial) ctx.Reply(LairGateReply);
+                if (_lairAnswered.Add(given)) ctx.Refuse(LairGateReply);
                 return;
             case GateVerdict.WalkEnds when step is { } gate:
                 // Stock: the request is the first we hear of the second drop. The
@@ -388,10 +393,34 @@ public sealed class PartyComebackManager : IDisposable
 
     // The answer to a member Auto-Lair left at an exit that turned them away. "I
     // can't yet" is what a follower's client reads as "wait", not as a refusal.
-    public const string LairGateReply = "I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you";
+    public const string LairGateReply = NotYet + ", an exit on my way turned you away. I'll invite you when my next pass finds you";
 
     // The answer to a member who asks to be fetched in the middle of a train trip.
-    public const string TrainTripReply = "I can't yet, I'm on a train trip. I'll come for you when the training is done";
+    public const string TrainTripReply = NotYet + ", I'm on a train trip. I'll come for you when the training is done";
+
+    // How each answer that says we are coming, now or later, begins. The follower's
+    // client waits longer on one of these and on nothing else we telepath it
+    // (ComebackRequester.OnTelepathIn), so the answers below are built from these
+    // and the two sides can't drift apart. The words must stay as they are: a
+    // follower on another version reads them too.
+    public const string ComingForPickup = "coming to your location for pickup";
+    public const string Backtracking = "backtracking up to";
+    public const string AlreadyInProgress = "comeback already in progress";
+    public const string NotYet = "I can't yet";
+    public const string DidNotFindYou = "didn't find you";
+    public const string FoundYou = "found you";
+    public const string GotYou = "got you";
+
+    private static readonly string[] ComingOrLaterOpenings =
+        { ComingForPickup, Backtracking, AlreadyInProgress, NotYet, DidNotFindYou, FoundYou, GotYou };
+
+    // True when a leader's answer says it is coming for us, now or later.
+    public static bool SaysComingOrLater(string answer)
+    {
+        foreach (string opening in ComingOrLaterOpenings)
+            if (answer.StartsWith(opening, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
 
     // ----- a train trip (nobody is fetched until it is over) ----------------
 
@@ -541,7 +570,7 @@ public sealed class PartyComebackManager : IDisposable
             $"{_senderGiven} isn't in the room the trip left them in — waiting for their @comeback to name a room.");
         _awaitedAfterTrip[_senderGiven] = NowProvider();
         _party.ExpectComebackFrom(_senderGiven);
-        _reply("didn't find you where the trip left you — @comeback with your room and I'll come");
+        _reply($"{DidNotFindYou} where the trip left you - @comeback with your room and I'll come");
         Resume();
     }
 
@@ -1080,6 +1109,17 @@ public sealed class PartyComebackManager : IDisposable
     // this one is for a member our own trip walked away from (user, 2026-10-10).
     // roomUnconfirmed: the room is our own guess (the one our step left when the
     // game dropped them), to be checked for them on arrival.
+    //
+    // Every answer given through `reply`, here and for the rest of the recovery,
+    // is protocol and goes whatever the Warn setting says: the follower's client
+    // (ComebackRequester) reads each one to decide whether to give the follow up
+    // at once ("I can't", "my party is full", "can't find a path", "can't come",
+    // "forget me", "going idle"), to give up after a pickup that failed ("can't
+    // reach", "path failed", "follow timed out"), or to wait for us for longer
+    // (the answers SaysComingOrLater names). Silenced, a follower would wait out
+    // its whole window for a leader who had already said no. The words it matches
+    // on are not to be reworded. (The three answers OnComeback gives through
+    // Refuse are not among these: they follow the Warn setting.)
     private void BeginRecovery(string senderGiven, RoomKey? target, Action<string> reply,
         ResumeTarget? carried = null, bool tripFetch = false, bool roomUnconfirmed = false)
     {
@@ -1103,7 +1143,7 @@ public sealed class PartyComebackManager : IDisposable
                 // the user taking over; BeginWalk sets the new phase.
                 _phase = ComebackPhase.Idle;
                 _walker.Stop("comeback: member gave their room");
-                reply("coming to your location for pickup");
+                reply(ComingForPickup);
                 BeginWalk(there, ComebackPhase.WalkingToRoom);
                 return;
             }
@@ -1113,10 +1153,10 @@ public sealed class PartyComebackManager : IDisposable
             if (!same)
             {
                 QueueRecovery(senderGiven, target, reply, tripFetch, roomUnconfirmed);
-                reply($"comeback already in progress — fetching {_senderGiven} first, then you");
+                reply($"{AlreadyInProgress} - fetching {_senderGiven} first, then you");
                 return;
             }
-            reply("comeback already in progress");
+            reply(AlreadyInProgress);
             return;
         }
 
@@ -1128,7 +1168,7 @@ public sealed class PartyComebackManager : IDisposable
         // until they actually rejoin (which clears it in OnMemberFollowConfirmed).
         if (_failedRecoveries.GetValueOrDefault(senderGiven) >= MaxFailedRecoveries)
         {
-            reply($"tried reaching you {MaxFailedRecoveries}x and couldn't — forget me");
+            reply($"tried reaching you {MaxFailedRecoveries}x and couldn't - forget me");
             DeclineAndForget(senderGiven);
             return;
         }
@@ -1137,7 +1177,7 @@ public sealed class PartyComebackManager : IDisposable
         // there's no seat to recover them into.
         if (_party.State.Members.Count >= MaxPartySize)
         {
-            reply("my party is full — can't take you back");
+            reply("my party is full - can't take you back");
             DeclineAndForget(senderGiven);
             return;
         }
@@ -1150,13 +1190,13 @@ public sealed class PartyComebackManager : IDisposable
             int? hops = _bfs.DistanceBetween(current.Key, dest);
             if (hops is null)
             {
-                reply("can't find a path to you — you're on your own");
+                reply("can't find a path to you - you're on your own");
                 DeclineAndForget(senderGiven);
                 return;
             }
             if (!tripFetch && hops > ReturnDistanceRooms)
             {
-                reply($"you're {hops} rooms off (limit {ReturnDistanceRooms}) — can't come, forget me");
+                reply($"you're {hops} rooms off (limit {ReturnDistanceRooms}) - can't come, forget me");
                 DeclineAndForget(senderGiven);
                 return;
             }
@@ -1194,7 +1234,7 @@ public sealed class PartyComebackManager : IDisposable
 
         if (target is { } room)
         {
-            reply("coming to your location for pickup");
+            reply(ComingForPickup);
             BeginWalk(room, ComebackPhase.WalkingToRoom);
             return;
         }
@@ -1202,16 +1242,25 @@ public sealed class PartyComebackManager : IDisposable
         BuildBacktrack();
         if (_backtrack.Count == 0)
         {
-            reply("no path history to backtrack — going idle");
+            reply("no path history to backtrack - going idle");
             ParkAndGoIdle();
             return;
         }
-        reply($"backtracking up to {_backtrack.Count} room(s) to find you");
+        reply($"{Backtracking} {_backtrack.Count} room(s) to find you");
         StepBacktrack();
     }
 
     // Tell the returning member to stop waiting on us, and drop them from our own
     // roster + grace window so we don't keep auto-inviting them on re-entry.
+    //
+    // @forget (and @waiting, further down) go by telepath whatever channel the
+    // @comeback came in on. They are commands, not answers: a client acts on one
+    // from whoever it hears it from. On gangpath or say every member's client
+    // would hear it, a say directed at one player included, and each follower that
+    // heard its leader's @forget would drop that leader. Telepath is the one
+    // channel that reaches only the member it is meant for. (The answers in
+    // braces, which do nothing to a client that isn't waiting on them, go on the
+    // channel the request arrived on.)
     private void DeclineAndForget(string given)
     {
         _wire.Send($"/{given} @forget");
@@ -1227,7 +1276,7 @@ public sealed class PartyComebackManager : IDisposable
         string given = GivenName(ctx.Sender);
         if (string.IsNullOrEmpty(given))
         {
-            ctx.Reply("nothing to forget");
+            ctx.Refuse("nothing to forget");
             return;
         }
 
@@ -1254,7 +1303,7 @@ public sealed class PartyComebackManager : IDisposable
 
         if (wasRecovering)
         {
-            ctx.Reply($"forgetting {given} — resuming");
+            ctx.Reply($"forgetting {given} - resuming");
             Resume();
         }
         else
@@ -1444,7 +1493,7 @@ public sealed class PartyComebackManager : IDisposable
         if (!_walker.WalkTo(room))
         {
             if (phase == ComebackPhase.WalkingToRoom) NoteRecoveryFailedToReach();
-            _reply($"can't reach {room.Map}/{room.Room} — resuming");
+            _reply($"can't reach {room.Map}/{room.Room} - resuming");
             Resume();
         }
     }
@@ -1505,11 +1554,11 @@ public sealed class PartyComebackManager : IDisposable
                     if (_roomUnconfirmed && !FollowerHere()) NotWhereTheTripLeftThem();
                     else ReInviteAndAwait();
                 }
-                else if (e.Kind == WalkEventKind.Failed) { NoteRecoveryFailedToReach(); _reply("path failed — resuming"); Resume(); }
+                else if (e.Kind == WalkEventKind.Failed) { NoteRecoveryFailedToReach(); _reply("path failed - resuming"); Resume(); }
                 break;
             case ComebackPhase.WalkingBacktrack:
                 if (e.Kind == WalkEventKind.Finished) OnBacktrackArrival();
-                else if (e.Kind == WalkEventKind.Failed) { _reply("backtrack path failed — going idle"); ParkAndGoIdle(); }
+                else if (e.Kind == WalkEventKind.Failed) { _reply("backtrack path failed - going idle"); ParkAndGoIdle(); }
                 break;
         }
     }
@@ -1532,7 +1581,7 @@ public sealed class PartyComebackManager : IDisposable
     {
         if (_backtrackIndex >= _backtrack.Count)
         {
-            _reply("couldn't find you after backtracking — going idle");
+            _reply("couldn't find you after backtracking - going idle");
             ParkAndGoIdle();
             return;
         }
@@ -1573,7 +1622,7 @@ public sealed class PartyComebackManager : IDisposable
     private void ReInviteAndAwait()
     {
         _phase = ComebackPhase.AwaitingFollow;
-        _reply($"found you — re-inviting {_senderGiven}");
+        _reply($"{FoundYou} - re-inviting {_senderGiven}");
         _party.Invite(_senderGiven);
         _followTimer.Stop();
         // "If leading, wait only" at 0 means no limit, which suits a wait on a
@@ -1638,17 +1687,18 @@ public sealed class PartyComebackManager : IDisposable
             {
                 // Their @ok came a moment before they were left behind, so another
                 // one proves nothing — sit out the whole window instead.
-                _reply($"got you — your last @ok was too early, waiting the full {FollowWaitWindow.TotalSeconds:0}s");
+                _reply($"{GotYou} - your last @ok was too early, waiting the full {FollowWaitWindow.TotalSeconds:0}s");
             }
             else
             {
+                // By telepath: see DeclineAndForget.
                 _wire.Send($"/{_senderGiven} @waiting");
-                _reply("got you — waiting for your @ok");
+                _reply($"{GotYou} - waiting for your @ok");
             }
         }
         else
         {
-            _reply("got you — resuming");
+            _reply($"{GotYou} - resuming");
         }
         Resume();
     }
@@ -1695,13 +1745,13 @@ public sealed class PartyComebackManager : IDisposable
         // The timer keeps ticking, so the wait runs out at its first tick after
         // the master switch is back on.
         if (MasterOff) return;
-        _reply("follow timed out — resuming anyway");
+        _reply("follow timed out - resuming anyway");
         Resume();
     }
 
     // Wraps a telepath reply to the probed member in the same { } meta-braces the
     // engine's SendReply uses, so path-B narration reads like any @-command answer.
-    private Action<string> TelepathReply(string given) => msg => _wire.Send($"/{given} {{{msg}}}");
+    private Action<string> TelepathReply(string given) => msg => _wire.Send($"/{given} {{{WireText.Ascii(msg)}}}");
 
     // On our list as following us (an [Invited] row is on the list and isn't).
     private bool MemberFollowing(string given)

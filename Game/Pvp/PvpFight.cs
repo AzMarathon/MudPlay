@@ -249,6 +249,54 @@ public sealed class PvpFight : IDisposable
         return IsHere(given) && Engage(given, chase: false, "ordered by @kill", byOrder: true);
     }
 
+    // A leader's @kill, whoever it names. A player in the room is ours to decide
+    // on: fought when we may, and otherwise NOT handed to the combat engine, which
+    // would attack by that name all the same and keep sending the attack (with
+    // PvP off, at a member of our own party, or in the middle of another fight).
+    // The answer is then why, for the sender. Any other name is a monster's and
+    // goes to retargetMonster. Null when the order was taken.
+    public string? TakeKillOrder(string name, Action<string> retargetMonster)
+    {
+        ArgumentNullException.ThrowIfNull(retargetMonster);
+        if (EngageOnOrder(name)) return null;
+        string given = PlayerObservation.SplitName(name).Given;
+        if (!NamesPlayerHere(name, given))
+        {
+            retargetMonster(name);
+            return null;
+        }
+        string why = WhyNotFought(given);
+        _log?.Info(LogCategory, $"@kill {given} not taken: {why}");
+        return $"not attacking {given}: {why}";
+    }
+
+    // Whether an order's name is a player standing here. A name of several words is
+    // one only when it is that player's whole name: "bob cat" is a monster's name
+    // though Bob stands in the room, and refusing it for Bob's sake would leave the
+    // monster unattacked.
+    private bool NamesPlayerHere(string name, string given)
+    {
+        if (!IsHere(given)) return false;
+        string whole = name.Trim();
+        if (!whole.Contains(' ')) return true;
+        if (_classifier.Current is not { } obs) return false;
+        foreach (RoomEntity e in obs.Entities)
+            if (e.Kind == EntityKind.Player
+                && string.Equals(e.ResolvedName, whole, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
+    // Why Engage turned a player down, in its own order of checks.
+    private string WhyNotFought(string given)
+    {
+        if (!_pvpEnabled()) return "PvP is off";
+        if (_inParty(given)) return "they are in my party";
+        if (_target is { } current && !string.Equals(current, given, StringComparison.OrdinalIgnoreCase))
+            return $"I'm fighting {current}";
+        return "automation is switched off";
+    }
+
     private void LoadSpells(PvpSettings settings)
     {
         _spells.Clear();

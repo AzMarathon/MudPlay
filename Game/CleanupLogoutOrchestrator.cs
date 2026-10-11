@@ -93,6 +93,13 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
     private Avalonia.Threading.DispatcherTimer? _tick;
     private DateTime _exitSentUtc;
     private bool _exitRetried;
+
+    // For a bug report: the cleanup log-off in progress, or null.
+    public string? DescribePending() =>
+        !_settleOwed && _safeSinceUtc is null && _exitSentUtc == default ? null
+        : (_settleOwed ? "a settle is owed" : "no settle owed")
+          + (_safeSinceUtc is { } safe ? $", safe since {safe.ToLocalTime():HH:mm:ss}" : string.Empty)
+          + (_exitSentUtc != default ? $", exit sent {_exitSentUtc.ToLocalTime():HH:mm:ss}{(_exitRetried ? " (retried)" : string.Empty)}" : string.Empty);
     private bool _disposed;
 
     // Where in the log-off sequence we are. Public so the host (and tests) can

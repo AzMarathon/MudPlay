@@ -62,7 +62,7 @@
 
             <CheckBox Content="Disallow @party commands (from any party member)"
                       IsChecked="{Binding DisallowPartyCommands, Mode=TwoWay}"
-                      ToolTip.Tip="Gates only the @party directive path (attack / rest / meditate / go / stat / i / par) for every active party member, not just the leader."/>
+                      ToolTip.Tip="Stops @party &lt;command&gt; said by a party member from being sent to the game as your own command, whatever the command is. It also takes away a member's free answer to a bare @party (they then need Query health/status). The other party signals (@wait, @ok, @comeback, @share) are not affected."/>
 
             <!-- ============ Per-channel disable (wired) ============ -->
             <TextBlock Classes="SectionHeader" Text="Per-channel disable"/>
@@ -85,7 +85,7 @@
 
             <CheckBox Content="Warn sender on invalid / denied remote command"
                       IsChecked="{Binding WarnOnInvalidRemoteCommand, Mode=TwoWay}"
-                      ToolTip.Tip="Reply to the originator when a command is unknown or the sender lacks permission. Hard-blocks (reroll / suicide) and user-disabled paths (master / per-channel) stay silent regardless."/>
+                      ToolTip.Tip="Answer the sender when a command is refused or can't be carried out: no permission, a name that matches nothing, nothing to do. Off, none of those is answered. Never answered either way: an @ word that is no command, the hard-blocks (reroll, @party set suicide), anything while Auto-All is off, and the switches above. Answers another MudPlay client waits on (a leader's reply to @comeback, a trap result) are sent either way."/>
 
             <Grid ColumnDefinitions="180,*" Margin="0,4,0,0">
                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Failure message"/>
@@ -93,7 +93,7 @@
                           Text="{Binding RemoteCommandFailureMessage, Mode=TwoWay}"
                           IsEnabled="{Binding WarnOnInvalidRemoteCommand}"
                           MaxWidth="380" HorizontalAlignment="Left"
-                          ToolTip.Tip="Sent verbatim back to the originator on per-player denial / unknown-command / party-whitelist denial."/>
+                          ToolTip.Tip="Sent to a sender who lacks the permission for a command (or isn't in your party, for the party signals), and for a refusal with no reason of its own. Left empty, those get no answer."/>
             </Grid>
 
             <!-- ============ Chat etiquette ============ -->
