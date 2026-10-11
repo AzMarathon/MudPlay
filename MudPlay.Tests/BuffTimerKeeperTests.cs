@@ -234,6 +234,26 @@ public sealed class BuffTimerKeeperTests : IDisposable
         c.Keeper.WriteTo(c.Profile);
 
         Assert.Null(c.Profile.BuffTimers);
+        Assert.Equal(0, c.Saves);                  // nor is that file rewritten at every disconnect
+        Assert.Contains(c.LogLines, l => l.EndsWith("not saved, no character's profile is loaded"));
+    }
+
+    // The client began to close and then did not (the game goes on, a prompt shows):
+    // the timers run again, and a save made in the game carries none, as ever.
+    [Fact]
+    public void ClientDidNotCloseAfterAll_TheNextPromptPutsItBackInTheGame()
+    {
+        using Client c = InTheGame(new CharacterProfile());
+        c.Advance(100);
+        c.Keeper.NoteClientClosing();
+
+        c.Keeper.NoteBackInGame();                 // PromptScanner.PromptObserved
+        c.Advance(250);
+        c.Keeper.WriteTo(c.Profile);
+
+        Assert.Null(c.Profile.BuffTimers);
+        Assert.Equal(-50, c.LeftOn("bles"));       // running: 300 s, 350 s on
+        Assert.Contains(c.Keeper.Describe(), l => l == "running: the character is in the game");
     }
 
     // ----- between sessions -----------------------------------------------
@@ -316,6 +336,83 @@ public sealed class BuffTimerKeeperTests : IDisposable
         Assert.Empty(c.Hazard.DescribeTracking());
         Assert.Null(profile.BuffTimers);
         Assert.Contains(c.LogLines, l => l == $"dropped 2 buff timers saved with the character: {why}");
+    }
+
+    // The guard is not only for the load. A realm reassigned, or the profile saved
+    // under another name, while the character is out of the game: the timers standing
+    // still are the other character's, so the next save drops them. It used to write
+    // them out again under the new realm, for a later client to put back as its own.
+    [Theory]
+    [InlineData("Board/Paradigm", "Tester")]
+    [InlineData("Board/Stock", "Tester the Second")]
+    public void RealmOrProfileChangedWhileOut_TheTimersAreDropped_NotRelabelled(string realm, string name)
+    {
+        CharacterProfile profile = SavedOutOfTheGame();
+        using Client c = new(Start.AddHours(2), profile);
+        c.Keeper.RestoreFrom(profile);
+
+        c.Realm = realm;
+        c.ProfileName = name;
+        c.Keeper.WriteTo(profile);
+
+        Assert.Null(profile.BuffTimers);
+        Assert.Empty(c.Director.SnapshotActiveBuffs());
+        Assert.Empty(c.Hazard.DescribeTracking());
+        Assert.Contains(c.LogLines, l => l.StartsWith("dropped 2 buff timers: they stood still for 'Tester' on Board/Stock, and the profile is now"));
+
+        using Client next = new(Start.AddHours(3), profile) { Realm = realm, ProfileName = name };
+        next.Keeper.RestoreFrom(profile);
+        Assert.Empty(next.Director.SnapshotActiveBuffs());
+    }
+
+    // While nothing changes, every save out of the game writes the record under the
+    // realm and name it was frozen for.
+    [Fact]
+    public void SavesWhileOut_KeepTheRealmAndProfileTheTimersWereFrozenFor()
+    {
+        CharacterProfile profile = SavedOutOfTheGame();
+        using Client c = new(Start.AddHours(2), profile);
+        c.Keeper.RestoreFrom(profile);
+
+        c.Keeper.WriteTo(profile);
+
+        Assert.Equal(("Board/Stock", "Tester"), (profile.BuffTimers!.Realm, profile.BuffTimers.Profile));
+    }
+
+    // A death the client did not see and learns of after the login (the verdict
+    // waited on a `stat`) wiped what was on when the game was left. Exactly the
+    // carried timers go (CastingDirectorTests has a buff raised since staying).
+    [Fact]
+    public void ADeathFoundAfterTheLogin_DropsTheCarriedTimers()
+    {
+        CharacterProfile profile = SavedOutOfTheGame();
+        using Client c = new(Start.AddHours(2), profile);
+        c.Keeper.RestoreFrom(profile);
+        c.Keeper.NoteBackInGame();
+        c.Advance(30);
+
+        Assert.Equal(1, c.Director.ClearCarriedSelfTimers("a death found late"));   // RoomTracker.UnwitnessedDeathRecorded
+        Assert.Equal(1, c.Hazard.ForgetCarried("a death found late"));
+
+        Assert.Empty(c.Director.SnapshotActiveBuffs());
+        Assert.Empty(c.Hazard.DescribeTracking());
+    }
+
+    // The waterskin drunk again since the login is not a carried buff any more.
+    [Fact]
+    public void AHazardBuffRaisedAgainSince_IsNotDroppedAsCarried()
+    {
+        CharacterProfile profile = SavedOutOfTheGame();
+        using Client c = new(Start.AddHours(2), profile);
+        c.Keeper.RestoreFrom(profile);
+        Assert.Contains("(put back from the saved profile)", c.Hazard.DescribeTracking()[0]);
+        c.Keeper.NoteBackInGame();
+        c.Advance(30);
+        c.Hazard.OnServerLine(SwigLine);
+
+        Assert.Equal(0, c.Hazard.ForgetCarried("a death found late"));
+
+        Assert.Single(c.Hazard.DescribeTracking());
     }
 
     // Restoring is bookkeeping: with nothing saved, nothing is touched and the cast

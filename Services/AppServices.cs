@@ -10022,10 +10022,21 @@ public sealed class AppServices
         {
             if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath();
         };
-        // The buff timers were only frozen when the link dropped. Cleared for a
-        // death found at the login only: one found later would wipe the timers of
-        // buffs cast since.
+        // The buff timers were only frozen when the link dropped. All of our own are
+        // cleared for a death found at the login only: one found later would wipe the
+        // timers of buffs cast since.
         RoomTracker.PlayerDeathInferred += () => CastDirector.ClearSelfBuffTracking();
+        // A death found later (the verdict waited on a `stat`, typed or sent once
+        // Auto-All was back on) still wiped the buffs that were on when the game was
+        // left. Those timers were carried over the time away and are known by it, so
+        // exactly they go, the hazard buff's with them, and what was raised since
+        // stays. Raised for a death found at the login as well, where the blanket
+        // clear above follows.
+        RoomTracker.UnwitnessedDeathRecorded += () =>
+        {
+            CastDirector.ClearCarriedSelfTimers("a death while out of the game, found after the login");
+            AutoHazardCounterProvisioner.ForgetCarried("a death while out of the game, found after the login");
+        };
         // The event the other engines take a death of our own from (both wordings).
         RoomTracker.PlayerDeathObserved += HangupItems.OnPlayerDied;
         InGameCapture.InGameChanged += HangupItems.OnInGameChanged;
@@ -10061,9 +10072,14 @@ public sealed class AppServices
             log: Log);
         InGameCapture.InGameChanged += inGame =>
         {
-            if (inGame) BuffTimers.NoteBackInGame();
-            else BuffTimers.NoteLeftGame("the link dropped or the game was left");
+            if (!inGame) BuffTimers.NoteLeftGame("the link dropped or the game was left");
         };
+        // Back in on a prompt, and told of every one: the first after time out of the
+        // game runs the timers on, and any of them means a client that had begun to
+        // close did not. Subscribed after InGameCapture (which the hang-up check
+        // hears through), so that check is already in the game when the keeper's
+        // save on the way in runs.
+        PromptScanner.PromptObserved += _ => BuffTimers.NoteBackInGame();
         Profile.ProfileSaving += BuffTimers.WriteTo;
         Profile.ProfileLoaded += BuffTimers.RestoreFrom;
 

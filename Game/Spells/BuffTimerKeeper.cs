@@ -14,10 +14,11 @@ namespace MudPlay.Game.Spells;
 // timers (CastingDirector) and the hazard buff's (AutoHazardCounterProvisioner)
 // alike:
 //
-//  • Out of the game the timers stand still. Out is the link dropping, or the
-//    game being left for the board's menu with the link up (InGameCapture tells
-//    both); back in is the first in-game prompt. Each store does its own freezing
-//    and gives the time back on the way in.
+//  • Out of the game the timers on our own character stand still. Out is the link
+//    dropping, or the game being left for the board's menu with the link up
+//    (InGameCapture tells both); back in is the first in-game prompt. Each store
+//    does its own freezing and gives the time back on the way in. A timer on a
+//    party member is left to run (CastingDirector.ResumeBuffTimers says why).
 //  • What they had left is written to the character's profile whenever it is
 //    saved while the character is out of the game, and put back, still standing,
 //    when that profile is next loaded. A save made in the game writes none: time
@@ -53,6 +54,12 @@ public sealed class BuffTimerKeeper
     // When the timers now standing still stopped, for the record and the reports.
     private DateTime? _frozenAtUtc;
 
+    // The realm and the profile they stopped under. The record is written with these
+    // and never with whatever is current at a later save: a realm reassigned or a
+    // profile saved under another name while the character is out of the game is
+    // another character, and its saves must not relabel these timers as its own.
+    private (string? Realm, string? Profile)? _frozenFor;
+
     // What the last profile load put back, for the bug report.
     private string? _restoredNote;
 
@@ -87,7 +94,7 @@ public sealed class BuffTimerKeeper
         _log = log;
     }
 
-    // The character left the game. Stops every timer, and on the way out of the
+    // The character left the game. Stops the timers on it, and on the way out of the
     // game (not when it was out already) saves what each had left.
     public void NoteLeftGame(string why)
     {
@@ -95,21 +102,32 @@ public sealed class BuffTimerKeeper
         _hazard.Pause(why);
         if (!_inGame) return;
         _inGame = false;
-        _frozenAtUtc = _utcNow();
-        _log?.Info(LogCategory, $"out of the game ({why}) — {CountText(StandingStill())} stand still until it is entered again; saved with the character");
+        Freeze();
+        string still = $"out of the game ({why}) — {CountText(StandingStill())} stand still until it is entered again";
+        // The default profile takes no timers (WriteTo), so there is nothing to save
+        // it for, and a save here would rewrite that file at every disconnect.
+        if (_profile() is null)
+        {
+            _log?.Info(LogCategory, $"{still}; not saved, no character's profile is loaded");
+            return;
+        }
+        _log?.Info(LogCategory, $"{still}; saved with the character");
         _saveProfile();
     }
 
-    // The first in-game prompt. Every timer runs on with the time it had left, and
-    // the record in the profile, now spent, is cleared.
+    // An in-game prompt: asked on every one. On the first after time out of the game
+    // every timer runs on with what it had left, and the record in the profile, now
+    // spent, is cleared.
     public void NoteBackInGame()
     {
         _director.ResumeBuffTimers();
         _hazard.Resume();
+        // A prompt means the client did not close after all, whatever it had begun.
+        _closing = false;
         if (_inGame) return;
         _inGame = true;
-        _closing = false;
         _frozenAtUtc = null;
+        _frozenFor = null;
         if (_profile()?.BuffTimers is null) return;
         _log?.Info(LogCategory, "back in the game — the timers saved with the character run on, and the saved copy is cleared");
         _saveProfile();
@@ -123,8 +141,14 @@ public sealed class BuffTimerKeeper
         _director.PauseBuffTimers();
         _hazard.Pause("the client is closing");
         if (!_inGame) return;
-        _frozenAtUtc = _utcNow();
+        Freeze();
         _log?.Info(LogCategory, $"the client is closing — {CountText(StandingStill())} saved with the character");
+    }
+
+    private void Freeze()
+    {
+        _frozenAtUtc = _utcNow();
+        _frozenFor = (_realmKey(), _profileName());
     }
 
     // ProfileService.ProfileSaving: the timers go into the profile while the
@@ -138,15 +162,31 @@ public sealed class BuffTimerKeeper
             saving.BuffTimers = null;
             return;
         }
+
+        // The realm or the profile's name changed while the character was out of the
+        // game: what stands still here was another character's. It is dropped, where
+        // writing it out would hand it to this one under its own name.
+        (string? Realm, string? Profile) now = (_realmKey(), _profileName());
+        if (_frozenFor is { } was && (!Same(was.Realm, now.Realm) || !Same(was.Profile, now.Profile)))
+        {
+            string why = $"they stood still for '{was.Profile}' on {was.Realm ?? "no realm"}, "
+                + $"and the profile is now '{now.Profile}' on {now.Realm ?? "no realm"}";
+            int dropped = _director.ClearCarriedSelfTimers(why) + _hazard.ForgetCarried(why);
+            _frozenFor = now;
+            _restoredNote = null;
+            _log?.Info(LogCategory, $"dropped {CountText(dropped)}: {why}");
+        }
+
         List<SavedBuffTimer> buffs = _director.SnapshotSelfTimersForSave();
         List<SavedHazardBuff> hazardBuffs = _hazard.SnapshotForSave();
+        (string? Realm, string? Profile) key = _frozenFor ?? now;
         saving.BuffTimers = buffs.Count + hazardBuffs.Count == 0
             ? null
             : new SavedBuffTimers
             {
                 FrozenAtUtc = _frozenAtUtc ?? _utcNow(),
-                Realm = _realmKey(),
-                Profile = _profileName(),
+                Realm = key.Realm,
+                Profile = key.Profile,
                 Buffs = buffs,
                 HazardBuffs = hazardBuffs,
             };
@@ -161,6 +201,7 @@ public sealed class BuffTimerKeeper
         ArgumentNullException.ThrowIfNull(loaded);
         _restoredNote = null;
         _frozenAtUtc = null;
+        _frozenFor = null;
         if (!ReferenceEquals(_profile(), loaded) || loaded.BuffTimers is not { } saved) return;
 
         int kept = saved.Buffs.Count + saved.HazardBuffs.Count;
@@ -178,6 +219,7 @@ public sealed class BuffTimerKeeper
 
         int restored = _director.RestoreSelfTimers(saved.Buffs) + _hazard.Restore(saved.HazardBuffs);
         _frozenAtUtc = saved.FrozenAtUtc;
+        _frozenFor = (saved.Realm, saved.Profile);
         string from = $"the session that left the game at {Local(saved.FrozenAtUtc)}";
         _restoredNote = $"{CountText(restored)} put back from {from}";
         _log?.Info(LogCategory,
@@ -204,7 +246,7 @@ public sealed class BuffTimerKeeper
         return lines;
     }
 
-    private int StandingStill() => _director.SnapshotActiveBuffs().Count + _hazard.SnapshotForSave().Count;
+    private int StandingStill() => _director.SnapshotSelfTimersForSave().Count + _hazard.SnapshotForSave().Count;
 
     private static string CountText(int timers) => timers == 1 ? "1 buff timer" : $"{timers} buff timers";
 
