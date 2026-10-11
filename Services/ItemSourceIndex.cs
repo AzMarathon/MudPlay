@@ -75,8 +75,9 @@ public readonly record struct SummonDropSource(
 // outright. Backs both the Game Data Browser's item detail pane and the
 // deterministic acquisition routers (PathItemGiveRouter / PathItemSummonRouter),
 // so unlike the eager indexes (ShopStockIndex / MonsterDropIndex) it builds on
-// first query and self-invalidates by comparing the cache's ActiveSet to the set
-// it last built from — no ActiveSetChanged subscription, and it never evicts
+// first query and self-invalidates by comparing the cache's ActiveLoad (the set's
+// name and the count that moves when its tables are read afresh) to the load it
+// last built from — no ActiveSetChanged subscription, and it never evicts
 // tables (the browser is actively reading them). `roomitem` awards are
 // deliberately excluded from the giver map: that verb scatter-places an item in a
 // room rather than handing it to the player on a gated exchange.
@@ -90,9 +91,13 @@ public sealed class ItemSourceIndex
     // the current snapshot and work from it, so a rebuild can run on a background
     // thread without ever handing a caller a half-cleared dictionary — which is what
     // lets the warm-up below happen off the UI thread.
+    //
+    // Load is the load of the set it was built from, name and count: a set imported
+    // again over itself keeps its name, and the name alone left the old build
+    // answering until a real switch.
     private sealed class Snapshot
     {
-        public required string? Set { get; init; }
+        public required GameDataCache.Load Load { get; init; }
         public required Dictionary<int, List<ItemSource>> Containers { get; init; }
         public required Dictionary<int, List<ItemGiver>> Givers { get; init; }
         public required Dictionary<int, List<RoomKey>> GiverRooms { get; init; }
@@ -187,21 +192,28 @@ public sealed class ItemSourceIndex
 
     private Snapshot EnsureBuilt()
     {
-        string? active = _cache.ActiveSet;
-        if (_snapshot is { } current && current.Set == active) return current;
+        if (_snapshot is { } current && current.Load == _cache.ActiveLoad) return current;
 
         lock (_buildGate)
         {
-            // Another thread may have published while we waited for the gate.
-            if (_snapshot is { } published && published.Set == active) return published;
-            Snapshot built = Build(active);
-            _snapshot = built;
+            // Read once the gate is ours and before the build: another thread may
+            // have published while we waited, and the set may have been loaded again.
+            GameDataCache.Load load = _cache.ActiveLoad;
+            if (_snapshot is { } published && published.Load == load) return published;
+            // The cache's load moves before the textblock store reloads. A build that
+            // begins in between reads this load's tables and the last load's
+            // textblocks: it answers the caller and is not kept, so the next ask
+            // builds again from the store once it is this load's.
+            bool textblocksAreThisLoads = _tb.LoadedFor == load;
+            Snapshot built = Build(load);
+            if (textblocksAreThisLoads) _snapshot = built;
             return built;
         }
     }
 
-    private Snapshot Build(string? active)
+    private Snapshot Build(GameDataCache.Load load)
     {
+        string? active = load.Set;
         var containers = new Dictionary<int, List<ItemSource>>();
         var givers = new Dictionary<int, List<ItemGiver>>();
         var giverRooms = new Dictionary<int, List<RoomKey>>();
@@ -233,7 +245,7 @@ public sealed class ItemSourceIndex
 
         return new Snapshot
         {
-            Set = active,
+            Load = load,
             Containers = containers,
             Givers = givers,
             GiverRooms = giverRooms,

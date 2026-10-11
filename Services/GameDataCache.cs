@@ -41,7 +41,10 @@ namespace MudPlay.Services;
 // BbsProfile.ActiveGameDataSet drives the switch automatically (falling back to
 // GlobalSettings.DefaultGameDataSet when no BBS is pinned). Manual switches via
 // the File → Game Data → Active set menu write back to the resolved BBS profile.
-public sealed class GameDataCache
+//
+// Two small types other classes name live in files of their own: Load
+// (GameDataCache.Load.cs) and TableFileStamp (GameDataCache.TableFileStamp.cs).
+public sealed partial class GameDataCache
 {
     // FindRowByNumber / FindRowByName / RowNumbers go through each table's own
     // number and name indexes, built on its first lookup; they go when it does.
@@ -61,24 +64,75 @@ public sealed class GameDataCache
     // / EvictAll, which only ever own the live set's cache (ReloadActiveSet does
     // purge this set's stale entries after a re-import — see there, and EvictIdle
     // drops a guess nobody claimed).
-    private readonly Dictionary<(string Set, string Table), GameTable> _prewarmed = new();
+    private readonly Dictionary<(string Set, string Table), ReadOutcome> _prewarmed = new();
 
     // Environment.TickCount64 of each cached table's last GetTable read (and of
     // each prewarm's parse), for the idle sweep. Guarded by the _tables lock.
     private readonly Dictionary<string, long> _lastRead = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string Set, string Table), long> _prewarmedAt = new();
 
-    // Prewarm parses still running. A lookup that arrives before one finishes waits
-    // for it (Lazy lets one thread run the parse and the other block on it) rather
-    // than parsing the same file a second time on its own thread. Guarded by the
-    // _tables lock.
-    private readonly Dictionary<(string Set, string Table), Lazy<GameTable?>> _prewarming = new();
+    // What one read of a table file came to: the table, or why there is none.
+    private readonly record struct ReadOutcome(GameTable? Table, Exception? Failure, long Kilobytes, TableFileStamp Stamp);
+
+    // A read of a table file that is running, or done and not yet put in its place.
+    // A lookup that arrives meanwhile waits for it (Lazy lets one thread run the read
+    // and the others block on it) rather than reading the same file a second time on
+    // its own thread: a set load starts background builds that ask for the tables
+    // the loading thread is reading, Rooms among them.
+    private sealed class TableRead
+    {
+        public required Lazy<ReadOutcome> Outcome { get; init; }
+        // A prewarm reads for a set that may not be active yet, so any load of that
+        // set may take it (ReloadActiveSet removes the ones a re-import outdated). A
+        // lookup's read belongs to the load that started it: Generation says which.
+        public required bool Prewarm { get; init; }
+        public long Generation { get; init; }
+        // A lookup is waiting on this read and will put the table in place itself,
+        // taking the entry out as it does; a prewarm then files nothing.
+        public bool Claimed { get; set; }
+    }
+
+    // Guarded by the _tables lock. A table's name is matched as _tables matches it,
+    // whatever its case, so "monsters" waits on a read of "Monsters".
+    private readonly Dictionary<(string Set, string Table), TableRead> _reading = new(ReadKeyComparer.Instance);
+
+    private sealed class ReadKeyComparer : IEqualityComparer<(string Set, string Table)>
+    {
+        public static readonly ReadKeyComparer Instance = new();
+
+        public bool Equals((string Set, string Table) x, (string Set, string Table) y) =>
+            string.Equals(x.Set, y.Set, StringComparison.Ordinal)
+            && string.Equals(x.Table, y.Table, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string Set, string Table) key) =>
+            HashCode.Combine(key.Set, StringComparer.OrdinalIgnoreCase.GetHashCode(key.Table));
+    }
+
+    // The file each table of this load was last read from. Kept when the idle sweep
+    // drops the table, replaced when the table is read again, and cleared with the
+    // tables on a switch or reload. Guarded by the _tables lock.
+    private readonly Dictionary<string, TableFileStamp> _stamps = new(StringComparer.OrdinalIgnoreCase);
+
+    // Raised on the reading thread just before a table file is opened, with the
+    // table's name. A test seam: counts the reads and holds one open.
+    internal Action<string>? TableReadStarting { get; set; }
 
     // Results worked out from the active set's tables (Derived), and a count bumped
     // whenever the set's tables are dropped for re-reading, so a result built from
     // the old ones is never kept. Guarded by the _tables lock.
     private readonly Dictionary<string, object> _derived = new(StringComparer.Ordinal);
     private long _generation;
+
+    // The load the cache is serving (see Load, in GameDataCache.Load.cs). Whatever keeps something built from the tables
+    // and decides for itself when it is out of date reads this BEFORE building and
+    // keeps it with the result, which is good only while this still equals it. A
+    // build a switch overtook is then never mistaken for one of the set switched
+    // back to, whatever tables it read on the way. Asked on every lookup of such an
+    // index, so it takes no lock: the count alone tells two loads apart, and the
+    // name beside it need not be read in the same instant. (A switch moves the count
+    // before the name, and this reads the name first, so the worst a reader caught
+    // mid-switch gets is the old name with the new count, which equals no load.)
+    public Load ActiveLoad => new(ActiveSet, Interlocked.Read(ref _generation));
 
     // Long enough that anything read per combat round / tick / room entry never ages
     // out; short enough that a startup-only table is gone within minutes of its build.
@@ -215,17 +269,18 @@ public sealed class GameDataCache
         // Normalize empty → null so the event payload is consistent.
         if (string.IsNullOrWhiteSpace(setName)) setName = null;
 
-        if (string.Equals(ActiveSet, setName, StringComparison.OrdinalIgnoreCase)) return;
-
-        string? outgoing = ActiveSet;
-        EvictAll();
-        ActiveSet = setName;
-        // Again once the new set is the active one: a result built in between read
-        // tables of the old.
+        // One step to every other thread: the old set's tables go, the count moves
+        // and the new name arrives under one hold of the lock. Done in stages, a
+        // lookup between them resolved the old set's file under the count of the new
+        // load and left that table in place for the whole of it. The handlers run
+        // after the lock is let go: they call back into the cache.
+        string? outgoing;
         lock (_tables)
         {
-            _derived.Clear();
-            _generation++;
+            if (string.Equals(ActiveSet, setName, StringComparison.OrdinalIgnoreCase)) return;
+            outgoing = ActiveSet;
+            EvictAll();
+            ActiveSet = setName;
         }
         Log?.Log(LogSeverity.Info, "GameData",
             (outgoing, setName) switch
@@ -244,14 +299,18 @@ public sealed class GameDataCache
     // the ones only the rebuild read.
     private void LogTablesHeld()
     {
-        if (Log is null || ActiveSet is null) return;
+        if (Log is null) return;
+        string? set;
         (string Table, long Bytes)[] held;
         lock (_tables)
+        {
+            set = ActiveSet;
             held = _tables.Select(t => (t.Key, t.Value.ResidentBytes)).OrderBy(t => t.Key, StringComparer.Ordinal).ToArray();
-        if (held.Length == 0) return;
+        }
+        if (set is null || held.Length == 0) return;
         static string Mb(long bytes) => (bytes / 1048576.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         Log.Log(LogSeverity.Info, "GameData",
-            $"Tables held for '{ActiveSet}': {string.Join(", ", held.Select(t => $"{t.Table} {Mb(t.Bytes)} MB"))} "
+            $"Tables held for '{set}': {string.Join(", ", held.Select(t => $"{t.Table} {Mb(t.Bytes)} MB"))} "
             + $"({Mb(held.Sum(t => t.Bytes))} MB in all).");
     }
 
@@ -271,28 +330,34 @@ public sealed class GameDataCache
     // exactly what a real swap does. No-op when no set is active.
     public void ReloadActiveSet()
     {
-        if (ActiveSet is null) return;
-        EvictAll();
-        // Drop any still-unclaimed background prewarm for this set — it predates the
-        // re-import, so claiming it later would hand back stale tables. (Startup
-        // prewarm entries are normally claimed long before a re-import; this covers
-        // a table that happened never to be read.)
+        string? set;
+        // One hold of the lock for the whole of it, as in SwitchSet: a lookup of the
+        // new load must not get in between the tables going and the old prewarms going.
         lock (_tables)
         {
-            foreach ((string Set, string Table) key in _prewarming.Keys
-                         .Where(k => string.Equals(k.Set, ActiveSet, StringComparison.OrdinalIgnoreCase))
+            set = ActiveSet;
+            if (set is null) return;
+            EvictAll();
+            // Drop any still-unclaimed background prewarm for this set, running or
+            // done — it predates the re-import, so claiming it later would hand back
+            // stale tables. (Startup prewarm entries are normally claimed long before
+            // a re-import; this covers a table that happened never to be read.) A
+            // lookup's own read still running goes with them: it belongs to the load
+            // just ended.
+            foreach ((string Set, string Table) key in _reading.Keys
+                         .Where(k => string.Equals(k.Set, set, StringComparison.OrdinalIgnoreCase))
                          .ToList())
-                _prewarming.Remove(key);
+                _reading.Remove(key);
             foreach ((string Set, string Table) key in _prewarmed.Keys
-                         .Where(k => string.Equals(k.Set, ActiveSet, StringComparison.OrdinalIgnoreCase))
+                         .Where(k => string.Equals(k.Set, set, StringComparison.OrdinalIgnoreCase))
                          .ToList())
             {
                 _prewarmed.Remove(key);
                 _prewarmedAt.Remove(key);
             }
         }
-        Log?.Log(LogSeverity.Info, "GameData", $"Re-ingested game data set '{ActiveSet}'.");
-        ActiveSetChanged?.Invoke(ActiveSet);
+        Log?.Log(LogSeverity.Info, "GameData", $"Re-ingested game data set '{set}'.");
+        ActiveSetChanged?.Invoke(set);
         LogTablesHeld();
     }
 
@@ -309,9 +374,15 @@ public sealed class GameDataCache
         string set;
         string? path;
         long generation;
-        Lazy<GameTable?>? inFlight;
+        TableRead read;
+        bool mine;
         lock (_tables)
         {
+            // The set as it is under the lock, read once: the check above was made
+            // without it, and the set may have been switched (to nothing, too) since.
+            if (ActiveSet is not { } active) return null;
+            set = active;
+
             if (_tables.TryGetValue(tableName, out GameTable? cached))
             {
                 _lastRead[tableName] = Environment.TickCount64;
@@ -321,75 +392,114 @@ public sealed class GameDataCache
 
             // A PrewarmAsync call already parsed this table for the set that's now
             // active, ahead of the switch — claim it instead of re-reading the file.
-            if (_prewarmed.Remove((ActiveSet, tableName), out GameTable? warmed))
+            if (_prewarmed.Remove((set, tableName), out ReadOutcome warmed))
             {
-                _prewarmedAt.Remove((ActiveSet, tableName));
-                _tables[tableName] = warmed;
+                _prewarmedAt.Remove((set, tableName));
+                _tables[tableName] = warmed.Table!;
+                _stamps[tableName] = warmed.Stamp;
                 _lastRead[tableName] = Environment.TickCount64;
                 Log?.Log(LogSeverity.Debug, "GameData",
-                    $"'{tableName}' claimed from background prewarm for '{ActiveSet}'.");
-                return warmed;
+                    $"'{tableName}' claimed from background prewarm for '{set}'.");
+                return warmed.Table;
             }
 
-            set = ActiveSet;
             path = ResolveTablePath(set, tableName);
-            if (path is null || !File.Exists(path)) return null;
+            if (path is null || !File.Exists(path))
+            {
+                // Read earlier in this load, dropped by the idle sweep, and the file
+                // gone since: the stamp was of a table there is no longer.
+                _stamps.Remove(tableName);
+                return null;
+            }
             generation = _generation;
-            _prewarming.Remove((set, tableName), out inFlight);
+
+            // A read of this table is already running, for a prewarm or for another
+            // lookup of this load: wait for that one. Otherwise this lookup's read
+            // is the one the next lookup waits for.
+            if (_reading.TryGetValue((set, tableName), out TableRead? running)
+                && (running.Prewarm || running.Generation == generation))
+            {
+                read = running;
+                mine = false;
+            }
+            else
+            {
+                string file = path;
+                read = new TableRead
+                {
+                    Outcome = new Lazy<ReadOutcome>(() => ReadTable(file, tableName)),
+                    Prewarm = false,
+                    Generation = generation,
+                };
+                _reading[(set, tableName)] = read;
+                mine = true;
+            }
+            read.Claimed = true;
         }
 
         // Read and parse outside the lock: Rooms takes half a second, and holding the
         // lock that long stalled every other table lookup, the UI thread's included,
-        // behind a background read. Two threads may parse the same table at once;
-        // the first to publish wins and the other copy is dropped.
-        GameTable? parsed = null;
-        JsonException? failure = null;
-        long kilobytes = 0;
-        // A prewarm is already parsing this table: take its result. A failed one
-        // (null) falls through to the read below, which reports the failure.
-        if (inFlight is not null)
-        {
-            using PerformanceMonitor.Scope? wait = Performance?.Measure($"await prewarm {tableName}");
-            parsed = inFlight.Value;
-        }
-        bool fromPrewarm = parsed is not null;
-        if (!fromPrewarm)
+        // behind a background read. Waiting on the Lazy holds no lock of ours, and
+        // the read it runs takes none and needs no other thread, so a UI thread
+        // waiting on a worker's read waits for the file and nothing else.
+        ReadOutcome outcome;
+        using (Performance?.Measure(mine ? $"parse {tableName}"
+                   : read.Prewarm ? $"await prewarm {tableName}" : $"await parse {tableName}"))
+            outcome = read.Outcome.Value;
+        bool shared = !mine && outcome.Table is not null;
+        // A read another caller started that failed is that caller's to answer for.
+        // This one reads the file itself, as it would have with no read in flight,
+        // so each caller meets the failure (or a file that reads this time) first-hand.
+        if (!mine && outcome.Table is null)
         {
             using PerformanceMonitor.Scope? parse = Performance?.Measure($"parse {tableName}");
-            try { parsed = ReadTable(path, out kilobytes); }
-            catch (JsonException ex) { failure = ex; }
+            outcome = ReadTable(path, tableName);
         }
 
         lock (_tables)
         {
+            // Taken out here, under the same lock that puts the table in place, so a
+            // lookup arriving in between finds one or the other and never reads again.
+            if (_reading.TryGetValue((set, tableName), out TableRead? listed) && ReferenceEquals(listed, read))
+                _reading.Remove((set, tableName));
+
             // The set was switched or reloaded meanwhile: hand the caller what it
             // asked for, as if the read had finished first, but don't keep it.
-            if (generation != _generation) return parsed;
-            if (_tables.TryGetValue(tableName, out GameTable? won))
+            if (generation != _generation)
+                result = outcome.Table;
+            else if (_tables.TryGetValue(tableName, out GameTable? won))
             {
                 _lastRead[tableName] = Environment.TickCount64;
                 return won;
             }
-            if (parsed is not null)
+            else if (outcome.Table is not null)
             {
-                result = parsed;
+                result = outcome.Table;
                 _tables[tableName] = result;
+                _stamps[tableName] = outcome.Stamp;
                 _lastRead[tableName] = Environment.TickCount64;
-                Log?.Log(LogSeverity.Debug, "GameData", fromPrewarm
+                Log?.Log(LogSeverity.Debug, "GameData", shared && read.Prewarm
                     ? $"'{tableName}' taken from the prewarm in flight for '{set}'."
-                    : $"'{tableName}' loaded for '{set}' ({kilobytes} KB on disk, {result.ResidentBytes / 1024} KB held).");
+                    : $"'{tableName}' loaded for '{set}' ({outcome.Kilobytes} KB on disk, {result.ResidentBytes / 1024} KB held).");
             }
-            else if (failure is { } ex)
+            else
             {
-                // Malformed table JSON is an external-data-boundary failure (a bad
-                // MDB import, hand-edited file, etc.), not an app invariant — treat
-                // the table as unavailable rather than crash every consumer that
-                // happens to look it up.
-                _failedTables.Add(tableName);
-                Log?.Log(LogSeverity.Error, "GameData",
-                    $"'{tableName}' could not be parsed for set '{set}' ({ex.Message}) — " +
-                    "treating it as unavailable until the set is reloaded or re-imported.");
-                notifyParseFailed = true;
+                // No table this time. If one was read earlier in this load (and
+                // dropped by the idle sweep since), its stamp goes: it described a
+                // file the cache can no longer read.
+                _stamps.Remove(tableName);
+                if (outcome.Failure is JsonException ex && _failedTables.Add(tableName))
+                {
+                    // Malformed table JSON is an external-data-boundary failure (a bad
+                    // MDB import, hand-edited file, etc.), not an app invariant — treat
+                    // the table as unavailable rather than crash every consumer that
+                    // happens to look it up. Said once: a lookup that was reading the
+                    // same file meanwhile finds the table already marked.
+                    Log?.Log(LogSeverity.Error, "GameData",
+                        $"'{tableName}' could not be parsed for set '{set}' ({ex.Message}) — " +
+                        "treating it as unavailable until the set is reloaded or re-imported.");
+                    notifyParseFailed = true;
+                }
             }
         }
 
@@ -398,18 +508,56 @@ public sealed class GameDataCache
         // _tables. Deduped by _failedTables: the next lookup short-circuits above,
         // so this fires at most once per table per active set.
         if (notifyParseFailed) TableParseFailed?.Invoke(tableName);
+        // Anything but malformed JSON (the file locked, gone, unreadable) is the
+        // caller's to hear of, as it was when the read ran on the caller's own stack.
+        if (outcome.Table is null && outcome.Failure is { } fault and not JsonException)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(fault).Throw();
         return result;
     }
 
     // One table file into its compact form, a block at a time: the file is never
     // whole in memory. The stream does no buffering of its own; the reader's block
-    // is the buffer.
-    private static GameTable ReadTable(string path, out long kilobytes)
+    // is the buffer. Never throws: several lookups may be waiting on one read, and
+    // each decides for itself what a failure means to it.
+    private ReadOutcome ReadTable(string path, string tableName)
     {
-        using FileStream file = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
-            bufferSize: 0, FileOptions.SequentialScan);
-        kilobytes = file.Length / 1024;
-        return GameTableReader.Read(file);
+        try
+        {
+            TableReadStarting?.Invoke(tableName);
+            using FileStream file = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                bufferSize: 0, FileOptions.SequentialScan);
+            // Of the open file, so they describe the bytes read even if the file is
+            // replaced on disk meanwhile.
+            TableFileStamp stamp = new(file.Length, File.GetLastWriteTimeUtc(file.SafeFileHandle));
+            return new ReadOutcome(GameTableReader.Read(file), null, file.Length / 1024, stamp);
+        }
+        catch (Exception ex)
+        {
+            return new ReadOutcome(null, ex, 0, default);
+        }
+    }
+
+    // The file tableName was last read from in this load of the active set: its
+    // length and last-write time, taken from the open file as it was read.
+    //
+    // Read by the saved Simulator rankings, which stamp a ranking with the tables
+    // this client had actually loaded when it was worked out (not with the files on
+    // disk at the moment of saving).
+    //
+    // Null for a table not read since the set's tables were last dropped for
+    // re-reading (a switch, a reload, a re-import), and for one whose latest read
+    // found no file or a file that would not parse, whatever an earlier read found.
+    //
+    // The idle sweep dropping the table does not forget the stamp. When the table
+    // is then read again this answers with THAT read, the latest, not the first of
+    // the load: the rankings keep the first stamp they saw in a load themselves and
+    // take a later one that differs to mean the file changed under the session,
+    // which they could not see if this went on answering with the first.
+    internal TableFileStamp? FileStampAsRead(string tableName)
+    {
+        ArgumentNullException.ThrowIfNull(tableName);
+        lock (_tables)
+            return _stamps.TryGetValue(tableName, out TableFileStamp stamp) ? stamp : null;
     }
 
     // Parse tableNames for setName on background threads, ahead of setName actually
@@ -439,36 +587,30 @@ public sealed class GameDataCache
                 string? path = ResolveTablePath(setName, tableName);
                 if (path is null || !File.Exists(path)) return Task.CompletedTask;
 
-                Lazy<GameTable?> parse = new(() =>
+                TableRead read = new()
                 {
-                    try
-                    {
-                        return ReadTable(path, out _);
-                    }
-                    catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
-                    {
-                        return null;
-                    }
-                });
+                    Outcome = new Lazy<ReadOutcome>(() => ReadTable(path, tableName)),
+                    Prewarm = true,
+                };
                 lock (_tables)
                 {
                     if (_tables.ContainsKey(tableName) || _prewarmed.ContainsKey((setName, tableName))
-                        || !_prewarming.TryAdd((setName, tableName), parse))
+                        || !_reading.TryAdd((setName, tableName), read))
                         return Task.CompletedTask;
                 }
                 return Task.Run(() =>
                 {
-                    GameTable? table = parse.Value;
+                    ReadOutcome outcome = read.Outcome.Value;
                     lock (_tables)
                     {
                         // Still ours to file: a lookup that claimed it meanwhile
-                        // publishes it itself.
-                        if (!_prewarming.TryGetValue((setName, tableName), out Lazy<GameTable?>? pending)
-                            || !ReferenceEquals(pending, parse))
+                        // publishes it itself, and takes the entry out when it does.
+                        if (!_reading.TryGetValue((setName, tableName), out TableRead? pending)
+                            || !ReferenceEquals(pending, read) || read.Claimed)
                             return;
-                        _prewarming.Remove((setName, tableName));
-                        if (table is null) return;
-                        _prewarmed[(setName, tableName)] = table;
+                        _reading.Remove((setName, tableName));
+                        if (outcome.Table is null) return;
+                        _prewarmed[(setName, tableName)] = outcome;
                         _prewarmedAt[(setName, tableName)] = Environment.TickCount64;
                     }
                 });
@@ -623,10 +765,11 @@ public sealed class GameDataCache
         lock (_tables)
         {
             _derived.Clear();
-            _generation++;
+            Interlocked.Increment(ref _generation);
             _tables.Clear();
             _failedTables.Clear();
             _lastRead.Clear();
+            _stamps.Clear();
         }
     }
 

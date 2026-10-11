@@ -35,6 +35,13 @@ public sealed class ShopStockIndex
     // Set the index was last built from, or null if empty.
     public string? ActiveSet { get; private set; }
 
+    // The load of the set whose stock is in place; none while the index is being
+    // rebuilt. The cache's load moves before the handler that rebuilds this runs, so
+    // something asked in that moment that builds from the stock and keeps the result
+    // for the cache's load checks this first. Written and read on the thread that
+    // switches the set.
+    public GameDataCache.Load LoadedFor { get; private set; }
+
     // Number of distinct stocked item ids in the active set.
     public int ItemCount => _shopsByItem.Count;
 
@@ -66,11 +73,14 @@ public sealed class ShopStockIndex
     // AppServices to GameDataCache.ActiveSetChanged.
     public void OnActiveSetChanged(string? setName)
     {
+        GameDataCache.Load load = _cache.ActiveLoad;
+        LoadedFor = GameDataCache.Load.None;
         _shopsByItem.Clear();
         ActiveSet = setName;
 
         if (string.IsNullOrWhiteSpace(setName))
         {
+            LoadedFor = load;
             _log?.Info("ShopStockIndex", "No active set; cleared.");
             StoreReloaded?.Invoke();
             return;
@@ -79,6 +89,7 @@ public sealed class ShopStockIndex
         GameTable? doc = _cache.GetTable("Shops");
         if (doc is null)
         {
+            LoadedFor = load;
             _log?.Info("ShopStockIndex", $"Active set '{setName}' has no Shops.json; empty.");
             StoreReloaded?.Invoke();
             return;
@@ -104,6 +115,7 @@ public sealed class ShopStockIndex
         }
 
         _cache.EvictTable("Shops");
+        LoadedFor = load;
 
         _log?.Info("ShopStockIndex",
             $"Indexed {_shopsByItem.Count} stocked item(s) across {stockedShops} shop(s) from '{setName}'.");

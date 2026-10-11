@@ -34,7 +34,9 @@ public sealed class SpellAilmentIndex
 
     private readonly GameDataCache _cache;
     private Dictionary<int, HashSet<string>>? _byNumber;
-    private string? _builtForSet;
+    // The load of the set _byNumber came from, read before the build: a set imported
+    // again over itself keeps its name, so the name alone is no test.
+    private GameDataCache.Load _builtFor;
 
     public SpellAilmentIndex(GameDataCache cache)
     {
@@ -54,9 +56,10 @@ public sealed class SpellAilmentIndex
 
     private Dictionary<int, HashSet<string>> Map()
     {
-        if (_byNumber is not null && _builtForSet == _cache.ActiveSet) return _byNumber;
+        GameDataCache.Load load = _cache.ActiveLoad;
+        if (_byNumber is not null && _builtFor == load) return _byNumber;
         _byNumber = Build(_cache);
-        _builtForSet = _cache.ActiveSet;
+        _builtFor = load;
         return _byNumber;
     }
 
