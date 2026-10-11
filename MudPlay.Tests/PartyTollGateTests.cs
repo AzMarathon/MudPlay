@@ -72,8 +72,17 @@ public sealed class PartyTollGateTests : IDisposable
         public bool MasterOff { get; set; }
         // Settings → Cash + Items: "Fund party members' tolls / rides if short"
         // (off until ticked) and the keep-on-hand floor, in copper.
-        public bool Fund { get; set; } = new MudPlay.Models.Profile.CashSettings().FundPartyTolls;
-        public long KeepOnHand { get; set; }
+        // The check holds both as values, as AppServices hands them to it.
+        public bool Fund
+        {
+            get => Gate.FundsShortMembers;
+            set => Gate.FundsShortMembers = value;
+        }
+        public long KeepOnHand
+        {
+            get => Gate.KeepOnHandCopper;
+            set => Gate.KeepOnHandCopper = value;
+        }
         public Func<string, RoomKey, RoomKey, bool> WentBack { get; set; } = (_, _, _) => false;
 
         // A purse of mixed coins, in place of Gold.
@@ -181,8 +190,7 @@ public sealed class PartyTollGateTests : IDisposable
             clock: () => made!.Now)
         {
             MasterSwitchOff = () => made!.MasterOff,
-            FundsShortMembers = () => made!.Fund,
-            KeepOnHandCopper = () => made!.KeepOnHand,
+            FundsShortMembers = new MudPlay.Models.Profile.CashSettings().FundPartyTolls,
             Notice = text => made!.HandOverNotices.Add(text),
             WentBackFor = (name, from, to) => made!.WentBack(name, from, to),
         };

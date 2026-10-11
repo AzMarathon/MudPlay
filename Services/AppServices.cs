@@ -8950,18 +8950,6 @@ public sealed class AppServices
             log: Log)
         {
             MasterSwitchOff = MasterSwitchOff("Party polls"),
-            // The character's own Cash section, as every engine reads its settings.
-            FundsShortMembers = () =>
-                ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").FundPartyTolls,
-            // The deposit floor, in copper: the same conversion the deposit and the
-            // train funding use, so all three agree on what "keep" means.
-            KeepOnHandCopper = () =>
-            {
-                Models.Profile.CashSettings cash =
-                    ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
-                return cash.KeepOnHandWealth
-                       * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
-            },
             // Read when asked: the comeback manager is built further down.
             WentBackFor = (given, from, to) => PartyComeback.WentBackFor(given, from, to),
             KnownLeftBehind = () => PartyComeback.KnownLeftBehind(),
@@ -8985,6 +8973,23 @@ public sealed class AppServices
                 PartyToll.NoteRoomChanged(left, now.Key);
         };
         Profile.ProfileLoaded += _ => PartyToll.Reset();
+        // The check's two Cash settings are handed to it here, on the UI thread,
+        // when the profile loads, is saved (a Settings save writes the section and
+        // then saves) or closes: a route search asks the check from its own
+        // thread, where the profile's settings dictionary is not safe to read.
+        // The character's own Cash section, as every engine reads its settings;
+        // the floor by the conversion the deposit and the train funding use.
+        void RefreshPartyTollSettings()
+        {
+            Models.Profile.CashSettings cash = ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+            PartyToll.FundsShortMembers = cash.FundPartyTolls;
+            PartyToll.KeepOnHandCopper =
+                cash.KeepOnHandWealth * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
+        }
+        RefreshPartyTollSettings();
+        Profile.ProfileLoaded += _ => RefreshPartyTollSettings();
+        Profile.ProfileSaving += _ => RefreshPartyTollSettings();
+        Profile.ProfileClosed += RefreshPartyTollSettings;
         // A toll closed to the party stays closed for the trip it was closed on.
         MovementControl.StateChanged += () =>
         {

@@ -158,18 +158,33 @@ public sealed class PartyTollGate
     public Func<bool>? MasterSwitchOff { get; set; }
 
     // Settings → Cash + Items, "Fund party members' tolls / rides if short"
-    // (CashSettings.FundPartyTolls, off until ticked). Off or unset: no coin is
-    // handed over, so a short or silent member closes the crossing.
-    public Func<bool>? FundsShortMembers { get; set; }
+    // (CashSettings.FundPartyTolls, off until ticked). Off: no coin is handed
+    // over, so a short or silent member closes the crossing.
+    //
+    // This and KeepOnHandCopper are values, set on the UI thread when the profile
+    // loads and when it is saved, and not read from the profile when asked: Closes
+    // is called from a route search's thread, and the profile's settings are a
+    // plain dictionary a Settings save writes.
+    public bool FundsShortMembers
+    {
+        get => _fundsShortMembers;
+        set => _fundsShortMembers = value;
+    }
+    private volatile bool _fundsShortMembers;
 
-    public bool FundingOn => FundsShortMembers?.Invoke() == true;
+    public bool FundingOn => _fundsShortMembers;
 
     // Settings → Cash + Items, "Minimum cash to keep on hand", in copper. What we
     // may not hand over is the larger of this and what we need to cross ourselves
     // (user, 2026-10-10: "first protect the leaders crossing requirement, if their
     // keep on hand is less than that, protect the crossing amount, if their keep
     // on hand is more than that, protect the keep on hand amount").
-    public Func<long>? KeepOnHandCopper { get; set; }
+    public long KeepOnHandCopper
+    {
+        get => Volatile.Read(ref _keepOnHandCopper);
+        set => Volatile.Write(ref _keepOnHandCopper, Math.Max(0, value));
+    }
+    private long _keepOnHandCopper;
 
     internal const string FundingSettingName = "Fund party members' tolls / rides if short";
 
@@ -343,7 +358,7 @@ public sealed class PartyTollGate
     // rest of the route, and what a trip has set aside for its fees), or the
     // keep-on-hand amount when that is more.
     private long Kept(long cost, long later) =>
-        Math.Max(cost + Math.Max(0, later) + Math.Max(0, _reservedCopper()), Math.Max(0, KeepOnHandCopper?.Invoke() ?? 0));
+        Math.Max(cost + Math.Max(0, later) + Math.Max(0, _reservedCopper()), KeepOnHandCopper);
 
     // What we can hand over there: the purse on record less Kept. Null while the
     // purse isn't known.
@@ -352,7 +367,7 @@ public sealed class PartyTollGate
     // The words for what Spare was counted after.
     private string Keeping(Crossing crossing, long later = 0)
     {
-        long keep = Math.Max(0, KeepOnHandCopper?.Invoke() ?? 0);
+        long keep = KeepOnHandCopper;
         if (keep > crossing.Copper + Math.Max(0, later) + Math.Max(0, _reservedCopper()))
             return $"the {CurrencyFormat.Full(keep)} you keep on hand";
         return later > 0
@@ -1008,8 +1023,8 @@ public sealed class PartyTollGate
                     (PartyWealthTracker.PurseKnowledge.Silent, _) => PaidAndSilent(name, crossing),
                     _ => $"{name} not asked yet",
                 });
-        long keep = Math.Max(0, KeepOnHandCopper?.Invoke() ?? 0);
-        string own = _ownPurse() is { } purse
+        long keep = KeepOnHandCopper;
+        string own =_ownPurse() is { } purse
             ? $"own purse {CurrencyFormat.Full(purse)}"
               + (_reservedCopper() > 0 ? $" with {CurrencyFormat.Full(_reservedCopper())} set aside" : string.Empty)
               + (keep > 0 ? $", {CurrencyFormat.Full(keep)} kept on hand" : string.Empty)
