@@ -660,7 +660,9 @@ public sealed partial class SimulatorViewModel : ObservableObject
             return;
         }
         // Saving under a taken name would overwrite that loop, so a second save of the
-        // same area gets a number.
+        // same area gets a number. A loop of that name another client saved a moment
+        // ago counts, so the folder is read first.
+        _loops.TakeInOutsideChanges();
         string wanted = $"{rank.Area.Replace('/', '-')} (L{rank.Level} sim)";
         string name = _loops.Get(wanted) is null ? wanted : _loops.NumberedName(wanted);
         var loop = new Loop(name, rank.Tour) { Notes = LoopNotes(rank, _rankRun) };

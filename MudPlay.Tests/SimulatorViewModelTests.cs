@@ -133,6 +133,25 @@ public sealed class SimulatorViewModelTests : IDisposable
     }
 
     [Fact]
+    public void SavingARankedAreaLeavesALoopAnotherClientJustSavedUnderItsName()
+    {
+        using Harness h = Build(saveLoops: true);
+        using Harness other = Build(saveLoops: true);
+        RoomKey[] theirs = { new(1, 1), new(1, 2), new(1, 1), new(1, 2) };
+        other.Loops.Save(new Loop("Hills (L40 sim)", theirs));
+        Assert.Null(h.Loops.Get("Hills (L40 sim)"));
+        RoomKey[] tour = { new(1, 2), new(1, 1) };
+        h.Simulator.SelectedRanking = new AreaRank("Hills", 40, tour, 2, new LoopSimSummary(new[] { Run }));
+
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+
+        Assert.Equal(theirs, h.Loops.Get("Hills (L40 sim)")?.Waypoints.Select(w => w.Key));
+        Assert.Equal(tour, h.Loops.Get("Hills (L40 sim) 2")?.Waypoints.Select(w => w.Key));
+        other.Loops.LoadAll(h.Loops.SetName);
+        Assert.Equal(theirs, other.Loops.Get("Hills (L40 sim)")?.Waypoints.Select(w => w.Key));
+    }
+
+    [Fact]
     public void ASavedLoopRowOffersNoSave()
     {
         using Harness h = Build();
