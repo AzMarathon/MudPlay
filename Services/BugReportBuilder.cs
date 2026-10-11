@@ -307,6 +307,12 @@ public static class BugReportBuilder
             string body = section.Body.TrimEnd();
             if (body.Length > 0) sb.Append(body).Append("\n\n");
             if (section.Entries is not { } entries) continue;
+            // What the body says of its count and span was written before the
+            // budget cut: say what is actually below.
+            if (section.TrimmedEntries > 0)
+                sb.Append("_Shown: the newest ").Append(entries.Count).Append(" of ")
+                  .Append(entries.Count + section.TrimmedEntries)
+                  .Append("; the first line below is the oldest kept, so the span starts there, not where the text above says._\n\n");
             sb.Append("```\n");
             foreach (string entry in entries) sb.Append(entry).Append('\n');
             sb.Append("```\n\n");
@@ -1991,7 +1997,7 @@ public static class BugReportBuilder
         {
             Kv(sb, "Dark reveal",
                 dark.LastRevealName is { Length: > 0 } rn
-                    ? $"{rn} at {dark.LastRevealAt:HH:mm:ss} from '{dark.LastRevealLine}'"
+                    ? $"{rn} at {dark.LastRevealAt?.ToLocalTime():HH:mm:ss} from '{dark.LastRevealLine}'"
                     : "(none this session)");
             Kv(sb, "Dark held off", dark.LastHeldOffReason ?? "(none)");
         }

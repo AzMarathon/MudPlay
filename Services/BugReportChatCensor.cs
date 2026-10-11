@@ -151,7 +151,11 @@ public sealed partial class BugReportChatCensor
         for (int i = 0; i < rows.Count; i++)
         {
             string row = rows[i];
-            bool chat = ChatLineDetector.IsChat(row) || (continues && row.Length > 0);
+            // The backscroll doesn't record which rows the terminal wrapped, so a
+            // continuation is told by the row before it being full. A row that
+            // starts with the game's prompt is never one.
+            bool chat = ChatLineDetector.IsChat(row)
+                || (continues && row.Length > 0 && !LineExtractor.TrySplitPrompt(row, out _));
             if (chat) rows[i] = CensorText(row);
             continues = chat && terminalColumns > 0 && row.Length >= terminalColumns - 1;
         }

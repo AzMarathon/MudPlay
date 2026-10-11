@@ -26,6 +26,11 @@ public static class BugReportBudget
     {
         ArgumentNullException.ThrowIfNull(sections);
 
+        // The masking that follows writes `[redacted]` over values that may be
+        // shorter than it: a little is kept back so the result still fits.
+        maxBytes -= maxBytes / 50;
+        sections = CapStaticBodies(sections, maxBytes, overheadBytes);
+
         int count = sections.Count;
         int[][] entryBytes = new int[count][];
         long[] remaining = new long[count];   // bytes of the entries still kept
@@ -78,6 +83,62 @@ public static class BugReportBudget
         }
         return new Result(fitted, (int)Math.Min(int.MaxValue, total), total > maxBytes);
     }
+
+    // The share of the budget the sections with no history may take between
+    // them. Past it the largest of them are cut down first: one runaway static
+    // section (a thousand overrides, a huge workshop) must not cost the report
+    // its program log.
+    private const int StaticSharePercent = 60;
+
+    private static IReadOnlyList<BugReportBuilder.Section> CapStaticBodies(
+        IReadOnlyList<BugReportBuilder.Section> sections, int maxBytes, int overheadBytes)
+    {
+        long target = (long)maxBytes * StaticSharePercent / 100 - overheadBytes;
+        int[] sizes = new int[sections.Count];
+        long total = 0;
+        for (int i = 0; i < sections.Count; i++)
+        {
+            if (!sections[i].InBudget) continue;
+            sizes[i] = Encoding.UTF8.GetByteCount(sections[i].Body);
+            total += sizes[i];
+        }
+        if (total <= target) return sections;
+
+        // The largest cap that brings the bodies' sum to the target: every body
+        // under it is whole, every body over it is cut to it.
+        int[] ordered = sizes.Where(s => s > 0).OrderBy(s => s).ToArray();
+        long cap = 0, below = 0;
+        for (int i = 0; i < ordered.Length; i++)
+        {
+            long candidate = (target - below) / (ordered.Length - i);
+            if (candidate <= ordered[i]) { cap = Math.Max(candidate, MinCappedBody); break; }
+            below += ordered[i];
+            cap = ordered[i];
+        }
+
+        List<BugReportBuilder.Section> capped = new(sections.Count);
+        for (int i = 0; i < sections.Count; i++)
+        {
+            BugReportBuilder.Section s = sections[i];
+            if (!s.InBudget || sizes[i] <= cap) { capped.Add(s); continue; }
+            // Cut at a line end, on a character boundary, at or before the cap.
+            int chars = (int)Math.Min(s.Body.Length, cap * s.Body.Length / sizes[i]);
+            int lineEnd = s.Body.LastIndexOf('\n', Math.Max(0, chars - 1));
+            if (lineEnd > chars / 2) chars = lineEnd;
+            string kept = s.Body[..chars];
+            // A code fence left open would swallow the rest of the report.
+            bool openFence = kept.Split("```").Length % 2 == 0;
+            capped.Add(s with
+            {
+                Body = kept + (openFence ? "\n```" : string.Empty)
+                    + $"\n\n_(the rest of this section, {(sizes[i] - Encoding.UTF8.GetByteCount(kept)) / 1024} KB of {sizes[i] / 1024} KB, "
+                    + $"is left out to keep the report under {MaxBytes / 1000} KB)_",
+            });
+        }
+        return capped;
+    }
+
+    private const int MinCappedBody = 2_000;
 
     // The heading marks, blank lines and code fence written around one section.
     private const int SectionOverhead = 20;

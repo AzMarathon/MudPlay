@@ -97,7 +97,9 @@ public sealed class CastCoordinator : IDisposable
             t == DateTimeOffset.MinValue ? "never" : t.ToLocalTime().ToString("HH:mm:ss.fff");
         return $"last attack-slot cast {At(_lastAttackSentAt)}, last between-round cast {At(_lastBetweenRoundSentAt)}, "
             + $"last spell sent {_lastSpellSent ?? "(none)"} ({(_lastCastWasAttackSlot ? "attack slot" : "between-round slot")}); "
-            + (_castBlocked ? $"BLOCKED since {At(_castBlockedSince)} (the game refused a cast this round)" : "not blocked");
+            + (_castBlocked
+                ? $"block latched at {At(_castBlockedSince)} when the game refused a cast (it is lifted at the next cast attempt, so an old time here is a latch nobody has tested since, not a cast still refused)"
+                : "no block latched");
     }
 
     // Fires after a cast command was successfully written to the wire. Carries the

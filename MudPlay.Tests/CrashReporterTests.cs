@@ -62,7 +62,7 @@ public sealed class CrashReporterTests
 
         Assert.Contains("- **Build**: " + AppInfo.Version, md);
         Assert.Contains("- **Log folder**: ", md);
-        Assert.Contains("- **Last-minutes log**: ", md);
+        Assert.Contains("- **Log to send with this**: ", md);
     }
 
     [Fact]

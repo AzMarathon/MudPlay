@@ -15,7 +15,9 @@ public static class BugReportSentCommands
         SentCommandTrail.Entry[] entries = trail.Snapshot();
         StringBuilder body = new();
         body.Append("Every command the client put on the wire, or meant to, with where it came from: ")
-            .Append("`typed` at the terminal, an `engine` by name, `user` for a macro, alias, trigger or event, ")
+            .Append("`typed` for anything sent as the user's own line (typed at the terminal, an alias's expansion, ")
+            .Append("a button in one of the client's windows, the local API's send), an `engine` by name, ")
+            .Append("`user` for a macro, trigger or event, ")
             .Append("`route` for a walk or loop step. A command the send gate dropped or sneak keeping held back ")
             .Append("never reached the game and has no echo in the scrollback. The last ")
             .Append(SentCommandTrail.Capacity).Append(" are kept.");

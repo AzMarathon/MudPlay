@@ -140,9 +140,18 @@ public static class CrashReporter
         // The log files outlive the process: say where they are, in case this
         // document's own state dump below could not be made.
         Kv(sb, "Log folder", Safe(() => BugReportContext.HomeRelative(AppPaths.LogsDir)));
-        Kv(sb, "Last-minutes log", Safe(() => AppServices.CurrentOrNull?.RecentLog.CurrentFiles is { Count: > 0 } files
-            ? string.Join(" and ", files.Select(Path.GetFileName))
-            : "(none written: Auto-collect logs is on and the full program log is the record, or nothing was logged)"));
+        Kv(sb, "Log to send with this", Safe(() =>
+        {
+            AppServices? svc = AppServices.CurrentOrNull;
+            if (svc is null) return "(the client had not finished starting)";
+            // With Auto-collect on, the last-minutes files stopped when it went
+            // on: the full program log is the record, not they.
+            if (svc.LogDiagnostics.AutoCollectLogs)
+                return "the full program log: " + (svc.ProgramLog.CurrentPath is { } full ? Path.GetFileName(full) : "(not open)");
+            return svc.RecentLog.CurrentFiles is { Count: > 0 } files
+                ? "the last-minutes log: " + string.Join(" and ", files.Select(Path.GetFileName))
+                : "(nothing was logged)";
+        }));
         sb.Append('\n');
 
         sb.Append("## Exception\n\n");

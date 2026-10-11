@@ -73,15 +73,45 @@ public sealed class BugReportBudgetTests
     }
 
     [Fact]
-    public void AHistoryKeepsItsNewestEntriesEvenWhenTheFixedSectionsAloneAreTooLarge()
+    public void AGiantStaticSection_IsCutDownFirst_AndTheHistoriesKeepMostOfTheBudget()
     {
-        BugReportBuilder.Section huge = new("Settings", new string('s', 200_000));
-        BugReportBuilder.Section log = new("Program log", "", Entries(1_000, 100));
+        string line = new string('s', 99) + "\n";
+        BugReportBuilder.Section huge = new("Monster overrides", string.Concat(Enumerable.Repeat(line, 16_000)));   // 1.6 MB
+        BugReportBuilder.Section small = new("Session", new string('x', 5_000));
+        BugReportBuilder.Section log = new("Program log", "", Entries(4_000, 100));                               // 400 KB
 
-        BugReportBudget.Result result = BugReportBudget.Fit([huge, log], maxBytes: 100_000);
+        BugReportBudget.Result result = BugReportBudget.Fit([huge, small, log], maxBytes: 1_000_000);
 
-        Assert.True(result.OverBudget);
-        Assert.Equal(BugReportBudget.KeepAtLeast, result.Sections[1].Entries!.Count);
+        Assert.False(result.OverBudget);
+        Assert.True(result.Bytes <= 1_000_000);
+        // The small static section is whole; the giant one says what it lost.
+        Assert.Equal(small, result.Sections[1]);
+        Assert.Contains("is left out to keep the report under 1000 KB", result.Sections[0].Body);
+        Assert.True(result.Sections[0].Body.Length < 620_000);
+        // The log was not cut to its floor to pay for it.
+        Assert.True(result.Sections[2].Entries!.Count > 3_000, $"log kept {result.Sections[2].Entries!.Count}");
+    }
+
+    [Fact]
+    public void ACutStaticSection_ClosesTheCodeFenceItWasCutInside()
+    {
+        string body = "```json\n" + string.Concat(Enumerable.Repeat("  \"k\": 1,\n", 100_000)) + "```";
+        BugReportBudget.Result result = BugReportBudget.Fit([new("Settings", body)], maxBytes: 200_000);
+
+        string cut = result.Sections[0].Body;
+        Assert.Equal(1, cut.Split("```").Length % 2);   // an even number of fence marks
+    }
+
+    [Fact]
+    public void Render_ATrimmedHistory_SaysHowManyAreShown()
+    {
+        BugReportBuilder.BugReportCapture capture = new(
+            new DateTimeOffset(2026, 10, 10, 14, 0, 0, TimeSpan.Zero), RealmType.Stock,
+            [new BugReportBuilder.Section("Program log (oldest first)", "30000 entries.", Entries(30_000, 110))]);
+
+        string md = BugReportBuilder.Render(capture, "x");
+
+        Assert.Matches(@"_Shown: the newest \d+ of 30000; the first line below is the oldest kept", md);
     }
 
     [Fact]
@@ -103,7 +133,8 @@ public sealed class BugReportBudgetTests
 
         int withoutWire = Encoding.UTF8.GetByteCount(md) - 400_000;
         // Trimmed to the budget, not far under it: nothing is thrown away for nothing.
-        Assert.InRange(withoutWire, BugReportBudget.MaxBytes - 5_000, BugReportBudget.MaxBytes + 1_000);
+        // (2% is kept back for the masking that follows.)
+        Assert.InRange(withoutWire, BugReportBudget.MaxBytes * 97 / 100, BugReportBudget.MaxBytes);
         Assert.Contains("## Program log (oldest first) — ", md);
         Assert.Contains("oldest entries left out to keep the report under 1000 KB", md);
         // The newest entries of both histories are there, the wire is whole.

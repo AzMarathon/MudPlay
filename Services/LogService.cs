@@ -11,8 +11,8 @@ namespace MudPlay.Services;
 // Subscribers that touch UI state must marshal via Dispatcher.UIThread.Post
 // themselves.
 //
-// Capacity defaults to 2000 entries; oldest entries are overwritten on
-// wraparound. The size knob is exposed in Settings.Display; the constructor
+// Capacity defaults to DefaultCapacity entries (the running client asks for
+// SessionCapacity); oldest entries are overwritten on wraparound. The size knob is exposed in Settings.Display; the constructor
 // takes the initial value.
 public sealed class LogService
 {

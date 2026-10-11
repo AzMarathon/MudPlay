@@ -1574,7 +1574,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
             && !RemoteActionPathExpander.ReachesDestination(expanded, destination))
         {
             string reason = DescribeUnroutableLever(unroutable[0]);
-            _log?.Info("Walker", $"walk to {destination}: {reason}");
             Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
             return false;
         }
@@ -2168,11 +2167,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     }
 
     // A walk with no route for want of a toll or fare says so where the user is
-    // looking, not only on the Navigation window's chip, and in the log from here:
-    // that window writes a failed walk's reason, and it may be shut.
+    // looking, not only on the Navigation window's chip. (The log line is
+    // Raise's, as for every failed walk.)
     private void FailUnpaid(RoomKey destination, string reason)
     {
-        _log?.Info("Walker", $"walk to {destination}: {reason}");
         _unpaidCrossingHandler?.Invoke(destination, reason);
         Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
     }
@@ -2878,7 +2876,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
             round = _bfs.FindPath(here.Key, dest, roundIt, ignoreAvoids: _activeIgnoreAvoids);
         if (round is null)
         {
-            _log?.Info("Walker", $"walk to {dest}: gave up on {door} ({reason}), and there is no other way");
             Raise(new WalkEvent(WalkEventKind.Failed,
                 $"couldn't open {door} ({reason}), and there is no other way to {dest}", _destination));
             Reset();
@@ -4512,7 +4509,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
             default: return;   // per-step events are the listeners' to report
         }
         _log?.Info("Walker", $"walk {verb}"
-            + (evt.Destination is { } to ? $" (to {to})" : string.Empty)
+            + (evt.Destination is { } to
+                ? $" (to {to}{(_graph.GetRoom(to)?.Name is { Length: > 0 } name ? " - " + name : string.Empty)})"
+                : string.Empty)
             + (string.IsNullOrWhiteSpace(evt.Detail) ? string.Empty : $": {evt.Detail}"));
     }
 
