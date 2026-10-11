@@ -2,8 +2,10 @@
 
 ## 3.172.1
 
-- A monster swinging at you as you step out of its room is no longer attacked from there; the attack used to land in the next room
+- No fight is opened from a room you are stepping out of (a swing at you, a hit line, a room re-run); the attack used to land in the next room
 - A lair entered that way opens with its debuff, then the room attack
+- A step with no landing or refusal within 3 s counts as not taken: the attacker is fought back where you stand
+- Bug report shows an engage held for a move in flight
 - bug reports addressed: paradigm-20261010-231540
 
 ## 3.172.0
