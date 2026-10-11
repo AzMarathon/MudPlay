@@ -1746,6 +1746,23 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Equal("join Boss", h.LastWire);
     }
 
+    // Our link dropped: leaving the game took us off every list, so no join of
+    // ours is tried until we have followed again, and nothing is recorded as the
+    // game having refused one.
+    [Fact]
+    public void Stock_AfterTheLinkDropped_NoJoinIsTried_UntilWeFollowAgain()
+    {
+        using Harness h = NewFollower();
+        h.Requester.OnStock = () => true;
+        AskedOnStock(h);
+        h.Requester.NoteDisconnected();
+
+        h.Requester.NotePlayerInRoom("Boss");
+
+        Assert.Equal(1, h.Sent);
+        Assert.Null(h.Requester.JoinSummary);
+    }
+
     // The leader's @join had us send the join (PartyEssentialHandlers): ours isn't
     // sent on top of it, and the game's answer to it is read here all the same.
     [Fact]

@@ -10015,7 +10015,9 @@ public sealed class AppServices
         ComebackRequest.ListedWith = () => Party.ListedWithLeader;
         ComebackRequest.NotOnTheirList = leader => Party.NoteNotListedWith(leader);
         // One join, whichever of the two sends it: ours, or the one the leader's
-        // @join asks for. The game's answer to either is read in one place.
+        // @join asks for. The game's answer to either is read in one place. Not
+        // keyed on the realm: a second @join inside 3 s is passed over anywhere
+        // (PartyEssentialHandlers.OnJoin says why that is safe).
         PartyEssentials.JoinSent = ComebackRequest.NoteJoinSent;
         PartyEssentials.JoinAlreadySent = ComebackRequest.JoinJustSentTo;
         RoomClassifier.EntitiesObserved += observation =>

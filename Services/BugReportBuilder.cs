@@ -646,9 +646,10 @@ public static class BugReportBuilder
             Kv(sb, "Left-behind check pending", $"judging whether {pendingLeader} left without us");
         if (svc.ComebackRequest.HeldBack is { } heldBack)
             Kv(sb, "Left-behind @comeback held back", heldBack);
-        // Stock: a follower still on the leader's list joins by itself.
+        // The last join this client sent a leader: its own (a Stock follower still
+        // on the leader's list joins by itself) or one a leader's @join asked for.
         if (svc.ComebackRequest.JoinSummary is { } ownJoin)
-            Kv(sb, "Own join of the leader (Stock)", ownJoin);
+            Kv(sb, "Last join sent to a leader", ownJoin);
         if (svc.PartyComeback.QueuedRecoveries is { Count: > 0 } queued)
             Kv(sb, "Recoveries waiting their turn", string.Join(", ", queued));
         if (svc.PartyComeback.LeftAtLoopGates is { Count: > 0 } atGates)

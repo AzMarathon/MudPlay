@@ -234,6 +234,9 @@ public sealed partial class ComebackRequester : IDisposable
     private string? _joinedLeader;
     private DateTimeOffset _joinSentAt = DateTimeOffset.MinValue;
     private bool _joinRefused;
+    // Our link dropped since we last followed anyone: leaving the game took us off
+    // every member list, so no join of ours can work until an invite has.
+    private bool _leftTheGame;
 
     // The game answers a join in the same tick; this only covers lag.
     private static readonly TimeSpan JoinReplyWindow = TimeSpan.FromSeconds(3);
@@ -241,7 +244,8 @@ public sealed partial class ComebackRequester : IDisposable
     // tried again no sooner than this.
     private static readonly TimeSpan JoinRetryGap = TimeSpan.FromSeconds(20);
 
-    // For the bug report: what became of our own join this split.
+    // For the bug report: the last join this client sent a leader, and whether the
+    // game refused it.
     public string? JoinSummary => _joinedLeader is null ? null
         : $"`join {_joinedLeader}` sent {_joinSentAt.ToLocalTime():HH:mm:ss}"
           + (_joinRefused ? "; the game answered \"You must be invited first!\": waiting for their invite" : string.Empty);
@@ -280,7 +284,7 @@ public sealed partial class ComebackRequester : IDisposable
     // first!" this falls back to what it always did: wait for the invite.
     private void TryJoin(string leader, string because)
     {
-        if (OnStock?.Invoke() != true || _joinRefused) return;
+        if (OnStock?.Invoke() != true || _joinRefused || _leftTheGame) return;
         if (!IsLeaderWeAsked(leader)) return;
         bool stillFollowingByOurBooks = BelievedLeader() is { } believed
             && believed.Equals(leader, StringComparison.OrdinalIgnoreCase);
@@ -301,14 +305,19 @@ public sealed partial class ComebackRequester : IDisposable
             $"{because}, and we are still on {leader}'s member list (Stock): sent `join {leader}` ourselves, no invite needed. If the game says we must be invited first, we wait for the invite as before.");
     }
 
-    // "You must be invited first!" to a join this client sent: we are off that
-    // leader's list after all. Nothing more is tried; their invite is waited for.
+    // "You must be invited first!" to a join this client sent: we are not on that
+    // leader's list. No join of our own is tried again for this split; their
+    // invite is waited for.
+    //
+    // Read on every realm, since the join may be one a leader's @join had us send
+    // (an ordinary nag, on Paradigm too). So the log line says only what holds
+    // everywhere: it names no realm and assumes no @comeback of ours.
     private void OnMustBeInvited(MatchResult _)
     {
         if (_joinedLeader is not { } leader || NowProvider() - _joinSentAt > JoinReplyWindow) return;
         _joinRefused = true;
         _log?.Info(LogCategory,
-            $"the game answered our `join {leader}` with \"You must be invited first!\": we are off their list after all. Falling back to waiting for {leader}'s invite, which is taken as that of a leader we asked.");
+            $"the game answered our `join {leader}` with \"You must be invited first!\": we are not on {leader}'s member list, so only an invite from them brings us in. This client sends no join of its own to them until we follow someone or ask a leader back again; an invite is taken by the usual rules.");
         NotOnTheirList?.Invoke(leader);
     }
 
@@ -449,7 +458,7 @@ public sealed partial class ComebackRequester : IDisposable
         ClearEvidence();
         // Leaving the game takes us off every member list: until we follow again
         // only an invite brings us back, and no join of ours is tried.
-        _joinRefused = true;
+        _leftTheGame = true;
         if (BelievedLeader() is not { } leader) return;
         _incidentAnswered = true;
         DateTimeOffset now = NowProvider();
@@ -572,6 +581,7 @@ public sealed partial class ComebackRequester : IDisposable
         _askedBack = null;
         _joinedLeader = null;
         _joinRefused = false;
+        _leftTheGame = false;
         _typedLeaveAt = DateTimeOffset.MinValue;
     }
 
