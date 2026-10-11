@@ -7,8 +7,8 @@ namespace MudPlay.Services;
 // edits" group of RankingCharacter). The resolver takes in another client's write to
 // those files on the next heartbeat, so the files now are what a simulation uses
 // now. (The tables and the monster seed are held in memory from when they were
-// read, and are stamped there: GameDataCache's TableStampsInUse,
-// MonsterOverlaySeedStore's ContentStamp.)
+// read, and are stamped as read: RankingWorldWatch, MonsterOverlaySeedStore's
+// ContentStamp. TableOnDisk here is for a table not read yet.)
 //
 // The overrides are small and are stamped by content, so a file rewritten with what
 // it already held (a settings save) is not a change. A content hash is remembered
@@ -18,6 +18,25 @@ public sealed class RankingStampReader
 {
     private readonly Dictionary<string, (long Length, DateTime Written, string Hash)> _hashes =
         new(StringComparer.Ordinal);
+
+    // The stamp of a table of the set in setDir as its file is on disk now, null when
+    // the set has no such table: for a table the cache has not read in this load
+    // (RankingWorldWatch). The file is found as the cache finds it, by name whatever
+    // its capitals; the cache's own lookup is private to it.
+    public static string? TableOnDisk(string setDir, string table)
+    {
+        ArgumentNullException.ThrowIfNull(setDir);
+        ArgumentNullException.ThrowIfNull(table);
+        if (!Directory.Exists(setDir)) return null;
+        string name = table + ".json";
+        string exact = Path.Combine(setDir, name);
+        string? path = File.Exists(exact) ? exact
+            : Directory.EnumerateFiles(setDir, "*.json")
+                .FirstOrDefault(p => string.Equals(Path.GetFileName(p), name, StringComparison.OrdinalIgnoreCase));
+        if (path is null) return null;
+        FileInfo file = new(path);
+        return file.Exists ? RankingWorldWatch.Stamp(file.Length, file.LastWriteTimeUtc) : null;
+    }
 
     // The user's record overrides for a set, at every tier that applies to the
     // loaded character: folders is the Global folder, the realm's and the

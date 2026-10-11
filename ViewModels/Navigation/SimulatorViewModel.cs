@@ -655,10 +655,11 @@ public sealed partial class SimulatorViewModel : ObservableObject
         // character cancels it, and by the time it finds that out the list on show is
         // another pairing's.
         SimulatorOwner owner = _owner;
-        // What it is made in and for, taken as it starts: a ranking kept between
-        // sessions is listed again by these.
-        RankingWorld? madeIn = _simulation.World();
+        // Who it is made for, taken as it starts, and which load of the game data it
+        // starts in: a ranking kept between sessions is listed again by the first,
+        // and stamped as it finishes only if the load is still that one.
         RankingCharacter? madeFor = _simulation.CharacterAt(level);
+        object? startedIn = _simulation.Load();
         using var cts = new CancellationTokenSource();
         _rankCts = cts;
         CancellationToken cancel = cts.Token;
@@ -766,6 +767,11 @@ public sealed partial class SimulatorViewModel : ObservableObject
             string summary = $"L{level} from {here.Map}/{here.Room}: {safe} safe option(s) (areas and your loops), best first; {ranked.Count - safe} where you died listed last"
                 + (gatedAreas > 0 ? $"; {gatedAreas} area(s) you can't reach at L{level} left out" : "") + skipped
                 + ". Pick one to see its route and details, show it on the map, and save it as a loop to run.";
+            // What it was made in, taken now: every table it used has been read by
+            // now, and the stamp is of those reads. A load that changed under it
+            // cancelled it above; were one ever to slip through, a ranking of two
+            // loads is of neither and is kept for the session only.
+            RankingWorld? madeIn = Equals(_simulation.Load(), startedIn) ? _simulation.World() : null;
             ListFinishedRanking(owner, new AreaRanking(
                 ranked, level, step, hours, runs, here, RealmLabel, summary, DateTimeOffset.Now, ownLevel, madeIn, madeFor,
                 Loops: loopSignatures));

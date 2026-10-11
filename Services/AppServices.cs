@@ -8445,10 +8445,12 @@ public sealed class AppServices
             new AreaRankingFiles(log: Log), act => Avalonia.Threading.Dispatcher.UIThread.Post(act), Log);
         SimulatorRankings.NoteActiveSet(GameData.ActiveSet);
         GameData.ActiveSetChanged += setName =>
-        {
-            _simulatorMixedTablesSaid = null;
             LogStaleSimulatorRankings(setName, "was read in again", SimulatorRankings.NoteActiveSet(setName));
-        };
+        // A saved ranking is stamped with the table files this client read, and the
+        // watch has to see each table's first read of a load before the cache can
+        // drop the table and read it again: once a second is far inside that.
+        _simulatorWorld = new Game.Simulation.RankingWorldWatch(SimulatorTableStampAsRead, SimulatorTableStampOnDisk);
+        Tick.HeartbeatElapsed += () => _simulatorWorld.Observe(SimulatorLoad());
         // They are a character's as well. One that comes to go by another name is
         // the same character: its rankings go with it, and none stay under the name
         // it left for the next profile given that name.
@@ -11576,40 +11578,56 @@ public sealed class AppServices
     public Game.Simulation.SimulationSource LoopSimulationSource =>
         _loopSimulationSource ??= new(BuildLoopSimulation, () => PlayerStats.Name, () => PlayerStats.Level,
             LoopSimulationWalkSeconds, () => RoomTracker.State.CurrentRoom?.Key, AppPaths.LogsDir,
-            SimulatorWorld, SimulatorCharacterAt);
+            SimulatorWorld, SimulatorCharacterAt, SimulatorLoad);
     private Game.Simulation.SimulationSource? _loopSimulationSource;
 
     // The game data this client is running on, for a ranking kept between sessions
-    // (RankingWorld): the table files as they were when read and the monster seed as
-    // loaded, not what is on disk now. Another client can import the set or an update
-    // replace the seed while this one runs; a ranking made here is still a ranking of
-    // the old data, and stamped with the new it would be trusted after a restart.
+    // (RankingWorld): the table files as they were when read (RankingWorldWatch) and
+    // the monster seed as loaded, not what is on disk now. Another client can import
+    // the set or an update replace the seed while this one runs; a ranking made here
+    // is still a ranking of the old data.
     //
-    // Null when a table has since been read again from a changed file. The room map
-    // and catalogs built at load are then from one file and the rows looked up since
-    // from another, so no stamp describes what a ranking would be made on: none is
-    // saved or read back until the set is read in again, which a restart or a
-    // re-import does. A ranking is still made and listed for the session.
+    // Null with no set active, and when the watch finds the tables in memory are not
+    // of one version of the set: then no ranking is saved or read back until the set
+    // is read in again, said once for each load. A ranking is still made and listed
+    // for the session.
     private Game.Simulation.RankingWorld? SimulatorWorld()
     {
         if (GameData.ActiveSet is not { } set) return null;
-        IReadOnlyDictionary<string, string> tables =
-            GameData.TableStampsInUse(Game.Simulation.RankingWorld.TableNames, out IReadOnlyList<string> changed);
-        if (changed.Count == 0)
-            return new Game.Simulation.RankingWorld(
-                Game.Simulation.LoopSimulator.SimulatorVersion, tables, MonsterOverlaySeed.ContentStamp);
-        if (!string.Equals(_simulatorMixedTablesSaid, set, StringComparison.OrdinalIgnoreCase))
+        object? load = SimulatorLoad();
+        if (_simulatorWorld.Now(load, MonsterOverlaySeed.ContentStamp, out string? why) is { } world) return world;
+        if (!Equals(_simulatorWorldProblemSaid, load))
         {
-            _simulatorMixedTablesSaid = set;
+            _simulatorWorldProblemSaid = load;
             Log.Info("Simulator",
-                $"'{set}' changed on disk while it was loaded ({string.Join(", ", changed)} read again from a new file): " +
-                "area rankings are not saved or read back until the set is read in again (restart, or import it here)");
+                $"'{set}' changed on disk while it was loaded ({why}): area rankings are not saved or read back " +
+                "until the set is read in again (restart, or import it here)");
         }
         return null;
     }
 
-    // The set the line above was last logged for; cleared when a set is read in.
-    private string? _simulatorMixedTablesSaid;
+    // The load the line above was last logged for.
+    private object? _simulatorWorldProblemSaid;
+
+    // Set where the Simulator's rankings are wired, before any window can ask.
+    private Game.Simulation.RankingWorldWatch _simulatorWorld = null!;
+
+    // The tables of the active set read again from a changed file, for the bug report.
+    public IReadOnlyList<string> SimulatorTablesChangedUnderClient => _simulatorWorld.Changed;
+
+    // Which load of the active set is in hand: the cache keeps one Derived object for
+    // each load of a set's tables and makes another after a switch, a reload or a
+    // re-import, so the same object back means the same load.
+    private object? SimulatorLoad() =>
+        GameData.ActiveSet is null ? null : GameData.Derived("simulator ranking load", static () => new object());
+
+    // The file the cache read a table of the active set from, in this load. The
+    // cache keeps no record of that, so every table counts as not read and the watch
+    // stamps it from its file as it is now.
+    private static string? SimulatorTableStampAsRead(string table) => null;
+
+    private string? SimulatorTableStampOnDisk(string table) =>
+        GameData.ActiveSet is { } set ? RankingStampReader.TableOnDisk(AppPaths.GameDataSetDir(set), table) : null;
 
     // The character as a ranking at `level` would simulate it now, as the groups a
     // kept ranking is compared by (RankingCharacter). Null until the game has shown

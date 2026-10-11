@@ -50,110 +50,165 @@ public sealed class RankingStampTests : IDisposable
 
     // ----- The tables, as this client read them ---------
 
-    private const string Set = "alpha";
+    // One client on a set: the files on disk, and what its cache says of the file
+    // it last read each table from in the load it is on.
+    private sealed class Client
+    {
+        private readonly string _setDir;
+        private readonly Dictionary<string, string> _asRead = new(StringComparer.OrdinalIgnoreCase);
 
-    private string TableFile(string table) => Path.Combine(_dir, Set, table + ".json");
+        public Client(string setDir)
+        {
+            _setDir = setDir;
+            Watch = new RankingWorldWatch(_asRead.GetValueOrDefault, table => RankingStampReader.TableOnDisk(_setDir, table));
+        }
+
+        public RankingWorldWatch Watch { get; }
+        public object Load { get; private set; } = new();
+
+        // The cache reads the table's file as it is now, as a first lookup does and
+        // as a lookup after the idle sweep dropped the table does.
+        public void Read(params string[] tables)
+        {
+            foreach (string table in tables) _asRead[table] = RankingStampReader.TableOnDisk(_setDir, table)!;
+        }
+
+        // The set is read in again: a switch back, a reload, an import here.
+        public void Reload()
+        {
+            _asRead.Clear();
+            Load = new object();
+        }
+
+        public RankingWorld? World(out string? why) => Watch.Now(Load, "s", out why);
+        public RankingWorld? World() => World(out _);
+    }
+
+    private string TableFile(string table) => Path.Combine(_dir, table + ".json");
 
     // A set with every table the simulator reads but Lairs, and one it doesn't.
-    private GameDataCache LoadedSet()
+    private Client OnASet()
     {
-        Directory.CreateDirectory(Path.Combine(_dir, Set));
         foreach (string table in RankingWorld.TableNames.Where(t => t != "Lairs").Append("Shops"))
             File.WriteAllText(TableFile(table), """[{"Number":1}]""");
-        var cache = new GameDataCache(_dir);
-        cache.SwitchSet(Set);
-        return cache;
+        return new Client(_dir);
     }
 
     // The file as another client's import leaves it: other rows, another length.
-    private void ImportedElsewhere(string table) =>
-        File.WriteAllText(TableFile(table), """[{"Number":1},{"Number":2}]""");
-
-    private static RankingWorld WorldOf(GameDataCache cache, out IReadOnlyList<string> changed) =>
-        new(LoopSimulator.SimulatorVersion, cache.TableStampsInUse(RankingWorld.TableNames, out changed), "s");
+    private void ImportedElsewhere(params string[] tables)
+    {
+        foreach (string table in tables) File.WriteAllText(TableFile(table), """[{"Number":1},{"Number":2}]""");
+    }
 
     [Fact]
     public void ATableIsStampedByTheFileItWasReadFrom_NotTheOneOnDiskNow()
     {
-        GameDataCache cache = LoadedSet();
-        Assert.NotNull(cache.GetTable("Rooms"));
-        RankingWorld loaded = WorldOf(cache, out _);
-        Assert.Equal("none", loaded.Tables["Lairs"]);
+        Client client = OnASet();
+        client.Read("Rooms", "Monsters");
+        RankingWorld loaded = Assert.IsType<RankingWorld>(client.World());
+        Assert.Equal(LoopSimulator.SimulatorVersion, loaded.SimulatorVersion);
+        Assert.Equal(RankingWorldWatch.NoTable, loaded.Tables["Lairs"]);
 
         // Another client imports the set while this one runs on the rows it read.
-        ImportedElsewhere("Rooms");
-        ImportedElsewhere("Shops");
-        RankingWorld made = WorldOf(cache, out IReadOnlyList<string> changed);
+        ImportedElsewhere("Rooms", "Shops");
+        RankingWorld made = Assert.IsType<RankingWorld>(client.World(out string? why));
+        Assert.Null(why);
         Assert.Null(made.DiffersFrom(loaded));
-        Assert.Empty(changed);
+        Assert.Empty(client.Watch.Changed);
 
         // After a restart the tables are the new ones, and that ranking is not of them.
-        var restarted = new GameDataCache(_dir);
-        restarted.SwitchSet(Set);
-        Assert.Contains("Rooms table has changed", WorldOf(restarted, out _).DiffersFrom(made));
+        Client restarted = new(_dir);
+        restarted.Read("Rooms", "Monsters");
+        Assert.Contains("Rooms table has changed", restarted.World()!.DiffersFrom(made));
     }
 
     [Fact]
-    public void ATableDroppedFromMemoryKeepsItsStamp_AndReadAgainFromTheSameFileIsTheSame()
+    public void ATableNotReadYetIsStampedFromItsFile_AndReadLaterFromThatFileIsTheSameStamp()
     {
-        GameDataCache cache = LoadedSet();
-        cache.GetTable("Rooms");
-        RankingWorld loaded = WorldOf(cache, out _);
+        Client client = OnASet();
+        client.Read("Rooms");
+        RankingWorld before = client.World()!;
 
-        cache.EvictIdle(TimeSpan.Zero);
-        Assert.False(cache.IsTableLoaded("Rooms"));
-        Assert.Null(WorldOf(cache, out IReadOnlyList<string> changed).DiffersFrom(loaded));
-        Assert.Empty(changed);
-
-        cache.GetTable("Rooms");
-        Assert.Null(WorldOf(cache, out changed).DiffersFrom(loaded));
-        Assert.Empty(changed);
+        // Read for the first time, or dropped from memory and read again, with the
+        // file as it was: nothing has changed.
+        client.Read("Items", "Rooms");
+        Assert.Null(client.World()!.DiffersFrom(before));
+        Assert.Empty(client.Watch.Changed);
     }
 
     [Fact]
-    public void ATableReadAgainFromAChangedFileHasNoOneStamp_UntilTheSetIsReadInAgain()
+    public void ATableReadAgainFromAChangedFileLeavesNoWorld_UntilTheSetIsReadInAgain()
     {
-        GameDataCache cache = LoadedSet();
-        cache.GetTable("Rooms");
-        RankingWorld loaded = WorldOf(cache, out _);
+        Client client = OnASet();
+        client.Read("Rooms", "Monsters");
+        RankingWorld loaded = client.World()!;
 
         // Dropped by the idle sweep, replaced on disk, read again: what was built at
         // load is from the old file and the rows from here on are the new one's.
-        cache.EvictIdle(TimeSpan.Zero);
         ImportedElsewhere("Rooms");
-        cache.GetTable("Rooms");
-        WorldOf(cache, out IReadOnlyList<string> changed);
-        Assert.Equal(new[] { "Rooms" }, changed);
+        client.Read("Rooms");
+        Assert.Null(client.World(out string? why));
+        Assert.Equal("Rooms was read again from a file that had changed since the set was loaded", why);
+        Assert.Equal(new[] { "Rooms" }, client.Watch.Changed);
 
-        // So is one stamped before it was ever read, and then read from another file.
-        ImportedElsewhere("Monsters");
-        cache.GetTable("Monsters");
-        WorldOf(cache, out changed);
-        Assert.Equal(new[] { "Monsters", "Rooms" }, changed);
+        // So is one stamped from its file before it was ever read, then read from another.
+        ImportedElsewhere("Items");
+        client.Read("Items");
+        Assert.Null(client.World(out why));
+        Assert.StartsWith("Items, Rooms were read again", why);
+
+        // Nothing mends it within the load, the old file put back included.
+        File.WriteAllText(TableFile("Rooms"), """[{"Number":1}]""");
+        client.Read("Rooms");
+        Assert.Null(client.World());
 
         // Read in again (an import here, a restart), everything is of the files now.
-        cache.ReloadActiveSet();
-        cache.GetTable("Rooms");
-        RankingWorld reloaded = WorldOf(cache, out changed);
-        Assert.Empty(changed);
-        Assert.Contains("Rooms, Monsters tables", reloaded.DiffersFrom(loaded));
+        client.Reload();
+        client.Read("Rooms", "Monsters", "Items");
+        RankingWorld reloaded = Assert.IsType<RankingWorld>(client.World());
+        Assert.Empty(client.Watch.Changed);
+        Assert.Contains("Rooms, Items tables have changed", reloaded.DiffersFrom(loaded));
     }
 
     [Fact]
-    public async System.Threading.Tasks.Task ATableReadAheadOfTheSwitchIsStampedByThatRead()
+    public void TheFirstReadIsRememberedFromTheHeartbeat_NotOnlyWhenARankingAsks()
     {
-        Directory.CreateDirectory(Path.Combine(_dir, Set));
-        File.WriteAllText(TableFile("Rooms"), """[{"Number":1}]""");
-        var before = new FileInfo(TableFile("Rooms"));
-        string asRead = $"{before.Length}:{before.LastWriteTimeUtc.Ticks}";
-        var cache = new GameDataCache(_dir);
-        await cache.PrewarmAsync(Set, new[] { "Rooms" });
+        Client client = OnASet();
+        client.Read("Rooms");
+        client.Watch.Observe(client.Load);
 
+        // No ranking has asked for the world yet; the re-read is caught all the same.
         ImportedElsewhere("Rooms");
-        cache.SwitchSet(Set);
-        cache.GetTable("Rooms");
-        Assert.Equal(asRead, cache.TableStampsInUse(new[] { "Rooms" }, out IReadOnlyList<string> changed)["Rooms"]);
-        Assert.Empty(changed);
+        client.Read("Rooms");
+        client.Watch.Observe(client.Load);
+
+        Assert.Equal(new[] { "Rooms" }, client.Watch.Changed);
+        Assert.Null(client.World());
+    }
+
+    [Fact]
+    public void ATableThatArrivesInTheSetAfterItWasStampedAsMissing_IsAChangeLikeAnyOther()
+    {
+        Client client = OnASet();
+        client.Read("Rooms");
+        Assert.Equal(RankingWorldWatch.NoTable, client.World()!.Tables["Lairs"]);
+
+        ImportedElsewhere("Lairs");
+        client.Read("Lairs");
+
+        Assert.Null(client.World(out string? why));
+        Assert.StartsWith("Lairs was read again", why);
+    }
+
+    [Fact]
+    public void ATableFileIsFoundWhateverItsCapitals_AndASetWithoutItHasNoStamp()
+    {
+        File.WriteAllText(Path.Combine(_dir, "rooms.json"), "[]");
+        var file = new FileInfo(Path.Combine(_dir, "rooms.json"));
+
+        Assert.Equal(RankingWorldWatch.Stamp(file.Length, file.LastWriteTimeUtc), RankingStampReader.TableOnDisk(_dir, "Rooms"));
+        Assert.Null(RankingStampReader.TableOnDisk(_dir, "Monsters"));
+        Assert.Null(RankingStampReader.TableOnDisk(Path.Combine(_dir, "missing"), "Rooms"));
     }
 
     // ----- The monster seed, as loaded ---------
