@@ -637,6 +637,19 @@ public sealed partial class CombatManager
         // recovery. Must precede the CombatSpellsWired gate below.
         VerifyEngagement();
 
+        // The user's attack took a break hold off without naming a monster we could
+        // place; their round is over, so pick from the room as a fresh fight would.
+        if (_repickAfterUserAttack)
+        {
+            _repickAfterUserAttack = false;
+            if (Fighting() && _currentTarget is null && _classifier.Current is { } afterUserAttack)
+            {
+                _log?.Combat(LogCategory, "the user's attack ended a break hold with no target of ours — picking one now");
+                OnEntitiesObserved(afterUserAttack);
+                return;
+            }
+        }
+
         // Follow-deferral fallback: we held our own room-entry pick waiting for the
         // followed player's attack announce (ShouldWaitForFollow), but a full round
         // elapsed with no announce (the tick is the round heartbeat, driven by the

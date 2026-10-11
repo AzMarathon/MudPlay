@@ -1236,6 +1236,14 @@ public partial class MainWindowViewModel : ObservableObject
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.SummonSettle.NoteRoomDisplayed();
         // Tells the hang-up item check that the room, floor list included, has been read.
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.HangupItems.NoteRoomDisplayed();
+        // Under a typed break's hold the combat engine asks to see the room once a
+        // fight in it goes quiet; a display that lists nobody is how an emptied room
+        // answers. A `look <direction>` shows the next room and answers nothing.
+        _roomDisplayParser.RoomParsed += _ =>
+        {
+            if (!AppServices.Current.RoomTracker.IsPeekSuppressed())
+                AppServices.Current.Combat.NoteRoomDisplayed();
+        };
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
             AppServices.Current.Conditions.IsConfuseFumbleLine,
@@ -3816,6 +3824,14 @@ public partial class MainWindowViewModel : ObservableObject
         // re-attack after the swap, and are left to it.
         if (typed && AppServices.Current.EngineGate.SendingUsersOwnCommand)
             AppServices.Current.OutboundGear.ObserveOutbound(data);
+        // Break observer — the user's own `break` holds the combat engine's attack on
+        // the monster it was fighting, and their own attack lets it go: typed, or
+        // sent by a macro, trigger or event of theirs. An engine's break or attack is
+        // neither, and the raw wire's lines (`sys goto` sends a break ahead of a
+        // jump) are an engine's although nothing wraps them.
+        if (typed && AppServices.Current.EngineGate.SendingUsersOwnCommand
+            && !AppServices.Current.SendingEngineRawCommand)
+            AppServices.Current.OutboundBreak.ObserveOutbound(data);
         // Sneak — a typed command that ends a sneak (search, gear, a door…) marks it
         // broken, the same as an engine send through the gate. Short lines only: a
         // command, not a paste.
