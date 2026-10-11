@@ -30,6 +30,13 @@ public sealed record RoomSpellDamageReading(
     IReadOnlyList<string> Conditions,
     string? Gap)
 {
+    // Set when the damage is a follow-on spell the data doesn't tie to the room
+    // spell and the user named (RoomSpellDamageClassifier's table of confirmed
+    // follow-ons): the spell that does the damage, and the buff it is cast for the
+    // want of. Paradigm's desert: desert damage #712, without waterskin #711.
+    public int FollowOnSpell { get; init; }
+    public int FollowOnWithoutBuff { get; init; }
+
     // The damage a timer started by the spell ends in, soonest first; empty for a
     // spell with no such timer.
     public IReadOnlyList<RoomSpellDamageStage> Timed { get; init; } = [];

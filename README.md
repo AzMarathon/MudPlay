@@ -13,6 +13,7 @@
 > - Settings → Periodic Damage Room Spells: a tick box for it, on by default
 > - Off with the master switch
 > - Bug report lists what was put on this way and what was set aside
+> - Periodic Damage Room Spells: Paradigm's desert rows show desert damage, 5–20, cast without the waterskin buff
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

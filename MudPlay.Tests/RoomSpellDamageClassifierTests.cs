@@ -365,6 +365,44 @@ public sealed class RoomSpellDamageClassifierTests
         Assert.Equal("textblock 2654 missing", r.Gap);
     }
 
+    // The same desert with desert damage #712 in the set, as Paradigm's Spells table
+    // has it: the user named it as what is cast for the want of the waterskin buff
+    // (2026-10-10), so its range is shown and the row says whose damage it is.
+    [Theory]
+    [InlineData(683, 2653, 2654)]
+    [InlineData(684, 2658, 2659)]
+    public void Reading_ParadigmDesert_ShowsTheFollowOnTheUserNamed(int roomSpell, int block, int missing)
+    {
+        Spell(roomSpell, 0, 0, (TextBlock, block), (DescMsg, 66));
+        Block(block, $"failspell 711 {missing}:random 2655\n");
+        Block(2655, "85:addexp 0\n99:message 2023\n");
+        Spell(712, 5, 20, (Damage, 0));
+
+        RoomSpellDamageReading r = Read(roomSpell);
+        Assert.Equal(RoomSpellDamage.EveryTick, r.Kind);
+        Assert.Equal("5–20", RoomSpellDamageText.Damage(r));
+        Assert.Equal((712, 711), (r.FollowOnSpell, r.FollowOnWithoutBuff));
+        Assert.Null(r.Gap);
+        Assert.Equal(
+            "every tick: desert damage is cast on a character without the waterskin buff",
+            RoomSpellDamageText.How(r, spellName: n => n == 712 ? "desert damage" : n == 711 ? "waterskin" : null));
+    }
+
+    [Fact]
+    public void Reading_AMissingBlockBehindAnyOtherRoomSpell_IsStillDamageOfUnknownSize()
+    {
+        // The table of named follow-ons is keyed by room spell: it reads nothing
+        // into a spell the user said nothing about.
+        Spell(9040, 0, 0, (TextBlock, 9041));
+        Block(9041, "failspell 711 9042\n");
+        Spell(712, 5, 20, (Damage, 0));
+
+        RoomSpellDamageReading r = Read(9040);
+        Assert.Equal("not in the data", RoomSpellDamageText.Damage(r));
+        Assert.Equal(0, r.FollowOnSpell);
+        Assert.Equal("textblock 9042 missing", r.Gap);
+    }
+
     // ----- a timer that ends in damage --------------------------------------
 
     // The drowning chain as the data has it: freezing water casts holding breath when

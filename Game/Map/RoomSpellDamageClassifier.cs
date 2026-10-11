@@ -41,6 +41,19 @@ public static class RoomSpellDamageClassifier
     // table whose lines reach 100 runs a line every time.
     private const int RollCeiling = 100;
 
+    // Follow-on spells the data does not tie to their room spell, on the user's
+    // word. Paradigm's two desert spells run `failspell 711 <block>` and the set
+    // has neither block, so nothing in it says what is cast on a character without
+    // the waterskin buff; the user confirmed it is desert damage #712, 5 to 20 a
+    // cast (2026-10-10, asked exactly that: "yes"). Read only where the block is
+    // missing: a set that has the block (Stock) is read from its own data. An
+    // entry goes in here on a confirmation and never on a guess.
+    private static readonly Dictionary<int, int> ConfirmedFollowOns = new()
+    {
+        [683] = 712,   // desert spell
+        [684] = 712,   // desert spell 2
+    };
+
     // spellOf resolves a spell number to its record, textblock a TBInfo number to its
     // entry; either returns null for a number the set doesn't have.
     public static RoomSpellDamageReading Classify(
@@ -48,7 +61,7 @@ public static class RoomSpellDamageClassifier
     {
         ArgumentNullException.ThrowIfNull(spellOf);
         ArgumentNullException.ThrowIfNull(textblock);
-        var walk = new Walk(spellOf, textblock);
+        var walk = new Walk(spell, spellOf, textblock);
         List<Hit> hits = walk.Spell(spell, [], 0);
         if (hits.Count == 0) return RoomSpellDamageReading.NoDamage(walk.Gap);
 
@@ -75,6 +88,8 @@ public static class RoomSpellDamageClassifier
                 .Where(static c => c.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             walk.Gap)
         {
+            FollowOnSpell = sized.Select(static h => h.FollowOn).FirstOrDefault(static f => f > 0),
+            FollowOnWithoutBuff = sized.Select(static h => h.WithoutBuff).FirstOrDefault(static b => b > 0),
             Timed = hits.Where(static h => h.Kind == RoomSpellDamage.AfterATimer)
                 .OrderBy(static h => h.AfterRounds)
                 .Select(static h => new RoomSpellDamageStage(h.Spell, h.Min, h.Max, h.AfterRounds))
@@ -86,12 +101,13 @@ public static class RoomSpellDamageClassifier
     // One damage spell a path ends in. Chance is the share of casts that reach it
     // past the table bands and EndCast% on the way (1 when there is none);
     // AfterRounds the durations of the spells whose ending leads to it (0 for
-    // damage the cast itself does).
+    // damage the cast itself does). FollowOn and WithoutBuff are set for damage read
+    // through ConfirmedFollowOns: the spell, and the buff whose absence casts it.
     private readonly record struct Hit(
         RoomSpellDamage Kind, int Spell, int Min, int Max, bool Grows, double Chance, bool SkillTest,
-        string[] Conditions, int AfterRounds = 0);
+        string[] Conditions, int AfterRounds = 0, int FollowOn = 0, int WithoutBuff = 0);
 
-    private sealed class Walk(Func<int, SpellFormulaInput?> spellOf, Func<int, TBInfoEntry?> textblock)
+    private sealed class Walk(int roomSpell, Func<int, SpellFormulaInput?> spellOf, Func<int, TBInfoEntry?> textblock)
     {
         // What is being read right now: a chain that comes back to one of these has
         // looped, and the second visit adds nothing the first won't find.
@@ -208,6 +224,16 @@ public static class RoomSpellDamageClassifier
                 {
                     // The second number is the block run when the buff is missing.
                     int absent = Number(words, 2);
+                    // A block the set lacks, behind a room spell whose follow-on
+                    // the user has named: read that spell, and say whose word it is.
+                    if (Is(verb, "failspell") && absent > 0 && textblock(absent) is null
+                        && ConfirmedFollowOns.TryGetValue(roomSpell, out int followOn) && spellOf(followOn) is not null)
+                    {
+                        int buff = Number(words, 1);
+                        foreach (Hit hit in Spell(followOn, conditions, depth + 1))
+                            hits.Add(hit with { FollowOn = followOn, WithoutBuff = buff });
+                        continue;
+                    }
                     hits.AddRange(Lines(absent, conditions, depth + 1));
                     // `failspell`: without the buff "the damage fires" (GAME_MECHANICS
                     // "Room-spell hazard shape 3 — buff check (`checkspell` /
