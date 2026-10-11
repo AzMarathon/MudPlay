@@ -531,7 +531,7 @@ public sealed class RoomHazardIndex
         { "cast", "teleport", "transfer", "checkspell", "failspell" };
 
     // Control-flow directives whose target block continues the same branch.
-    private static readonly string[] BranchFlowDirectives =
+    internal static readonly string[] BranchFlowDirectives =
         { "random", "linkto", "link", "goto" };
 
     // True when any textblock reachable from these roots contains a harmful directive.

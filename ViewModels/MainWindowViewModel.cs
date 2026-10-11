@@ -3835,7 +3835,13 @@ public partial class MainWindowViewModel : ObservableObject
         // to report, once it has gone; reporting it here as well judged every client
         // command twice.
         if (data.Length is > 0 and <= 128 && !AppServices.Current.EngineGate.SendingClientCommand)
-            AppServices.Current.NoteSentForSneak(System.Text.Encoding.Latin1.GetString(data).TrimEnd('\r', '\n', '\0'));
+        {
+            string sent = System.Text.Encoding.Latin1.GetString(data).TrimEnd('\r', '\n', '\0');
+            AppServices.Current.NoteSentForSneak(sent);
+            // A room command that casts a dispel ends a tracked hazard buff, judged
+            // at the same point and for the same reason: once per command.
+            AppServices.Current.NoteSentForRoomCommand(sent);
+        }
         // Chat router — capture engine-sent telepath "/<recipient> <message>"
         // bursts (party @-command broadcasts / nags) so the outgoing
         // conversation entry is attributed. Typed telepaths render on-screen

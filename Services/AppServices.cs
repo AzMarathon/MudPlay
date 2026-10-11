@@ -2404,6 +2404,15 @@ public sealed class AppServices
     public void NoteSentForSneak(string command) =>
         Stealth.NoteCommandSent(command, CharacterHasShadowRest, _itemUseStealth);
 
+    // A command of the room we stand in that casts a dispel takes a tracked hazard
+    // buff with it. Reported from the same two places as the sneak note above, so
+    // each command is judged once, typed or the client's own.
+    public void NoteSentForRoomCommand(string command)
+    {
+        if (RoomTracker.State.CurrentRoom is { Cmd: > 0 } room)
+            AutoHazardCounterProvisioner.OnRoomCommandSent(room, command);
+    }
+
     private Game.Stealth.ItemUseStealthRule? _itemUseStealth;
 
     // Sniffs a hand-typed PHYSICAL attack verb so Combat treats it as a user override
@@ -5490,7 +5499,11 @@ public sealed class AppServices
         // a sneak marks it broken so the next move re-sneaks.
         EngineGate.SetSneakHooks(
             takeForLater: cmd => Game.Stealth.SneakBreakingCommands.CanWait(cmd) && SneakGuard.TakeIfHeld(cmd),
-            sent: NoteSentForSneak);
+            sent: command =>
+            {
+                NoteSentForSneak(command);
+                NoteSentForRoomCommand(command);
+            });
         Stealth.SetAutoToggles(
             isAutoSneakEnabled: () => ReadAutoModeFlag(d => d.AutoSneak),
             isAutoHideEnabled:  () => ReadAutoModeFlag(d => d.AutoHide));
@@ -7898,7 +7911,8 @@ public sealed class AppServices
             autoSneakOn:    () => ReadAutoModeFlag(d => d.AutoSneak),
             // The buff has no wear-off line, so a room that strips it is known by
             // its spell: the index the cast pass skips buffing by.
-            roomStripsBuff: (roomSpell, buffSpell) => RoomBuffStrip.StripsBuff(roomSpell, buffSpell));
+            roomStripsBuff: (roomSpell, buffSpell) => RoomBuffStrip.StripsBuff(roomSpell, buffSpell),
+            commandStripsBuff: (roomCmd, command, buffSpell) => RoomBuffStrip.CommandStripsBuff(roomCmd, command, buffSpell));
         // The step into a hazard room waits for the answer to the `use` sent ahead
         // of it, and through the round when that answer is that the round's cast was
         // already made.

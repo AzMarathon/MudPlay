@@ -44,6 +44,9 @@ public sealed class HazardBuffRefreshTests : IDisposable
     private static readonly RoomKey Shallows = new(1, 5);
     private const int NegateMagic = 310;
     private const int StopDrowning = 515;
+    // The Bone Room's command textblock: `enter tapestry` casts negate magic and
+    // then teleports.
+    private const int TapestryCommands = 9498;
 
     private const int Waterskin = 60;
     private const int BuffSpell = 300;
@@ -121,7 +124,9 @@ public sealed class HazardBuffRefreshTests : IDisposable
                 sendBlocked: () => SendBlocked,
                 autoSneakOn: () => AutoSneak,
                 roomStripsBuff: (roomSpell, buffSpell) =>
-                    roomSpell == NegateMagic || (roomSpell == StopDrowning && buffSpell is 512 or 513));
+                    roomSpell == NegateMagic || (roomSpell == StopDrowning && buffSpell is 512 or 513),
+                commandStripsBuff: (roomCmd, command, _) =>
+                    roomCmd == TapestryCommands && command.Trim().Equals("enter tapestry", StringComparison.OrdinalIgnoreCase));
             Engine.SetWireSender(b => Wire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
             Engine.SetStepHold(Coordinator, (after, run) => Timers.Add((after, run)));
             Engine.UseSent += () => UsesSent++;
@@ -324,6 +329,73 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Assert.False(index.StripsBuff(515, 711));
         Assert.True(index.StripsBuff(515, 512));
         Assert.False(index.StripsBuff(683, 711));
+    }
+
+    // A room command can cast the dispel too (asked whether those should end the
+    // tracked buff: "yes", user, 2026-10-10). The command going out in that room is
+    // what is judged; any other command there leaves the buff alone.
+    [Fact]
+    public void ARoomCommandThatCastsADispel_EndsTheTrackedBuff()
+    {
+        Room boneRoom = new()
+        {
+            Key = new RoomKey(17, 1772), Name = "Bone Room", Cmd = TapestryCommands,
+            Exits = new Dictionary<Direction, RoomExit>(),
+        };
+        Field f = new();
+        f.Engine.OnServerLine(SwigLine);
+
+        f.Engine.OnRoomCommandSent(boneRoom, "look tapestry");
+        Assert.Single(f.Engine.DescribeTracking());
+
+        f.Engine.OnRoomCommandSent(boneRoom, "enter tapestry");
+        Assert.Empty(f.Engine.DescribeTracking());
+        Assert.Contains(f.LogLines, l => l.StartsWith("buff 300 taken off by `enter tapestry` in 17/1772 (Bone Room), a command that casts a dispel"));
+    }
+
+    // What the index reads for it: the casts of a room command's line and of a room
+    // spell's textblock, each through the blocks they hand over to. The cast pass's
+    // own "this room strips buffs" is asked of what the room spell does of itself,
+    // and stays as it was.
+    [Fact]
+    public void StripIndex_ReadsDispelsCastByARoomCommandAndByARoomSpellsTextblock()
+    {
+        string dir = Path.Combine(_root, "casts");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"), """
+            [ { "Map Number": 17, "Room Number": 1772, "Name": "Bone Room", "CMD": 9498 },
+              { "Map Number": 15, "Room Number": 1112, "Name": "Grand Altar", "CMD": 4011 },
+              { "Map Number": 1, "Room Number": 5, "Name": "Healer", "CMD": 159 },
+              { "Map Number": 17, "Room Number": 2980, "Name": "Ancient Fortress", "Spell": 1361 } ]
+            """);
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), """
+            [ { "Number": 310, "Abil-0": 73, "AbilVal-0": 0 },
+              { "Number": 645, "Abil-0": 73, "AbilVal-0": 0 },
+              { "Number": 223, "Abil-0": 122, "AbilVal-0": 143 },
+              { "Number": 1361, "Abil-0": 148, "AbilVal-0": 0, "MinBase": 4120, "MaxBase": 4120 } ]
+            """);
+        File.WriteAllText(Path.Combine(dir, "TBInfo.json"), """
+            [ { "Number": 9498, "Action": "enter tapestry:needmonster 1003 1373:message 3148:cast 310:teleport 1773 17:message 837\ngo tapestry:needmonster 1003 1373:message 3148:cast 310:teleport 1773 17:message 837" },
+              { "Number": 4011, "Action": "touch ruby:message 541:random 4013" },
+              { "Number": 4013, "Action": "cast 645:message 542" },
+              { "Number": 159, "Action": "buy cure disease:price 100 1560:cast 223" },
+              { "Number": 4120, "Action": "failroomitem 1891:clearitem 1958:cast 645:teleport 3090 17:summon 1016" } ]
+            """);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("casts");
+        RoomBuffStripIndex index = new(cache);
+        index.OnActiveSetChanged("casts");
+
+        Assert.True(index.CommandStripsBuff(9498, "enter tapestry", 711));
+        Assert.True(index.CommandStripsBuff(9498, " GO TAPESTRY ", 711));
+        Assert.False(index.CommandStripsBuff(9498, "look tapestry", 711));
+        Assert.True(index.CommandStripsBuff(4011, "touch ruby", 711));          // through `random`
+        Assert.False(index.CommandStripsBuff(159, "buy cure disease", 711));    // removes other spells by number
+        Assert.True(index.CommandStripsBuff(159, "buy cure disease", 143));
+
+        Assert.True(index.StripsBuff(1361, 711));
+        Assert.False(index.StripsBuffs(1361));
+        Assert.Equal(0, index.StripSpellCount);
     }
 
     // A transport token casts negate magic ahead of its teleport.

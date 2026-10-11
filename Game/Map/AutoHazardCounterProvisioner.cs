@@ -140,6 +140,9 @@ public sealed class AutoHazardCounterProvisioner
     // RoomBuffStripIndex.StripsBuff: a room's cast-on-enter spell (first) takes the
     // buff (second) off. Null → no room is known to.
     private readonly Func<int, int, bool>? _roomStripsBuff;
+    // RoomBuffStripIndex.CommandStripsBuff: in a room with this command textblock, the
+    // command's line casts a spell that takes the buff off. Null → none is known to.
+    private readonly Func<int, string, int, bool>? _commandStripsBuff;
     // Charges left in the carried item, null when the client doesn't know.
     private readonly Func<int, int?>? _chargesLeft;
     // The engine send gate is up (a password prompt, mortally wounded): a send now
@@ -243,7 +246,8 @@ public sealed class AutoHazardCounterProvisioner
         Func<int, int?>? chargesLeft = null,
         Func<bool>? sendBlocked = null,
         Func<bool>? autoSneakOn = null,
-        Func<int, int, bool>? roomStripsBuff = null)
+        Func<int, int, bool>? roomStripsBuff = null,
+        Func<int, string, int, bool>? commandStripsBuff = null)
     {
         ArgumentNullException.ThrowIfNull(resolveRoom);
         ArgumentNullException.ThrowIfNull(hazardForSpell);
@@ -266,6 +270,7 @@ public sealed class AutoHazardCounterProvisioner
         _sendBlocked = sendBlocked;
         _autoSneakOn = autoSneakOn;
         _roomStripsBuff = roomStripsBuff;
+        _commandStripsBuff = commandStripsBuff;
     }
 
     // Bind the wire-sender — the gate-wrapped engine pipeline from
@@ -421,6 +426,24 @@ public sealed class AutoHazardCounterProvisioner
         DropTracked(gone);
         _log?.Info(LogCategory,
             $"buff {string.Join(", ", gone)} taken off by {Describe(room)}, whose spell strips it — treated as off until used again");
+    }
+
+    // A command went out in a room whose command textblock answers it with a dispel
+    // (`enter tapestry`, `enter portal`, `go courtyard`: negate magic, then a
+    // teleport). Judged by the command sent, since no line of the game's is read for
+    // it: a cast written ahead of the line's conditions lands whether or not the rest
+    // goes through, and one behind a condition that failed did not, in which case
+    // the buff is only forgotten early.
+    public void OnRoomCommandSent(Room room, string command)
+    {
+        if (_commandStripsBuff is null || _on.Count == 0 || room.Cmd <= 0) return;
+        List<int>? gone = null;
+        foreach (int buffSpell in _on.Keys)
+            if (_commandStripsBuff(room.Cmd, command, buffSpell)) (gone ??= new()).Add(buffSpell);
+        if (gone is null) return;
+        DropTracked(gone);
+        _log?.Info(LogCategory,
+            $"buff {string.Join(", ", gone)} taken off by `{command.Trim()}` in {Describe(room)}, a command that casts a dispel — treated as off until used again");
     }
 
     // Negate magic was cast on the character by something other than a room's own
