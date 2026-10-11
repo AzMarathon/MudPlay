@@ -673,7 +673,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
             string summary = $"L{level} from {here.Map}/{here.Room}: {safe} safe option(s) (areas and your loops), best first; {ranked.Count - safe} where you died listed last"
                 + (gatedAreas > 0 ? $"; {gatedAreas} area(s) you can't reach at L{level} left out" : "") + skipped
                 + ". Pick one to see its route and details, show it on the map, and save it as a loop to run.";
-            ListFinishedRanking(new AreaRanking(
+            ListFinishedRanking(owner, new AreaRanking(
                 ranked, level, step, hours, runs, here, RealmLabel, summary, DateTimeOffset.Now, ownLevel));
             _log?.Info("Simulator", $"ranked {ranked.Count} options at L{level} for {owner.Label} ({gatedAreas} areas unreachable, " +
                 $"{skippedAreas} areas and {skippedLoops} loops skipped): " +
@@ -698,13 +698,16 @@ public sealed partial class SimulatorViewModel : ObservableObject
         }
     }
 
-    // A ranking finished uncancelled, so for the pairing on show (a switch cancels
-    // one that is running): it is kept as that pairing's, and listed.
-    internal void ListFinishedRanking(AreaRanking ranking)
+    // A ranking finished for owner, the pairing it was started for: it is kept as
+    // that pairing's, and listed while that pairing is still the one on show. A
+    // switch cancels a ranking that is running, so one that finishes does so for
+    // the pairing on show; keying on its own owner is what makes that true of a
+    // ranking kept even should a path ever finish one late.
+    internal void ListFinishedRanking(SimulatorOwner owner, AreaRanking ranking)
     {
-        if (_rankings.Keep(_owner, ranking) is { } dropped)
+        if (_rankings.Keep(owner, ranking) is { } dropped)
             _log?.Info("Simulator", $"the area ranking for {dropped.Label} was let go: only the last {AreaRankingStore.MaxKept} made or shown are kept");
-        ShowRanking(ranking);
+        if (owner == _owner) ShowRanking(ranking);
     }
 
     // A ranking for owner was cancelled or failed. Its own list is left empty with

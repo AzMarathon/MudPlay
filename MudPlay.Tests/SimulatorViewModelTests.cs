@@ -68,6 +68,10 @@ public sealed class SimulatorViewModelTests : IDisposable
             Simulator.CharacterChanged();
         }
 
+        // A ranking started for the pairing now loaded finishes, uncancelled.
+        public void Finish(AreaRanking ranking) =>
+            Simulator.ListFinishedRanking(new SimulatorOwner(Cache.ActiveSet, Character), ranking);
+
         // The loaded profile comes to go by another name, as the app's store and the
         // Navigation window's Simulator hear of it.
         public void Rename(string? character)
@@ -296,7 +300,7 @@ public sealed class SimulatorViewModelTests : IDisposable
     {
         using Harness h = Build(saveLoops: true);
         AreaRanking onAlpha = Ranking("Hills");
-        h.Simulator.ListFinishedRanking(onAlpha);
+        h.Finish(onAlpha);
         h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
         h.Simulator.SimResult = new LoopSimSummary(new[] { Run });
         Assert.Equal(2, h.Session.Clicks.Count);
@@ -323,9 +327,9 @@ public sealed class SimulatorViewModelTests : IDisposable
     {
         using Harness h = Build();
         AreaRanking onAlpha = Ranking("Hills"), onBeta = Ranking("Marsh", level: 55);
-        h.Simulator.ListFinishedRanking(onAlpha);
+        h.Finish(onAlpha);
         h.Cache.SwitchSet("beta");
-        h.Simulator.ListFinishedRanking(onBeta);
+        h.Finish(onBeta);
         Assert.Equal(onBeta.Rows, h.Simulator.Rankings);
 
         h.Cache.SwitchSet("alpha");
@@ -351,7 +355,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         AreaRanking made = Ranking("Hills");
 
         // Just made: its own summary and nothing in front of it.
-        h.Simulator.ListFinishedRanking(made);
+        h.Finish(made);
         Assert.Equal(made.Summary, h.Simulator.RankStatus);
         Assert.False(h.Simulator.RankingNotCurrent);
 
@@ -371,7 +375,7 @@ public sealed class SimulatorViewModelTests : IDisposable
 
         // Ranked again at the new level: current, and plain.
         AreaRanking again = Ranking("Hills") with { CharacterLevel = 31 };
-        h.Simulator.ListFinishedRanking(again);
+        h.Finish(again);
         Assert.Equal(again.Summary, h.Simulator.RankStatus);
         Assert.False(h.Simulator.RankingNotCurrent);
     }
@@ -381,7 +385,7 @@ public sealed class SimulatorViewModelTests : IDisposable
     {
         using Harness h = Build();
         AreaRanking ones = Ranking("Hills"), twos = Ranking("Marsh");
-        h.Simulator.ListFinishedRanking(ones);
+        h.Finish(ones);
 
         h.Load(null);
         Assert.Empty(h.Simulator.Rankings);
@@ -389,7 +393,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.Empty(h.Simulator.Rankings);
         Assert.Equal("", h.Simulator.RankStatus);
 
-        h.Simulator.ListFinishedRanking(twos);
+        h.Finish(twos);
         h.Load(One);
         Assert.Equal(ones.Rows, h.Simulator.Rankings);
 
@@ -406,7 +410,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         using Harness h = Build();
         const string renamed = "board/renamed";
         AreaRanking onAlpha = Ranking("Hills"), onBeta = Ranking("Marsh");
-        h.Simulator.ListFinishedRanking(onAlpha);
+        h.Finish(onAlpha);
         h.Rankings.Keep(new SimulatorOwner("beta", One), onBeta);
 
         h.Rename(renamed);
@@ -418,7 +422,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.Equal(onBeta.Rows, h.Simulator.Rankings);
         // A ranking made after the rename is the renamed character's.
         AreaRanking again = Ranking("Fen");
-        h.Simulator.ListFinishedRanking(again);
+        h.Finish(again);
         Assert.Same(again, h.Rankings.Get(new SimulatorOwner("beta", renamed)));
 
         // Another profile later given the old name is another character.
@@ -434,16 +438,33 @@ public sealed class SimulatorViewModelTests : IDisposable
         using Harness h = Build();
         h.Load(null);
         AreaRanking asDraft = Ranking("Hills");
-        h.Simulator.ListFinishedRanking(asDraft);
+        h.Finish(asDraft);
 
         h.Rename("board/named");
         AreaRanking asNamed = Ranking("Marsh");
-        h.Simulator.ListFinishedRanking(asNamed);
+        h.Finish(asNamed);
 
         h.Load(null);
         Assert.Empty(h.Simulator.Rankings);
         h.Load("board/named");
         Assert.Equal(asNamed.Rows, h.Simulator.Rankings);
+    }
+
+    [Fact]
+    public void ARankingIsKeptForThePairingItWasStartedForWhateverIsOnShow()
+    {
+        using Harness h = Build();
+        var alpha = new SimulatorOwner("alpha", One);
+        AreaRanking onBeta = Ranking("Marsh"), late = Ranking("Hills");
+        h.Cache.SwitchSet("beta");
+        h.Finish(onBeta);
+
+        h.Simulator.ListFinishedRanking(alpha, late);
+
+        Assert.Equal(onBeta.Rows, h.Simulator.Rankings);
+        Assert.Equal(onBeta.Summary, h.Simulator.RankStatus);
+        Assert.Same(late, h.Rankings.Get(alpha));
+        Assert.Same(onBeta, h.Rankings.Get(new SimulatorOwner("beta", One)));
     }
 
     [Fact]
@@ -470,7 +491,7 @@ public sealed class SimulatorViewModelTests : IDisposable
     public void AGameDataSetImportedAgainFromAnotherSetListsNothingOnTheWayBack()
     {
         using Harness h = Build(saveLoops: true);
-        h.Simulator.ListFinishedRanking(Ranking("Hills"));
+        h.Finish(Ranking("Hills"));
         h.Cache.SwitchSet("beta");
 
         // What an import of alpha does when it finishes, whichever set is active;
@@ -489,7 +510,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         using Harness h = Build();
         h.Rankings.Keep(new SimulatorOwner("alpha", Two), Ranking("Marsh"));
         h.Rankings.Keep(new SimulatorOwner("beta", One), Ranking("Fen"));
-        h.Simulator.ListFinishedRanking(Ranking("Hills"));
+        h.Finish(Ranking("Hills"));
         h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
 
         h.Cache.ReloadActiveSet();
@@ -508,7 +529,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         var kept = new AreaRankingStore();
         AreaRanking ranking = Ranking("Hills");
         using (Harness first = Build(rankings: kept))
-            first.Simulator.ListFinishedRanking(ranking);
+            first.Finish(ranking);
 
         using Harness reopened = Build(rankings: kept);
 
@@ -520,7 +541,7 @@ public sealed class SimulatorViewModelTests : IDisposable
     public void TheBugReportSaysWhoseResultsAreListed()
     {
         using Harness h = Build();
-        h.Simulator.ListFinishedRanking(Ranking("Hills"));
+        h.Finish(Ranking("Hills"));
         Assert.Equal("alpha", h.Simulator.ToSnapshot().ForSet);
         Assert.Equal(One, h.Simulator.ToSnapshot().ForCharacter);
         Assert.NotNull(h.Simulator.ToSnapshot().AreaRanking);
