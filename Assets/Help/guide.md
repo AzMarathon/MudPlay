@@ -980,7 +980,7 @@ Type the command as the whole message, with `@` as its first character. Three ch
 - **Gangpath:** `bg @timer dragon`. Every MudPlay client in the gang that grants you the command answers, on gangpath, where the whole gang reads it.
 - **Say:** `.@party rest`. Every MudPlay client in the room that grants you the command acts on it. An answer comes back as a say directed at you (`>Leader {reply}`), so in a full room you can tell it is yours.
 
-Gossip, auction, yell and broadcast lines are never read as commands.
+Gossip, auction and yell lines are never read as commands. Neither are lines on the broadcast channel (the numbered one you `join`), with one exception you have to switch on: the client-to-client transfers, see *Sharing data between clients*.
 
 How the line is read:
 
@@ -2419,11 +2419,18 @@ Three commands hand whole data sets from one MudPlay client to another over chat
 |---|---|
 | `@loop send` | telepath |
 | `@roomba sync` | telepath, gangpath |
-| `@timer sync` | say, telepath, gangpath, broadcast |
+| `@timer sync` | say, telepath, gangpath, broadcast (with the broadcast box unticked on both clients, see below) |
 
 *Broadcast* is the game's numbered channel: the one you `join <n>` and speak on with `br`, `'` or `-`, heard as `Broadcast from <name> "…"`. It is not gossip or auction.
 
-Both ends keep to the table. The client asked refuses a request that comes by another channel, saying where the transfer does work (a refusal, so it follows the **Warn** setting). The client asking takes no data that comes by another channel, and when you type the request on one, it opens nothing and tells you so in the terminal. A channel you switched off for remote commands on Settings → Talk stays off whatever the table allows; the broadcast channel has no such switch, and is listened to for `@timer sync` alone: no other remote command is followed or answered there.
+Both ends keep to the table. The client asked refuses a request that comes by another channel, saying where the transfer does work (a refusal, so it follows the **Warn** setting, and goes back on the channel the request came by). The client asking takes no data that comes by another channel, and when you type the request on one, it opens nothing and tells you so in the terminal. A channel you switched off for remote commands on Settings → Talk stays off whatever the table allows.
+
+**The broadcast channel starts switched off.** It is public: anyone can join a numbered channel. Settings → Talk → **Disallow @commands from broadcast** is ticked by default, and while it is, your client reads nothing on that channel: no request, and no answer to a request of your own. For a timer sync on broadcast the box must be unticked on **both** clients, the one asking and the one answering. With it unticked:
+
+- `@timer sync` is followed there, and answered on the channel.
+- `@roomba sync` and `@loop send` are refused there with where they do work.
+- A player without the permission for one of those three gets the Failure message there.
+- **No other remote command is read on that channel.** It is not followed, answered, refused or relayed.
 
 #### @timer
 
@@ -2435,7 +2442,7 @@ Reports the boss respawn timers you are tracking, or hands them to the sender's 
 - `@timer dragon`: the timers of bosses whose name contains the text, ignoring case.
 - `@timer sync`: send the timers as data, for another MudPlay client to merge.
 
-**Who may send it:** a player with **Query boss timers**, by telepath, gangpath or say. `@timer sync` may also be asked on the **broadcast channel** (the numbered channel spoken on with `br`), and is answered there; the readable `@timer` report is not.
+**Who may send it:** a player with **Query boss timers**, by telepath, gangpath or say. `@timer sync` may also be asked on the **broadcast channel** (the numbered channel spoken on with `br`), and is answered there, once you have unticked **Disallow @commands from broadcast** on Settings → Talk; the readable `@timer` report is not read there.
 
 | Reply | When |
 |---|---|
@@ -2447,6 +2454,7 @@ Reports the boss respawn timers you are tracking, or hands them to the sender's 
 | `no boss timers active` | Bare, and none is running. |
 | `expired` | A name was given and no running timer matches it. |
 | `@timerdata <i>/<k> <data>` | `@timer sync`: up to sixty timers, packed into as many lines as it takes. |
+| `@timer sync answered here less than a minute ago - ask again shortly` | **Refusal:** a second `@timer sync` from the same player on the broadcast channel inside a minute. On the other channels there is no such limit. |
 | the Failure message | **Refusal:** the sender doesn't hold Query boss timers. |
 
 Times read `2h14m`, or `45m` under an hour.
@@ -2454,8 +2462,10 @@ Times read `2h14m`, or `45m` under an hour.
 **Situations:**
 
 - **The asking side of `@timer sync`:** sending it, by hand or with **Request Timers** on the Bosses tab, opens the merge window that collects the answers. See **Bosses** under *Quests, Bosses, and Deaths*.
-- **On gangpath, say or the broadcast channel** every client that grants you the permission answers, each with its own set.
-- **Answers are taken on all four channels**, whichever one you asked on. A client that is sneaking answers a said request by telepath, since it won't speak aloud, and that answer is taken like any other.
+- **On gangpath, say or the broadcast channel** every client that grants you the permission answers, each with its own set, and everyone on the channel sees the lines. The merge window keeps one set per player and folds them together, so several answers are what you want; each is a handful of lines (sixty timers at most).
+- **On the broadcast channel each client answers a player once a minute.** Asked again sooner it sends one line saying so in place of the timers.
+- **Answers are taken on all four channels**, whichever one you asked on. A client that is sneaking answers a said request by telepath, since it won't speak aloud, and that answer is taken like any other. Answers on the broadcast channel are taken only while **Disallow @commands from broadcast** is unticked.
+- **Request Timers with Broadcast chosen and that box ticked** asks nothing and says which box to untick. Typed by hand with the box ticked, your client shows `[the broadcast channel is switched off for @commands: …]` and opens no window.
 - **On the broadcast channel the game does not show you your own line on Stock**, so a `br @timer sync` typed by hand there does not open the merge window; use **Request Timers**, which opens it before asking. On Paradigm your own broadcast is echoed and the window opens either way.
 - **Not on a channel**, `br` is not a command to the game and the words may be said aloud instead. `join <n>` first.
 
@@ -3233,7 +3243,7 @@ Tick **Grab All** (default off) to blindly grab a boss's loot the instant it's a
 - an **item** that just sits in the room (a box, e.g. a bogwood box or Pastor Lander's box) — `get` it every time you **walk into** the room.
 - **neither** (an unresolvable name — a touch-to-awaken mechanic like Iceforge) — Grab All doesn't apply, so its cell shows a muted dash reading *"Cannot resolve to a specific monster or item"*.
 
-**Sync Timers…** shares respawn timers with other MudPlay users. Pick a channel (Gang, Telepath to a named player, Local say, or Broadcast: the numbered channel you have joined, spoken on with `br`) and click **Request Timers**; the client sends `@timer sync` on that channel, and any other MudPlay user who receives it (and grants the `@timer` remote command) replies with their active timers. Most arrivals need no action from you:
+**Sync Timers…** shares respawn timers with other MudPlay users. Pick a channel (Gang, Telepath to a named player, Local say, or Broadcast: the numbered channel you have joined, spoken on with `br`, which works once **Disallow @commands from broadcast** is unticked on Settings → Talk, on your client and on theirs) and click **Request Timers**; the client sends `@timer sync` on that channel, and any other MudPlay user who receives it (and grants the `@timer` remote command) replies with their active timers. Most arrivals need no action from you:
 
 - a timer for a boss you track but have **no** timer for is **adopted automatically**.
 - one that matches what you already hold is left alone (co-kills marked seconds apart count as the same timer).
@@ -5971,7 +5981,14 @@ Settings → Talk.
 ### Disallow @commands from telepaths / pages, gangpaths, or say (local)
 
 **Default:** all Off
-**What it does:** Three separate switches to drop `@`-commands arriving via each specific channel (telepaths and pages, guild/gang chat, local room speech). These are the only three channels MudPlay listens for `@`-commands on at all.
+**What it does:** Three separate switches to drop `@`-commands arriving via each specific channel (telepaths and pages, guild/gang chat, local room speech). With the broadcast channel below, these are the only channels MudPlay listens for `@`-commands on at all.
+
+### Disallow @commands from broadcast
+
+**Default:** On (ticked). A profile saved before this setting existed also reads as ticked.
+**What it does:** Drops everything arriving on the **broadcast channel**: the game's numbered channel, the one you `join <n>` and speak on with `br`. It is ticked by default because that channel is public: anyone can join one. While it is ticked your client reads nothing there, neither another player's request nor the answers to a request of your own.
+**Unticked:** only the three client-to-client transfers are read on that channel. `@timer sync` is followed and answered there; `@roomba sync` and `@loop send` are refused there with where they do work; a player without the permission gets the Failure message. **No other `@`-command is read on the broadcast channel**, whatever permissions the sender holds. See *Sharing data between clients* under Remote @-commands.
+**Important notes:** For a timer sync on broadcast the box must be unticked on both clients. Refusals there follow **Warn sender on invalid / denied remote command** like any other, and are seen by everyone on the channel.
 
 ### Warn sender on invalid / denied remote command
 
