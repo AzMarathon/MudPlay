@@ -11,7 +11,7 @@
 - Bug report: the build, when the client started, your system, the connection, open windows, pending work, triggers / aliases / macros, remote-command permissions, death history
 - Bug report: state first, settings after, histories last and oldest first; under 1 MB without the wire sections
 - The wire sections follow the Wire Inspector's tick boxes and show when each read arrived
-- The last 2 to 4 minutes of the program log are always on disk, for a hang or a forced kill (Logs folder, `…-recent-a.log` / `-b.log`)
+- The last 3 to 6 minutes of the program log are always on disk, for a hang or a forced kill (Logs folder, `…-recent-a.log` / `-b.log`)
 - Program log: a startup block, a status line every 3 minutes, and how a walk ended even with the Navigation window closed
 - `@suicide` sends the stored password only when the game asks for it
 - A custom statline counts as the game prompt, for `@suicide` and for the list of commands sent

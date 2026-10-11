@@ -10,7 +10,7 @@ namespace MudPlay.Services;
 // Two files per client process, written in turn. Each takes entries for
 // SegmentSpan (or until SegmentMaxBytes); then the other is emptied and takes
 // over. What a reader finds after a kill is the full older file and the part-
-// written newer one: between one and two spans, two to four minutes, of log.
+// written newer one: between one and two spans, three to six minutes, of log.
 // Each file opens with the same header (build, system, start time), so either
 // one stands on its own. The pair can never pass 2 × SegmentMaxBytes.
 //
@@ -30,11 +30,12 @@ namespace MudPlay.Services;
 // disk from whenever it was switched on, and is the record.
 public sealed class RecentLogFile : IAsyncDisposable
 {
-    // Two of these are what survives: 2 to 4 minutes.
-    public static readonly TimeSpan SegmentSpan = TimeSpan.FromMinutes(2);
+    // What survives is the full older file and the part-written newer one: never
+    // less than one span, so at least the last 3 minutes, and up to 6.
+    public static readonly TimeSpan SegmentSpan = TimeSpan.FromMinutes(3);
 
     // A busy session logs about 8 entries of about 100 bytes a second: some
-    // 100 KB a span. The cap leaves ten times that for a burst before a file
+    // 150 KB a span. The cap leaves seven times that for a burst before a file
     // rolls early.
     public const int SegmentMaxBytes = 1024 * 1024;
 
