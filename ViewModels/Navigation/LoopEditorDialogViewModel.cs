@@ -27,11 +27,11 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // is modeless and stays open through a switch of game data, after which Save
     // would write it into the other set's Loops folder, a file every character and
     // running client on that set reads, and a room added would be the other set's.
-    private readonly string? _openedOn;
+    private readonly OpenedOnGameData _openedOn;
 
     // Why the loop can't be saved or added to right now, or null: another game-data
     // set is active than the one it was opened on.
-    private string? OtherGameDataRefusal() => OpenedOnGameData.Refusal("loop", _openedOn, _loops.SetName);
+    private string? OtherGameDataRefusal() => _openedOn.Refusal("loop", _loops.SetName);
     private readonly RoomGraphManager _graph;
     private readonly LoopRunner? _runner;
     private readonly ConfirmService? _confirm;
@@ -114,7 +114,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         LoopRunner? runner = null,
         ConfirmService? confirm = null,
         bool isNew = false,
-        string? roomsOf = null)
+        OpenedOnGameData? roomsOf = null)
     {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(loops);
@@ -122,8 +122,8 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         _original = loop;
         _loops = loops;
         // roomsOf names the set for a loop that didn't come off the active one's
-        // catalogue or map: the running loop is kept through a switch of game data.
-        _openedOn = roomsOf ?? loops.SetName;
+        // catalogue or map: the running loop, stamped with the set it was started on.
+        _openedOn = roomsOf ?? new OpenedOnGameData(loops.SetName);
         _graph = graph;
         _runner = runner;
         _confirm = confirm;

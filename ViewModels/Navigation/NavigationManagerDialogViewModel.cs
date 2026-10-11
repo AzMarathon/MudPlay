@@ -600,15 +600,21 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     private void SaveRunningLoop()
     {
         if (_runner?.CurrentLoop is not { } running) return;
-        // A switch of game data doesn't stop a run: the loop is still the rooms of
-        // the set it was started on, and isn't saved into another's.
-        if (OpenedOnGameData.Refusal("loop", _runner.LastRunLoopGameData ?? _loops.SetName, _loops.SetName) is { } refusal)
+        // The loop is the rooms of the set it was started on, and isn't saved into
+        // another's. A switch of game data stops a run, so this is for one something
+        // started again from before it.
+        OpenedOnGameData startedOn = new(_runner.LastRunLoopGameData);
+        if (startedOn.Refusal("loop", _loops.SetName) is { } refusal)
         {
-            ImportStatus = refusal;
+            ImportStatus = _runningLoopSaveRefusal = refusal;
             _log?.Info("Navigation",
-                $"running loop '{running.Name}' not saved: {OpenedOnGameData.LogReason(_runner.LastRunLoopGameData, _loops.SetName)}");
+                $"running loop '{running.Name}' not saved: {startedOn.LogReason(_loops.SetName)}");
             return;
         }
+        // The refusal isn't left standing over a save that went through. The line
+        // is the import's too, so whatever else it says stays.
+        if (_runningLoopSaveRefusal is { } said && ImportStatus == said) ImportStatus = string.Empty;
+        _runningLoopSaveRefusal = null;
         string saveName = (RunningLoopName ?? string.Empty).Trim();
         if (saveName.Length == 0) saveName = running.Name;
 
@@ -636,6 +642,10 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     private string _importStatus = string.Empty;
 
     public bool HasImportStatus => !string.IsNullOrEmpty(ImportStatus);
+
+    // The refusal SaveRunningLoop last put on that line, so the save that goes
+    // through can take it off again without wiping an import's status.
+    private string? _runningLoopSaveRefusal;
 
     // Pick a .mp file and open the import review: the file decoded beside our
     // translation, editable, accepted or rejected there.

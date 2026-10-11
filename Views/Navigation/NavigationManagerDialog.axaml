@@ -149,11 +149,12 @@
                              the per-loop / per-lair Run + action buttons in the
                              tree rows below. -->
                         <StackPanel Margin="0,0,14,0">
-                            <!-- .mp import status line — empty until the
-                                 user clicks "Import .mp" the first time.
-                                 Persists for the lifetime of the dialog
-                                 so the user can re-read the last
-                                 attempt's reason. -->
+                            <!-- Status line: the last .mp import's outcome,
+                                 or why the running loop's Save below was
+                                 refused. Empty until one of them has
+                                 something to say; an import's stays for the
+                                 lifetime of the dialog so the user can
+                                 re-read the last attempt's reason. -->
                             <Border IsVisible="{Binding HasImportStatus}"
                                     Padding="6,4"
                                     Margin="0,0,0,2"

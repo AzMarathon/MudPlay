@@ -2164,9 +2164,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // Loop running: snapshot from the runner. A switch of game data doesn't stop
-        // a run, so the editor is told the set the loop was started on: its rooms
-        // are that set's, and under another it refuses to save them.
+        // Loop running: snapshot from the runner. The editor is told the set the loop
+        // was started on: its rooms are that set's, and under another (a loop from
+        // before a switch, started again) it refuses to save them.
         if (_services.LoopRunner.CurrentLoop is { } running)
         {
             Loop draft = new(running.Name, running.Waypoints)
@@ -2176,7 +2176,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             LoopEditorDialogViewModel vm = new(
                 draft, _services.Loops, _services.RoomGraph,
                 _services.LoopRunner, _services.Confirm, isNew: true,
-                roomsOf: _services.LoopRunner.LastRunLoopGameData);
+                roomsOf: new OpenedOnGameData(_services.LoopRunner.LastRunLoopGameData));
             await _services.Dialogs
                 .OpenWindowAsync<LoopEditorDialogViewModel, Loop?>(vm);
         }
@@ -2205,12 +2205,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             name: $"Lairs {DateTime.Now:HH-mm-ss}",
             markers: markers);
 
-        // Marks a run is on are kept through a switch of game data: the editor is
-        // told the set they were placed on, and under another it refuses to save them.
+        // The editor is told the set the marks were placed on: under another (marks an
+        // event put back for a run from before a switch) it refuses to save them.
         LairEditorDialogViewModel vm = new(
             draft, _services.Lairs, _services.RoomGraph,
             _services.LairTimers, _services.Confirm, isNew: true, log: _services.Log,
-            roomsOf: _services.AutoLair.MarksGameData);
+            roomsOf: new OpenedOnGameData(_services.AutoLair.MarksGameData));
         await _services.Dialogs
             .OpenWindowAsync<LairEditorDialogViewModel, Models.Profile.LairSetup?>(vm);
     }
@@ -5645,6 +5645,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
     }
 
+    // The running loop the "live edits last for this run only" notice was last said
+    // for (EditRunningWaypointAction).
+    private Loop? _liveEditNotSavedSaidFor;
+
     // Click a running-loop rail row → open the same per-waypoint action editor the
     // builder uses, and apply the result LIVE to the running loop — no stop/restart.
     // Add / remove / reorder of rooms isn't offered here (see the green rail template),
@@ -5689,13 +5693,25 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         wp.RestHereMana = result.RestHereMana;
 
         _services.LoopRunner.ReconcileExpandedSteps();
-        // A switch of game data doesn't stop a run, and a loop of this name on the
-        // set active now is another loop: the change stays with the run and isn't
-        // written over that one.
-        string? startedOn = _services.LoopRunner.LastRunLoopGameData ?? _services.Loops.SetName;
-        if (OpenedOnGameData.Refusal("loop", startedOn, _services.Loops.SetName) is not null)
+        // A loop started on other game data than the active one (from before a
+        // switch, started again): a loop of its name on this set is another loop, so
+        // the change stays with the run and isn't written over that one.
+        OpenedOnGameData startedOn = new(_services.LoopRunner.LastRunLoopGameData);
+        if (startedOn.Refusal("loop", _services.Loops.SetName) is not null)
+        {
             _services.Log?.Info("Navigation",
-                $"loop live-edit not saved to the loop file: {OpenedOnGameData.LogReason(startedOn, _services.Loops.SetName)}");
+                $"loop live-edit not saved to the loop file: {startedOn.LogReason(_services.Loops.SetName)}");
+            // The rail shows the edit and the run uses it, so it is said that the
+            // file didn't take it; once for the run, not at every edit. A resume of
+            // the run holds the same loop, a fresh start another.
+            if (!ReferenceEquals(_liveEditNotSavedSaidFor, loop))
+            {
+                _liveEditNotSavedSaidFor = loop;
+                _services.WriteTerminalNotice(
+                    $"[Live edits of loop '{loop.Name}' last for this run only: its rooms belong to game data '{startedOn.Set ?? "(none)"}', "
+                    + $"and '{_services.Loops.SetName ?? "(none)"}' is active now, so its loop file is not changed]");
+            }
+        }
         else if (_services.Loops.Get(loop.Name) is not null)
             _services.Loops.Save(loop);
 

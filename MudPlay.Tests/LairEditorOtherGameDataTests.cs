@@ -170,7 +170,7 @@ public sealed class LairEditorOtherGameDataTests : IDisposable
         (_, LairManager setups) = Open(NewSetup("Camp"));
         LairEditorDialogViewModel editor = new(
             NewSetup("From marks"), setups, new RoomGraphManager(new GameDataCache()), _timers!,
-            isNew: true, log: _log, roomsOf: Other);
+            isNew: true, log: _log, roomsOf: new OpenedOnGameData(Other));
 
         await editor.SaveCommand.ExecuteAsync(null);
 
@@ -179,6 +179,25 @@ public sealed class LairEditorOtherGameDataTests : IDisposable
             + "switch back to that game data to change or save it.",
             editor.SaveError);
         Assert.Null(setups.Get("From marks"));
+    }
+
+    // Marks stamped while no game data was active are not the active set's: "no
+    // set" is a stamp, and only no stamp at all means the catalogue's own set.
+    [Fact]
+    public async Task ASetupStampedWithNoGameData_IsNotSavedUnderTheActiveOne()
+    {
+        (_, LairManager setups) = Open(NewSetup("Camp"));
+        LairEditorDialogViewModel editor = new(
+            NewSetup("From no set"), setups, new RoomGraphManager(new GameDataCache()), _timers!,
+            isNew: true, roomsOf: new OpenedOnGameData(null));
+
+        await editor.SaveCommand.ExecuteAsync(null);
+
+        Assert.Equal(
+            $"This setup's rooms belong to game data '(none)', and '{_opened}' is active now — "
+            + "switch back to that game data to change or save it.",
+            editor.SaveError);
+        Assert.Null(setups.Get("From no set"));
     }
 
     [Fact]

@@ -3914,6 +3914,24 @@ public sealed class AppServices
             string? className = profile.LastKnownStats?.Class;
             Task.Run(() => WarmQuestData(className));
         };
+        // A switch to another game-data set stops whatever is walking by the last
+        // set's room numbers (owner, 2026-10-11). Subscribed ahead of the room graph's
+        // own handler below, so the stop comes before the graph is rebuilt and nothing
+        // re-plans those numbers on the new set's rooms first. The movement controller
+        // is built further down: before it exists nothing is running.
+        string? walkedOn = GameData.ActiveSet;
+        GameData.ActiveSetChanged += set =>
+        {
+            string? was = walkedOn;
+            walkedOn = set;
+            if (MovementControl is null) return;
+            IReadOnlyList<string> stopped = MovementControl.StopForOtherGameData(was, set);
+            if (stopped.Count == 0) return;
+            // Posted: a set change can come from inside the line pump, where writing
+            // to the terminal re-enters it.
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(
+                $"[{string.Join(" and ", stopped)} stopped: the game data changed from '{was ?? "(none)"}' to '{set ?? "(none)"}']"));
+        };
         GameData.ActiveSetChanged += RoomGraph.OnActiveSetChanged;
         if (GameData.ActiveSet is not null)
             RoomGraph.OnActiveSetChanged(GameData.ActiveSet);
@@ -8826,12 +8844,10 @@ public sealed class AppServices
         // marks on the map are dropped, with a notice, when the set changes to another,
         // as a loop being built is. Posted: a set change can come from inside the line
         // pump, where writing to the terminal re-enters it.
-        GameData.ActiveSetChanged += set =>
-        {
-            if (!AutoLair.DropMarksOfOtherGameData(set, out string? markedOn)) return;
+        GameData.ActiveSetChanged += set => AutoLair.DropMarksOfOtherGameData(set);
+        AutoLair.MarksOfOtherGameDataDropped += (markedOn, active) =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(
-                $"[Lair marks were dropped: their rooms belonged to game data '{markedOn ?? "(none)"}', and '{set ?? "(none)"}' is active now]"));
-        };
+                $"[Lair marks were dropped: their rooms belonged to game data '{markedOn ?? "(none)"}', and '{active ?? "(none)"}' is active now]"));
 
         // Auto-Lair beginning a run is a loop-start for gear purposes — swap to the
         // Default set, same as LoopRunner's ReachedFirstWaypoint above.

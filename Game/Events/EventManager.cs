@@ -1981,7 +1981,7 @@ public sealed class EventManager : IDisposable
             Dictionary<RoomKey, int?> snap = new();
             foreach (RoomKey k in al.Marked)
                 snap[k] = al.Overrides.TryGetValue(k, out int? v) ? v : null;
-            return new EventResumePlan.AutoLair(snap);
+            return new EventResumePlan.AutoLair(snap, OffARun: true, MarkedOn: al.MarksGameData);
         }
         if (_loopRunner is not null
             && _loopRunner.State is not LoopState.Idle
@@ -2028,9 +2028,16 @@ public sealed class EventManager : IDisposable
                     if (_autoLair is null) return EngineStart.Refused;
                     if (_autoLair.IsActive) return EngineStart.StillRunning;
                     EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Lair, "event resume");
-                    _autoLair.Clear();
-                    foreach (KeyValuePair<RoomKey, int?> kv in al.Markers)
-                        _autoLair.Mark(kv.Key, kv.Value);
+                    if (al.OffARun)
+                    {
+                        _autoLair.RestoreMarks(al.Markers, al.MarkedOn);
+                    }
+                    else
+                    {
+                        _autoLair.Clear();
+                        foreach (KeyValuePair<RoomKey, int?> kv in al.Markers)
+                            _autoLair.Mark(kv.Key, kv.Value);
+                    }
                     return _autoLair.Start() ? EngineStart.Started : EngineStart.Refused;
                 case EventResumePlan.Walker w:
                     if (_walker is null) return EngineStart.Refused;
@@ -2055,7 +2062,11 @@ public sealed class EventManager : IDisposable
         {
             public override string Describe() => $"loop '{SavedLoop.Name}'";
         }
-        public sealed record AutoLair(Dictionary<RoomKey, int?> Markers) : EventResumePlan
+        // OffARun: the markers are what a run had when the event took over from it,
+        // and go back as the game data's they were marked on (MarkedOn) rather than
+        // the set active at the resume. Markers read from a saved setup are the
+        // active set's.
+        public sealed record AutoLair(Dictionary<RoomKey, int?> Markers, bool OffARun = false, string? MarkedOn = null) : EventResumePlan
         {
             public override string Describe() => $"auto-lair ({Markers.Count} markers)";
         }

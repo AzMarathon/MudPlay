@@ -1243,9 +1243,11 @@ public sealed class LoopRunner : IRecoverableEngine
             Notes = loop.Notes,
             OwnSettings = loop.OwnSettings,
         };
-        // A recovery reroute is the same run re-planned: the loop is still the set's
-        // it was started on, though a switch of game data may be what lost the room.
-        if (!isRecovery) LastRunLoopGameData = _graph?.ActiveSet;
+        // The stamp is the run's, written by a fresh start only. A recovery reroute,
+        // an avoid-list reroute and a resume after a detour (the two that arrive
+        // with the first-waypoint event suppressed) are the same run re-planned: the
+        // loop is still the set's it was started on, whatever is active by now.
+        if (!isRecovery && !suppressFirstWaypointEvent) LastRunLoopGameData = _graph?.ActiveSet;
         _index = 0;
         _stepInFlight = false;
         _awaitingCommandReplies = false;

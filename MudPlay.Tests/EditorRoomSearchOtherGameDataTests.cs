@@ -78,7 +78,7 @@ public sealed class EditorRoomSearchOtherGameDataTests : IDisposable
     }
 
     private (LoopEditorDialogViewModel Editor, LoopManager Loops, GameDataCache Cache, RoomGraphManager Graph) OpenLoopEditor(
-        string? roomsOf = null)
+        OpenedOnGameData? roomsOf = null)
     {
         (GameDataCache cache, RoomGraphManager graph) = OwnSetLoaded();
         LoopManager loops = new(new BfsMapper(graph), graph);
@@ -193,12 +193,12 @@ public sealed class EditorRoomSearchOtherGameDataTests : IDisposable
         Assert.Equal(new RoomKey(1, 101), editor.Waypoints[2].Key);
     }
 
-    // The running loop is kept through a switch of game data, so the Save chip opens
+    // A loop can be running that was started on other game data, so the Save chip opens
     // it as the set's it was started on, whatever set is active by then.
     [Fact]
     public async Task EditLoop_ALoopOpenedAsAnotherGameDatas_IsNotSaved()
     {
-        (LoopEditorDialogViewModel editor, LoopManager loops, _, _) = OpenLoopEditor(roomsOf: Other);
+        (LoopEditorDialogViewModel editor, LoopManager loops, _, _) = OpenLoopEditor(roomsOf: new OpenedOnGameData(Other));
         editor.Name = "From the run";
 
         await editor.SaveCommand.ExecuteAsync(null);
@@ -208,5 +208,22 @@ public sealed class EditorRoomSearchOtherGameDataTests : IDisposable
             + "switch back to that game data to change or save it.",
             editor.SaveError);
         Assert.Null(loops.Get("From the run"));
+    }
+
+    // A loop stamped while no game data was active is not the active set's: "no
+    // set" is a stamp, and only no stamp at all means the catalogue's own set.
+    [Fact]
+    public async Task EditLoop_ALoopStampedWithNoGameData_IsNotSavedUnderTheActiveOne()
+    {
+        (LoopEditorDialogViewModel editor, LoopManager loops, _, _) = OpenLoopEditor(roomsOf: new OpenedOnGameData(null));
+        editor.Name = "From no set";
+
+        await editor.SaveCommand.ExecuteAsync(null);
+
+        Assert.Equal(
+            $"This loop's rooms belong to game data '(none)', and '{_opened}' is active now — "
+            + "switch back to that game data to change or save it.",
+            editor.SaveError);
+        Assert.Null(loops.Get("From no set"));
     }
 }

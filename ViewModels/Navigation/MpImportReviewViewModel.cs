@@ -33,7 +33,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     private readonly LoopManager _loops;
     // The game-data set the file was translated on: the rooms in the rows are that
     // set's (see OpenedOnGameData), and Accept writes into that set's Loops folder.
-    private readonly string? _openedOn;
+    private readonly OpenedOnGameData _openedOn;
     private readonly MovementFilter? _filter;
     private readonly LogService? _log;
     private MegaMudRoomsFile? _roomsMd;
@@ -66,7 +66,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         _importer = importer;
         _graph = graph;
         _loops = loops;
-        _openedOn = loops.SetName;
+        _openedOn = new OpenedOnGameData(loops.SetName);
         _filter = filter;
         _log = log;
 
@@ -182,7 +182,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         return true;
     }
 
-    private string? OtherGameDataRefusal() => OpenedOnGameData.Refusal("loop", _openedOn, _loops.SetName);
+    private string? OtherGameDataRefusal() => _openedOn.Refusal("loop", _loops.SetName);
 
     // True, with the reason on the status line and in the log, when another game-data
     // set is active than the one the file was opened on: nothing is saved, verified
@@ -192,7 +192,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         if (OtherGameDataRefusal() is not { } refusal) return false;
         SetStatus(refusal, good: false);
         _log?.Info("MpImporter",
-            $"{FileName}: {what} refused: {OpenedOnGameData.LogReason(_openedOn, _loops.SetName)}");
+            $"{FileName}: {what} refused: {_openedOn.LogReason(_loops.SetName)}");
         return true;
     }
 

@@ -26,7 +26,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
     private readonly LairManager _setups;
     // The game-data set the setup was opened on: its marked rooms are that set's
     // (see OpenedOnGameData).
-    private readonly string? _openedOn;
+    private readonly OpenedOnGameData _openedOn;
     private readonly RoomGraphManager _graph;
     private readonly LairTimerStore _timers;
     private readonly ConfirmService? _confirm;
@@ -35,7 +35,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
 
     // Why the setup can't be saved or added to right now, or null: another game-data
     // set is active than the one it was opened on.
-    private string? OtherGameDataRefusal() => OpenedOnGameData.Refusal("setup", _openedOn, _setups.SetName);
+    private string? OtherGameDataRefusal() => _openedOn.Refusal("setup", _setups.SetName);
 
     // Window title — "Create Setup" when new, "Edit Setup" otherwise.
     public string DialogTitle => _isNew ? "Create Auto-Lair Setup" : "Edit Auto-Lair Setup";
@@ -100,7 +100,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
         ConfirmService? confirm = null,
         bool isNew = false,
         LogService? log = null,
-        string? roomsOf = null)
+        OpenedOnGameData? roomsOf = null)
     {
         ArgumentNullException.ThrowIfNull(setup);
         ArgumentNullException.ThrowIfNull(setups);
@@ -109,8 +109,8 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
         _original = setup;
         _setups = setups;
         // roomsOf names the set for a setup that didn't come off the active one's
-        // catalogue: marks on the map can be kept through a switch of game data.
-        _openedOn = roomsOf ?? setups.SetName;
+        // catalogue: the marks on the map, stamped with the set they were placed on.
+        _openedOn = roomsOf ?? new OpenedOnGameData(setups.SetName);
         _graph = graph;
         _timers = timers;
         _confirm = confirm;
@@ -327,7 +327,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
         }
         SaveError = refusal;
         _log?.Info("Lairs",
-            $"setup '{Name.Trim()}' not saved: {OpenedOnGameData.LogReason(_openedOn, _setups.SetName)}");
+            $"setup '{Name.Trim()}' not saved: {_openedOn.LogReason(_setups.SetName)}");
         return true;
     }
 

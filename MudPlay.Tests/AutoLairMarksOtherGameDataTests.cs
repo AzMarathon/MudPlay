@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using MudPlay.Game.Map;
 using MudPlay.Services;
@@ -9,7 +10,7 @@ namespace MudPlay.Tests;
 // Lair marks placed on the map are rooms of the game data that was active when they
 // were placed. When the set changes to another they are dropped, as a loop being
 // built is: saved as a setup they would land in the other set's Loops folder. The
-// same set read in again keeps them, and a run under way is left its marks.
+// same set read in again keeps them, and a set of marks is never mixed.
 public sealed class AutoLairMarksOtherGameDataTests : IDisposable
 {
     private readonly string _root =
@@ -21,30 +22,39 @@ public sealed class AutoLairMarksOtherGameDataTests : IDisposable
         catch { /* best-effort temp cleanup */ }
     }
 
-    // 1/1 ↔ 1/2 ↔ 1/3, a strip to mark and to start a run on.
-    private const string Rooms = """
-        [
-          { "Map Number": 1, "Room Number": 1, "Name": "A",
+    private static string Room(int map, int room, string name, string north = "0", string south = "0") => $$"""
+          { "Map Number": {{map}}, "Room Number": {{room}}, "Name": "{{name}}",
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "1/2", "S": "0", "E": "0", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 1, "Room Number": 2, "Name": "B",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 1, "Room Number": 3, "Name": "C",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "1/2", "E": "0", "W": "0",
+            "N": "{{north}}", "S": "{{south}}", "E": "0", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
-        ]
         """;
+
+    // alpha: 1/1 ↔ 1/2 ↔ 1/3, a strip to mark and to start a run on. beta: the first
+    // two rooms and a room alpha lacks.
+    private static readonly string Alpha =
+        $"[\n{Room(1, 1, "A", north: "1/2")},\n{Room(1, 2, "B", north: "1/3", south: "1/1")},\n{Room(1, 3, "C", south: "1/2")}\n]";
+    private static readonly string Beta =
+        $"[\n{Room(1, 1, "Other A", north: "1/2")},\n{Room(1, 2, "Other B", south: "1/1")},\n{Room(7, 7, "Other only")}\n]";
 
     private sealed class Harness : IDisposable
     {
+        public required GameDataCache Cache { get; init; }
+        public required RoomGraphManager Graph { get; init; }
         public required RoomTracker Tracker { get; init; }
         public required AutoLairManager Lairs { get; init; }
         public required LairTimerStore Timers { get; init; }
         public required LogService Log { get; init; }
+        // Every drop the manager announced: the set the marks were of, the set active.
+        public List<(string? MarkedOn, string? Active)> Dropped { get; } = new();
+
+        // The graph on another set, with nobody telling the manager: what a set of
+        // marks put back for a run after a switch stands on.
+        public void GraphOn(string set)
+        {
+            Cache.SwitchSet(set);
+            Graph.OnActiveSetChanged(set);
+        }
+
         public void Dispose()
         {
             Lairs.Dispose();
@@ -54,8 +64,11 @@ public sealed class AutoLairMarksOtherGameDataTests : IDisposable
 
     private Harness OnAlpha()
     {
-        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Rooms);
+        foreach ((string set, string rooms) in new[] { ("alpha", Alpha), ("beta", Beta) })
+        {
+            Directory.CreateDirectory(Path.Combine(_root, set));
+            File.WriteAllText(Path.Combine(_root, set, "Rooms.json"), rooms);
+        }
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
         RoomGraphManager graph = new(cache);
@@ -67,13 +80,17 @@ public sealed class AutoLairMarksOtherGameDataTests : IDisposable
         walker.SetWireSender(_ => { });
         LairTimerStore timers = new(cache, graph, tracker);
         LogService log = new();
-        return new Harness
+        Harness h = new()
         {
+            Cache = cache,
+            Graph = graph,
             Tracker = tracker,
             Timers = timers,
             Log = log,
             Lairs = new AutoLairManager(walker, tracker, graph, bfs, timers, log, coord),
         };
+        h.Lairs.MarksOfOtherGameDataDropped += (markedOn, active) => h.Dropped.Add((markedOn, active));
+        return h;
     }
 
     [Fact]
@@ -95,11 +112,11 @@ public sealed class AutoLairMarksOtherGameDataTests : IDisposable
         int changed = 0;
         h.Lairs.MarkedChanged += () => changed++;
 
-        Assert.True(h.Lairs.DropMarksOfOtherGameData("beta", out string? markedOn));
+        Assert.True(h.Lairs.DropMarksOfOtherGameData("beta"));
 
-        Assert.Equal("alpha", markedOn);
         Assert.Empty(h.Lairs.Marked);
         Assert.Equal(1, changed);
+        Assert.Equal(new[] { ((string?)"alpha", (string?)"beta") }, h.Dropped);
         Assert.Contains(h.Log.Snapshot(), e => e.Severity == LogSeverity.Info && e.Source == "AutoLair"
             && e.Message == "2 lair mark(s) dropped: their rooms were game data 'alpha''s and 'beta' is active now");
     }
@@ -110,10 +127,11 @@ public sealed class AutoLairMarksOtherGameDataTests : IDisposable
         using Harness h = OnAlpha();
         h.Lairs.Mark(new RoomKey(1, 1));
 
-        Assert.False(h.Lairs.DropMarksOfOtherGameData("alpha", out _));
-        Assert.False(h.Lairs.DropMarksOfOtherGameData("ALPHA", out _));
+        Assert.False(h.Lairs.DropMarksOfOtherGameData("alpha"));
+        Assert.False(h.Lairs.DropMarksOfOtherGameData("ALPHA"));
 
         Assert.Single(h.Lairs.Marked);
+        Assert.Empty(h.Dropped);
     }
 
     [Fact]
@@ -122,7 +140,7 @@ public sealed class AutoLairMarksOtherGameDataTests : IDisposable
         using Harness h = OnAlpha();
         h.Lairs.Mark(new RoomKey(1, 1));
 
-        Assert.True(h.Lairs.DropMarksOfOtherGameData(null, out _));
+        Assert.True(h.Lairs.DropMarksOfOtherGameData(null));
 
         Assert.Empty(h.Lairs.Marked);
     }
@@ -132,31 +150,62 @@ public sealed class AutoLairMarksOtherGameDataTests : IDisposable
     {
         using Harness h = OnAlpha();
 
-        Assert.False(h.Lairs.DropMarksOfOtherGameData("beta", out _));
+        Assert.False(h.Lairs.DropMarksOfOtherGameData("beta"));
+        Assert.Empty(h.Dropped);
     }
 
-    // A run is left to carry on as it would have; its marks still say whose they
-    // are, which is what refuses saving them as a setup under the other set.
+    // A set of marks is never mixed: a room marked under another game data than the
+    // marks held starts a fresh set, and the old ones are dropped with the notice.
     [Fact]
-    public void ARunUnderWay_KeepsItsMarks_StillStampedWithTheirOwnGameData()
+    public void ARoomMarkedOnTopOfAnotherGameDatasMarks_DropsThemAndStartsAFreshSet()
     {
         using Harness h = OnAlpha();
-        h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Lairs.Mark(new RoomKey(1, 1));
         h.Lairs.Mark(new RoomKey(1, 3));
-        Assert.True(h.Lairs.Start());
+        h.GraphOn("beta");
 
-        Assert.False(h.Lairs.DropMarksOfOtherGameData("beta", out _));
+        h.Lairs.Mark(new RoomKey(7, 7));
 
-        Assert.True(h.Lairs.IsActive);
-        Assert.Equal(2, h.Lairs.Marked.Count);
-        Assert.Equal("alpha", h.Lairs.MarksGameData);
-        Assert.Contains(h.Log.Snapshot(), e => e.Severity == LogSeverity.Info && e.Source == "AutoLair"
-            && e.Message == "2 lair mark(s) kept for the run under way: their rooms are game data 'alpha''s and 'beta' is active now");
+        Assert.Equal(new[] { new RoomKey(7, 7) }, h.Lairs.Marked);
+        Assert.Equal("beta", h.Lairs.MarksGameData);
+        Assert.Equal(new[] { ((string?)"alpha", (string?)"beta") }, h.Dropped);
 
-        // Once the run is over the next change of game data drops them.
-        h.Lairs.Stop();
-        Assert.True(h.Lairs.DropMarksOfOtherGameData("beta", out _));
+        // Back on the first set the room it lacks is not carried there either.
+        h.GraphOn("alpha");
+        Assert.True(h.Lairs.DropMarksOfOtherGameData("alpha"));
         Assert.Empty(h.Lairs.Marked);
+    }
+
+    [Fact]
+    public void MarkingAgainOnTheirOwnGameData_AddsToTheSet()
+    {
+        using Harness h = OnAlpha();
+        h.Lairs.Mark(new RoomKey(1, 1));
+
+        h.Lairs.Mark(new RoomKey(1, 3));
+
+        Assert.Equal(2, h.Lairs.Marked.Count);
+        Assert.Empty(h.Dropped);
+    }
+
+    // What an event puts back after taking over from a run: the marks as the game
+    // data's they were placed on, not the set active at the resume.
+    [Fact]
+    public void RestoredMarks_KeepTheStampTheyHad()
+    {
+        using Harness h = OnAlpha();
+        Dictionary<RoomKey, int?> marks = new() { [new RoomKey(1, 1)] = null, [new RoomKey(1, 3)] = 120 };
+        h.GraphOn("beta");
+
+        h.Lairs.RestoreMarks(marks, "alpha");
+
+        Assert.Equal(2, h.Lairs.Marked.Count);
+        Assert.Equal(120, h.Lairs.GetOverride(new RoomKey(1, 3)));
+        Assert.Equal("alpha", h.Lairs.MarksGameData);
+        Assert.Empty(h.Dropped);
+
+        // And the next room marked under the active set doesn't join them.
+        h.Lairs.Mark(new RoomKey(7, 7));
+        Assert.Equal(new[] { new RoomKey(7, 7) }, h.Lairs.Marked);
     }
 }

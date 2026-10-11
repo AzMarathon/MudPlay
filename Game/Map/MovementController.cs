@@ -382,20 +382,51 @@ public sealed class MovementController : IDisposable
     // route between walks) stops with them.
     public event Action? Stopping;
 
-    public void Stop()
+    public void Stop(string reason = "user stop from toolbar")
     {
         LetErrandGo();
         DropQueuedRun();
         Stopping?.Invoke();
-        if (_autoLair.IsActive) _autoLair.Stop("user stop from toolbar");
-        if (_loops.State != LoopState.Idle) _loops.Stop("user stop from toolbar");
-        _loops.DropResumeHeldForMasterSwitch("user stop from toolbar");
+        if (_autoLair.IsActive) _autoLair.Stop(reason);
+        if (_loops.State != LoopState.Idle) _loops.Stop(reason);
+        _loops.DropResumeHeldForMasterSwitch(reason);
         // Idle too: a journey can stand between two of its legs with no walk running
         // (waiting at a giver for the hand-over), and Stop is the end of it.
-        _walker.Stop("user stop from toolbar");
+        _walker.Stop(reason);
         foreach ((Func<bool> active, _, Action<string> stop) in _solvers)
-            if (active()) stop("user stop from toolbar");
+            if (active()) stop(reason);
         _coordinator.ClearGate(MovementCoordinator.UserGate, nameof(MovementController));
+    }
+
+    // The active game data changed from one set to another. Everything here walks by
+    // room numbers, and under another set those are other rooms: a loop, Auto-Lair,
+    // a walk-to, a puzzle solve or an errand in progress is stopped, the way Stop
+    // stops it, and nothing is resumed afterwards (owner, 2026-10-11). The same set
+    // read in again stops nothing. Returns what was stopped, each as it reads at the
+    // start of a sentence ("Loop 'Ring'"), for the notice; empty when nothing was.
+    public IReadOnlyList<string> StopForOtherGameData(string? was, string? now)
+    {
+        if (string.Equals(was, now, StringComparison.OrdinalIgnoreCase)) return Array.Empty<string>();
+
+        List<string> stopped = new();
+        // The topmost engine is the run: a loop or Auto-Lair drives the walker.
+        if (_autoLair.IsActive) stopped.Add("Auto-Lair");
+        else if (_loops.State != LoopState.Idle) stopped.Add($"Loop '{_loops.CurrentLoop?.Name ?? "?"}'");
+        else if (_walker.State != WalkState.Idle || _walker.Journey is not null)
+            stopped.Add((_walker.Journey?.Destination ?? _walker.Destination) is { } to ? $"Walk to {to}" : "Walk");
+        if (_solvers.Any(s => s.Active())) stopped.Add(stopped.Count == 0 ? "Puzzle solve" : "puzzle solve");
+        string? errand = _activeErrand?.Invoke();
+        if (errand is not null) stopped.Add(stopped.Count == 0 ? char.ToUpperInvariant(errand[0]) + errand[1..] : errand);
+        if (stopped.Count == 0 && SuspendedErrand is null && _afterErrand is null && _awaitingAnswer is null)
+            return stopped;
+
+        string reason = $"game data changed from '{was ?? "(none)"}' to '{now ?? "(none)"}'";
+        _log?.Info("Movement", $"{(stopped.Count == 0 ? "Queued run dropped" : string.Join(" and ", stopped) + " stopped")}: {reason}");
+        // A start waiting on the "Resume first?" answer is a run of the last set's too.
+        _awaitingAnswer = null;
+        if (errand is not null) _abandonErrand?.Invoke(reason);
+        Stop(reason);
+        return stopped;
     }
 
     // Auto-All kill switch engaged: suspend an in-flight navigation the same way a
