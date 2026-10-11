@@ -93,7 +93,8 @@ public sealed class ItemRecordDialogService
             castsSpells:      mdb.CastsSpells,
             roomCommands:     mdb.RoomCommands,
             editAttachedMessage:    editMsg,
-            attachedMessageSummary: msgSummary);
+            attachedMessageSummary: msgSummary,
+            exitUses:         new ItemMdbViewBuilder(_cache, 50).ExitUsesOf(itemNumber));
 
         ItemEditDialogViewModel? previous = _openItemVm;
         _openItemVm = vm;

@@ -1,5 +1,9 @@
 # Version history
 
+## 3.173.1
+
+- Item records show a Used on section listing every exit that names the item as the one needed to pass (a key on a locked door, an item to carry, a ticket): room, map/room and direction, one line per exit
+
 ## 3.173.0
 
 - Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held
