@@ -47,11 +47,18 @@ namespace MudPlay.Game.Inventory;
 // the link is gone, so no death line is ever seen (Recovery.HangupDeath has the
 // rule). When the list says the character was that low and the realm penalises,
 // the pass runs for that alone, item counts or not: at the inventory read it
-// asks for a `stat` if none has given the lives, then judges. Only a life lost
-// says "died". A death it finds is recorded as any other and ends the pass: what
-// is missing then is a deathpile, Death Recovery's to fetch, and nothing here
-// picks it up or calls it missing. When it can't tell, it says so once and
-// records nothing.
+// asks for a `stat` if none has given the lives, then judges. A life lost says
+// "died", and the room the character comes back in must agree: the first room
+// the map is sure of on this connection, before a move has gone out, is where
+// the dead of the room it hung up in arrive. A death it finds is recorded as any
+// other and ends the pass: what is missing then is a deathpile, Death Recovery's
+// to fetch, and nothing here picks it up or calls it missing. When it can't
+// tell, it says so once and records nothing.
+//
+// A hang-up while dropped in an arena room is looked into on any realm, penalty
+// or none: the death it gets there takes no life and nothing else, so it is told
+// by the room it comes back in alone and recorded as an arena death, with no
+// pile (Recovery.HangupDeath.JudgeArena).
 //
 // The question outlives the pass when the lives can't be had (Auto-All off, or
 // the hold already given up): it stays open, without a hold and with nothing
@@ -92,6 +99,11 @@ public sealed class HangupItemRecheck
         "Killed by the hang-up penalty (not seen: worked out on entering the game). The room and time are where this "
         + "client last had the character in the game.";
 
+    // The same for a hang-up while dropped in an arena room.
+    public const string ArenaDeathMessage =
+        "Died in an arena room after the link went down (not seen: worked out on entering the game). An arena death "
+        + "takes no life, item or coin. The room and time are where this client last had the character in the game.";
+
     private enum Phase { Idle, AwaitingEntry, AwaitingInventory, AwaitingLives, AwaitingRoom, AwaitingFightEnd, PickingUp }
 
     private readonly MovementCoordinator _coordinator;
@@ -124,6 +136,8 @@ public sealed class HangupItemRecheck
     private readonly Func<bool, bool, int?>? _hpShareTop;
     private readonly Func<bool>? _stockRealm;
     private readonly Func<string, bool>? _staysOnDeath;
+    private readonly Func<RoomKey, RoomKey, Recovery.HangupEntryRoomReading>? _entryRoomSays;
+    private readonly Func<RoomKey, string>? _roomLabel;
     private readonly Func<Recovery.UnwitnessedDeath, DeathRecord?>? _recordDeath;
 
     private Phase _phase;
@@ -185,6 +199,9 @@ public sealed class HangupItemRecheck
     // HP at the first prompt of this connection.
     private bool _hpAtEntryTaken;
     private int? _hpAtEntry;
+    // The first room the map confirmed on this connection, before any move went
+    // out: where the hang-up left the character, or where its dead arrive.
+    private RoomKey? _entryRoom;
     // The first inventory read of this connection.
     private InventorySnapshot? _firstInventory;
     // The board's two hang-up lines were printed on this connection.
@@ -224,6 +241,10 @@ public sealed class HangupItemRecheck
     //   staysOnDeath     — an item of this name stays with the character through a
     //                      death (loyal, or cursed so); false for a name the game
     //                      data doesn't know, which is then taken for one a death takes.
+    //   entryRoomSays    — HangupDeathArrivalRooms.Read for the active game data,
+    //                      given the room the character hung up in and the first
+    //                      room confirmed on the way back in.
+    //   roomLabel        — a room's name with its number, for the wording.
     public HangupItemRecheck(
         MovementCoordinator coordinator,
         Func<CharacterProfile?> profile,
@@ -251,7 +272,9 @@ public sealed class HangupItemRecheck
         Func<bool, bool, int?>? hpShareTop = null,
         Func<bool>? stockRealm = null,
         Func<Recovery.UnwitnessedDeath, DeathRecord?>? recordDeath = null,
-        Func<string, bool>? staysOnDeath = null)
+        Func<string, bool>? staysOnDeath = null,
+        Func<RoomKey, RoomKey, Recovery.HangupEntryRoomReading>? entryRoomSays = null,
+        Func<RoomKey, string>? roomLabel = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(profile);
@@ -294,6 +317,8 @@ public sealed class HangupItemRecheck
         _stockRealm = stockRealm;
         _recordDeath = recordDeath;
         _staysOnDeath = staysOnDeath;
+        _entryRoomSays = entryRoomSays;
+        _roomLabel = roomLabel;
     }
 
     // ----- for the bug report -------------------------------------------
@@ -462,13 +487,15 @@ public sealed class HangupItemRecheck
         _deathBefore = null;
         _hpAtEntryTaken = false;
         _hpAtEntry = null;
+        _entryRoom = null;
         _firstInventory = null;
         _loginLines = false;
         _saidWaiting = false;
 
         if (_profile()?.HeldAtDisconnect is not { } before) return;
         bool items = before.Items.Count > 0 && _maxItemsDropped() > 0;
-        bool death = DeathSuspected(before);
+        bool arena = ArenaDeathPossible(before);
+        bool death = DeathSuspected(before) || arena;
         if (!items && !death) return;
         string? realm = _realmKey();
         if (realm is null || !string.Equals(before.Realm, realm, StringComparison.OrdinalIgnoreCase))
@@ -482,6 +509,17 @@ public sealed class HangupItemRecheck
         _phase = Phase.AwaitingEntry;
         _entryTicks = 0;
         string left = $"{before.At.ToLocalTime():yyyy-MM-dd HH:mm:ss}, {RoomText(before.Room)}";
+        if (arena)
+        {
+            _deathBefore = before;
+            Hold("whether the character died in the arena after the hang-up is checked on entering the game");
+            _log?.Info(LogCategory,
+                $"The character was {HpText(before)} in an arena room when it was last in the game ({left}). A hang-up "
+                + "there while dropped is the arena's death, which takes no life and no item and moves the character to "
+                + "where that room's dead arrive: checked on entering the game, from the room it comes back in"
+                + (DeathSuspected(before) ? ", and from its lives should it prove an ordinary death." : "."));
+            return;
+        }
         if (death)
         {
             _deathBefore = before;
@@ -664,6 +702,10 @@ public sealed class HangupItemRecheck
         {
             open.LoginLinesSeenSince |= _loginLines;
             open.HpAtFirstEntrySince ??= _hpAtEntry;
+            if (_entryRoom is { } entered) open.EntryRoomSince ??= new RoomRef(entered.Map, entered.Room);
+            // It moved on before the map knew where it had come back: the room a
+            // later connection starts in is not that room.
+            else if (_moveSentSinceEntry && open.EntryRoomSince is null) open.MovedBeforeEntryRoomKnownSince = true;
             _saveProfile();
         }
         _leaving = Leaving.No;
@@ -752,14 +794,15 @@ public sealed class HangupItemRecheck
 
         bool stock = _stockRealm?.Invoke() ?? false;
         bool? loginLines = stock ? _loginLines || older.LoginLinesSeenSince : null;
-        (Recovery.HangupDeathVerdict verdict, string why) = Recovery.HangupDeath.Judge(
-            older.Hp, older.MaxHp, share, hpAtEntry, older.Lives, _livesReadThisLink,
-            worn: null, loginLines, takenStillHeld: null);
+        (bool? entryRoom, string? entryRoomText) = EntryRoom(older);
+        (Recovery.HangupDeathVerdict verdict, string why, bool arena) =
+            Verdict(older, hpAtEntry, worn: null, loginLines, takenStillHeld: null, entryRoom, entryRoomText);
         // Without an inventory read the worn and still-held checks that tell a death
         // by that hang-up from a life lost on another client (recovered, everything
         // worn again) can't be made. On Stock the board's login lines still can; off
-        // Stock nothing does, so it is told instead.
-        if (verdict == Recovery.HangupDeathVerdict.Died && !stock)
+        // Stock only the room it came back in does (where the dead of the room it
+        // hung up in arrive), and without that it is told instead.
+        if (verdict == Recovery.HangupDeathVerdict.Died && !stock && entryRoom != true)
         {
             verdict = Recovery.HangupDeathVerdict.Unsure;
             why += ", but no inventory was read on this connection and this realm prints no login lines, so nothing separates "
@@ -767,11 +810,13 @@ public sealed class HangupItemRecheck
         }
         string seen = $"judged as the link dropped again with no inventory read: left the game {older.At.ToLocalTime():yyyy-MM-dd HH:mm:ss} "
             + $"at {RoomText(older.Room)} with HP {Shown(older.Hp)}, lives {Shown(older.Lives)}; since then HP {Shown(hpAtEntry)} at "
-            + $"the first prompt, lives {Shown(_livesReadThisLink)} from a `stat`";
+            + $"the first prompt, lives {Shown(_livesReadThisLink)} from a `stat`"
+            + (entryRoomText is null ? "" : $", came back in {entryRoomText}");
         switch (verdict)
         {
             case Recovery.HangupDeathVerdict.Died when _livesReadThisLink is { } livesNow:
-                RecordDeath(older, held: null, livesNow, why, seen);
+                if (arena) RecordArenaDeath(older, atEntry: false, livesNow, why, seen, entryRoomText);
+                else RecordDeath(older, held: null, livesNow, why, seen, entryRoom == true ? entryRoomText : null);
                 break;
             case Recovery.HangupDeathVerdict.NeedsLives or Recovery.HangupDeathVerdict.Unsure:
                 _deathBefore = null;
@@ -984,6 +1029,40 @@ public sealed class HangupItemRecheck
     private bool DeathSuspected(HeldAtDisconnect before) =>
         !before.CleanExit && Recovery.HangupDeath.Suspected(before.Hp, before.MaxHp, ShareTop(before));
 
+    // The list says the character was dropped in an arena room. A hang-up there is
+    // the arena's death on the Stock engine whatever the board's penalty, so this
+    // is looked into on any realm, and never after the game's own exit.
+    private static bool ArenaDeathPossible(HeldAtDisconnect before) =>
+        !before.CleanExit && before.Hp is <= 0 && InArenaRoom(before);
+
+    private static bool InArenaRoom(HeldAtDisconnect before) =>
+        before.Room is { } room && Recovery.ArenaDeathRooms.Contains(new RoomKey(room.Map, room.Room));
+
+    // What a list comes to: the arena's death first, where it could have been one,
+    // and the ordinary rule when it wasn't.
+    private (Recovery.HangupDeathVerdict Verdict, string Why, bool Arena) Verdict(
+        HeldAtDisconnect before, int? hpAtEntry, bool? worn, bool? loginLines, bool? takenStillHeld,
+        bool? entryRoom, string? entryRoomText)
+    {
+        string? notArena = null;
+        if (ArenaDeathPossible(before))
+        {
+            (Recovery.HangupDeathVerdict arena, string arenaWhy) = Recovery.HangupDeath.JudgeArena(
+                before.Hp, hpAtEntry, before.Lives, _livesReadThisLink, takenStillHeld, entryRoom, entryRoomText,
+                ordinaryDeathPossible: ShareTop(before) is not null);
+            if (arena != Recovery.HangupDeathVerdict.NotSuspected) return (arena, arenaWhy, true);
+            notArena = arenaWhy;
+        }
+        (Recovery.HangupDeathVerdict verdict, string why) = Recovery.HangupDeath.Judge(
+            before.Hp, before.MaxHp, ShareTop(before), hpAtEntry, before.Lives, _livesReadThisLink,
+            worn, loginLines, takenStillHeld, entryRoom, entryRoomText, OwnedNothing(before));
+        // A realm that doesn't penalise the hang-up was looked at for the arena
+        // alone: the reason it wasn't that is the one worth reading.
+        if (verdict == Recovery.HangupDeathVerdict.NotSuspected && notArena is not null)
+            why = $"no arena death ({notArena}), and {why}";
+        return (verdict, why, false);
+    }
+
     private int? ShareTop(HeldAtDisconnect before) => _hpShareTop?.Invoke(before.PvpFight, before.InCombat);
 
     private (int Hp, int? MaxHp)? VitalsNow() => _promptThisLink ? _vitals?.Invoke() : null;
@@ -1028,28 +1107,36 @@ public sealed class HangupItemRecheck
         bool? loginLines = stock ? _loginLines || before.LoginLinesSeenSince : null;
         List<(string Name, int Count)> gone = HangupItemPlan.Missing(before.Items, held);
         bool? takenStillHeld = _firstInventory is null ? null : TakenStillHeld(before, held);
-        (Recovery.HangupDeathVerdict verdict, string why) = Recovery.HangupDeath.Judge(
-            before.Hp, before.MaxHp, share, hpAtEntry, before.Lives, _livesReadThisLink, worn, loginLines, takenStillHeld);
+        (bool? entryRoom, string? entryRoomText) = EntryRoom(before);
+        (Recovery.HangupDeathVerdict verdict, string why, bool arena) =
+            Verdict(before, hpAtEntry, worn, loginLines, takenStillHeld, entryRoom, entryRoomText);
 
         RoomKey? here = _confirmedRoom();
         string evidence =
-            $"left the game {before.At.ToLocalTime():yyyy-MM-dd HH:mm:ss} at {RoomText(before.Room)} with HP "
+            $"left the game {before.At.ToLocalTime():yyyy-MM-dd HH:mm:ss} at {RoomText(before.Room)}"
+            + $"{(InArenaRoom(before) ? " (an arena room)" : "")} with HP "
             + $"{Shown(before.Hp)} of {Shown(before.MaxHp)}, lives {Shown(before.Lives)}, {FightText(before)}; the realm's "
             + $"settings say that hang-up costs up to {Shown(share)}% of max HP; since then: HP {Shown(hpAtEntry)} "
             + $"at the first prompt, lives {Shown(_livesReadThisLink)} from a `stat`, "
             + (worn is { } w ? $"{(w ? "something" : "nothing")} worn at the first inventory read, " : "")
             + (loginLines is { } l ? $"the board's hang-up lines {(l ? "printed" : "not printed")}, " : "")
+            + (entryRoomText is null ? "the room it came back in not confirmed before it moved, "
+                : $"came back in {entryRoomText} ({(entryRoom is { } says ? says ? "a death by this hang-up puts it there" : "a death by this hang-up does not put it there" : "which says nothing either way")}), ")
             + $"{(here is { } at ? $"room {at}" : "room not known")} now; held then and not at the first inventory read: "
             + (before.ItemsUnknown ? "not known (no inventory was read on the connection it left on)"
                 : gone.Count > 0 ? Names(gone) : "nothing");
-        _log?.Info(LogCategory, $"A hang-up the penalty could have killed for: {evidence}.");
+        // A realm that doesn't penalise the hang-up is looked at for the arena alone.
+        _log?.Info(LogCategory, (DeathSuspected(before)
+            ? "A hang-up the penalty could have killed for: "
+            : "A hang-up while dropped in an arena room: ") + $"{evidence}.");
 
         switch (verdict)
         {
             // Died is only ever said on a count read on this connection, so the
             // record never carries a made-up one.
             case Recovery.HangupDeathVerdict.Died when _livesReadThisLink is { } livesNow:
-                RecordDeath(before, held, livesNow, why, evidence);
+                if (arena) RecordArenaDeath(before, atEntry: _holding, livesNow, why, evidence, entryRoomText);
+                else RecordDeath(before, held, livesNow, why, evidence, entryRoom == true ? entryRoomText : null);
                 return DeathAnswer.Recorded;
 
             case Recovery.HangupDeathVerdict.NeedsLives:
@@ -1075,8 +1162,7 @@ public sealed class HangupItemRecheck
                 _deathBefore = null;
                 LastDeathCheck = $"{_now():HH:mm:ss} can't tell, nothing recorded: {why}. Seen: {evidence}";
                 _log?.Info(LogCategory, $"No death is recorded for the hang-up: {why}.");
-                _notice?.Invoke($"[Hang-up check: you were {HpText(before)} when you left the game and this realm penalises "
-                                + $"that hang-up, which can kill. No death was recorded: {why}"
+                _notice?.Invoke($"[Hang-up check: {Looked(before)}. No death was recorded: {why}"
                                 + (gone.Count > 0 ? $". Held then and not now: {Names(gone)}" : "") + "]");
                 return DeathAnswer.CantTell;
 
@@ -1090,6 +1176,33 @@ public sealed class HangupItemRecheck
 
     private bool StaysOnDeath(string name) => _staysOnDeath?.Invoke(name) ?? false;
 
+    // What the room the character came back in says of a death by the hang-up, and
+    // the words for it. The room is the first one the map confirmed after the
+    // hang-up with no move sent: this connection's, or the one an earlier
+    // connection saw and left on the list. Nothing when the room it hung up in or
+    // the room it came back in isn't known, and an earlier connection that moved
+    // on before the map knew the room leaves it unknown for good: this
+    // connection's first room is then somewhere the character walked to.
+    private (bool? Says, string? Text) EntryRoom(HeldAtDisconnect before)
+    {
+        RoomKey? entered = before.EntryRoomSince is { } since ? new RoomKey(since.Map, since.Room)
+            : before.MovedBeforeEntryRoomKnownSince ? null
+            : _entryRoom;
+        if (before.Room is not { } left || entered is not { } here) return (null, null);
+        RoomKey hungUpIn = new(left.Map, left.Room);
+        Recovery.HangupEntryRoomReading reading = _entryRoomSays?.Invoke(hungUpIn, here) ?? default;
+        string text = reading.Says != true
+            ? here == hungUpIn ? $"{Label(here)}, the room it left the game in" : Label(here)
+            : (reading.TakenFor is { } arrival
+                ? $"{Label(here)}, which the map can't tell from {Label(arrival)}, where the dead of {Label(hungUpIn)} arrive"
+                : $"{Label(here)}, where the dead of {Label(hungUpIn)} arrive")
+              // Paradigm: no list names this room's arrival room; it is in Albion.
+              + (reading.Albion ? " (Albion: reachable from that room without a boat)" : "");
+        return (reading.Says, text);
+    }
+
+    private string Label(RoomKey room) => _roomLabel?.Invoke(room) ?? $"room {room}";
+
     // Both realms: a death takes every item but those that stay with the character,
     // and every coin. So one such item of the list, or any of its coins, still
     // held at the first inventory read says the character didn't die since the
@@ -1098,13 +1211,20 @@ public sealed class HangupItemRecheck
     // the list has nothing a death takes, or doesn't know what was held.
     private bool? TakenStillHeld(HeldAtDisconnect before, InventorySnapshot held)
     {
-        if (before.ItemsUnknown) return null;
+        if (before.ItemsUnknown || OwnedNothing(before)) return null;
         List<HeldItem> taken = before.Items.Where(i => !StaysOnDeath(i.Name)).ToList();
         long coinsThen = before.Coins?.TotalCoinCount ?? 0;
-        if (taken.Count == 0 && coinsThen == 0) return null;
         HashSet<string> heldNow = new(HangupItemPlan.Held(held).Select(h => h.Name), StringComparer.OrdinalIgnoreCase);
         return taken.Exists(i => heldNow.Contains(i.Name)) || (coinsThen > 0 && held.Currency.TotalCoinCount > 0);
     }
+
+    // The list knows what was held, and none of it is taken by a death: no item but
+    // those that stay with the character, and no coin. Such a character comes back
+    // from a death holding what it left with, so its pack can neither bear a
+    // death out nor speak against one.
+    private bool OwnedNothing(HeldAtDisconnect before) =>
+        !before.ItemsUnknown && before.Items.TrueForAll(i => StaysOnDeath(i.Name))
+        && (before.Coins?.TotalCoinCount ?? 0) == 0;
 
     // A `stat` was read while the question stood open after its pass.
     private void AnswerOpenQuestion(HeldAtDisconnect before)
@@ -1131,21 +1251,37 @@ public sealed class HangupItemRecheck
     private void SayWaiting(HeldAtDisconnect before, string why)
     {
         if (_saidWaiting) return;
-        // Only when a read is what is missing (a `stat`, or the inventory a life
-        // already seen lost is waiting on): not when HP at the first prompt already
-        // answers, and not when no count was kept to compare one with.
-        if (Recovery.HangupDeath.Judge(before.Hp, before.MaxHp, ShareTop(before),
-                before.HpAtFirstEntrySince ?? _hpAtEntry, before.Lives, _livesReadThisLink,
-                worn: null, loginLines: null, takenStillHeld: null).Verdict
-            is not (Recovery.HangupDeathVerdict.NeedsLives or Recovery.HangupDeathVerdict.Died))
-            return;
+        // Only when a read is what is missing (a `stat`, or the inventory): not
+        // when HP at the first prompt or the room it came back in already answers,
+        // and not when nothing that could be read would tell.
+        //
+        // What the pack says can decide whether a `stat` is worth waiting for: with
+        // no count from before, only a character back stripped where its dead
+        // arrive is still in question, and in an arena only one that isn't. So the
+        // first inventory read is asked when there is one, and with none read yet
+        // the question is whether either answer would leave it open.
+        int? hpAtEntry = before.HpAtFirstEntrySince ?? _hpAtEntry;
+        bool? entryRoom = EntryRoom(before).Says;
+        bool StillOpen(bool? takenStillHeld) =>
+            Verdict(before, hpAtEntry, worn: null, loginLines: null, takenStillHeld, entryRoom, entryRoomText: null).Verdict
+                is Recovery.HangupDeathVerdict.NeedsLives or Recovery.HangupDeathVerdict.Died;
+        bool open = _firstInventory is { } first
+            ? StillOpen(TakenStillHeld(before, first))
+            : StillOpen(false) || StillOpen(true);
+        if (!open) return;
         _saidWaiting = true;
         _log?.Info(LogCategory,
-            $"Whether the hang-up penalty killed the character hasn't been checked: {why}. A `stat` and an inventory read on "
+            $"Whether the hang-up killed the character hasn't been checked: {why}. A `stat` and an inventory read on "
             + "this connection will answer it.");
-        _notice?.Invoke($"[Hang-up check: you were {HpText(before)} when you left the game and this realm penalises that "
-                        + $"hang-up, which can kill. Whether it did hasn't been checked: {why}. Type `stat` and `i` and it will be]");
+        _notice?.Invoke($"[Hang-up check: {Looked(before)}. Whether it did hasn't been checked: {why}. Type `stat` and `i` and it will be]");
     }
+
+    // Why the hang-up is being looked into, for the terminal. A realm that doesn't
+    // penalise it is here for the arena alone.
+    private string Looked(HeldAtDisconnect before) => DeathSuspected(before)
+        ? $"you were {HpText(before)} when you left the game and this realm penalises that hang-up, which can kill"
+        : $"you were {HpText(before)} in an arena room when you left the game, and a hang-up there while dropped "
+          + "can kill, as the arena does (nothing lost)";
 
     // The record a death line would have made, from the list: where and when the
     // character was last in the game, and as its pile what it held then and
@@ -1154,7 +1290,11 @@ public sealed class HangupItemRecheck
     //   held — the first inventory read since the hang-up; null when none was read
     //          (the list is being let go as the link drops again): the pile is
     //          then everything on the list that a death takes.
-    private void RecordDeath(HeldAtDisconnect before, InventorySnapshot? held, int lives, string why, string evidence)
+    //   cameBackIn — the room the character came back in and whose dead arrive
+    //          there, when that is what the room says; the record and the notice
+    //          then name it.
+    private void RecordDeath(HeldAtDisconnect before, InventorySnapshot? held, int lives, string why, string evidence,
+        string? cameBackIn = null)
     {
         _deathBefore = null;
         // Still holding movement: nothing has run since the connect, and the death
@@ -1169,12 +1309,13 @@ public sealed class HangupItemRecheck
             equipped?.RemoveAll(i => StaysOnDeath(i.Name));
             lost?.RemoveAll(i => StaysOnDeath(CountedCommand.SplitLeadingCount(i.Name.Trim()).Name));
         }
-        string message = before.ItemsUnknown ? DeathMessage + " What it held then isn't known." : DeathMessage;
+        string message = DeathMessage
+            + (cameBackIn is null ? "" : $" It came back in {cameBackIn}.")
+            + (before.ItemsUnknown ? " What it held then isn't known." : "");
         DeathRecord? record = _recordDeath?.Invoke(new Recovery.UnwitnessedDeath(
             before.Room, before.At, lives, message, equipped, lost, before.ItemsUnknown ? null : before.Coins, atEntry));
 
-        string where = record?.RoomName is { Length: > 0 } name ? $"{name} ({record.RoomKeyText})" : RoomText(before.Room);
-        string number = record is null ? "" : $" #{record.RecordNumber}";
+        (string where, string number) = Recorded(record, before);
         string pile = equipped is null || lost is null
             ? "not known (no inventory was read on the connection it left on)"
             : $"{equipped.Count} worn, {lost.Count} carried"
@@ -1186,7 +1327,8 @@ public sealed class HangupItemRecheck
             + (atEntry ? "" : " Found after the login, so the movement engines and the buff timers are left as they are."));
         _notice?.Invoke(
             $"[Hang-up check: the character died to the hang-up penalty and has {lives} {(lives == 1 ? "life" : "lives")} "
-            + $"left. This client last had it in the game at {where}, {HpText(before)}, when the link went down "
+            + $"left{(cameBackIn is null ? "" : $": it came back in {cameBackIn}")}. "
+            + $"This client last had it in the game at {where}, {HpText(before)}, when the link went down "
             + $"({before.At.ToLocalTime():yyyy-MM-dd HH:mm:ss}): death{number} is recorded there, and Recover Now in Death "
             + "Recovery goes for the pile. If it was played from another client since, the pile is where it died then"
             + (before.ItemsUnknown ? ". What it held then isn't known, so the record lists no pile" : "") + "]");
@@ -1194,6 +1336,42 @@ public sealed class HangupItemRecheck
         LastMissing = [];
         _missing = new List<(string Name, int Count)>();
         Finish("the hang-up killed the character; the death is recorded and the pile is Death Recovery's", quiet: true);
+    }
+
+    // Where a record was made and its number, for the log and the terminal.
+    private static (string Where, string Number) Recorded(DeathRecord? record, HeldAtDisconnect before) =>
+        (record?.RoomName is { Length: > 0 } name ? $"{name} ({record.RoomKeyText})" : RoomText(before.Room),
+         record is null ? "" : $" #{record.RecordNumber}");
+
+    // The record a witnessed arena death gets (RoomTracker.NoteDeath's
+    // tookNothing): in the history with nothing lost, so there is no pile and
+    // nothing for Death Recovery to do. The pass ends with it: the character
+    // stands where the arena's dead arrive, not where it left the game, and
+    // nothing it held was taken.
+    //   atEntry — movement is still held at the login, so nothing has run since
+    //             the connect (UnwitnessedDeath.AtEntry).
+    private void RecordArenaDeath(HeldAtDisconnect before, bool atEntry, int lives, string why, string evidence,
+        string? cameBackIn)
+    {
+        _deathBefore = null;
+        string message = ArenaDeathMessage + (cameBackIn is null ? "" : $" It came back in {cameBackIn}.");
+        DeathRecord? record = _recordDeath?.Invoke(new Recovery.UnwitnessedDeath(
+            before.Room, before.At, lives, message, Equipped: null, Lost: null, Coins: null, atEntry, NothingLost: true));
+
+        (string where, string number) = Recorded(record, before);
+        LastDeathCheck = $"{_now():HH:mm:ss} died in the arena, death{number} recorded with nothing lost"
+            + $"{(atEntry ? "" : " (found late)")}: {why}. Seen: {evidence}";
+        _log?.Info(LogCategory,
+            $"Arena death{number} recorded for the hang-up at {where}: {why}. Nothing was lost, so there is no pile and "
+            + "nothing to recover."
+            + (atEntry ? "" : " Found after the login, so the movement engines and the buff timers are left as they are."));
+        _notice?.Invoke(
+            $"[Hang-up check: the character died in the arena after the link went down"
+            + $"{(cameBackIn is null ? "" : $", and came back in {cameBackIn}")}. An arena death takes no life and no item: it "
+            + $"has {lives} {(lives == 1 ? "life" : "lives")}, and there is no pile to recover. This client "
+            + $"last had it in the game at {where}, {HpText(before)}, when the link went down "
+            + $"({before.At.ToLocalTime():yyyy-MM-dd HH:mm:ss}): death{number} is recorded there]");
+        Finish("the character died in the arena after the hang-up; nothing was lost, so nothing is looked for", quiet: true);
     }
 
     private static string HpText(HeldAtDisconnect before) =>
@@ -1391,6 +1569,15 @@ public sealed class HangupItemRecheck
         }
         _roomShownHere = true;
         if (_linkUp) _roomReadThisLink = true;
+        // The room the map makes of this display, once it has taken it in: the
+        // first one it is sure of, with no move sent yet, is where the character
+        // came back in. A room it only still holds from before the link dropped
+        // doesn't count, so nothing is taken before a display has been read.
+        if (_linkUp && _entryRoom is null && !_moveSentSinceEntry)
+            _post(() =>
+            {
+                if (_entryRoom is null && !_moveSentSinceEntry) _entryRoom = _confirmedRoom();
+            });
         if (_phase != Phase.AwaitingRoom) return;
         _post(() =>
         {

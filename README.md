@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.172.3**
+> **Version 3.175.0**
 > - New Cash + Items setting, off by default: Fund party members' tolls / rides if short
 > - Changed from 3.172.0, which paid tolls for members unasked: with the setting off, a short or silent member closes tolls, NPC rides and sailings to the party for the trip
 > - On: the leader keeps the larger of its own crossings (this one and those further on the route) and Minimum cash to keep on hand; only coin above that is handed over

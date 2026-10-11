@@ -59,12 +59,13 @@
                     <CheckBox Content="Wait to enter lairs until I can debuff"
                               FontSize="11"
                               IsChecked="{Binding WaitToDebuffBeforeLairs, Mode=TwoWay}"
-                              ToolTip.Tip="Stand one step short of each lair until the round's between-round cast is free, so your combat profile's debuff goes out as you walk in instead of behind the attack. Does nothing unless the profile has a debuff set, and skips lairs marked 'do not attack'."/>
+                              ToolTip.Tip="Stand one step short of each lair until the round's between-round cast is free, so your combat profile's debuff goes out as you walk in instead of behind the attack. It also waits there while mana is under that debuff's Min mana per cast. Does nothing unless the profile has a debuff set, and skips lairs marked 'do not attack'."/>
                     <ComboBox Margin="22,0,0,0" FontSize="11" MinWidth="160"
                               IsVisible="{Binding WaitToDebuffBeforeLairs}"
                               SelectedIndex="{Binding LairDebuffWaitChoice, Mode=TwoWay}">
                         <ComboBoxItem Content="Wait for spells" ToolTip.Tip="Cast the buffs, heals and cures that are due first (one a round, three rounds at most), then enter. Keeps buffs up; costs the wait."/>
-                        <ComboBoxItem Content="Block spells" ToolTip.Tip="Hold buffs back and enter as soon as the cast is free (a round at most). Buffs go out after the fight. Heals and cures are never held."/>
+                        <ComboBoxItem Content="Block spells" ToolTip.Tip="Hold buffs back and enter as soon as the cast is free (a round at most). Buffs are let through again once the debuff has gone out in the lair. Heals and cures are never held."/>
+                        <ComboBoxItem Content="Wait for priority buff spells" ToolTip.Tip="Cast every buff ticked 'Priority buff' that is due first (one a round, however many) and hold every other buff back, then enter. The held buffs are let through again once the debuff has gone out in the lair. Heals and cures are never held."/>
                     </ComboBox>
                 </StackPanel>
             </Grid>

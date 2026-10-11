@@ -1,6 +1,6 @@
 # Version history
 
-## 3.172.3
+## 3.175.0
 
 - New Cash + Items setting, off by default: Fund party members' tolls / rides if short
 - Changed from 3.172.0, which paid tolls for members unasked: with the setting off, a short or silent member closes tolls, NPC rides and sailings to the party for the trip
@@ -9,6 +9,55 @@
 - Paid NPC transports and sailings are checked and funded like tolls
 - A bank stop already being made (training trip, item purchase, a stash room set as the Bank) also draws what the party is short of the tolls ahead
 - A hidden member can't be given coin and counts as not funded; coin give refusals are read on every realm
+
+## 3.174.6
+
+- Hang-up death check reads the room you come back in: where that room's dead arrive agrees with a death; back where you left rules one out, and so does any other room on unmodified Stock data and the zones Paradigm shares with Stock
+- Lives not read before the hang-up: back stripped where the dead arrive is now recorded as a death; owning nothing a death takes, the room alone is enough
+- Paradigm: back in the Burial Vault (14/1077) after hanging up in Albion (any room you can walk to from it without a boat) counts as where the dead arrive
+- The death record and notice name the room you came back in
+- A hang-up while dropped in an arena room is recorded as an arena death (nothing lost, no pile), on any realm, with or without a lives count from before
+- Sysop god lives asks no life back after an arena death, on either realm
+- Bug report shows where the stored list's dead arrive, how far that is trusted, and the room come back in
+
+## 3.174.3
+
+- Used on also lists the rooms where a command needs the item held to work an exit (lever, rubbed orb, titanium fork), naming the exit it opens
+
+## 3.174.2
+
+- No fight is opened from a room you are stepping out of (a swing at you, a hit line, a room re-run); the attack used to land in the next room
+- A lair entered that way opens with its debuff, then the room attack
+- A step with no landing or refusal within 3 s counts as not taken: the attacker is fought back where you stand
+- Bug report shows an engage held for a move in flight
+- bug reports addressed: paradigm-20261010-231540
+
+## 3.174.1
+
+- Item records show a Used on section listing every exit that names the item as the one needed to pass (a key on a locked door, an item to carry, a ticket): room, map/room and direction, one line per exit
+
+## 3.174.0
+
+- Timers of the buffs on you stop while you are out of the game (dropped link, relog, the board's menu) and run on with the time they had left
+- None of yours is recast for time spent away; a buff on a party member keeps its real end, as before
+- A whole-party buff stands still on you only: in a party it is recast when it would have run out had you not left
+- Your own buffs' time left is saved with the character and put back after MudPlay is closed
+- A client killed while in the game saves none, and buffs afresh
+- Changing profile with a character in the game tosses its buff timers
+- A buff's wear-off line is read after a reconnect or a restart; a hang-up death found late drops the buffs carried over
+- Bug report says whether the timers are running or standing still, and what a load put back
+
+## 3.173.0
+
+- Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held
+- Held buffs are let through once the debuff has gone out in the lair, two rounds into its fight at the latest, and held again at the next lair's door
+- A buff held at one lair with no cast since gets one cast at the next door first
+- Every lair wait also holds while mana is under what the debuff needs: its Min mana per cast, never less than the spell's cost, the higher of the two debuffs' (nav chip: Waiting for Mana to Debuff); mana-regen buffs still go out
+- A fight at the doorstep holds no buff
+- At a lair's door a buff you can't pay for is passed over for the next due one
+- A lair wait ends at once when the loop is stopped or paused, or Auto-Combat or the master switch goes off
+- Entire Loop Settings offers the lair wait while a loop walks to its first room
+- Program log and bug report say what a lair wait is for, what it holds back and why it ended
 
 ## 3.172.0
 
@@ -107,7 +156,7 @@
 - A room spell's kills count one each as they happen (session kills, lair timer, drop re-look, summon re-scan)
 - A command's `*Combat Off*` is recognised with a prompt or other lines between it and the echo
 - Program log notes a `*Combat Off*` that answers a command
-- bug reports addressed: paradigm-20261010-145330
+- bug reports addressed: paradigm-20261010-145330, paradigm-20261010-215619
 
 ## 3.167.12
 

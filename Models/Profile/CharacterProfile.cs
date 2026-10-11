@@ -238,6 +238,12 @@ public sealed class CharacterProfile
     // inventory read.
     public HeldAtDisconnect? HeldAtDisconnect { get; set; }
 
+    // The buff timers the character had when it was last out of the game, each with
+    // the time it had left. Written by Game.Spells.BuffTimerKeeper on ProfileSaving
+    // while the character is out of the game and read by it on the next load; null
+    // while the character is in the game, and when it had none.
+    public SavedBuffTimers? BuffTimers { get; set; }
+
     // Full names of the spells this character has learned — the persisted Spell
     // Book obtained set, so the learned checkmarks survive across sessions
     // instead of blanking until the next in-game `spells` / `pow` poll. Stored

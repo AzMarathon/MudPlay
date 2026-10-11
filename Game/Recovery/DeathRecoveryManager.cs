@@ -2984,8 +2984,12 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     }
 
     // RoomTracker.PlayerDeathInferred: a death worked out at the login. The pieces
-    // held to go back on are on that pile now, as above.
-    private void OnDeathInferred() => _heldEquip.Clear();
+    // held to go back on are on that pile now, as above, unless it was an arena
+    // death, which took nothing.
+    private void OnDeathInferred()
+    {
+        if (!_roomTracker.LastDeathTookNothing) _heldEquip.Clear();
+    }
 
     // RoomTracker.UnwitnessedDeathRecorded: a death recorded after the fact, at
     // the login or later. The grid gets its row. No backscroll is kept for it,

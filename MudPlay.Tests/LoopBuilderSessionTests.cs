@@ -213,6 +213,21 @@ public sealed class LoopBuilderSessionTests : IDisposable
     }
 
     [Fact]
+    public void WaitForPriorityBuffs_CarriedIntoBuiltLoop_FromTheTickBoxAndThirdChoice()
+    {
+        (LoopBuilderSessionViewModel s, _) = NewSession();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 3));
+        s.WaitToDebuffBeforeLairs = true;
+        s.LairDebuffWaitChoice = LairEntryDebuffModes.WaitForPriorityBuffsChoice;
+
+        Assert.Equal(LairEntryDebuffMode.WaitForPriorityBuffs, s.BuildTransient()!.LairEntryDebuff);
+
+        s.WaitToDebuffBeforeLairs = false;      // unticked, the choice is kept but the loop gets Off
+        Assert.Equal(LairEntryDebuffMode.Off, s.BuildTransient()!.LairEntryDebuff);
+    }
+
+    [Fact]
     public void DoNotRest_JsonRoundTrips_AndDefaultsFalseForOlderFiles()
     {
         // New loops persist the flag; older .loop files lacking it load as false —

@@ -260,6 +260,10 @@ public partial class MainWindow : Window
             // client is not a Cancel. Ahead of the profile save, which writes them.
             if (DataContext is MainWindowViewModel exiting) exiting.SavePendingSettingsForExit();
 
+            // The link goes with the client: the buff timers stop here, so the save
+            // below carries what each had left to the next session.
+            AppServices.Current.BuffTimers.NoteClientClosing();
+
             try { AppServices.Current.Profile.Save(); }
             catch (Exception ex)
             {
