@@ -1,5 +1,14 @@
 # Version history
 
+## 3.175.22
+
+- The client learns where a room's dead arrive from a death it sees, and keeps it with the game-data set for every client on it
+- Hang-up death check: back in a learned room counts as where the dead arrive, for rooms no list covers (never as "the wrong room", never over the Stock list)
+- A room seen to send its dead to two rooms is kept as disputed, and neither is used
+- Paradigm: the dungeon rooms of map 1 (1/2171 to 1/2188) go by the Stock list: their dead arrive in the Temple
+- Paradigm: Albion takes in the rooms only a room command on the same map reaches (Chamber of Wisdom, Castle Courtyard)
+- Bug report shows the learned arrival rooms, the disputed ones, and the pair the last check used
+
 ## 3.175.17
 
 - Loops and Auto-Lair setups saved, edited, renamed, moved or deleted in one running client now appear in the others within a few seconds, without a restart

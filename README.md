@@ -1,10 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.175.17**
-> - Loops and Auto-Lair setups saved, edited, renamed, moved or deleted in one running client now appear in the others within a few seconds, without a restart
-> - A loop already running, paused or staged keeps going from the copy it started with
-> - A loop is now written before its old copy is removed, so a client reading at that moment never sees it missing
+> **Version 3.175.22**
+> - The client learns where a room's dead arrive from a death it sees, and keeps it with the game-data set for every client on it
+> - Hang-up death check: back in a learned room counts as where the dead arrive, for rooms no list covers (never as "the wrong room", never over the Stock list)
+> - A room seen to send its dead to two rooms is kept as disputed, and neither is used
+> - Paradigm: the dungeon rooms of map 1 (1/2171 to 1/2188) go by the Stock list: their dead arrive in the Temple
+> - Paradigm: Albion takes in the rooms only a room command on the same map reaches (Chamber of Wisdom, Castle Courtyard)
+> - Bug report shows the learned arrival rooms, the disputed ones, and the pair the last check used
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
