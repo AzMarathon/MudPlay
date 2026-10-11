@@ -235,6 +235,7 @@ internal static class GameTableReader
         // The shape the row being read is expected to have (the last row's), how far
         // its names have matched, and the row's own names once one did not.
         private int _expected = -1;
+        private byte[][] _expectedUtf8 = Array.Empty<byte[]>();
         private int _fields;
         private List<string>? _names;
         private long _nestedStart = -1;
@@ -328,8 +329,11 @@ internal static class GameTableReader
         {
             if (_names is null)
             {
-                if (_expected >= 0 && _fields < _shapeUtf8[_expected].Length
-                    && reader.ValueTextEquals(_shapeUtf8[_expected][_fields]))
+                byte[][] expected = _expectedUtf8;
+                if (_fields < expected.Length
+                    && (reader.ValueIsEscaped
+                        ? reader.ValueTextEquals(expected[_fields])
+                        : reader.ValueSpan.SequenceEqual(expected[_fields])))
                 {
                     _fields++;
                     return;
@@ -351,7 +355,11 @@ internal static class GameTableReader
             int id = ShapeId(names);
             // A row without fields (a stray non-object, an empty object) never becomes
             // the expectation: the next real row would then miss it.
-            if (names.Length != 0) _expected = id;
+            if (names.Length != 0)
+            {
+                _expected = id;
+                _expectedUtf8 = _shapeUtf8[id];
+            }
             return id;
         }
 
@@ -373,6 +381,25 @@ internal static class GameTableReader
         // ("7.8", "1e3", "-0", past 32 bits) keeps its text so it reads back exactly.
         private void Number(ReadOnlySpan<byte> text)
         {
+            // Nearly every cell is a few digits: read those without the general parser.
+            int start = text[0] == (byte)'-' ? 1 : 0;
+            if (text.Length - start <= 9)
+            {
+                int digits = 0;
+                int at = start;
+                for (; at < text.Length; at++)
+                {
+                    uint digit = (uint)(text[at] - '0');
+                    if (digit > 9) break;
+                    digits = digits * 10 + (int)digit;
+                }
+                if (at == text.Length && !(start == 1 && digits == 0))
+                {
+                    Add(GameTable.Int32Cell, start == 1 ? -digits : digits);
+                    return;
+                }
+            }
+
             if (Utf8Parser.TryParse(text, out int value, out int used) && used == text.Length
                 && !(value == 0 && text.Length != 1))
                 Add(GameTable.Int32Cell, value);
