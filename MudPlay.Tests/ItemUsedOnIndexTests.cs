@@ -221,4 +221,36 @@ public sealed class ItemUsedOnIndexTests : IDisposable
         Assert.Empty(ItemUsedOnIndex.ActionsOf(cache, 0));
         Assert.Empty(ItemUsedOnIndex.ActionsOf(Cache(), 100));
     }
+
+    // The warm-up is the build: an item asked about afterwards is answered from it,
+    // with the Rooms table gone from the cache and from disk.
+    [Fact]
+    public void Warm_BuildsTheIndexAQueryThenReads()
+    {
+        GameDataCache cache = Cache();
+
+        ItemUsedOnIndex.Warm(cache);
+        cache.EvictIdle(TimeSpan.Zero);
+        File.Delete(Path.Combine(_root, "realm", "Rooms.json"));
+
+        Assert.Equal(new RoomKey(3, 1), Assert.Single(ItemUsedOnIndex.UsesOf(cache, 300)).Room);
+        Assert.Equal(new RoomKey(5, 1), Assert.Single(ItemUsedOnIndex.ActionsOf(cache, 600)).Room);
+        Assert.False(cache.IsTableLoaded("Rooms"));
+    }
+
+    // A cell that is "0" is no exit and is passed over unread; the exits beside it
+    // are still found.
+    [Fact]
+    public void ZeroCellsNameNothing_AndDoNotHideTheExitsBesideThem()
+    {
+        const string rooms =
+            "[{\"Map Number\":1,\"Room Number\":1,\"Name\":\"A\",\"N\":\"0\",\"S\":\"1/3 (Key: 700)\",\"E\":\"0\",\"W\":\"1/2 (Item: 701)\"}]";
+        GameDataCache cache = Cache(rooms);
+
+        Assert.Equal(Direction.S, Assert.Single(ItemUsedOnIndex.UsesOf(cache, 700)).Exit);
+        Assert.Equal(Direction.W, Assert.Single(ItemUsedOnIndex.UsesOf(cache, 701)).Exit);
+        int total = 0;
+        for (int item = 1; item <= 1000; item++) total += ItemUsedOnIndex.UsesOf(cache, item).Count;
+        Assert.Equal(2, total);
+    }
 }

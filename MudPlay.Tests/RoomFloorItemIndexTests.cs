@@ -175,4 +175,52 @@ public sealed class RoomFloorItemIndexTests : IDisposable
         Assert.Empty(idx.FloorItemsOf(new RoomKey(7, 1008)));           // alpha placement gone
         Assert.Equal(new[] { 812 }, idx.FloorItemsOf(new RoomKey(3, 500)));   // beta placement present
     }
+
+    // The warm-up is the build: a room asked about afterwards is answered from it,
+    // with the Rooms table gone from the cache and from disk.
+    [Fact]
+    public void Warm_BuildsTheIndexAQueryThenReads()
+    {
+        SeedTb("alpha", "[]");
+        SeedRooms("alpha", """
+            [ { "Map Number": 14, "Room Number": 10415, "Name": "Cache", "Placed": "3796,73" } ]
+            """);
+        (GameDataCache cache, _, RoomFloorItemIndex idx) = Build("alpha");
+
+        idx.Warm();
+        cache.EvictIdle(TimeSpan.Zero);
+        File.Delete(Path.Combine(_root, "alpha", "Rooms.json"));
+
+        Assert.Equal(new[] { 3796, 73 }, idx.FloorItemsOf(new RoomKey(14, 10415)));
+        Assert.False(cache.IsTableLoaded("Rooms"));
+    }
+
+    // A warm-up on a worker and queries on other threads at once: every one gets the
+    // whole index, never a map still being filled.
+    [Fact]
+    public async Task WarmAndQueriesTogether_EachSeesTheWholeIndex()
+    {
+        System.Text.StringBuilder rooms = new("[");
+        for (int room = 1; room <= 2000; room++)
+        {
+            if (room > 1) rooms.Append(',');
+            rooms.Append($$"""{ "Map Number": 1, "Room Number": {{room}}, "Name": "r", "Placed": "{{room}},7" }""");
+        }
+        rooms.Append(']');
+        SeedTb("alpha", "[]");
+        SeedRooms("alpha", rooms.ToString());
+        (_, _, RoomFloorItemIndex idx) = Build("alpha");
+
+        Task warm = Task.Run(idx.Warm);
+        Task<bool>[] queries = Enumerable.Range(0, 8).Select(_ => Task.Run(() =>
+        {
+            for (int room = 2000; room >= 1; room--)
+                if (!idx.FloorItemsOf(new RoomKey(1, room)).SequenceEqual(room == 7 ? new[] { 7 } : new[] { room, 7 }))
+                    return false;
+            return true;
+        })).ToArray();
+        await warm;
+
+        Assert.All(await Task.WhenAll(queries), Assert.True);
+    }
 }
