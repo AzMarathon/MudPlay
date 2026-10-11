@@ -63,6 +63,7 @@ public static class LocalApiActions
 
         string normalised = command.Trim().ToLowerInvariant();
         if (!normalised.StartsWith('@')) normalised = "@" + normalised;
+        normalised = RemoteCommandCatalog.WithoutEmphasis(normalised);
 
         if (RemoteCommandCatalog.Map.TryGetValue(normalised, out category)) return true;
 

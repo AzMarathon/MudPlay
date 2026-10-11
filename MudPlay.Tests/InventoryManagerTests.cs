@@ -1790,6 +1790,30 @@ public sealed class InventoryManagerTests
         Assert.Equal(30, h.Inv.Snapshot.Currency.Gold);
     }
 
+    // The engine's answer to a coin give of more of a coin than is held, one wording
+    // for each of the four metals and one for the board's fifth coin.
+    [Theory]
+    [InlineData("You do not have that much copper!")]
+    [InlineData("You do not have that much silver!")]
+    [InlineData("You do not have that much gold!")]
+    [InlineData("You do not have that much platinum!")]
+    [InlineData("You do not have that many runic coins!")]
+    public void GiveAway_Coins_TheLineForMoreThanIsHeld_IsRaised_AndMovesNothing(string line)
+    {
+        using Harness h = new();
+        h.Feed("You are carrying lantern, 30 gold crowns.");
+        h.Feed("Wealth:    3000 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+        int lacked = 0;
+        h.Inv.CoinGiveLackedCoins += () => lacked++;
+
+        h.Feed(line);
+        h.Feed("You do not have that.");                          // another command's line: not this
+
+        Assert.Equal(1, lacked);
+        Assert.Equal(30, h.Inv.Snapshot.Currency.Gold);
+    }
+
     // The count-then-words shape with more than one unknown word names no coin.
     [Fact]
     public void Receive_Coins_IgnoresALineThatNamesNoCoin()

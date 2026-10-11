@@ -44,6 +44,14 @@ public sealed class PathItemShopRouterTests
 
         public void Carry(int id, int n = 1) => Carried[id] = n;
 
+        // A party in tow: what the withdrawal adds for it given what the item
+        // draws (unset: the router is built without the party hooks), what it
+        // was asked about, and the purse read left waiting when HoldPurseRead.
+        public Func<long, long>? PartyTopUp;
+        public readonly List<(RoomKey Bank, RoomKey Shop, RoomKey Dest, long Drawing)> TopUpAsked = new();
+        public bool HoldPurseRead;
+        public Action? PursesRead;
+
         public PathItemShopRouter Build() => new(
             shopRoomsSellingItem: id => ShopRooms.TryGetValue(id, out List<RoomKey>? r)
                 ? r
@@ -63,7 +71,17 @@ public sealed class PathItemShopRouterTests
             post: a => a(),                          // synchronous in tests
             log: null,
             buyTimeout: TimeSpan.FromHours(1),        // real timer never fires mid-test
-            withdrawTimeout: TimeSpan.FromHours(1));
+            withdrawTimeout: TimeSpan.FromHours(1),
+            partyTollTopUp: PartyTopUp is null ? null : (bank, shop, dest, drawing) =>
+            {
+                TopUpAsked.Add((bank, shop, dest, drawing));
+                return (PartyTopUp(drawing), "the party is short");
+            },
+            readPartyPurses: PartyTopUp is null ? null : (_, _, _, then) =>
+            {
+                if (HoldPurseRead) PursesRead = then;
+                else then();
+            });
 
         // One shop (ShopA) selling item 42, three steps out, four steps on to dest.
         public Harness WithSingleShop()
@@ -538,6 +556,54 @@ public sealed class PathItemShopRouterTests
         r.OnNeedPosted(PathNeed(42, qty: 3));
 
         Assert.Equal(Bank, Assert.Single(h.Walks));
+    }
+
+    // Leading a party: the withdrawal for the item also draws what the party is
+    // short of the tolls on the rest of the walk, after its purses are read (user,
+    // 2026-10-10). A detour dropped while they are being read draws nothing.
+    [Fact]
+    public void OnWalkEvent_ArriveAtBank_WithdrawsThePartysTollShareWithTheShortfall()
+    {
+        var h = new Harness().WithSingleShop().WithBank(unitCost: 100);
+        h.Cash = 30;
+        h.PartyTopUp = _ => 900;
+        h.HoldPurseRead = true;
+        PathItemShopRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(42));
+        r.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "reached", Bank));
+
+        Assert.Empty(r.LastSentForTests);          // the purses first
+        h.PursesRead!();
+
+        Assert.Equal("with 970", Decode(Assert.Single(r.LastSentForTests)));
+        Assert.Equal((Bank, ShopA, Dest, 70L), Assert.Single(h.TopUpAsked));
+
+        var dropped = new Harness().WithSingleShop().WithBank(unitCost: 100);
+        dropped.Cash = 30;
+        dropped.PartyTopUp = _ => 900;
+        dropped.HoldPurseRead = true;
+        PathItemShopRouter gone = dropped.Build();
+        gone.OnNeedPosted(PathNeed(42));
+        gone.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "reached", Bank));
+        gone.OnWalkEvent(new WalkEvent(WalkEventKind.Started, "the user walked on", Dest));
+        dropped.PursesRead!();
+        Assert.Empty(gone.LastSentForTests);
+    }
+
+    // The party's share never makes a bank trip: cash that covers the item goes
+    // straight to the shop, and nothing is asked.
+    [Fact]
+    public void OnNeedPosted_CashCoversTheItem_NoBankTripForThePartysShare()
+    {
+        var h = new Harness().WithSingleShop().WithBank(unitCost: 100);
+        h.Cash = 100;
+        h.PartyTopUp = _ => 900;
+        PathItemShopRouter r = h.Build();
+
+        r.OnNeedPosted(PathNeed(42));
+
+        Assert.Equal(ShopA, Assert.Single(h.Walks));
+        Assert.Empty(h.TopUpAsked);
     }
 
     [Fact]

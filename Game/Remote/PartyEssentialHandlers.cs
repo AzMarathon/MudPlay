@@ -198,7 +198,7 @@ public sealed class PartyEssentialHandlers : IDisposable
 
     private void OnHealth(RemoteCommandContext ctx)
     {
-        if (!_player.HasPromptData) { ctx.Reply("HP unknown — no prompt observed yet"); return; }
+        if (!_player.HasPromptData) { ctx.Refuse("HP unknown - no prompt observed yet"); return; }
         // Format mirrors the in-game prompt vocabulary so the recipient
         // can read it at a glance: HP=cur/max,MA=cur/max[, Resting|Meditating].
         // The engine wraps the whole payload in { } at SendReply time;
@@ -238,7 +238,7 @@ public sealed class PartyEssentialHandlers : IDisposable
     // The engine wraps the payload in { } at SendReply time.
     private void OnStatus(RemoteCommandContext ctx)
     {
-        if (!_player.HasPromptData) { ctx.Reply("Status unknown"); return; }
+        if (!_player.HasPromptData) { ctx.Refuse("Status unknown"); return; }
         MovementStatus mv = _readMovement?.Invoke() ?? default;
         string eta = DescribeEta(mv);
         string etaClause = eta.Length > 0 ? $"; {eta}" : string.Empty;
@@ -410,7 +410,7 @@ public sealed class PartyEssentialHandlers : IDisposable
 
         if (TryResolveWhereViaResync(ctx)) return;
 
-        ctx.Reply("Location unknown");
+        ctx.Refuse("Location unknown");
     }
 
     // On Paradigm, fire `rm` and defer the @where reply until the game answers.
@@ -433,7 +433,7 @@ public sealed class PartyEssentialHandlers : IDisposable
                 else ctx.Reply($"map {key.Map}, room {key.Room} (not in map data)");
             },
             // onFailed: rm timed out / room not in graph — degrade gracefully.
-            () => ctx.Reply("Location unknown"));
+            () => ctx.Refuse("Location unknown"));
     }
 
     private static void ReplyWhere(RemoteCommandContext ctx, Room room)
@@ -512,8 +512,8 @@ public sealed class PartyEssentialHandlers : IDisposable
     // @party-specific party-member fallback in RemoteCommandManager.IsAuthorised,
     // so this handler fires for (a) any active party member regardless of
     // per-player grants and (b) any non-party caller with an explicit
-    // QueryHealthStatus grant. Hard-blocks for @party suicide / @party reroll fire
-    // at engine level before this handler runs.
+    // QueryHealthStatus grant. Hard-blocks for @party set suicide / @party reroll
+    // fire at engine level before this handler runs.
     private void OnParty(RemoteCommandContext ctx)
     {
         if (ctx.Channel != RemoteChannel.Local || ctx.Args.Count == 0)
@@ -602,7 +602,7 @@ public sealed class PartyEssentialHandlers : IDisposable
     private void OnLives(RemoteCommandContext ctx)
     {
         int? lives = _engine.LivesProvider?.Invoke();
-        if (lives is null) { ctx.Reply("lives unknown"); return; }
+        if (lives is null) { ctx.Refuse("lives unknown"); return; }
         ctx.Reply($"{lives} {(lives == 1 ? "life" : "lives")} remaining");
     }
 
@@ -614,25 +614,22 @@ public sealed class PartyEssentialHandlers : IDisposable
     //     knows why and can pick a different party.
     //   - otherwise → send invite <sender-given> on the wire. The invite itself IS
     //     the confirmation; no additional telepath reply.
-    // The follower-deny reply is gated on WarnOnDenial per the same remote-command
-    // reply policy that gates the suicide policy-block reply — denials are
-    // user-suppressible noise. The full-party reply is informational coordination,
-    // not a denial, and fires regardless.
+    // The follower-deny and full-party replies are refusals, so the Warn setting
+    // silences them (the remote-command reply policy).
     // A mortally-wounded character can neither join nor lead a party — the game
     // rejects the join/invite command outright ("You may not do that while you
     // are mortally wounded!"). Reply with the reason, and who (if anyone) is
     // dragging our downed body, so the partymate understands why and whether help
-    // is already underway instead of watching the command bounce. Fires
-    // regardless of WarnOnDenial: this is party-coordination info for a member
-    // trying to help, like the full-party @invite reply, not a security-sensitive
-    // denial to a stranger. Returns true when it handled (blocked) the command.
+    // is already underway instead of watching the command bounce. A refusal like
+    // any other: the Warn setting silences it (user, 2026-10-10). Returns true
+    // when it handled (blocked) the command.
     private bool RejectIfMortallyWounded(RemoteCommandContext ctx, string verb)
     {
         if (!_player.IsMortallyWounded) return false;
         string drag = _readDraggedBy?.Invoke() is { Length: > 0 } who
             ? $"being dragged by {who}"
             : "nobody is dragging me";
-        ctx.Reply($"Can't {verb} — I'm mortally wounded; {drag}.");
+        ctx.Refuse($"Can't {verb} - I'm mortally wounded; {drag}.");
         return true;
     }
 
@@ -641,9 +638,8 @@ public sealed class PartyEssentialHandlers : IDisposable
         if (RejectIfMortallyWounded(ctx, "invite")) return;
         if (_party.IsInParty && !_party.SelfIsLeader)
         {
-            if (!_engine.WarnOnDenial) return;
             string leader = GivenName(_party.LeaderName ?? string.Empty);
-            ctx.Reply(string.IsNullOrEmpty(leader)
+            ctx.Refuse(string.IsNullOrEmpty(leader)
                 ? "I'm following someone; denied."
                 : $"I'm following {leader}; denied.");
             return;
@@ -659,7 +655,7 @@ public sealed class PartyEssentialHandlers : IDisposable
                 if (!string.IsNullOrEmpty(g)) followers.Add(g);
             }
             string list = followers.Count == 0 ? "(roster unknown)" : string.Join(", ", followers);
-            ctx.Reply($"My Party is full, {list} are following me.");
+            ctx.Refuse($"My party is full: {list} {(followers.Count == 1 ? "is" : "are")} following me.");
             return;
         }
         if (_wireSender is null) return;
@@ -686,9 +682,8 @@ public sealed class PartyEssentialHandlers : IDisposable
         // in the party is harmless (the game just says we already are).
         if (_party.IsInParty && !_party.SelfIsLeader && !IsBelievedLeader(senderGiven))
         {
-            if (!_engine.WarnOnDenial) return;
             string leader = GivenName(_party.LeaderName ?? string.Empty);
-            ctx.Reply(string.IsNullOrEmpty(leader)
+            ctx.Refuse(string.IsNullOrEmpty(leader)
                 ? "I'm following someone; denied."
                 : $"I'm following {leader}; denied.");
             return;
@@ -746,6 +741,10 @@ public sealed class PartyEssentialHandlers : IDisposable
     // there, so a hold that cleared while we were out never sent its @ok. Answer
     // @ok now when nothing still holds us; otherwise the @ok goes out when the last
     // hold clears (PartyRestSync.RequestOk), since we're back in the party.
+    //
+    // The @ok goes by telepath whatever channel the @waiting came in on, as every
+    // @ok we send does: it is a command for the leader alone, and said aloud or
+    // gangpathed it would reach every client that holds a wait of ours.
     private void OnWaiting(RemoteCommandContext ctx)
     {
         string senderGiven = GivenName(ctx.Sender);

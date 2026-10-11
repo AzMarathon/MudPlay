@@ -92,6 +92,7 @@ public sealed class TrainerWalkManager : IDisposable
     private int _keepLevels;          // bankable levels to leave untrained this run (the reserve)
     private StopReason _stopReason;   // why a looping run stopped (shapes the reply)
     private Action<string>? _reply;   // @train deferred reply sink (null for local runs)
+    private Action<string>? _refuse;  // @train: where a report of nothing trained goes (null: _reply)
     private TrainerShop? _target;
     private ResumeTarget _resume;
     private bool _walkRun;            // the run walked to its trainer (Train Now / armed), not @train in place
@@ -394,14 +395,18 @@ public sealed class TrainerWalkManager : IDisposable
     //     then report;
     //   * both set → as above, plus apply the CP plan through the final level.
     // reply (when supplied) receives a one-line status report once the run settles.
+    // refuse (when supplied) receives it in reply's place when the run trained no
+    // level and allocated no CP: that report is a failure answer, which the remote
+    // command sends under the Warn setting.
     // No engine detour — a remote train is used while parked.
-    public void TrainInPlace(Action<string>? reply = null)
+    public void TrainInPlace(Action<string>? reply = null, Action<string>? refuse = null)
     {
         if (IsBusy || !_wire.IsBound) return;
         AutoTrainerSettings s = ReadSettings();
         // Decoupled: AutoTrain drives the level-loop, AutoTrainStats drives the CP
         // apply — each independent (either, neither, or both).
         ResetRunState(loop: s.AutoTrain, applyCp: s.AutoTrainStats, reply);
+        _refuse = refuse;
         _target = null;       // no walk target — we're assumed to be at the trainer
         _resume = default;    // and not detouring a running engine
         _startLevel = _stats.Level;
@@ -1345,6 +1350,7 @@ public sealed class TrainerWalkManager : IDisposable
         Action<string>? reply = _reply;
         Action<int, string>? partyDone = _partyDone;
         int levels = _levelsTrained;
+        if (levels == 0 && !_cpApplied && _refuse is { } refuse) reply = refuse;
         _partyDone = null;   // delivered here with the report, not by Finish
         Finish(null);
         if (partyDone is not null)
@@ -1436,6 +1442,7 @@ public sealed class TrainerWalkManager : IDisposable
         _keepLevels = 0;
         _cpApplied = false;
         _reply = null;
+        _refuse = null;
         _levelsTrained = 0;
         _trainSteps = 0;
         _startLevel = 0;
@@ -1495,8 +1502,10 @@ public sealed class TrainerWalkManager : IDisposable
             if (trained > 0) return $"Trained to level {finalLevel}.";
             return stop switch
             {
-                StopReason.ProgressedTooFar => "Can't train — you've progressed too far for this trainer.",
-                StopReason.NoMoney => "Can't train — not enough money for training.",
+                // Plain hyphens: this line is also the @train answer, which rides
+                // the wire to another player (WireText).
+                StopReason.ProgressedTooFar => "Can't train - you've progressed too far for this trainer.",
+                StopReason.NoMoney => "Can't train - not enough money for training.",
                 _ => "Nothing to train.",
             };
         }

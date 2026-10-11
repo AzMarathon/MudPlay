@@ -371,7 +371,10 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         // Name-conflict guard: refuse if the new name would overwrite
         // a DIFFERENT loop. Renaming an existing loop to its own
         // current name (i.e. no rename, just a Save) is the intentional
-        // overwrite case and is allowed.
+        // overwrite case and is allowed. A loop of that name another client saved a
+        // moment ago counts, so the folder is read first, without waiting for it to
+        // settle.
+        _loops.TakeInOutsideChanges();
         bool wouldOverwriteAnother = _loops.Loops.Any(l =>
             string.Equals(l.Name, newName, StringComparison.OrdinalIgnoreCase)
             && (_isNew || !string.Equals(l.Name, _original.Name, StringComparison.OrdinalIgnoreCase)));

@@ -17,8 +17,9 @@ namespace MudPlay.Game.Remote;
 // Hard-blocks land at engine level before this handler runs:
 //   - @do reroll is always denied (the reroll token match in IsHardBlocked
 //     catches command + args).
-//   - @do suicide is gated by LivesProvider through GetSuicidePolicyBlockReply —
-//     denied when remaining lives ≤ MaxSuicideLivesThreshold.
+//   - @do with the word `suicide` among what it would send is always refused,
+//     with a pointer at @suicide (GetForcedSuicideRedirectReply), once the
+//     sender's permission has been checked.
 //
 // Wire-sender is bound to the gate-wrapped sender (same as the rest of the
 // engine-side handlers) so a malicious caller can't slip bytes onto the wire

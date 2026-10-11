@@ -186,13 +186,10 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
             ? $"{cmd}: {opt.Num} {opt.Label} ({name})"
             : $"{cmd}: {opt.Num} {opt.Label}";
 
-    // Syntax-error reply — gated by the engine's WarnOnDenial master switch so a
-    // muted client stays silent.
-    private void Fail(string cmd, Option[] options, RemoteCommandContext ctx)
-    {
-        if (_engine.WarnOnDenial)
-            ctx.Reply($"{cmd}: command failed. Options: {OptionsList(options)}");
-    }
+    // Syntax-error reply: a refusal, so a client with the Warn setting off stays
+    // silent.
+    private static void Fail(string cmd, Option[] options, RemoteCommandContext ctx) =>
+        ctx.Refuse($"{cmd}: command failed. Options: {OptionsList(options)}");
 
     private static string OptionsList(Option[] options) =>
         string.Join(", ", options.Select(o =>

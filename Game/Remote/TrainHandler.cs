@@ -11,8 +11,8 @@ namespace MudPlay.Game.Remote;
 //
 // PlayerRemoteControls.ExecuteCommands-gated per the catalog — it's a "do
 // something on my behalf" action, like @do / @kill. A request while a train run
-// is already in flight is declined (reply gated on
-// RemoteCommandManager.WarnOnDenial).
+// is already in flight is refused, and so is the report of a run that trained
+// nothing.
 public sealed class TrainHandler : IDisposable
 {
     private readonly RemoteCommandManager _engine;
@@ -42,11 +42,12 @@ public sealed class TrainHandler : IDisposable
     {
         if (_coordinator.IsBusy)
         {
-            if (_engine.WarnOnDenial) ctx.Reply("busy training");
+            ctx.Refuse("busy training");
             return;
         }
         // The status report is delivered by the coordinator once the (possibly
-        // multi-level) run settles — capture the reply sink for that deferred call.
-        _coordinator.TrainInPlace(ctx.Reply);
+        // multi-level) run settles — capture the sinks for that deferred call. A
+        // run that trained nothing reports through Refuse.
+        _coordinator.TrainInPlace(ctx.Reply, why => ctx.Refuse(why));
     }
 }

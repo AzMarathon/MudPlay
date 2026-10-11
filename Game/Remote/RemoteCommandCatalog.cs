@@ -153,7 +153,7 @@ public static class RemoteCommandCatalog
             // @atkprio / @atkorder split the legacy @attack-last verb: one
             // sets the priority target, the other the target-ordering mode.
             // No-arg form queries the current value; an arg sets it. Handler
-            // lives in AtkConfigHandler.cs, writes CombatSettings.
+            // lives in AttackTargetingRemoteHandler.cs, writes CombatSettings.
             ["@atkprio"]      = PlayerRemoteControls.AlterSettings,
             ["@atkorder"]     = PlayerRemoteControls.AlterSettings,
             ["@auto-all"]     = PlayerRemoteControls.AlterSettings,
@@ -213,7 +213,7 @@ public static class RemoteCommandCatalog
             // sub-command dispatch path (Local channel + args) lives
             // in PartyEssentialHandlers.OnParty and gates on
             // IsActivePartyMember + !DisallowPartyDirectives itself.
-            // Hard-blocks (@party suicide, @party reroll) bypass both
+            // Hard-blocks (@party set suicide, @party reroll) bypass both
             // at engine level via IsHardBlocked.
             ["@party"]        = PlayerRemoteControls.QueryHealthStatus,
             ["@share"]        = PlayerRemoteControls.None,
@@ -244,16 +244,16 @@ public static class RemoteCommandCatalog
             ["@path"]         = new("@path", "movement engine activity + step progress; when idle, the last loop/auto-lair run"),
             ["@who"]          = new("@who", "other players / monsters in your room"),
             ["@timer"]        = new("@timer [name]", "boss respawn timers (all, or matching a name); @timer sync shares them client-to-client"),
-            ["@death"]        = new("@death [all]", "unrecovered deaths from the recovery log — the latest, or all of them"),
+            ["@death"]        = new("@death [all]", "unrecovered deaths from the recovery log: the latest, or all of them"),
             ["@roomba"]       = new("@roomba <item>", "where an item was last seen across gang-house rooms; @roomba sync shares the log"),
-            ["@quest"]        = new("@quest [name|flag]", "quest progress: bare lists your marked-complete quests; with a name/alias/flag reports that quest's marked bands, plus the live flag step on Paradigm (or stock with sys-god)"),
-            ["@help"]         = new("@help [command]", "the commands you're allowed to use, or one command's syntax"),
+            ["@quest"]        = new("@quest [name|flag|update]", "quest progress: bare lists your completed quests; a name/alias/flag reports that quest and its live flag step (Paradigm, or stock with sys-god); 'update' reads every flag and marks what is done"),
+            ["@help"]         = new("@help [command|&@]", "the commands you're allowed to use, or one command's syntax; @help &@ describes the relay-back form"),
             ["@what"]         = new("@what", "items on the room floor"),
             ["@wealth"]       = new("@wealth", "your coins and total value"),
             ["@enc"]          = new("@enc", "encumbrance"),
             ["@have"]         = new("@have <item>", "whether you carry, wear, or hold a matching item / key"),
             ["@inv"]          = new("@inv", "your carried pack and keys"),
-            ["@token"]        = new("@token <name>", "remaining daily charges of a held transport token"),
+            ["@token"]        = new("@token [place]", "remaining daily charges of your transport tokens: bare lists them all, a place (its whole name) reports that one"),
             ["@uses"]         = new("@uses [item]", "remaining charges of a carried limited-use item; bare lists them all"),
             ["@suicide"]      = new("@suicide", "forces your character's death (Elevated; uses your stored suicide password; blocked at/below your lives threshold)"),
             ["@invite"]       = new("@invite", "asks you to invite the sender into your party"),
@@ -262,24 +262,24 @@ public static class RemoteCommandCatalog
             ["@get-stash"]    = new("@get-stash", "search the room and take the coin it shows, up to your coin weight limits"),
             ["@drop-all"]     = new("@drop-all [full|coins|keys]", "drop everything unworn in your pack; 'full' everything held (worn gear, light, keys, coins); 'coins' / 'keys' just those"),
             ["@hide-all"]     = new("@hide-all [full|coins|keys]", "the @drop-all sweeps, but hidden in the room instead of dropped"),
-            ["@deposit-all"]  = new("@deposit-all", "bank all excess coin"),
+            ["@deposit-all"]  = new("@deposit-all", "in a bank: deposits your coin above your keep-on-hand amount, or withdraws up to it when you carry less"),
             ["@do"]           = new("@do <command>", "sends the command verbatim to the game (highest-trust)"),
-            ["@kill"]         = new("@kill <target>", "retargets your combat onto the named monster this round"),
+            ["@kill"]         = new("@kill <target>", "retargets your combat onto the named monster this round; naming a player in your room starts a fight with them where PvP is on"),
             ["@trap"]         = new("@trap <dir>", "disarm a trap in that direction; @trap stop aborts"),
-            ["@train"]        = new("@train", "trains (and applies your CP plan if Auto-train-stats is on); assumes you're at a trainer"),
+            ["@train"]        = new("@train", "trains where you stand: one level, or every banked level if Auto-train is on; applies your CP plan if Auto-train stats is on; assumes you're at a trainer"),
             ["@equip"]        = new("@equip <set> [update] | @equip-all", "wears a saved gear set (default / backstab / resthp / restma / moving / bossing, or its keyword); 'update' saves what you're wearing into that set; @equip-all wears the Default set"),
             ["@goto"]         = new("@goto <destination>", "walks you to a GOTO favorite, a searched room (coords/name/acronym), or a boss"),
-            ["@loop"]         = new("@loop <name|coords|last> | @loop send [name|yes|no]", "starts a saved loop, an ad-hoc coordinate loop (≥2 coords), or re-runs the last loop ('last'); 'send' asks for a copy of one of my loops (bare 'send' = the one I'm running)"),
-            ["@lair"]         = new("@lair <name|coords>", "starts an Auto-Lair setup"),
+            ["@loop"]         = new("@loop <name> | <m/r, m/r, ...> | last | send [name|yes|no]", "starts a saved loop, a loop through 2+ map/room coords (commas or semicolons between them), or the last loop again; 'send' asks for a copy of one of my loops"),
+            ["@lair"]         = new("@lair <name> | <m/r, m/r, ...>", "starts Auto-Lair on a saved setup (its whole name) or on 2+ map/room coords (commas or semicolons between); one already running takes the new lairs and carries on"),
             ["@stop"]         = new("@stop", "pauses your movement"),
             ["@rego"]         = new("@rego", "resumes your movement"),
             ["@atkprio"]      = new("@atkprio [1|2|3 <name>]", "Target Priority: bare reports it; 1 Default, 2 follow-leader, 3 <name> attack-what-player"),
-            ["@atkorder"]     = new("@atkorder [1-5 <name>]", "Attack Order: bare reports it; 1 Default, 2 last-party, 3 last-room, 4 <name> attack-after, 5 not-last"),
+            ["@atkorder"]     = new("@atkorder [1|2|3|4 <name>|5]", "Attack Order: bare reports it; 1 Default, 2 last-party, 3 last-room, 4 <name> attack-after, 5 not-last"),
             ["@auto-all"]     = new("@auto-all [on|off]", "kill switch: off stops every engine, on restores what was running"),
             ["@auto-combat"]  = new("@auto-combat [on|off]", "toggle the auto-combat engine"),
             ["@auto-nuke"]    = new("@auto-nuke [on|off]", "toggle the auto-nuke (offensive spell) engine"),
-            ["@auto-heal"]    = new("@auto-heal [on|off]", "toggle auto-heal (same flag as @auto-rest)"),
-            ["@auto-rest"]    = new("@auto-rest [on|off]", "toggle auto-rest / heal"),
+            ["@auto-heal"]    = new("@auto-heal [on|off]", "toggle auto-heal (heal and cure casts; resting is @auto-rest)"),
+            ["@auto-rest"]    = new("@auto-rest [on|off]", "toggle auto-rest (resting and meditating; healing is @auto-heal)"),
             ["@auto-bless"]   = new("@auto-bless [on|off]", "toggle the auto-bless engine"),
             ["@auto-light"]   = new("@auto-light [on|off]", "toggle the auto-light engine"),
             ["@auto-cash"]    = new("@auto-cash [on|off]", "toggle the auto-cash engine"),
@@ -293,7 +293,7 @@ public static class RemoteCommandCatalog
             ["@divert"]       = new("@divert [player]", "forwards your incoming telepaths to another player; bare stops"),
             ["@hangup"]       = new("@hangup", "drops your connection and stays down (no auto-reconnect)"),
             ["@relog"]        = new("@relog", "cleanly exits, then reconnects and auto-logs back in"),
-            ["@dupe"]         = new("@dupe <player>", "copies your query and roomba permissions onto that player (Elevated; one use until reset in the client; telepath / gangpath only)"),
+            ["@dupe"]         = new("@dupe <player>", "copies your query, roomba and quest permissions onto that player (Elevated; one use until reset in the client; telepath / gangpath only)"),
             ["@wait"]         = new("@wait", "hold: automation pauses until @ok releases it"),
             ["@ok"]           = new("@ok", "releases a @wait hold"),
             ["@waiting"]      = new("@waiting", "leader is holding for your @ok; answered with @ok once nothing holds you"),
@@ -323,12 +323,14 @@ public static class RemoteCommandCatalog
     public static bool TryGetCategory(string command, out PlayerRemoteControls category)
     {
         if (string.IsNullOrEmpty(command)) { category = default; return false; }
-        string key = command;
-        // Strip a trailing `!` so an emphatic wire form matches the bare
-        // command name in the catalog.
-        if (key[^1] == '!') key = key[..^1];
-        return Map.TryGetValue(key, out category);
+        return Map.TryGetValue(WithoutEmphasis(command), out category);
     }
+
+    // The command word less one trailing `!`: `@stop!` is `@stop` said with
+    // emphasis. The catalog, the dispatcher and the local API all read a command
+    // word through here, so the three agree on what was sent.
+    public static string WithoutEmphasis(string command) =>
+        command.Length > 2 && command[^1] == '!' ? command[..^1] : command;
 
     // Look up a command's help. Accepts the name with or without the leading `@`
     // (so `@help suicide` and `@help @suicide` both resolve) and strips a trailing

@@ -1,5 +1,37 @@
 # Version history
 
+## 3.176.0
+
+- New Cash + Items setting, off by default: Fund party members' tolls / rides if short
+- Changed from 3.172.0, which paid tolls for members unasked: with the setting off, a short or silent member closes tolls, NPC rides and sailings to the party for the trip
+- On: the leader keeps the larger of its own crossings (this one and those further on the route) and Minimum cash to keep on hand; only coin above that is handed over
+- No exact change: the smallest larger amount your coins make is handed over, with no other limit; the terminal says how much over
+- Paid NPC transports and sailings are checked and funded like tolls
+- A bank stop already being made (training trip, item purchase, a stash room set as the Bank) also draws what the party is short of the tolls ahead
+- A hidden member can't be given coin and counts as not funded; coin give refusals are read on every realm
+
+## 3.175.17
+
+- Loops and Auto-Lair setups saved, edited, renamed, moved or deleted in one running client now appear in the others within a few seconds, without a restart
+- A loop already running, paused or staged keeps going from the copy it started with
+- A loop is now written before its old copy is removed, so a client reading at that moment never sees it missing
+- bug reports addressed: paradigm-20261010-225215, paradigm-20261010-225246
+
+## 3.175.15
+
+- Remote commands: a sender without the permission gets only the Failure message; `@suicide`'s lives rule and `@do suicide` answer only a sender who holds it
+- Every refusal (bad or missing word, can't be done, state not read yet, mortally wounded) follows the Warn setting; answers another client waits on are still sent
+- A `&@` relay asked for on say goes by telepath while sneaking
+- `@loop` and `@goto` say they started only when they did, and why not otherwise
+- `@lair` on a running Auto-Lair keeps the run: `already running` for the same lairs, `updated` for others
+- `@deposit-all` in a room surely not a bank answers `not in a bank - nothing deposited` and sends nothing
+- `@kill` naming a player you won't fight (PvP off, your party, another fight) attacks nothing and says why
+- A follower waits longer on a leader's `@comeback` answer only when it says the leader is coming
+- Replies are plain ASCII: a hyphen where a long dash was
+- Reply wording: `can't be hidden`, bare `@profile` without doubled braces, `My party is full: …`
+- A trailing `!` on any command (`@stop!`) is ignored on every path
+- `@help` texts and Talk tab tooltips corrected
+
 ## 3.175.2
 
 - A room title or prayer line shown mid-fight is no longer read as a miss (Wire Inspector's Classified tags; a monster's attack under a `break` hold); only dark cyan is one

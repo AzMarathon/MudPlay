@@ -97,6 +97,9 @@ public sealed class PathItemShopRouter : IDisposable
     private RoomKey _shopRoom;
     private RoomKey _bankRoomKey;
     private long _costTarget;
+    private readonly Func<RoomKey, RoomKey, RoomKey, long, (long Copper, string Said)>? _partyTollTopUp;
+    private readonly Action<RoomKey, RoomKey, RoomKey, Action>? _readPartyPurses;
+    private int _bankStop;
 
     public PathItemShopRouter(
         Func<int, IReadOnlyList<RoomKey>> shopRoomsSellingItem,
@@ -115,8 +118,17 @@ public sealed class PathItemShopRouter : IDisposable
         Action<Action> post,
         LogService? log = null,
         TimeSpan? buyTimeout = null,
-        TimeSpan? withdrawTimeout = null)
+        TimeSpan? withdrawTimeout = null,
+        // A party in tow pays the tolls and fares on the rest of the walk too (bank
+        // → shop → destination). partyTollTopUp: what to add to a withdrawal of the
+        // given size for them, with the line for the log, never more than the bank
+        // is known to hold. readPartyPurses: has their purses read first and calls
+        // back; it calls back at once when there is nothing to read them for.
+        Func<RoomKey, RoomKey, RoomKey, long, (long Copper, string Said)>? partyTollTopUp = null,
+        Action<RoomKey, RoomKey, RoomKey, Action>? readPartyPurses = null)
     {
+        _partyTollTopUp = partyTollTopUp;
+        _readPartyPurses = readPartyPurses;
         ArgumentNullException.ThrowIfNull(shopRoomsSellingItem);
         ArgumentNullException.ThrowIfNull(deterministicGiveExists);
         ArgumentNullException.ThrowIfNull(currentRoom);
@@ -364,9 +376,42 @@ public sealed class PathItemShopRouter : IDisposable
             GoToShop();
             return;
         }
+        if (_readPartyPurses is null || _partyTollTopUp is null)
+        {
+            SendWithdraw();
+            return;
+        }
+        // A newer stop at the bank, or a detour dropped meanwhile, makes this
+        // answer nobody's.
+        int stop = ++_bankStop;
+        _readPartyPurses(_bankRoomKey, _shopRoom, _origDest, () =>
+        {
+            if (_phase == Phase.Withdrawing && stop == _bankStop) SendWithdraw();
+        });
+    }
+
+    private void SendWithdraw()
+    {
+        long shortfall = _costTarget - _cashOnHand();
+        if (shortfall <= 0)
+        {
+            GoToShop();
+            return;
+        }
+        // The members' share is only ever added to this withdrawal, which the item
+        // is the reason for (user, 2026-10-10: the leader's cash "from hand or bank
+        // if its making a bank trip").
+        long extra = 0;
+        if (_partyTollTopUp is { } topUp)
+        {
+            (extra, string said) = topUp(_bankRoomKey, _shopRoom, _origDest, shortfall);
+            extra = Math.Max(0, extra);
+            if (said.Length > 0) _log?.Info(LogCategory, said);
+        }
         _log?.Info(LogCategory,
-            $"at bank {_bankRoomKey} — withdrawing {shortfall} copper for path item {_itemId}");
-        _wire.Send($"with {shortfall}");
+            $"at bank {_bankRoomKey} — withdrawing {shortfall} copper for path item {_itemId}"
+            + (extra > 0 ? $" and {extra} for the party's tolls, {shortfall + extra} in all" : string.Empty));
+        _wire.Send($"with {shortfall + extra}");
         ArmWithdrawTimer();
     }
 

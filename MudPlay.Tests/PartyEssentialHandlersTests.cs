@@ -1246,7 +1246,7 @@ public sealed class PartyEssentialHandlersTests
         engine.DispatchForTests(Telepath("Raijin", "@invite"));
 
         // Comma-joined given names of the 5 followers (skipping self).
-        Assert.Contains("{My Party is full, Helper, Buddy, Lou, Sam, Pal are following me.}", LastReply(engine));
+        Assert.Contains("{My party is full: Helper, Buddy, Lou, Sam, Pal are following me.}", LastReply(engine));
         Assert.Empty(relay);
     }
 
@@ -1375,15 +1375,28 @@ public sealed class PartyEssentialHandlersTests
     }
 
     [Fact]
-    public void Join_WhileMortallyWounded_RepliesEvenWhenWarnDenialOff()
+    public void Join_WhileMortallyWounded_IsSilentWhenWarnDenialOff()
     {
-        // The mortally-wounded refusal is party-coordination info (like the
-        // full-party @invite reply), not a security-sensitive denial — it
-        // fires regardless of WarnOnDenial so a helper always learns why.
+        // A refusal like any other: the Warn setting silences it (user,
+        // 2026-10-10), and the join is still not sent.
         var (engine, _, player, _, players, relay) = Setup();
         SeedPlayer(players, "Raijin", PlayerRemoteControls.RequestInvite);
         DropPlayer(player);
         engine.WarnOnDenial = false;
+
+        engine.DispatchForTests(Telepath("Raijin", "@join"));
+
+        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(relay);
+    }
+
+    [Fact]
+    public void Join_WhileMortallyWounded_RepliesWhenWarnDenialOn()
+    {
+        var (engine, _, player, _, players, relay) = Setup();
+        SeedPlayer(players, "Raijin", PlayerRemoteControls.RequestInvite);
+        DropPlayer(player);
+        engine.WarnOnDenial = true;
 
         engine.DispatchForTests(Telepath("Raijin", "@join"));
 
