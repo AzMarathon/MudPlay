@@ -118,7 +118,8 @@ public static class TransferChannels
         return (transfer, channel);
     }
 
-    private static string NameOf(RemoteChannel channel) => channel switch
+    // A channel as the log and a refusal name it.
+    public static string NameOf(RemoteChannel channel) => channel switch
     {
         RemoteChannel.Telepath => "telepath",
         RemoteChannel.Gangpath => "gangpath",

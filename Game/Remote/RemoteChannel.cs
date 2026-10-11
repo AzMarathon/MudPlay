@@ -18,7 +18,8 @@ public enum RemoteChannel
     Local,
 
     // "Broadcast from X "@cmd"" — the game's numbered channel (`join <n>`, spoken
-    // with `br`). Not a channel for remote commands at large: only the client-to-
-    // client transfers that TransferChannels allows there are followed on it.
+    // with `br`). Public, so read only once the user opens it on the Talk tab;
+    // then every remote command is, under the same gates as on the other three,
+    // and what is said back is bounded (BroadcastAnswerBudget).
     Broadcast,
 }

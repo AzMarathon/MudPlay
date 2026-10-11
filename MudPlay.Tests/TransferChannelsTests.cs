@@ -211,24 +211,139 @@ public sealed class TransferChannelsTests
         Assert.Equal("br {data}\r", e.Wire.Single());
     }
 
-    // The broadcast channel carries the transfers and nothing else: no other remote
-    // command is followed or answered there, as none was before.
+    // With its box unticked the broadcast channel is read like the other three: an
+    // ordinary remote command from a player who holds its permission is carried
+    // out, and answered on the channel. The log says where it was said.
     [Theory]
-    [InlineData("@timer")]
-    [InlineData("@timer dragon")]
-    [InlineData("@health")]
-    [InlineData("@loop kings road")]
-    [InlineData("@roomba torch")]
-    [InlineData("&@health")]
-    [InlineData("@nosuchcommand sync")]
-    public void AnythingElseOnTheBroadcastChannel_IsPassedOver(string line)
+    [InlineData("@timer", "@timer", "br {ordinary answer}\r")]
+    [InlineData("@timer dragon", "@timer", "br {ordinary answer}\r")]
+    [InlineData("@health", "@health", "br {HP=1/1}\r")]
+    [InlineData("@loop kings road", "@loop", "br {ordinary answer}\r")]
+    [InlineData("@roomba torch", "@roomba", "br {ordinary answer}\r")]
+    public void AnOrdinaryCommandOnTheBroadcastChannel_IsFollowed_AndAnsweredThere(
+        string line, string command, string expected)
     {
         Engine e = new();
 
         e.Commands.DispatchForTests(Broadcast("Friend", line));
 
+        Assert.StartsWith(command, Assert.Single(e.Ran));
+        Assert.Equal(expected, e.Wire.Single());
+        Assert.Contains(e.Log.Snapshot(), l => l.Severity == LogSeverity.Info
+            && l.Message == $"Following {command} from Friend, said on the broadcast channel.");
+    }
+
+    // What is no command stays unread there, and so does a relay-back: the channel
+    // was opened to commands, and the echo would be a bare command to everyone on it.
+    [Theory]
+    [InlineData("&@health")]
+    [InlineData("&@timer sync")]
+    [InlineData("@nosuchcommand sync")]
+    [InlineData("hello @health")]
+    public void ARelayBackOrAWordThatIsNoCommand_OnTheBroadcastChannel_IsPassedOver(string line)
+    {
+        Engine e = new();
+
+        e.Commands.DispatchForTests(Broadcast("Friend", line));
+        e.Commands.DispatchForTests(Broadcast("Stranger", line));
+
         Assert.Empty(e.Ran);
         Assert.Empty(e.Wire);
+    }
+
+    // Every gate that stands on the other channels stands there for an ordinary
+    // command: the permission (answered with the Failure message, by the Warn
+    // setting, on the channel), the master switch, "Disallow all", and the box
+    // itself, which while ticked has nothing read.
+    [Fact]
+    public void AnOrdinaryCommandOnTheBroadcastChannel_IsHeldToTheUsualGates()
+    {
+        Engine denied = new();
+        denied.Commands.DispatchForTests(Broadcast("Stranger", "@health"));
+        Assert.Empty(denied.Ran);
+        Assert.Equal("br {command invalid or not allowed}\r", denied.Wire.Single());
+        Assert.Contains(DebugLines(denied), l => l.StartsWith("Denied @health from Stranger on broadcast (lacks"));
+
+        Engine deniedQuietly = new(warn: false);
+        deniedQuietly.Commands.DispatchForTests(Broadcast("Stranger", "@health"));
+        Assert.Empty(deniedQuietly.Ran);
+        Assert.Empty(deniedQuietly.Wire);
+
+        Engine off = new(masterSwitchOff: true);
+        off.Commands.DispatchForTests(Broadcast("Friend", "@health"));
+        off.Commands.DispatchForTests(Broadcast("Stranger", "@health"));
+        Assert.Empty(off.Ran);
+        Assert.Empty(off.Wire);
+
+        Engine disallowed = new();
+        disallowed.Commands.MasterDisable = true;
+        disallowed.Commands.DispatchForTests(Broadcast("Friend", "@health"));
+        Assert.Empty(disallowed.Ran);
+        Assert.Empty(disallowed.Wire);
+
+        Engine ticked = new(broadcastOpen: false);
+        ticked.Commands.DispatchForTests(Broadcast("Friend", "@health"));
+        ticked.Commands.DispatchForTests(Broadcast("Stranger", "@health"));
+        Assert.Empty(ticked.Ran);
+        Assert.Empty(ticked.Wire);
+        Assert.Empty(ticked.Log.Snapshot());
+    }
+
+    // The blocks that never answer do not answer there either, whoever asks and
+    // whatever the Warn setting: a reroll anywhere in the line, `@party set
+    // suicide`, and a command that hands out trust, which is for the path channels.
+    [Theory]
+    [InlineData("@do reroll")]
+    [InlineData("@party reroll")]
+    [InlineData("@party set suicide")]
+    [InlineData("@dupe Stranger")]
+    public void TheSilentBlocks_StaySilentOnTheBroadcastChannel(string line)
+    {
+        Engine e = new(everyCommand: true);
+
+        e.Commands.DispatchForTests(Broadcast("Friend", line));
+        e.Clock += TimeSpan.FromMinutes(2);
+        e.Commands.DispatchForTests(Broadcast("Stranger", line));
+
+        Assert.Empty(e.Ran);
+        Assert.Empty(e.Wire);
+    }
+
+    // A refusal with a reason of its own is said on the channel too, to a sender
+    // who holds the permission, and by the Warn setting.
+    [Fact]
+    public void TheSuicideRules_AnswerOnTheBroadcastChannel_ByTheWarnSetting()
+    {
+        Engine e = new(everyCommand: true);
+        e.Commands.DispatchForTests(Broadcast("Friend", "@do suicide"));
+        e.Clock += TimeSpan.FromMinutes(2);
+        e.Commands.DispatchForTests(Broadcast("Friend", "@suicide"));
+        Assert.Empty(e.Ran);
+        Assert.Equal(new[]
+        {
+            "br {@do suicide is not allowed, use @suicide}\r",
+            "br {suicide blocked, lives unknown to client}\r",
+        }, e.Wire);
+
+        Engine quiet = new(warn: false, everyCommand: true);
+        quiet.Commands.DispatchForTests(Broadcast("Friend", "@do suicide"));
+        quiet.Commands.DispatchForTests(Broadcast("Friend", "@suicide"));
+        Assert.Empty(quiet.Ran);
+        Assert.Empty(quiet.Wire);
+    }
+
+    // Speaking on the broadcast channel ends no sneak, so an answer there is not
+    // moved to telepath while we are sneaking, as an answer to a say is.
+    [Fact]
+    public void AnAnswerOnTheBroadcastChannel_StaysThereWhileSneaking()
+    {
+        Engine e = new();
+        e.Commands.StealthedProvider = () => true;
+
+        e.Commands.DispatchForTests(Broadcast("Friend", "@health"));
+        e.Commands.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Local, "Friend", "@health", "raw"));
+
+        Assert.Equal(new[] { "br {HP=1/1}\r", "/Friend {HP=1/1}\r" }, e.Wire);
     }
 
     // The two transfers that do not use the broadcast channel are answered there
@@ -300,17 +415,15 @@ public sealed class TransferChannelsTests
     // Everything the engine can put on the broadcast channel, for every command in
     // the catalogue and for words that are no command, in every form a line takes,
     // from a player with every permission and from one with none. With the box
-    // ticked: nothing. Unticked: the data of the one transfer that goes by that
-    // channel, the "works by … only" refusal of the other two, and the Failure
-    // message to a player without the permission for one of the three; the last
-    // two by the Warn setting. No other command is read there, so none is answered,
-    // refused or relayed, and a handler is never run for one.
+    // ticked: nothing. Unticked, each line is held to the gates of any other
+    // channel (ExpectedOnBroadcast spells them out), a handler runs only for a
+    // player who holds the command's permission, and nothing is relayed.
     [Theory]
     [InlineData(true, true)]
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(false, false)]
-    public void OnTheBroadcastChannel_OnlyTheThreeTransfersAreEverAnswered(bool open, bool warn)
+    public void OnTheBroadcastChannel_EveryLineIsGatedAsOnTheOtherChannels(bool open, bool warn)
     {
         string[] words = RemoteCommandCatalog.Help.Keys
             .Concat(new[] { "@nosuchcommand", "@", "@timerdata", "@loopdata", "@loopresult", "@roombadata", "hello", "{@timer" })
@@ -343,42 +456,60 @@ public sealed class TransferChannelsTests
     }
 
     // What a line on the broadcast channel puts on the wire, and whether a handler
-    // is run for it at all: only for one of the three transfers, from a player who
-    // holds its permission.
+    // is run for it. The gates, in the engine's order: the box, the relay-back,
+    // a word that is no command, the silent blocks, the permission, the suicide
+    // rule, and then the handler's own answer. Nobody here is in a party, so a
+    // command for party members is denied to both players.
     private static (string[] Wire, bool HandlerRuns) ExpectedOnBroadcast(string sender, string line, bool open, bool warn)
     {
         string[] none = Array.Empty<string>();
+        string[] failure = warn ? new[] { "br {command invalid or not allowed}\r" } : none;
         if (!open || line.StartsWith('&')) return (none, false);
         string[] tokens = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         string command = tokens[0].TrimEnd('!');
         string[] args = tokens[1..];
-        if (!command.StartsWith('@') || TransferChannels.Identify(command, args) is not { } transfer) return (none, false);
+        if (!command.StartsWith('@') || !RemoteCommandCatalog.Help.ContainsKey(command)) return (none, false);
         // A blocked word anywhere in the line is never answered, on any channel.
-        if (args.Contains("reroll")) return (none, false);
-        if (sender == "Stranger") return (warn ? new[] { "br {command invalid or not allowed}\r" } : none, false);
-        if (transfer == Transfer.TimerSync) return (new[] { "br {data}\r" }, true);
-        return (warn ? new[] { $"br {{{TransferChannels.Refusal(transfer)}}}\r" } : none, true);
+        // Asking what a command does is not sending it.
+        if (command != "@help" && args.Any(a => a.Contains("reroll"))) return (none, false);
+        // Handing out trust is for telepath and gangpath: dropped without a word.
+        if (RemoteCommandCatalog.IsPathChannelOnly(command)) return (none, false);
+        RemoteCommandCatalog.TryGetCategory(command, out PlayerRemoteControls category);
+        if (sender == "Stranger" || category == PlayerRemoteControls.None) return (failure, false);
+        if (command == "@suicide")
+            return (warn ? new[] { "br {suicide blocked, lives unknown to client}\r" } : none, false);
+
+        if (command == "@health") return (new[] { "br {HP=1/1}\r" }, true);
+        if (command is "@timer" or "@roomba" or "@loop")
+        {
+            if (TransferChannels.Identify(command, args) is not { } transfer) return (new[] { "br {ordinary answer}\r" }, true);
+            if (transfer == Transfer.TimerSync) return (new[] { "br {data}\r" }, true);
+            return (warn ? new[] { $"br {{{TransferChannels.Refusal(transfer)}}}\r" } : none, true);
+        }
+        // The stand-in for every other command answers, then refuses, then fails:
+        // both lines are one answer, and the refusal goes by the Warn setting.
+        return (warn ? new[] { "br {an answer}\r", "br {a refusal}\r" } : new[] { "br {an answer}\r" }, true);
     }
 
     // The remote commands for Events are ordinary remote commands: on the broadcast
-    // channel they are not read, whoever sends them. By telepath they are.
+    // channel they are read like any other, from a player who holds the permission,
+    // and denied to one who does not.
     [Theory]
     [InlineData("@events", "@events")]
     [InlineData("@event 1 on", "@event")]
     [InlineData("@event daily bank off", "@event")]
     [InlineData("@event! 1", "@event")]
-    public void TheEventCommandsOnTheBroadcastChannel_AreNotRead(string line, string command)
+    public void TheEventCommandsOnTheBroadcastChannel_AreReadLikeAnyOther(string line, string command)
     {
         Engine e = new(everyCommand: true);
 
         e.Commands.DispatchForTests(Broadcast("Friend", line));
-        e.Commands.DispatchForTests(Broadcast("Stranger", line));
-
-        Assert.Empty(e.Ran);
-        Assert.Empty(e.Wire);
-
-        e.Commands.DispatchForTests(new ChatLogEntry(Now, ChatChannel.TelepathIncoming, "Friend", line, "raw"));
         Assert.Equal(new[] { command }, e.Ran);
+        Assert.Equal(new[] { "br {an answer}\r", "br {a refusal}\r" }, e.Wire);
+
+        e.Commands.DispatchForTests(Broadcast("Stranger", line));
+        Assert.Equal(new[] { command }, e.Ran);
+        Assert.Equal("br {command invalid or not allowed}\r", e.Wire.Last());
     }
 
     // ----- how much is said on the broadcast channel ------------------------
@@ -446,6 +577,103 @@ public sealed class TransferChannelsTests
 
         e.Commands.DispatchForTests(Broadcast("Friend", "@timer sync"));
         Assert.Equal("br {data}\r", e.Wire.Single());
+    }
+
+    // The bound holds for every command. A second one from a speaker already
+    // answered this minute is passed over before anything runs for it: a command
+    // that would get no answer is not carried out either. A minute on, it is.
+    [Fact]
+    public void OnTheBroadcastChannel_ASecondCommandInsideTheMinute_IsNeitherRunNorAnswered()
+    {
+        Engine e = new(everyCommand: true);
+
+        e.Commands.DispatchForTests(Broadcast("Friend", "@health"));
+        e.Commands.DispatchForTests(Broadcast("Friend", "@stop"));
+        e.Commands.DispatchForTests(Broadcast("Friend", "@health"));
+
+        Assert.Equal(new[] { "@health" }, e.Ran);
+        Assert.Equal("br {HP=1/1}\r", e.Wire.Single());
+        Assert.Contains(DebugLines(e), l => l ==
+            "Passing over @stop from Friend on the broadcast channel: they were answered there less than a minute ago.");
+
+        e.Clock += BroadcastAnswerBudget.Window;
+        e.Commands.DispatchForTests(Broadcast("Friend", "@stop"));
+
+        Assert.Equal(new[] { "@health", "@stop" }, e.Ran);
+        Assert.Equal(new[] { "br {HP=1/1}\r", "br {an answer}\r", "br {a refusal}\r" }, e.Wire);
+    }
+
+    // The channel's few answers a minute are for everyone together, whatever the
+    // command: once they are given, a granted player's command waits like the rest.
+    [Fact]
+    public void OnTheBroadcastChannel_OnceTheMinutesAnswersAreGiven_NoCommandRuns()
+    {
+        Engine e = new();
+        for (int i = 0; i < BroadcastAnswerBudget.AnswersPerWindow; i++)
+            e.Commands.DispatchForTests(Broadcast($"Passerby{i}", "@health"));
+        Assert.Equal(BroadcastAnswerBudget.AnswersPerWindow, e.Wire.Length);
+        Assert.All(e.Wire, line => Assert.Equal("br {command invalid or not allowed}\r", line));
+
+        e.Commands.DispatchForTests(Broadcast("Friend", "@health"));
+
+        Assert.Empty(e.Ran);
+        Assert.Equal(BroadcastAnswerBudget.AnswersPerWindow, e.Wire.Length);
+    }
+
+    // What a handler says after the dispatch has returned (a result that follows
+    // an acceptance) is part of the answer its command began: it goes out, and is
+    // not counted again. A second command inside the minute is still passed over.
+    [Fact]
+    public void OnTheBroadcastChannel_AHandlersLaterLines_AreTheSameAnswer()
+    {
+        Engine e = new();
+        Action<string>? later = null;
+        Action<string?>? laterRefusal = null;
+        e.Commands.RegisterHandler("@trap", PlayerRemoteControls.ExecuteCommands, ctx =>
+        {
+            e.Ran.Add("@trap");
+            ctx.Reply("attempting");
+            later = ctx.Reply;
+            laterRefusal = ctx.Refusal;
+        });
+
+        e.Commands.DispatchForTests(Broadcast("Friend", "@trap n"));
+        e.Clock += TimeSpan.FromSeconds(20);
+        later!("disarmed");
+        laterRefusal!("and one thing more");
+
+        Assert.Equal(new[] { "br {attempting}\r", "br {disarmed}\r", "br {and one thing more}\r" }, e.Wire);
+        Assert.Equal(1, e.Commands.BroadcastSpeakersRememberedForTests);
+
+        e.Commands.DispatchForTests(Broadcast("Friend", "@trap s"));
+        Assert.Single(e.Ran);
+        Assert.Equal(3, e.Wire.Length);
+    }
+
+    // A handler that says nothing at first and answers only later begins its
+    // answer then, under the bound as it stands at that moment.
+    [Fact]
+    public void OnTheBroadcastChannel_AnAnswerThatOnlyComesLater_IsBoundedWhenItComes()
+    {
+        Engine e = new();
+        List<Action<string>> later = new();
+        e.Commands.RegisterHandler("@goto", PlayerRemoteControls.MovePlayer, ctx => later.Add(ctx.Reply));
+
+        e.Commands.DispatchForTests(Broadcast("Friend", "@goto bank"));
+        Assert.Empty(e.Wire);
+        // Nothing was said, so nothing was used up: the same player's next command runs.
+        e.Commands.DispatchForTests(Broadcast("Friend", "@health"));
+        Assert.Equal("br {HP=1/1}\r", e.Wire.Single());
+
+        // The first command's answer now comes inside the minute of the second's.
+        later[0]("arrived");
+        Assert.Single(e.Wire);
+        Assert.Contains(DebugLines(e), l => l.StartsWith("Not said to Friend on the broadcast channel:"));
+
+        e.Clock += BroadcastAnswerBudget.Window;
+        later[0]("arrived");
+        later[0]("and resting");
+        Assert.Equal(new[] { "br {HP=1/1}\r", "br {arrived}\r", "br {and resting}\r" }, e.Wire);
     }
 
     // Many speakers cannot make the client flood either: no more than

@@ -6,12 +6,14 @@ namespace MudPlay.Game.Remote;
 // against the user's own input with the game's limiter (GAME_MECHANICS "Command
 // rate limit"). So the first answer is given, as on any channel, and the rest are
 // bounded:
-//   - one answer a minute to each speaker, whatever it is: a timer sync's data, a
-//     "works by … only" refusal or the Failure message;
+//   - one answer a minute to each speaker, whatever it is: a command's reply, a
+//     timer sync's data, a "works by … only" refusal or the Failure message;
 //   - AnswersPerWindow answers a minute to everyone together, so a channel full of
 //     speakers cannot make the client flood either.
 // An answer is everything said for one line of theirs. A timer sync's data is
 // several lines to one asker and counts once, so it is never cut in the middle.
+// A line of theirs that would get no answer is not acted on either: the engine
+// asks WhyNot before it runs anything for it.
 internal sealed class BroadcastAnswerBudget
 {
     public static readonly TimeSpan Window = TimeSpan.FromMinutes(1);

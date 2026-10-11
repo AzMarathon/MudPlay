@@ -1000,7 +1000,7 @@ Type the command as the whole message, with `@` as its first character. Three ch
 - **Gangpath:** `bg @timer dragon`. Every MudPlay client in the gang that grants you the command answers, on gangpath, where the whole gang reads it.
 - **Say:** `.@party rest`. Every MudPlay client in the room that grants you the command acts on it. An answer comes back as a say directed at you (`>Leader {reply}`), so in a full room you can tell it is yours.
 
-Gossip, auction and yell lines are never read as commands. Neither are lines on the broadcast channel (the numbered one you `join`), with one exception you have to switch on: the client-to-client transfers, see *Sharing data between clients*.
+Gossip, auction and yell lines are never read as commands. Lines on the broadcast channel (the numbered one you `join`) are not read either until you switch that on: Settings → Talk → **Disallow @commands from broadcast** is ticked by default, because the channel is public. Untick it and remote commands are read there as on telepath, gangpath and say. **Anyone who has joined the channel can then send your client a command there; each one is still subject to that player's permissions**, exactly as on the other channels, and your client answers on the channel, to each player once a minute at most (see *Sharing data between clients*).
 
 How the line is read:
 
@@ -1103,7 +1103,7 @@ In the reply tables of the command topics, a row that begins **Refusal:** is sen
 - `@party <command>` on say: the command your client sends to the game is the answer.
 - `@wait`, `@ok`, `@waiting` and `@ptrain`: signals between clients.
 - `@heal`, sent to a character with no party heal spell set up: only healers answer.
-- An `@` word that is no command, a `@dupe` said aloud, any command while the master switch is off, while **Disallow all remote control commands** is on, or on a switched-off channel.
+- An `@` word that is no command, a `@dupe` said aloud or on the broadcast channel, a command on the broadcast channel from a player already answered there this minute, any command while the master switch is off, while **Disallow all remote control commands** is on, or on a switched-off channel.
 
 ### Always refused
 
@@ -1120,7 +1120,7 @@ No other command is touched for having `suicide` among its words: `@have suicide
 Put `&` in front of a remote command (`&@invite`, `&@where`, `&@wealth`) and the player you send it to **sends that command back to you**, on the channel it arrived on: a telepath, a gangpath line or a say directed at you. Your own client then takes it as a command from them, under the permissions *you* grant *them*. It is the way to make another player ask something of you: telling a party member `&@invite` makes them send you `@invite`, and your client invites them.
 
 - **Who may ask:** the player relaying it must grant you **Execute commands**, the box `@do` needs. A `@do` could already put the same line on the wire.
-- **What is relayed:** only a command their client knows, with whatever follows it, sent bare (no braces). Anything else, or a bare `&@`, is ignored without an answer. `reroll` and `@party set suicide` are dropped here too. A relay asked for on say goes back by telepath when the relaying character is sneaking or hidden, as a reply would.
+- **What is relayed:** only a command their client knows, with whatever follows it, sent bare (no braces). Anything else, or a bare `&@`, is ignored without an answer. `reroll` and `@party set suicide` are dropped here too. A relay asked for on say goes back by telepath when the relaying character is sneaking or hidden, as a reply would. A relay asked for on the broadcast channel is not read.
 - **Replies:** none when it works: the relayed command is the answer, and your client's reply to it goes to them. Without the grant: the Failure message (a **Refusal**). With their master switch off: nothing, `&@auto-all` included, since it asks their client to send something.
 - **On gangpath or say** everyone there sees both lines: every MudPlay client that grants you Execute commands relays the command, and any client that grants the relaying player that command runs it too. Use telepath when you want one player to relay it, and only to you.
 - A bare `@help` lists `&@<command>` when you hold that grant, and `@help &@` describes it.
@@ -2451,11 +2451,13 @@ Both ends keep to the table. The client asked refuses a request that comes by an
 
 **The broadcast channel starts switched off.** It is public: anyone can join a numbered channel. Settings → Talk → **Disallow @commands from broadcast** is ticked by default, and while it is, your client reads nothing on that channel: no request, and no answer to a request of your own. For a timer sync on broadcast the box must be unticked on **both** clients, the one asking and the one answering. With it unticked:
 
+- **Every remote command is read there, as on telepath, gangpath and say.** Anyone who has joined the channel can send one. Each is still subject to that player's permissions: a player you have granted nothing gets the Failure message and nothing else.
+- **Answers go back on the channel** (`br`), where everyone on it sees them. That holds while you are sneaking too: speaking on the broadcast channel ends no sneak.
 - `@timer sync` is followed there, and answered on the channel.
 - `@roomba sync` and `@loop send` are refused there with where they do work.
-- A player without the permission for one of those three gets the Failure message there.
-- **No other remote command is read on that channel.** It is not followed, answered, refused or relayed.
-- **Your client says little there.** Each player gets one answer a minute on that channel (a set of timers, a refusal or the Failure message), and all players together get four a minute. Anything past that is passed over without a word, so nobody on the channel can make your client flood it, or use up the lines the game lets you send.
+- **Every other rule still holds there:** the master switch (off, nothing is followed or answered), **Disallow all remote control commands**, the **Warn** setting for refusals, and the blocks that never answer (`reroll`, `@party set suicide`). `@dupe` is not taken on the channel, as it is not taken on say: it stays telepath and gangpath only. `@party` with a directive acts only when said in the room; on the channel it reports its status, as it does by telepath and gangpath.
+- **A relay-back (`&@command`) is not read there.**
+- **Your client says little there.** Each player gets one answer a minute on that channel (a command's reply, a set of timers, a refusal or the Failure message), and all players together get four a minute. An answer is everything said for one command, however many lines, including a result that follows later (a `@trap` attempt, then its outcome). **A command that would get no answer is not carried out either:** anything past the limit is passed over without a word and without effect, so nobody on the channel can make your client flood it, or use up the lines the game lets you send. Ask again a minute later.
 
 #### @timer
 
@@ -2467,7 +2469,7 @@ Reports the boss respawn timers you are tracking, or hands them to the sender's 
 - `@timer dragon`: the timers of bosses whose name contains the text, ignoring case.
 - `@timer sync`: send the timers as data, for another MudPlay client to merge.
 
-**Who may send it:** a player with **Query boss timers**, by telepath, gangpath or say. `@timer sync` may also be asked on the **broadcast channel** (the numbered channel spoken on with `br`), and is answered there, once you have unticked **Disallow @commands from broadcast** on Settings → Talk; the readable `@timer` report is not read there.
+**Who may send it:** a player with **Query boss timers**, by telepath, gangpath or say. `@timer sync` may also be asked on the **broadcast channel** (the numbered channel spoken on with `br`), and is answered there, once you have unticked **Disallow @commands from broadcast** on Settings → Talk; the readable `@timer` report is then read there too, like any remote command.
 
 | Reply | When |
 |---|---|
@@ -2761,7 +2763,7 @@ Copies **the sender's own query, Roomba and quest permissions** onto another pla
 
 - `@dupe Scout`: give Scout the query permissions the sender holds. Exactly one name.
 
-**Who may send it:** a player with **Elevated Commands**, on **telepath or gangpath only**. Said aloud it is dropped without an answer, and the Local control API can't run it.
+**Who may send it:** a player with **Elevated Commands**, on **telepath or gangpath only**. Said aloud or on the broadcast channel it is dropped without an answer, and the Local control API can't run it.
 
 | Reply | When |
 |---|---|
@@ -6091,8 +6093,8 @@ Settings → Talk.
 
 **Default:** On (ticked). A profile saved before this setting existed also reads as ticked.
 **What it does:** Drops everything arriving on the **broadcast channel**: the game's numbered channel, the one you `join <n>` and speak on with `br`. It is ticked by default because that channel is public: anyone can join one. While it is ticked your client reads nothing there, neither another player's request nor the answers to a request of your own.
-**Unticked:** only the three client-to-client transfers are read on that channel. `@timer sync` is followed and answered there; `@roomba sync` and `@loop send` are refused there with where they do work; a player without the permission gets the Failure message. **No other `@`-command is read on the broadcast channel**, whatever permissions the sender holds. See *Sharing data between clients* under Remote @-commands.
-**Important notes:** For a timer sync on broadcast the box must be unticked on both clients. Refusals there follow **Warn sender on invalid / denied remote command** like any other, and are seen by everyone on the channel. Your client answers each player there once a minute at most, and four players a minute in all (a whole set of timers counts as one answer); anything more is passed over in silence. Timers that arrive on this channel are never adopted without your pick.
+**Unticked:** remote commands are read on that channel as they are on telepath, gangpath and say, and answered on it. **Anyone who has joined the channel can send your client a command there. Each one is still subject to that player's permissions** (Players tab), so a player you have granted nothing gets the Failure message and nothing more. The transfers keep to their own channels: `@timer sync` is followed and answered there; `@roomba sync` and `@loop send` are refused there with where they do work. `@dupe` is not taken there, and a relay-back (`&@command`) is not read there. See *Sharing data between clients* under Remote @-commands.
+**Important notes:** For a timer sync on broadcast the box must be unticked on both clients. Refusals there follow **Warn sender on invalid / denied remote command** like any other, and are seen by everyone on the channel, as every answer is. Your client answers each player there once a minute at most, and four players a minute in all (everything said for one command counts as one answer); a command past that is passed over in silence and is not carried out. The master switch, **Disallow all remote control commands** and the blocks that never answer apply there as everywhere. Timers that arrive on this channel are never adopted without your pick.
 
 ### Warn sender on invalid / denied remote command
 

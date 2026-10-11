@@ -840,16 +840,34 @@ public sealed class BossTimerTests : IDisposable
         }
     }
 
-    // On the broadcast channel only the sync is followed: the readable report is an
-    // ordinary remote command, and none of those is taken there.
+    // The readable report is an ordinary remote command, and with the broadcast
+    // channel opened those are read there too: it is answered on the channel, once
+    // a minute to each asker like everything said there.
     [Fact]
-    public void TimerReport_OnTheBroadcastChannel_IsNotAnswered()
+    public void TimerReport_OnTheBroadcastChannel_IsAnsweredThere_OnceAMinute()
     {
         var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
         timers.MarkKilled("ogre king");
 
         engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer", "raw"));
         engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer ogre", "raw"));
+
+        Assert.StartsWith("br {ogre king - ", Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests)));
+
+        _engineNow += BroadcastAnswerBudget.Window;
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer ogre", "raw"));
+        Assert.Equal(2, engine.LastSentForTests.Count);
+    }
+
+    // With the box ticked the report is not read there, like everything else.
+    [Fact]
+    public void TimerReport_OnTheBroadcastChannelSwitchedOff_IsNotAnswered()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+        engine.DisableBroadcastChannel = true;
+
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer", "raw"));
 
         Assert.Empty(engine.LastSentForTests);
     }

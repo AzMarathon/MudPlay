@@ -16,16 +16,21 @@ namespace MudPlay.Game.Remote;
 // The order of checks on an inbound line (OnChatEntry). The first that stops a
 // command ends it:
 //   a. "Disallow all remote control commands" — nothing is read or answered.
-//   b. The channel: telepath, gangpath or say, each with its own off switch. The
-//      numbered broadcast channel too, for the client-to-client transfers alone
-//      (TransferChannels): nothing else said on it is read as a command.
-//   c. Our own echo, and anything that doesn't start with `@` (or `&@`).
+//   b. The channel: telepath, gangpath, say or the numbered broadcast channel,
+//      each with its own off switch. The broadcast channel's starts on: it is
+//      public, so nothing is read there until the user opens it.
+//   c. Our own echo, and anything that doesn't start with `@` (or `&@`). A
+//      relay-back (`&@`) is not read on the broadcast channel.
 //   d. Reserved words other subsystems own (ailment announces, @panic, sync
 //      data) — swallowed.
+//   d2. On the broadcast channel only: a speaker already answered there this
+//      minute, or a channel that has had its answers for the minute — passed
+//      over before anything runs (BroadcastAnswerBudget).
 //   e. The master switch: off, only @auto-all is followed; no answer.
 //   f. Hard-blocks (1 below) — no answer, whatever the Warn setting says.
 //   g. A word that is no command — no answer.
-//   h. A path-only command (@dupe) said aloud — no answer.
+//   h. A path-only command (@dupe) said aloud or on the broadcast channel — no
+//      answer.
 //   i. The permission (2 and 3 below). A sender without it gets the generic
 //      failure message and nothing else: every check that answers with a reason
 //      of its own comes after this one, so it can tell a stranger nothing.
@@ -447,14 +452,6 @@ public sealed class RemoteCommandManager : IDisposable
 
     private void OnChatEntry(ChatLogEntry entry)
     {
-        try { Dispatch(entry); }
-        // Whatever was said on the broadcast channel for this line is one answer;
-        // the next line starts another (MayAnswerOnBroadcast).
-        finally { _broadcastAnswering = null; }
-    }
-
-    private void Dispatch(ChatLogEntry entry)
-    {
         // Master kill-switch (Settings.Talk → Disallow all remote control
         // commands). Above everything else — no logging either, no point
         // spamming the log with denied lines when the user explicitly
@@ -492,7 +489,9 @@ public sealed class RemoteCommandManager : IDisposable
 
         if (relayBack)
         {
-            // No relay on the broadcast channel: it carries the transfers only.
+            // No relay on the broadcast channel. It was opened to commands, not to
+            // relays (user, 2026-10-11), and the echo would be a bare @-command in
+            // front of every client listening there, not the asker's alone.
             if (channel.Value == RemoteChannel.Broadcast) return;
             HandleRelayBack(entry.Speaker, entry.Message, channel.Value);
             return;
@@ -511,23 +510,26 @@ public sealed class RemoteCommandManager : IDisposable
         // unknown-command denial path and bounce a reply at the sender.
         if (_ignored.Contains(command)) return;
 
-        // The broadcast channel was opened for the three transfers and for nothing
-        // else: one of them may go by it, and the other two are answered there with
-        // where they do work, as on any channel they do not use (user, 2026-10-11:
-        // "refusals should be sent on the same channel received"). No other remote
-        // command is read on it: it is passed over without a word, as everything
-        // said there was before the channel carried any of them.
-        if (channel.Value == RemoteChannel.Broadcast && TransferChannels.Identify(command, args) is null) return;
-
-        // What is left on that channel would be answered. A speaker already answered
-        // there this minute, or a channel that has had its answers for the minute,
-        // is passed over before anything runs for the line (BroadcastAnswerBudget).
-        if (channel.Value == RemoteChannel.Broadcast
-            && _broadcastAnswers.WhyNot(entry.Speaker, Now()) is { } spent)
+        // With its box unticked the broadcast channel is read like the other three
+        // (user, 2026-10-11): every remote command, under every gate below, answered
+        // on the channel ("refusals should be sent on the same channel received").
+        // The transfers keep to their own channels there as anywhere: one of the
+        // three may go by it, and the other two are answered with where they do work.
+        //
+        // What differs is how much is said there. A speaker already answered this
+        // minute, or a channel that has had its answers for the minute, is passed
+        // over before anything runs for the line (BroadcastAnswerBudget): a command
+        // that would get no answer is not carried out either.
+        BroadcastAnswer? answer = null;
+        if (channel.Value == RemoteChannel.Broadcast)
         {
-            _log?.Log(LogSeverity.Debug, "RemoteCmd",
-                $"Passing over {command} from {entry.Speaker} on the broadcast channel: {spent}.");
-            return;
+            if (_broadcastAnswers.WhyNot(entry.Speaker, Now()) is { } spent)
+            {
+                _log?.Log(LogSeverity.Debug, "RemoteCmd",
+                    $"Passing over {command} from {entry.Speaker} on the broadcast channel: {spent}.");
+                return;
+            }
+            answer = new BroadcastAnswer();
         }
 
         // Ahead of every block and denial below, so nothing here answers while
@@ -591,12 +593,14 @@ public sealed class RemoteCommandManager : IDisposable
         }
 
         // A command that hands out trust is accepted only over the path channels.
-        // Say is room-wide, so a @dupe said aloud is dropped outright — no denial
-        // reply, which would only announce the command to the room.
-        if (channel.Value == RemoteChannel.Local && RemoteCommandCatalog.IsPathChannelOnly(command))
+        // Say is room-wide and the broadcast channel is open to anyone who joins
+        // it, so a @dupe on either is dropped outright — no denial reply, which
+        // would only announce the command to everyone there.
+        if (channel.Value is RemoteChannel.Local or RemoteChannel.Broadcast
+            && RemoteCommandCatalog.IsPathChannelOnly(command))
         {
             _log?.Log(LogSeverity.Info, "RemoteCmd",
-                $"Ignoring {command} from {entry.Speaker} on say — telepath / gangpath only.");
+                $"Ignoring {command} from {entry.Speaker} on {TransferChannels.NameOf(channel.Value)} — telepath / gangpath only.");
             return;
         }
 
@@ -604,13 +608,13 @@ public sealed class RemoteCommandManager : IDisposable
         if (!IsAuthorised(entry.Speaker, registration.RequiredCategory, command))
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
-                $"Denied {command} from {entry.Speaker} (lacks {registration.RequiredCategory}).");
+                $"Denied {command} from {entry.Speaker} on {TransferChannels.NameOf(channel.Value)} (lacks {registration.RequiredCategory}).");
             // Only the commands let through with the master switch off reach here
             // then, and they must not be the ones that answer a stranger: no
             // denial either.
             if (BlockedByMasterSwitch?.Invoke($"{command} from {entry.Speaker} (not granted)") == true)
                 return;
-            SendDenialReply(channel.Value, entry.Speaker);
+            SendDenialReply(channel.Value, entry.Speaker, answer: answer);
             return;
         }
 
@@ -628,7 +632,7 @@ public sealed class RemoteCommandManager : IDisposable
         {
             _log?.Log(LogSeverity.Info, "RemoteCmd",
                 $"Forcible-suicide blocked from {entry.Speaker}: {forcedSuicideRedirect}");
-            SendDenialReply(channel.Value, entry.Speaker, specificReason: forcedSuicideRedirect);
+            SendDenialReply(channel.Value, entry.Speaker, specificReason: forcedSuicideRedirect, answer: answer);
             return;
         }
 
@@ -637,21 +641,28 @@ public sealed class RemoteCommandManager : IDisposable
         {
             _log?.Log(LogSeverity.Info, "RemoteCmd",
                 $"Suicide policy-blocked from {entry.Speaker}: {suicideReply}");
-            SendDenialReply(channel.Value, entry.Speaker, specificReason: suicideReply);
+            SendDenialReply(channel.Value, entry.Speaker, specificReason: suicideReply, answer: answer);
             return;
         }
 
+        // The channel is public: what is carried out for a line said on it is on
+        // record, with who asked.
+        if (channel.Value == RemoteChannel.Broadcast)
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Following {command} from {entry.Speaker}, said on the broadcast channel.");
+
         // Invoke. Engine supplies the Reply callback that routes back via
-        // the same channel.
+        // the same channel. On the broadcast channel both callbacks carry this
+        // line's answer, so a result the handler gives later is still part of it.
         RemoteCommandContext ctx = new(
             Sender:          entry.Speaker,
             Command:         command,
             Args:            args,
             OriginalMessage: entry.Message,
             Channel:         channel.Value,
-            Reply:           text => SendReply(channel.Value, entry.Speaker, text))
+            Reply:           text => SendReply(channel.Value, entry.Speaker, text, answer))
         {
-            Refusal = why => SendDenialReply(channel.Value, entry.Speaker, specificReason: why),
+            Refusal = why => SendDenialReply(channel.Value, entry.Speaker, specificReason: why, answer: answer),
         };
         try { registration.Handler(ctx); }
         catch (Exception ex)
@@ -830,12 +841,13 @@ public sealed class RemoteCommandManager : IDisposable
     // party-whitelist denial — the generic FailureMessage), by the suicide rules
     // (a specific reason), and by every handler: RemoteCommandContext.Refuse is
     // bound to it, so a handler's failure answer is gated here and nowhere else.
-    private void SendDenialReply(RemoteChannel channel, string sender, string? specificReason = null)
+    private void SendDenialReply(
+        RemoteChannel channel, string sender, string? specificReason = null, BroadcastAnswer? answer = null)
     {
         if (!WarnOnDenial) return;
         string text = specificReason ?? FailureMessage;
         if (string.IsNullOrWhiteSpace(text)) return;
-        SendReply(channel, sender, text);
+        SendReply(channel, sender, text, answer);
     }
 
     // Tell a player what became of something they sent because the user here asked
@@ -871,8 +883,8 @@ public sealed class RemoteCommandManager : IDisposable
     // Remote commands are accepted from every inbound chat channel EXCEPT the
     // realm-wide noise channels — Gossip (also carries auctions), Yell
     // (shout-style noise), system-level RealmEvent, and our own outbound echo
-    // (TelepathOutgoing). The numbered broadcast channel is taken in only for the
-    // transfers (see OnChatEntry).
+    // (TelepathOutgoing). The numbered broadcast channel is taken in only once the
+    // user opens it (DisableBroadcastChannel).
     private static RemoteChannel? MapChannel(ChatChannel c) => c switch
     {
         ChatChannel.TelepathIncoming => RemoteChannel.Telepath,
@@ -1165,10 +1177,10 @@ public sealed class RemoteCommandManager : IDisposable
     // can visually distinguish an engine-generated answer from in-character
     // speech. Handlers provide bare text; the engine adds the braces here, so
     // nothing upstream has to remember the convention.
-    private void SendReply(RemoteChannel channel, string recipient, string text)
+    private void SendReply(RemoteChannel channel, string recipient, string text, BroadcastAnswer? answer = null)
     {
         if (string.IsNullOrEmpty(text)) return;
-        SendLine(channel, recipient, $"{{{text}}}");
+        SendLine(channel, recipient, $"{{{text}}}", answer);
     }
 
     // Address a line to recipient on channel and put it on the wire. A reply wraps its
@@ -1178,11 +1190,11 @@ public sealed class RemoteCommandManager : IDisposable
     // Sneaking or hidden, nothing is said aloud: a line for the say channel goes by
     // telepath instead (StealthedProvider). That holds for a relay-back as for a
     // reply — either would end the sneak.
-    private void SendLine(RemoteChannel channel, string recipient, string payload)
+    private void SendLine(RemoteChannel channel, string recipient, string payload, BroadcastAnswer? answer = null)
     {
         if (channel == RemoteChannel.Local && StealthedProvider?.Invoke() == true)
             channel = RemoteChannel.Telepath;
-        if (channel == RemoteChannel.Broadcast && !MayAnswerOnBroadcast(recipient)) return;
+        if (channel == RemoteChannel.Broadcast && !MayAnswerOnBroadcast(recipient, answer)) return;
         // Nothing outside ASCII goes out: see WireText.
         payload = WireText.Ascii(payload);
         string given = GivenName(recipient);
@@ -1202,17 +1214,24 @@ public sealed class RemoteCommandManager : IDisposable
 
     private readonly BroadcastAnswerBudget _broadcastAnswers = new();
 
-    // The speaker whose line on the broadcast channel is being answered right now.
-    private string? _broadcastAnswering;
+    // Everything this client says for one line of a speaker's on the broadcast
+    // channel. The reply callbacks made for that line hold it, so what a handler
+    // says after the dispatch has returned (a disarm's result after its
+    // acceptance, a trip's arrival) is the same answer and not a second one, which
+    // the minute would swallow.
+    private sealed class BroadcastAnswer
+    {
+        public bool Begun;
+    }
 
     // Every line this client says on the broadcast channel passes here, so the
-    // bound on them (BroadcastAnswerBudget) has one gate. The first line said to a
-    // speaker for a line of theirs begins an answer and is counted; the lines that
-    // follow in the same dispatch are that answer, so a timer sync's data goes out
-    // whole. A line that comes later is a new answer, and is held to the minute.
-    private bool MayAnswerOnBroadcast(string recipient)
+    // bound on them (BroadcastAnswerBudget) has one gate. The first line said for
+    // a line of a speaker's begins an answer and is counted; the lines that follow
+    // for the same line of theirs are that answer, so a timer sync's data goes out
+    // whole. A line said for nothing of theirs is an answer of its own.
+    private bool MayAnswerOnBroadcast(string recipient, BroadcastAnswer? answer)
     {
-        if (string.Equals(_broadcastAnswering, recipient, StringComparison.OrdinalIgnoreCase)) return true;
+        if (answer is { Begun: true }) return true;
         DateTimeOffset now = Now();
         if (_broadcastAnswers.WhyNot(recipient, now) is { } spent)
         {
@@ -1221,7 +1240,7 @@ public sealed class RemoteCommandManager : IDisposable
             return false;
         }
         _broadcastAnswers.Note(recipient, now);
-        _broadcastAnswering = recipient;
+        if (answer is not null) answer.Begun = true;
         return true;
     }
 
