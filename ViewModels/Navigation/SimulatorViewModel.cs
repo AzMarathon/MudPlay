@@ -427,7 +427,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
     // quote these, not settings the user has changed since.
     private RankRun? _rankRun;
 
-    private sealed record RankRun(double Step, double Hours, int Runs, RoomKey From, string Realm);
+    private sealed record RankRun(double Step, double Hours, int Runs, RoomKey From, string Realm, string? Set);
 
     // Every hunting area's lair tour (AreaTours, grouped by the Monsters' Region /
     // Area labels) played by the character at RankLevel, safe areas first by
@@ -453,6 +453,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
             RankStatus = "MudPlay doesn't know which room you're in yet — step into a room so it can tell which areas you can reach.";
             return;
         }
+        string? set = _loops.SetName;
         using var cts = new CancellationTokenSource();
         _rankCts = cts;
         CancellationToken cancel = cts.Token;
@@ -545,7 +546,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
                 })
                 .ToList(), cancel));
 
-            _rankRun = new RankRun(step, hours, runs, here, RealmLabel);
+            _rankRun = new RankRun(step, hours, runs, here, RealmLabel, set);
             foreach (AreaRank r in ranked) Rankings.Add(r);
             OnPropertyChanged(nameof(HasRankings));
             int safe = ranked.Count(r => r.Safe);
@@ -657,6 +658,13 @@ public sealed partial class SimulatorViewModel : ObservableObject
         if (_loops.SetName is null)
         {
             RankStatus = "No game-data set is active, so there's nowhere to save a loop.";
+            return;
+        }
+        // A ranking stays listed through a game-data switch, and its tour is room
+        // numbers of the set it was ranked on: under another set they are other rooms.
+        if (_rankRun is { } ranked && !string.Equals(ranked.Set, _loops.SetName, StringComparison.OrdinalIgnoreCase))
+        {
+            RankStatus = "This ranking was made on other game data, so its rooms aren't these — rank again to save a loop.";
             return;
         }
         // Saving under a taken name would overwrite that loop, so a second save of the
