@@ -551,7 +551,7 @@ public sealed class StashTransferRunner
     // replies from the same member (a @health probe's, say) don't end the wait.
     private static readonly string[] TakingReplies = { "ok", "busy" };
     private static readonly string[] DepositReplies =
-        { "depositing", "withdrawing", "already at keep-on-hand", "wealth unknown" };
+        { "depositing", "withdrawing", "already at keep-on-hand", "wealth unknown", "not in a bank" };
 
     // A {reply} came in by telepath. From a member we are waiting on, the answer to
     // the order means that member has finished it (taken its load, or sent its

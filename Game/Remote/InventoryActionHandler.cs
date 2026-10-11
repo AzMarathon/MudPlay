@@ -355,9 +355,22 @@ public sealed class InventoryActionHandler : IDisposable
     //
     // Protocol, not a courtesy: a leader's stash transfer (StashTransferRunner)
     // waits at the bank for one answer from each member and reads it by its
-    // opening words, "wealth unknown" among them. So every answer goes whatever the
-    // Warn setting says.
-    private void OnDepositAll(RemoteCommandContext ctx) => ctx.Reply(DepositAll());
+    // opening words, "wealth unknown" and "not in a bank" among them. So every
+    // answer goes whatever the Warn setting says.
+    //
+    // Outside a bank nothing is sent and the answer says so: "depositing" is only
+    // answered where a deposit can start. A room we can't place is not a room
+    // known to be no bank, so there the command goes out as before and the game
+    // decides.
+    private void OnDepositAll(RemoteCommandContext ctx) =>
+        ctx.Reply(InBank?.Invoke() == false ? NotInBank : DepositAll());
+
+    // Whether the room we stand in is a bank: false only when the room is known
+    // and is none, null when the room isn't known. Unbound, nothing is checked.
+    public Func<bool?>? InBank { get; set; }
+
+    // The opening words are what a leader's stash transfer reads.
+    public const string NotInBank = "not in a bank - nothing deposited";
 
     // Level held coin to the keep-on-hand floor and return the status line. Shared
     // by the @deposit-all remote handler and the local "Deposit All" action. Emits

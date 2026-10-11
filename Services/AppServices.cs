@@ -6362,7 +6362,14 @@ public sealed class AppServices
                 timer.Tick += (_, _) => { timer.Stop(); action(); };
                 timer.Start();
             },
-            log: Log);
+            log: Log)
+        {
+            // @deposit-all answers "depositing" only where a deposit can start. The
+            // tracker is built later; a room it can't place is unknown, not "no bank".
+            InBank = () => RoomTracker?.State.CurrentRoom?.Key is { } here
+                ? Game.GameData.BankCatalog.IsBankRoom(GameData, here)
+                : null,
+        };
         PromptScanner.PromptObserved += _ => InventoryAction.NotePrompt();
 
         // @get-stash: a leader's stash transfer has us search and carry a load too.

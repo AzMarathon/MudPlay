@@ -262,7 +262,7 @@ public static class RemoteCommandCatalog
             ["@get-stash"]    = new("@get-stash", "search the room and take the coin it shows, up to your coin weight limits"),
             ["@drop-all"]     = new("@drop-all [full|coins|keys]", "drop everything unworn in your pack; 'full' everything held (worn gear, light, keys, coins); 'coins' / 'keys' just those"),
             ["@hide-all"]     = new("@hide-all [full|coins|keys]", "the @drop-all sweeps, but hidden in the room instead of dropped"),
-            ["@deposit-all"]  = new("@deposit-all", "bank all excess coin"),
+            ["@deposit-all"]  = new("@deposit-all", "in a bank: deposits your coin above your keep-on-hand amount, or withdraws up to it when you carry less"),
             ["@do"]           = new("@do <command>", "sends the command verbatim to the game (highest-trust)"),
             ["@kill"]         = new("@kill <target>", "retargets your combat onto the named monster this round"),
             ["@trap"]         = new("@trap <dir>", "disarm a trap in that direction; @trap stop aborts"),
