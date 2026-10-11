@@ -1881,6 +1881,11 @@ public sealed class AppServices
     // by CastingDirector's Tier-2 cure path.
     public Game.Conditions.ConditionTracker Conditions { get; private set; } = null!;
 
+    // Who can cast each spell of the active set (monsters, rooms, or something the
+    // client can't see). Conditions reads an applied line several spells share by
+    // it. Rebuilt on a worker each time a set's room graph has loaded.
+    public Game.GameData.SpellCasterIndex SpellCasters { get; private set; } = null!;
+
     // Outbound ailment-sync engine — on a local curable ailment it
     // announces on say (.@poisoned etc.) so other MudPlay
     // clients mirror our state, and @waits the leader; on clear it @oks.
@@ -5152,6 +5157,19 @@ public sealed class AppServices
         // Stock's `stat` lists each active effect as its bare applied line; the stat
         // screen around it is what marks it a readout, not a cast.
         Conditions.SetStatScreenProbe(() => Stats.InStatScreen);
+        // An applied line several spells print is read by which of them the room or
+        // a monster in it casts. The room counts only while the position is
+        // confirmed, the roster only while the room can be seen.
+        SpellCasters = new Game.GameData.SpellCasterIndex(GameData, () => RoomGraph.Rooms, Log);
+        RoomGraph.GraphReloaded += () => Task.Run(SpellCasters.Warm);
+        if (GameData.ActiveSet is not null) Task.Run(SpellCasters.Warm);
+        Conditions.SetCastReach(new Game.Conditions.CastReach(SpellCasters, () =>
+            RoomTracker.State is { Confidence: Game.Map.RoomConfidence.Confirmed, CurrentRoom: { } room }
+                ? new Game.Conditions.CastReach.Here(room.Spell, Game.Conditions.CastReach.MonstersSeen(
+                    RoomClassifier.Current,
+                    cannotSee: RoomTracker.IsInDarkRoom || RoomTracker.EnteredBlind || Conditions.IsBlinded,
+                    SpellCasters.KnowsMonster))
+                : null));
         // Watches the same wire for lines neither the message catalogue above nor any
         // registered Router pattern recognizes, staging them as review candidates.
         // AttachLineExtractor lands in MainWindowViewModel alongside the other line

@@ -3961,6 +3961,8 @@ A command you typed yourself is never auto-repeated, and a fumbled move self-rec
 - **Last action failed** — re-sends an action the server ate.
 - **Disabled (don't use)** — switches the whole record off, so you can silence a mis-firing line without deleting it.
 
+**When one line fits several records.** A condition is read off a record's *applied* text wherever it appears in a line, with two exceptions. A line that is another spell's own cast line is not taken for a shorter applied text inside it: the Underwater Passage's *You are freezing cold!* is the room's spell, not the mists' *You are freezing*. And an applied line that several spells share is read by which of them the room's own spell or a monster in the room can cast: a record for a spell that only monsters and rooms cast is left out when none of them is here and another of the records is one that is. A spell a player can learn, or that an item or a textblock casts, is never left out; a monster's spell is not left out in a room you can't see (dark, or blind), and nothing is left out while your place on the map isn't confirmed.
+
 (The four MegaMUD effect bits nothing acted on — losing-HP, HP/mana regenerating, ends-combat — were retired, so they no longer appear here.)
 
 ### Incomplete Messages

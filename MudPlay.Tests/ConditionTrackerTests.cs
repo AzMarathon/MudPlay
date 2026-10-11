@@ -257,6 +257,198 @@ public sealed class ConditionTrackerTests
         Assert.True(h.Tracker.IsMovementPrevented);
     }
 
+    // ----- a line that is another spell's own cast line ----------------
+
+    // A record as the seeds carry it: every message slot, and the spells it is for.
+    private static MessageRecord Full(
+        string name, MessageFlags flags, string caster, string target, string witness,
+        string applied, string endsWith, params int[] spells) =>
+        new(
+            Id: MessageRecord.ComputeId(name, caster, target, witness, applied, endsWith),
+            Name: name,
+            Flags: flags,
+            RawFlagsHex: (ushort)flags,
+            CasterMessage: caster,
+            TargetMessage: target,
+            WitnessMessage: witness,
+            AppliedMessage: applied,
+            AppliedEndsWith: endsWith,
+            Links: spells.Select(n => new GameDataLink("Spells", n)).ToArray());
+
+    // Report paradigm-20261011-165726: the Underwater Passage rooms cast freezing
+    // water (#511), whose line "You are freezing cold!" holds "You are freezing", the
+    // applied text of four other spells, two of them confusions. All four latched on
+    // every room, Confused held navigation and had the party told to wait, and no
+    // wear-off ever came: the room's spell prints none. Run over both shipped seeds.
+    [Theory]
+    [InlineData("paradigm")]
+    [InlineData("stock")]
+    public void ShippedSeed_FreezingWatersLine_LatchesNothing(string realm)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-seed-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            List<MessageRecord> seed = JsonStore.Load<List<MessageRecord>>(
+                Path.Combine(dir, $"Messages.{realm}.seed.json"))!;
+            using Harness h = new();
+            h.Messages.Messages.ReplaceAll(seed);
+
+            h.Feed("You are freezing cold!");
+            Assert.Empty(h.Applied);
+            Assert.Equal(MessageFlags.None, h.Tracker.ActiveFlags);
+
+            // The mists' and the storms' own applied line still latches them.
+            h.Feed("You are freezing!");
+            Assert.True(h.Tracker.IsConfused);
+            foreach (string name in new[] { "glacial mist", "galacial mist", "ice storm", "freezing" })
+                Assert.Contains(h.Applied, r => r.Name == name);
+            Assert.DoesNotContain(h.Applied, r => r.Name == "freezing water");
+
+            h.Feed("You are no longer freezing.");
+            Assert.False(h.Tracker.IsConfused);
+            Assert.DoesNotContain(h.Applied, h.Tracker.IsActive);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    // The same five records by hand, so the rule is pinned without the seeds.
+    [Fact]
+    public void AppliedText_InsideAnotherSpellsCastLine_DoesNotLatch()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(Full("freezing water", MessageFlags.None,
+            "{null}", "You are freezing cold!", "{null}", "{null}", "{null}", 511, 5242));
+        h.Messages.Messages.Add(Full("glacial mist", MessageFlags.Confused,
+            "An opalescent white mist billows through the room!", "An opalescent white mist surrounds you!",
+            "An opalescent white mist billows through the room!",
+            "You are freezing", "You are no longer freezing", 1042));
+        h.Messages.Messages.Add(Full("ice storm", MessageFlags.None,
+            "A freezing storm of ice envelops the foe!", "A freezing storm of ice surrounds you!",
+            "A freezing storm of ice sweeps through the room!",
+            "You are freezing", "You are no longer freezing", 1363));
+
+        h.Log.Diagnostics = new LogDiagnosticState { DebugDiagnostics = true };
+        h.Feed("You are freezing cold!");
+        Assert.Empty(h.Applied);
+        Assert.False(h.Tracker.IsConfused);
+        Assert.Contains(h.Log.Snapshot(), e =>
+            e.Message.Contains("matched only inside 'You are freezing cold!'", StringComparison.Ordinal)
+            && e.Message.Contains("freezing water", StringComparison.Ordinal));
+
+        h.Feed("You are freezing");
+        Assert.True(h.Tracker.IsConfused);
+        Assert.Equal(2, h.Applied.Count);
+
+        h.Feed("You are no longer freezing");
+        Assert.False(h.Tracker.IsConfused);
+    }
+
+    // A spell's own cast line can hold its applied text, and so can the cast line of
+    // a record that carries the same applied text: mesmerize's "You are mesmerized by
+    // the movements!" is the onset for it and for strut, which shares the text.
+    [Fact]
+    public void AppliedText_InsideItsOwnSpellsCastLine_StillLatches()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(Full("mesmerize", MessageFlags.Confused,
+            "{null}", "You are mesmerized by the movements!", "{null}",
+            "You are mesmerized", "You are no longer mesmerized", 1391));
+        h.Messages.Messages.Add(Full("strut", MessageFlags.Confused,
+            "You strut your stuff with your hot pants!", "{source} struts their stuff with their hot pants!", "{null}",
+            "You are mesmerized", "The effects of the hot pants wear off", 1109));
+
+        h.Feed("You are mesmerized by the movements!");
+
+        Assert.True(h.Tracker.IsConfused);
+        Assert.Equal(2, h.Applied.Count);
+    }
+
+    // Two records for one spell, the cast line on one and the applied text on the
+    // other: the line is that spell's, and its condition is read off it.
+    [Fact]
+    public void AppliedText_InsideACastLineOfARecordForTheSameSpell_StillLatches()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(Full("venom (cast)", MessageFlags.None,
+            "{null}", "You are poisoned by the serpent's venom!", "{null}", "{null}", "{null}", 900));
+        h.Messages.Messages.Add(Full("venom", MessageFlags.Poisoned,
+            "{null}", "{null}", "{null}", "You are poisoned", "The venom fades", 900));
+
+        h.Feed("You are poisoned by the serpent's venom!");
+
+        Assert.True(h.Tracker.IsPoisoned);
+    }
+
+    // The longer line carries a placeholder: poison hits (#588) is a monster's on-hit
+    // damage with no poison in it, and its line holds way of the cobra's applied text.
+    [Fact]
+    public void AppliedText_InsideAnotherSpellsCastLineWithAPlaceholder_DoesNotLatch()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(Full("poison hits", MessageFlags.None,
+            "{target} are poisoned for {damage} damage!", "You are poisoned for {damage} damage!",
+            "{source} is poisoned for {damage} damage!", "{null}", "{null}", 588));
+        h.Messages.Messages.Add(Full("way of the cobra", MessageFlags.Poisoned,
+            "{target} is poisoned!", "You are poisoned!", "{target} is poisoned!",
+            "You are poisoned", "The effects of the poison wear off", 299));
+
+        h.Feed("You are poisoned for 3 damage!");
+        Assert.False(h.Tracker.IsPoisoned);
+
+        h.Feed("You are poisoned!");
+        Assert.True(h.Tracker.IsPoisoned);
+    }
+
+    // The applied text also stands by itself elsewhere in the line: it still counts.
+    [Fact]
+    public void AppliedText_AlsoOutsideTheOtherSpellsCastLine_StillLatches()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(Full("poison hits", MessageFlags.None,
+            "{null}", "You are poisoned for {damage} damage!", "{null}", "{null}", "{null}", 588));
+        h.Messages.Messages.Add(Full("freezing water", MessageFlags.None,
+            "{null}", "You are freezing cold!", "{null}", "{null}", "{null}", 511));
+        h.Messages.Messages.Add(Full("way of the cobra", MessageFlags.Poisoned,
+            "{null}", "{null}", "{null}", "You are poisoned", "The effects of the poison wear off", 299));
+        h.Messages.Messages.Add(Full("glacial mist", MessageFlags.Confused,
+            "{null}", "{null}", "{null}", "You are freezing", "You are no longer freezing", 1042));
+
+        h.Feed("You are poisoned for 3 damage! You are poisoned!");
+        Assert.True(h.Tracker.IsPoisoned);
+
+        h.Feed("You are freezing! You are freezing cold!");
+        Assert.True(h.Tracker.IsConfused);
+    }
+
+    // Hypnotic hands' cast line holds mesmerize's applied text. It is a confusion in
+    // its own right, read off its own applied line, which follows.
+    [Fact]
+    public void AnotherSpellsCastLine_StillLatchesThatSpellOffItsOwnAppliedLine()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(Full("hypnotic hands", MessageFlags.Confused,
+            "{target} is mesmerized by the hypnotic movements!", "You are mesmerized by the hypnotic movements!",
+            "{target} is mesmerized by the hypnotic movements!",
+            "You are confused!", "The effect of hypnotic hands wears off.", 300));
+        h.Messages.Messages.Add(Full("mesmerize", MessageFlags.Confused,
+            "{null}", "You are mesmerized by the movements!", "{null}",
+            "You are mesmerized", "You are no longer mesmerized", 1391));
+
+        h.Feed("You are mesmerized by the hypnotic movements!");
+        Assert.Empty(h.Applied);
+
+        h.Feed("You are confused!");
+        Assert.Equal(new[] { "hypnotic hands" }, h.Applied.Select(r => r.Name));
+        Assert.True(h.Tracker.IsConfused);
+
+        h.Feed("The effect of hypnotic hands wears off.");
+        Assert.False(h.Tracker.IsConfused);
+    }
+
     // An applied line and the wear-off the game prints can sit on different records
     // that share a flag. The wear-off's own record was never latched, and its line
     // still has to release the flag: nothing else in the tracker ever would.
