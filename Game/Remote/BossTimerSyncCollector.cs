@@ -5,8 +5,9 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Remote;
 
-// One responder's fully-reassembled, decoded timer set.
-public readonly record struct BossTimerSyncResponse(string Sender, IReadOnlyList<BossTimerSyncRecord> Records);
+// One responder's fully-reassembled, decoded timer set, and the channel it came by.
+public readonly record struct BossTimerSyncResponse(
+    string Sender, IReadOnlyList<BossTimerSyncRecord> Records, RemoteChannel Channel);
 
 // Requester side of @timer sync: scrapes the `@timerdata <i>/<n> <blob>` reply lines off
 // ChatRouter (they ride the chat as ordinary text — the remote engine ignores the
@@ -15,41 +16,59 @@ public readonly record struct BossTimerSyncResponse(string Sender, IReadOnlyList
 // Correlation is by responder name (every reply line carries it), so a shared gang/local
 // channel just yields one set per responder — no request token needed. Collection is
 // transient: Begin on send, Stop / Dispose when the merge window closes.
+//
+// Data is taken only on a channel a request of ours went out on. Nothing here checks
+// who a responder is (answering at all is their grant to us), so a channel we did
+// not ask on is a way in for anyone who can reach us there while the window is open:
+// a request to the gang must not let a line on the public broadcast channel in.
 public sealed class BossTimerSyncCollector : IDisposable
 {
     private readonly ChatRouter _chat;
     private readonly LogService? _log;
     private readonly Func<bool> _broadcastOff;
+    private readonly Func<string, bool> _isOurName;
     private bool _collecting;
     private bool _disposed;
 
     private readonly Dictionary<string, Partial> _partial = new(StringComparer.OrdinalIgnoreCase);
+
+    // The channels our requests went out on since Begin.
+    private readonly HashSet<RemoteChannel> _askedOn = new();
 
     public event Action<BossTimerSyncResponse>? ResponseReceived;
 
     // broadcastOff: the Talk tab's "Disallow @commands from broadcast". Ticked, the
     // broadcast channel is not listened to at all, for answers no more than for
     // requests: it is public, and off until the user opens it.
-    public BossTimerSyncCollector(ChatRouter chat, LogService? log = null, Func<bool>? broadcastOff = null)
+    // isOurName: whether a speaker is our own character. A shared channel can echo
+    // our own lines back under our name: a request we typed, or data we sent in
+    // answer to someone else's request while this window is open.
+    public BossTimerSyncCollector(
+        ChatRouter chat, LogService? log = null, Func<bool>? broadcastOff = null, Func<string, bool>? isOurName = null)
     {
         ArgumentNullException.ThrowIfNull(chat);
         _chat = chat;
         _log = log;
         _broadcastOff = broadcastOff ?? (static () => false);
+        _isOurName = isOurName ?? (static _ => false);
         _chat.EntryClassified += Ingest;
     }
 
-    // Start collecting responses, discarding any prior run.
-    public void Begin()
+    // Start collecting the answers to a request that went out on askedOn, discarding
+    // any prior run.
+    public void Begin(RemoteChannel askedOn)
     {
         _collecting = true;
         _partial.Clear();
+        _askedOn.Clear();
+        _askedOn.Add(askedOn);
     }
 
     public void Stop()
     {
         _collecting = false;
         _partial.Clear();
+        _askedOn.Clear();
     }
 
     public void Dispose()
@@ -69,11 +88,17 @@ public sealed class BossTimerSyncCollector : IDisposable
     internal void Ingest(ChatLogEntry e)
     {
         if (!_collecting) return;
-        // A response is taken on any channel a timer sync may go by, not only the
-        // one the request went out on: a responder who is sneaking answers a said
-        // request by telepath.
-        if (!TransferChannels.Allows(Transfer.TimerSync, e.Channel)) return;
-        if (e.Channel == ChatChannel.Broadcast && _broadcastOff()) return;
+
+        // A further request of ours, typed by hand while the window is open: its
+        // answers are taken on its channel as well.
+        if (TransferChannels.OwnRequest(e, _isOurName) is { Transfer: Transfer.TimerSync } own)
+        {
+            if (TransferChannels.Allows(Transfer.TimerSync, own.Channel)) _askedOn.Add(own.Channel);
+            return;
+        }
+
+        if (TransferChannels.Of(e.Channel) is not { } heardOn || !AnswersAreTakenOn(heardOn)) return;
+        if (heardOn == RemoteChannel.Broadcast && _broadcastOff()) return;
         if (e.Speaker is not { Length: > 0 } sender) return;
         if (!TryParse(e.Message, out int index, out int count, out string blob)) return;
 
@@ -100,8 +125,17 @@ public sealed class BossTimerSyncCollector : IDisposable
         }
         _log?.Info("BossTimerSync",
             $"received {records.Count} timer(s) from {sender} in {p.N} line(s): {Describe(records)}");
-        ResponseReceived?.Invoke(new BossTimerSyncResponse(sender, records));
+        ResponseReceived?.Invoke(new BossTimerSyncResponse(sender, records, heardOn));
     }
+
+    // An answer comes back on the channel it was asked on (RemoteCommandManager
+    // answers there), with one exception: a responder who is sneaking answers a said
+    // request by telepath, since speaking aloud would end the sneak. So telepath is
+    // taken after a said request too. Gangpath and broadcast end no sneak and are
+    // never rerouted (GAME_MECHANICS "Channel broadcast").
+    private bool AnswersAreTakenOn(RemoteChannel heardOn) =>
+        _askedOn.Contains(heardOn)
+        || (heardOn == RemoteChannel.Telepath && _askedOn.Contains(RemoteChannel.Local));
 
     // Parse "@timerdata <i>/<n> <blob>", tolerating the {} the remote reply path wraps a
     // reply in. The blob is a single spaceless base64url token, so a 3-way split keeps it

@@ -2472,8 +2472,8 @@ Times read `2h14m`, or `45m` under an hour.
 - **The asking side of `@timer sync`:** sending it, by hand or with **Request Timers** on the Bosses tab, opens the merge window that collects the answers. See **Bosses** under *Quests, Bosses, and Deaths*.
 - **On gangpath, say or the broadcast channel** every client that grants you the permission answers, each with its own set, and everyone on the channel sees the lines. The merge window keeps one set per player and folds them together, so several answers are what you want; each is a handful of lines (sixty timers at most).
 - **On the broadcast channel each client answers a player once a minute.** Asked again sooner it sends one line saying so in place of the timers.
-- **Answers are taken on all four channels**, whichever one you asked on. A client that is sneaking answers a said request by telepath, since it won't speak aloud, and that answer is taken like any other. Answers on the broadcast channel are taken only while **Disallow @commands from broadcast** is unticked.
-- **Request Timers with Broadcast chosen and that box ticked** asks nothing and says which box to untick. Typed by hand with the box ticked, your client shows `[the broadcast channel is switched off for @commands: …]` and opens no window.
+- **Answers are taken on the channel you asked on, and on no other.** Asked on gangpath, only gangpath answers are read; by telepath, only telepaths; on broadcast, only broadcast (and only while **Disallow @commands from broadcast** is unticked). The one exception: after a request you **said**, a telepathed answer is read too, because a client that is sneaking answers a said request by telepath rather than speak aloud. A second request typed on another channel while the window is open adds that channel.
+- **Timers heard on the broadcast channel are never adopted without a pick.** On the other channels a timer for a boss you track and hold no timer for is adopted as it arrives. Anyone can join a numbered channel, so there the same timer becomes a row to choose, marked `heard on broadcast` under the sender's name, with **Keep ours** selected until you pick it.- **Request Timers with Broadcast chosen and that box ticked** asks nothing and says which box to untick. Typed by hand with the box ticked, your client shows `[the broadcast channel is switched off for @commands: …]` and opens no window.
 - **On the broadcast channel the game does not show you your own line on Stock**, so a `br @timer sync` typed by hand there does not open the merge window; use **Request Timers**, which opens it before asking. On Paradigm your own broadcast is echoed and the window opens either way.
 - **Not on a channel**, `br` is not a command to the game and the words may be said aloud instead. `join <n>` first.
 
@@ -3327,10 +3327,12 @@ Tick **Grab All** (default off) to blindly grab a boss's loot the instant it's a
 
 **Sync Timers…** shares respawn timers with other MudPlay users. Pick a channel (Gang, Telepath to a named player, Local say, or Broadcast: the numbered channel you have joined, spoken on with `br`, which works once **Disallow @commands from broadcast** is unticked on Settings → Talk, on your client and on theirs) and click **Request Timers**; the client sends `@timer sync` on that channel, and any other MudPlay user who receives it (and grants the `@timer` remote command) replies with their active timers. Most arrivals need no action from you:
 
-- a timer for a boss you track but have **no** timer for is **adopted automatically**.
+- a timer for a boss you track but have **no** timer for is **adopted automatically**, unless it was heard on the **broadcast** channel: anyone can join that channel, so there it is a row to pick, marked `heard on broadcast`, and nothing is written until you choose it and **Apply Selected**.
 - one that matches what you already hold is left alone (co-kills marked seconds apart count as the same timer).
 - a genuine **conflict** — a boss where someone's timer disagrees with one you hold — shows your timer beside a **Keep ours** default plus a pick button per differing responder; choose whose to keep, then **Apply Selected**.
 - a boss a responder tracks that **you don't** also asks — adopting it **adds the boss back to your list** (recovering a catalog boss you'd removed).
+
+Answers are read only on the channel you asked on (after a say, a telepathed answer too, which is how a sneaking client replies).
 
 Bosses are matched by the monster itself (not by room), so it works even if you and they pinned different rooms. You don't have to open the tab first: sending `@timer sync` by hand — a telepath (`/name @timer sync`), a gang broadcast (`bg @timer sync`), or a say (`.@timer sync`) — **auto-opens this merge window** and starts collecting.
 

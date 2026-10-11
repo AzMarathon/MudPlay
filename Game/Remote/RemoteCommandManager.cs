@@ -1183,7 +1183,7 @@ public sealed class RemoteCommandManager : IDisposable
     // True when speaker is the local character (a public-channel self-echo). The gang
     // echo carries a single-word given name, while our own name may be "Given Family", so
     // compare on the given-name form — the same convention IsActivePartyMember uses.
-    private bool IsSelfEcho(string speaker)
+    public bool IsSelfEcho(string speaker)
     {
         string? self = SelfNameProvider?.Invoke();
         if (string.IsNullOrEmpty(self)) return false;

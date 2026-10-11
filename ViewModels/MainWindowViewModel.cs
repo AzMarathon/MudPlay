@@ -4104,7 +4104,7 @@ public partial class MainWindowViewModel : ObservableObject
         switch (asked.Transfer)
         {
             case Game.Remote.Transfer.TimerSync:
-                OpenTimerSyncWindow();
+                OpenTimerSyncWindow(asked.Channel);
                 break;
             case Game.Remote.Transfer.RoombaSync:
                 AppServices.Current.RoombaSync.NoteSyncRequested();
@@ -4125,16 +4125,19 @@ public partial class MainWindowViewModel : ObservableObject
         return Given(self).Equals(Given(speaker), StringComparison.OrdinalIgnoreCase);
     }
 
-    private async void OpenTimerSyncWindow()
+    // askedOn: the channel our request went out on, the one its answers are taken on.
+    private async void OpenTimerSyncWindow(Game.Remote.RemoteChannel askedOn)
     {
-        if (AppServices.Current.TimerSyncWindowActive) return;   // already collecting
+        // Already collecting: the open window's collector sees the request go out
+        // too, and takes answers on its channel as well.
+        if (AppServices.Current.TimerSyncWindowActive) return;
         var vm = new ViewModels.CharacterWorkshop.BossTimerSyncViewModel(
             AppServices.Current.Bosses,
             AppServices.Current.BossTimers,
             AppServices.Current.GameData,
             AppServices.Current.Chat,
             AppServices.Current.SendTypedInput,
-            preArmed: true);
+            preArmedOn: askedOn);
         await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.CharacterWorkshop.BossTimerSyncViewModel, bool>(vm);
     }

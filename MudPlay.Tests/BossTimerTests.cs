@@ -625,6 +625,98 @@ public sealed class BossTimerTests : IDisposable
         Assert.Empty(engine.LastSentForTests);
     }
 
+    // ----- the merge window: what is written without a pick -----------------
+
+    private static readonly DateTimeOffset Killed = new(2026, 8, 3, 21, 30, 0, TimeSpan.Zero);
+
+    // The merge window over real stores, tracking one boss it holds no timer for:
+    // the case in which an offered timer is adopted outright.
+    private (BossTimerSyncViewModel window, BossTimerStore timers) NewSyncWindow()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "1/1"));
+        var (bosses, timers, cache) = NewStores();
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        BossTimerSyncViewModel window = new(bosses, timers, cache, new ChatRouter(router), send: _ => { },
+            preArmedOn: RemoteChannel.Broadcast, new LogService(), broadcastOff: () => false,
+            isOurName: _ => false, windowActive: _ => { });
+        return (window, timers);
+    }
+
+    private static BossTimerSyncResponse Offers(string sender, RemoteChannel heardOn) =>
+        new(sender, new[] { new BossTimerSyncRecord(50, null, Killed) }, heardOn);
+
+    // Anyone can join the broadcast channel, and a request there tells every
+    // listener that a collection is open. A timer a player with no standing sends
+    // on it, for a boss we track and hold no timer for, is written nowhere: it is a
+    // row to pick, naming who sent it and where it was heard, with "keep ours"
+    // chosen. Closing the window leaves the timers as they were.
+    [Fact]
+    public void SyncWindow_ATimerHeardOnBroadcast_IsOfferedAsAPick_AndNothingIsWritten()
+    {
+        var (window, timers) = NewSyncWindow();
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+
+            window.Fold(Offers("Stranger", RemoteChannel.Broadcast));
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.False(row.WasAutoMerged);
+            Assert.True(row.KeepOursSelected);
+            Assert.Null(row.SelectedKilledAt);
+            BossTimerSyncCellViewModel offer = Assert.Single(row.Responders);
+            Assert.Equal("Stranger", offer.Responder);
+            Assert.False(offer.IsSelected);
+            Assert.EndsWith("heard on broadcast", offer.Text);
+            Assert.Contains("never adopted without a pick", window.Status);
+
+            window.ApplyCommand.Execute(null);   // nothing picked
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.False(closedWithWrites);
+        }
+    }
+
+    // Picked, the same row is merged like any other.
+    [Fact]
+    public void SyncWindow_APickedBroadcastRow_IsMergedOnApply()
+    {
+        var (window, timers) = NewSyncWindow();
+        using (window)
+        {
+            window.Fold(Offers("Stranger", RemoteChannel.Broadcast));
+            Assert.Null(timers.KilledAt("ogre king"));
+
+            Assert.Single(Assert.Single(window.Rows).Responders).AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+        }
+    }
+
+    // On the other channels the same timer is adopted as it arrives, as before.
+    [Theory]
+    [InlineData(RemoteChannel.Gangpath)]
+    [InlineData(RemoteChannel.Local)]
+    [InlineData(RemoteChannel.Telepath)]
+    public void SyncWindow_TheSameTimerOnAnotherChannel_IsAdoptedOutright(RemoteChannel heardOn)
+    {
+        var (window, timers) = NewSyncWindow();
+        using (window)
+        {
+            window.Fold(Offers("Bob", heardOn));
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.True(Assert.Single(window.Rows).WasAutoMerged);
+            Assert.DoesNotContain("broadcast", window.Status);
+        }
+    }
+
     // On the broadcast channel only the sync is followed: the readable report is an
     // ordinary remote command, and none of those is taken there.
     [Fact]
