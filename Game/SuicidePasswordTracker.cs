@@ -85,6 +85,17 @@ public sealed class SuicidePasswordTracker : IDisposable
     // Current state of the flow — exposed for tests + diagnostics.
     public FlowState State => _state;
 
+    // Counts down the outbound lines a bare `suicide` covers: itself and the
+    // password that answers it.
+    private int _useFlowLines;
+
+    // True while an outbound line may be a suicide password: from `set suicide` or
+    // a bare `suicide` going out, until the flow ends. The prompts reach us as
+    // lines only after they are answered, so State alone flips too late to keep a
+    // typed password out of anything that records what was sent. Read after
+    // ObserveOutbound has seen the line in question.
+    public bool PasswordEntryLikely => _captureArmed || _state != FlowState.Idle || _useFlowLines > 0;
+
     public SuicidePasswordTracker(
         MessageRouter router,
         EngineSendGate gate,
@@ -169,6 +180,11 @@ public sealed class SuicidePasswordTracker : IDisposable
         string completed = _currentOutLine.ToString();
         _currentOutLine.Clear();
         if (completed.Length == 0) return;
+
+        // A bare `suicide` is answered with the password as the very next line,
+        // typed before the game's prompt for it has reached us as a line.
+        if (completed.Trim().Equals("suicide", StringComparison.OrdinalIgnoreCase)) _useFlowLines = 2;
+        else if (_useFlowLines > 0) _useFlowLines--;
 
         if (!_captureArmed)
         {
@@ -311,6 +327,7 @@ public sealed class SuicidePasswordTracker : IDisposable
         // "Invalid", etc.).
         _captureArmed = false;
         _latestArmedLine = null;
+        _useFlowLines = 0;
         _currentOutLine.Clear();
         _log?.Log(LogSeverity.Info, "Suicide", $"Engine gate UNLOCKED — {reason}");
     }

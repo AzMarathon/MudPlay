@@ -91,12 +91,89 @@ public sealed class SuicideHandlerTests
 
         DispatchTelepath(h.Router, "Trusted", "@suicide");
 
-        // Two sends from the handler: "suicide\r" then "hunter2\r".
-        // The engine itself may also send a denial reply if mis-routed,
-        // so check the handler-driven bytes explicitly.
+        // Only the command goes out until the game asks for the password.
         string joined = string.Join("|", h.Wire.Select(b => Encoding.Latin1.GetString(b)));
         Assert.Contains("suicide\r", joined);
-        Assert.Contains("hunter2\r", joined);
+        Assert.DoesNotContain("hunter2", joined);
+        Assert.True(h.Handler.AwaitingPasswordPrompt);
+
+        // A row that isn't the prompt sends nothing; the prompt sends the password.
+        h.Handler.ObserveCursorRow("[HP=100/MA=50]:suicide");
+        Assert.DoesNotContain("hunter2",
+            string.Join("|", h.Wire.Select(b => Encoding.Latin1.GetString(b))));
+        h.Handler.ObserveCursorRow("Enter your suicide password:");
+        Assert.Equal("hunter2\r", Encoding.Latin1.GetString(h.Wire[^1]));
+        Assert.False(h.Handler.AwaitingPasswordPrompt);
+    }
+
+    [Fact]
+    public void StoredPassword_PromptAfterAStatlineOnTheSameRow_SendsPassword()
+    {
+        using Harness h = new();
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Handler.ObserveCursorRow("[HP=100/MA=50]:Enter your suicide password:");
+
+        Assert.Equal("hunter2\r", Encoding.Latin1.GetString(h.Wire[^1]));
+    }
+
+    [Fact]
+    public void StoredPassword_PromptNeverComes_PasswordIsNeverSentAndSenderIsTold()
+    {
+        using Harness h = new();
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+        DateTimeOffset now = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        h.Handler.Clock = () => now;
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Wire.Clear();
+
+        // Past the wait, even the prompt itself no longer draws the password.
+        now += SuicideHandler.PromptWait + TimeSpan.FromSeconds(1);
+        h.Handler.ObserveCursorRow("Enter your suicide password:");
+
+        byte[] sent = Assert.Single(h.Wire);
+        Assert.Equal("/Trusted {suicide failed, the game did not ask for the password}\r",
+            Encoding.Latin1.GetString(sent));
+        Assert.False(h.Handler.AwaitingPasswordPrompt);
+    }
+
+    [Fact]
+    public void StoredPassword_PromptNeverComes_WarnOnDenialOff_StaysSilent()
+    {
+        using Harness h = new();
+        GrantElevated(h.Players, "Trusted");
+        h.Engine.WarnOnDenial = false;
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+        DateTimeOffset now = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        h.Handler.Clock = () => now;
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Wire.Clear();
+        now += SuicideHandler.PromptWait + TimeSpan.FromSeconds(1);
+        h.Handler.FireNextPromptForTests();
+
+        Assert.Empty(h.Wire);
+        Assert.False(h.Handler.AwaitingPasswordPrompt);
+    }
+
+    [Fact]
+    public void StoredPassword_SecondAttemptWhileWaiting_IsRefusedAndSendsNoSecondCommand()
+    {
+        using Harness h = new();
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Wire.Clear();
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+
+        byte[] sent = Assert.Single(h.Wire);
+        Assert.Equal("/Trusted {@suicide already in-flight, try again shortly}\r",
+            Encoding.Latin1.GetString(sent));
     }
 
     [Fact]

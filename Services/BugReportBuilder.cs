@@ -34,10 +34,44 @@ public static class BugReportBuilder
     // Frozen point-in-time capture produced by Capture. Holds the realm +
     // timestamp used for the file name and every pre-rendered section. The
     // user's issue description is folded in later by Render.
+    // Scrubber masks the account's login name and passwords in everything Render
+    // writes (BugReportScrub); a capture built without one masks nothing.
     public sealed record BugReportCapture(
         DateTimeOffset CapturedAt,
         RealmType Realm,
-        IReadOnlyList<Section> Sections);
+        IReadOnlyList<Section> Sections,
+        BugReportScrub.Scrubber? Scrubber = null);
+
+    // The login name, login password and suicide password stored for the loaded
+    // character, decrypted for the comparison only: they are held by the scrubber
+    // and never written or logged. Every board's stored login is taken, not only
+    // the active one's, since a profile moved between boards keeps the others.
+    public static BugReportScrub.Scrubber BuildScrubber(AppServices svc)
+    {
+        ArgumentNullException.ThrowIfNull(svc);
+        List<BugReportScrub.Secret> secrets = new();
+        Models.Profile.CharacterProfile? profile = Guard<Models.Profile.CharacterProfile?>(() => svc.Profile.Current, null);
+        if (profile is not null)
+        {
+            string? Open(string? blob) =>
+                string.IsNullOrEmpty(blob) ? null : Guard<string?>(() => svc.Passwords.Unprotect(blob), null);
+            if (profile.BbsCredentials is { } logins)
+            {
+                foreach (Models.Profile.BbsCredentials login in logins.Values)
+                {
+                    secrets.Add(new(BugReportScrub.LoginNameLabel, Open(login.EncryptedUsername)));
+                    secrets.Add(new(BugReportScrub.LoginPasswordLabel, Open(login.EncryptedPassword)));
+                }
+            }
+            secrets.Add(new(BugReportScrub.SuicidePasswordLabel, Open(profile.EncryptedSuicidePassword)));
+        }
+        return BugReportScrub.Build(secrets,
+        [
+            Guard<string?>(() => svc.Profile.CurrentProfileName, null),
+            Guard<string?>(() => svc.PlayerStats.Name, null),
+            profile?.Name,
+        ]);
+    }
 
     // Freeze the current client state into a BugReportCapture. Every section is
     // built defensively — a failure reading one subsystem is surfaced inline in
@@ -50,10 +84,11 @@ public static class BugReportBuilder
 
         DateTimeOffset now = DateTimeOffset.Now;
         RealmType realm = Guard(() => svc.GameData.ActiveRealm, RealmType.Stock);
+        BugReportScrub.Scrubber scrubber = Guard(() => BuildScrubber(svc), BugReportScrub.Scrubber.None);
 
         List<Section> sections =
         [
-            new("Session", SafeSection(() => BuildSession(svc, realm, now))),
+            new("Session", SafeSection(() => BuildSession(svc, realm, now) + AccountDetailNote(scrubber))),
             new("Player state", SafeSection(() => BuildPlayerState(svc))),
             new("Statline", SafeSection(() => BuildStatline(svc))),
             new("Party", SafeSection(() => BuildParty(svc))),
@@ -104,7 +139,18 @@ public static class BugReportBuilder
             sections.Add(new("Wire — classified combat (last 750 lines)",
                 SafeSection(() => BuildClassifiedWire(svc))));
 
-        return new BugReportCapture(now, realm, sections);
+        return new BugReportCapture(now, realm, sections, scrubber);
+    }
+
+    // What the report says about the masking, and about a value it could not mask.
+    private static string AccountDetailNote(BugReportScrub.Scrubber scrubber)
+    {
+        StringBuilder sb = new();
+        Kv(sb, "Account details", "the login name, login password and suicide password are written as "
+            + $"`{BugReportScrub.Mask}` wherever they appear in this report");
+        foreach (string note in scrubber.Notes)
+            Kv(sb, "Account details, not masked", note);
+        return sb.ToString();
     }
 
     // Compose the final Markdown document from a capture and the user's
@@ -124,8 +170,13 @@ public static class BugReportBuilder
         sb.Append("\n\n");
 
         AppendSections(sb, capture);
-        return sb.ToString();
+        return Scrubbed(capture, sb.ToString());
     }
+
+    // The last step of every render: the scrub sees the whole document, the
+    // user's own description included.
+    private static string Scrubbed(BugReportCapture capture, string document) =>
+        capture.Scrubber is { } scrubber ? scrubber.Apply(document) : document;
 
     // State-only variant for the crash reporter: the section dump with no
     // bug-report title and no user-description block, so a crash document can
@@ -136,7 +187,7 @@ public static class BugReportBuilder
 
         StringBuilder sb = new(capacity: 16 * 1024);
         AppendSections(sb, capture);
-        return sb.ToString();
+        return Scrubbed(capture, sb.ToString());
     }
 
     private static void AppendSections(StringBuilder sb, BugReportCapture capture)

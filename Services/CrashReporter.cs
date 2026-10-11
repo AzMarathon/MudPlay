@@ -34,6 +34,13 @@ public static class CrashReporter
     // exception, just without the state dump.
     public static void RegisterStateProvider(Func<string?> provider) => _stateProvider = provider;
 
+    // The whole crash document passes through this before it is written: the
+    // account-detail scrub a bug report gets, since a crash report is posted the
+    // same way. If it throws, the document is not written at all rather than
+    // written unmasked.
+    private static Func<string, string>? _textFilter;
+    public static void RegisterTextFilter(Func<string, string> filter) => _textFilter = filter;
+
     // Wire the two out-of-band failure channels. UI-thread crashes escape the
     // Avalonia run loop instead and are caught by Guard.
     public static void Install()
@@ -142,7 +149,7 @@ public static class CrashReporter
         else
             sb.Append("## State\n\n_(client state unavailable — the crash happened before the UI was ready, or state capture itself failed)_\n");
 
-        return sb.ToString();
+        return _textFilter is { } filter ? filter(sb.ToString()) : sb.ToString();
     }
 
     // Walk the inner-exception chain so a wrapped fault (AggregateException, a

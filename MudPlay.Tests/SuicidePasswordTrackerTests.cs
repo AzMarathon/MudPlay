@@ -46,6 +46,41 @@ public sealed class SuicidePasswordTrackerTests
             IsPromptLine: false));
 
     [Fact]
+    public void PasswordEntryLikely_CoversABareSuicideAndTheLineThatAnswersIt()
+    {
+        var (tracker, _, _, _, _, tmp) = Setup();
+        try
+        {
+            Assert.False(tracker.PasswordEntryLikely);
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("suicide\r"));
+            Assert.True(tracker.PasswordEntryLikely);
+            // The password, typed before the prompt for it has arrived as a line.
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("hunter2\r"));
+            Assert.True(tracker.PasswordEntryLikely);
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("look\r"));
+            Assert.False(tracker.PasswordEntryLikely);
+        }
+        finally { Directory.Delete(tmp, recursive: true); }
+    }
+
+    [Fact]
+    public void PasswordEntryLikely_HoldsFromSetSuicideUntilTheFlowEnds()
+    {
+        var (tracker, router, _, _, _, tmp) = Setup();
+        try
+        {
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("set suicide\r"));
+            Assert.True(tracker.PasswordEntryLikely);
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("oldpw\r"));
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("newpw\r"));
+            Assert.True(tracker.PasswordEntryLikely);
+            Dispatch(router, "Password Changed");
+            Assert.False(tracker.PasswordEntryLikely);
+        }
+        finally { Directory.Delete(tmp, recursive: true); }
+    }
+
+    [Fact]
     public void FirstTimeSet_PrimedByOutboundSetSuicide_CapturesOnPasswordChanged()
     {
         var (tracker, router, gate, profile, protector, tmp) = Setup();

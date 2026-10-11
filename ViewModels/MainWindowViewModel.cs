@@ -846,6 +846,7 @@ public partial class MainWindowViewModel : ObservableObject
         // character mode the moment the box appears. Cheap: pre-filtered on the
         // stat-box marker and skipped entirely once armed.
         Emulator.ScreenUpdated += OnScreenUpdatedForTrainerMenu;
+        Emulator.ScreenUpdated += OnScreenUpdatedForSuicidePrompt;
 
         // Feed the crash reporter a live-state snapshot so a fatal fault's
         // Crash-<timestamp>.md carries the same scrollback / log / engine dump a
@@ -854,6 +855,8 @@ public partial class MainWindowViewModel : ObservableObject
         CrashReporter.RegisterStateProvider(() =>
             BugReportBuilder.RenderStateOnly(
                 BugReportBuilder.Capture(AppServices.Current, Emulator)));
+        CrashReporter.RegisterTextFilter(document =>
+            BugReportBuilder.BuildScrubber(AppServices.Current).Apply(document));
 
         // 100 ms refresh — matches TickEngine's internal cadence so the
         // countdown ticks down by 0.1 s each repaint instead of jumping
@@ -3741,6 +3744,17 @@ public partial class MainWindowViewModel : ObservableObject
     // stalled the walker after training (it advanced one room per manual `rm`).
     // Presence is tracked unconditionally (even while armed) so the falling edge is
     // seen; the box must actually leave and reappear before it can re-arm.
+    // An @suicide with a stored password answers the game's password prompt, which
+    // has no line end until answered and so is only ever seen on the cursor's row.
+    private void OnScreenUpdatedForSuicidePrompt()
+    {
+        Game.Remote.SuicideHandler suicide = AppServices.Current.Suicide;
+        if (!suicide.AwaitingPasswordPrompt) return;
+        TerminalScreen screen = Emulator.Screen;
+        int row = Math.Clamp(screen.CursorY, 0, screen.Rows - 1);
+        suicide.ObserveCursorRow(TranscriptSnapshot.RowText(screen.Row(row)));
+    }
+
     private void OnScreenUpdatedForTrainerMenu()
     {
         bool onScreen = ScreenShowsStatBoxMarker();
