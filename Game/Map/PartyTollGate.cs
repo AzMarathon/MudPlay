@@ -69,6 +69,8 @@ public sealed class PartyTollGate
         // commands whose lines are still to come.
         public Dictionary<string, (long Planned, long Confirmed, int GivesLeft)> Pending { get; } =
             new(StringComparer.OrdinalIgnoreCase);
+        // Per member: what each give sent and not yet answered was worth, in copper.
+        public Dictionary<string, List<long>> Unanswered { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private readonly PartyWealthTracker _wealth;
@@ -100,15 +102,16 @@ public sealed class PartyTollGate
     // answers it was made on: asked again every 30 s, a toll with no way through
     // would be walked up to and turned from over and over.
     private readonly Dictionary<TollKey, Closure> _closed = new();
-    // Members left out of the count for the trip: a hand-over to them got no line
-    // from the game and they aren't listed in the room, so they aren't following
-    // from here and the toll is no concern of theirs.
-    private readonly HashSet<string> _notHere = new(StringComparer.OrdinalIgnoreCase);
+    // Members known not to be with us, as last asked on the UI thread (a route
+    // search reads this copy, never the comeback manager's own lists). They are
+    // left out of a toll's count: they aren't following through it. Swapped whole.
+    private volatile IReadOnlyCollection<string> _leftBehind = [];
 
     // Hand-overs whose window passed with no line from the game, by member: the
     // toll they were for and when the window passed. A line that comes late still
     // means the coin went, so it is still credited.
-    private readonly Dictionary<string, (TollKey Toll, DateTime At)> _lateGives = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (TollKey Toll, DateTime At, List<long> Unanswered)> _lateGives =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private TollKey? _asking;
     private Funding? _funding;
@@ -116,10 +119,14 @@ public sealed class PartyTollGate
     // How long after its window a hand-over's line is still taken as its own.
     public TimeSpan LateConfirmationWindow { get; set; } = TimeSpan.FromMinutes(2);
 
-    // Whether a member is listed among the players in the room as last shown. Not
-    // a test of who follows (a follower arrives after the room is drawn, and a
-    // hidden one is never listed): only read once a hand-over has gone unanswered.
-    public Func<string, bool>? SeenInRoom { get; set; }
+    // The members the client KNOWS are not with us (PartyComebackManager.
+    // KnownLeftBehind). Only that leaves a listed member out of the count: one who
+    // is merely not shown in the room may be hidden, or have arrived after it was
+    // drawn, and the ruling is that everyone gets through or nobody does.
+    public Func<IReadOnlyCollection<string>>? KnownLeftBehind { get; set; }
+
+    // Asked on the UI thread, at each toll step and when a round of answers is in.
+    public void RefreshLeftBehind() => _leftBehind = KnownLeftBehind?.Invoke() ?? [];
 
     // How long a hand-over may go unconfirmed before the member counts as unable.
     // The @wealth window's length: one command each way.
@@ -241,13 +248,14 @@ public sealed class PartyTollGate
         TollKey toll = KeyOf(in exit);
         DateTime now = _clock();
         List<Member> members = new(followers.Count);
+        IReadOnlyCollection<string> leftBehind = _leftBehind;
         foreach (string name in followers)
         {
+            if (leftBehind.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
             (PartyWealthTracker.PurseKnowledge knowledge, long copper) = _wealth.FreshPurse(name);
             string? unable = null;
             lock (_marksLock)
             {
-                if (_notHere.Contains(name)) continue;
                 // Silent, but handed coin at this toll with no toll crossed since:
                 // they hold at least that, which is all there is to go on.
                 if (knowledge == PartyWealthTracker.PurseKnowledge.Silent
@@ -280,19 +288,24 @@ public sealed class PartyTollGate
         Judgement fresh = JudgeNow(in exit, followers);
         TollKey toll = KeyOf(in exit);
         long cost = (long)exit.TollGold * 100;
-        Closure? closure;
-        lock (_marksLock)
+        if (fresh.Outcome == Outcome.Closed)
         {
-            if (fresh.Outcome == Outcome.Closed)
+            bool isNew;
+            lock (_marksLock)
             {
-                bool isNew = !_closed.ContainsKey(toll);
+                isNew = !_closed.ContainsKey(toll);
                 _closed[toll] = new Closure(
                     new HashSet<string>(followers, StringComparer.OrdinalIgnoreCase),
                     fresh.Needs, fresh.MemberUnable, fresh.Summary);
-                if (isNew && !atTheStep)
-                    Decide($"the toll into {toll.Target} ({toll.TollGold} gold): closed to the party for this trip. {fresh.Summary}");
-                return fresh;
             }
+            // Said with the lock let go: the log is not ours to hold it across.
+            if (isNew && !atTheStep)
+                Decide($"the toll into {toll.Target} ({toll.TollGold} gold): closed to the party for this trip. {fresh.Summary}");
+            return fresh;
+        }
+        Closure? closure;
+        lock (_marksLock)
+        {
             if (fresh.Outcome != Outcome.Unverified || !_closed.TryGetValue(toll, out closure))
             {
                 _closed.Remove(toll);
@@ -344,6 +357,7 @@ public sealed class PartyTollGate
         if (!Applies(out IReadOnlyList<string> followers)) return StepVerdict.Go;
         // The gate is up for an ask or a hand-over: the step comes back when it clears.
         if (_asking is not null || _funding is not null) return StepVerdict.Hold;
+        RefreshLeftBehind();
 
         TollKey toll = KeyOf(in exit);
         string crossing = PaidCrossingDescriber.Describe(from, direction, in exit, _roomName);
@@ -355,7 +369,7 @@ public sealed class PartyTollGate
         switch (judged.Outcome)
         {
             case Outcome.Clear:
-                Decide($"{crossing}: every party member can pay ({LastReadings}); going through");
+                Decide($"{crossing}: every party member with us can pay ({LastReadings}); going through");
                 NoteTollTaken();
                 return StepVerdict.Go;
 
@@ -457,7 +471,10 @@ public sealed class PartyTollGate
         // Everyone is on the list before the first command goes: a confirmation
         // that came back at once would otherwise find the list empty and end it.
         foreach ((string name, IReadOnlyList<(string Currency, long Count)> coins, long copper) in plans)
+        {
             funding.Pending[name] = (copper, 0, coins.Count);
+            funding.Unanswered[name] = coins.Select(c => CurrencyHoldings.ToCopper(c.Currency, c.Count)).ToList();
+        }
         string runic = _runicName();
         foreach ((string name, IReadOnlyList<(string Currency, long Count)> coins, _) in plans)
             foreach ((string currency, long count) in coins)
@@ -506,6 +523,7 @@ public sealed class PartyTollGate
             CreditLateHandOver(recipient, copper);
             return;
         }
+        funding.Unanswered[recipient].Remove(copper);
         long confirmed = pending.Confirmed + copper;
         int left = pending.GivesLeft - 1;
         if (confirmed >= pending.Planned) Settle(funding, recipient, confirmed, failure: null);
@@ -523,41 +541,48 @@ public sealed class PartyTollGate
         Settle(funding, recipient, pending.Confirmed, "wasn't handed the coin: the game refused the hand-over");
     }
 
+    // InventoryManager.CoinGiveMisaimed: the Stock engine's answer to a coin give
+    // at something that isn't a player, or at a player hidden from us. It names
+    // nobody, so it is taken for the hand-over in hand only when there is just one.
+    public void OnCoinGiveMisaimed()
+    {
+        if (_funding is not { Pending.Count: 1 } funding) return;
+        (string name, (long _, long confirmed, int _)) = funding.Pending.First();
+        Settle(funding, name, confirmed,
+            "wasn't handed the coin: the game says there is nobody of that name here to give to (not here, or hidden from us)");
+    }
+
     private void OnGiveWindowElapsed()
     {
         if (_funding is not { } funding) return;
         DateTime now = _clock();
         foreach ((string name, (long _, long confirmed, int _)) in funding.Pending.ToArray())
         {
-            // The command went out, so its line may still come: kept on record.
-            _lateGives[name] = (funding.Toll, now);
-            // Nothing came back at all and they aren't listed in the room: they are
-            // somewhere else, the give reached nobody, and a member who isn't here
-            // isn't following through this toll. Left out of the count for the trip
-            // rather than held against the whole party.
-            if (confirmed == 0 && SeenInRoom?.Invoke(name) == false)
-            {
-                lock (_marksLock) _notHere.Add(name);
-                Settle(funding, name, confirmed,
-                    "got no hand-over line and isn't seen in the room: not counted at tolls on this trip", unable: false);
-                continue;
-            }
+            // The commands went out, so their lines may still come: what was sent
+            // and not yet answered is kept on record.
+            _lateGives[name] = (funding.Toll, now, funding.Unanswered[name]);
             Settle(funding, name, confirmed,
-                $"wasn't seen to get the coin: no confirmation inside {GiveConfirmWindow.TotalSeconds:0} s");
+                $"gave no answer to the hand-over: no line from the game inside {GiveConfirmWindow.TotalSeconds:0} s");
         }
     }
 
     // A coin line for a member whose hand-over had already been given up on: the
     // coin left our purse all the same, so it counts toward what they hold and
     // toward what they were paid at that toll, whatever was decided meanwhile.
+    // Only a line worth what one of the unanswered gives was worth: coin handed to
+    // them by hand, or by another feature, is not this toll's.
     private void CreditLateHandOver(string recipient, long copper)
     {
-        if (copper <= 0 || !_lateGives.TryGetValue(recipient, out (TollKey Toll, DateTime At) late)) return;
+        if (copper <= 0
+            || !_lateGives.TryGetValue(recipient, out (TollKey Toll, DateTime At, List<long> Unanswered) late))
+            return;
         if (_clock() - late.At > LateConfirmationWindow)
         {
             _lateGives.Remove(recipient);
             return;
         }
+        if (!late.Unanswered.Remove(copper)) return;
+        if (late.Unanswered.Count == 0) _lateGives.Remove(recipient);
         _wealth.NoteGiven(recipient, copper);
         lock (_marksLock)
         {
@@ -568,8 +593,8 @@ public sealed class PartyTollGate
             $"A late line from the game: {CurrencyFormat.Full(copper)} did reach {recipient}. Counted toward what they hold and what they were paid.");
     }
 
-    // unable: the failure stands against the member at this toll (MarkUnable).
-    private void Settle(Funding funding, string name, long confirmed, string? failure, bool unable = true)
+    // A failure stands against the member at this toll (MarkUnable).
+    private void Settle(Funding funding, string name, long confirmed, string? failure)
     {
         funding.Pending.Remove(name);
         if (confirmed > 0)
@@ -581,7 +606,7 @@ public sealed class PartyTollGate
             _log?.Info(LogCategory, $"{funding.Crossing}: the game confirmed {CurrencyFormat.Full(confirmed)} handed to {name}.");
         else
         {
-            if (unable) MarkUnable(name, funding.Toll, failure);
+            MarkUnable(name, funding.Toll, failure);
             _log?.Info(LogCategory, $"{funding.Crossing}: {name} {failure}.");
         }
         if (funding.Pending.Count > 0 || !ReferenceEquals(_funding, funding)) return;
@@ -602,23 +627,31 @@ public sealed class PartyTollGate
     // Done here, where the step is released, and not on the room change: the
     // engine sends its next step from inside that change, and a second toll right
     // behind the first was judged on what was read before the first was paid.
-    private void NoteTollTaken()
+    // What a member was paid at this toll is another matter: that stands until
+    // the crossing is seen to have happened (NoteRoomChanged), since a step let go
+    // can still bounce, and a member paid for it must not be paid for the retry.
+    private void NoteTollTaken() => _wealth.ExpireReadings();
+
+    // The tracker confirmed a move from one room to another. Through a toll exit,
+    // whoever was paid for that toll has now spent it or been left at it: what
+    // they were handed there no longer stands for what they hold.
+    public void NoteRoomChanged(Room previous, RoomKey now)
     {
-        _wealth.ExpireReadings();
-        lock (_marksLock)
-            foreach ((string Name, TollKey Toll) key in _funded.Keys.ToArray())
-                _funded[key] = (_funded[key].Copper, CrossedSince: true);
+        ArgumentNullException.ThrowIfNull(previous);
+        foreach (RoomExit exit in previous.Exits.Values)
+        {
+            if (!IsToll(in exit) || (exit.Target != now && exit.Landing != now)) continue;
+            TollKey crossed = KeyOf(in exit);
+            lock (_marksLock)
+                foreach ((string Name, TollKey Toll) key in _funded.Keys.Where(k => k.Toll == crossed).ToArray())
+                    _funded[key] = (_funded[key].Copper, CrossedSince: true);
+        }
     }
 
-    // MovementController going idle: the trip a toll was closed on is over, and so
-    // is the count that left a member out.
+    // MovementController going idle: the trip a toll was closed on is over.
     public void NoteTripEnded()
     {
-        lock (_marksLock)
-        {
-            _closed.Clear();
-            _notHere.Clear();
-        }
+        lock (_marksLock) _closed.Clear();
     }
 
     // Another character's profile: nothing asked, handed over or closed stands.
@@ -629,8 +662,8 @@ public sealed class PartyTollGate
             _funded.Clear();
             _unable.Clear();
             _closed.Clear();
-            _notHere.Clear();
         }
+        _leftBehind = [];
         _lateGives.Clear();
         bool held = _asking is not null || _funding is not null;
         _asking = null;
@@ -650,14 +683,30 @@ public sealed class PartyTollGate
         _log?.Info(LogCategory, text);
     }
 
+    // A member who gave no answer: with what we have handed them for a toll of
+    // this price and not yet seen spent, when that is why they count as paid.
+    private string PaidAndSilent(string name, long cost)
+    {
+        lock (_marksLock)
+            foreach (((string Name, TollKey Toll) key, (long Copper, bool CrossedSince) paid) in _funded)
+                if (!paid.CrossedSince && (long)key.Toll.TollGold * 100 == cost
+                    && string.Equals(key.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return $"{name} no answer, handed {CurrencyFormat.Full(paid.Copper)} for this toll";
+        return $"{name} no answer";
+    }
+
     private string DescribeReadings(IReadOnlyList<string> followers, long cost)
     {
-        IEnumerable<string> purses = followers.Select(name => _wealth.FreshPurse(name) switch
-        {
-            (PartyWealthTracker.PurseKnowledge.Read, long copper) => $"{name} {CurrencyFormat.Full(copper)}",
-            (PartyWealthTracker.PurseKnowledge.Silent, _) => $"{name} no answer",
-            _ => $"{name} not asked yet",
-        });
+        IReadOnlyCollection<string> leftBehind = _leftBehind;
+        IEnumerable<string> purses = followers.Select(name =>
+            leftBehind.Contains(name, StringComparer.OrdinalIgnoreCase)
+                ? $"{name} left out (known to be left behind, not following through this toll)"
+                : _wealth.FreshPurse(name) switch
+                {
+                    (PartyWealthTracker.PurseKnowledge.Read, long copper) => $"{name} {CurrencyFormat.Full(copper)}",
+                    (PartyWealthTracker.PurseKnowledge.Silent, _) => PaidAndSilent(name, cost),
+                    _ => $"{name} not asked yet",
+                });
         string own = _ownPurse() is { } purse
             ? $"own purse {CurrencyFormat.Full(purse)}"
               + (_reservedCopper() > 0 ? $" with {CurrencyFormat.Full(_reservedCopper())} set aside" : string.Empty)

@@ -1769,6 +1769,27 @@ public sealed class InventoryManagerTests
         Assert.Equal(new[] { (recipient, copper) }, given);
     }
 
+    // The Stock engine's answer to a coin give at nobody it can find for us: told
+    // apart from the refusals that name the player, and moving nothing.
+    [Fact]
+    public void GiveAway_Coins_TheLineForNobodyHereToGiveTo_IsRaised_AndMovesNothing()
+    {
+        using Harness h = new();
+        h.Feed("You are carrying lantern, 30 gold crowns.");
+        h.Feed("Wealth:    3000 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+        int misaimed = 0;
+        bool refused = false;
+        h.Inv.CoinGiveMisaimed += () => misaimed++;
+        h.Inv.GiveRefused += _ => refused = true;
+
+        h.Feed("Why would you want to give to that?");
+
+        Assert.Equal(1, misaimed);
+        Assert.False(refused);
+        Assert.Equal(30, h.Inv.Snapshot.Currency.Gold);
+    }
+
     // The count-then-words shape with more than one unknown word names no coin.
     [Fact]
     public void Receive_Coins_IgnoresALineThatNamesNoCoin()

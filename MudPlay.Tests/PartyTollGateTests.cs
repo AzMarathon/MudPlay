@@ -72,8 +72,8 @@ public sealed class PartyTollGateTests : IDisposable
 
         // A purse of mixed coins, in place of Gold.
         public CurrencyHoldings? Coins { get; set; }
-        // Who is listed among the players in the room: everyone, unless a test says.
-        public Func<string, bool> InRoom { get; set; } = _ => true;
+        // The members the comeback manager knows are not with us: nobody, unless a test says.
+        public HashSet<string> LeftBehind { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public long? Purse => Coins?.TotalCopperValue ?? (Gold is { } gold ? gold * 100L : null);
         public CurrencyHoldings? Holdings =>
@@ -205,12 +205,18 @@ public sealed class PartyTollGateTests : IDisposable
         runner.SetUnpaidCrossingHandler(rig.Notices.Add);
         runner.Event += rig.LoopEvents.Add;
 
+        gate.KnownLeftBehind = () => rig.LeftBehind.ToArray();
         wealth.RoundSettled += () =>
         {
+            gate.RefreshLeftBehind();
             walker.ReplanIfATollAheadIsClosed();
             runner.ReplanIfATollAheadIsClosed();
         };
-        gate.SeenInRoom = name => rig.InRoom(name);
+        tracker.StateChanged += t =>
+        {
+            if (t.PreviousRoom is { } left && t.NewRoom is { } now && left.Key != now.Key)
+                gate.NoteRoomChanged(left, now.Key);
+        };
         return rig;
     }
 
@@ -306,7 +312,7 @@ public sealed class PartyTollGateTests : IDisposable
         Assert.Equal(new[] { "e" }, rig.Moves);
         Assert.Empty(rig.Gives);
         Assert.False(rig.Coordinator.IsPaused);
-        Assert.Contains("every party member can pay", rig.Decided);
+        Assert.Contains("every party member with us can pay", rig.Decided);
     }
 
     // ----- one short, one silent ---------------------------------------------------
@@ -445,7 +451,7 @@ public sealed class PartyTollGateTests : IDisposable
         Assert.Empty(unconfirmed.Moves);
         unconfirmed.GiveWindow!();                                // no line from the game inside the bound
         Assert.Equal(new[] { "n" }, unconfirmed.Moves);
-        Assert.Contains("no confirmation inside 4 s", unconfirmed.Decided);
+        Assert.Contains("gave no answer to the hand-over", unconfirmed.Decided);
 
         // Stock counts over only what the recipient has room to keep.
         Rig cutShort = PartyAtTheToll();
@@ -872,23 +878,104 @@ public sealed class PartyTollGateTests : IDisposable
 
     // ----- a member who isn't here ---------------------------------------------------------
 
-    // Listed in the party and somewhere else: the give gets no line, and she isn't
-    // among the players in the room. She isn't following through this toll, so the
-    // party isn't held to it on her account.
+    // She answers that she holds nothing, and her hand-over gets no line: hidden,
+    // late into the room, or elsewhere, the client can't tell. Everyone gets through
+    // or nobody does, so she is unable, not left out: the party is not taken
+    // through without her, and the decision never reads as if all could pay.
     [Fact]
-    public void AMemberNotInTheRoom_WhoseHandOverGetsNoLine_IsLeftOutOfTheCount()
+    public void AMemberWhoseHandOverGetsNoLine_IsUnable_NotLeftOut_AndThePartyGoesRound()
     {
         Rig rig = PartyAtTheToll();
-        rig.InRoom = name => name != "Cal";
         Assert.True(rig.Walker.WalkTo(WayRoundRoad));
         rig.Says("Bob", 500);
-        rig.Windows[^1]();
+        rig.Says("Cal", 0);
         Assert.Equal(new[] { "give 5 gold to Cal" }, rig.Gives);
 
         rig.GiveWindow!();
 
-        Assert.Equal(new[] { "e" }, rig.Moves);                   // through, with those who are here
-        Assert.Equal(new[] { "give 5 gold to Cal" }, rig.Gives);
+        Assert.Equal(new[] { "n" }, rig.Moves);
+        Assert.Contains("Cal gave no answer to the hand-over", rig.Decided);
+        Assert.DoesNotContain("can pay", rig.Decided);
+    }
+
+    // Only a member the client KNOWS is not with us is left out: one the comeback
+    // manager has as left behind. She isn't asked to be covered, the rest go
+    // through, and the decision says who was left out and why.
+    [Fact]
+    public void AMemberKnownToBeLeftBehind_IsLeftOutOfTheCount_AndThePartyGoesOn()
+    {
+        Rig rig = PartyAtTheToll();
+        rig.LeftBehind.Add("Cal");
+        Assert.True(rig.Walker.WalkTo(WayRoundRoad));
+        rig.Says("Bob", 500);
+        rig.Windows[^1]();                                        // she doesn't answer either
+
+        Assert.Empty(rig.Gives);
+        Assert.Equal(new[] { "e" }, rig.Moves);
+        Assert.Contains("Cal left out (known to be left behind", rig.Decided);
+    }
+
+    // The Stock engine's answer to a coin give at nobody it can find for us.
+    [Fact]
+    public void TheGamesLineForAGiveAtNobodyHere_FailsTheOneHandOverInHand()
+    {
+        Rig rig = PartyAtTheToll();
+        Assert.True(rig.Walker.WalkTo(WayRoundRoad));
+        rig.Says("Bob", 500);
+        rig.Says("Cal", 0);
+
+        rig.Gate.OnCoinGiveMisaimed();                            // "Why would you want to give to that?"
+
+        Assert.Equal(new[] { "n" }, rig.Moves);
+        Assert.Contains("nobody of that name here to give to", rig.Decided);
+    }
+
+    // ----- a step let go that bounces ----------------------------------------------------
+
+    // A member who never answers @wealth is handed the toll and it is confirmed; the
+    // party is let through and the game bounces the move. The retry asks again, she
+    // is silent again, and she still counts as holding what she was handed: the
+    // crossing hasn't been seen, so nothing has spent it.
+    [Fact]
+    public void AStepLetThroughThatBounces_DoesNotPayTheSilentMemberASecondTime()
+    {
+        Rig rig = PartyAtTheToll();
+        rig.Gold = 40;
+        Assert.True(rig.Walker.WalkTo(WayRoundRoad));
+        rig.Says("Bob", 500);
+        rig.Windows[^1]();
+        rig.Confirms("Cal", 5);
+        Assert.Equal(new[] { "e" }, rig.Moves);
+
+        rig.Tracker.NoteMoveBlocked();                            // the move never left the room
+
+        Assert.Equal(4, rig.Asked.Count);                         // the retry asks afresh
+        rig.Says("Bob", 500);
+        rig.Windows[^1]();
+
+        Assert.Equal(new[] { "give 5 gold to Cal" }, rig.Gives);  // the one hand-over
+        Assert.Equal(new[] { "e", "e" }, rig.Moves);
+    }
+
+    // ----- a late line must be one of ours ---------------------------------------------------
+
+    [Fact]
+    public void ALateLine_IsCreditedOnlyWhenItMatchesAGiveThisCheckSent()
+    {
+        Rig rig = PartyAtTheToll();
+        rig.Gold = 40;
+        Assert.True(rig.Walker.WalkTo(WayRoundRoad));
+        rig.Says("Bob", 500);
+        rig.Windows[^1]();
+        rig.GiveWindow!();
+
+        rig.Gate.OnCoinsGivenAway("Cal", 100);                    // a gold handed over by hand: not this toll's
+        Assert.Null(rig.Wealth.LastReading("Cal"));
+
+        rig.Gate.OnCoinsGivenAway("Cal", 500);                    // the give that was sent
+        Assert.Equal(500, rig.Wealth.LastReading("Cal"));
+        rig.Gate.OnCoinsGivenAway("Cal", 500);                    // and not a second time
+        Assert.Equal(500, rig.Wealth.LastReading("Cal"));
     }
 
     // A fare keeps the rule it had: refused on a purse someone reported, and a

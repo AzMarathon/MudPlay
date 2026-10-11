@@ -651,6 +651,23 @@ public sealed class PartyComebackManager : IDisposable
     public bool WentBackFor(string given, RoomKey from, RoomKey to) =>
         _gateFetches.Exists(f => SameName(f.Given, given) && f.From == from && f.To == to);
 
+    // The members this manager knows are not with us: being gone back for or
+    // waiting their turn, told by the game to have dropped behind a move, left by
+    // a train trip, left at a loop's gate, or waiting for Auto-Lair's next pass.
+    // PartyTollGate leaves them out of a toll's count: they aren't following
+    // through it. A member merely unseen in the room is not one of these.
+    public IReadOnlyCollection<string> KnownLeftBehind()
+    {
+        HashSet<string> left = new(StringComparer.OrdinalIgnoreCase);
+        if (_busy && !string.IsNullOrEmpty(_senderGiven)) left.Add(_senderGiven);
+        foreach (var queued in _queued) left.Add(queued.Given);
+        foreach (var onTrip in _leftOnTrip) left.Add(onTrip.Given);
+        left.UnionWith(_dropLineSeen);
+        left.UnionWith(_gatedOnLoop.Keys);
+        left.UnionWith(_inviteOnSight);
+        return left;
+    }
+
     private ResumeKind EngineInCharge => _busy ? _resume.Kind : SnapshotRunningEngine().Kind;
 
     // Each room change: was it an engine's step through an exit that lets through

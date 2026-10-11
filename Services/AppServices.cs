@@ -8950,7 +8950,7 @@ public sealed class AppServices
             MasterSwitchOff = MasterSwitchOff("Party polls"),
             // Read when asked: the comeback manager is built further down.
             WentBackFor = (given, from, to) => PartyComeback.WentBackFor(given, from, to),
-            SeenInRoom = IsGivenNameInRoom,
+            KnownLeftBehind = () => PartyComeback.KnownLeftBehind(),
         };
         Movement.PartyTollClosedProbe = exit => PartyToll.Closes(in exit);
         Movement.PartyTollClosedReason = exit => PartyToll.DescribeClosed(in exit);
@@ -8958,6 +8958,13 @@ public sealed class AppServices
         LoopRunner.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
         Inventory.CoinsGivenAway += (recipient, copper) => PartyToll.OnCoinsGivenAway(recipient, copper);
         Inventory.GiveRefused += recipient => PartyToll.OnGiveRefused(recipient);
+        Inventory.CoinGiveMisaimed += () => PartyToll.OnCoinGiveMisaimed();
+        // A member paid for at a toll has spent it once the room beyond is confirmed.
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.PreviousRoom is { } left && t.NewRoom is { } now && left.Key != now.Key)
+                PartyToll.NoteRoomChanged(left, now.Key);
+        };
         Profile.ProfileLoaded += _ => PartyToll.Reset();
         // A toll closed to the party stays closed for the trip it was closed on.
         MovementControl.StateChanged += () =>
@@ -8968,6 +8975,7 @@ public sealed class AppServices
         // that the party can't be taken through is turned from now, not at its gate.
         PartyWealth.RoundSettled += () =>
         {
+            PartyToll.RefreshLeftBehind();
             Walker.ReplanIfATollAheadIsClosed();
             LoopRunner.ReplanIfATollAheadIsClosed();
         };

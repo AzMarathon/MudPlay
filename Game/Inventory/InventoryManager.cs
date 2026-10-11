@@ -207,6 +207,10 @@ public sealed partial class InventoryManager : IDisposable
     // game's, which on Stock is what the recipient had room to keep.
     public event Action<string, long>? CoinsGivenAway;
 
+    // The game answered a coin give of ours with its line for a target that isn't
+    // a player here, or is hidden from us. It names nobody.
+    public event Action? CoinGiveMisaimed;
+
     // The game refused a give of ours. Carries the player the line names, or null
     // for the refusal that names nobody. A give waiting to be confirmed stops
     // waiting on it rather than on a timer.
@@ -818,6 +822,16 @@ public sealed partial class InventoryManager : IDisposable
         if (GiveFailedRegex().IsMatch(line))
         {
             _log?.Debug(LogCategory, "give bounced: item not held");
+            return;
+        }
+
+        // The Stock engine's answer to a coin give at something that isn't a player,
+        // or at a player hidden from us (GAME_MECHANICS "Giving items and coins to
+        // another player"). Nothing moved, and the line names nobody.
+        if (line == CoinGiveMisaimedLine)
+        {
+            _log?.Debug(LogCategory, "coin give refused: nobody of that name here to give to");
+            CoinGiveMisaimed?.Invoke();
             return;
         }
 
@@ -1830,4 +1844,5 @@ public sealed partial class InventoryManager : IDisposable
     private static partial Regex GiveRefusedByRegex();
 
     private const string GiveNotAllowedLine = "You may not give that item away!";
+    private const string CoinGiveMisaimedLine = "Why would you want to give to that?";
 }
