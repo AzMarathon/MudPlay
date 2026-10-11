@@ -3064,6 +3064,11 @@ public sealed class AppServices
         // swallows it instead of bouncing "{command invalid}" at each responder.
         RemoteCommands.RegisterIgnored(Game.Remote.BossTimerQueryHandler.SyncResponseToken);
         RemoteCommands.RegisterIgnored(Game.Remote.RoombaQueryHandler.SyncResponseToken);
+        // The two lines of a `@loop send` that are answers and never commands. They
+        // travel in braces, which keeps them from the engine; reserved as well, so
+        // that one typed by hand without its braces is swallowed like the others.
+        RemoteCommands.RegisterIgnored(Game.Remote.LoopShareHandler.DataToken);
+        RemoteCommands.RegisterIgnored(Game.Remote.LoopShareHandler.ResultToken);
         // Stat-screen parser ahead of LivesProvider hookup below so
         // both the engine's @suicide hard-block and the @lives reply
         // path share the same "unknown until first stat poll" source.
