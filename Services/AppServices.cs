@@ -8430,6 +8430,17 @@ public sealed class AppServices
         SimulatorRankings.NoteActiveSet(GameData.ActiveSet);
         GameData.ActiveSetChanged += setName =>
             LogStaleSimulatorRankings(setName, "was read in again", SimulatorRankings.NoteActiveSet(setName));
+        // They are a character's as well. One that comes to go by another name is
+        // the same character: its rankings go with it, and none stay under the name
+        // it left for the next profile given that name.
+        Profile.ProfileRenamed += (oldBbs, oldName) =>
+        {
+            string? was = Game.Simulation.SimulatorOwner.CharacterKey(oldBbs, oldName);
+            string? now = Game.Simulation.SimulatorOwner.CharacterKey(Profile.CurrentBbsName, Profile.CurrentProfileName);
+            int carried = SimulatorRankings.RenameCharacter(was, now);
+            if (carried > 0)
+                Log.Info("Simulator", $"character '{was ?? "(none)"}' is now '{now ?? "(none)"}': {carried} area ranking(s) kept for it go with it");
+        };
 
         // Which loops and auto-lair setups are favourites is each character's own.
         // Built after the first LoadAll above so a profile already loaded finds its

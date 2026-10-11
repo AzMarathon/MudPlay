@@ -52,6 +52,29 @@ public sealed class SimulatorViewModelTests : IDisposable
         public required LoopManager Loops { get; init; }
         public required GameDataCache Cache { get; init; }
         public required AreaRankingStore Rankings { get; init; }
+        // The loaded profile as the Simulator reads it; null is the default profile.
+        public string? Character { get; set; } = One;
+
+        // A profile swap as the Simulator hears of it: the loaded character is
+        // closed, then the next is loaded.
+        public void Load(string? character)
+        {
+            Character = null;
+            Simulator.CharacterChanged();
+            if (character is null) return;
+            Character = character;
+            Simulator.CharacterChanged();
+        }
+
+        // The loaded profile comes to go by another name, as the app's store and the
+        // Navigation window's Simulator hear of it.
+        public void Rename(string? character)
+        {
+            Rankings.RenameCharacter(Character, character);
+            Character = character;
+            Simulator.CharacterRenamed();
+        }
+
         public void Dispose()
         {
             Resolver.Dispose();
@@ -79,6 +102,7 @@ public sealed class SimulatorViewModelTests : IDisposable
             _ => null, () => null, () => 30, _ => 1.0, () => new RoomKey(1, 1), _root);
         var session = new ExpEstimatorSessionViewModel(resolver, loops, graph, cache);
         SimulatorViewModel? sim = null;
+        Harness? harness = null;
         AreaRankingStore? store = rankings;
         if (store is null)
         {
@@ -88,11 +112,12 @@ public sealed class SimulatorViewModelTests : IDisposable
             cache.ActiveSetChanged += set => made.NoteActiveSet(set);
         }
         sim = new SimulatorViewModel(resolver, loops, cache, null, simulation, null, () => session,
-            (rooms, name) => { session.LoadRoute(rooms, name); return null; }, store, One);
+            (rooms, name) => { session.LoadRoute(rooms, name); return null; }, store,
+            () => harness is null ? One : harness.Character);
         session.RouteChanged += sim.SketchChanged;
         // As the Navigation window wires it.
         cache.ActiveSetChanged += sim.GameDataChanged;
-        return new Harness
+        return harness = new Harness
         {
             Timers = timers, Resolver = resolver, Session = session, Simulator = sim, Loops = loops,
             Cache = cache, Rankings = store,
@@ -316,23 +341,67 @@ public sealed class SimulatorViewModelTests : IDisposable
         AreaRanking ones = Ranking("Hills"), twos = Ranking("Marsh");
         h.Simulator.ListFinishedRanking(ones);
 
-        // A swap closes the first character before it loads the second.
-        h.Simulator.CharacterChanged(null);
+        h.Load(null);
         Assert.Empty(h.Simulator.Rankings);
-        h.Simulator.CharacterChanged(Two);
+        h.Load(Two);
         Assert.Empty(h.Simulator.Rankings);
         Assert.Equal("", h.Simulator.RankStatus);
 
         h.Simulator.ListFinishedRanking(twos);
-        h.Simulator.CharacterChanged(null);
-        h.Simulator.CharacterChanged(One);
+        h.Load(One);
         Assert.Equal(ones.Rows, h.Simulator.Rankings);
 
         // The second character's is its own on this game data only.
-        h.Simulator.CharacterChanged(Two);
+        h.Load(Two);
         Assert.Equal(twos.Rows, h.Simulator.Rankings);
         h.Cache.SwitchSet("beta");
         Assert.Empty(h.Simulator.Rankings);
+    }
+
+    [Fact]
+    public void ARenamedCharacterKeepsItsRankingsUnderTheNewNameAndLeavesNoneUnderTheOld()
+    {
+        using Harness h = Build();
+        const string renamed = "board/renamed";
+        AreaRanking onAlpha = Ranking("Hills"), onBeta = Ranking("Marsh");
+        h.Simulator.ListFinishedRanking(onAlpha);
+        h.Rankings.Keep(new SimulatorOwner("beta", One), onBeta);
+
+        h.Rename(renamed);
+
+        // Still the same character's list.
+        Assert.Equal(onAlpha.Rows, h.Simulator.Rankings);
+        Assert.Equal(renamed, h.Simulator.ToSnapshot().ForCharacter);
+        h.Cache.SwitchSet("beta");
+        Assert.Equal(onBeta.Rows, h.Simulator.Rankings);
+        // A ranking made after the rename is the renamed character's.
+        AreaRanking again = Ranking("Fen");
+        h.Simulator.ListFinishedRanking(again);
+        Assert.Same(again, h.Rankings.Get(new SimulatorOwner("beta", renamed)));
+
+        // Another profile later given the old name is another character.
+        h.Load(One);
+        Assert.Empty(h.Simulator.Rankings);
+        h.Cache.SwitchSet("alpha");
+        Assert.Empty(h.Simulator.Rankings);
+    }
+
+    [Fact]
+    public void TheDefaultProfileGivenANameTakesWhatWasRankedAsItAndNoCharacterIsLeftWithIt()
+    {
+        using Harness h = Build();
+        h.Load(null);
+        AreaRanking asDraft = Ranking("Hills");
+        h.Simulator.ListFinishedRanking(asDraft);
+
+        h.Rename("board/named");
+        AreaRanking asNamed = Ranking("Marsh");
+        h.Simulator.ListFinishedRanking(asNamed);
+
+        h.Load(null);
+        Assert.Empty(h.Simulator.Rankings);
+        h.Load("board/named");
+        Assert.Equal(asNamed.Rows, h.Simulator.Rankings);
     }
 
     [Fact]
@@ -415,7 +484,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.NotNull(h.Simulator.ToSnapshot().AreaRanking);
 
         h.Cache.SwitchSet("beta");
-        h.Simulator.CharacterChanged(Two);
+        h.Load(Two);
         SimulatorSnapshot snap = h.Simulator.ToSnapshot();
 
         Assert.Equal("beta", snap.ForSet);

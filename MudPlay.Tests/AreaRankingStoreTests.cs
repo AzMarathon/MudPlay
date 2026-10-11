@@ -94,6 +94,34 @@ public sealed class AreaRankingStoreTests
     }
 
     [Fact]
+    public void ARenamedCharactersRankingsGoWithItOnEverySetAndTheOldNameKeepsNone()
+    {
+        var store = new AreaRankingStore();
+        AreaRanking hills = Ranking("Hills"), marsh = Ranking("Marsh");
+        store.Keep(new SimulatorOwner("alpha", "board/one"), hills);
+        store.Keep(new SimulatorOwner("beta", "board/one"), marsh);
+        store.Keep(new SimulatorOwner("alpha", "board/two"), Ranking("Fen"));
+        // Kept for a character that had the new name before: no longer that name's.
+        store.Keep(new SimulatorOwner("alpha", "board/new"), Ranking("Dunes"));
+
+        Assert.Equal(2, store.RenameCharacter("Board/One", "board/new"));
+
+        Assert.Same(hills, store.Get(new SimulatorOwner("alpha", "board/new")));
+        Assert.Same(marsh, store.Get(new SimulatorOwner("beta", "board/new")));
+        Assert.Null(store.Get(new SimulatorOwner("alpha", "board/one")));
+        Assert.Null(store.Get(new SimulatorOwner("beta", "board/one")));
+        Assert.NotNull(store.Get(new SimulatorOwner("alpha", "board/two")));
+        Assert.Equal(3, store.Count);
+
+        // The default profile given a name, and a name that is the same but for case.
+        store.Keep(new SimulatorOwner("alpha", null), Ranking("Moor"));
+        Assert.Equal(1, store.RenameCharacter(null, "board/named"));
+        Assert.Null(store.Get(new SimulatorOwner("alpha", null)));
+        Assert.Equal(0, store.RenameCharacter("board/named", "BOARD/NAMED"));
+        Assert.NotNull(store.Get(new SimulatorOwner("alpha", "board/named")));
+    }
+
+    [Fact]
     public void OnlyTheLastFewMadeOrShownAreKept()
     {
         var store = new AreaRankingStore();

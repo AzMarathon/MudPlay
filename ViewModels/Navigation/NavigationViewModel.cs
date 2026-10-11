@@ -175,24 +175,24 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         Simulator = new SimulatorViewModel(
             _services.ExpResolver, _services.Loops, _services.GameData, _services.Movement,
             _services.LoopSimulationSource, _services.Log, () => ExpEstimator, ShowSimulatedRouteOnMap,
-            _services.SimulatorRankings, SimulatorCharacter());
+            _services.SimulatorRankings, SimulatorCharacter);
         _services.SimulatorSnapshotProvider = () => Simulator.ToSnapshot();
         _services.NavigationModeProvider = DescribeModeForReport;
         // The Simulator's results are one character's on one game-data set: it is
         // told when either changes, and shows that pairing's own or nothing.
         _services.Profile.ProfileLoaded += OnSimulatorCharacterLoaded;
         _services.Profile.ProfileClosed += OnSimulatorCharacterClosed;
+        _services.Profile.ProfileRenamed += OnSimulatorCharacterRenamed;
         _services.GameData.ActiveSetChanged += OnSimulatorGameDataChanged;
     }
 
-    // The loaded character as the Simulator keys its results: the profile under its
-    // BBS, since one name on two BBSes is two characters. Null for the default
-    // profile, which is no character.
-    private string? SimulatorCharacter() =>
-        _services.Profile.CurrentProfileName is { } name ? $"{_services.Profile.CurrentBbsName}/{name}" : null;
+    // The loaded character as the Simulator keys its results.
+    private string? SimulatorCharacter() => Game.Simulation.SimulatorOwner.CharacterKey(
+        _services.Profile.CurrentBbsName, _services.Profile.CurrentProfileName);
 
-    private void OnSimulatorCharacterLoaded(Models.Profile.CharacterProfile _) => Simulator.CharacterChanged(SimulatorCharacter());
-    private void OnSimulatorCharacterClosed() => Simulator.CharacterChanged(SimulatorCharacter());
+    private void OnSimulatorCharacterLoaded(Models.Profile.CharacterProfile _) => Simulator.CharacterChanged();
+    private void OnSimulatorCharacterClosed() => Simulator.CharacterChanged();
+    private void OnSimulatorCharacterRenamed(string? oldBbs, string? oldName) => Simulator.CharacterRenamed();
     private void OnSimulatorGameDataChanged(string? set) => Simulator.GameDataChanged(set);
 
     // The Simulator window's state: it plays saved loops or the estimator's sketch,
@@ -324,6 +324,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Macros.Macros.CollectionChanged -= OnMacrosCollectionChanged;
         _services.Profile.ProfileLoaded -= OnSimulatorCharacterLoaded;
         _services.Profile.ProfileClosed -= OnSimulatorCharacterClosed;
+        _services.Profile.ProfileRenamed -= OnSimulatorCharacterRenamed;
         _services.GameData.ActiveSetChanged -= OnSimulatorGameDataChanged;
     }
 

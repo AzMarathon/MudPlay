@@ -54,6 +54,25 @@ public sealed class AreaRankingStore
 
     public void Forget(SimulatorOwner owner) => _kept.RemoveAll(k => k.Owner == owner);
 
+    // The loaded character is now known as to (it was renamed or moved to another
+    // BBS, or the default profile was given a name): its rankings on every set go
+    // with it. Any kept under the new name were another character's, which that name
+    // no longer is, and are dropped; nothing is left under the old name for the next
+    // character to be given it. Returns how many were carried.
+    public int RenameCharacter(string? from, string? to)
+    {
+        if (string.Equals(from, to, StringComparison.OrdinalIgnoreCase)) return 0;
+        _kept.RemoveAll(k => string.Equals(k.Owner.Character, to, StringComparison.OrdinalIgnoreCase));
+        int carried = 0;
+        for (int i = 0; i < _kept.Count; i++)
+        {
+            if (!string.Equals(_kept[i].Owner.Character, from, StringComparison.OrdinalIgnoreCase)) continue;
+            _kept[i] = (_kept[i].Owner with { Character = to }, _kept[i].Ranking);
+            carried++;
+        }
+        return carried;
+    }
+
     // The set last told active.
     private string? _activeSet;
 

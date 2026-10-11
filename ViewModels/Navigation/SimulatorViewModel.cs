@@ -45,17 +45,20 @@ public sealed partial class SimulatorViewModel : ObservableObject
     private CancellationTokenSource? _checkCancel;
     private CancellationTokenSource? _rankCts;
     private readonly AreaRankingStore _rankings;
+    // The loaded character as results are kept under (SimulatorOwner.CharacterKey),
+    // read when it is needed: a profile comes to be known by another name without
+    // being loaded again, and the name told at the last load would then be stale.
+    private readonly Func<string?> _character;
     // The game data and character the results on show were made on.
     private SimulatorOwner _owner;
 
     // showOnMap loads a ranked tour into the estimator's sketch and returns null, or
-    // returns why it couldn't. character is the loaded profile, as CharacterChanged
-    // takes it.
+    // returns why it couldn't.
     public SimulatorViewModel(
         RouteExpResolver resolver, LoopManager loops, GameDataCache gameData, IRoomFilter? filter,
         SimulationSource? simulation, LogService? log,
         Func<ExpEstimatorSessionViewModel?> sketch, Func<IReadOnlyList<RoomKey>, string, string?> showOnMap,
-        AreaRankingStore rankings, string? character)
+        AreaRankingStore rankings, Func<string?> character)
     {
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(loops);
@@ -63,6 +66,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(sketch);
         ArgumentNullException.ThrowIfNull(showOnMap);
         ArgumentNullException.ThrowIfNull(rankings);
+        ArgumentNullException.ThrowIfNull(character);
         _resolver = resolver;
         _loops = loops;
         _gameData = gameData;
@@ -72,7 +76,8 @@ public sealed partial class SimulatorViewModel : ObservableObject
         _sketch = sketch;
         _showOnMap = showOnMap;
         _rankings = rankings;
-        _owner = new SimulatorOwner(gameData.ActiveSet, character);
+        _character = character;
+        _owner = new SimulatorOwner(gameData.ActiveSet, character());
         RefreshRoutes();
         // The store outlives the Navigation window this lives with, so a ranking made
         // before the window was last closed is listed again.
@@ -107,10 +112,28 @@ public sealed partial class SimulatorViewModel : ObservableObject
         ShowRanking(null);
     }
 
-    // Another character was loaded, or the loaded one closed (null): a result is one
+    // Another character was loaded, or the loaded one closed: a result is one
     // character's stats and gear, so the ranking listed is that character's own for
     // the active game data, or none.
-    public void CharacterChanged(string? character) => ChangeOwner(_owner with { Character = character });
+    public void CharacterChanged() => ChangeOwner(_owner with { Character = _character() });
+
+    // The loaded character goes by another name (renamed, moved to another BBS, the
+    // default profile given a name). It is the same character, so what is listed
+    // stays; the name its results are kept under moves, as the store has moved what
+    // it kept (AreaRankingStore.RenameCharacter). A ranking still running was
+    // started under the old name and is cancelled, not kept under a name that is no
+    // longer this character's.
+    public void CharacterRenamed()
+    {
+        SimulatorOwner renamed = _owner with { Character = _character() };
+        if (renamed == _owner) return;
+        if (IsRanking)
+        {
+            _rankCts?.Cancel();
+            RankStatus = "Ranking cancelled: the character was renamed. Rank again.";
+        }
+        _owner = renamed;
+    }
 
     private void ChangeOwner(SimulatorOwner owner)
     {

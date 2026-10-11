@@ -16,4 +16,10 @@ public readonly record struct SimulatorOwner(string? Set, string? Character)
         Character is null ? 0 : StringComparer.OrdinalIgnoreCase.GetHashCode(Character));
 
     public string Label => $"game data '{Set ?? "(none)"}', character '{Character ?? "(none)"}'";
+
+    // The Character part for a profile: its name under its BBS, since one name on
+    // two BBSes is two characters. Null for the default profile, which has no name
+    // and is no character whichever BBS it was started on.
+    public static string? CharacterKey(string? bbs, string? profile) =>
+        profile is null ? null : $"{bbs}/{profile}";
 }
