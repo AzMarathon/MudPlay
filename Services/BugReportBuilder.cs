@@ -1879,9 +1879,16 @@ public static class BugReportBuilder
                 loop.CircleStartRoom is { } start ? $"{start.Map}/{start.Room}" : "(none)");
             // Loop combat-suppression state — answers "why didn't it fight
             // here?" for a do-not-attack / only-attack-in-lair report.
-            Kv(sb, "Loop only-attack-in-lair", curLoop.OnlyAttackInLairRooms.ToString());
-            Kv(sb, "Loop wait-to-debuff before lairs",
+            // Both are this character's settings for the loop, not the loop file's:
+            // another character on the same loop can have them the other way.
+            Kv(sb, "Loop only-attack-in-lair (this character's)", curLoop.OnlyAttackInLairRooms.ToString());
+            Kv(sb, "Loop wait-to-debuff before lairs (this character's)",
                 $"{curLoop.LairEntryDebuff} ({Game.Map.LairEntryDebuffModes.Label(curLoop.LairEntryDebuff)})");
+            Kv(sb, "Loop settings kept for this character",
+                svc.LoopSettings.HasOwn(curLoop.Name) ? "yes, its own"
+                : svc.Loops.Get(curLoop.Name) is { } filed
+                    ? $"no, the loop file's still (only-attack-in-lair {filed.SharedOnlyAttackInLairRooms}, wait-to-debuff {filed.SharedLairEntryDebuff})"
+                    : "no, the loop is not saved");
             // Whether it stands outside a lair now, on which buffs, and how the last
             // such wait ended: answers "why did it stand there / go in without buffing".
             Kv(sb, "Lair-entry debuff wait", svc.LairDebuffHold.Describe());
@@ -2681,6 +2688,10 @@ public static class BugReportBuilder
         sb.Append('\n');
         Kv(sb, "Favourite loops (this character)", NamesOrNone(svc.LoopFavorites.Loops));
         Kv(sb, "Favourite auto-lair setups (this character)", NamesOrNone(svc.LoopFavorites.LairSetups));
+        // So is how a loop is run. A loop not listed runs with what its file holds.
+        Kv(sb, "Loops with this character's own loop settings", NamesOrNone(svc.LoopSettings.Own
+            .Select(p => $"{p.Key} ({LoopSettingsStore.Describe(p.Value)})")
+            .ToList()));
         DateTimeOffset? lastOutside = svc.Loops.LastOutsideReadAt is { } l && svc.Lairs.LastOutsideReadAt is { } s
             ? (l > s ? l : s)
             : svc.Loops.LastOutsideReadAt ?? svc.Lairs.LastOutsideReadAt;

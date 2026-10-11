@@ -69,6 +69,14 @@ public sealed class CharacterProfile
     public List<string>? FavoriteLoops { get; set; }
     public List<string>? FavoriteLairSetups { get; set; }
 
+    // This character's "Entire Loop Settings" (only attack in lair rooms, the wait to
+    // enter lairs), by loop name. The loops themselves stay with the game data,
+    // shared; how each of them is run is each character's own, kept by
+    // LoopSettingsStore (user, 2026-10-10). Holds only the loops this character has
+    // set either for: one with no entry runs with what its loop file holds. null =
+    // none set.
+    public Dictionary<string, LoopSettingsChoice>? LoopSettings { get; set; }
+
     // User-defined outgoing-text aliases. Per-character; loaded into AliasEngine
     // on profile load. Variables substitution inside an alias's expansion reads
     // from the shared session-scoped variable store the trigger engine maintains.

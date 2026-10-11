@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.175.17**
-> - Loops and Auto-Lair setups saved, edited, renamed, moved or deleted in one running client now appear in the others within a few seconds, without a restart
-> - A loop already running, paused or staged keeps going from the copy it started with
-> - A loop is now written before its old copy is removed, so a client reading at that moment never sees it missing
+> **Version 3.175.18**
+> - A loop's Only attack in lair rooms and Wait to enter lairs settings are now each character's own; a loop a character hasn't set them for runs with what the loop file holds
+> - Ticking either no longer rewrites the shared loop file
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

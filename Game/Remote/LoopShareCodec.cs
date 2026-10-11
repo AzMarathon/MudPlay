@@ -15,9 +15,11 @@ namespace MudPlay.Game.Remote;
 // self-contained — a loop is only useful whole — so the receiver reassembles all of
 // them before decoding.
 //
-// Only what defines the route travels: name, notes, the loop-wide lair-only flag, and
-// each waypoint's room / command / delay / no-rest / no-attack. Favourite and folder
-// are the receiver's own choices and stay behind.
+// What defines the route travels: name, notes, and each waypoint's room / command /
+// delay / no-rest / no-attack. So do the sending character's two loop settings (only
+// attack in lair rooms, the lair wait), which the receiving character takes as its
+// own for the loop. Favourite and folder are the receiver's own choices and stay
+// behind.
 //
 // Decoding is hostile-input safe: the inflated size is capped (a tiny blob can't
 // expand into a huge allocation), the waypoint count and field lengths are bounded,

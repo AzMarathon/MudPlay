@@ -2670,6 +2670,7 @@ public sealed class AppServices
     // BBS changes.
     public Game.Map.LoopManager Loops { get; private set; } = null!;
     public LoopFavoritesStore LoopFavorites { get; private set; } = null!;
+    public LoopSettingsStore LoopSettings { get; private set; } = null!;
 
     // MegaMUD .mp loop-file importer. Stateless w.r.t. the
     // profile; takes the active RoomGraph at construct
@@ -8383,6 +8384,9 @@ public sealed class AppServices
         // game data's loops in hand; it plugs into both managers.
         LoopFavorites = new LoopFavoritesStore(Profile, Loops, Lairs, ProfileGameDataSet, Log);
 
+        // So is how each loop is run: only attack in lair rooms and the lair wait.
+        LoopSettings = new LoopSettingsStore(Profile, Loops, Log);
+
         // Shared folder CRUD over the Loops directory (loops + lairs
         // live in the same on-disk tree). Owns the filesystem move once
         // and reloads both managers, instead of either racing the dir.
@@ -8492,6 +8496,11 @@ public sealed class AppServices
             PromptScanner, Log, RoomGraph, Recovery, Bfs, Walker, Movement);
         Loops.NamesInUse = () => new[] { LoopRunner.CurrentLoop?.Name, LoopRunner.StagedLoop?.Name }
             .OfType<string>().ToArray();
+        // The runner's loops can be copies the catalogue no longer holds (its snapshot
+        // of the last run, a loop re-read from disk under a run). A change to the
+        // character's settings for a loop, or another character loading, reaches
+        // those too, or a run would go on with the settings it started with.
+        Loops.SettingsChanged += name => Loops.CopySettingsTo(LoopRunner.HeldLoops, name);
         // A confusion fumble ("You convulse violently!" / "You fumble in
         // confusion!") can bonk several consecutive moves in a row well inside
         // the loop's bounded recovery budget; EnterRecovery reads this to avoid

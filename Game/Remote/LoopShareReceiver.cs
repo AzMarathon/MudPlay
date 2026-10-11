@@ -15,9 +15,11 @@ namespace MudPlay.Game.Remote;
 // telepath, so we know who to — only from that player. The permission gate is on the
 // sender, who only offered because they grant us @loop; we just confirm we asked.
 //
-// A received loop never overwrites one of ours: an identical loop already saved under
-// that name is reported as already had, and a different one lands as
-// "<name> (from <sender>)".
+// A received loop never overwrites one of ours: a loop with the same route already
+// saved under that name is reported as already had, and a different one lands as
+// "<name> (from <sender>)". The sender's two loop settings (only attack in lair
+// rooms, the lair wait) become this character's for the loop either way: they are
+// each character's own, and they are what was offered and accepted.
 public sealed class LoopShareReceiver : IDisposable
 {
     // Long enough for a big loop's paced lines (~800ms apart) and a slow sender.
@@ -126,13 +128,22 @@ public sealed class LoopShareReceiver : IDisposable
         _loops.TakeInOutsideChanges();
         if (_loops.Get(loop.Name) is { } existing && SameRoute(existing, loop))
         {
-            _log?.Info("LoopShare", $"loop '{loop.Name}' from {sender} matches ours — nothing saved.");
-            _notice($"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}, already have it]");
+            // The route is here already, so there is no file to save. The sender's
+            // two loop settings came with it and were accepted with it, so this
+            // character runs the loop it has their way from now.
+            bool settingsDiffer = existing.OwnSettings != loop.OwnSettings;
+            if (settingsDiffer) _loops.SetSettings(existing.Name, loop.OwnSettings);
+            _log?.Info("LoopShare", $"loop '{loop.Name}' from {sender} matches ours — nothing saved"
+                + (settingsDiffer ? "; its loop settings taken as this character's." : "."));
+            _notice($"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}, already have it"
+                + (settingsDiffer ? "; its loop settings are now yours]" : "]"));
             return;
         }
 
         string original = loop.Name;
         loop.Name = FreeName(original, sender);
+        // Save keeps the two loop settings the sender offered as this character's
+        // for the loop, and the rest in the loop file.
         _loops.Save(loop);
         _log?.Info("LoopShare",
             $"saved loop '{loop.Name}' ({loop.Waypoints.Count} rooms) received from {sender}.");
@@ -151,10 +162,12 @@ public sealed class LoopShareReceiver : IDisposable
         return candidate;
     }
 
+    // What the loop file holds of the route: every room and what is set on it. The
+    // two loop settings are no part of it. They are each character's own, and a
+    // loop that differed only in them would be saved as a second file, for every
+    // character on the game data, to hold nothing but two of one character's ticks.
     private static bool SameRoute(Loop a, Loop b) =>
-        a.OnlyAttackInLairRooms == b.OnlyAttackInLairRooms
-        && a.LairEntryDebuff == b.LairEntryDebuff
-        && a.Waypoints.Count == b.Waypoints.Count
+        a.Waypoints.Count == b.Waypoints.Count
         && a.Waypoints.Zip(b.Waypoints).All(p =>
             p.First.Room == p.Second.Room
             && (p.First.Command ?? "") == (p.Second.Command ?? "")

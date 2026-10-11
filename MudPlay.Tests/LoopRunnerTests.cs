@@ -443,6 +443,28 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("ab", h.Runner.LastRunLoop!.Name);
     }
 
+    // The two loop-wide settings a run started with are the character's, and the
+    // snapshot "@loop last" re-runs carries them. Every loop the runner holds is
+    // offered up so a later change to the character's settings can reach it.
+    [Fact]
+    public void RunCarriesTheCharactersLoopSettings_AndOffersEveryLoopItHolds()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Loop loop = AbCycle();
+        loop.OwnSettings = new LoopOwnSettings(true, LairEntryDebuffMode.BlockSpells);
+        Loop staged = AbCycle();
+        h.Runner.Stage(staged);
+
+        h.Runner.Start(loop);
+
+        Assert.Equal(loop.OwnSettings, h.Runner.LastRunLoop!.OwnSettings);
+        Assert.Equal(new[] { loop, h.Runner.LastRunLoop, staged }, h.Runner.HeldLoops);
+
+        h.Runner.Stop();
+        Assert.Equal(new[] { h.Runner.LastRunLoop, staged }, h.Runner.HeldLoops);
+    }
+
     [Fact]
     public void Stop_DuringRun_GoesIdle()
     {

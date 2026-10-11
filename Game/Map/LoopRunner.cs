@@ -337,6 +337,20 @@ public sealed class LoopRunner : IRecoverableEngine
     // Manage window. Null until the user stages one.
     public Loop? StagedLoop { get; private set; }
 
+    // Every loop this runner holds on to: the one running, the snapshot of the last
+    // run and the staged one. Any of them can be a copy the catalogue no longer
+    // holds, so the character's settings for a loop are brought to them here when
+    // they change (AppServices, on LoopManager.SettingsChanged).
+    public IEnumerable<Loop> HeldLoops
+    {
+        get
+        {
+            if (_loop is { } running) yield return running;
+            if (LastRunLoop is { } last) yield return last;
+            if (StagedLoop is { } staged) yield return staged;
+        }
+    }
+
     // Remember loop as the staged loop (see StagedLoop) without starting movement.
     // Idempotent — re-staging simply replaces the remembered loop.
     public void Stage(Loop loop)
@@ -1214,12 +1228,12 @@ public sealed class LoopRunner : IRecoverableEngine
         // Retain a canonical-order COPY (waypoints not yet rotated here) so "@loop
         // last" / the Loop-mode chip can re-run or re-open this exact loop even if it
         // was an ad-hoc, never-saved run. A copy, not the same object, so RotateLoopTo
-        // below can't reorder the snapshot.
+        // below can't reorder the snapshot. The two settings are the ones this
+        // character runs the loop with (Loop.OwnSettings), not the loop file's.
         LastRunLoop = new Loop(loop.Name, new List<LoopWaypoint>(loop.Waypoints))
         {
             Notes = loop.Notes,
-            OnlyAttackInLairRooms = loop.OnlyAttackInLairRooms,
-            LairEntryDebuff = loop.LairEntryDebuff,
+            OwnSettings = loop.OwnSettings,
         };
         _index = 0;
         _stepInFlight = false;

@@ -1524,7 +1524,7 @@
                                     Padding="2,0"
                                     FontSize="13"
                                     Content="⚙  Entire Loop Settings  ⚙"
-                                    ToolTip.Tip="Settings that apply to the whole loop you're building, not any one room.">
+                                    ToolTip.Tip="Settings that apply to the whole loop you're building, not any one room. They are this character's own for the loop: your other characters keep theirs.">
                                 <Button.Flyout>
                                     <Flyout Placement="Bottom">
                                         <StackPanel Spacing="6" MaxWidth="280">
@@ -1656,7 +1656,7 @@
                                     Padding="2,0"
                                     FontSize="13"
                                     Content="⚙  Entire Loop Settings  ⚙"
-                                    ToolTip.Tip="Settings that apply to the whole running loop, not any one room. Changes take effect live.">
+                                    ToolTip.Tip="Settings that apply to the whole running loop, not any one room. Changes take effect live. They are this character's own for the loop: your other characters keep theirs.">
                                 <Button.Flyout>
                                     <Flyout Placement="Bottom">
                                         <StackPanel Spacing="6" MaxWidth="280">
@@ -1854,7 +1854,7 @@
                                                       Padding="2,0"
                                                       FontSize="13"
                                                       Content="⚙  Entire Loop Settings  ⚙"
-                                                      ToolTip.Tip="Settings that apply to the whole loop, not any one room.">
+                                                      ToolTip.Tip="Settings that apply to the whole loop, not any one room. They are this character's own for the loop: your other characters keep theirs.">
                                                   <Button.Flyout>
                                                       <Flyout Placement="Bottom">
                                                           <StackPanel Spacing="6" MaxWidth="280">
