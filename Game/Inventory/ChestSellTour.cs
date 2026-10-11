@@ -87,6 +87,14 @@ public sealed class ChestSellTour : IDisposable
 
     public void Cancel() => Finish("Sell tour cancelled.");
 
+    // Ended from outside, in whichever phase it is, for a reason of its own (the
+    // game data changed to another set, and the shops left are that set's rooms):
+    // the line above the shops and the log say why.
+    public void Cancel(string why)
+    {
+        if (IsRunning) Finish($"Sell tour stopped: {why} — nothing more sold.");
+    }
+
     private void GoToStop()
     {
         ++_generation;

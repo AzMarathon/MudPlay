@@ -31,6 +31,9 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     private readonly MpFileImporter _importer;
     private readonly RoomGraphManager _graph;
     private readonly LoopManager _loops;
+    // The game-data set the file was translated on: the rooms in the rows are that
+    // set's (see OpenedOnGameData), and Accept writes into that set's Loops folder.
+    private readonly OpenedOnGameData _openedOn;
     private readonly MovementFilter? _filter;
     private readonly LogService? _log;
     private MegaMudRoomsFile? _roomsMd;
@@ -63,6 +66,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         _importer = importer;
         _graph = graph;
         _loops = loops;
+        _openedOn = new OpenedOnGameData(loops.SetName);
         _filter = filter;
         _log = log;
 
@@ -121,12 +125,75 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     [ObservableProperty] private bool _hasAnchorChoice;
     [ObservableProperty] private MpAnchorChoice? _selectedAnchor;
 
+    // A start room picked while another game data was active. Translating from it is
+    // matching the steps against the active rooms, so it waits for the first Verify,
+    // Accept or Rooms.md load on the set the file was opened on. Until then the rows
+    // are the earlier start room's, and every status says so (SetStatus).
+    private bool _anchorWaiting;
+
+    private const string AnchorWaitingNote =
+        "The start room picked meanwhile is not in the rows yet: the next Verify or Accept on this loop's own game data rebuilds them from it and stops there.";
+
     partial void OnSelectedAnchorChanged(MpAnchorChoice? value)
     {
         if (value is null || _rebuilding) return;
+        // Set before the refusal goes up, so the status names the wait with it.
+        _anchorWaiting = OtherGameDataRefusal() is not null;
+        if (_anchorWaiting) RefusedForOtherGameData("start room change");
+        else TranslateFrom(value);
+    }
+
+    private void TranslateFrom(MpAnchorChoice anchor) =>
         BuildRows(_fixedRooms.Count > 0 || _roomsMd is not null
-            ? _importer.Translate(_file, value.Anchor, _fixedRooms, _roomsMd)
-            : _candidates.FirstOrDefault(c => c.Anchor.Equals(value.Anchor)), preserveEdits: true);
+            ? _importer.Translate(_file, anchor.Anchor, _fixedRooms, _roomsMd)
+            : _candidates.FirstOrDefault(c => c.Anchor.Equals(anchor.Anchor)), preserveEdits: true);
+
+    // True when a start room was waiting. The rows are rebuilt from it, with the
+    // rooms typed in since, and the click that got here goes no further: what it
+    // would verify or save is not what the rows showed when it was pressed. A
+    // command, delay or tick set on a step whose room changed is not carried over
+    // (as on any change of start room), and the status says how many steps lost one.
+    private bool RebuiltFromWaitingAnchor(string what)
+    {
+        if (!_anchorWaiting) return false;
+        if (SelectedAnchor is not { } anchor)
+        {
+            _anchorWaiting = false;
+            return false;
+        }
+        // A typed room that isn't in the map: said on the status, the pick still waiting.
+        if (!TryReadTypedRooms(out Dictionary<int, RoomKey> typed)) return true;
+
+        MpTranslatedRowViewModel[] shown = Rows.Where(r => !r.IsInserted).ToArray();
+        _anchorWaiting = false;
+        _fixedRooms.Clear();
+        foreach ((int i, RoomKey k) in typed) _fixedRooms[i] = k;
+        TranslateFrom(anchor);
+
+        Dictionary<int, MpTranslatedRowViewModel> rebuilt = Rows.Where(r => !r.IsInserted).ToDictionary(r => r.Index);
+        int lost = shown.Count(old => rebuilt.TryGetValue(old.Index, out MpTranslatedRowViewModel? now) && old.SettingsLostIn(now));
+        SetStatus("The rows were rebuilt from the start room picked while other game data was active, and nothing was "
+            + (what switch { "accept" => "saved", "verify" => "verified", _ => "loaded" })
+            + " — check them, then press Verify or Accept again."
+            + (lost > 0 ? $" The command, delay or ticks set on {lost} step(s) were not carried over." : ""), good: false);
+        _log?.Info("MpImporter",
+            $"{FileName}: {what} stopped, rows rebuilt from the start room picked under other game data — {TranslationSummary}"
+            + (lost > 0 ? $"; settings on {lost} step(s) not carried over" : ""));
+        return true;
+    }
+
+    private string? OtherGameDataRefusal() => _openedOn.Refusal("loop", _loops.SetName);
+
+    // True, with the reason on the status line and in the log, when another game-data
+    // set is active than the one the file was opened on: nothing is saved, verified
+    // or translated until that set is active again.
+    private bool RefusedForOtherGameData(string what)
+    {
+        if (OtherGameDataRefusal() is not { } refusal) return false;
+        SetStatus(refusal, good: false);
+        _log?.Info("MpImporter",
+            $"{FileName}: {what} refused: {_openedOn.LogReason(_loops.SetName)}");
+        return true;
     }
 
     public ObservableCollection<MpTranslatedRowViewModel> Rows { get; } = new();
@@ -176,6 +243,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     [RelayCommand]
     private async Task LoadRoomsMdAsync()
     {
+        if (RefusedForOtherGameData("Rooms.md load") || RebuiltFromWaitingAnchor("Rooms.md load")) return;
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
         IReadOnlyList<IStorageFile> picked = await main.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -189,15 +257,20 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
             },
         });
         if (picked.Count == 0) return;
+        MegaMudRoomsFile roomsMd;
         try
         {
-            _roomsMd = MegaMudRoomsFile.Parse(await File.ReadAllTextAsync(picked[0].Path.LocalPath));
+            roomsMd = MegaMudRoomsFile.Parse(await File.ReadAllTextAsync(picked[0].Path.LocalPath));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             SetStatus($"Can't read that file: {ex.Message}", good: false);
             return;
         }
+        // The game data can have changed while the file picker was up, and a start
+        // room have been picked under the other one.
+        if (RefusedForOtherGameData("Rooms.md load") || RebuiltFromWaitingAnchor("Rooms.md load")) return;
+        _roomsMd = roomsMd;
         Retranslate(resetAnchor: _fixedRooms.Count == 0);
         SetStatus(NeedsRoomsMd
             ? "That Rooms.md doesn't name this loop's start room either — pick it from the list or type it in the first row."
@@ -210,6 +283,9 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     [RelayCommand]
     private void Verify()
     {
+        if (RefusedForOtherGameData("verify")) return;
+        NameTypedRooms();
+        if (RebuiltFromWaitingAnchor("verify")) return;
         if (!ApplyTypedRooms()) return;
         CheckWalkable();
         RefreshMapComparison();
@@ -219,6 +295,11 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     private void Accept()
     {
         if (!CanAccept) return;
+        // Before the name is checked: under another set it would be checked against
+        // that set's loops.
+        if (RefusedForOtherGameData("accept")) return;
+        NameTypedRooms();
+        if (RebuiltFromWaitingAnchor("accept")) return;
         string name = LoopName.Trim();
         if (name.Length == 0) { SetStatus("Give the loop a name first.", good: false); return; }
         // A loop of that name another client saved a moment ago counts.
@@ -261,11 +342,40 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         CloseRequested?.Invoke(null);
     }
 
+    // A room typed into an inserted row while another game data was active was named
+    // from that set's rooms: name them from this one's.
+    private void NameTypedRooms()
+    {
+        foreach (MpTranslatedRowViewModel row in Rows) row.NameTypedRoom();
+    }
+
     // Take the rooms typed into the rows (an empty box releases one set before) and
     // re-translate from them. False when a typed room isn't in the map.
     private bool ApplyTypedRooms()
     {
-        Dictionary<int, RoomKey> updated = new(_fixedRooms);
+        if (!TryReadTypedRooms(out Dictionary<int, RoomKey> updated)) return false;
+        bool changed = updated.Count != _fixedRooms.Count || updated.Any(kv => !_fixedRooms.TryGetValue(kv.Key, out RoomKey v) || !v.Equals(kv.Value));
+        if (!changed) return true;
+
+        RoomKey anchor = updated.TryGetValue(0, out RoomKey first) ? first : SelectedAnchor?.Anchor ?? default;
+        if (anchor.Equals(default(RoomKey)))
+        {
+            SetStatus("Set the first step's room (map/room) to start from.", good: false);
+            return false;
+        }
+        _fixedRooms.Clear();
+        foreach ((int i, RoomKey k) in updated) _fixedRooms[i] = k;
+        BuildRows(_importer.Translate(_file, anchor, _fixedRooms, _roomsMd), preserveEdits: true);
+        _log?.Info("MpImporter", $"{FileName}: re-translated with {_fixedRooms.Count} room(s) set by hand — {TranslationSummary}");
+        return true;
+    }
+
+    // The rooms set by hand as the rows have them now: those held, with what is
+    // typed in the boxes (an empty box releases one set before). False, with the
+    // status saying which, when a typed room isn't in the map.
+    private bool TryReadTypedRooms(out Dictionary<int, RoomKey> updated)
+    {
+        updated = new(_fixedRooms);
         foreach (MpTranslatedRowViewModel row in Rows)
         {
             if (row.IsInserted)
@@ -288,19 +398,6 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
             }
             updated[row.Index] = k;
         }
-        bool changed = updated.Count != _fixedRooms.Count || updated.Any(kv => !_fixedRooms.TryGetValue(kv.Key, out RoomKey v) || !v.Equals(kv.Value));
-        if (!changed) return true;
-
-        RoomKey anchor = updated.TryGetValue(0, out RoomKey first) ? first : SelectedAnchor?.Anchor ?? default;
-        if (anchor.Equals(default(RoomKey)))
-        {
-            SetStatus("Set the first step's room (map/room) to start from.", good: false);
-            return false;
-        }
-        _fixedRooms.Clear();
-        foreach ((int i, RoomKey k) in updated) _fixedRooms[i] = k;
-        BuildRows(_importer.Translate(_file, anchor, _fixedRooms, _roomsMd), preserveEdits: true);
-        _log?.Info("MpImporter", $"{FileName}: re-translated with {_fixedRooms.Count} room(s) set by hand — {TranslationSummary}");
         return true;
     }
 
@@ -471,8 +568,10 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
 
     private void SetStatus(string text, bool good)
     {
-        Status = text;
-        StatusIsGood = good;
+        // A start room still waiting is said after whatever else the status says,
+        // and nothing reads as verified until the rows are rebuilt from it.
+        Status = !_anchorWaiting ? text : text.Length == 0 ? AnchorWaitingNote : $"{text} {AnchorWaitingNote}";
+        StatusIsGood = good && !_anchorWaiting;
     }
 
     private string Describe(RoomKey k) => _graph.GetRoom(k) is { } r ? $"{r.Name} ({k})" : k.ToString();

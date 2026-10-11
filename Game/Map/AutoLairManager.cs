@@ -264,9 +264,62 @@ public sealed class AutoLairManager : IDisposable
 
     public bool IsMarked(RoomKey key) => _markers.ContainsKey(key);
 
+    // The game-data set the marks are rooms of: the one active when the first of
+    // them was placed, so whoever would save them as a setup can tell whose they
+    // are. A set of marks is one game data's, never mixed. Means nothing while
+    // nothing is marked.
+    public string? MarksGameData { get; private set; }
+
+    // Marks were dropped for being another game data's rooms than the active one's:
+    // the set they were of, and the set active now.
+    public event Action<string?, string?>? MarksOfOtherGameDataDropped;
+
+    // The active game data changed. Under another set the marked rooms are other
+    // rooms, and saved as a setup they would land in that set's Loops folder, a file
+    // every character and running client on that set reads: the marks are dropped.
+    // The same set read in again keeps them. True when marks were dropped.
+    public bool DropMarksOfOtherGameData(string? active)
+    {
+        if (_markers.Count == 0) return false;
+        if (string.Equals(MarksGameData, active, StringComparison.OrdinalIgnoreCase)) return false;
+        string? markedOn = MarksGameData;
+        _log?.Info("AutoLair",
+            $"{_markers.Count} lair mark(s) dropped: their rooms were game data '{markedOn ?? "(none)"}''s and '{active ?? "(none)"}' is active now");
+        Clear();
+        MarksOfOtherGameDataDropped?.Invoke(markedOn, active);
+        return true;
+    }
+
+    // Put back the marks a run had when something took over from it (an event's
+    // snapshot of what it interrupted), with the stamp they had. False, with
+    // nothing put back, when they are another game data's than the active one's:
+    // a set change in between doesn't make them this set's, and a run isn't
+    // started on another set's rooms.
+    public bool RestoreMarks(IReadOnlyDictionary<RoomKey, int?> marks, string? markedOn)
+    {
+        ArgumentNullException.ThrowIfNull(marks);
+        if (!string.Equals(markedOn, _graph.ActiveSet, StringComparison.OrdinalIgnoreCase))
+        {
+            _log?.Info("AutoLair",
+                $"{marks.Count} lair mark(s) not put back: their rooms were game data '{markedOn ?? "(none)"}''s and '{_graph.ActiveSet ?? "(none)"}' is active now");
+            return false;
+        }
+        _markers.Clear();
+        foreach ((RoomKey key, int? overrideRespawnSeconds) in marks) _markers[key] = overrideRespawnSeconds;
+        MarksGameData = markedOn;
+        _noRoute.Clear();
+        _log?.Info("AutoLair", $"restored {_markers.Count} mark(s) of game data '{markedOn ?? "(none)"}'");
+        MarkedChanged?.Invoke();
+        return true;
+    }
+
     public void Mark(RoomKey key, int? overrideRespawnSeconds = null)
     {
+        // A set of marks is one game data's: any held from another than the active
+        // one go before a room of this one joins them.
+        DropMarksOfOtherGameData(_graph.ActiveSet);
         if (_markers.TryGetValue(key, out int? current) && current == overrideRespawnSeconds) return;
+        if (_markers.Count == 0) MarksGameData = _graph.ActiveSet;
         _markers[key] = overrideRespawnSeconds;
         _noRoute.Clear();
         _log?.Info("AutoLair",

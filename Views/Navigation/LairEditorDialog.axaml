@@ -175,12 +175,20 @@
                            Text="{Binding AddMarkerError}"
                            IsVisible="{Binding HasAddMarkerError}"
                            FontSize="10"
+                           TextWrapping="Wrap"
                            Foreground="{StaticResource AccentRedBrush}"/>
             </Grid>
 
-            <!-- Action strip. Col 0 is an empty spacer that keeps the
-                 Cancel / Save buttons right-aligned. -->
+            <!-- Action strip. Col 0 keeps the Cancel / Save buttons
+                 right-aligned and holds the reason a Save was refused. -->
             <Grid Grid.Row="5" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="0,8,0,0">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding SaveError}"
+                           IsVisible="{Binding HasSaveError}"
+                           VerticalAlignment="Center"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource AccentRedBrush}"/>
                 <Button Grid.Column="1"
                         Content="Cancel"
                         Command="{Binding CancelCommand}"/>

@@ -1,5 +1,12 @@
 # Version history
 
+## 3.180.4
+
+- Switching to another game data set, or reading the active one in again (an import, Manage Sets, or picking it again), stops a loop, Auto-Lair or walk in progress and anything held to restart one
+- The Auto-Lair setup editor and the .mp import review won't save, verify or take a room until the game data they were opened on is active again; their add-room list, and Edit Loop's, lists no rooms meanwhile
+- Lair marks on the map are dropped, with a notice, when the game data changes to another set, and a set of marks is never mixed across sets
+- `@loop last` won't run a loop last run on other game data
+
 ## 3.180.2
 
 - Yells from other players are read as chat and show in the Conversation window; before, only your own yell was
