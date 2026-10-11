@@ -605,6 +605,83 @@ public sealed class EventRemoteHandlerTests : IDisposable
         Assert.False(tab.Rows[0].ShowsOffBadge);
     }
 
+    // The edit window, open on an event a remote command then switches: its
+    // Disabled box moves with the switch and what else was typed there stays, so
+    // Save keeps both, and the note of who switched it.
+    [Fact]
+    public void TheOpenEditor_FollowsARemoteSwitch_AndSaveKeepsItWithTheOtherEdits()
+    {
+        using Rig r = Build();
+        r.Events.Add(Command("Night stats"));
+        ScheduledEvent e = Command("Sell junk");
+        r.Events.Add(e);
+        EventEditDialogViewModel editor = new(e, isNew: false) { Name = "Sell the junk", CommandText = "sell all" };
+        Action stop = editor.FollowSwitches(r.Events.Events, e);
+        Assert.False(editor.DisabledFlag);
+
+        r.Ask("@event night stats off");            // another event: not this window's
+        Assert.False(editor.DisabledFlag);
+        r.Ask("@event sell junk off");
+
+        Assert.True(editor.DisabledFlag);
+        Assert.Equal("Sell the junk", editor.Name);
+        Assert.Equal("sell all", editor.CommandText);
+
+        ScheduledEvent? saved = null;
+        editor.CloseRequested += result => saved = result;
+        editor.SaveCommand.Execute(null);
+        stop();
+        Assert.True(r.Events.Replace(e, saved!));
+
+        Assert.True(saved!.Disabled);
+        Assert.Equal("Sell the junk", saved.Name);
+        Assert.Equal("sell all", saved.CommandText);
+        Assert.StartsWith("switched off by remote @event from Friend at ", r.Events.LastSwitch(saved));
+    }
+
+    // Cancel saves nothing, so the switch made while the window was open stands.
+    // The box also stays the user's to set: ticked back before Save, the event is
+    // saved on, and the note of the remote switch goes with the state it described.
+    [Fact]
+    public void TheOpenEditor_Cancelled_LeavesTheRemoteSwitch_AndTheBoxStaysTheUsers()
+    {
+        using Rig r = Build();
+        ScheduledEvent e = Command("Sell junk");
+        r.Events.Add(e);
+        EventEditDialogViewModel cancelled = new(e, isNew: false) { Name = "Never saved" };
+        Action stop = cancelled.FollowSwitches(r.Events.Events, e);
+        r.Ask("@event sell junk off");
+        bool closed = false;
+        ScheduledEvent? result = e;
+        cancelled.CloseRequested += given => { closed = true; result = given; };
+        cancelled.CancelCommand.Execute(null);
+        stop();
+
+        Assert.True(closed);
+        Assert.Null(result);
+        Assert.True(e.Disabled);
+        Assert.Equal("Sell junk", e.Name);
+        Assert.Same(e, r.Events.Events[0]);
+
+        // Once the window is closed nothing follows any more.
+        r.Ask("@event sell junk on");
+        Assert.True(cancelled.DisabledFlag);
+
+        EventEditDialogViewModel overruled = new(e, isNew: false);
+        Action stopSecond = overruled.FollowSwitches(r.Events.Events, e);
+        r.Ask("@event sell junk off");
+        Assert.True(overruled.DisabledFlag);
+        overruled.DisabledFlag = false;
+        ScheduledEvent? saved = null;
+        overruled.CloseRequested += given => saved = given;
+        overruled.SaveCommand.Execute(null);
+        stopSecond();
+        r.Events.Replace(e, saved!);
+
+        Assert.False(saved!.Disabled);
+        Assert.Null(r.Events.LastSwitch(saved));
+    }
+
     // Logged at Info with who and which way; shown on the bug report's event line.
     [Fact]
     public void ASwitch_IsLoggedWithWhoAsked_AndKeptForTheBugReport()

@@ -219,7 +219,10 @@ public sealed class EventManager : IDisposable
         if (idx < 0) return false;
         Events[idx] = updated;
         _autoDisabled.Remove(original);
-        _lastSwitch.Remove(original);
+        // An edit saved with the switch still as the remote command left it keeps
+        // the note of who made it; one that changes the state is the user's own.
+        if (_lastSwitch.Remove(original, out string? note) && updated.Disabled == original.Disabled)
+            _lastSwitch[updated] = note;
         ReconcileTargets();
         _profile?.Save();
         return true;
