@@ -438,12 +438,15 @@ public sealed class LoopSettingsStoreTests : IDisposable
         DefaultPatterns.Seed(router);
         List<string> notices = new();
         using LoopShareReceiver inbox = new(new ChatRouter(router), receiver.Loops, notices.Add, receiver.Log);
+        // The sender's offer first, with its code, as a sender on this version makes it.
+        inbox.Ingest(Telepath("{" + LoopShareHandler.OfferLine(sent.Name, LoopSignature.ShortOf(sent)) + "}"));
         inbox.NoteSendConfirmed("Sender");
-        foreach (string line in DataLines(sent))
-            inbox.Ingest(new ChatLogEntry(DateTimeOffset.UnixEpoch, ChatChannel.TelepathIncoming, "Sender", line,
-                $"Sender telepaths: {line}"));
+        foreach (string line in DataLines(sent)) inbox.Ingest(Telepath(line));
         return notices;
     }
+
+    private static ChatLogEntry Telepath(string line) =>
+        new(DateTimeOffset.UnixEpoch, ChatChannel.TelepathIncoming, "Sender", line, $"Sender telepaths: {line}");
 
     [Fact]
     public void LoopSend_CarriesTheSendersOwnSettings_AndTheReceiverTakesThemAsItsOwn()
@@ -459,7 +462,8 @@ public sealed class LoopSettingsStoreTests : IDisposable
 
         List<string> notices = Receive(receiver, sender.Loops.Get("Dragons")!);
 
-        Assert.Equal("[Received loop 'Dragons' 2 rooms from Sender]", notices.Single());
+        Assert.Equal($"[Received loop 'Dragons' 2 rooms from Sender ({LoopSignature.ShortOf(sender.Loops.Get("Dragons")!)}, verified)]",
+            notices.Single());
         Assert.Equal(sendersOwn, receiver.Loops.Get("Dragons")!.OwnSettings);
         Assert.True(receiver.Store.HasOwn("Dragons"));
         // The file it saved is every character's on its set, and holds neither.
@@ -505,13 +509,13 @@ public sealed class LoopSettingsStoreTests : IDisposable
         List<string> notices = Receive(receiver, spelledOtherwise);
 
         string code = LoopSignature.ShortOf(sent);
-        Assert.Equal($"[Received loop 'DRAGONS' 2 rooms from Sender, already have it ({code})]", notices.Single());
+        Assert.Equal($"[Received loop 'DRAGONS' 2 rooms from Sender ({code}, verified), already have it as 'Dragons']", notices.Single());
         Assert.Equal(before, OnDisk("Beta"));
         Assert.Single(receiver.Loops.Loops);
         Assert.Empty(changed);
         Assert.Equal(0, catalogueEvents);
         Assert.Equal(LairOnlyAndBlock, receiver.Loops.Get("Dragons")!.OwnSettings);
-        Assert.Contains(receiver.Messages, m => m.Contains($"[{code}]") && m.Contains("nothing saved, nothing changed"));
+        Assert.Contains(receiver.Messages, m => m.Contains($"({code}, verified)") && m.Contains("nothing saved, nothing changed"));
     }
 
     [Fact]
@@ -530,7 +534,7 @@ public sealed class LoopSettingsStoreTests : IDisposable
         List<string> notices = Receive(receiver, sender.Loops.Get("Dragons")!);
 
         Assert.NotEqual(ourCode, theirCode);
-        Assert.Equal($"[Received loop 'Dragons' 2 rooms from Sender, saved as 'Dragons 2' ({theirCode}): "
+        Assert.Equal($"[Received loop 'Dragons' 2 rooms from Sender ({theirCode}, verified), saved as 'Dragons 2': "
             + $"your 'Dragons' is a different loop ({ourCode})]", notices.Single());
         Assert.Equal(oursBefore, File.ReadAllBytes(LoopPath("Dragons", _awaySet)));
         Assert.Equal(2, receiver.Loops.Get("Dragons")!.Waypoints[1].Key.Room);
@@ -598,9 +602,56 @@ public sealed class LoopSettingsStoreTests : IDisposable
         Assert.Contains("saved as 'Dragons 3'", notices.Single());
         Assert.Contains("your 'dragons' is a different loop", notices.Single());
         Assert.Equal(new[] { "dragons", "DRAGONS 2", "Dragons 3" }, receiver.Loops.Loops.Select(l => l.Name));
+    }
 
-        // Sent once more, it is a different loop from 'dragons' still, and 2 and 3 are taken.
-        Assert.Contains("saved as 'Dragons 4'", Receive(receiver, sender.Loops.Get("Dragons")!).Single());
+    // The same loop sent a second time is the numbered copy the first one made, and
+    // is turned away as that copy. Before this each send piled up another number.
+    [Fact]
+    public void LoopSend_SameLoopAcceptedTwice_TheSecondIsRejectedAsTheNumberedCopy()
+    {
+        WriteSharedLoop("Dragons", onlyLair: false, wait: "Off", secondRoom: 3);
+        WriteSharedLoop("Dragons", onlyLair: false, wait: "Off", set: _awaySet);
+        WriteOlderCharacter("Alpha");
+        WriteOlderCharacter("Beta");
+        Client sender = Open("Alpha");
+        sender.Loops.SetSettings("Dragons", LairOnlyAndBlock);
+        Client receiver = Open("Beta", _awaySet);
+        string code = LoopSignature.ShortOf(sender.Loops.Get("Dragons")!);
+
+        Assert.Contains("saved as 'Dragons 2'", Receive(receiver, sender.Loops.Get("Dragons")!).Single());
+        Dictionary<string, string> before = OnDisk("Beta");
+
+        // Asked for again under another spelling: the copy is found all the same.
+        Loop sent = sender.Loops.Get("Dragons")!;
+        List<string> again = Receive(receiver, new Loop("DRAGONS", sent.Waypoints) { OwnSettings = sent.OwnSettings });
+
+        Assert.Equal($"[Received loop 'DRAGONS' 2 rooms from Sender ({code}, verified), already have it as 'Dragons 2']", again.Single());
+        Assert.Equal(before, OnDisk("Beta"));
+        Assert.Equal(new[] { "Dragons", "Dragons 2" }, receiver.Loops.Loops.Select(l => l.Name));
+
+        // The copy is compared as this character runs it. Run another way, it is no
+        // longer the loop being sent, and that one is saved under the next number.
+        receiver.Loops.SetSettings("Dragons 2", Neither);
+        Assert.Contains("saved as 'Dragons 3'", Receive(receiver, sent).Single());
+    }
+
+    // Only the names a numbered save writes count as copies. A loop the user named
+    // themselves is theirs, however alike the name, even when it is the same loop.
+    [Fact]
+    public void LoopSend_LoopsTheUserNamed_AreNotTakenForNumberedCopies()
+    {
+        WriteSharedLoop("Dragons", onlyLair: false, wait: "Off", secondRoom: 3);
+        WriteSharedLoop("Dragons", onlyLair: false, wait: "Off", set: _awaySet);
+        foreach (string handNamed in new[] { "Dragons 2a", "Dragons2", "Dragons (old)", "Dragons 02", "Dragons 1", "Dragons  2" })
+            WriteSharedLoop(handNamed, onlyLair: false, wait: "Off", set: _awaySet, secondRoom: 3);
+        WriteOlderCharacter("Alpha");
+        WriteOlderCharacter("Beta");
+        Client sender = Open("Alpha");
+        Client receiver = Open("Beta", _awaySet);
+
+        List<string> notices = Receive(receiver, sender.Loops.Get("Dragons")!);
+
+        Assert.Contains("saved as 'Dragons 2'", notices.Single());
     }
 
     // The rule goes by name. The same loop under a name we don't have is saved under
@@ -617,7 +668,8 @@ public sealed class LoopSettingsStoreTests : IDisposable
 
         List<string> notices = Receive(receiver, sender.Loops.Get("Wyrms")!);
 
-        Assert.Equal("[Received loop 'Wyrms' 2 rooms from Sender]", notices.Single());
+        Assert.Equal($"[Received loop 'Wyrms' 2 rooms from Sender ({LoopSignature.ShortOf(sender.Loops.Get("Wyrms")!)}, verified)]",
+            notices.Single());
         Assert.Equal(LoopSignature.Of(receiver.Loops.Get("Dragons")!), LoopSignature.Of(receiver.Loops.Get("Wyrms")!));
     }
 
