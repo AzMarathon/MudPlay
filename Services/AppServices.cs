@@ -7319,13 +7319,13 @@ public sealed class AppServices
         };
 
         // Party-wealth probe + tracker. Unlike level, wealth isn't kept warm —
-        // it drifts with loot / spend — so the tracker probes @wealth only when
-        // BFS actually evaluates a toll exit (MinWealth is the demand trigger),
-        // records each reply, and exposes the party's minimum wallet;
-        // MovementFilter reads that to route a following party around a toll a
-        // member can't afford. The probe forwards replies straight to the
-        // tracker (not the players table). Always on — a toll is per-crosser, so
-        // stranding a member at a gate is never wanted. The recordWealth closure
+        // it drifts with loot / spend — so @wealth is asked only when a walk's
+        // route crosses a paid exit (Probe, from MovementFilter.WarmForRoute) and
+        // at a toll itself (PartyTollGate, further down). The tracker records each
+        // reply and exposes the party's poorest known wallet, which
+        // MovementFilter reads to keep a following party off a fare a member can't
+        // pay; a toll is PartyTollGate's to judge. The probe forwards replies
+        // straight to the tracker (not the players table). The recordWealth closure
         // reads the PartyWealth property lazily, so the construction order is fine.
         PartyWealthProbe = new Game.Remote.PartyWealthProbe(
             PartyBroadcaster, Chat, PartyState,

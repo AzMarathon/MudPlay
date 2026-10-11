@@ -1043,8 +1043,9 @@ public sealed class LoopRunner : IRecoverableEngine
     }
 
     // A loop one of whose legs has no way but through a toll or fare the purse
-    // can't pay is not run (user, 2026-10-10): it would walk to the gate and be
-    // turned away every lap. Asked at every start, a recovery's re-plan included,
+    // can't pay, or a toll the party in tow can't all get through, is not run
+    // (user, 2026-10-10): it would walk to the gate and be turned away, or leave
+    // someone there, every lap. Asked at every start, a recovery's re-plan included,
     // so a loop refused at a toll mid-lap re-expands round it where a way round
     // exists and stops here, naming the crossing, where none does. The words for
     // the crossing are the walk-to's (PaidCrossingDescriber).

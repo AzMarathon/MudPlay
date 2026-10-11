@@ -11,9 +11,9 @@ namespace MudPlay.Game.Remote;
 // carrying?" by broadcasting @wealth to every non-self member and aggregating
 // the replies into a single PartyWealthResult. Backs the leader-side toll-gate
 // check: a (Toll: N) exit is per-crosser — every member needs N*100 copper-value
-// on hand — so before routing the party through one the leader confirms every
-// follower can pay. A member who can't cover it (or doesn't reply) means the
-// route avoids that toll room (confirmed mechanic).
+// on hand — so before stepping the party through one the leader asks what every
+// follower holds. What is done about a member who is short or doesn't reply is
+// PartyTollGate's: paid for when we can spare it, the toll not taken otherwise.
 //
 // Same round-trip plumbing as PartyLevelProbe: the query goes out through
 // PartyBroadcaster.Broadcast (one /<given> @wealth per member) and each member's
@@ -29,8 +29,9 @@ namespace MudPlay.Game.Remote;
 // carries no "(= N copper)" tally — observed once as "{Wealth: 26 platinum pieces,
 // 4792 gold crowns}". We fold that in by scanning for "<count> <denomination>" coin
 // phrases and summing via the standard ratio ladder.
-// A member that answers "unknown" or never answers contributes no reading, so the
-// tracker treats them as unaffordable and avoids the toll — the conservative side.
+// A member that answers "unknown" or never answers contributes no reading: for a
+// toll the tracker notes them silent, which counts as unable to pay (user,
+// 2026-10-10); for a fare they are simply not counted.
 //
 // Unlike level, wealth is never persisted to the players table: it drifts
 // constantly with loot / spend, so the probe forwards each fresh reading to the

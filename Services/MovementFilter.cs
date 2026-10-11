@@ -684,8 +684,8 @@ public sealed class MovementFilter : IRoomFilter
     }
 
     // An NPC ask-transport charges its fare to every person who asks, so it gates on
-    // the same party-or-self wallet check as a toll — the party only routes through it
-    // when its poorest member can pay. The fare is already copper. Stands down with the
+    // the party-or-self wallet check — the party only routes through it when its
+    // poorest known member can pay. The fare is already copper. Stands down with the
     // toll gate while WarmForRoute plans the paid-crossings-permitted route.
     private bool IsFareGateBlocked(in RoomExit exit)
     {
@@ -869,8 +869,9 @@ public sealed class MovementFilter : IRoomFilter
 
     // Whether what this exit charges is beyond OUR purse, as against a party
     // member's: the purse in doubt, a refusal standing, or the record short. A
-    // crossing only a follower can't pay is left to the party rules, which walk on
-    // with a warning.
+    // follower's purse is judged apart: at a toll by PartyTollGate, and for a fare
+    // by the poorest known purse, where a sole-crossing sailing still sails with
+    // its warning.
     public bool IsOwnPurseShort(in RoomExit exit)
     {
         long cost = CostOf(in exit);
