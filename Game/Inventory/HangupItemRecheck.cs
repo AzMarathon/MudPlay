@@ -1193,9 +1193,11 @@ public sealed class HangupItemRecheck
         Recovery.HangupEntryRoomReading reading = _entryRoomSays?.Invoke(hungUpIn, here) ?? default;
         string text = reading.Says != true
             ? here == hungUpIn ? $"{Label(here)}, the room it left the game in" : Label(here)
-            : reading.TakenFor is { } arrival
+            : (reading.TakenFor is { } arrival
                 ? $"{Label(here)}, which the map can't tell from {Label(arrival)}, where the dead of {Label(hungUpIn)} arrive"
-                : $"{Label(here)}, where the dead of {Label(hungUpIn)} arrive";
+                : $"{Label(here)}, where the dead of {Label(hungUpIn)} arrive")
+              // Paradigm: no list names this room's arrival room; it is in Albion.
+              + (reading.Albion ? " (Albion: reachable from that room without a boat)" : "");
         return (reading.Says, text);
     }
 

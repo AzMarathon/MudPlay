@@ -98,33 +98,147 @@ public sealed class HangupDeathArrivalRoomsTests
         Assert.Null(Says(Darkwood, new RoomKey(16, 542), Edited));
     }
 
-    // Paradigm's own rooms (map 18, and every room past the last Stock room of
-    // its map) aren't on the list. One arrival room is known for them: 14/1077,
-    // where the dead of Albion arrive (the owner, 2026-10-10). Which rooms are
-    // Albion isn't in the data, so being there is a yes for any of them, and
-    // nothing ever says no.
-    [Fact]
-    public void AParadigmOnlyRoom_BackInTheAlbionVault_SaysADeath_AndNothingSaysNo()
-    {
-        RoomKey kingsport = new(14, 5000);
-        RoomKey vault = HangupDeathArrivalRooms.ParadigmAlbionVault;
-        Assert.Equal(new RoomKey(14, 1077), vault);
-        Assert.Null(HangupDeathArrivalRooms.For(kingsport));
+    // ----- Paradigm's own rooms ----------------------------------------------
+    //
+    // The Stock list speaks for the zones Paradigm shares with Stock, which is not
+    // the same as the room numbers Stock has: Paradigm re-used some for other
+    // places. For its own rooms one thing is known: the dead of Albion arrive in
+    // 14/1077, the Burial Vault, and Albion is "the rooms that can be reached from
+    // 14/1077 without taking the boat" (the owner, 2026-10-10). The walk itself is
+    // WalkReach's; here it is given.
 
-        Assert.True(Says(kingsport, vault, Paradigm));
-        Assert.True(Says(new RoomKey(18, 40), vault, Paradigm));
-        // Its own arrival room isn't known: neither the room it left, nor another
-        // room, nor the Temple says anything.
-        Assert.Null(Says(kingsport, kingsport, Paradigm));
-        Assert.Null(Says(kingsport, new RoomKey(14, 5001), Paradigm));
-        Assert.Null(Says(kingsport, Temple, Paradigm));
-        // Hung up in the vault itself.
-        Assert.Null(Says(vault, vault, Paradigm));
-        // The vault is Paradigm's. On Stock data such a room isn't in the world.
-        Assert.Null(Says(kingsport, vault, Vanilla));
-        Assert.Null(Says(kingsport, vault, Edited));
-        // A room Paradigm shares with Stock goes by the Stock list, not the vault.
-        Assert.False(Says(Darkwood, vault, Paradigm));
+    private static readonly RoomKey Vault = new(14, 1077);
+    private static readonly RoomKey BankOfAlbion = new(14, 1);        // a Stock number, Albion on Paradigm
+    private static readonly RoomKey Kingsport = new(14, 5000);        // past Stock's last room of map 14
+    private static readonly RoomKey PortBlackwater = new(14, 9);      // a Stock number, not Albion
+    private static readonly RoomKey Shadowmere = new(5, 3);           // Stock's Tournament Arena
+    private static readonly RoomKey TerraIsta = new(14, 1813);
+
+    private static bool InAlbion(RoomKey room) => room == Vault || room == BankOfAlbion || room == Kingsport;
+
+    private static HangupEntryRoomReading OnParadigm(RoomKey hungUpIn, RoomKey enteredIn) =>
+        HangupDeathArrivalRooms.Read(hungUpIn, enteredIn, Paradigm, couldBeTakenFor: null, InAlbion);
+
+    // 14/1 is `Waterfall Path` on Stock and `Bank of Albion` on Paradigm, where
+    // every Stock room of map 14 is another place. Read by its number, the Stock
+    // list sent its dead to the Temple and called the Burial Vault the wrong room.
+    [Fact]
+    public void AStockNumberThatIsAlbionOnParadigm_BackInTheBurialVault_SaysADeath()
+    {
+        Assert.Equal(new RoomKey(14, 1077), HangupDeathArrivalRooms.ParadigmAlbionVault);
+        Assert.False(HangupDeathArrivalRooms.ListCovers(BankOfAlbion, Paradigm));
+
+        HangupEntryRoomReading reading = OnParadigm(BankOfAlbion, Vault);
+
+        Assert.True(reading.Says);
+        Assert.True(reading.Albion);
+        // On Stock data the same number is Stock's own room, and goes by the list.
+        Assert.True(HangupDeathArrivalRooms.ListCovers(BankOfAlbion, Vanilla));
+        Assert.False(Says(BankOfAlbion, Vault, Vanilla));
+        Assert.True(Says(BankOfAlbion, Temple, Vanilla));
+    }
+
+    // An Albion room says yes in the Burial Vault and nothing anywhere else: a
+    // hang-up goes through the room's leave-the-game room first, and Paradigm's
+    // aren't in the data, so "wrong room" and "never moved" can't be said.
+    [Theory]
+    [InlineData(14, 1)]
+    [InlineData(14, 5000)]
+    public void AnAlbionRoom_SaysYesInTheBurialVault_AndNothingElsewhere(int map, int room)
+    {
+        RoomKey left = new(map, room);
+
+        Assert.True(OnParadigm(left, Vault).Says);
+        Assert.Null(OnParadigm(left, left).Says);
+        Assert.Null(OnParadigm(left, new RoomKey(14, 5001)).Says);
+        Assert.Null(OnParadigm(left, Temple).Says);
+        // Hung up in the vault itself: nothing.
+        Assert.Null(OnParadigm(Vault, Vault).Says);
+        // Albion is Paradigm's. On Stock data, or with no walk to go by, nothing.
+        Assert.Null(HangupDeathArrivalRooms.Read(Kingsport, Vault, Vanilla, null, InAlbion).Says);
+        Assert.Null(HangupDeathArrivalRooms.Read(Kingsport, Vault, Edited, null, InAlbion).Says);
+        Assert.Null(Says(Kingsport, Vault, Paradigm));
+    }
+
+    // Paradigm's own rooms outside Albion have no known arrival room: Port
+    // Blackwater on Stock's map-14 numbers, Shadowmere on Stock's map 5, Terra
+    // Ista across the water, map 18. The Burial Vault says nothing for them, and
+    // neither does the Temple, the room they left, or any other.
+    [Theory]
+    [InlineData(14, 9)]
+    [InlineData(5, 3)]
+    [InlineData(14, 1813)]
+    [InlineData(18, 40)]
+    public void AParadigmRoomOutsideAlbion_SaysNothing_WhereverItComesBack(int map, int room)
+    {
+        RoomKey left = new(map, room);
+        Assert.False(HangupDeathArrivalRooms.ListCovers(left, Paradigm));
+
+        Assert.Null(OnParadigm(left, Vault).Says);
+        Assert.Null(OnParadigm(left, Temple).Says);
+        Assert.Null(OnParadigm(left, left).Says);
+        Assert.Null(OnParadigm(left, new RoomKey(1, 110)).Says);
+    }
+
+    // Which Stock numbers are another place on Paradigm: maps 5 and 14 whole, four
+    // rooms with another name and no neighbour in common, and the `Blank`
+    // placeholders of map 1 that Paradigm made a dungeon of.
+    [Theory]
+    [InlineData(5, 1)]
+    [InlineData(5, 25)]
+    [InlineData(14, 1)]
+    [InlineData(14, 28)]
+    [InlineData(4, 2)]
+    [InlineData(6, 1338)]
+    [InlineData(12, 2383)]
+    [InlineData(16, 2272)]
+    [InlineData(1, 2171)]
+    [InlineData(1, 2188)]
+    public void AStockNumberThatIsAnotherPlaceOnParadigm_IsNotCoveredThere(int map, int room)
+    {
+        RoomKey key = new(map, room);
+
+        Assert.False(HangupDeathArrivalRooms.ListCovers(key, Paradigm));
+        Assert.True(HangupDeathArrivalRooms.ListCovers(key, Vanilla));
+        Assert.True(HangupDeathArrivalRooms.ListCovers(key, Edited));
+    }
+
+    // A room Paradigm only renamed is the same room, in a zone it shares with
+    // Stock: 15/1530 is `Old Mine Tunnel` on Stock and `Webbed Mine Tunnel` on
+    // Paradigm with the same exits, 15/851 a ganghouse room Stock ships unnamed,
+    // 1/2182 the `Park` that sits among map 1's placeholders. The Stock list
+    // holds for them, "wrong room" included.
+    [Theory]
+    [InlineData(15, 1530)]
+    [InlineData(15, 851)]
+    [InlineData(1, 2182)]
+    [InlineData(1, 109)]
+    public void ARoomParadigmOnlyRenamed_IsStillSharedWithStock(int map, int room)
+    {
+        RoomKey left = new(map, room);
+        Assert.True(HangupDeathArrivalRooms.ListCovers(left, Paradigm));
+
+        Assert.True(OnParadigm(left, Temple).Says);
+        Assert.False(OnParadigm(left, Temple).Albion);
+        Assert.False(OnParadigm(left, left).Says);
+        Assert.False(OnParadigm(left, Vault).Says);
+    }
+
+    // What the bug report and the judgement both go by.
+    [Fact]
+    public void ArrivalsOn_SaysWhichRoomsAndWhatTheyRestOn()
+    {
+        Assert.Equal((true, false), Rests(HangupDeathArrivalRooms.ArrivalsOn(Darkwood, Paradigm, InAlbion)));
+        (IReadOnlyList<RoomKey>? rooms, bool allKnown, bool albion) =
+            HangupDeathArrivalRooms.ArrivalsOn(BankOfAlbion, Paradigm, InAlbion);
+        Assert.Equal(new[] { Vault }, rooms);
+        Assert.Equal((false, true), (allKnown, albion));
+        Assert.Null(HangupDeathArrivalRooms.ArrivalsOn(PortBlackwater, Paradigm, InAlbion).Rooms);
+        Assert.Null(HangupDeathArrivalRooms.ArrivalsOn(Shadowmere, Paradigm, InAlbion).Rooms);
+        Assert.Null(HangupDeathArrivalRooms.ArrivalsOn(TerraIsta, Paradigm, InAlbion).Rooms);
+        Assert.Null(HangupDeathArrivalRooms.ArrivalsOn(Kingsport, Vanilla, InAlbion).Rooms);
+
+        static (bool, bool) Rests((IReadOnlyList<RoomKey>? Rooms, bool AllKnown, bool Albion) on) => (on.AllKnown, on.Albion);
     }
 
     // Hung up in the very room its dead arrive in: being there says nothing.
@@ -260,11 +374,11 @@ public sealed class HangupDeathArrivalRoomsTests
         private readonly string _root;
         public RoomGraphManager Graph { get; }
 
-        public RealGraph()
+        public RealGraph(string rooms = RealRooms)
         {
             _root = Path.Combine(Path.GetTempPath(), "mudplay-arrivalrooms-" + Path.GetRandomFileName());
             Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-            File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), RealRooms);
+            File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), rooms);
             GameDataCache cache = new(_root);
             cache.SwitchSet("alpha");
             Graph = new RoomGraphManager(cache);
@@ -304,6 +418,56 @@ public sealed class HangupDeathArrivalRoomsTests
         Assert.False(g.Graph.CouldBeTakenFor(Temple, new RoomKey(1, 1)));
         Assert.False(g.Graph.CouldBeTakenFor(new RoomKey(9, 9), PortalRoom));
     }
+
+    // A hidden exit prints on no exits line, whichever kind it is: one a plain step
+    // crosses (`Hidden/Passable`, which the walker treats as an ordinary exit), one
+    // that has to be searched for, one opened by an action elsewhere. A room whose
+    // only other exits are hidden shows as its plainer namesake does.
+    [Theory]
+    [InlineData("(Hidden/Passable)")]
+    [InlineData("(Hidden/Searchable)")]
+    [InlineData("(Text: go crack, enter crack)")]
+    public void AnExitThatPrintsOnNoExitsLine_DoesNotTellTwoRoomsApart(string hint)
+    {
+        using RealGraph g = new(TwoCellars(hint));
+
+        // 9/1 prints south only, which is all 9/2 has.
+        Assert.True(g.Graph.CouldBeTakenFor(new RoomKey(9, 1), new RoomKey(9, 2)));
+        // The other way round too: what 9/2 prints is an exit of 9/1.
+        Assert.True(g.Graph.CouldBeTakenFor(new RoomKey(9, 2), new RoomKey(9, 1)));
+    }
+
+    // An exit that does print tells them apart: the room that shows it can't be
+    // taken for one that lacks it, though the plainer one still fits the other.
+    [Theory]
+    [InlineData("")]
+    [InlineData("(Door)")]
+    public void AnExitThatPrints_TellsTwoRoomsApart(string hint)
+    {
+        using RealGraph g = new(TwoCellars(hint));
+
+        Assert.False(g.Graph.CouldBeTakenFor(new RoomKey(9, 1), new RoomKey(9, 2)));
+        Assert.True(g.Graph.CouldBeTakenFor(new RoomKey(9, 2), new RoomKey(9, 1)));
+    }
+
+    // Two rooms of one name: 9/1 has a north exit of the given kind beside the
+    // south exit that is all 9/2 has.
+    private static string TwoCellars(string northHint) => """
+        [
+          { "Map Number": 9, "Room Number": 1, "Name": "Cellar",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "9/3 HINT", "S": "9/3", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 9, "Room Number": 2, "Name": "Cellar",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "9/3", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 9, "Room Number": 3, "Name": "Passage",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "9/1", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """.Replace(" HINT", northHint.Length == 0 ? "" : " " + northHint);
 
     // Killed by a hang-up in the Crimson Passage, the character stands in 11/35.
     // The map, shown `Portal Room` with a south exit, confirms 11/37: the one room

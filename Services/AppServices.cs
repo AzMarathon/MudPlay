@@ -2314,6 +2314,12 @@ public sealed class AppServices
         : GameData.ActiveSetIsVanillaStock ? Game.Recovery.HangupArrivalListTrust.VanillaStock
         : Game.Recovery.HangupArrivalListTrust.Unverified;
 
+    // Paradigm's Albion: the rooms that can be walked to from the Burial Vault,
+    // where its dead arrive. The walk is made the first time a hang-up in one of
+    // Paradigm's own rooms is judged and kept with the graph (Map.WalkReach).
+    public bool InParadigmAlbion(Game.Map.RoomKey room) =>
+        Game.Map.WalkReach.From(RoomGraph, Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault).Contains(room);
+
     // The teleport spots in the loaded game data, for the
     // setting that says which of them automatic walks may use. Worked out from the
     // room graph on first use and again after the graph reloads.
@@ -10080,7 +10086,7 @@ public sealed class AppServices
             // far it goes depends on the game data (HangupArrivalListTrust). The
             // graph says which rooms the map can't tell an arrival room from.
             entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.Read(
-                hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor),
+                hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion),
             roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}");
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();

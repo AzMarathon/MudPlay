@@ -328,10 +328,17 @@ public sealed class RoomGraphManager
         if (!string.Equals(room.Name, twin.Name, StringComparison.OrdinalIgnoreCase)) return false;
         uint printed = 0;
         foreach ((Direction direction, RoomExit exit) in room.Exits)
-            if (exit.Hint != RoomExitHint.Text && !MpFile.MegaMudHash.IsHidden(exit.Hint))
-                printed |= 1u << (int)direction;
+            if (PrintsOnExitsLine(exit)) printed |= 1u << (int)direction;
         return (printed & twin.ExitMask) == printed;
     }
+
+    // A hidden exit that a plain step crosses (`Hidden/Passable`) carries no hint
+    // of its own, the walker having nothing special to do for it; only the cell's
+    // own text says it is hidden.
+    private static bool PrintsOnExitsLine(RoomExit exit) =>
+        exit.Hint != RoomExitHint.Text
+        && !MpFile.MegaMudHash.IsHidden(exit.Hint)
+        && exit.RawHint?.StartsWith("Hidden", StringComparison.OrdinalIgnoreCase) != true;
 
     // Rebuild the graph from setName's Rooms.json. Pass null to clear. Safe to
     // call repeatedly; idempotent on no-op transitions (same set still fires

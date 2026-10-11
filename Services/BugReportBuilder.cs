@@ -226,19 +226,7 @@ public static class BugReportBuilder
               // what an earlier connection that judged nothing saw of the way back in.
               // The list is the Stock map file's, and the row says how far it is
               // trusted for the active game data.
-              + (heldList.Room is { } hungUpIn
-                  ? "; by the Stock map file its dead arrive in "
-                    + (Game.Recovery.HangupDeathArrivalRooms.For(new Game.Map.RoomKey(hungUpIn.Map, hungUpIn.Room)) is { } arrivals
-                        ? string.Join(" or ", arrivals) + svc.HangupArrivalListTrust switch
-                        {
-                            Game.Recovery.HangupArrivalListTrust.VanillaStock => "",
-                            Game.Recovery.HangupArrivalListTrust.Paradigm => " (Paradigm shares these rooms with Stock)",
-                            _ => " (not confirmed for this game data: the room it comes back in can say yes, never no)",
-                        }
-                        : svc.HangupArrivalListTrust == Game.Recovery.HangupArrivalListTrust.Paradigm
-                            ? $"(a room that file doesn't have; on Paradigm {Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault} is the one arrival room known for such rooms)"
-                            : "(a room that file doesn't have)")
-                  : "")
+              + (heldList.Room is { } hungUpIn ? "; " + HangupArrivalText(svc, new Game.Map.RoomKey(hungUpIn.Map, hungUpIn.Room)) : "")
               + (heldList.EntryRoomSince is { } cameBack ? $"; came back in {cameBack.Map}/{cameBack.Room} on a connection since" : "")
               + (heldList.MovedBeforeEntryRoomKnownSince ? "; a connection since moved before the room it came back in was known" : "")
             : "(none)");
@@ -406,6 +394,29 @@ public static class BugReportBuilder
         if (svc.DeathRecovery.SpillSweepPlan is { Length: > 0 } plan)
             Kv(sb, "Stock spill sweep rooms, in order", plan);
         return sb.ToString();
+    }
+
+    // Where a death by a hang-up in this room would put the character on the
+    // active game data, and what that rests on: the Stock map file's list (with
+    // how far it is trusted here), Paradigm's Albion, or nothing known.
+    private static string HangupArrivalText(AppServices svc, Game.Map.RoomKey hungUpIn)
+    {
+        Game.Recovery.HangupArrivalListTrust trust = svc.HangupArrivalListTrust;
+        (IReadOnlyList<Game.Map.RoomKey>? rooms, bool allKnown, bool albion) =
+            Game.Recovery.HangupDeathArrivalRooms.ArrivalsOn(hungUpIn, trust, svc.InParadigmAlbion);
+        if (albion)
+            return $"its dead arrive in {string.Join(" or ", rooms!)}: Albion (reachable from "
+                + $"{Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault} without a boat); that room says yes, no other says no";
+        if (rooms is null || !allKnown)
+            return trust == Game.Recovery.HangupArrivalListTrust.Paradigm
+                ? "where its dead arrive isn't known (one of Paradigm's own rooms, outside Albion)"
+                : "where its dead arrive isn't known (a room the Stock map file doesn't have)";
+        return $"by the Stock map file its dead arrive in {string.Join(" or ", rooms)}" + trust switch
+        {
+            Game.Recovery.HangupArrivalListTrust.VanillaStock => "",
+            Game.Recovery.HangupArrivalListTrust.Paradigm => " (a zone Paradigm shares with Stock)",
+            _ => " (not confirmed for this game data: the room it comes back in can say yes, never no)",
+        };
     }
 
     // Party roster snapshot — who's grouped, their roles, and the pending-invite

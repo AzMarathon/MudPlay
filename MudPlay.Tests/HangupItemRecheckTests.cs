@@ -242,6 +242,8 @@ public sealed class HangupItemRecheckTests
         public bool EditedBoard { get; set; }
         // The graph's word on which rooms the map can't tell an arrival room from.
         public Func<RoomKey, RoomKey, bool>? CouldBeTakenFor { get; set; }
+        // Paradigm's Albion: the rooms the graph can walk to from the Burial Vault.
+        public HashSet<RoomKey> Albion { get; } = new();
         public Dictionary<RoomKey, string> RoomNames { get; } = new();
         public List<MudPlay.Game.Recovery.UnwitnessedDeath> Deaths { get; } = new();
         public HangupItemRecheck Check { get; }
@@ -293,7 +295,7 @@ public sealed class HangupItemRecheckTests
                     !Stock ? MudPlay.Game.Recovery.HangupArrivalListTrust.Paradigm
                     : EditedBoard ? MudPlay.Game.Recovery.HangupArrivalListTrust.Unverified
                     : MudPlay.Game.Recovery.HangupArrivalListTrust.VanillaStock,
-                    CouldBeTakenFor),
+                    CouldBeTakenFor, Albion.Contains),
                 roomLabel: room => RoomNames.TryGetValue(room, out string? name) ? $"{name} ({room})" : $"room {room}");
             Check.SetWireSender(_ => { });
         }
@@ -3525,7 +3527,24 @@ public sealed class HangupItemRecheckTests
         Assert.Contains("no death", h.Check.LastDeathCheck);
         Assert.Contains("the room it left the game in", h.Check.LastDeathCheck);
         Assert.DoesNotContain(h.Notices, n => n.Contains("No death was recorded"));
+        // The item check goes on in the same pass, still holding movement: the
+        // torches on the floor are asked for, and nothing has been said yet.
         Assert.Contains(("torch", 3), h.Collected);
+        Assert.True(h.Held);
+        Assert.Empty(h.Notices);
+
+        // They land, and the pass ends as any pickup does: what came back, what
+        // didn't, the equipment manager asked, movement let go.
+        h.Check.OnItemTaken("torch", 3);
+
+        Assert.False(h.Held);
+        Assert.Equal(2, h.Notices.Count);
+        Assert.Contains("picked up 3 torch", h.Notices[0]);
+        Assert.Contains("chainmail hauberk", h.Notices[1]);
+        Assert.Contains("rope", h.Notices[1]);
+        Assert.Equal(new[] { "torch" }, Assert.Single(h.GearAsked));
+        Assert.Empty(h.Deaths);
+        Assert.Null(h.Profile.DeathHistory);
     }
 
     // A connection that came and went with no inventory read never learned the
@@ -3669,30 +3688,39 @@ public sealed class HangupItemRecheckTests
 
     // ----- Paradigm's own rooms ----------------------------------------------
     //
-    // Paradigm sends the dead of Albion (Kingsport and the areas attached to it)
-    // to 14/1077, the Burial Vault (the owner, 2026-10-10). Which rooms are Albion
-    // isn't in the game data, so for any room Paradigm has and Stock doesn't,
-    // being found there is a yes, and no other room is ever a no.
+    // Paradigm sends the dead of Albion to 14/1077, the Burial Vault, and Albion
+    // is "the rooms that can be reached from 14/1077 without taking the boat" (the
+    // owner, 2026-10-10). For a room in it, being found in the vault is a yes and
+    // no other room is ever a no. Paradigm's other own rooms (Port Blackwater,
+    // Terra Ista, Terra Fuego, Tal'kiran, Shadowmere) have no known arrival room.
+    // The Stock list speaks only for the zones Paradigm shares with Stock: 14/1 is
+    // a Stock room number, and on Paradigm it is the Bank of Albion.
 
     private static readonly RoomKey Kingsport = new(14, 5000);
+    private static readonly RoomKey BankOfAlbion = new(14, 1);
     private static readonly RoomKey BurialVault = new(14, 1077);
 
     private static Harness OnParadigm()
     {
         Harness h = new() { MaxItems = 0, PveShare = 50, Stock = false };
+        h.Albion.UnionWith([BurialVault, Kingsport, BankOfAlbion]);
         h.RoomNames[BurialVault] = "Burial Vault";
+        h.RoomNames[BankOfAlbion] = "Bank of Albion";
         return h;
     }
 
+    private const string BackInTheVault = "Burial Vault (14/1077), where the dead of ";
+    private const string ByAlbion = " arrive (Albion: reachable from that room without a boat)";
+
     [Fact]
-    public void Paradigm_HungUpInOneOfItsOwnRooms_BackInTheBurialVault_IsRecorded_NamingIt()
+    public void Paradigm_HungUpInAlbion_BackInTheBurialVault_IsRecorded_NamingIt()
     {
         Harness h = OnParadigm();
         h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, Kingsport);
 
         h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
 
-        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in Burial Vault (14/1077), where the dead of room 14/5000 arrive.",
+        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in {BackInTheVault}room 14/5000{ByAlbion}.",
             Assert.Single(h.Deaths).Message);
 
         // With no count from before, back there stripped is enough.
@@ -3702,14 +3730,35 @@ public sealed class HangupItemRecheckTests
         Assert.Single(o.Deaths);
     }
 
-    // Anywhere else, the room says nothing for one of Paradigm's own rooms: its
-    // arrival room isn't known, so neither "the wrong room" nor "it never moved"
-    // can be said, and the lives decide alone.
+    // The case that was lost by reading Stock's list by room number: 14/1 is in
+    // Stock's range, where that list sends its dead to the Temple. On Paradigm it
+    // is the Bank of Albion. A life down and stripped in the Burial Vault is a
+    // death, with a count from before or without one.
+    [Theory]
+    [InlineData(7)]
+    [InlineData(null)]
+    public void Paradigm_AStockRoomNumberThatIsAlbion_BackInTheBurialVault_IsRecorded(int? livesBefore)
+    {
+        Harness h = OnParadigm();
+        h.StoredAt(-5, Geared, lives: livesBefore, room: new RoomRef(14, 1));
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.Equal(6, death.LivesRemaining);
+        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in {BackInTheVault}Bank of Albion (14/1){ByAlbion}.",
+            death.Message);
+    }
+
+    // Anywhere else, the room says nothing for an Albion room: a hang-up goes
+    // through the room's leave-the-game room first and Paradigm's aren't in the
+    // data, so neither "the wrong room" nor "it never moved" can be said, and the
+    // lives decide alone.
     [Theory]
     [InlineData(14, 5001)]
     [InlineData(14, 5000)]
     [InlineData(1, 2189)]
-    public void Paradigm_HungUpInOneOfItsOwnRooms_NoOtherRoomSaysNo(int map, int room)
+    public void Paradigm_HungUpInAlbion_NoOtherRoomSaysNo(int map, int room)
     {
         Harness h = OnParadigm();
         h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, Kingsport);
@@ -3717,5 +3766,48 @@ public sealed class HangupItemRecheckTests
         h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: new RoomKey(map, room));
 
         Assert.Equal(HangupItemRecheck.DeathMessage, Assert.Single(h.Deaths).Message);
+    }
+
+    // One of Paradigm's own rooms outside Albion: Terra Ista (14/1813, across the
+    // water), Port Blackwater (14/9, a Stock room number), Shadowmere (5/3, Stock's
+    // Tournament Arena), map 18. Where its dead arrive isn't known, so the Burial
+    // Vault says nothing for it either. With a life down the lives decide alone,
+    // and the record names no room; with no count from before nothing tells.
+    [Theory]
+    [InlineData(14, 1813)]
+    [InlineData(14, 9)]
+    [InlineData(5, 3)]
+    [InlineData(18, 40)]
+    public void Paradigm_OneOfItsOwnRoomsOutsideAlbion_TheBurialVaultSaysNothing(int map, int room)
+    {
+        Harness h = OnParadigm();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(map, room));
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
+        Assert.Equal(HangupItemRecheck.DeathMessage, Assert.Single(h.Deaths).Message);
+        Assert.Contains("which says nothing either way", h.Check.LastDeathCheck);
+
+        Harness o = OnParadigm();
+        o.StoredAt(-5, Geared, lives: null, room: new RoomRef(map, room));
+        o.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
+        Assert.Empty(o.Deaths);
+        Assert.Contains("only a life lost tells a death", Assert.Single(o.Notices));
+    }
+
+    // A room Paradigm only renamed is still shared with Stock: 15/1530 is `Old
+    // Mine Tunnel` there and `Webbed Mine Tunnel` here, with the same exits. Its
+    // dead arrive in the Temple on both, and another room is the wrong one.
+    [Fact]
+    public void Paradigm_ARoomOnlyRenamed_StillGoesByTheStockList()
+    {
+        Harness h = OnParadigm();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(15, 1530));
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: HallsOfTheDead);
+        Assert.Contains("It came back in room 1/2189, where the dead of room 15/1530 arrive.", Assert.Single(h.Deaths).Message);
+
+        Harness o = OnParadigm();
+        o.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(15, 1530));
+        o.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
+        Assert.Empty(o.Deaths);
+        Assert.Contains("which is not where a death by this hang-up puts it", Assert.Single(o.Notices));
     }
 }

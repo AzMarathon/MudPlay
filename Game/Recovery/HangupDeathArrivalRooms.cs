@@ -66,15 +66,35 @@ public static class HangupDeathArrivalRooms
     public static readonly RoomKey Temple = new(1, 2189);
     public static readonly RoomKey EvilTomb = new(1, 142);
 
-    // Paradigm: where the dead of Albion (Kingsport and the areas attached to it)
-    // arrive, the Burial Vault (the owner, 2026-10-10). Which rooms are Albion
-    // isn't in the game data, so it stands as a room the dead of any of
-    // Paradigm's own rooms may arrive in, and never as the only one.
+    // Paradigm: where the dead of Albion arrive, the Burial Vault. Albion is "the
+    // rooms that can be reached from 14/1077 without taking the boat" (the owner,
+    // 2026-10-10): the caller's walk from this room over the graph
+    // (Map.WalkReach). Where the dead of Paradigm's other own rooms arrive (Port
+    // Blackwater, Terra Ista, Terra Fuego, Tal'kiran and the rest) isn't known.
     public static readonly RoomKey ParadigmAlbionVault = new(14, 1077);
-    private static readonly RoomKey[] ParadigmOwnArrivals = { ParadigmAlbionVault };
+    private static readonly RoomKey[] AlbionArrivals = { ParadigmAlbionVault };
 
-    // The rooms a character killed by a hang-up in this room can arrive in, or
-    // null for a room the list doesn't cover.
+    // Stock room numbers that are another place on Paradigm, so that the Stock
+    // list says nothing of them there: (map, first room, last room). Paradigm
+    // shares Stock's zones (the owner, 2026-10-10), and a zone is not a number.
+    // Worked out by setting the Stock 1.11p Rooms table beside the Paradigm 1.9.1
+    // one, room number by room number. 484 numbers bear another name on Paradigm:
+    //   - maps 5 and 14, where every Stock room does: the Tournament Arena is
+    //     Shadowmere there, and the Silver River is Albion and Port Blackwater;
+    //   - four rooms with another name and no neighbour in common with the Stock
+    //     room (4/2, 6/1338, 12/2383, 16/2272);
+    //   - sixteen rooms Stock only has as `Blank` placeholders (map 1), which
+    //     Paradigm made a dungeon of. There is no Stock zone there to share.
+    // The other 411 keep a neighbour (382 keep every exit): the same room under a
+    // new name, shared like the rest.
+    private static readonly (int Map, int First, int Last)[] AnotherPlaceOnParadigm =
+    {
+        (1, 2171, 2174), (1, 2176, 2181), (1, 2183, 2188), (4, 2, 2), (5, 1, 25), (6, 1338, 1338),
+        (12, 2383, 2383), (14, 1, 28), (16, 2272, 2272),
+    };
+
+    // The rooms a character killed by a hang-up in this room can arrive in by the
+    // Stock map file, or null for a room that file doesn't have.
     public static IReadOnlyList<RoomKey>? For(RoomKey hungUpIn)
     {
         if (hungUpIn.Map < 1 || hungUpIn.Map > LastRoom.Length) return null;
@@ -83,6 +103,33 @@ public static class HangupDeathArrivalRooms
             if (hungUpIn.Map == map && hungUpIn.Room >= first && hungUpIn.Room <= last)
                 return new[] { new RoomKey(map, arrival) };
         return new[] { Temple, EvilTomb };
+    }
+
+    // Whether the Stock list speaks for this room on the game data in hand: it is
+    // one of that file's rooms and, on Paradigm, still the same place.
+    public static bool ListCovers(RoomKey room, HangupArrivalListTrust trust)
+    {
+        if (For(room) is null) return false;
+        if (trust != HangupArrivalListTrust.Paradigm) return true;
+        foreach ((int map, int first, int last) in AnotherPlaceOnParadigm)
+            if (room.Map == map && room.Room >= first && room.Room <= last) return false;
+        return true;
+    }
+
+    // The rooms the dead of a hang-up in this room arrive in on the game data in
+    // hand, or null when none is known.
+    //   AllKnown — every room they can arrive in is among them (a room the list
+    //              covers). Only then can another room be the wrong one.
+    //   Albion   — it is one of Paradigm's own rooms, and in Albion.
+    //   inAlbion — the room can be walked to from ParadigmAlbionVault; asked only
+    //              of a room the list doesn't cover, on Paradigm.
+    public static (IReadOnlyList<RoomKey>? Rooms, bool AllKnown, bool Albion) ArrivalsOn(
+        RoomKey hungUpIn, HangupArrivalListTrust trust, Func<RoomKey, bool>? inAlbion)
+    {
+        if (ListCovers(hungUpIn, trust)) return (For(hungUpIn), true, false);
+        return trust == HangupArrivalListTrust.Paradigm && inAlbion?.Invoke(hungUpIn) == true
+            ? (AlbionArrivals, false, true)
+            : (null, false, false);
     }
 
     // What the first room confirmed on the way back in says of a death by the
@@ -95,10 +142,10 @@ public static class HangupDeathArrivalRooms
     //   - Anywhere else that is not an arrival room: no death by this hang-up,
     //     where the list is that world's (an unmodified Stock set, or Paradigm
     //     for the rooms it shares with Stock). On other game data nothing.
-    //   - A room the list doesn't cover (Paradigm's own, or any room past
-    //     Stock's): on Paradigm, back in the one arrival room known for those is
-    //     a yes; everything else is nothing, the room's own arrival room not
-    //     being known. Off Paradigm nothing at all.
+    //   - A room the list doesn't cover (ListCovers): on Paradigm, one in Albion
+    //     found in the Burial Vault is a yes. Nothing says no for it: a hang-up
+    //     goes through the room's leave-the-game room first, and Paradigm's
+    //     aren't in the data. Any other such room says nothing at all.
     // An arena room is a room like any other here: its dead are moved the same way
     // whether the death was the arena's free one or not (HangupDeath.JudgeArena
     // tells those apart).
@@ -117,17 +164,12 @@ public static class HangupDeathArrivalRooms
     //     room it left, so the map never moves. There the room says nothing.
     public static HangupEntryRoomReading Read(
         RoomKey? hungUpIn, RoomKey? enteredIn, HangupArrivalListTrust trust,
-        Func<RoomKey, RoomKey, bool>? couldBeTakenFor = null)
+        Func<RoomKey, RoomKey, bool>? couldBeTakenFor = null, Func<RoomKey, bool>? inAlbion = null)
     {
         if (hungUpIn is not { } left || enteredIn is not { } entered) return default;
-        IReadOnlyList<RoomKey>? listed = For(left);
-        IReadOnlyList<RoomKey>? arrivals =
-            listed ?? (trust == HangupArrivalListTrust.Paradigm ? ParadigmOwnArrivals : null);
+        (IReadOnlyList<RoomKey>? arrivals, bool allKnown, bool albion) = ArrivalsOn(left, trust, inAlbion);
         if (arrivals is null || arrivals.Contains(left)) return default;
-        if (Array.IndexOf(LeftThroughTheirArrivalRoom, left) >= 0) return default;
-        // Only a room the list covers has every room its dead can arrive in
-        // known, which is what a "no" rests on.
-        bool allKnown = listed is not null;
+        if (allKnown && Array.IndexOf(LeftThroughTheirArrivalRoom, left) >= 0) return default;
 
         RoomKey? ArrivalItLooksLike(RoomKey room)
         {
@@ -141,9 +183,9 @@ public static class HangupDeathArrivalRooms
         // from one to the other, or tell either from a third that looks the same.
         bool leftLooksLikeIt = ArrivalItLooksLike(left) is not null;
         if (entered == left) return allKnown && !leftLooksLikeIt ? new HangupEntryRoomReading(false) : default;
-        if (arrivals.Contains(entered)) return new HangupEntryRoomReading(true);
+        if (arrivals.Contains(entered)) return new HangupEntryRoomReading(true, Albion: albion);
         if (ArrivalItLooksLike(entered) is { } stoodFor)
-            return leftLooksLikeIt ? default : new HangupEntryRoomReading(true, stoodFor);
+            return leftLooksLikeIt ? default : new HangupEntryRoomReading(true, stoodFor, albion);
         return new HangupEntryRoomReading(allKnown && trust != HangupArrivalListTrust.Unverified ? false : null);
     }
 }
