@@ -2954,7 +2954,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // Snapshot its backscroll before the graveyard display floods scrollback.
     private void OnDeathObserved()
     {
-        _heldEquip.Clear();   // whatever was waiting to go back on is on the new pile now
+        // An arena death took nothing (RoomTracker.NoteDeath): the pieces held to
+        // go back on are still in the pack, and there are no spill facts to keep.
+        bool tookNothing = _roomTracker.LastDeathTookNothing;
+        if (!tookNothing) _heldEquip.Clear();   // whatever was waiting to go back on is on the new pile now
         // A sweep that was out walking died with us. Every movement engine is stopped
         // on a death and nothing may walk back toward the room we died in.
         DropSweep("died during the sweep");
@@ -2974,7 +2977,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             return;
         }
         DeathRecord last = list[^1];
-        CaptureSpillFacts(last);
+        if (tookNothing) _returnedLines.Clear();
+        else CaptureSpillFacts(last);
         if (last.DeathLogFile is not null) return;   // already captured
         CaptureDeathLog(last);
     }

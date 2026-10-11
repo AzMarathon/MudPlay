@@ -122,6 +122,13 @@ public sealed class MovementCoordinator
     // of the answer and walk on unsneaked. Capped at a few seconds. Engine-wait tier.
     public const string SneakSettleGate = "SneakSettle";
 
+    // Asserted by RoomSpellCounterWear from the `wear` of a room-spell counter (the
+    // phoenix feather ahead of magma heat) until the game says it is on or refuses
+    // it, so the step into the room goes out after the item does. Capped like the
+    // sneak answer above, so a wear the game never answers can't strand the route.
+    // Engine-wait tier.
+    public const string CounterWearGate = "CounterWear";
+
     // Asserted by StealthManager while auto-sneak is on and a buff / heal / cure that
     // sneak keeping held on the way comes due in an NPC-free room: the step waits for
     // the cast, then the re-sneak, since that's the one place both can go out. Capped
@@ -264,6 +271,14 @@ public sealed class MovementCoordinator
     // every move is refused until the weight is back under it, usually when the
     // debuff that cut the max wears off (GAME_MECHANICS "Too heavy to move (over max encumbrance)").
     public const string TooHeavyGate = "TooHeavy";
+
+    // Asserted by AutoHazardCounterProvisioner from a hazard counter's `use` sent
+    // ahead of a step into the room it protects in (the desert waterskin at its last
+    // call) until the game answers it, so the step goes in with the buff on. A `use`
+    // refused because the round's cast was already made keeps it for that round,
+    // until the next round's cast has sent it again. Capped both ways, so a `use` the
+    // game never answers can't strand the route. Engine-wait tier.
+    public const string HazardBuffGate = "HazardBuff";
 
     private const int HistoryCapacity = 200;
 

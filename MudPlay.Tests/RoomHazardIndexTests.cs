@@ -425,6 +425,37 @@ public sealed class RoomHazardIndexTests : IDisposable
         Assert.Equal("log raft or wooden skiff (held)", h.DescribeCounters(Name));
     }
 
+    // What a route is planned on: a carried negating item counts only when it is
+    // usable (worn, or the client will wear it before the step); an item the room
+    // only checks for is unaffected by that.
+    [Fact]
+    public void ForARoute_ACarriedNegatorCountsOnlyWhenUsable_AHeldItemAlways()
+    {
+        RoomHazardIndex lava = NewIndex(
+            Room(526),
+            """ [ { "Number": 526, "Name": "magma heat", "MinBase": 30, "MaxBase": 60, "Abil-0": 1, "AbilVal-0": 0 } ] """,
+            """
+            [ { "Number": 487, "Name": "magma amulet", "Worn": 8, "NegateSpell-0": 526, "NegateSpell-1": 218 },
+              { "Number": 1000, "Name": "phoenix feather", "Worn": 8, "NegateSpell-0": 526, "NegateSpell-1": 218 } ]
+            """);
+        RoomHazardIndex.RoomHazard heat = lava.HazardForSpell(526)!;
+        Assert.Equal(new[] { 487, 1000 }, heat.NegatingItems);
+        Assert.True(heat.IsSatisfiedBy(id => id == 1000));                        // no test given: every carried one counts
+        Assert.True(heat.IsSatisfiedBy(id => id == 1000, id => id == 1000));
+        Assert.False(heat.IsSatisfiedBy(id => id == 1000, _ => false));
+        Assert.False(heat.IsSatisfiedBy(_ => false, _ => true));                  // usable is no use uncarried
+
+        RoomHazardIndex river = NewIndex(
+            Room(753),
+            """ [ { "Number": 753, "Abil-0": 148, "AbilVal-0": 2750 }, { "Number": 754, "MinBase": 10, "MaxBase": 20, "Abil-0": 1 } ] """,
+            """ [ { "Number": 690, "Name": "log raft", "Worn": 0 } ] """,
+            """ [ { "Number": 2750, "Action": "failitem 690:message 2096:cast 754" } ] """,
+            set: "beta");
+        RoomHazardIndex.RoomHazard water = river.HazardForSpell(753)!;
+        Assert.Empty(water.NegatingItems);
+        Assert.True(water.IsSatisfiedBy(id => id == 690, _ => false));
+    }
+
     // Made up: one item that both negates the room's own damage and is the
     // textblock's `failitem`. The two are separate checks, so in the pack it meets
     // the second and not the first.

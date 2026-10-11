@@ -56,6 +56,38 @@ public sealed class DoHandlerTests
         Assert.Equal("par\r", Encoding.Latin1.GetString(sent));
     }
 
+    // While the line is going out the handler names who asked for it, which is how
+    // the wire tells a party member's `@do break` from an engine's; before and after
+    // the send it names nobody.
+    [Fact]
+    public void Do_NamesTheSender_OnlyWhileItsLineIsBeingSent()
+    {
+        var (engine, handler, players, _) = Setup();
+        SeedPlayer(players, "Trusted", PlayerRemoteControls.ExecuteCommands);
+        List<string?> duringSend = new();
+        handler.SetWireSender(_ => duringSend.Add(handler.SendingFor));
+
+        Assert.Null(handler.SendingFor);
+        engine.DispatchForTests(Telepath("Trusted", "@do break"));
+
+        Assert.Equal(new string?[] { "Trusted" }, duringSend);
+        Assert.Null(handler.SendingFor);
+    }
+
+    // With the master switch off no remote command is followed, so a `@do break`
+    // never reaches the wire and there is nothing for it to hold.
+    [Fact]
+    public void Do_WithTheMasterSwitchOff_SendsNothing()
+    {
+        var (engine, _, players, wire) = Setup();
+        SeedPlayer(players, "Trusted", PlayerRemoteControls.ExecuteCommands);
+        engine.BlockedByMasterSwitch = _ => true;
+
+        engine.DispatchForTests(Telepath("Trusted", "@do break"));
+
+        Assert.Empty(wire);
+    }
+
     [Fact]
     public void Do_AcknowledgesSenderWithOkReply()
     {

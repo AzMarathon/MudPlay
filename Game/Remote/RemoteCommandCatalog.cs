@@ -302,7 +302,7 @@ public static class RemoteCommandCatalog
             ["@heal"]         = new("@heal", "asks a configured party healer to heal whoever's low"),
             ["@party"]        = new("@party [directive]", "bare reports solo/following/leading; with args on say, relays the directive to your character"),
             ["@share"]        = new("@share", "splits your held coin evenly across the party"),
-            ["@ptrain"]       = new("@ptrain <st|ask|train|give|with|done>", "party auto-train handshake between MudPlay clients (acts only with Auto-train party on)"),
+            ["@ptrain"]       = new("@ptrain <st|ask|train|give|with|done|trip>", "party auto-train handshake between MudPlay clients (acts only with Auto-train party on)"),
         };
 
     // Commands accepted ONLY over telepath and gangpath. @dupe hands out trust, so

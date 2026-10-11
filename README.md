@@ -1,14 +1,16 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.21**
-> - After a death, walks and loops avoid tolls, fares and sailings until the inventory is re-read; an arena death takes nothing
-> - A toll or fare the game refuses isn't sent twice; it reopens once you carry the price
-> - A walk with no way round an unpayable toll says so on the terminal
-> - A loop over an unpayable toll isn't started, and stops if refused mid-lap (it could crash the client)
-> - A sailing you can't pay for isn't walked to
-> - The purse re-read after a refusal or a death stays owed until it goes out
-> - Program log and bug report show the purse a toll was judged on
+> **Version 3.171.0**
+> - Hazard buff (desert waterskin) tracked: drinks again only shortly before it runs out
+> - Auto-Sneak on: from 60 s before, with a hazard room here or within 5 steps, the drink waits for a room with no NPCs, then re-sneaks before stepping on
+> - Auto-Sneak off, or the last 15 s: it drinks where you stand; a sneak spent that way counts as lost there
+> - Kept up while you stand in a hazard room by hand too, with Auto-All on
+> - The drink takes the round's in-between cast; a refused one is retried next round or set aside
+> - The step into a hazard room waits for the drink's answer
+> - A dropped link pauses its clock; death, a buff-stripping room or room command, and a token end it
+> - Paradigm: the desert's thirst line is read, and counts the buff as off
+> - Bug report shows the tracked hazard buff
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -174,10 +174,14 @@ public sealed class PartyTrainCoordinator : IDisposable
         Func<TimeSpan?> selfTimeToLevel,
         Func<bool> telepathsPending,
         Func<DateTimeOffset>? now = null,
-        LogService? log = null)
+        LogService? log = null,
+        // Told when a trip is over: who set out, and whether it ended by itself.
+        Action<IReadOnlyList<string>, bool>? tripEnded = null)
     {
         ArgumentNullException.ThrowIfNull(party);
         ArgumentNullException.ThrowIfNull(trainer);
+        ArgumentNullException.ThrowIfNull(send);
+        _roll = new PartyTrainTripRoll(send, Speaks, ActiveMemberGivens, tripEnded, log);
         _party = party;
         _trainer = trainer;
         _expPerHour = expPerHour ?? throw new ArgumentNullException(nameof(expPerHour));
@@ -425,6 +429,44 @@ public sealed class PartyTrainCoordinator : IDisposable
 
     private bool IsLeader(string sender) =>
         Following && string.Equals(GivenName(sender), GivenName(_party.LeaderName!), StringComparison.OrdinalIgnoreCase);
+
+    // `@ptrain trip on|off` — the leader's trip has set out, or is over. Taken
+    // whatever our own toggle says: it asks nothing of us, it only says that being
+    // left behind on the way is the trip's to mend once the training is done
+    // (user, 2026-10-10). "on" is taken from the leader we follow; "off" from the
+    // leader who said "on", since by then an exit may have turned us out of the
+    // party. TripAnnounceLife ends a trip whose "off" never reached us.
+    public void ReceiveTrip(string sender, bool on)
+    {
+        string leader = GivenName(sender);
+        if (on)
+        {
+            if (!IsLeader(sender)) return;
+            _tripLeader = leader;
+            _tripUntil = _now() + TripAnnounceLife;
+            _log?.Info(LogCategory, $"{leader}'s party train trip has set out.");
+        }
+        else if (string.Equals(leader, _tripLeader, StringComparison.OrdinalIgnoreCase))
+        {
+            _tripLeader = null;
+            _log?.Info(LogCategory, $"{leader}'s party train trip is over.");
+        }
+    }
+
+    // For the bug report: the leader whose trip we were told has set out.
+    public string? TripWeSetOutOn => _tripLeader is not null && _now() <= _tripUntil ? _tripLeader : null;
+
+    // Whether that leader has a party train trip under way that we set out on.
+    public bool InTripOf(string leader) =>
+        _tripLeader is not null && _now() <= _tripUntil
+        && string.Equals(GivenName(leader), _tripLeader, StringComparison.OrdinalIgnoreCase);
+
+    // Leader side: who set out on the trip in hand, and what is owed them at its end.
+    private readonly PartyTrainTripRoll _roll;
+
+    private string? _tripLeader;
+    private DateTimeOffset _tripUntil;
+    private static readonly TimeSpan TripAnnounceLife = TimeSpan.FromMinutes(15);
 
     // ----- leader side ------------------------------------------------------
 
@@ -811,10 +853,13 @@ public sealed class PartyTrainCoordinator : IDisposable
                 return;
             }
             started = true;
-            List<string> setOut = ActiveMemberGivens().ToList();
             _log?.Info(LogCategory,
                 $"Party train trip: training {string.Join(", ", trainees)} across {stops.Count} stop(s)"
                 + (bankRoom is { } br ? $", via the bank at {br.Map}/{br.Room}" : "") + ".");
+            // Who sets out, and the word to their clients that a trip is on
+            // (PartyTrainTripRoll says why).
+            _roll.Open();
+            IReadOnlyList<string> setOut = _roll.SetOut;
 
             // Coin changes hands where we stand, before anyone walks.
             bool gave = false;
@@ -837,7 +882,7 @@ public sealed class PartyTrainCoordinator : IDisposable
             {
                 if (!await WalkAsync(bank))
                 {
-                    _trainer.EndPartyTrip("couldn't reach the bank.");
+                    EndTrip("couldn't reach the bank.");
                     started = false;
                     return;
                 }
@@ -855,7 +900,7 @@ public sealed class PartyTrainCoordinator : IDisposable
                 RoomKey room = new(stop.Trainer.Map, stop.Trainer.Room);
                 if (!await WalkAsync(room))
                 {
-                    _trainer.EndPartyTrip($"couldn't reach {stop.Trainer.Name} ({room.Map}/{room.Room}).");
+                    EndTrip($"couldn't reach {stop.Trainer.Name} ({room.Map}/{room.Room}).");
                     started = false;
                     return;
                 }
@@ -889,7 +934,7 @@ public sealed class PartyTrainCoordinator : IDisposable
                 if (stop.Members.Count > 0) await AwaitMembersDoneAsync();
             }
 
-            _trainer.EndPartyTrip("all stops done.");
+            EndTrip("all stops done.");
             started = false;
             // A member that trained left and rejoined, so it's asked afresh; one that
             // didn't keeps its ask record and only counts again once it pushes a
@@ -903,13 +948,33 @@ public sealed class PartyTrainCoordinator : IDisposable
         }
         finally
         {
-            if (started) _trainer.EndPartyTrip("aborted.");
+            if (started) EndTrip("aborted.");
             _tripRunning = false;
             _cooldownUntil = _now() + TripCooldown;
             _walkTcs = null;
             _awaitingDone = null;
             _doneTcs = null;
+            bool byItself = !_tripTakenOver;
+            _tripTakenOver = false;
+            // Last, with the engine put back and the trip no longer running: the
+            // members are told it is over, and whoever it left is handed on. A trip
+            // that couldn't reach its trainer has left people on the way just the
+            // same, and they are gone back for; one the player took over leaves
+            // them to the player (PartyComebackManager.TrainTripEnded).
+            _roll.Close(byItself);
         }
+    }
+
+    // The trip in hand was taken out of its own hands: its walk was stopped under
+    // it (a Stop, a walk started over it, a death), or the trainer's side of it was
+    // already ended from outside (the second Stop, a run started over it, Reset
+    // States) by the time we came to end it.
+    private bool _tripTakenOver;
+
+    private void EndTrip(string reason)
+    {
+        if (!_trainer.PartyTripActive) _tripTakenOver = true;
+        _trainer.EndPartyTrip(reason);
     }
 
     // Arm the `done` wait, then order each member at this stop to train here.
@@ -970,7 +1035,12 @@ public sealed class PartyTrainCoordinator : IDisposable
                 tcs.TrySetResult(_currentRoom() == _walkTarget);
                 break;
             case WalkEventKind.Failed:
+                _walkTcs = null;
+                tcs.TrySetResult(false);
+                break;
             case WalkEventKind.Stopped:
+                // Somebody stopped the trip's walk: it didn't fail by itself.
+                _tripTakenOver = true;
                 _walkTcs = null;
                 tcs.TrySetResult(false);
                 break;

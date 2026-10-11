@@ -636,8 +636,10 @@ public static class DefaultPatterns
         // own, apart from the visible floor's.
         yield return new RegexPattern(KnownPatterns.RoomHideRefused,
             @"^There is no room to hide (?<item>.*) here\.");
+        // Item names carry hyphens, apostrophes and full stops as well as letters
+        // (half-plate corselet, scroll of god's wrath, scroll of prot. from evil).
         yield return new RegexPattern(KnownPatterns.UserEquipped,
-            @"^(?:You are now wearing|You lit the) (?<item>[\w ]+)\.$");
+            @"^(?:You are now wearing|You lit the) (?<item>[\w' .-]+)\.$");
         yield return new RegexPattern(KnownPatterns.UserEquipFailed,
             @"^You may not wear that item!$");
         yield return new RegexPattern(KnownPatterns.UserWieldFailed,
@@ -647,9 +649,16 @@ public static class DefaultPatterns
         // are kept apart from UserEquipFailed, whose handler reads alignment into a
         // refusal. Group [0] is the item the first line names, empty for the second.
         yield return new RegexPattern(KnownPatterns.UserEquipCannotBeWorn,
-            @"^(?:(?<item>[\w' -]+) may not be worn!|You have no more room to wear that item!)$");
+            @"^(?:(?<item>[\w' .-]+) may not be worn!|You have no more room to wear that item!)$");
         yield return new RegexPattern(KnownPatterns.UserRemoved,
-            @"^You have removed (?<item>[\w ]+?)(?: and extinguished it)?\.$");
+            @"^You have removed (?<item>[\w' .-]+?)(?: and extinguished it)?\.$");
+        // Two more answers to a wear that put nothing on: no unworn copy of the item
+        // is in the pack (the game echoes the name typed), and the piece in its place
+        // is cursed (the game names that piece, not the one being put on).
+        yield return new RegexPattern(KnownPatterns.UserEquipNotInPack,
+            @"^You do not have (?<item>[\w' .-]+) left unequipped\.$");
+        yield return new RegexPattern(KnownPatterns.UserEquipOccupantStuck,
+            @"^You are already wearing (?<item>[\w' .-]+) and it may not be removed\.$");
         yield return new RegexPattern(KnownPatterns.HiddenItems,
             @"^You notice (?<items>.*)(?:\r\n| )");
         yield return new RegexPattern(KnownPatterns.ShopListHeader,
@@ -760,6 +769,11 @@ public static class DefaultPatterns
             @"^(?<player>\w+) started to follow you\.");
         yield return new RegexPattern(KnownPatterns.PartyYouFollowing,
             @"^You are now following (?<player>\w+)\.?$");
+        // The line a follower's `par` opens with, ahead of the roster header: the
+        // game's own word that we follow someone (GAME_MECHANICS "`par` output
+        // block"). A player who follows nobody isn't printed it.
+        yield return new RegexPattern(KnownPatterns.PartyParFollowing,
+            @"^You are following (?<player>[A-Z]\w*)\.\s*$");
         // Party-follow drag — the game moved us one room in the leader's wake and
         // prints " -- Following your Party leader <dir> --" just before the new
         // room display. Longest direction alternatives first so "northeast" can't

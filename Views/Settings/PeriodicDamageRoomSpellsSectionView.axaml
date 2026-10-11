@@ -44,8 +44,22 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid>
-        <Border IsVisible="{Binding !HasSpells}" Padding="22" VerticalAlignment="Top">
+    <Grid RowDefinitions="Auto,*">
+        <!-- The one setting that needs no game data: shown whenever a character is
+             loaded, above the list or the line that says why there is none. -->
+        <StackPanel Grid.Row="0" IsVisible="{Binding HasProfile}" Margin="22,22,22,0" Spacing="4"
+                    MaxWidth="1100" HorizontalAlignment="Left">
+            <TextBlock Classes="SettingsSectionBanner first" Text="Character profile settings"/>
+            <TextBlock Classes="SettingsSectionSub"
+                       Text="Saved to the loaded character — each character on a BBS keeps its own."/>
+            <CheckBox Margin="0,6,0,0" IsChecked="{Binding WearCounterBeforeEntering, Mode=TwoWay}"
+                      Content="Wear the item that negates a room's spell before stepping in"
+                      ToolTip.Tip="Ticked: a carried item that negates a room's own spell (the phoenix feather or magma amulet against magma heat, swamp boots, the fish-helm) is put on before the step into such a room, and the usual piece goes back on once no such room is near. Such an item does nothing from the pack. Unticked: nothing is put on, and a route is not planned on a negating item that isn't already worn."/>
+            <TextBlock Classes="Readout"
+                       Text="An item that negates a room's spell (Countered by: worn) works only while it is worn. Ticked, the client puts a carried one on before a walk, a loop or your own typed step enters such a room, and on arrival when the move wasn't its own (following a leader). The piece it replaced, or whatever the gear set then in force has for that slot, goes back on once no such room is within a few steps. Not with the master switch off."/>
+        </StackPanel>
+
+        <Border Grid.Row="1" IsVisible="{Binding !HasSpells}" Padding="22" VerticalAlignment="Top">
             <TextBlock Text="{Binding EmptyReason}"
                        Foreground="{StaticResource ChromeFgSecBrush}"
                        FontSize="{StaticResource FontSizeMd}" TextWrapping="Wrap"/>
@@ -54,14 +68,10 @@
         <!-- Three lists, each taking the lines in view only: the spells, the picked
              spell's areas, and the picked area's rooms. A spell can sit on a couple
              of thousand rooms. -->
-        <Grid IsVisible="{Binding HasSpells}" Margin="22"
-              RowDefinitions="Auto,Auto,Auto,Auto,3*,Auto,Auto,2*"
+        <Grid Grid.Row="1" IsVisible="{Binding HasSpells}" Margin="22,10,22,22"
+              RowDefinitions="Auto,Auto,3*,Auto,Auto,2*"
               MaxWidth="1100" HorizontalAlignment="Left">
-            <TextBlock Grid.Row="0" Classes="SettingsSectionBanner first" Text="Character profile settings"/>
-            <TextBlock Grid.Row="1" Classes="SettingsSectionSub"
-                       Text="Saved to the loaded character — each character on a BBS keeps its own."/>
-
-            <StackPanel Grid.Row="2" Spacing="4" Margin="0,8,0,8">
+            <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,8">
                 <TextBlock Classes="FieldLabel" Text="Room spells that do damage, and whether each bars resting:"/>
                 <TextBlock Classes="Readout"
                            Text="Some rooms cast a spell of their own on whoever stands in them, about every six seconds: the volcano's heat, a swamp's poison, a river with no boat. Damage from it breaks a rest or a meditation. In a room whose spell is ticked here, no rest or meditate is started: healing spells go on as set, a walk or loop carries on, and the rest is taken in the next room that isn't barred. With the spell's counter in effect the room is rested in as normal."/>
@@ -69,7 +79,7 @@
                            Text="Ticked to start with: the spells that damage on every tick, or on a timer that ends in death. Unticked: the ones that damage only on a roll or on a condition. With a spell ticked, a character that cannot heal itself does not recover in those rooms; untick the spell to let it try to rest there. The list comes from the loaded game data."/>
             </StackPanel>
 
-            <Grid Grid.Row="3" ColumnDefinitions="96,62,180,130,230,*,64" Margin="9,0,24,2">
+            <Grid Grid.Row="1" ColumnDefinitions="96,62,180,130,230,*,64" Margin="9,0,24,2">
                 <TextBlock Grid.Column="0" Classes="ColumnHead" Text="BARS RESTING"/>
                 <TextBlock Grid.Column="1" Classes="ColumnHead" Text="RECORD"/>
                 <TextBlock Grid.Column="2" Classes="ColumnHead" Text="SPELL"/>
@@ -79,7 +89,7 @@
                 <TextBlock Grid.Column="6" Classes="ColumnHead" Text="ROOMS" HorizontalAlignment="Right"/>
             </Grid>
 
-            <ListBox Grid.Row="4" ItemsSource="{Binding Spells}"
+            <ListBox Grid.Row="2" ItemsSource="{Binding Spells}"
                      SelectedItem="{Binding SelectedSpell, Mode=TwoWay}"
                      BorderBrush="{StaticResource ChromeFgMutedBrush}" BorderThickness="1"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -100,15 +110,15 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="10" Margin="0,6,0,0">
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" Margin="0,6,0,0">
                 <Button Content="Reset to defaults" Command="{Binding ResetToDefaultsCommand}"
                         ToolTip.Tip="Ticks every spell that damages on every tick and clears the rest."/>
                 <TextBlock Classes="Readout" Text="{Binding Summary}" VerticalAlignment="Center"/>
             </StackPanel>
 
-            <TextBlock Grid.Row="6" Classes="FieldLabel" Text="{Binding RoomsTitle}" TextWrapping="Wrap" Margin="0,12,0,4"/>
+            <TextBlock Grid.Row="4" Classes="FieldLabel" Text="{Binding RoomsTitle}" TextWrapping="Wrap" Margin="0,12,0,4"/>
 
-            <Grid Grid.Row="7" ColumnDefinitions="340,8,*">
+            <Grid Grid.Row="5" ColumnDefinitions="340,8,*">
                 <ListBox Grid.Column="0" ItemsSource="{Binding Areas}"
                          SelectedItem="{Binding SelectedArea, Mode=TwoWay}"
                          BorderBrush="{StaticResource ChromeFgMutedBrush}" BorderThickness="1">

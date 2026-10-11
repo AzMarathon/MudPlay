@@ -78,6 +78,7 @@ public static class NavActivity
         (MovementCoordinator.AcquisitionGate, "looting", NavActivityKind.Waiting, false),
         (MovementCoordinator.GhSortGate, "Roomba", NavActivityKind.Waiting, true),
         (MovementCoordinator.GearSwapGate, "changing gear", NavActivityKind.Waiting, false),
+        (MovementCoordinator.CounterWearGate, "putting on a room-spell counter", NavActivityKind.Waiting, false),
         (MovementCoordinator.SneakCooldownGate, "Waiting to Sneak", NavActivityKind.Waiting, true),
         (MovementCoordinator.SneakSettleGate, "sneaking", NavActivityKind.Waiting, false),
         (MovementCoordinator.SneakCastGate, "Buffing", NavActivityKind.Waiting, true),
@@ -88,6 +89,7 @@ public static class NavActivity
         (MovementCoordinator.SummonDeathSettleGate, "checking for a summon", NavActivityKind.Moving, false),
         (MovementCoordinator.DeathStallGate, "waiting to loot", NavActivityKind.Waiting, false),
         (MovementCoordinator.LairDebuffGate, "Waiting to Debuff", NavActivityKind.Waiting, true),
+        (MovementCoordinator.HazardBuffGate, "raising a hazard buff", NavActivityKind.Waiting, false),
     ];
 
     public static (string Text, NavActivityKind Kind) Describe(

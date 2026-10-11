@@ -1236,6 +1236,14 @@ public partial class MainWindowViewModel : ObservableObject
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.SummonSettle.NoteRoomDisplayed();
         // Tells the hang-up item check that the room, floor list included, has been read.
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.HangupItems.NoteRoomDisplayed();
+        // Under a typed break's hold the combat engine asks to see the room once a
+        // fight in it goes quiet; a display that lists nobody is how an emptied room
+        // answers. A `look <direction>` shows the next room and answers nothing.
+        _roomDisplayParser.RoomParsed += _ =>
+        {
+            if (!AppServices.Current.RoomTracker.IsPeekSuppressed())
+                AppServices.Current.Combat.NoteRoomDisplayed();
+        };
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
             AppServices.Current.Conditions.IsConfuseFumbleLine,
@@ -1479,8 +1487,8 @@ public partial class MainWindowViewModel : ObservableObject
         // @divert is active; rides the same gate-wrapped pipeline.
         AppServices.Current.Divert.SetWireSender(engineSend);
         // Follower-side @comeback. Telepaths @comeback to the leader
-        // when a movement-failure line strands us as the party walks
-        // off; rides the same gate-wrapped pipeline.
+        // when the party walks off without us; rides the same
+        // gate-wrapped pipeline.
         AppServices.Current.ComebackRequest.SetWireSender(engineSend);
         AppServices.Current.LeaderBossTravel.SetWireSender(engineSend);
         // Follower-side reconnect auto-rejoin — telepaths @comeback + @invite
@@ -3472,6 +3480,9 @@ public partial class MainWindowViewModel : ObservableObject
                 if (wasConnected) AppServices.Current.PartyReform.NoteDisconnected();
                 // The follower's reconnect @comeback is skipped after too long a drop.
                 if (wasConnected) AppServices.Current.PartyRejoin.NoteDisconnected();
+                // That reconnect request is the only one for this split: the
+                // left-behind watch stands down until we follow again.
+                if (wasConnected) AppServices.Current.ComebackRequest.NoteDisconnected();
                 // A member's @comeback kept for the master switch names a place
                 // from the stay that just ended.
                 AppServices.Current.RemoteCommands.DropHeldComebacks("disconnected");
@@ -3611,6 +3622,10 @@ public partial class MainWindowViewModel : ObservableObject
                 // and a resume gap longer than the longest buff clears them then; so a
                 // brief manual disconnect keeps the recast clock instead of restarting it.
                 AppServices.Current.CastDirector.PauseBuffTimers();
+                // A hazard counter's buff is on the character through the drop too.
+                // Its clock stops here and runs on, with what it had left, from the
+                // same first in-game prompt.
+                AppServices.Current.AutoHazardCounterProvisioner.Pause();
                 // The reconnect's splash and login menu ride the same line extractor.
                 AppServices.Current.MessageCandidateWatcher.NotifyLeftGame();
                 AppServices.Current.InGameCapture.NotifyDisconnected();
@@ -3817,13 +3832,38 @@ public partial class MainWindowViewModel : ObservableObject
         // re-attack after the swap, and are left to it.
         if (typed && AppServices.Current.EngineGate.SendingUsersOwnCommand)
             AppServices.Current.OutboundGear.ObserveOutbound(data);
+        // Break observer — the user's own `break` holds the combat engine's attack on
+        // the monster it was fighting, and their own attack lets it go: typed, or
+        // sent by a macro, trigger or event of theirs. An engine's break or attack is
+        // neither, and the raw wire's lines (`sys goto` sends a break ahead of a
+        // jump) are an engine's although nothing wraps them. A line a party member
+        // relayed with `@do` or `@party` counts with the user's (user, 2026-10-10)
+        // and carries their name.
+        string? relayedFor =
+            AppServices.Current.Do.SendingFor is { } doSender ? $"{doSender}'s @do"
+            : AppServices.Current.PartyEssentials.RelayingFor is { } partySender ? $"{partySender}'s @party"
+            : null;
+        if (typed && !AppServices.Current.SendingEngineRawCommand
+            && (AppServices.Current.EngineGate.SendingUsersOwnCommand || relayedFor is not null))
+            AppServices.Current.OutboundBreak.ObserveOutbound(data, relayedFor);
+        // Left-behind watch — a typed `leave` is the user leaving the party, and a
+        // typed room command can draw an exit's refusal; neither is a follower the
+        // leader walked off without. Typed lines only, as for gear.
+        if (typed && !AppServices.Current.EngineGate.SendingClientCommand)
+            AppServices.Current.ComebackRequest.ObserveOutbound(data);
         // Sneak — a typed command that ends a sneak (search, gear, a door…) marks it
         // broken, the same as an engine send through the gate. Short lines only: a
         // command, not a paste. A line a wrapped sender is putting out is the gate's
         // to report, once it has gone; reporting it here as well judged every client
         // command twice.
         if (data.Length is > 0 and <= 128 && !AppServices.Current.EngineGate.SendingClientCommand)
-            AppServices.Current.NoteSentForSneak(System.Text.Encoding.Latin1.GetString(data).TrimEnd('\r', '\n', '\0'));
+        {
+            string sent = System.Text.Encoding.Latin1.GetString(data).TrimEnd('\r', '\n', '\0');
+            AppServices.Current.NoteSentForSneak(sent);
+            // A room command that casts a dispel ends a tracked hazard buff, judged
+            // at the same point and for the same reason: once per command.
+            AppServices.Current.NoteSentForRoomCommand(sent);
+        }
         // Chat router — capture engine-sent telepath "/<recipient> <message>"
         // bursts (party @-command broadcasts / nags) so the outgoing
         // conversation entry is attributed. Typed telepaths render on-screen

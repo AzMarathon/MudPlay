@@ -248,7 +248,8 @@ public sealed class MovementFilter : IRoomFilter
     public bool IsExitBlocked(in RoomExit exit) =>
         IsLevelGateBlocked(in exit) || IsTollGateBlocked(in exit) || IsFareGateBlocked(in exit)
         || IsClassGateBlocked(in exit) || IsRaceGateBlocked(in exit)
-        || IsItemGateBlocked(in exit) || IsImpassableDoorBlocked(in exit) || IsHazardEntryBlocked(in exit)
+        || IsItemGateBlocked(in exit) || IsImpassableDoorBlocked(in exit)
+        || (IsHazardEntryBlocked(in exit) && !SharesHazardStoodIn(in exit))
         || IsAlignmentGateBlocked(in exit);
 
     // Same gate checks as IsExitBlocked, but reports which kinds fire rather
@@ -271,7 +272,7 @@ public sealed class MovementFilter : IRoomFilter
                 ? ExitBlockReason.LockedDoor
                 : ExitBlockReason.Item;
         if (IsImpassableDoorBlocked(in exit)) reasons |= ExitBlockReason.Door;
-        if (IsHazardEntryBlocked(in exit)) reasons |= ExitBlockReason.Hazard;
+        if (IsHazardEntryBlocked(in exit) && !SharesHazardStoodIn(in exit)) reasons |= ExitBlockReason.Hazard;
         if (IsAlignmentGateBlocked(in exit)) reasons |= ExitBlockReason.Alignment;
         return reasons;
     }
@@ -433,14 +434,39 @@ public sealed class MovementFilter : IRoomFilter
         // carried changes that, so it doesn't wait for the inventory to be read.
         if (!HazardCounterProtects(hazard)) return true;
         if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
-        if (!_acquirableGateSuspended) return !hazard.IsSatisfiedBy(carries);
+        if (!_acquirableGateSuspended) return !hazard.IsSatisfiedBy(carries, NegatingItemUsableProbe);
         if (!_keepUncounteredHazards) return false;
 
         // Planning through gates with uncountered hazards kept: the room opens only
-        // when what is carried plus what the walk will obtain covers it.
+        // when what is carried plus what the walk will obtain covers it. An item
+        // the walk fetches is worn on the same terms as one already in the pack.
         IReadOnlyList<int> arranged = HazardProvisionProbe?.Invoke(exit.Target) ?? Array.Empty<int>();
-        return !hazard.IsSatisfiedBy(id => carries(id) || arranged.Contains(id));
+        return !hazard.IsSatisfiedBy(id => carries(id) || arranged.Contains(id), NegatingItemUsableProbe);
     }
+
+    // The room the character stands in, when the tracker is sure of it.
+    public Func<RoomKey?>? StandingRoomProbe { get; set; }
+
+    // Standing in a hazard room nothing counters (a wear the game refused part-way
+    // along a route, a leader's drag, a counter that ran out), the rooms of that
+    // same hazard are the only way on from the middle of it: with them shut, a
+    // re-plan from there found no route and the walk ended where the damage is. So
+    // an exit into a room whose hazard shares a counter with the room stood in
+    // isn't shut for the hazard. A plan started anywhere else still goes round.
+    private bool SharesHazardStoodIn(in RoomExit exit)
+    {
+        if (_acquirableGateSuspended || Hazards is null || RoomEntrySpellProbe is not { } spellOf) return false;
+        if (StandingRoomProbe?.Invoke() is not { } here) return false;
+        if (Hazards.HazardForSpell(spellOf(here)) is not { } mine || !HazardCounterProtects(mine)) return false;
+        if (Hazards.HazardForSpell(spellOf(exit.Target)) is not { } theirs || !HazardCounterProtects(theirs)) return false;
+        return ReferenceEquals(mine, theirs) || mine.ProtectingItems.Intersect(theirs.ProtectingItems).Any();
+    }
+
+    // Whether a carried item that negates a room's spell counts for a route: it
+    // works only while worn, so it counts when it is on or when the client will
+    // put it on before the step (Settings → Periodic Damage Room Spells, and not
+    // with the master switch off). Unset, every carried one counts.
+    public Func<int, bool>? NegatingItemUsableProbe { get; set; }
 
     // Whether holding the hazard's counter makes its rooms safe to route through.
     // Not on Crystal Lake, whose sea rooms teleport a boat's holder as well

@@ -480,6 +480,20 @@ public sealed class TrainerWalkManager : IDisposable
 
     public bool PartyTripActive => _partyTrip;
 
+    // A run of our own that took the engine's place is under way: the walk to a
+    // trainer (Train Now, the armed run) or to the spell shops, from the moment
+    // the engine is stopped for it until the run is finished. A party in tow
+    // follows it, and a leader goes back for nobody in the middle of it
+    // (PartyComebackManager.TrainTripRunning).
+    public bool OwnRunActive => !_partyTrip && _phase != Phase.Idle && (_walkRun || _spellsOnly);
+
+    // Told when such a run is over, after the engine it paused is back. False: it
+    // was taken out of our hands (cancelled, its walk stopped under it, the spell
+    // errand's walker taken over), and nothing was resumed.
+    public Action<bool>? OwnRunOver { get; set; }
+
+    private bool _runTakenOver;
+
     // This character's party-train picture, from its own Auto-Trainer thresholds:
     // Ready once the solo trigger would fire, Waiting (with a projected time to Ready
     // at expPerHour, -1 when unknown) before that, Blocked when the party ceiling
@@ -969,6 +983,7 @@ public sealed class TrainerWalkManager : IDisposable
             // or a death. They've taken over, so end the run and leave the engine
             // stopped instead of resuming the loop under them.
             _resume = default;
+            _runTakenOver = true;
             Finish($"Walk to the trainer stopped ({e.Detail}) — run cancelled; the loop stays stopped.");
         }
     }
@@ -1365,7 +1380,11 @@ public sealed class TrainerWalkManager : IDisposable
         if (_phase != Phase.Spells) return;
         // Someone took the walker over mid-trip: leave the engine stopped under
         // them, as a stopped trainer walk does.
-        if (result.Aborted) _resume = default;
+        if (result.Aborted)
+        {
+            _resume = default;
+            _runTakenOver = true;
+        }
         if (_spellsOnly)
         {
             // The errand has logged the trip and the spells by name; a train report
@@ -1388,6 +1407,7 @@ public sealed class TrainerWalkManager : IDisposable
         _partyTrip = false;
         _partyTripTrained = false;
         _resume = default;
+        _runTakenOver = true;
         _partyDone = null;
         _levelsTrained = 0;
         Finish(reason);
@@ -1400,6 +1420,9 @@ public sealed class TrainerWalkManager : IDisposable
         int levels = _levelsTrained;
         Action<int, string>? partyDone = _partyDone;
         ResumeTarget resume = _resume;
+        bool ownRun = OwnRunActive;
+        bool takenOver = _runTakenOver;
+        _runTakenOver = false;
         ReserveForTraining?.Invoke(0);
         _phase = Phase.Idle;
         _target = null;
@@ -1452,6 +1475,9 @@ public sealed class TrainerWalkManager : IDisposable
         // and strand the loop at the bank. Running it second means the bank visit
         // happens on the way back into the circuit, exactly as a mid-loop one does.
         if (trained) AfterTrainRun?.Invoke();
+        // Last, so a party the train disbanded is being re-formed and the engine is
+        // back before anyone the run left on the way is gone back for.
+        if (ownRun) OwnRunOver?.Invoke(!takenOver);
     }
 
     // Compose the one-line status line (the @train reply, or the Train Now / armed

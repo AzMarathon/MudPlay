@@ -374,6 +374,8 @@ public static class KnownPatterns
     public const string UserWieldFailed   = "item.user-wield-failed";  // weapon EP-zap: "You may not use that weapon."
     public const string UserEquipCannotBeWorn = "item.user-equip-cannot-be-worn"; // "<item> may not be worn!" / "You have no more room to wear that item!" — nothing to do with alignment
     public const string UserRemoved       = "item.user-removed";
+    public const string UserEquipNotInPack = "item.user-equip-not-in-pack"; // "You do not have <item> left unequipped."
+    public const string UserEquipOccupantStuck = "item.user-equip-occupant-stuck"; // "You are already wearing <other> and it may not be removed."
     public const string HiddenItems       = "item.hidden-items";
     public const string ShopListHeader    = "item.shop-list-header";
     public const string UserBuys          = "item.user-buys";        // "You just bought X for <price>." (any currency, incl. "nothing")
@@ -425,6 +427,7 @@ public static class KnownPatterns
     // as `WhoListParser`), not by a one-line regex.
     public const string PartyFollowsYou     = "party.follows-you";       // "X started to follow you."
     public const string PartyYouFollowing   = "party.you-following";     // "You are now following X."  (we joined someone's party)
+    public const string PartyParFollowing   = "party.par-following";     // "You are following X."      (first line of a follower's `par`)
     // " -- Following your Party leader <dir> --" — the game dragging us one room
     // in the leader's wake. A follower sends no movement bytes, so this line is
     // the ONLY movement signal for a dragged follower; FollowMoveObserver turns it

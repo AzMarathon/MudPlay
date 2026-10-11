@@ -626,9 +626,8 @@ public sealed class AppServices
     public Game.Remote.PathReplyTracker PathReply { get; private set; } = null!;
     public Game.Remote.LeaderBossTravelProbe LeaderBossTravel { get; private set; } = null!;
 
-    // Follower-side @comeback sender. Detects being left
-    // behind (a movement-failure line just before "You are no longer
-    // following X.") and telepaths @comeback to the leader.
+    // Follower-side @comeback sender: telepaths @comeback to the leader once
+    // when the party walks off without us.
     // Game.Remote.ComebackRequester.Enabled is pushed from
     // Settings → Other.
     public Game.Remote.ComebackRequester ComebackRequest { get; private set; } = null!;
@@ -1953,6 +1952,12 @@ public sealed class AppServices
     // override so gear-set applies don't clobber the location item.
     public Game.Inventory.LocationEquipManager LocationEquip { get; private set; } = null!;
 
+    // Wears the carried item that negates a room's own spell (the phoenix feather
+    // against magma heat) before the character steps into the room and gives the
+    // slot back once no such room is near, through the same per-slot override the
+    // location rules use.
+    public Game.Inventory.RoomSpellCounterWear CounterWear { get; private set; } = null!;
+
     // Casting-spell profiles (Settings → Combat) — the named, quick-swap snapshots
     // of the Combat tab's spell slots. Owns the list, the active pointer, CRUD, and
     // the @profile / toolbar / chip swap, overlaying a profile's spells onto the
@@ -2405,6 +2410,15 @@ public sealed class AppServices
     public void NoteSentForSneak(string command) =>
         Stealth.NoteCommandSent(command, CharacterHasShadowRest, _itemUseStealth);
 
+    // A command of the room we stand in that casts a dispel takes a tracked hazard
+    // buff with it. Reported from the same two places as the sneak note above, so
+    // each command is judged once, typed or the client's own.
+    public void NoteSentForRoomCommand(string command)
+    {
+        if (RoomTracker.State.CurrentRoom is { Cmd: > 0 } room)
+            AutoHazardCounterProvisioner.OnRoomCommandSent(room, command);
+    }
+
     private Game.Stealth.ItemUseStealthRule? _itemUseStealth;
 
     // Sniffs a hand-typed PHYSICAL attack verb so Combat treats it as a user override
@@ -2414,6 +2428,10 @@ public sealed class AppServices
     // Sniffs a hand-typed gear command (eq / wear / wield / rem) so Combat re-attacks
     // on the *Combat Off* it draws mid-fight. Hooked from SendUserInput, typed lines only.
     public Game.Combat.OutboundGearObserver OutboundGear { get; private set; } = null!;
+
+    // Sniffs the user's own `break`, which holds Combat's attack on that monster, and
+    // the attack of theirs that lets it go. Hooked from SendUserInput, their lines only.
+    public Game.Combat.OutboundBreakObserver OutboundBreak { get; private set; } = null!;
 
     // Classifies a cast-code as a combat spell (round energy 1–1000) vs an in-between
     // spell — drives whether a hand-typed cast is a user override or keeps the resume.
@@ -3939,7 +3957,10 @@ public sealed class AppServices
 
         // Death-message detector — bound to the per-session
         // LineExtractor by MainWindowViewModel.AttachLineExtractor.
-        Death = new Game.DeathDetector(RoomTracker, Log);
+        Death = new Game.DeathDetector(RoomTracker, Log)
+        {
+            IsParadigm = () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+        };
 
         // "There is no exit in that direction!" → demote tracker to
         // Suspect so the next observation re-resolves via candidate
@@ -4086,6 +4107,10 @@ public sealed class AppServices
         // (same rule as level / wealth / class above).
         Movement.InventoryReadyProbe = () => Inventory.IsLoaded;
         Movement.ItemCarriedProbe = IsItemCarried;
+        Movement.NegatingItemUsableProbe = NegatingItemUsable;
+        Movement.StandingRoomProbe = () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Confirmed
+            ? RoomTracker.State.CurrentRoom?.Key
+            : null;
         Movement.PartyShortOfItemProbe = IsPartyShortOfGateItem;
         Movement.StrengthProvider = () => Stats.HasParsed ? PlayerStats.Strength : (int?)null;
         Movement.PicklocksProvider = () => Stats.HasParsed ? PlayerStats.Picklocks : (int?)null;
@@ -4507,6 +4532,8 @@ public sealed class AppServices
         // CastResponse (seeded "^M^M" = two carriage returns) to unstick it. Subscribes
         // BEFORE the roster-resync below so Combat.CurrentTarget — its fallback identity
         // when the death carried no candidates — is still set.
+        _tempDeathBurst = new Game.Combat.TempDeathBurst(n => TempDeathSpellOf(n) is not null);
+        RoomClassifier.EntitiesObserved += _tempDeathBurst.NoteRoomListed;
         MonsterDeath.MonsterDied += FireTempDeathResponse;
         // Summon-on-death recheck. MUST subscribe to MonsterDied BEFORE the roster-
         // resync handler below: on a kill whose DeathSpell summons, it asserts a
@@ -5043,10 +5070,7 @@ public sealed class AppServices
                 text.Length <= 40 && text[^1] != '.' && ItemNames.FindByName(text) is not null,
             // A named exit ("go manhole") prints its own passage flavour, which the
             // game data doesn't carry; the room's exit commands identify the cause.
-            isRoomExitCommand: command =>
-                RoomTracker.State.CurrentRoom is { } room
-                && room.Exits.Values.Any(exit => exit.TextCommands is { } commands
-                    && commands.Contains(command, StringComparer.OrdinalIgnoreCase)));
+            isRoomExitCommand: IsExitCommandHere);
         // Subscribed after the message and candidate stores' own loads, so the queue is
         // re-checked against the set's freshly loaded catalogue.
         GameData.ActiveSetChanged += _ => PruneMessageCandidatesWhenIdle();
@@ -5317,7 +5341,15 @@ public sealed class AppServices
             characterName: () => PlayerStats.Name,
             send: cmd => SendGameCommand(cmd),
             log: Log);
-        RoomTracker.PlayerDeathObserved += SysopGodLife.OnDeath;
+        // Not for a death the Stock engine answered with its colliseum line: that
+        // one leaves the lives as they were (GAME_MECHANICS "Death threshold &
+        // consequences"), and the command would add a life that was never spent.
+        RoomTracker.PlayerDeathObserved += () =>
+        {
+            if (!Death.LastDeathSavedInColliseum) SysopGodLife.OnDeath();
+            else if (SysopGodLivesEnabledHere())
+                Log.Info("SysopGodLife", "A colliseum death spends no life: no life is asked back.");
+        };
 
         // "Sysop goto": gate `sys goto <name>` (per-BBS power + active-combat block +
         // table + level) and, on a fired jump, re-anchor position when the landing
@@ -5445,14 +5477,36 @@ public sealed class AppServices
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
         CombatSpells = new Game.Combat.CombatSpellIndex(GameData);
         Combat.SetCombatSpellPredicate(CombatSpells.IsCombatSpell);
-        // A hand-typed PHYSICAL attack (a / at / att / aa / bash / smash / sm / sma / bs)
-        // is likewise a user override — the observer forwards every recognised verb and
-        // Combat drops its own swing's echo via a one-shot claim.
+        // A hand-typed PHYSICAL attack (any word of AttackCommandWords) is likewise a
+        // user override — the observer forwards every recognised verb and Combat
+        // drops its own swing's echo via a one-shot claim. A line that is a text exit
+        // of the room we stand in is a move, whatever its first word (`jump pool`).
         OutboundAttack = new Game.Combat.OutboundAttackObserver(
-            (verb, target) => Combat.NoteAttackCommandObserved(verb, target));
+            (verb, target) => Combat.NoteAttackCommandObserved(verb, target),
+            isExitCommandHere: IsExitCommandHere);
         // A hand-typed eq / wear / wield / rem mid-fight stops the fight like a cast:
         // arm the re-attack for the *Combat Off* it draws.
         OutboundGear = new Game.Combat.OutboundGearObserver(Combat.NoteTypedGearCommand);
+        // The user's own `break` holds the engine's attack on the monster it was
+        // fighting until they attack again, it dies or leaves, or we leave the room
+        // (user, 2026-10-10). The hold is the combat manager's; what follows is what
+        // it needs told from outside.
+        OutboundBreak = new Game.Combat.OutboundBreakObserver(
+            isAttackSpell: CombatSpells.IsCombatSpell,
+            onBreak: Combat.NoteUserBreak,
+            onAttack: Combat.NoteUserAttack,
+            isExitCommandHere: IsExitCommandHere);
+        Combat.UserBreakHoldNotice += text => WriteTerminalNotice($"[{text}]");
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewRoom?.Key != t.PreviousRoom?.Key) Combat.NoteRoomLeft(RoomTracker.LastMoveSentAt);
+        };
+        Profile.ProfileLoaded += _ => Combat.ClearUserBreakHold("another profile was loaded");
+        // The room read a held monster's silent round asked for is sent from here
+        // when another re-display's cooldown held it back.
+        Tick.HeartbeatElapsed += Combat.OnHeartbeat;
+        // On Stock a room spell's kill prints *Combat Off* and the spell runs on.
+        Combat.SetStockRealmProbe(() => GameData.ActiveRealm != Game.RealmType.ParaMud);
         Tick.CombatTickElapsed += Combat.OnCombatTick;
         // Count attack-spell MaxCasts off Combat's own ConfirmedAttackCastCount —
         // incremented directly off each observed cast-result line — instead of
@@ -5491,7 +5545,11 @@ public sealed class AppServices
         // a sneak marks it broken so the next move re-sneaks.
         EngineGate.SetSneakHooks(
             takeForLater: cmd => Game.Stealth.SneakBreakingCommands.CanWait(cmd) && SneakGuard.TakeIfHeld(cmd),
-            sent: NoteSentForSneak);
+            sent: command =>
+            {
+                NoteSentForSneak(command);
+                NoteSentForRoomCommand(command);
+            });
         Stealth.SetAutoToggles(
             isAutoSneakEnabled: () => ReadAutoModeFlag(d => d.AutoSneak),
             isAutoHideEnabled:  () => ReadAutoModeFlag(d => d.AutoHide));
@@ -5582,7 +5640,10 @@ public sealed class AppServices
             isSolo:          () => !PartyState.IsInParty,
             onRecovered:     Combat.ResumeAfterShadowRest);
         Combat.SetShadowRestSuppression(() => Health.ShadowRestHolding);
-        CombatTracker.SetCombatHeldOnPurposeProbe(() => Health.ShadowRestHolding);
+        // Likewise a monster left standing by the user's own `break`: the quiet is
+        // what they asked for, and the watchdog's force-clear would let a walk leave.
+        CombatTracker.SetCombatHeldOnPurposeProbe(
+            () => Health.ShadowRestHolding || Combat.AttackHeldByUserBreak);
         SneakGuard.SetShadowRestProbe(() => Health.ShadowRestHolding);
         Health.SetSneakKeptProbe(() => SneakGuard.Holds);
         Health.SetMeditateWhilePoisonedProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
@@ -6418,6 +6479,72 @@ public sealed class AppServices
         RoomTracker.StateChanged += t => LocationEquip.OnRoomChanged(t.NewRoom);
         Profile.ProfileLoaded += _ => LocationEquip.OnProfileSwapped();
 
+        // Room-spell counters: an item that negates a room's spell only works worn
+        // (GAME_MECHANICS "Room-spell hazard shape 1"), so it goes on before the
+        // step into such a room and the slot goes back to the gear sets afterwards.
+        // After the location rules on a room change, so a rule that wears the same
+        // piece has claimed it first and nothing is sent twice.
+        CounterWear = new Game.Inventory.RoomSpellCounterWear(
+            equipment: Equipment,
+            coordinator: MovementCoordinator,
+            enabled: () => ReadSection<Models.Profile.PeriodicDamageRoomSpellSettings>(
+                Profile.Current, Models.Profile.PeriodicDamageRoomSpellSettings.TabKey).WearCounterBeforeEntering,
+            roomOf: key => RoomGraph.GetRoom(key),
+            // Only a room the tracker is sure of: a pending move still shows the
+            // room being left, and a suspect reading may not be where we are.
+            currentRoom: () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Confirmed
+                ? RoomTracker.State.CurrentRoom?.Key
+                : null,
+            negatorsOf: spell => RoomHazards.HazardForSpell(spell)?.NegatingItems ?? Array.Empty<int>(),
+            describe: DescribeCounterItem,
+            isWorn: IsItemWorn,
+            isCarried: IsItemCarried,
+            wornIn: WornPiecesIn,
+            spellName: SpellCatalog.GetSpellNameByNumber,
+            // Sneaking past things it won't fight: the one case a gear command waits
+            // for a room with no NPC in it (the test SneakGuard holds a command on).
+            sneakingPast: () => ReadAutoModeFlag(d => d.AutoSneak) && !ReadAutoModeFlag(d => d.AutoCombat),
+            roomEmpty: () => !CombatTracker.HasRoomNpc,
+            plannedAhead: PlannedRoomsAhead,
+            schedule: (delay, action) => ScheduleOnce(delay, action),
+            // A wear mid-fight draws *Combat Off*; the engine picks the fight up again.
+            gearCommandSent: () => Combat.NoteGearSwapInterrupt(),
+            log: Log);
+        // A wear the locked send gate would drop is not claimed and not waited for.
+        Equipment.SetSendGateProbe(() => EngineGate.IsLocked);
+        CounterWear.UsabilityChanged += () => _negatorUsable.Clear();
+        // Confirmed rooms only, as the gear sets' own room hook has it: a restore
+        // acted on a predicted or doubtful room could take the counter off in lava.
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewConfidence == Game.Map.RoomConfidence.Confirmed && t.NewRoom is { } arrived)
+                CounterWear.OnArrived(arrived.Key);
+        };
+        Profile.ProfileLoaded += _ => CounterWear.Reset();
+        // Standing in such a room already: the counter goes on when it turns up in
+        // the pack, when the pack is first read, and when commands held back (a
+        // password prompt, the trainer form) go out again. A restore that waited
+        // for a kept sneak is decided again when the sneak ends.
+        Inventory.Changed += () =>
+        {
+            _negatorUsable.Clear();
+            CounterWear.Recheck();
+        };
+        Inventory.FullInventoryParsed += CounterWear.NoteInventoryRead;
+        EngineGate.Released += CounterWear.Recheck;
+        SneakGuard.Released += CounterWear.Recheck;
+        // Waiting for the room to empty (sneaking past things): asked again as
+        // the roster changes, which has no event of its own.
+        Tick.HeartbeatElapsed += CounterWear.Poll;
+        // What the game refused may be wearable on another level or alignment.
+        Stats.ScreenParsed += _ => CounterWear.LiftRefusals("the stat screen was read");
+        // The tracker raises Refreshed on every read; the counter lifts on a change.
+        Alignment.Refreshed += () => CounterWear.NoteAlignmentRead(Alignment.SelfAlignment);
+        PlayerStats.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Game.PlayerStats.Level)) CounterWear.LiftRefusals("the level changed");
+        };
+
         // Combat profiles: a full-posture quick-swap. A switch overlays the profile's
         // spell/verb/room fields onto the live Combat section the engine re-reads each
         // round, writes the profile's whole Health section, and writes its weapons into
@@ -6533,9 +6660,15 @@ public sealed class AppServices
         PromptScanner.PromptObserved += _ => AlignmentCheck.OnPrompt();
         _equipWearOkSub = Router.Subscribe(Services.Patterns.KnownPatterns.UserEquipped, m =>
         {
-            if (m.Groups.Count > 0) Equipment.NoteEquipSucceeded(m.Groups[0]);
+            if (m.Groups.Count == 0) return;
+            Equipment.NoteEquipSucceeded(m.Groups[0]);
+            // The line itself too: an answer that came after the counter's wait
+            // was given up is no longer paired with a wear by the manager above.
+            CounterWear.NoteWorn(m.Groups[0]);
         });
         // A refused wear / wield may be our alignment having moved: check it too.
+        // A refusal of a room-spell counter's wear reaches CounterWear through
+        // Equipment.SlotWearAnswered, paired with the wear it answers.
         _equipWearFailSub = Router.Subscribe(
             Services.Patterns.KnownPatterns.UserEquipFailed, _ =>
             {
@@ -6553,11 +6686,25 @@ public sealed class AppServices
         _equipCannotBeWornSub = Router.Subscribe(
             Services.Patterns.KnownPatterns.UserEquipCannotBeWorn,
             m => Equipment.NoteCannotBeWorn(m.Groups.Count > 0 ? m.Groups[0] : null));
-        // A "no more room" block lasts only while every worn slot is taken.
+        // A "no more room" block lasts only while every worn slot is taken. The
+        // removed piece's name is also how a counter learns what its wear pushed out.
         _wornPieceRemovedSubs = new[]
         {
-            Router.Subscribe(Services.Patterns.KnownPatterns.UserRemoved, _ => Equipment.NoteWornPieceRemoved()),
+            Router.Subscribe(Services.Patterns.KnownPatterns.UserRemoved, m =>
+            {
+                Equipment.NoteWornPieceRemoved();
+                if (m.Groups.Count > 0) CounterWear.NoteRemoved(m.Groups[0]);
+            }),
             Router.Subscribe(Services.Patterns.KnownPatterns.AlignmentGearRemoved, _ => Equipment.NoteWornPieceRemoved()),
+            // Two answers that put nothing on, each to the slot claim it answers.
+            Router.Subscribe(Services.Patterns.KnownPatterns.UserEquipNotInPack, m =>
+            {
+                if (m.Groups.Count > 0) Equipment.NoteNotLeftUnequipped(m.Groups[0]);
+            }),
+            Router.Subscribe(Services.Patterns.KnownPatterns.UserEquipOccupantStuck, m =>
+            {
+                if (m.Groups.Count > 0) Equipment.NoteOccupantNotRemovable(m.Groups[0]);
+            }),
         };
 
         // Hold auto-rest while a gear-set swap streams its paced wear/rem commands —
@@ -7680,7 +7827,12 @@ public sealed class AppServices
         // move that skipped the ready check. Once per step either way.
         Walker.SetMoveReadyCheck(() =>
         {
+            // First of all: a counter for the next room's own spell goes on, and
+            // the step waits for it. A wear ends a sneak, so it has to be ahead of
+            // the `sn` below.
+            if (!CounterWear.ReadyToEnter(NextPlannedRoomForEquip(Walker.PeekNextPlannedDirection()))) return false;
             PreMoveGearOnce(ref _walkerPreMoveGearFor, Walker.PeekNextPlannedDirection());
+            if (!HazardLastCallBeforeStep(Walker.PeekNextPlannedDirection())) return false;
             return Stealth.ReadyToMoveSneaking();
         });
         Walker.SetRoomActionHook(cmd => Stealth.NoteSneakBroken($"room command '{cmd}'"));
@@ -7885,7 +8037,60 @@ public sealed class AppServices
             log:            Log,
             // A follower is carried through a hazard by the leader's route, with no
             // walk of its own for the approach hook to ride — it raises on arrival.
-            followingLeader: () => PartyState.IsInParty && !PartyState.SelfIsLeader);
+            followingLeader: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
+            roomsAhead:     HazardRoomsAhead,
+            allCounters:    () => RoomHazards.Hazards.SelectMany(h => h.BuffCounters),
+            // Asked at the send, for "this `use` spent a sneak". The guard alone holds
+            // for a move in flight whether or not the character is sneaking.
+            sneakKept:      () => SneakGuard.Holds && Stealth.IsStealthed,
+            chargesLeft:    id => ItemNames.GetName(id) is { } name ? CarriedCharges.RemainingForName(name) : null,
+            sendBlocked:    () => EngineGate.IsLocked,
+            // The early window and the look ahead are for finding a room with no
+            // NPCs to drink in, so they come with Auto-Sneak and not without.
+            autoSneakOn:    () => ReadAutoModeFlag(d => d.AutoSneak),
+            // The buff has no wear-off line, so a room that strips it is known by
+            // its spell: the index the cast pass skips buffing by.
+            roomStripsBuff: (roomSpell, buffSpell) => RoomBuffStrip.StripsBuff(roomSpell, buffSpell),
+            commandStripsBuff: (roomCmd, command, buffSpell) => RoomBuffStrip.CommandStripsBuff(roomCmd, command, buffSpell));
+        // The step into a hazard room waits for the answer to the `use` sent ahead
+        // of it, and through the round when that answer is that the round's cast was
+        // already made.
+        AutoHazardCounterProvisioner.SetStepHold(MovementCoordinator, (delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+        });
+        // The refresh inside its window is sent by the between-round cast pass: one
+        // cast a round, held while a sneak is being kept, then the fight's resume and
+        // the re-sneak. Nothing is offered while the master switch is off. A `use`
+        // sent by another road (the step into a hazard room, a lapse prompt) is
+        // reported to the same pass, so it counts as the round's cast too.
+        CastDirector.SetClientUseSource(
+            due: () => AutoModeController.KillSwitchEngaged ? null : AutoHazardCounterProvisioner.DueNow(),
+            fire: AutoHazardCounterProvisioner.FireDue,
+            heldForSneak: AutoHazardCounterProvisioner.NoteHeldForSneak);
+        AutoHazardCounterProvisioner.UseSent += CastDirector.NoteClientUseSent;
+        // A `use` that could not wait for a room with no NPCs spent the sneak where
+        // the character stands: the same thing, to whatever reacts to a lost sneak,
+        // as a sneak that failed on the way in.
+        AutoHazardCounterProvisioner.SneakSpentHere += CombatTracker.NoteSilentSneakLoss;
+        // What is believed about the buff is dropped wherever it can't be vouched
+        // for: a death wipes it, and a new profile or game-data set is another
+        // character or other data. A death that happened while the link was down is
+        // the inferred one, raised for a verdict reached at the login only: one
+        // reached later would wipe a buff raised since (as for the cast pass's
+        // timers).
+        RoomTracker.PlayerDeathObserved += () => AutoHazardCounterProvisioner.Forget("death");
+        RoomTracker.PlayerDeathInferred += () => AutoHazardCounterProvisioner.Forget("death");
+        // A dropped link only stops its clock (MainWindowViewModel's disconnect
+        // handler, beside the cast pass's own pause); the first prompt back in the
+        // game starts it again. No-op unless a drop paused it.
+        PromptScanner.PromptObserved += _ => AutoHazardCounterProvisioner.Resume();
+        Profile.ProfileLoaded += _ => AutoHazardCounterProvisioner.Forget("profile loaded");
+        GameData.ActiveSetChanged += _ => AutoHazardCounterProvisioner.Forget("game data changed");
+        // Every arrival: a room whose own spell strips the buff ends it, and a
+        // follower raises the buff of a hazard room it was carried into.
         RoomTracker.StateChanged += t =>
         {
             if (t.NewRoom is { } arrived && !Equals(arrived.Key, t.PreviousRoom?.Key))
@@ -8228,8 +8433,13 @@ public sealed class AppServices
         {
             // A "rest up here" room holds the step until the rest is done.
             if (Health.HoldForRestHere()) return false;
+            // The next room's counter, ahead of the lair's entry buffs, the pre-move
+            // gear and the `sn`: the buffs are raised for the step, and a wear that
+            // held it afterwards would spend their time; a wear also ends a sneak.
+            if (!CounterWear.ReadyToEnter(NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()))) return false;
             if (!LairDebuffHold.ReadyToEnter(LairEntryDebuffModeForNextStep())) return false;
             PreMoveGearOnce(ref _loopPreMoveGearFor, LoopRunner.PeekNextPlannedDirection());
+            if (!HazardLastCallBeforeStep(LoopRunner.PeekNextPlannedDirection())) return false;
             return Stealth.ReadyToMoveSneaking();
         });
         LoopRunner.SetPreMoveHook(() =>
@@ -8439,7 +8649,8 @@ public sealed class AppServices
             sendGang: text => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes($"bg {text}\r")),
             roomName: () => RoomTracker.State.CurrentRoom?.Name,
             schedule: pacedReplyScheduler,
-            log: Log)
+            log: Log,
+            isPartyFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader)
         {
             IsMasterSwitchOff = () => AutoModeController.KillSwitchEngaged,
             SkippedForMasterSwitch = why => AutoModeController.Blocks("PvP response", why),
@@ -8494,6 +8705,10 @@ public sealed class AppServices
                 case Game.Map.MovementEngineState.Running: AutoEquip.OnMovementStarted(); break;
                 case Game.Map.MovementEngineState.Idle:    AutoEquip.OnMovementStopped(); break;
             }
+            // After the set revert above. A walk's plan is what a counter is put on
+            // ahead of when sneaking past things: one worn for a room the walk
+            // never reached goes back to that set now.
+            CounterWear.Recheck();
         };
         RoomTracker.StateChanged += t =>
         {
@@ -8546,6 +8761,15 @@ public sealed class AppServices
         //
         // Nobody pressed Pause, so the pause says what caused it: in the terminal, on
         // the Navigation window's hold chips, and in the bug report.
+        // A typed step into a room whose spell a carried item negates: the wear goes
+        // out here, ahead of the step's own bytes, as a typed step's `sn` does. Only
+        // a compass step names its room; any other move is countered on arrival.
+        RoomTracker.ManualMoveObserved += command =>
+        {
+            if (Game.Map.DirectionExtensions.TryFromToken(command, out Game.Map.Direction direction)
+                && NextPlannedRoomForEquip(direction) is { } next)
+                CounterWear.BeforeTypedStep(next);
+        };
         RoomTracker.ManualMoveObserved += command =>
         {
             if (!MovementControl.IsActive || MovementControl.IsUserPaused) return;
@@ -8639,10 +8863,7 @@ public sealed class AppServices
         // re-read lands a walk from the graveyard would head for a toll it can't pay
         // (report paradigm-20261010-145529).
         RoomTracker.PlayerDeathObserved += () => Movement.NoteDeath(
-            RoomTracker.LastDeathRoom,
-            tookNothing: Game.Recovery.ArenaDeathRooms.DeathTookNothing(
-                RoomTracker.LastDeathRoom, Death.LastDeathSavedInColliseum,
-                paradigm: GameData.ActiveRealm == Game.RealmType.ParaMud));
+            RoomTracker.LastDeathRoom, RoomTracker.LastDeathTookNothing);
         Movement.TripUnderWayProbe = () => MovementControl.IsActive;
         MovementControl.StateChanged += () =>
         {
@@ -8786,6 +9007,32 @@ public sealed class AppServices
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
+        // A loop doesn't go back for a member an exit of its circuit turned away.
+        // What tells that from a hold: a wait or hold the member has out with us,
+        // and what we hold of them against the exit's own conditions (the @level
+        // probe, their class and race from `who`, the last purse they reported, the
+        // items handed to them or counted).
+        PartyComeback.MemberSignalledHold = given => PartyEssentials.WaitingMembers.Contains(given);
+        // Their pending @wait would park the walk back to them behind the party-wait
+        // gate. Let go by the manager itself, after it has read what the wait says.
+        PartyComeback.ReleaseMemberWait = PartyEssentials.ReleaseWait;
+        PartyComeback.Notice = text =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(text));
+        PartyComeback.MemberCanPass = (given, exit) =>
+        {
+            Models.GameData.PlayerRecord? known = Players.Find(given);
+            return Game.Remote.MemberGateJudge.CanPass(in exit, new Game.Remote.MemberGateJudge.Facts(
+                Level: known?.Level is > 0 and int level ? level : null,
+                ClassNumber: TableNumberByName("Classes", known?.Class),
+                RaceNumber: TableNumberByName("Races", known?.Race),
+                PurseCopper: PartyWealth.LastReading(given),
+                CopiesHeld: itemId => PartyHandOvers.CopiesRememberedFor(given, itemId)));
+        };
+        // During a train trip nobody is gone back for; they are fetched at its end.
+        // A party train trip, or the leader's own train or spell run with the
+        // party in tow (both are built further down, and read only when asked).
+        PartyComeback.TrainTripRunning = () =>
+            PartyTrain?.TripRunning == true || TrainerWalk?.OwnRunActive == true;
         // A dropped member's reconnect hold (or their @wait) would park the walk to
         // pick them up — the leader never moves while they wait on it.
         PartyComeback.ReleaseHolds = (given, reason) =>
@@ -8793,8 +9040,6 @@ public sealed class AppServices
             PartyDisconnectMovement.Release(given, reason);
             PartyEssentials.ReleaseWait(given);
         };
-        // Their pending @wait would park the walk back to them behind the party-wait gate.
-        Party.MemberLeftBehind += PartyEssentials.ReleaseWait;
 
         // @where reply → nav-map flash. Recognises the wrapped location reply an
         // @where'd MudPlay client telepaths back and routes it to the (open) map;
@@ -9029,7 +9274,13 @@ public sealed class AppServices
             recordedLevel: name => Players.Find(name)?.Level,
             selfTimeToLevel: () => SelfTimeToLevel().Remaining,
             telepathsPending: () => Telepaths.Queued + Telepaths.InFlight > 0,
-            log: Log);
+            log: Log,
+            // The trip is over: whoever it came back without is gone back for, or
+            // left to the player when the player took the trip over.
+            tripEnded: (setOut, byItself) => PartyComeback.TrainTripEnded(byItself, setOut));
+        // The same for a train or spell run of the leader's own with the party in
+        // tow, which keeps no roll.
+        TrainerWalk.OwnRunOver = byItself => PartyComeback.TrainTripEnded(byItself, []);
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
         PartyLevelProbe.ProgressObserved += PartyTrain.NoteLevelProgress;
@@ -9498,6 +9749,9 @@ public sealed class AppServices
         // After the coordinator has seen it: a token the route didn't send (the user
         // used one by hand) ends all movement where we land — nothing walks on from
         // there — and either way the followers it drops aren't left-behind members.
+        // A token's textblock casts negate magic (#310) ahead of its teleport, which
+        // takes a tracked hazard buff with everything else.
+        Tokens.TokenUsed += place => AutoHazardCounterProvisioner.NoteNegateMagic($"token of {place}");
         Tokens.TokenUsed += place =>
         {
             PartyComeback.NoteOwnTeleport();
@@ -9514,13 +9768,30 @@ public sealed class AppServices
                 TokenRoute.OnRoomChanged(t.NewRoom?.Key);
         };
 
-        // Follower-side @comeback. Watches for a movement-failure
-        // line (prevents-movement flag / over-encumbered) immediately
-        // before "You are no longer following X." — the signature of being
-        // left behind — and telepaths @comeback to the leader. Enabled is
-        // pushed from Settings → Other by ApplyOtherFromActiveProfile.
+        // Follower-side @comeback: one telepath to the leader when the party walks
+        // off without us (the triggers and what is never one are on the class).
+        // Enabled is pushed from Settings → Other by ApplyOtherFromActiveProfile,
+        // and the master switch is set with every other system's
+        // (ComebackRequest.MasterSwitchOff).
         ComebackRequest = new Game.Remote.ComebackRequester(Router, RoomTracker, Log,
-            isMovementPrevented: () => Conditions.IsMovementPrevented);
+            isMovementPrevented: () => Conditions.IsMovementPrevented,
+            party: PartyState,
+            isSelfDown: () => PlayerState.IsMortallyWounded,
+            sendBlocked: () => InGameCapture.AtBoardMenu ? "we are at the board's menu"
+                : EngineGate.IsLocked ? "the client's sends are held (a trainer screen or a password prompt)"
+                : null,
+            // During the leader's party train trip the request waits for the trip to
+            // end (PartyTrain is built before this).
+            inTrainTrip: leader => PartyTrain.InTripOf(leader));
+        // A leader who refused, or never came: the follow the game ended without a
+        // line is ended on our side too.
+        ComebackRequest.FollowGivenUp = (leader, _) => Party.NoteFollowGivenUp(leader);
+        // The trip's leader may tell us it is over after an exit has turned us out
+        // of the party on our own side.
+        RemoteCommands.PartyTrainEligibility = sender => PartyTrain.InTripOf(sender);
+        // The leader's relay of a teleport keyword is the leader's own split.
+        PartyEssentials.PartyDirectiveRelayed += (sender, command) => ComebackRequest.NotePartyRelay(sender, command);
+        Party.LeaderListedAsInvited += leader => ComebackRequest.NoteLeaderListedAsInvited(leader);
 
         // Follower-side reconnect auto-rejoin. Mirrors live follower membership
         // into the profile (crash-survivable) and, on the first in-game prompt
@@ -9568,7 +9839,10 @@ public sealed class AppServices
         //     authorised even though neither is a live party member any more.
         //   - When we receive @forget from a leader we remembered, clear the
         //     crash-rejoin memory so a later reconnect stops telepathing them.
-        AutoParty.ForceAcceptFrom = PartyRejoin.IsRememberedLeader;
+        // The same holds for the leader we asked to come back for us: a member an
+        // exit turned away is out of the party and needs that invite to rejoin.
+        AutoParty.ForceAcceptFrom = name =>
+            PartyRejoin.IsRememberedLeader(name) || ComebackRequest.IsLeaderWeAsked(name);
         RemoteCommands.ForgetEligibility = s =>
             Party.WasRecentlyPartied(s) || PartyRejoin.IsRememberedLeader(s);
         PartyComeback.ForgetLeaderCallback = PartyRejoin.ForgetRememberedLeader;
@@ -10177,6 +10451,11 @@ public sealed class AppServices
         AutoTrain.MasterSwitchOff = MasterSwitchOff("Auto-train");
         Cash.MasterSwitchOff = MasterSwitchOff("Bank and stash trips");
         LocationEquip.MasterSwitchOff = MasterSwitchOff("Location gear");
+        CounterWear.MasterSwitchOff = MasterSwitchOff("Room-spell counter");
+        // The route planner asks about every hazard exit it weighs: a plain read,
+        // so a plan made with the switch off doesn't count hundreds of skips.
+        CounterWear.MasterSwitchIsOff = () => AutoModeController.KillSwitchEngaged;
+        AutoModeController.KillSwitchToggled += _ => _negatorUsable.Clear();
         PathItemFloor.MasterSwitchOff = MasterSwitchOff("Route item pickup");
         ChestOpens.MasterSwitchOff = MasterSwitchOff("Chest open read");
         ChestOpens.RefuseOpen = name =>
@@ -10355,7 +10634,15 @@ public sealed class AppServices
         // raises the buff now; the per-item timer was never stamped by the skip, and
         // an own walk is left to its next approach hook.
         if (RoomTracker.State.CurrentRoom is { } hazardRoom)
+        {
             AutoHazardCounterProvisioner.OnArrivedInRoom(hazardRoom.Key);
+        }
+        // The same for a counter that has to be worn: put on if the room stood in
+        // needs it, given back if one worn before the switch went off is no longer
+        // needed here. Neither was done while it was off. Routes planned while it
+        // was off counted no carried counter; the next plan asks again.
+        _negatorUsable.Clear();
+        CounterWear.Recheck();
         AilmentSync.ReevaluateWaits();
         PartyRest.ResyncAfterMasterSwitch();
         // A loop the last reconnect set aside, not restarted while the switch was
@@ -11165,6 +11452,50 @@ public sealed class AppServices
         return cur.Exits.TryGetValue(d, out Game.Map.RoomExit exit) ? exit.Target : null;
     }
 
+    // The hazard counter's last call for the step about to be taken, asked ahead of
+    // the sneak check. A `use` it sends ends the sneak, and sent here the `sn` that
+    // follows is the held kind, answered before the step goes. Sent from the approach
+    // hook, behind the check, its `sn` went out in one burst with the move.
+    // False while the step has to wait: for the answer to that `use`, or for the next
+    // round's cast when the game refused it for this round's. The provisioner holds
+    // its own movement gate meanwhile, and the gate's release re-drives the step.
+    private bool HazardLastCallBeforeStep(Game.Map.Direction? direction)
+    {
+        if (NextPlannedRoomForEquip(direction) is { } next)
+            AutoHazardCounterProvisioner.OnApproachingRoom(next);
+        return !AutoHazardCounterProvisioner.HoldingStep;
+    }
+
+    // The room the character stands in, then the rooms the running walk or loop
+    // plans to enter next: where the hazard counter looks for a room its buff matters
+    // in. A follower has no plan of its own, nor has a character standing where the
+    // player left it, so for them this is the one room.
+    private IReadOnlyList<Game.Map.RoomKey> HazardRoomsAhead()
+    {
+        if (RoomTracker.State.CurrentRoom is not { } here) return Array.Empty<Game.Map.RoomKey>();
+        List<Game.Map.RoomKey> rooms = new(1 + Game.Map.AutoHazardCounterProvisioner.LookaheadSteps) { here.Key };
+        rooms.AddRange(PlannedRoomsAhead(Game.Map.AutoHazardCounterProvisioner.LookaheadSteps));
+        return rooms;
+    }
+
+    // The rooms the moving engine's plan enters next, nearest first: its own next
+    // steps followed through the map's exits, as far as they can be. Empty with
+    // nothing moving the character.
+    private IReadOnlyList<Game.Map.RoomKey> PlannedRoomsAhead(int count)
+    {
+        if (ResolveActiveMovementEngine() is not { } engine || RoomTracker.State.CurrentRoom is not { } at)
+            return Array.Empty<Game.Map.RoomKey>();
+        List<Game.Map.RoomKey> rooms = new(count);
+        foreach (Game.Map.Direction step in engine.PeekPlannedDirections(count))
+        {
+            if (!at.Exits.TryGetValue(step, out Game.Map.RoomExit exit) || RoomGraph.GetRoom(exit.Target) is not { } next)
+                break;
+            rooms.Add(next.Key);
+            at = next;
+        }
+        return rooms;
+    }
+
     // The DEFAULT gear set's item-bearing slots as EquippedItems, for summing their
     // flat +MaxHP/+MaxMana bonuses. Skips empty slots and the two virtual
     // alternate-weapon slots (never worn — they write CombatSettings, not the wire).
@@ -11717,9 +12048,21 @@ public sealed class AppServices
     private bool SendGameCommandRaw(string command)
     {
         if (_rawWireSend is null || string.IsNullOrWhiteSpace(command)) return false;
-        _rawWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r"));
+        SendingEngineRawCommand = true;
+        try { _rawWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r")); }
+        finally { SendingEngineRawCommand = false; }
         return true;
     }
+
+    // Whether a line is a text exit of the room the tracker has us in.
+    private bool IsExitCommandHere(string command) =>
+        RoomTracker.State.CurrentRoom is { } room && room.HasExitCommand(command);
+
+    // True while SendGameCommandRaw is sending. The raw wire goes round the
+    // EngineSendGate, so to an outbound observer its lines look typed; the `break`
+    // `sys goto` sends ahead of a jump is the client's, not the user's, and must not
+    // be taken for the one that holds the combat engine's attack.
+    public bool SendingEngineRawCommand { get; private set; }
 
     // Send a command line to the server as if the user typed it (CR appended),
     // riding the raw engine wire-sender. Used by the Calculators tab's "Parse
@@ -11941,58 +12284,72 @@ public sealed class AppServices
         // The nudge is ours to send, not the game's to need: with the master
         // switch off the stall runs its length, or the user's own Enter ends it.
         if (AutoModeController.KillSwitchEngaged) return;
-        // The response and the coin hold are for a death that did stall the room. A
-        // room spell's kill among several kinds may not be the one with the death
-        // spell, so it is answered only when the room listed a single kind.
-        if (evt.RoomSpellRoster is { Count: > 1 }) return;
-        foreach (int num in DyingMonsterNumbers(evt))
+        // One response, one coin hold: TempDeathBurst answers a room spell's kills
+        // once however many of the listed monsters the round killed.
+        if (_tempDeathBurst.KindToAnswer(evt, DyingMonsterNumbers(evt)) is not { } num) return;
+        if (TempDeathSpellOf(num) is not var (deathSpell, spellName)) return;
+        string occasion = evt.RoomSpellRoster is null
+            ? "death-cast"
+            : "death-cast among our room spell's kills, answered once for the room";
+
+        // The coin get went out on the drop line, before the death was known,
+        // so the game threw it away. Once the death spell has run out the room
+        // is drawn again, and the coins still lying there are asked for then.
+        Cash.NoteDeathStall();
+        TimeSpan stall = DeathStallOf(num);
+        if (stall > TimeSpan.Zero && Cash.HasUnansweredGet)
+            HoldThroughDeathStall(stall, "coins dropped at the kill",
+                () => _engineWireSend?.Invoke(new[] { (byte)'\r' }));
+
+        foreach (Models.GameData.MessageRecord r in Messages.Messages)
         {
-            int deathSpell = MonsterCatalog.Get(num)?.DeathSpell ?? 0;
-            if (deathSpell <= 0) continue;
-            string? spellName = GameData.FindNameByNumber("Spells", deathSpell);
-            if (!Game.Combat.TempDeathResponse.IsTempSpell(spellName)) continue;
-            // The coin get went out on the drop line, before the death was known,
-            // so the game threw it away. Once the death spell has run out the room
-            // is drawn again, and the coins still lying there are asked for then.
-            Cash.NoteDeathStall();
-            TimeSpan stall = DeathStallOf(num);
-            if (stall > TimeSpan.Zero && Cash.HasUnansweredGet)
-                HoldThroughDeathStall(stall, "coins dropped at the kill",
-                    () => _engineWireSend?.Invoke(new[] { (byte)'\r' }));
-
-            foreach (Models.GameData.MessageRecord r in Messages.Messages)
-            {
-                if (string.IsNullOrEmpty(r.CastResponse) || r.Links is null) continue;
-                bool linked = false;
-                foreach (Models.GameData.GameDataLink l in r.Links)
-                    if (l.Table == "Spells" && l.Number == deathSpell) { linked = true; break; }
-                if (!linked) continue;
-                if (Game.Combat.TempDeathResponse.ExpandToWireBytes(r.CastResponse) is not { } bytes) continue;
-                _engineWireSend(bytes);
-                Log.Info("TempDeath",
-                    $"'{spellName}' (#{deathSpell}) death-cast — sent cast response to unstick the engine");
-                return;   // one response per death
-            }
-
-            // No message record names a response for this one (37 of the Paradigm
-            // bosses' temp spells had none): the same two carriage returns every
-            // listed one is given.
-            if (Game.Combat.TempDeathResponse.ExpandToWireBytes(Game.Combat.TempDeathResponse.DefaultResponse)
-                is { } fallback)
-            {
-                _engineWireSend(fallback);
-                Log.Info("TempDeath",
-                    $"'{spellName}' (#{deathSpell}) death-cast — no cast response on record, sent the default to unstick the engine");
-                return;
-            }
+            if (string.IsNullOrEmpty(r.CastResponse) || r.Links is null) continue;
+            bool linked = false;
+            foreach (Models.GameData.GameDataLink l in r.Links)
+                if (l.Table == "Spells" && l.Number == deathSpell) { linked = true; break; }
+            if (!linked) continue;
+            if (Game.Combat.TempDeathResponse.ExpandToWireBytes(r.CastResponse) is not { } bytes) continue;
+            _engineWireSend(bytes);
+            Log.Info("TempDeath",
+                $"'{spellName}' (#{deathSpell}) {occasion} — sent cast response to unstick the engine");
+            return;
         }
+
+        // No message record names a response for this one (37 of the Paradigm
+        // bosses' temp spells had none): the same two carriage returns every
+        // listed one is given.
+        if (Game.Combat.TempDeathResponse.ExpandToWireBytes(Game.Combat.TempDeathResponse.DefaultResponse)
+            is { } fallback)
+        {
+            _engineWireSend(fallback);
+            Log.Info("TempDeath",
+                $"'{spellName}' (#{deathSpell}) {occasion} — no cast response on record, sent the default to unstick the engine");
+        }
+    }
+
+    // The room-spell bookkeeping behind FireTempDeathResponse. Set in the
+    // constructor, ahead of the death subscription that reads it.
+    private readonly Game.Combat.TempDeathBurst _tempDeathBurst;
+
+    // A monster's DeathSpell when it is one of the silent "... temp" spells.
+    private (int Number, string Name)? TempDeathSpellOf(int monsterNumber)
+    {
+        int deathSpell = MonsterCatalog.Get(monsterNumber)?.DeathSpell ?? 0;
+        if (deathSpell <= 0) return null;
+        string? name = GameData.FindNameByNumber("Spells", deathSpell);
+        return Game.Combat.TempDeathResponse.IsTempSpell(name) ? (deathSpell, name!) : null;
     }
 
     // The Monsters-table Number for a boss whose BossDef didn't carry one — resolved
     // by its game-data name. Null when the active set has no such monster.
-    private int? ResolveMonsterNumberByName(string name)
+    private int? ResolveMonsterNumberByName(string name) => TableNumberByName("Monsters", name);
+
+    // The Number of a game-data table's row, found by its name (a monster, a
+    // class, a race). Null when the active set has no such row.
+    private int? TableNumberByName(string table, string? name)
     {
-        if (GameData.FindRowByName("Monsters", name) is not System.Text.Json.JsonElement row) return null;
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        if (GameData.FindRowByName(table, name) is not System.Text.Json.JsonElement row) return null;
         return row.TryGetProperty("Number", out System.Text.Json.JsonElement el)
                && el.TryGetInt32(out int n) ? n : null;
     }
@@ -12436,6 +12793,81 @@ public sealed class AppServices
         foreach (Game.Inventory.EquippedItem e in Inventory.Snapshot.EquippedItems)
             if (ItemNames.FindByName(e.Name) == itemId) return true;
         return false;
+    }
+
+    // A negating item is usable on a route when it is on, or when the client will
+    // put it on before the step (RoomSpellCounterWear.WillWear: the setting, the
+    // master switch, and whether this character can wear it). What a route is
+    // planned on and what the wear does are the same test.
+    //
+    // A route search asks this for every hazard exit it weighs, and the answer
+    // reads the settings, the item's record and the character's build each time.
+    // So an answer is kept for the search: until the counter's own state, the
+    // master switch, the worn list or the setting changes, and for no longer than
+    // NegatorUsableKeptFor in any case (the build and the data set have no one
+    // event to drop it on; a search is over in far less).
+    private bool NegatingItemUsable(int itemId)
+    {
+        long now = Environment.TickCount64;
+        if (now - _negatorUsableSince > NegatorUsableKeptFor)
+        {
+            _negatorUsable.Clear();
+            _negatorUsableSince = now;
+        }
+        if (!_negatorUsable.TryGetValue(itemId, out bool usable))
+            _negatorUsable[itemId] = usable = IsItemWorn(itemId) || CounterWear.WillWear(itemId);
+        return usable;
+    }
+
+    private const long NegatorUsableKeptFor = 500;
+    private readonly Dictionary<int, bool> _negatorUsable = new();
+    private long _negatorUsableSince;
+
+    // The setting was saved on the Periodic Damage Room Spells tab: routes are
+    // planned on the new answer, and a counter needed in the room stood in goes on.
+    public void NoteCounterWearSettingSaved()
+    {
+        _negatorUsable.Clear();
+        CounterWear.Recheck();
+    }
+
+    // A room-spell counter as RoomSpellCounterWear weighs it, null for an item the
+    // game data has no wearable record of.
+    private Game.Inventory.RoomSpellCounterItem? DescribeCounterItem(int itemId) =>
+        ItemNames.GetName(itemId) is { Length: > 0 } name ? DescribeGear(itemId, name) : null;
+
+    // The pieces worn in a slot now, both of a pair (fingers, wrists): what a
+    // counter going on there could push out, and whether a place is free.
+    private IReadOnlyList<Game.Inventory.RoomSpellCounterItem> WornPiecesIn(Models.Profile.EquipmentSlot slot)
+    {
+        List<Game.Inventory.RoomSpellCounterItem> pieces = new();
+        foreach (Game.Inventory.EquippedItem e in Inventory.Snapshot.EquippedItems)
+        {
+            if (ResolveEquipItemSlot(e.Name) is not { } worn
+                || !Game.Inventory.EquipmentManager.SharePlaces(worn, slot)) continue;
+            if (DescribeGear(ItemNames.FindByName(e.Name) ?? 0, e.Name) is { } piece) pieces.Add(piece);
+        }
+        return pieces;
+    }
+
+    // By number when the number is in hand: two items can share a name, and the
+    // name lookup would weigh the wrong one.
+    private Game.Inventory.RoomSpellCounterItem? DescribeGear(int itemId, string name)
+    {
+        System.Text.Json.JsonElement? found = itemId > 0
+            ? GameData.FindRowByNumber("Items", itemId)
+            : GameData.FindRowByName("Items", name);
+        if (found is not System.Text.Json.JsonElement row
+            || Game.Inventory.EquipmentSlotMap.SlotForItem(row) is not { } slot)
+            return null;
+        static int Int(System.Text.Json.JsonElement row, string field) =>
+            row.TryGetProperty(field, out System.Text.Json.JsonElement v) && v.TryGetInt32(out int n) ? n : 0;
+        // Before the stat screen is read the class and level aren't known, and an
+        // unknown build is not restricted (the rule the route gates follow): the
+        // game's own refusal settles it then.
+        bool canWear = !Stats.HasParsed || CanCharacterEquipItem(name);
+        return new Game.Inventory.RoomSpellCounterItem(
+            itemId, name, slot, Int(row, "ArmourClass"), Int(row, "DamageResist"), canWear);
     }
 
     // Find the active set's Models.GameData.MessageRecord
@@ -14111,7 +14543,7 @@ public sealed class AppServices
             int spell = RoomGraph.GetRoom(key)?.Spell ?? 0;
             if (spell <= 0) continue;
             if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
-            if (hazard.IsSatisfiedBy(IsItemCarried) && MovementFilter.HazardCounterProtects(hazard))
+            if (hazard.IsSatisfiedBy(IsItemCarried, NegatingItemUsable) && MovementFilter.HazardCounterProtects(hazard))
                 continue;                                         // player counters it → survives
             if (!hazard.IsSurvivableDamage) return false;         // an unprotected grave hazard
             sawUnprotected = true;
@@ -14133,7 +14565,7 @@ public sealed class AppServices
             int spell = RoomGraph.GetRoom(path[i])?.Spell ?? 0;
             if (spell <= 0) continue;
             if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
-            if (hazard.IsSatisfiedBy(IsItemCarried) && MovementFilter.HazardCounterProtects(hazard))
+            if (hazard.IsSatisfiedBy(IsItemCarried, NegatingItemUsable) && MovementFilter.HazardCounterProtects(hazard))
                 continue;                                         // player survives it
             return i > 0 ? path[i - 1] : path[0];
         }
@@ -14251,6 +14683,7 @@ public sealed class AppServices
     {
         // Movement engines first, so nothing below races a live walk.
         MovementControl.Stop();
+        Combat.ClearUserBreakHold("states were reset");
         GhSweep.Stop(reason);
         Walker.ReleaseAbandonedCombatHold();
         LoopRunner.ClearPendingReconnectResume();
@@ -14512,6 +14945,7 @@ public sealed class AppServices
         Party.ComebackWindow = window;
         PartyComeback.ComebackWindow = window;
         PartyRejoin.ComebackWindow = window;
+        ComebackRequest.RetryWindow = window;
         RemoteCommands.ComebackWindow = window;
     }
 
