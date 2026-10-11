@@ -1846,8 +1846,11 @@ public static class BugReportBuilder
         // character couldn't pay turns on what the client took the purse to be.
         Kv(sb, "Purse for tolls and fares", svc.Movement.DescribePurse()
             + (svc.PurseRead.Owed ? "; its re-read is owed and not yet sent (master switch off, or the send gate held)" : string.Empty));
-        // A party at a toll: what the leader's check decided there (asked, paid for
-        // whom, gone round or stopped for whom) and the purses it last judged on.
+        // A party at a toll or a paid ride: whether short members are funded
+        // (Settings → Cash + Items), what the leader's check decided there (asked,
+        // paid for whom and by how much over, gone round or stopped for whom) and
+        // the purses it last judged on.
+        Kv(sb, "Fund party members' tolls / rides if short", svc.PartyToll.FundingOn ? "on" : "off");
         Kv(sb, "Party toll decisions", svc.PartyToll.Decisions is { Count: > 0 } tollDecisions
             ? string.Join(" | ", tollDecisions) : "(none)");
         Kv(sb, "Party toll, purses last judged on", svc.PartyToll.LastReadings);

@@ -76,8 +76,8 @@ public interface IRoomFilter
     string? DescribePurseFor(in RoomExit exit) => null;
 
     // Whether what this exit charges is beyond the crosser's OWN purse, as against
-    // a party member's. A walk or loop is refused outright only for this; a crossing
-    // only a follower can't pay keeps the party rules. Default: never.
+    // a party member's: what tells "you can't pay" from "the party can't all pay"
+    // when a crossing is refused. Default: never.
     bool IsOwnPurseShort(in RoomExit exit) => false;
 
     // Changes whenever the stats the door rule reads change, so a caller that
@@ -102,10 +102,12 @@ public interface IRoomFilter
 
     // Classifies WHY a sailing is non-boardable — the union of the per-member gate
     // kinds (Level when the lowest member falls under the fare's level floor, Fare
-    // when the poorest can't cover the copper). Mirrors IsBoatPassable: a sailing
-    // blocks iff this returns non-None. The router uses it to warn on — and, when
-    // it's the sole crossing, still offer — a gated sail rather than hiding the
-    // only route. Default never blocks; only Services.MovementFilter overrides.
+    // when the crosser can't cover the copper or the party in tow can't all be got
+    // aboard). Mirrors IsBoatPassable: a sailing blocks iff this returns non-None.
+    // The router still offers a gated sail when it's the sole crossing rather than
+    // hiding the only route; the walker sails one gated on level with a warning,
+    // and names one gated on fare without setting out. Default never blocks; only
+    // Services.MovementFilter overrides.
     ExitBlockReason DescribeBoatBlock(in BoatPassage passage) => ExitBlockReason.None;
 
     // Warm any party-scoped wealth / level readings a chosen fare- or

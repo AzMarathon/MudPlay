@@ -58,17 +58,17 @@ public sealed class MovementFilter : IRoomFilter
     // Supplies the party's minimum confirmed on-hand wealth (copper) when this
     // character is leading a party, or null when solo, not leading, or our own
     // wallet is unknown. Wired by AppServices to
-    // Game.Remote.PartyWealthTracker.MinWealth. For fares (an NPC's transport, a
-    // boat): when non-null it takes precedence over WealthProvider in
-    // CannotAfford, so a fare a follower is known to be short of is not taken. A
-    // follower nobody has read is not counted. Toll exits don't read it: the party
-    // at a toll is PartyTollClosedProbe's.
+    // Game.Remote.PartyWealthTracker.MinWealth. Non-null is how the warm-ups know
+    // a party is led, and the figure is the bug report's. No toll or fare is
+    // judged on it: the party at a paid crossing is PartyTollClosedProbe's.
     public Func<long?>? PartyWealthProvider { get; set; }
 
     // Whether the party this character leads can't be taken through a toll exit,
-    // and in what words: wired by AppServices to Game.Map.PartyTollGate, which
-    // asks every follower's purse at the toll and pays for those who are short
-    // when we can spare it. Unset, or solo, a toll is judged on our own purse alone.
+    // an NPC's paid transport or a sailing, and in what words: wired by
+    // AppServices to Game.Map.PartyTollGate, which asks every follower's purse at
+    // the crossing and pays for those who are short when it may and we can spare
+    // it. A sailing is asked about as a fare into its port (AsFare). Unset, or
+    // solo, a crossing is judged on our own purse alone.
     public Func<RoomExit, bool>? PartyTollClosedProbe { get; set; }
     public Func<RoomExit, string?>? PartyTollClosedReason { get; set; }
 
@@ -709,34 +709,22 @@ public sealed class MovementFilter : IRoomFilter
         return SparePurse() is { } spare && spare < cost;
     }
 
-    // An NPC ask-transport charges its fare to every person who asks, so it gates on
-    // the party-or-self wallet check — the party only routes through it when its
-    // poorest known member can pay. The fare is already copper. Stands down with the
-    // toll gate while WarmForRoute plans the paid-crossings-permitted route.
+    // An NPC ask-transport charges its fare to every person who asks, so it is
+    // judged as a toll is: on our own purse, and for a party on PartyTollClosedProbe
+    // (user, 2026-10-10: a ride is funded and closed as a toll is). The fare is
+    // already copper. Stands down with the toll gate while WarmForRoute plans the
+    // paid-crossings-permitted route.
     private bool IsFareGateBlocked(in RoomExit exit)
     {
         if (exit.FareCopper <= 0 || (_tollGateSuspended && !_tollGateForcedClosed)) return false;
-        return IsRefusedCrossing(in exit) || CannotAfford(exit.FareCopper);
+        return IsRefusedCrossing(in exit) || OwnPurseCannotAfford(exit.FareCopper)
+            || PartyTollClosedProbe?.Invoke(exit) == true;
     }
 
-    // Party-or-self affordability of a fare: true when the crosser can't cover
-    // `cost` copper. Party branch (PartyWealthTracker.MinWealth folds in our own
-    // wallet too) keeps the party off a fare a member is known to be short of; a
-    // member nobody has read is not counted. Returns false (don't gate) when solo
-    // / not leading / own wallet unknown — same "don't refuse on what we can't
-    // evaluate" rule as an unknown level — except while the record is known to be
-    // wrong (PurseDoubt), when nothing is affordable. Shared by the
-    // transport-fare and boat-fare gates; a toll exit has OwnPurseCannotAfford.
-    private bool CannotAfford(long cost)
-    {
-        if (cost <= 0) return false;
-        if (_tollGateForcedClosed) return true;
-        // Ahead of the party's purse: it is our own record that isn't believed.
-        if (_purseDoubt != PurseDoubt.None) return true;
-        if (PartyWealthProvider?.Invoke() is { } partyMin) return partyMin < cost;
-        if (WealthProvider?.Invoke() is not { } wealth) return false;
-        return wealth - Math.Max(0, ReservedCopper) < cost;
-    }
+    // A sailing's fare as the fare of an exit into its port: a sailing is no exit,
+    // and an exit is all the party's check and the purse's wording are asked about.
+    private static RoomExit AsFare(in BoatPassage passage) =>
+        new(passage.ArrivalRoom, RoomExitHint.Teleport, RawHint: null, FareCopper: passage.FareCopper);
 
     // ----- The purse on record, when it is known to be wrong ----------------
     // The inventory record is only rebuilt by a full `i`. Until one is read, two
@@ -895,9 +883,7 @@ public sealed class MovementFilter : IRoomFilter
 
     // Whether what this exit charges is beyond OUR purse, as against a party
     // member's: the purse in doubt, a refusal standing, or the record short. A
-    // follower's purse is judged apart: at a toll by PartyTollGate, and for a fare
-    // by the poorest known purse, where a sole-crossing sailing still sails with
-    // its warning.
+    // follower's purse is judged apart, by PartyTollGate.
     public bool IsOwnPurseShort(in RoomExit exit)
     {
         long cost = CostOf(in exit);
@@ -922,11 +908,10 @@ public sealed class MovementFilter : IRoomFilter
                 ? $"the game refused it, naming {CurrencyFormat.Full(named)}: {DescribeOwnPurse(named, carried)}"
                 : $"the game refused it, naming {CurrencyFormat.Full(named)}, and the purse isn't known (inventory not read)";
         }
-        bool toll = exit.Hint == RoomExitHint.Toll && exit.TollGold > 0;
-        // A toll our own purse covers and the party's doesn't: who is short, and
-        // why they aren't paid for.
-        if (toll && !IsOwnPurseShort(in exit) && PartyTollClosedReason?.Invoke(exit) is { } party) return party;
-        return DescribePurse(cost, partyPurse: !toll);
+        // A toll or fare our own purse covers and the party's doesn't: who is
+        // short, and why they aren't paid for.
+        if (!IsOwnPurseShort(in exit) && PartyTollClosedReason?.Invoke(exit) is { } party) return party;
+        return DescribePurse(cost, partyPurse: false);
     }
 
     // The same with nothing to pay, for the bug report, with the crossings a
@@ -942,8 +927,8 @@ public sealed class MovementFilter : IRoomFilter
             + ")"));
     }
 
-    // partyPurse: the cost is a fare's, judged on the party's poorest known purse
-    // when one leads; a toll is described on our own.
+    // partyPurse: the bug report's line, which gives the party's poorest known
+    // purse when one is led; a toll or fare is described on our own.
     private string DescribePurse(long cost, bool partyPurse)
     {
         switch (_purseDoubt)
@@ -1015,7 +1000,9 @@ public sealed class MovementFilter : IRoomFilter
     {
         ExitBlockReason reasons = ExitBlockReason.None;
         if (IsLevelExcluded(passage.MinLevel, 0)) reasons |= ExitBlockReason.Level;
-        if (CannotAfford(passage.FareCopper)) reasons |= ExitBlockReason.Fare;
+        if (passage.FareCopper > 0
+            && (OwnPurseCannotAfford(passage.FareCopper) || PartyTollClosedProbe?.Invoke(AsFare(in passage)) == true))
+            reasons |= ExitBlockReason.Fare;
         return reasons;
     }
 

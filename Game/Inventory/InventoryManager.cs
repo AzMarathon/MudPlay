@@ -211,6 +211,10 @@ public sealed partial class InventoryManager : IDisposable
     // a player here, or is hidden from us. It names nobody.
     public event Action? CoinGiveMisaimed;
 
+    // The game answered a coin give of ours with its line for more of a coin than
+    // we hold. It names nobody, and nothing moved.
+    public event Action? CoinGiveLackedCoins;
+
     // The game refused a give of ours. Carries the player the line names, or null
     // for the refusal that names nobody. A give waiting to be confirmed stops
     // waiting on it rather than on a timer.
@@ -832,6 +836,15 @@ public sealed partial class InventoryManager : IDisposable
         {
             _log?.Debug(LogCategory, "coin give refused: nobody of that name here to give to");
             CoinGiveMisaimed?.Invoke();
+            return;
+        }
+
+        // A coin give of more of a coin than we hold: the purse on record was wrong
+        // about that coin. Nothing moved.
+        if (CoinGiveLackedCoinsRegex().IsMatch(line))
+        {
+            _log?.Debug(LogCategory, $"coin give refused: {line}");
+            CoinGiveLackedCoins?.Invoke();
             return;
         }
 
@@ -1842,6 +1855,12 @@ public sealed partial class InventoryManager : IDisposable
     // prints them (GAME_MECHANICS "Giving items and coins to another player").
     [GeneratedRegex(@"^(.+) (?:refuses|cannot accept) your offer\.$")]
     private static partial Regex GiveRefusedByRegex();
+
+    // "You do not have that much copper!" (and silver, gold, platinum), and for the
+    // fifth coin "You do not have that many <coin>!", as the Stock engine prints
+    // them (GAME_MECHANICS "Giving items and coins to another player").
+    [GeneratedRegex(@"^You do not have that (?:much (?:copper|silver|gold|platinum)|many .+)!$")]
+    private static partial Regex CoinGiveLackedCoinsRegex();
 
     private const string GiveNotAllowedLine = "You may not give that item away!";
     private const string CoinGiveMisaimedLine = "Why would you want to give to that?";

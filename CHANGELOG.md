@@ -1,5 +1,15 @@
 # Version history
 
+## 3.176.0
+
+- New Cash + Items setting, off by default: Fund party members' tolls / rides if short
+- Changed from 3.172.0, which paid tolls for members unasked: with the setting off, a short or silent member closes tolls, NPC rides and sailings to the party for the trip
+- On: the leader keeps the larger of its own crossings (this one and those further on the route) and Minimum cash to keep on hand; only coin above that is handed over
+- No exact change: the smallest larger amount your coins make is handed over, with no other limit; the terminal says how much over
+- Paid NPC transports and sailings are checked and funded like tolls
+- A bank stop already being made (training trip, item purchase, a stash room set as the Bank) also draws what the party is short of the tolls ahead
+- A hidden member can't be given coin and counts as not funded; coin give refusals are read on every realm
+
 ## 3.175.17
 
 - Loops and Auto-Lair setups saved, edited, renamed, moved or deleted in one running client now appear in the others within a few seconds, without a restart
