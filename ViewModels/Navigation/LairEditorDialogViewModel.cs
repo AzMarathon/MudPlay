@@ -24,10 +24,18 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
 
     private readonly LairSetup _original;
     private readonly LairManager _setups;
+    // The game-data set the setup was opened on: its marked rooms are that set's
+    // (see OpenedOnGameData).
+    private readonly string? _openedOn;
     private readonly RoomGraphManager _graph;
     private readonly LairTimerStore _timers;
     private readonly ConfirmService? _confirm;
+    private readonly LogService? _log;
     private readonly bool _isNew;
+
+    // Why the setup can't be saved or added to right now, or null: another game-data
+    // set is active than the one it was opened on.
+    private string? OtherGameDataRefusal() => OpenedOnGameData.Refusal("setup", _openedOn, _setups.SetName);
 
     // Window title — "Create Setup" when new, "Edit Setup" otherwise.
     public string DialogTitle => _isNew ? "Create Auto-Lair Setup" : "Edit Auto-Lair Setup";
@@ -90,7 +98,8 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
         RoomGraphManager graph,
         LairTimerStore timers,
         ConfirmService? confirm = null,
-        bool isNew = false)
+        bool isNew = false,
+        LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(setup);
         ArgumentNullException.ThrowIfNull(setups);
@@ -98,9 +107,11 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
         ArgumentNullException.ThrowIfNull(timers);
         _original = setup;
         _setups = setups;
+        _openedOn = setups.SetName;
         _graph = graph;
         _timers = timers;
         _confirm = confirm;
+        _log = log;
         _isNew = isNew;
 
         Name  = setup.Name ?? string.Empty;
@@ -132,6 +143,11 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
     [RelayCommand]
     private void AddMarker()
     {
+        if (OtherGameDataRefusal() is { } refusal)
+        {
+            AddMarkerError = refusal;
+            return;
+        }
         RoomKey? resolved =
               SelectedSearchResult?.Key
            ?? (SearchResults.Count > 0 ? SearchResults[0].Key : (RoomKey?)null)
@@ -271,10 +287,30 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
         return null;
     }
 
+    // Inline message for the Save row: why a Save click didn't persist. Empty until
+    // a Save is refused, and cleared by the next one that goes through.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSaveError))]
+    private string _saveError = string.Empty;
+
+    public bool HasSaveError => !string.IsNullOrEmpty(SaveError);
+
+    // True, with the reason on the Save row and in the log, when another game-data
+    // set is active than the one the setup was opened on.
+    private bool SaveRefusedForOtherGameData()
+    {
+        if (OtherGameDataRefusal() is not { } refusal) return false;
+        SaveError = refusal;
+        _log?.Info("Lairs",
+            $"setup '{Name.Trim()}' not saved: {OpenedOnGameData.LogReason(_openedOn, _setups.SetName)}");
+        return true;
+    }
+
     [RelayCommand]
     private async Task SaveAsync()
     {
         if (!CanSave) return;
+        if (SaveRefusedForOtherGameData()) return;
 
         // Renaming an existing setup to a name that's already taken
         // would silently clobber. Mirror LoopEditorDialog's behaviour:
@@ -289,7 +325,10 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
                 title: "Overwrite existing setup?",
                 body: $"A setup named \"{trimmed}\" already exists on this BBS. Overwrite it?");
             if (!ok) return;
+            // The prompt is modeless too: the game data can have changed under it.
+            if (SaveRefusedForOtherGameData()) return;
         }
+        SaveError = string.Empty;
 
         // Persist a fresh LairSetup. We don't mutate _original — the
         // rail rows hold references to it via LairSetupRowViewModel,

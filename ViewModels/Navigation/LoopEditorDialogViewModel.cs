@@ -31,10 +31,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
 
     // Why the loop can't be saved or added to right now, or null: another game-data
     // set is active than the one it was opened on.
-    private string? OtherGameDataRefusal() =>
-        string.Equals(_loops.SetName, _openedOn, StringComparison.OrdinalIgnoreCase) ? null
-        : $"This loop's rooms belong to game data '{_openedOn ?? "(none)"}', and '{_loops.SetName ?? "(none)"}' is active now — " +
-          "switch back to that game data to change or save it.";
+    private string? OtherGameDataRefusal() => OpenedOnGameData.Refusal("loop", _openedOn, _loops.SetName);
     private readonly RoomGraphManager _graph;
     private readonly LoopRunner? _runner;
     private readonly ConfirmService? _confirm;

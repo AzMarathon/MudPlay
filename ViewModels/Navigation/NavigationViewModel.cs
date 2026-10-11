@@ -2040,7 +2040,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (row is null) return;
         LairEditorDialogViewModel vm = new(
             row.Source, _services.Lairs, _services.RoomGraph,
-            _services.LairTimers, _services.Confirm);
+            _services.LairTimers, _services.Confirm, log: _services.Log);
         await _services.Dialogs
             .OpenWindowAsync<LairEditorDialogViewModel, Models.Profile.LairSetup?>(vm);
     }
@@ -2204,7 +2204,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
         LairEditorDialogViewModel vm = new(
             draft, _services.Lairs, _services.RoomGraph,
-            _services.LairTimers, _services.Confirm, isNew: true);
+            _services.LairTimers, _services.Confirm, isNew: true, log: _services.Log);
         await _services.Dialogs
             .OpenWindowAsync<LairEditorDialogViewModel, Models.Profile.LairSetup?>(vm);
     }

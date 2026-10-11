@@ -412,7 +412,7 @@ While a loop is **running**, the CURRENT NAV rail shows its rooms as **green** r
 
 ### Importing a MegaMUD loop
 
-**Game Data → Import loops (MegaMUD .mp)…** (or **Import .mp** in Manage Loops) opens a `.mp` file in the **import review** window. Nothing is saved until you accept.
+**Game Data → Import loops (MegaMUD .mp)…** (or **Import .mp** in Manage Loops) opens a `.mp` file in the **import review** window. Nothing is saved until you accept. The review window stays open through a switch of game data, but will not **Accept**, **Verify**, load a Rooms.md or translate from another start room until the game data it was opened on is active again, and says so.
 
 - **Left — what the file says.**
   - The loop's name and author.
@@ -556,7 +556,7 @@ A whole-area tour walks *every* lair in the area, including the rooms a hand-bui
 
 ## Auto-Lair
 
-**Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**; clicking a marked room again, or **Alt+clicking** it, unmarks it), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Go** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**.
+**Auto-Lair** camps a monster's lair: travel there, wait out the respawn timer, enter to kill the spawn, then repeat. Mark lairs with the **Lair mode** chip (left-click the lair rooms, then **Save**; clicking a marked room again, or **Alt+clicking** it, unmarks it), or build a setup in **Navigation Management → New Lair** (where you can override each lair's respawn timer). Start one from the **LOOPS + AUTO-LAIRS** rail's **Go** button — it cycles the marked lairs. Its routing heuristic and travel-cost model live in **Settings → Auto-Lair**. The setup editor (**New Lair**, or **Edit…** on a setup) stays open through a switch of game data, but will not **Save** or take a new room until the game data it was opened on is active again, and says so.
 
 **When a lair counts as ready.** Its respawn timer (from the room's **Max Regen** time — the middle of the window on Stock — or your override) runs on **Stock** from the **last kill** in the lair — the clock the game itself restarts on every kill, so a long fight pushes the next visit back by its length — and on **Paradigm** from when you **entered** it. A Stock lair you haven't seen a kill in yet times from your entry. The **CURRENT NAV** countdown for a marked lair follows the same clock.
 

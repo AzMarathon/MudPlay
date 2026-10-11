@@ -31,6 +31,9 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     private readonly MpFileImporter _importer;
     private readonly RoomGraphManager _graph;
     private readonly LoopManager _loops;
+    // The game-data set the file was translated on: the rooms in the rows are that
+    // set's (see OpenedOnGameData), and Accept writes into that set's Loops folder.
+    private readonly string? _openedOn;
     private readonly MovementFilter? _filter;
     private readonly LogService? _log;
     private MegaMudRoomsFile? _roomsMd;
@@ -63,6 +66,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
         _importer = importer;
         _graph = graph;
         _loops = loops;
+        _openedOn = loops.SetName;
         _filter = filter;
         _log = log;
 
@@ -121,12 +125,40 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     [ObservableProperty] private bool _hasAnchorChoice;
     [ObservableProperty] private MpAnchorChoice? _selectedAnchor;
 
+    // A start room picked while another game data was active: translating from it is
+    // matching the steps against the active rooms, so it waits for the next Verify or
+    // Accept on the set the file was opened on.
+    private bool _anchorWaiting;
+
     partial void OnSelectedAnchorChanged(MpAnchorChoice? value)
     {
         if (value is null || _rebuilding) return;
+        _anchorWaiting = RefusedForOtherGameData("start room change");
+        if (!_anchorWaiting) TranslateFrom(value);
+    }
+
+    private void TranslateFrom(MpAnchorChoice anchor) =>
         BuildRows(_fixedRooms.Count > 0 || _roomsMd is not null
-            ? _importer.Translate(_file, value.Anchor, _fixedRooms, _roomsMd)
-            : _candidates.FirstOrDefault(c => c.Anchor.Equals(value.Anchor)), preserveEdits: true);
+            ? _importer.Translate(_file, anchor.Anchor, _fixedRooms, _roomsMd)
+            : _candidates.FirstOrDefault(c => c.Anchor.Equals(anchor.Anchor)), preserveEdits: true);
+
+    private void TranslateFromWaitingAnchor()
+    {
+        if (!_anchorWaiting) return;
+        _anchorWaiting = false;
+        if (SelectedAnchor is { } anchor) TranslateFrom(anchor);
+    }
+
+    // True, with the reason on the status line and in the log, when another game-data
+    // set is active than the one the file was opened on: nothing is saved, verified
+    // or translated until that set is active again.
+    private bool RefusedForOtherGameData(string what)
+    {
+        if (OpenedOnGameData.Refusal("loop", _openedOn, _loops.SetName) is not { } refusal) return false;
+        SetStatus(refusal, good: false);
+        _log?.Info("MpImporter",
+            $"{FileName}: {what} refused: {OpenedOnGameData.LogReason(_openedOn, _loops.SetName)}");
+        return true;
     }
 
     public ObservableCollection<MpTranslatedRowViewModel> Rows { get; } = new();
@@ -176,6 +208,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     [RelayCommand]
     private async Task LoadRoomsMdAsync()
     {
+        if (RefusedForOtherGameData("Rooms.md load")) return;
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
         IReadOnlyList<IStorageFile> picked = await main.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -189,15 +222,19 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
             },
         });
         if (picked.Count == 0) return;
+        MegaMudRoomsFile roomsMd;
         try
         {
-            _roomsMd = MegaMudRoomsFile.Parse(await File.ReadAllTextAsync(picked[0].Path.LocalPath));
+            roomsMd = MegaMudRoomsFile.Parse(await File.ReadAllTextAsync(picked[0].Path.LocalPath));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             SetStatus($"Can't read that file: {ex.Message}", good: false);
             return;
         }
+        // The game data can have changed while the file picker was up.
+        if (RefusedForOtherGameData("Rooms.md load")) return;
+        _roomsMd = roomsMd;
         Retranslate(resetAnchor: _fixedRooms.Count == 0);
         SetStatus(NeedsRoomsMd
             ? "That Rooms.md doesn't name this loop's start room either — pick it from the list or type it in the first row."
@@ -210,6 +247,8 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     [RelayCommand]
     private void Verify()
     {
+        if (RefusedForOtherGameData("verify")) return;
+        TranslateFromWaitingAnchor();
         if (!ApplyTypedRooms()) return;
         CheckWalkable();
         RefreshMapComparison();
@@ -219,11 +258,15 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
     private void Accept()
     {
         if (!CanAccept) return;
+        // Before the name is checked: under another set it would be checked against
+        // that set's loops.
+        if (RefusedForOtherGameData("accept")) return;
         string name = LoopName.Trim();
         if (name.Length == 0) { SetStatus("Give the loop a name first.", good: false); return; }
         // A loop of that name another client saved a moment ago counts.
         _loops.TakeInOutsideChanges();
         if (_loops.Get(name) is not null) { SetStatus($"A loop named '{name}' already exists — rename this one.", good: false); return; }
+        TranslateFromWaitingAnchor();
         if (!ApplyTypedRooms()) return;
         if (CheckWalkable() is not { } waypoints) return;
 
@@ -362,6 +405,8 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
             HasAnchorChoice = AnchorChoices.Count > 1;
             SelectedAnchor = AnchorChoices.FirstOrDefault(a => keep is not null && a.Anchor.Equals(keep.Anchor))
                              ?? AnchorChoices.FirstOrDefault();
+            // The rows built below are the selected start room's.
+            _anchorWaiting = false;
 
             MpTranslation? chosen = SelectedAnchor is { } sel
                 ? (_fixedRooms.Count > 0 ? _importer.Translate(_file, sel.Anchor, _fixedRooms, _roomsMd)

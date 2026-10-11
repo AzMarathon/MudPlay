@@ -588,7 +588,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
             name: $"Lairs {DateTime.Now:HH-mm-ss}",
             markers: Array.Empty<LairMarker>());
         LairEditorDialogViewModel vm = new(
-            draft, _lairSetups, _graph, _lairTimers, _confirm, isNew: true);
+            draft, _lairSetups, _graph, _lairTimers, _confirm, isNew: true, log: _log);
         await _dialogs.OpenWindowAsync<LairEditorDialogViewModel, LairSetup?>(vm);
     }
 
@@ -724,7 +724,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     {
         if (row is null) return;
         LairEditorDialogViewModel vm = new(
-            row.Source, _lairSetups, _graph, _lairTimers, _confirm);
+            row.Source, _lairSetups, _graph, _lairTimers, _confirm, log: _log);
         await _dialogs.OpenWindowAsync<LairEditorDialogViewModel, LairSetup?>(vm);
     }
 
