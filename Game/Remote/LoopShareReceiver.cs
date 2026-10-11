@@ -24,6 +24,10 @@ namespace MudPlay.Game.Remote;
 // saved under the name when it is free, else as new under "<name> 2" (the next free
 // number), and the sender's two loop settings become this character's for the loop
 // saved alone.
+//
+// Before any of that the loop is checked against the code the sender put on its
+// offer, and when the transfer is over the sender is told, once, what became of it
+// (Tell): the two ends can see they hold the same loop.
 public sealed class LoopShareReceiver : IDisposable
 {
     // Long enough for a big loop's paced lines (~800ms apart) and a slow sender.
@@ -53,8 +57,14 @@ public sealed class LoopShareReceiver : IDisposable
     private string? _expectedSender;
     private bool _disposed;
 
+    // Sends the sender our one answer when a transfer is over: channel, their name,
+    // the text, and whether it is a failure. False when it was held back (the master
+    // switch, or the Warn setting for a failure): RemoteCommandManager.SendOutcome.
+    private readonly Func<RemoteChannel, string, string, bool, bool>? _tell;
+
     public LoopShareReceiver(ChatRouter chat, LoopManager loops, Action<string> notice,
-        LogService? log = null, Func<DateTimeOffset>? clock = null)
+        LogService? log = null, Func<DateTimeOffset>? clock = null,
+        Func<RemoteChannel, string, string, bool, bool>? tell = null)
     {
         ArgumentNullException.ThrowIfNull(chat);
         ArgumentNullException.ThrowIfNull(loops);
@@ -64,8 +74,31 @@ public sealed class LoopShareReceiver : IDisposable
         _notice = notice;
         _log = log;
         _now = clock ?? (() => DateTimeOffset.Now);
+        _tell = tell;
         _chat.EntryClassified += Ingest;
     }
+
+    // Tell the sender what became of the loop, on the channel it came by, once. A
+    // sender on this version shows it beside its own code for the loop, so both
+    // players see the two ends hold the same loop, or that it has to be sent again
+    // (user, 2026-10-11). An older sender's client shows the line and does nothing
+    // with it.
+    private void Tell(RemoteChannel channel, string sender, string? code, string outcome, bool failed = false)
+    {
+        if (_tell is null) return;
+        bool told = _tell(channel, sender, LoopShareHandler.ResultLine(code, outcome), failed);
+        _log?.Info("LoopShare", told
+            ? $"told {sender}: {outcome}"
+            : $"{sender} was not told ({outcome}): the master switch is off"
+              + (failed ? ", or answers about a failed command are switched off in Settings → Talk" : string.Empty) + ".");
+    }
+
+    private static RemoteChannel ChannelOf(ChatChannel channel) => channel switch
+    {
+        ChatChannel.Gangpath => RemoteChannel.Gangpath,
+        ChatChannel.Local => RemoteChannel.Local,
+        _ => RemoteChannel.Telepath,
+    };
 
     // We just sent `@loop send yes`. sender is the telepath recipient, or null when we
     // confirmed on gangpath / say (then any player on that channel may answer).
@@ -127,6 +160,7 @@ public sealed class LoopShareReceiver : IDisposable
         // The offer this transfer answers: one per transfer, as the yes is.
         string? offered = _offered.Remove(Given(sender), out (string? Code, DateTimeOffset At) offer)
             && _now() - offer.At <= OfferKept ? offer.Code : null;
+        RemoteChannel channel = ChannelOf(e.Channel);
         Loop loop;
         bool lairWaitUnknown;
         try { loop = LoopShareCodec.Decode(parts!, out lairWaitUnknown); }
@@ -134,12 +168,13 @@ public sealed class LoopShareReceiver : IDisposable
         {
             _log?.Warn("LoopShare", $"loop from {sender} couldn't be read: {ex.Message}");
             _notice($"[Loop from {sender} arrived damaged, not saved]");
+            Tell(channel, sender, code: null, "not saved: it arrived damaged - send it again", failed: true);
             return;
         }
-        Save(loop, sender, offered, lairWaitUnknown);
+        Save(loop, sender, channel, offered, lairWaitUnknown);
     }
 
-    private void Save(Loop loop, string sender, string? offered, bool lairWaitUnknown)
+    private void Save(Loop loop, string sender, RemoteChannel channel, string? offered, bool lairWaitUnknown)
     {
         // The sender's loop as the sender runs it: its route with the two settings it
         // sent. Ours, further down, is a loop here as this character runs it.
@@ -173,6 +208,7 @@ public sealed class LoopShareReceiver : IDisposable
                 $"loop '{loop.Name}' from {sender} is not the loop offered [received {theirCode}, offered {offered}] — not saved.");
             _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender} does not match the loop offered "
                 + $"(received {theirCode}, offered {offered}), not saved]");
+            Tell(channel, sender, theirCode, $"not saved: it is not the loop offered ({offered}) - send it again", failed: true);
             return;
         }
         string checkedAs = $"({theirCode}, {verification})";
@@ -181,6 +217,7 @@ public sealed class LoopShareReceiver : IDisposable
         {
             _log?.Warn("LoopShare", $"loop '{loop.Name}' from {sender} not saved — no game-data set is active");
             _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender}, not saved: no game data set is loaded]");
+            Tell(channel, sender, theirCode, "not saved: no game data set is loaded here", failed: true);
             return;
         }
 
@@ -198,6 +235,7 @@ public sealed class LoopShareReceiver : IDisposable
             _log?.Info("LoopShare",
                 $"loop '{loop.Name}' {checkedAs} from {sender} is the loop we have as '{same.Name}' — nothing saved, nothing changed.");
             _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender} {checkedAs}, already have it as '{same.Name}']");
+            Tell(channel, sender, theirCode, $"already have it as '{same.Name}'");
             return;
         }
 
@@ -208,6 +246,7 @@ public sealed class LoopShareReceiver : IDisposable
             _loops.Save(loop);
             _log?.Info("LoopShare", $"saved loop '{loop.Name}' {checkedAs} ({rooms} rooms) received from {sender}.");
             _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender} {checkedAs}]");
+            Tell(channel, sender, theirCode, $"saved as '{loop.Name}'");
             return;
         }
 
@@ -224,6 +263,7 @@ public sealed class LoopShareReceiver : IDisposable
             + $"'{existing.Name}' here is a different loop [{ourCode}] and is left as it is.");
         _notice($"[Received loop '{original}' {rooms} rooms from {sender} {checkedAs}, saved as '{loop.Name}': "
             + $"your '{existing.Name}' is a different loop ({ourCode})]");
+        Tell(channel, sender, theirCode, $"saved as '{loop.Name}'");
     }
 
     // "<name> 2", or the next number up that no loop has. Loop names are matched

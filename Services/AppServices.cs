@@ -9179,9 +9179,15 @@ public sealed class AppServices
         // receiver saves a loop we asked for (window opened by our own outbound
         // `@loop send yes`, wired from the outbound-chat watcher in MainWindowViewModel).
         LoopShare = new Game.Remote.LoopShareHandler(Loops, Log, paceScheduler: pacedReplyScheduler,
-            runningLoop: () => LoopRunner.State is not Game.Map.LoopState.Idle ? LoopRunner.CurrentLoop : null);
+            runningLoop: () => LoopRunner.State is not Game.Map.LoopState.Idle ? LoopRunner.CurrentLoop : null,
+            notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)));
+        // What the asker's client answers when a loop we sent has arrived there.
+        Chat.EntryClassified += LoopShare.NoteChat;
+        // The receiver's one answer to the sender goes out as every remote reply
+        // does, and is held back by the master switch and the Warn setting there.
         LoopShareInbox = new Game.Remote.LoopShareReceiver(Chat, Loops,
-            notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)), Log);
+            notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)), Log,
+            tell: RemoteCommands.SendOutcome);
 
         // MovePlayer remote-command handler.
         // Registers @goto, @loop, @lair, @stop, @rego against the
