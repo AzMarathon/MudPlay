@@ -3622,6 +3622,10 @@ public partial class MainWindowViewModel : ObservableObject
                 // and a resume gap longer than the longest buff clears them then; so a
                 // brief manual disconnect keeps the recast clock instead of restarting it.
                 AppServices.Current.CastDirector.PauseBuffTimers();
+                // A hazard counter's buff is on the character through the drop too.
+                // Its clock stops here and runs on, with what it had left, from the
+                // same first in-game prompt.
+                AppServices.Current.AutoHazardCounterProvisioner.Pause();
                 // The reconnect's splash and login menu ride the same line extractor.
                 AppServices.Current.MessageCandidateWatcher.NotifyLeftGame();
                 AppServices.Current.InGameCapture.NotifyDisconnected();
@@ -3853,7 +3857,13 @@ public partial class MainWindowViewModel : ObservableObject
         // to report, once it has gone; reporting it here as well judged every client
         // command twice.
         if (data.Length is > 0 and <= 128 && !AppServices.Current.EngineGate.SendingClientCommand)
-            AppServices.Current.NoteSentForSneak(System.Text.Encoding.Latin1.GetString(data).TrimEnd('\r', '\n', '\0'));
+        {
+            string sent = System.Text.Encoding.Latin1.GetString(data).TrimEnd('\r', '\n', '\0');
+            AppServices.Current.NoteSentForSneak(sent);
+            // A room command that casts a dispel ends a tracked hazard buff, judged
+            // at the same point and for the same reason: once per command.
+            AppServices.Current.NoteSentForRoomCommand(sent);
+        }
         // Chat router — capture engine-sent telepath "/<recipient> <message>"
         // bursts (party @-command broadcasts / nags) so the outgoing
         // conversation entry is attributed. Typed telepaths render on-screen

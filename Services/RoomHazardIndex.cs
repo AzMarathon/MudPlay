@@ -60,7 +60,8 @@ public sealed class RoomHazardIndex
     // desert's "you need water, soon!" spell 712), reached down the checkspell's
     // buff-absent branch; its game-data message is the reactive re-`use` trigger,
     // since the waterskin buff has no wear-off line to time off. 0 when the chain
-    // casts nothing (or the target block couldn't be resolved).
+    // casts nothing (or the target block couldn't be resolved) and the user has named
+    // no follow-on for the room spell (RoomSpellDamageClassifier.ConfirmedFollowOn).
     // ImmunityItems are the passive failure-branch guards (the desert sunstone
     // wristband) that make the whole hazard a no-op just by being held/worn — the
     // provisioner skips the `use` entirely when one is carried, since spending a
@@ -366,6 +367,16 @@ public sealed class RoomHazardIndex
         foreach (int tb in textBlocks)
             ScanTextBlock(tb, 0, tbActions, castersBySpell, durationSecondsBySpell, visitedTb, groups, buffCounters);
 
+        // Where the data named no lapse spell, the user may have: Paradigm's two
+        // desert spells gate on the waterskin buff with a `failspell` whose
+        // buff-absent block the set lacks, and the spell cast there is on the user's
+        // word (RoomSpellDamageClassifier.ConfirmedFollowOn, the one list of them).
+        // A set that has the block (Stock) is read from its own data above.
+        if (Game.Map.RoomSpellDamageClassifier.ConfirmedFollowOn(rootSpell) is > 0 and int followOn)
+            for (int i = 0; i < buffCounters.Count; i++)
+                if (buffCounters[i].LapseSpell == 0)
+                    buffCounters[i] = buffCounters[i] with { LapseSpell = followOn };
+
         // Only index a genuinely harmful spell — a benign one that happens to carry a
         // failitem/checkspell counter is not a hazard (see `harmful` above).
         if (!harmful || groups.Count == 0) return null;
@@ -516,7 +527,7 @@ public sealed class RoomHazardIndex
         { "cast", "teleport", "transfer", "checkspell", "failspell" };
 
     // Control-flow directives whose target block continues the same branch.
-    private static readonly string[] BranchFlowDirectives =
+    internal static readonly string[] BranchFlowDirectives =
         { "random", "linkto", "link", "goto" };
 
     // True when any textblock reachable from these roots contains a harmful directive.
