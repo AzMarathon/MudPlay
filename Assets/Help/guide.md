@@ -1358,7 +1358,7 @@ Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clien
 | `[<player> on loop '<name>': saved as '<name 2>' (code <code>, the same as sent)]` | The asker's answer came back and its code is the code of the loop you sent: both ends hold the same loop. |
 | `[<player> on loop '<name>': … (code <code>, NOT the code sent, <code>)]` | The asker's client read a different loop from the one you sent. It will also have said it was not saved. Send it again. |
 
-**What your client accepts.** Loop lines are taken only within two minutes of your own `@loop send yes` (or `y`) going out, and one loop per `yes`. When you said yes by telepath, only lines from that player are taken. A loop needs no permission on the receiving side: you asked for it.
+**What your client accepts.** Loop lines are taken only within two minutes of your own `@loop send yes` (or `y`) going out, one loop per `yes`, and **only on the channel the yes went by**. When you said yes by telepath, only lines from that player are taken. A yes on gangpath or say names nobody, so there lines are taken only from a player whose **offer** your client heard on that channel; anyone else's are passed over, and the loop you asked for is still let in. A loop whose name, or a room's command, holds a control character (an escape sequence, a line break) is refused as damaged. A loop needs no permission on the receiving side: you asked for it.
 
 **What travels:** the route itself. Every room, its command and delay, its no-rest, no-attack and rest-here marks, and the loop's notes. With it go the **sending character's** two loop settings, *Only attack in lair rooms* and the lair wait, as that character has them. The loop file your client saves is shared by every character on your game data and holds neither; the two settings become the **receiving character's own** for the loop that is saved, since that is what was offered and what you said yes to. Your other characters start the loop with both off. Whether it is a favourite, and which folder it sits in, stay your own choice.
 
@@ -1389,7 +1389,9 @@ Clients on an older version:
 
 **Situations:**
 
-- **On gangpath or say:** every MudPlay client there that grants you Move player offers its own match, and after a `yes` on those channels your client takes lines from any of them. Use telepath.
+- **On gangpath or say:** every MudPlay client there that grants you Move player offers its own match, and after a `yes` on those channels your client takes lines from any of the players who offered, on that channel. Use telepath.
+- **You asked aloud (say) and the sender is sneaking:** its client answers by telepath, since it won't speak aloud, so its loop does not come on the channel of a yes you said and is not taken. Ask by telepath.
+- **The sender offers other loops meanwhile**, to you or to anyone your client can hear: every offer it made in the last five minutes is remembered, and the loop that arrives is verified against whichever one it is.
 - **`yes`, `y`, `no` and `n` are read as answers**, so a loop with one of those names can't be asked for by name.
 - **The game says the sender is typing too quickly:** the sending client waits three seconds and sends the last line again.
 - **Master switch off on the client asked:** ignored, no answer.
