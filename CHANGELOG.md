@@ -1,6 +1,6 @@
 # Version history
 
-## 3.172.3
+## 3.173.3
 
 - Hang-up death check reads the room you come back in: where that room's dead arrive agrees with a death; back where you left rules one out, and so does any other room on unmodified Stock data and Paradigm's shared rooms
 - Lives not read before the hang-up: back stripped where the dead arrive is now recorded as a death; owning nothing a death takes, the room alone is enough
@@ -9,6 +9,18 @@
 - A hang-up while dropped in an arena room is recorded as an arena death (nothing lost, no pile), on any realm, with or without a lives count from before
 - Sysop god lives asks no life back after an arena death, on either realm
 - Bug report shows where the stored list's dead arrive, how far that is trusted, and the room come back in
+
+## 3.173.0
+
+- Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held
+- Held buffs are let through once the debuff has gone out in the lair, two rounds into its fight at the latest, and held again at the next lair's door
+- A buff held at one lair with no cast since gets one cast at the next door first
+- Every lair wait also holds while mana is under what the debuff needs: its Min mana per cast, never less than the spell's cost, the higher of the two debuffs' (nav chip: Waiting for Mana to Debuff); mana-regen buffs still go out
+- A fight at the doorstep holds no buff
+- At a lair's door a buff you can't pay for is passed over for the next due one
+- A lair wait ends at once when the loop is stopped or paused, or Auto-Combat or the master switch goes off
+- Entire Loop Settings offers the lair wait while a loop walks to its first room
+- Program log and bug report say what a lair wait is for, what it holds back and why it ended
 
 ## 3.172.0
 
@@ -107,7 +119,7 @@
 - A room spell's kills count one each as they happen (session kills, lair timer, drop re-look, summon re-scan)
 - A command's `*Combat Off*` is recognised with a prompt or other lines between it and the echo
 - Program log notes a `*Combat Off*` that answers a command
-- bug reports addressed: paradigm-20261010-145330
+- bug reports addressed: paradigm-20261010-145330, paradigm-20261010-215619
 
 ## 3.167.12
 

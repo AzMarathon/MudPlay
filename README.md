@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.172.3**
+> **Version 3.173.3**
 > - Hang-up death check reads the room you come back in: where that room's dead arrive agrees with a death; back where you left rules one out, and so does any other room on unmodified Stock data and Paradigm's shared rooms
 > - Lives not read before the hang-up: back stripped where the dead arrive is now recorded as a death; owning nothing a death takes, the room alone is enough
 > - Paradigm: back in the Burial Vault (14/1077) after hanging up in one of Paradigm's own rooms counts as where the dead arrive

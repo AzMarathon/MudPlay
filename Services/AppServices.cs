@@ -5451,7 +5451,7 @@ public sealed class AppServices
         // the attack spell" ordering). Only exercised when a debuff is actually
         // due, so a normal engage is untouched.
         Combat.SetInBetweenEvaluator(CastDirector.Evaluate);
-        Combat.SetBetweenRoundSlotMarker(CastDirector.MarkBetweenRoundSlotUsed);
+        Combat.SetBetweenRoundSlotMarker(CastDirector.NotePreAttackDebuffSent);
         Combat.SetBetweenRoundSlotQuery(() => CastDirector.BetweenRoundSlotUsed);
         // A between-round survival cast stops our auto-attack; let the combat
         // engine resume the weapon attack on the resulting *Combat Off*
@@ -8438,8 +8438,28 @@ public sealed class AppServices
                 timer.Tick += (_, _) => { timer.Stop(); action(); };
                 timer.Start();
             },
-            log: Log);
-        CastDirector.SetLairEntryBuffHold(() => LairDebuffHold.BlockingBuffs);
+            log: Log,
+            buffsDue: priority => CastDirector.BuffsDue(priority),
+            stillWanted: LairWaitStillWanted,
+            healOrCureDue: () => CastDirector.HealOrCureDue(),
+            debuffMana: LairEntryDebuffMana,
+            inCombat: () => PlayerState.InCombat,
+            manaIsFull: () => Health.ManaIsAtGameFull,
+            // Where the combat engine itself judges a fight to be: the room a loop
+            // step in flight is entering, else the one the tracker has us in.
+            fightRoom: () => CombatSuppressionVerdict().Room);
+        CastDirector.SetLairEntryBuffHold(LairDebuffHold);
+        CastDirector.SetManaRegenBuffProbe(IsManaRegenRollSpell);
+        // An engage with no debuff to cast first: the hold has nothing to keep the
+        // round's cast for, and lets the buffs through.
+        Combat.SetNoDebuffOnEngageSink(() => LairDebuffHold.NoteNoDebuffThisFight());
+        // A loop that stops or fails never asks again, so its wait is ended here rather
+        // than left to the hold's own next look.
+        LoopRunner.Event += e =>
+        {
+            if (e.Kind is Game.Map.LoopEventKind.Stopped or Game.Map.LoopEventKind.Failed)
+                LairDebuffHold.Reset("the loop stopped");
+        };
         LoopRunner.SetMoveReadyCheck(() =>
         {
             // A "rest up here" room holds the step until the rest is done.
@@ -8448,7 +8468,8 @@ public sealed class AppServices
             // gear and the `sn`: the buffs are raised for the step, and a wear that
             // held it afterwards would spend their time; a wear also ends a sneak.
             if (!CounterWear.ReadyToEnter(NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()))) return false;
-            if (!LairDebuffHold.ReadyToEnter(LairEntryDebuffModeForNextStep())) return false;
+            Game.Map.LairEntryDebuffMode lairWait = LairEntryDebuffModeForNextStep(out Game.Map.RoomKey? lair);
+            if (!LairDebuffHold.ReadyToEnter(lairWait, lair)) return false;
             PreMoveGearOnce(ref _loopPreMoveGearFor, LoopRunner.PeekNextPlannedDirection());
             if (!HazardLastCallBeforeStep(LoopRunner.PeekNextPlannedDirection())) return false;
             return Stealth.ReadyToMoveSneaking();
@@ -11492,14 +11513,17 @@ public sealed class AppServices
     // How the running loop wants its next step taken with respect to the debuff:
     // the loop's own setting when that step enters a lair we would fight in and the
     // combat profile has a debuff to cast on entry, else Off (nothing to wait for).
-    private Game.Map.LairEntryDebuffMode LairEntryDebuffModeForNextStep()
+    // lair is the room that step enters.
+    private Game.Map.LairEntryDebuffMode LairEntryDebuffModeForNextStep(out Game.Map.RoomKey? lair)
     {
+        lair = null;
         if (LoopRunner.CurrentLoop is not { LairEntryDebuff: not Game.Map.LairEntryDebuffMode.Off } loop)
             return Game.Map.LairEntryDebuffMode.Off;
         if (!IsAutoCombatEnabled) return Game.Map.LairEntryDebuffMode.Off;
         if (NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()) is not { } next
             || RoomGraph.GetRoom(next) is not { HasLair: true })
             return Game.Map.LairEntryDebuffMode.Off;
+        lair = next;
         // A lair the loop is told not to fight in gets no debuff either.
         if (Game.Map.LoopCombatSuppression.IsSuppressed(loop, next, currentIsLair: true))
             return Game.Map.LairEntryDebuffMode.Off;
@@ -11509,6 +11533,36 @@ public sealed class AppServices
         bool debuffConfigured = !string.IsNullOrWhiteSpace(combat.AreaDebuffSpell.SpellName)
                                 || !string.IsNullOrWhiteSpace(combat.SingleTargetDebuffSpell.SpellName);
         return debuffConfigured ? loop.LairEntryDebuff : Game.Map.LairEntryDebuffMode.Off;
+    }
+
+    // Asked by a lair wait that already stands: is the loop still about to enter the
+    // lair it waits outside? No once the loop is gone, its option or Auto-Combat (the
+    // master switch with it) is off, or its next step is known and is no longer into
+    // a lair it fights in. A room the tracker can't place at the moment says nothing
+    // either way: ending the wait on that would restart it, and its counts, at once.
+    private bool LairWaitStillWanted()
+    {
+        if (LoopRunner.CurrentLoop is not { LairEntryDebuff: not Game.Map.LairEntryDebuffMode.Off } loop
+            || !IsAutoCombatEnabled)
+            return false;
+        if (NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()) is not { } next) return true;
+        return RoomGraph.GetRoom(next) is { HasLair: true }
+            && !Game.Map.LoopCombatSuppression.IsSuppressed(loop, next, currentIsLair: true);
+    }
+
+    // The debuff a lair wait is for and the mana it needs (the higher-asking of the
+    // profile's two debuffs, by the cost the combat engine checks a cast against),
+    // against what the character has. Null when there is nothing to wait for: no
+    // debuff that needs mana, or mana not read yet.
+    private (string Spell, int Needed, int Mana, int MaxMana, bool IsSpellCost)? LairEntryDebuffMana()
+    {
+        if (PlayerState.MaxMa <= 0) return null;
+        Models.Profile.CombatSettings combat =
+            ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
+        return Game.Combat.CombatSpellChooser.EntryDebuffReserve(
+                combat, ReadAutoModeFlag(d => d.AutoNuke), PlayerState.MaxMa, Spellbook.ManaCostOf) is { } reserve
+            ? (reserve.Spell, reserve.Mana, PlayerState.Ma, PlayerState.MaxMa, reserve.IsSpellCost)
+            : null;
     }
 
     private Game.Map.RoomKey? NextPlannedRoomForEquip(Game.Map.Direction? dir)
