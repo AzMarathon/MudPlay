@@ -15,9 +15,13 @@ namespace MudPlay.Game.Remote;
 // telepath, so we know who to — only from that player. The permission gate is on the
 // sender, who only offered because they grant us @loop; we just confirm we asked.
 //
-// A received loop never overwrites one of ours: an identical loop already saved under
-// that name is reported as already had, and a different one lands as
-// "<name> (from <sender>)".
+// A received loop never overwrites one of ours, nor changes how we run one (user,
+// 2026-10-11). When we hold a loop of that name the two are compared by signature
+// (LoopSignature: the route, every room's settings, and the two loop-wide settings,
+// the sender's against this character's). The same: rejected, nothing saved or
+// changed. Different: saved as new under "<name> 2" (the next free number), and the
+// sender's two loop settings become this character's for that new loop alone. With
+// no loop of that name it is saved under it, the sender's two settings with it.
 public sealed class LoopShareReceiver : IDisposable
 {
     // Long enough for a big loop's paced lines (~800ms apart) and a slow sender.
@@ -124,45 +128,55 @@ public sealed class LoopShareReceiver : IDisposable
         // A loop of that name another client saved a moment ago counts for the
         // clash checks below.
         _loops.TakeInOutsideChanges();
-        if (_loops.Get(loop.Name) is { } existing && SameRoute(existing, loop))
+        // The sender's loop as the sender runs it: its route with the two settings it
+        // sent. Ours, below, is the loop of that name as this character runs it.
+        string theirs = LoopSignature.Of(loop);
+        string theirCode = LoopSignature.Short(theirs);
+        int rooms = loop.Waypoints.Count;
+        if (_loops.Get(loop.Name) is not { } existing)
         {
-            _log?.Info("LoopShare", $"loop '{loop.Name}' from {sender} matches ours — nothing saved.");
-            _notice($"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}, already have it]");
+            // Save keeps the two loop settings the sender offered as this character's
+            // for the loop, and the rest in the loop file.
+            _loops.Save(loop);
+            _log?.Info("LoopShare", $"saved loop '{loop.Name}' [{theirCode}] ({rooms} rooms) received from {sender}.");
+            _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender}]");
             return;
         }
 
+        string ours = LoopSignature.Of(existing);
+        if (ours == theirs)
+        {
+            _log?.Info("LoopShare",
+                $"loop '{loop.Name}' [{theirCode}] from {sender} is the loop we have under that name — nothing saved, nothing changed.");
+            _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender}, already have it ({theirCode})]");
+            return;
+        }
+
+        // The name is taken by a different loop: other rooms, other room settings or
+        // other loop settings. Ours stays as it is, with this character's settings
+        // for it, and theirs is saved beside it under a numbered name. Taking their
+        // two settings for the loop we have would change a run already under way.
         string original = loop.Name;
-        loop.Name = FreeName(original, sender);
+        loop.Name = NumberedName(original);
         _loops.Save(loop);
+        string ourCode = LoopSignature.Short(ours);
         _log?.Info("LoopShare",
-            $"saved loop '{loop.Name}' ({loop.Waypoints.Count} rooms) received from {sender}.");
-        _notice(loop.Name == original
-            ? $"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}]"
-            : $"[Received loop '{original}' {loop.Waypoints.Count} rooms from {sender}, saved as '{loop.Name}']");
+            $"saved loop '{loop.Name}' [{theirCode}] ({rooms} rooms) received from {sender}: "
+            + $"'{existing.Name}' here is a different loop [{ourCode}] and is left as it is.");
+        _notice($"[Received loop '{original}' {rooms} rooms from {sender}, saved as '{loop.Name}' ({theirCode}): "
+            + $"your '{existing.Name}' is a different loop ({ourCode})]");
     }
 
-    // The sender's name if it's free, else "<name> (from <sender>)", numbered on.
-    private string FreeName(string name, string sender)
+    // "<name> 2", or the next number up that no loop has. Loop names are matched
+    // without case, as the catalogue matches them.
+    private string NumberedName(string name)
     {
-        if (_loops.Get(name) is null) return name;
-        string baseName = $"{name} (from {sender})";
-        string candidate = baseName;
-        for (int n = 2; _loops.Get(candidate) is not null; n++) candidate = $"{baseName} {n}";
-        return candidate;
+        for (int n = 2; ; n++)
+        {
+            string candidate = $"{name} {n}";
+            if (_loops.Get(candidate) is null) return candidate;
+        }
     }
-
-    private static bool SameRoute(Loop a, Loop b) =>
-        a.OnlyAttackInLairRooms == b.OnlyAttackInLairRooms
-        && a.LairEntryDebuff == b.LairEntryDebuff
-        && a.Waypoints.Count == b.Waypoints.Count
-        && a.Waypoints.Zip(b.Waypoints).All(p =>
-            p.First.Room == p.Second.Room
-            && (p.First.Command ?? "") == (p.Second.Command ?? "")
-            && p.First.DelayMs == p.Second.DelayMs
-            && p.First.DoNotRest == p.Second.DoNotRest
-            && p.First.DoNotAttack == p.Second.DoNotAttack
-            && p.First.RestHereHp == p.Second.RestHereHp
-            && p.First.RestHereMana == p.Second.RestHereMana);
 
     // Parse "@loopdata <id> <i>/<n> <chunk>", tolerating the {} a remote reply is
     // wrapped in.

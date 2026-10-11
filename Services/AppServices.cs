@@ -2669,6 +2669,7 @@ public sealed class AppServices
     // BBS changes.
     public Game.Map.LoopManager Loops { get; private set; } = null!;
     public LoopFavoritesStore LoopFavorites { get; private set; } = null!;
+    public LoopSettingsStore LoopSettings { get; private set; } = null!;
 
     // MegaMUD .mp loop-file importer. Stateless w.r.t. the
     // profile; takes the active RoomGraph at construct
@@ -2958,7 +2959,12 @@ public sealed class AppServices
         StatlineReconcile.SetDesiredCommandProvider(
             () => ReadSection<Models.Profile.StatlineSettings>(Profile.Current, "Statline").Command);
         PartyState = new Game.PartyState();
-        Party = new Game.PartyManager(Router, PartyState);
+        Party = new Game.PartyManager(Router, PartyState, Log)
+        {
+            // Stock keeps a follower an exit turned away on the leader's member
+            // list, where Paradigm drops them (GameData is read when asked).
+            OnStock = () => GameData.ActiveRealm != Game.RealmType.ParaMud,
+        };
         // Mirror the local character's live HP/MA into the self party
         // row on every prompt — without this the self row only updates
         // on a par poll, so per-prompt damage between polls doesn't
@@ -3193,6 +3199,9 @@ public sealed class AppServices
         // followers sitting in the room, so re-invite each once AutoParty observes them
         // present (they never "re-enter the Realm" to trip the grace-window auto-invite).
         Party.LeaderReconnectReformInvites += AutoParty.NoteLeaderReconnectReform;
+        // A Stock member an exit left behind is on our list because they joined:
+        // an invite wait that runs out for them doesn't end in an uninvite.
+        AutoParty.LeftBehindOnOurList = Party.IsLeftBehindOnOurList;
         // Suicide-password observer + engine-gate consumer. Drives
         // EngineGate.IsLocked during password-entry prompts so
         // MainWindowViewModel's wrapped engine wire-senders silently
@@ -8382,6 +8391,9 @@ public sealed class AppServices
         // game data's loops in hand; it plugs into both managers.
         LoopFavorites = new LoopFavoritesStore(Profile, Loops, Lairs, ProfileGameDataSet, Log);
 
+        // So is how each loop is run: only attack in lair rooms and the lair wait.
+        LoopSettings = new LoopSettingsStore(Profile, Loops, Log);
+
         // Shared folder CRUD over the Loops directory (loops + lairs
         // live in the same on-disk tree). Owns the filesystem move once
         // and reloads both managers, instead of either racing the dir.
@@ -9201,6 +9213,9 @@ public sealed class AppServices
         // A follower we backtracked for couldn't move — hold for their @ok as if
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
+        // Stock keeps a follower an exit turned away on the leader's member list,
+        // where Paradigm drops them: what brings such a member back differs.
+        PartyComeback.OnStock = () => GameData.ActiveRealm != Game.RealmType.ParaMud;
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
         // A loop doesn't go back for a member an exit of its circuit turned away.
         // What tells that from a hold: a wait or hold the member has out with us,
@@ -9996,6 +10011,26 @@ public sealed class AppServices
         // A leader who refused, or never came: the follow the game ended without a
         // line is ended on our side too.
         ComebackRequest.FollowGivenUp = (leader, _) => Party.NoteFollowGivenUp(leader);
+        // Stock leaves a follower an exit turned away on the leader's member list,
+        // where an invite prints them nothing and a `join` of theirs needs none: the
+        // follower's client joins by itself once the leader it asked is with it.
+        ComebackRequest.OnStock = () => GameData.ActiveRealm != Game.RealmType.ParaMud;
+        ComebackRequest.ListedWith = () => Party.ListedWithLeader;
+        ComebackRequest.NotOnTheirList = leader => Party.NoteNotListedWith(leader);
+        // One join, whichever of the two sends it: ours, or the one the leader's
+        // @join asks for. The game's answer to either is read in one place. Not
+        // keyed on the realm: a second @join inside 3 s is passed over anywhere
+        // (PartyEssentialHandlers.OnJoin says why that is safe).
+        PartyEssentials.JoinSent = ComebackRequest.NoteJoinSent;
+        PartyEssentials.JoinAlreadySent = ComebackRequest.JoinJustSentTo;
+        RoomClassifier.EntitiesObserved += observation =>
+        {
+            foreach (Game.Combat.RoomEntity entity in observation.Entities)
+            {
+                if (entity.Kind != Game.Combat.EntityKind.Player) continue;
+                ComebackRequest.NotePlayerInRoom(Models.GameData.PlayerObservation.SplitName(entity.ResolvedName).Given);
+            }
+        };
         // The trip's leader may tell us it is over after an exit has turned us out
         // of the party on our own side.
         RemoteCommands.PartyTrainEligibility = sender => PartyTrain.InTripOf(sender);
@@ -10068,6 +10103,13 @@ public sealed class AppServices
             BlockedByMasterSwitch = what => AutoModeController.Blocks("Events", what),
             IsMasterSwitchOff = () => AutoModeController.KillSwitchEngaged,
         };
+
+        // A loop held outside the catalogue can be a copy the catalogue no longer
+        // holds (a snapshot of the last run, a loop re-read from disk under a run).
+        // A change to the character's settings for a loop, or another character
+        // loading, reaches those too, or a run would start or go on with the
+        // settings the copy was made with. Hooked up here, once every holder exists.
+        Loops.SettingsChanged += name => Loops.CopySettingsTo(LoopsHeldApartFromTheCatalogue(), name);
 
         // EventScheduler. Owns the AtTime ticker +
         // per-event Every-timers + connection-aware Logon / Re-log
@@ -11689,6 +11731,16 @@ public sealed class AppServices
     // current room, or the direction isn't a graph exit (a command / boat / special
     // step). Feeds the pre-move gear swap for boss / lair rooms.
     public Game.Map.LairEntryDebuffHold LairDebuffHold { get; private set; } = null!;
+
+    // Every loop some engine holds on to outside the loop catalogue: the runner's
+    // (running, last run, staged, to restart after a reconnect), the one waiting on
+    // its walk-to, and the one a running event goes back to.
+    private IEnumerable<Game.Map.Loop> LoopsHeldApartFromTheCatalogue()
+    {
+        foreach (Game.Map.Loop held in LoopRunner.HeldLoops) yield return held;
+        if (LoopHandoff.Pending is { } waitingOnItsWalk) yield return waitingOnItsWalk;
+        if (Events.ResumeLoop is { } eventGoesBackTo) yield return eventGoesBackTo;
+    }
 
     // How the running loop wants its next step taken with respect to the debuff:
     // the loop's own setting when that step enters a lair we would fight in and the
@@ -15327,6 +15379,7 @@ public sealed class AppServices
         AutoParty.JoinNagFrequency    = nagFreq;
         AutoParty.JoinNagMaxTotal     = nagMax;
         AutoParty.JoinNagEnabled      = dto.SendJoinToInvited;
+        PartyComeback.SendJoinToInvited = dto.SendJoinToInvited;
         PartyPoller.HealthNagInitialDelay = nagInitial;
         PartyPoller.HealthNagFrequency    = nagFreq;
         PartyPoller.HealthNagMaxTotal     = nagMax;
@@ -15355,6 +15408,7 @@ public sealed class AppServices
         AutoParty.JoinNagFrequency    = nagFreq;
         AutoParty.JoinNagMaxTotal     = nagMax;
         AutoParty.JoinNagEnabled      = defaults.SendJoinToInvited;
+        PartyComeback.SendJoinToInvited = defaults.SendJoinToInvited;
         PartyPoller.HealthNagInitialDelay = nagInitial;
         PartyPoller.HealthNagFrequency    = nagFreq;
         PartyPoller.HealthNagMaxTotal     = nagMax;

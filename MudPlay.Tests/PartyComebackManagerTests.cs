@@ -2183,4 +2183,402 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Party.Dispose();
         h.Engine.Dispose();
     }
+
+    // ----- a follower an exit refused: Stock keeps them on the leader's list -----
+    //
+    // GAME_MECHANICS "A follower who can't move is left behind". With the realm
+    // probe unset or false (Paradigm) nothing differs from what it always was;
+    // the tests named Paradigm_ pin that.
+
+    // Six rows, the member asking among them.
+    private static void SeatSix(Harness h, string asking)
+    {
+        SeatFollower(h, asking);
+        for (int i = 1; i <= 5; i++) SeatFollower(h, $"Member{i}");
+    }
+
+    [Fact]
+    public void Paradigm_PartyOfSix_TheAskingMembersOwnRowCounts_PartyIsFull()
+    {
+        using Harness h = NewHarness();
+        SeatSix(h, "Tank");
+        StartLair(h);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+
+        Assert.Contains("my party is full", h.LastReply);
+        Assert.True(Sent(h, "/Tank @forget"));
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    // On Stock the member an exit turned away is still on our list: the sixth row
+    // is their own seat, not one we refilled.
+    [Fact]
+    public void Stock_PartyOfSix_TheAskingMembersOwnRowIsTheirSeat_TheyAreFetched()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        SeatSix(h, "Tank");
+        StartLair(h);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+
+        Assert.Contains(PartyComebackManager.ComingForPickup, h.LastReply);
+        Assert.False(Sent(h, "/Tank @forget"));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+    }
+
+    // A seventh asking, with no row of their own: the party is full on Stock too.
+    [Fact]
+    public void Stock_PartyOfSix_SomeoneWithNoRowAsks_PartyIsFull()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        for (int i = 1; i <= 6; i++) SeatFollower(h, $"Member{i}");
+        h.Router.Dispatch(Line("Straggler started to follow you."));
+        h.Router.Dispatch(Line("Straggler stops following you."));
+        StartLair(h);
+
+        h.Engine.DispatchForTests(Telepath("Straggler", "@comeback 1/3"));
+
+        Assert.Contains("my party is full", h.LastReply);
+    }
+
+    // A member with a row on our roster asks from the room we stand in, so they
+    // are reached at once (ExplicitRoom_AlreadyThere_ReInvitesFollower has why the
+    // tracker is settled after the request). Returns what PartyManager sent.
+    private static List<string> ReachAMemberStillOnOurRoster(Harness h)
+    {
+        List<string> partyWire = new();
+        h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        SeatFollower(h, "Tank");
+        StartLair(h);
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/1"));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.Contains("found you - re-inviting Tank", h.LastReply);
+        return partyWire;
+    }
+
+    [Fact]
+    public void Paradigm_ReachingAMemberWithARosterRow_Invites_AndAsksNobodyToJoin()
+    {
+        using Harness h = NewHarness();
+
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+
+        Assert.Single(partyWire, w => w == "invite Tank");
+        Assert.False(Sent(h, "/Tank @join"));
+    }
+
+    // On Stock a member still on our list needs no invite and is printed nothing
+    // by one: their client is told to join.
+    [Fact]
+    public void Stock_ReachingAMemberStillOnOurList_TellsThemToJoin_AndSendsNoInvite()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+
+        Assert.True(Sent(h, "/Tank @join"));
+        Assert.Empty(partyWire);
+        Assert.Equal(new[] { "Tank" }, h.Comeback.AskedToJoin);
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);       // waiting for the follow
+    }
+
+    [Fact]
+    public void Stock_AskedToJoin_TheyFollow_NoInviteIsEverSent()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        now += TimeSpan.FromSeconds(30);
+        h.Comeback.FireJoinFallbackForTests();
+
+        Assert.Empty(partyWire);
+        Assert.Empty(h.Comeback.AskedToJoin);
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    // The fallback: the join didn't take (the game told them "You must be invited
+    // first!", or their client doesn't take our @join), so they are invited as
+    // they always were.
+    [Fact]
+    public void Stock_AskedToJoin_NoFollowInTime_TheyAreInvitedAfterAll()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+
+        now += TimeSpan.FromSeconds(2);
+        h.Comeback.FireJoinFallbackForTests();
+        Assert.Empty(partyWire);                                 // still inside the wait
+
+        now += TimeSpan.FromSeconds(4);
+        h.Comeback.FireJoinFallbackForTests();
+        Assert.Single(partyWire, w => w == "invite Tank");
+        Assert.Empty(h.Comeback.AskedToJoin);
+
+        h.Comeback.FireJoinFallbackForTests();
+        Assert.Single(partyWire);                                // once
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);       // the follow is still waited for
+    }
+
+    // A member who had a @wait out was held when we moved: the game took them off
+    // our list, so they are invited outright.
+    [Fact]
+    public void Stock_AMemberWhoSignalledAHold_IsInvitedOutright()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        h.Comeback.MemberSignalledHold = name => name == "Tank";
+
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+
+        Assert.Single(partyWire, w => w == "invite Tank");
+        Assert.False(Sent(h, "/Tank @join"));
+    }
+
+    // No row on our roster: not on our list, so an invite, on Stock as anywhere.
+    [Fact]
+    public void Stock_AMemberWithNoRosterRow_IsInvited()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        List<string> partyWire = new();
+        h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        SeatFollower(h, "Healer");
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Tank stops following you."));
+        StartLair(h);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/1"));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Assert.Single(partyWire, w => w == "invite Tank");
+        Assert.False(Sent(h, "/Tank @join"));
+    }
+
+    // The invite has to be out before the pickup stops waiting: with "If leading,
+    // wait only" at 3 s the join gets half of it, not the usual 5 s, which would
+    // have let the pickup time out with no invite ever sent.
+    [Fact]
+    public void Stock_AShortFollowWait_InvitesHalfwayThroughIt_BeforeThePickupGivesUp()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        h.Comeback.FollowWaitWindow = TimeSpan.FromSeconds(3);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+        Assert.True(Sent(h, "/Tank @join"));
+
+        now += TimeSpan.FromSeconds(1);
+        h.Comeback.FireJoinFallbackForTests();
+        Assert.Empty(partyWire);
+
+        now += TimeSpan.FromSeconds(0.6);
+        h.Comeback.FireJoinFallbackForTests();
+        Assert.Single(partyWire, w => w == "invite Tank");
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);       // still inside the 3 s
+
+        h.Comeback.FireFollowTimeoutForTests();
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Single(partyWire);
+    }
+
+    // "If leading, wait only" at 0: nothing is waited for, so the invite goes with
+    // the @join, as it always went on its own.
+    [Fact]
+    public void Stock_NoFollowWaitSet_InvitesWithTheJoin()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        h.Comeback.FollowWaitWindow = TimeSpan.Zero;
+
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+
+        Assert.True(Sent(h, "/Tank @join"));
+        Assert.Single(partyWire, w => w == "invite Tank");
+        Assert.Empty(h.Comeback.AskedToJoin);
+    }
+
+    // "Send @join nags to invited members" off: the pickup sends no @join on Stock
+    // either, and invites as it always did.
+    [Fact]
+    public void Stock_JoinNagsSwitchedOff_ThePickupSendsNoAtJoin_AndInvitesAtOnce()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        h.Comeback.SendJoinToInvited = false;
+
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+
+        Assert.False(Sent(h, "/Tank @join"));
+        Assert.Single(partyWire, w => w == "invite Tank");
+        Assert.Empty(h.Comeback.AskedToJoin);
+    }
+
+    // A pickup the member calls off ends what it owed: nobody is invited
+    // afterwards from wherever we have walked on to.
+    [Fact]
+    public void Stock_AskedToJoin_ThePickupIsCalledOff_NoLateInvite()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@forget"));
+        now += TimeSpan.FromSeconds(30);
+        h.Comeback.FireJoinFallbackForTests();
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Empty(partyWire);
+    }
+
+    // The game told us nothing of the drop (as on Stock); the member's request
+    // is how we know. They still have a row on our roster.
+    private static List<string> LeftAtAnExitByAutoLair_NoLineFromTheGame(Harness h)
+    {
+        h.Comeback.SetWireSender(_ => { });
+        List<string> partyWire = new();
+        h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        h.Lair.Mark(new RoomKey(1, 1));
+        h.Lair.Mark(new RoomKey(1, 3));
+        Assert.True(h.Lair.Start());
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        now += TimeSpan.FromSeconds(1);
+        StepThroughTheGate(h);
+        now += TimeSpan.FromSeconds(1);
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+        Assert.Contains(PartyComebackManager.LairGateReply, h.LastReply);
+        Assert.Equal(new[] { "Tank" }, h.Comeback.InviteOnSight);
+        return partyWire;
+    }
+
+    [Fact]
+    public void Paradigm_AutoLairOnSight_PassesOverAMemberWithARosterRow()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+
+        AlsoHere(h, "Tank");
+
+        Assert.DoesNotContain("invite Tank", partyWire);
+        Assert.False(Sent(h, "/Tank @join"));
+    }
+
+    private static int JoinsAsked(Harness h, string given) =>
+        h.Comeback.LastSentForTests.Count(b => Encoding.Latin1.GetString(b).Contains($"/{given} @join"));
+
+    // On Stock the row never left, so it can't mean they are back: the pass that
+    // finds them tells them to join, as it promised.
+    [Fact]
+    public void Stock_AutoLairOnSight_TellsAMemberStillOnOurListToJoin()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.OnStock = () => true;
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+
+        AlsoHere(h, "Tank");
+        Assert.Equal(1, JoinsAsked(h, "Tank"));
+        Assert.Empty(partyWire);
+        AlsoHere(h, "Tank");                                     // the room shown again
+        Assert.Equal(1, JoinsAsked(h, "Tank"));
+
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        Assert.Empty(h.Comeback.InviteOnSight);
+        Assert.Empty(h.Comeback.AskedToJoin);
+        Assert.Empty(partyWire);
+    }
+
+    // With the @join nags switched off the pass that finds them invites, as on
+    // Paradigm, and sends no @join.
+    [Fact]
+    public void Stock_AutoLairOnSight_JoinNagsSwitchedOff_Invites()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.OnStock = () => true;
+        h.Comeback.SendJoinToInvited = false;
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+
+        AlsoHere(h, "Tank");
+
+        Assert.Equal(0, JoinsAsked(h, "Tank"));
+        Assert.Single(partyWire, w => w == "invite Tank");
+    }
+
+    // The join wait is over, as the clock the helper pinned would never show.
+    private static void LetTheJoinWaitRunOut(Harness h)
+    {
+        DateTimeOffset later = DateTimeOffset.UtcNow.AddSeconds(30);
+        h.Comeback.NowProvider = () => later;
+        h.Comeback.FireJoinFallbackForTests();
+    }
+
+    // Still standing with them when the join wait runs out: invited after all.
+    [Fact]
+    public void Stock_AutoLairOnSight_NoFollowAfterTheJoin_StillInTheRoom_InvitesAfterAll()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.OnStock = () => true;
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+
+        AlsoHere(h, "Tank");
+        h.Comeback.FireJoinFallbackForTests();
+        Assert.Empty(partyWire);                                 // inside the join wait
+
+        LetTheJoinWaitRunOut(h);
+
+        Assert.Equal(1, JoinsAsked(h, "Tank"));
+        Assert.Single(partyWire, w => w == "invite Tank");
+    }
+
+    // Auto-Lair has walked on by then: an invite from the next room reaches nobody
+    // we stand with, so none is sent, and the pass that next finds them asks again.
+    [Fact]
+    public void Stock_AutoLairOnSight_WalkedOnBeforeTheJoinWaitRanOut_NoInvite_AndTheNextPassAsksAgain()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.OnStock = () => true;
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+        AlsoHere(h, "Tank");
+
+        AlsoHere(h, "Healer");                                   // the next room: Tank isn't in it
+        LetTheJoinWaitRunOut(h);
+
+        Assert.Empty(partyWire);
+        Assert.Empty(h.Comeback.AskedToJoin);
+        Assert.Equal(new[] { "Tank" }, h.Comeback.InviteOnSight);   // still owed
+
+        AlsoHere(h, "Tank");                                     // a pass finds them again
+        Assert.Equal(2, JoinsAsked(h, "Tank"));
+    }
+
+    // Auto-Lair was stopped: nothing is owed any more, and no invite follows.
+    [Fact]
+    public void Stock_AutoLairOnSight_AutoLairStoppedBeforeTheJoinWaitRanOut_NoInvite()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.OnStock = () => true;
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+        AlsoHere(h, "Tank");
+
+        h.Lair.Stop("test");
+        LetTheJoinWaitRunOut(h);
+
+        Assert.Empty(partyWire);
+        Assert.Empty(h.Comeback.AskedToJoin);
+    }
 }

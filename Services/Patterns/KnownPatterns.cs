@@ -467,6 +467,9 @@ public static class KnownPatterns
     public const string PartyFollowerRemoved      = "party.follower-removed";       // "X has been removed from your followers." — leader's view of an uninvite
     public const string PartyYouNoLongerFollowing = "party.you-no-longer-following";// "You are no longer following X." — follower's view of leader's uninvite / our own unfollow
     public const string PartyDissolved            = "party.dissolved";              // "You are not in a party at the present time." — authoritative wipe
+    // "You must be invited first!" — the game's answer to a `join` / `follow` of a
+    // player whose member list we aren't on (Stock wording, from the DLL).
+    public const string PartyMustBeInvited        = "party.must-be-invited";
     // Per-member rank-change observation — fires whenever someone in the
     // party reranks via `frontr` / `midr` / `backr`. Lets PartyManager
     // update PartyMember.Rank live instead of waiting for the next par poll.

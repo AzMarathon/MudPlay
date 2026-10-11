@@ -24,8 +24,9 @@ namespace MudPlay.Game.Remote;
 // full (we backfilled the slot while they were gone) and skip if they're farther
 // than the return-distance setting, declining via @forget + a spoken reason so
 // the member isn't left waiting. Otherwise we pause the running movement engine,
-// walk to recover them, re-invite (left-behind members are dropped from the party
-// server-side), wait for the follow confirmation, then resume. The member
+// walk to recover them, re-invite (Paradigm drops a left-behind member from the
+// party; on Stock one an exit turned away is still on our list and is told to
+// join, see AskBack), wait for the follow confirmation, then resume. The member
 // following us again ends the recovery at whatever stage it has reached.
 //
 // Stop-and-restart, not gate-pause. Asserting a MovementCoordinator gate would
@@ -224,6 +225,21 @@ public sealed class PartyComebackManager : IDisposable
     // Test seam — every outbound wire buffer, in order.
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
+    // True on a Stock realm. Stock ends the follow of a member whose follow move
+    // an exit refused and leaves them on our member list: nothing is printed to
+    // us, and a `join` of theirs works with no fresh invite (GAME_MECHANICS "A
+    // follower who can't move is left behind"). Paradigm drops them and tells us.
+    // Unset reads as Paradigm, where nothing here differs from what it always did.
+    public Func<bool>? OnStock { get; set; }
+
+    // Stock, and that member has a row on our roster: by the game's rule they are
+    // still on our list, whether or not they follow. The game tells a Stock
+    // leader nothing when a follow ends, so the row is all there is to go on; a
+    // member it did take off the list (held, stunned or too heavy when we moved)
+    // keeps a row here until a `par` drops it, which is why everything built on
+    // this falls back to an invite.
+    private bool StillOnOurList(string given) => OnStock?.Invoke() == true && MemberInParty(given);
+
     public PartyComebackManager(
         RemoteCommandManager engine,
         PartyManager party,
@@ -259,6 +275,8 @@ public sealed class PartyComebackManager : IDisposable
         _followTimer.Tick += OnFollowTimeout;
         _crFallbackTimer = new DispatcherTimer { Interval = CrRecoverFallback };
         _crFallbackTimer.Tick += (_, _) => FireCrFallback();
+        _joinFallbackTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _joinFallbackTimer.Tick += (_, _) => OnJoinFallbackTick();
 
         _walker.Event += OnWalkEvent;
         _party.MemberFollowConfirmed += OnMemberFollowConfirmed;
@@ -324,6 +342,7 @@ public sealed class PartyComebackManager : IDisposable
         _followTimer.Stop();
         _followTimer.Tick -= OnFollowTimeout;
         _crFallbackTimer.Stop();
+        _joinFallbackTimer.Stop();
     }
 
     // ----- @comeback (path A) ----------------------------------------
@@ -867,11 +886,16 @@ public sealed class PartyComebackManager : IDisposable
         {
             if (entity.Kind != EntityKind.Player) continue;
             string given = GivenName(entity.ResolvedName);
-            if (!_inviteOnSight.Contains(given) || MemberInParty(given)) continue;
+            if (!_inviteOnSight.Contains(given)) continue;
+            // A row on our roster means they are back with us, on Paradigm. On
+            // Stock the row never left when the exit turned them away, so it says
+            // nothing: they are owed this until they follow, which is what takes
+            // them off _inviteOnSight.
+            if (MemberInParty(given) && !StillOnOurList(given)) continue;
             if (now - _invitedOnSightAt.GetValueOrDefault(given, DateTimeOffset.MinValue) < OnSightInviteCooldown) continue;
             _invitedOnSightAt[given] = now;
-            _log?.Info(LogCategory, $"{given} is here — inviting them back, as Auto-Lair's pass found them.");
-            _party.Invite(given);
+            _log?.Info(LogCategory, $"{given} is here — bringing them back, as Auto-Lair's pass found them.");
+            AskBack(given, removedByAHold: false, inviteAfter: JoinFirstWait, onSight: true);
         }
     }
 
@@ -1174,8 +1198,17 @@ public sealed class PartyComebackManager : IDisposable
         }
 
         // Party-full gate — we backfilled the empty slot while they were gone, so
-        // there's no seat to recover them into.
-        if (_party.State.Members.Count >= MaxPartySize)
+        // there's no seat to recover them into. On Stock a member an exit turned
+        // away is still on our list (StillOnOurList), so the row we hold for them is
+        // their own seat and not one we refilled.
+        int seatsTaken = _party.State.Members.Count;
+        if (seatsTaken >= MaxPartySize && StillOnOurList(senderGiven))
+        {
+            seatsTaken--;
+            _log?.Info(LogCategory,
+                $"{senderGiven} asks to be fetched and still has a row on our list (Stock keeps a member an exit turned away): their own seat isn't counted against a full party.");
+        }
+        if (seatsTaken >= MaxPartySize)
         {
             reply("my party is full - can't take you back");
             DeclineAndForget(senderGiven);
@@ -1223,6 +1256,8 @@ public sealed class PartyComebackManager : IDisposable
         RecoveringChanged?.Invoke();
         _senderGiven = senderGiven;
         _reply = reply;
+        // Read before the hold is released below.
+        _heldWhenAsked = SignalledHold(senderGiven);
         _log?.Info(LogCategory,
             $"recovering {senderGiven} target={(target is { } t ? $"{t.Map}/{t.Room}" : "backtrack")} resume={resume.Kind}");
 
@@ -1461,17 +1496,23 @@ public sealed class PartyComebackManager : IDisposable
         _inviteOnSight.Clear();
         _invitedOnSightAt.Clear();
         _lairAnswered.Clear();
+        _askedToJoin.Clear();
+        _joinFallbackTimer.Stop();
         GoIdle();
         if (had) _log?.Info(LogCategory, $"recovery state cleared ({reason})");
     }
 
     private void GoIdle()
     {
+        // The pickup is over: a member asked to join who never followed isn't
+        // invited from wherever we have walked on to.
+        if (_busy) ForgetJoinAsked(_senderGiven);
         _busy = false;
         RecoveringChanged?.Invoke();
         _walkTarget = null;
         _leftBehind = false;
         _okPremature = false;
+        _heldWhenAsked = false;
         _tripFetch = false;
         _roomUnconfirmed = false;
         _phase = ComebackPhase.Idle;
@@ -1623,7 +1664,7 @@ public sealed class PartyComebackManager : IDisposable
     {
         _phase = ComebackPhase.AwaitingFollow;
         _reply($"{FoundYou} - re-inviting {_senderGiven}");
-        _party.Invite(_senderGiven);
+        AskBack(_senderGiven, removedByAHold: _heldWhenAsked, inviteAfter: InviteDelayWithin(FollowWaitWindow));
         _followTimer.Stop();
         // "If leading, wait only" at 0 means no limit, which suits a wait on a
         // member who is with us. One who never answers the re-invite is not (on
@@ -1635,6 +1676,144 @@ public sealed class PartyComebackManager : IDisposable
 
     // What stands in for "no limit" on the wait for a re-invited member to follow.
     private static readonly TimeSpan UnlimitedFollowWait = TimeSpan.FromSeconds(90);
+
+    // ----- asking a member back: an invite, or on Stock a `join` of theirs -------
+
+    // Stock: how long a member asked to `join` is given to follow before they are
+    // invited after all.
+    public TimeSpan JoinFirstWait { get; set; } = TimeSpan.FromSeconds(5);
+
+    // Mirrors PartySettings.SendJoinToInvited, as AutoPartyManager.JoinNagEnabled does.
+    public bool SendJoinToInvited { get; set; } = true;
+
+    // How long a pickup that waits `followWait` for the follow gives the `join`
+    // before the invite. The invite has to be out while the pickup still waits: a
+    // member the game took off our list can only come back by it, and a pickup
+    // that timed out first left them with nothing. So a wait shorter than two
+    // JoinFirstWaits gives the join half of it. At 0 ("If leading, wait only" set
+    // to no wait) the invite goes with the @join, as it always went on its own.
+    private TimeSpan InviteDelayWithin(TimeSpan followWait)
+    {
+        if (followWait <= TimeSpan.Zero) return TimeSpan.Zero;
+        return followWait < JoinFirstWait + JoinFirstWait ? followWait / 2 : JoinFirstWait;
+    }
+
+    // Stock: the members asked to `join` in an invite's place, when each is invited
+    // after all if they haven't followed, and whether Auto-Lair's pass asked (no
+    // pickup stands with them then, so that invite is only good while they are
+    // still in the room with us).
+    private readonly Dictionary<string, (DateTimeOffset InviteAt, bool OnSight)> _askedToJoin =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly DispatcherTimer _joinFallbackTimer;
+
+    // The member a recovery is for had a @wait out with us when they asked.
+    private bool _heldWhenAsked;
+
+    // For the bug report: who has been asked to join and isn't following yet.
+    public IReadOnlyCollection<string> AskedToJoin => _askedToJoin.Keys.ToList();
+
+    // Bring a member back into the party once we stand with them.
+    //
+    // Paradigm drops a member it leaves behind, so it takes an invite. On Stock a
+    // member an exit turned away is still on our list: an invite prints them
+    // nothing (the game tells only someone it newly adds), and a `join` of theirs
+    // works without one. So their client is told to join, by the @join it already
+    // takes from a player it grants "Request invite"; a follower's own client
+    // also joins by itself on our "found you" (ComebackRequester), which needs no
+    // grant.
+    //
+    // That a still-listed member's `join` works is read from the Stock DLL and has
+    // not been seen in play, and a member the game did take off our list (held,
+    // stunned or too heavy when we moved; their @wait says so) is answered "You
+    // must be invited first!", which only they see. So the invite is the
+    // fallback: at once for a member who signalled a hold, and otherwise when
+    // inviteAfter has passed with no follow.
+    //
+    // The @join is one of the nags Settings → Party "Send @join nags to invited
+    // members" governs. Switched off, none is sent here either: the member is
+    // invited as before, and on Stock comes back by their own client's join.
+    private void AskBack(string given, bool removedByAHold, TimeSpan inviteAfter, bool onSight = false)
+    {
+        if (!StillOnOurList(given) || removedByAHold)
+        {
+            _party.Invite(given);
+            return;
+        }
+        if (!SendJoinToInvited)
+        {
+            _log?.Info(LogCategory,
+                $"{given} is still on our list (Stock), and \"Send @join nags to invited members\" is off: no @join is sent, they are invited as before.");
+            _party.Invite(given);
+            return;
+        }
+        _wire.Send($"/{given} @join");
+        if (inviteAfter <= TimeSpan.Zero)
+        {
+            _log?.Info(LogCategory,
+                $"{given} is still on our list (Stock): told to join by @join, and invited with it since nothing is waited for.");
+            _party.Invite(given);
+            return;
+        }
+        _askedToJoin[given] = (NowProvider() + inviteAfter, onSight);
+        _log?.Info(LogCategory,
+            $"{given} is still on our list (Stock): told to join by @join, no invite sent. If they aren't following in {inviteAfter.TotalSeconds:0.#}s they are invited, as a member off our list would be.");
+        ArmJoinFallback();
+    }
+
+    // One shot for the earliest invite owed.
+    private void ArmJoinFallback()
+    {
+        _joinFallbackTimer.Stop();
+        if (_askedToJoin.Count == 0) return;
+        TimeSpan until = _askedToJoin.Values.Min(asked => asked.InviteAt) - NowProvider();
+        _joinFallbackTimer.Interval = until > ShortestTick ? until : ShortestTick;
+        _joinFallbackTimer.Start();
+    }
+
+    private static readonly TimeSpan ShortestTick = TimeSpan.FromMilliseconds(50);
+
+    private void ForgetJoinAsked(string given)
+    {
+        if (_askedToJoin.Remove(given)) ArmJoinFallback();
+    }
+
+    // Test seam — the DispatcherTimer doesn't tick under headless xUnit.
+    internal void FireJoinFallbackForTests() => OnJoinFallbackTick();
+
+    // Whoever was asked to join and has not followed in time is invited, as before.
+    private void OnJoinFallbackTick()
+    {
+        _joinFallbackTimer.Stop();
+        if (_askedToJoin.Count == 0) return;
+        // Held with everything else: looked at again shortly, until the switch is back.
+        if (MasterOff)
+        {
+            _joinFallbackTimer.Interval = TimeSpan.FromSeconds(1);
+            _joinFallbackTimer.Start();
+            return;
+        }
+        DateTimeOffset now = NowProvider();
+        foreach (string given in _askedToJoin.Keys.ToArray())
+        {
+            (DateTimeOffset inviteAt, bool onSight) = _askedToJoin[given];
+            if (now < inviteAt) continue;
+            _askedToJoin.Remove(given);
+            // Auto-Lair walked on meanwhile, or was stopped: an invite from here
+            // reaches nobody we stand with. The pass that next finds them asks
+            // again, with no cooldown held against it.
+            if (onSight && (!_autoLair.IsActive || !InOurRoom(given)))
+            {
+                _invitedOnSightAt.Remove(given);
+                _log?.Info(LogCategory,
+                    $"{given} didn't follow after the @join, and {(_autoLair.IsActive ? "is no longer in the room with us" : "Auto-Lair has stopped")}: no invite is sent from here. A pass that finds them asks again.");
+                continue;
+            }
+            _log?.Info(LogCategory,
+                $"{given} didn't follow after the @join: inviting them. Either the game told them \"You must be invited first!\" (they were off our list after all), or their client doesn't take our @join.");
+            _party.Invite(given);
+        }
+        ArmJoinFallback();
+    }
 
     private void OnMemberFollowConfirmed(string name)
     {
@@ -1649,6 +1828,7 @@ public sealed class PartyComebackManager : IDisposable
         _dropLineSeen.Remove(GivenName(name));
         ForgetTripMember(GivenName(name));
         ForgetOnSight(GivenName(name));
+        ForgetJoinAsked(GivenName(name));
         _seenFollowingAt[GivenName(name)] = NowProvider();
 
         if (!_busy || _phase == ComebackPhase.Idle) return;

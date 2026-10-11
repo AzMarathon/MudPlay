@@ -1842,4 +1842,236 @@ public sealed class PartyManagerTests
         p.NoteFollowGivenUp("Boss");          // the game's line came first
         Assert.False(p.State.IsInParty);
     }
+
+    // ----- a follower an exit refused: Stock keeps them on the leader's list -----
+    //
+    // GAME_MECHANICS "A follower who can't move is left behind". With the realm
+    // probe unset or false (Paradigm) nothing differs from what it always was.
+
+    // What a follower still on the old leader's list, and following nobody, is
+    // printed for `par` (GAME_MECHANICS "`par` output block"): no "You are
+    // following" line, the listed members as [Invited], its own row last.
+    private static void ParOfAListedFollower(MessageRouter router, PartyManager p)
+    {
+        router.Dispatch(Line("The following people are in your travel party:"));
+        p.FeedTestLines(new[]
+        {
+            "  Boss Hogg                      (Warrior)    [Invited]",
+            "  Other Guy                      (Mage)       [Invited]",
+            "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Midrank",
+        });
+        p.FeedTestPromptLine();
+    }
+
+    // On Stock giving the follow up frees our own engines (the roster is solo),
+    // and the leader is kept: the game has not taken us off their list.
+    [Fact]
+    public void Stock_TheFollowIsGivenUp_RosterGoesSolo_AndTheLeaderIsKeptAsListedWith()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("You are now following Boss."));
+
+        p.NoteFollowGivenUp("Boss");
+
+        Assert.False(p.State.IsInParty);
+        Assert.Null(p.State.LeaderName);
+        Assert.Equal("Boss", p.ListedWithLeader);
+    }
+
+    [Fact]
+    public void Paradigm_TheFollowIsGivenUp_NothingIsKept()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        router.Dispatch(Line("You are now following Boss."));
+
+        p.NoteFollowGivenUp("Boss");
+
+        Assert.False(p.State.IsInParty);
+        Assert.Null(p.ListedWithLeader);
+    }
+
+    // Every line that says where we stand ends the belief.
+    [Theory]
+    [InlineData("You are now following Boss.")]
+    [InlineData("You are now following Other.")]
+    [InlineData("You are no longer following Boss.")]
+    [InlineData("You are not in a party at the present time.")]
+    [InlineData("You have invited Other to follow you.")]
+    [InlineData("Other started to follow you.")]
+    [InlineData("Boss just hung up!!!")]
+    public void Stock_ListedWith_EndsOnTheGamesOwnWord(string line)
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        Assert.Equal("Boss", p.ListedWithLeader);
+
+        router.Dispatch(Line(line));
+
+        Assert.Null(p.ListedWithLeader);
+    }
+
+    [Fact]
+    public void Stock_ListedWith_EndsWhenAJoinIsRefused_OrTheLinkDrops_OrWeDrop()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        p.NoteNotListedWith("Other");
+        Assert.Equal("Boss", p.ListedWithLeader);        // another leader's refusal says nothing
+        p.NoteNotListedWith("Boss");
+        Assert.Null(p.ListedWithLeader);
+
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        p.NoteLinkDropped();
+        Assert.Null(p.ListedWithLeader);
+
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        p.NoteSelfDropped();
+        Assert.Null(p.ListedWithLeader);
+    }
+
+    [Fact]
+    public void Paradigm_AfterTheFollowIsGivenUp_AParOfInvitedRows_MakesUsTheLeader()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        Assert.False(p.State.IsInParty);
+
+        ParOfAListedFollower(router, p);
+
+        Assert.True(p.State.IsInParty);
+        Assert.True(p.State.SelfIsLeader);
+        Assert.Contains(p.State.Members, m => m.Name == "Boss Hogg" && m.IsInvited);
+    }
+
+    // On Stock the same reply is the old leader's party, listed [Invited] because
+    // we follow none of them: no invite of ours, so nothing makes us a leader.
+    [Fact]
+    public void Stock_AfterTheFollowIsGivenUp_AParOfInvitedRows_LeavesUsSolo_AndStillListed()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        int replies = 0;
+        p.ParReplyRead += () => replies++;
+
+        ParOfAListedFollower(router, p);
+
+        Assert.False(p.State.IsInParty);
+        Assert.False(p.State.SelfIsLeader);
+        Assert.Null(p.State.LeaderName);
+        Assert.DoesNotContain(p.State.Members, m => !m.IsSelf);
+        Assert.Equal("Boss", p.ListedWithLeader);
+        Assert.Equal(1, replies);
+    }
+
+    // The leader is gone from the list (they left the game): we are listed with
+    // nobody, and the rows of that reply are still not applied.
+    [Fact]
+    public void Stock_AParThatNoLongerListsTheLeader_EndsListedWith()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+
+        router.Dispatch(Line("The following people are in your travel party:"));
+        p.FeedTestLines(new[]
+        {
+            "  Other Guy                      (Mage)       [Invited]",
+            "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Midrank",
+        });
+        p.FeedTestPromptLine();
+
+        Assert.Null(p.ListedWithLeader);
+        Assert.False(p.State.SelfIsLeader);
+        Assert.False(p.State.IsInParty);
+    }
+
+    // Leader side. A member who followed us and now reads [Invited] on Stock was
+    // left behind at an exit and is still on our list; one we only invited is not.
+    [Fact]
+    public void Stock_AMemberWhoFollowedUs_ThenReadsInvited_IsLeftBehindOnOurList()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("Tank started to follow you."));
+        router.Dispatch(Line("You have invited Newcomer to follow you."));
+        Assert.False(p.IsLeftBehindOnOurList("Tank"));            // following
+
+        router.Dispatch(Line("The following people are in your travel party:"));
+        p.FeedTestLines(new[]
+        {
+            "  Tank Smith                     (Warrior)    [Invited]",
+            "  Newcomer Jones                 (Mage)       [Invited]",
+            "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Frontrank",
+        });
+        p.FeedTestPromptLine();
+
+        Assert.True(p.IsLeftBehindOnOurList("Tank"));
+        Assert.True(p.IsLeftBehindOnOurList("Tank Smith"));
+        Assert.False(p.IsLeftBehindOnOurList("Newcomer"));        // invited, never joined
+
+        router.Dispatch(Line("Tank started to follow you."));
+        Assert.False(p.IsLeftBehindOnOurList("Tank"));            // back with us
+    }
+
+    [Fact]
+    public void Stock_LeftBehindOnOurList_EndsWhenTheRowGoes()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("Tank started to follow you."));
+        router.Dispatch(Line("You have invited Tank to follow you."));   // row reads invited
+        Assert.True(p.IsLeftBehindOnOurList("Tank"));
+
+        router.Dispatch(Line("Tank has been removed from your followers."));
+        router.Dispatch(Line("You have invited Tank to follow you."));   // a fresh invite
+
+        Assert.False(p.IsLeftBehindOnOurList("Tank"));
+    }
+
+    [Fact]
+    public void Paradigm_NobodyIsEverLeftBehindOnOurList()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        router.Dispatch(Line("Tank started to follow you."));
+        router.Dispatch(Line("You have invited Tank to follow you."));
+
+        Assert.False(p.IsLeftBehindOnOurList("Tank"));
+    }
+
+    // The game's own "You are following X." outranks the belief: an ordinary
+    // follower's reply, read as one.
+    [Fact]
+    public void Stock_AParThatSaysWeFollow_IsReadAsAFollowers()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+
+        router.Dispatch(Line("You are following Boss."));
+        router.Dispatch(Line("The following people are in your travel party:"));
+        p.FeedTestLines(new[]
+        {
+            "  Boss Hogg                      (Warrior)             [H:100%]   - Frontrank",
+            "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Midrank",
+        });
+        p.FeedTestPromptLine();
+
+        Assert.Null(p.ListedWithLeader);
+        Assert.True(p.State.IsInParty);
+        Assert.False(p.State.SelfIsLeader);
+        Assert.Contains(p.State.Members, m => m.Name == "Boss Hogg" && !m.IsInvited);
+    }
 }

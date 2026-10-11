@@ -37,8 +37,10 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     [ObservableProperty] private string _notes = string.Empty;
 
     // Loop-wide "only attack in lair rooms" (an Entire Loop Setting), set from
-    // the build-time ⚙ Entire Loop Settings flyout. Carried into the saved loop
-    // on Save/BuildTransient. Loop-wide, not per-waypoint.
+    // the build-time ⚙ Entire Loop Settings flyout. Carried onto the loop on
+    // Save/BuildTransient. Loop-wide, not per-waypoint. This and the lair wait
+    // below are the building character's: Save keeps them for that character
+    // (LoopManager.Save), and the loop file it writes holds neither.
     [ObservableProperty] private bool _onlyAttackInLairRooms;
 
     // Entire Loop Settings: wait one step short of a lair until the debuff can be
