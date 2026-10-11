@@ -111,10 +111,15 @@ public static class LocalApiState
     // Error, so a ">= Warn" threshold would silently pull in every combat trace —
     // which is why the enum itself says consumers must not compare numerically.
     // Empty set means no severity filtering.
-    public static object Log(AppServices svc, long since, int limit,
+    //
+    // scrubber masks the saved login name and passwords in each entry's text, as a
+    // bug report does: this is the same log leaving the client by another door.
+    // The caller builds it for this one response and drops it.
+    public static object Log(LogService log, BugReportScrub.Scrubber scrubber, long since, int limit,
         IReadOnlySet<LogSeverity> severities, string? source)
     {
-        ArgumentNullException.ThrowIfNull(svc);
+        ArgumentNullException.ThrowIfNull(log);
+        ArgumentNullException.ThrowIfNull(scrubber);
 
         // Deliberately UNLIMITED at the ring, then limited after filtering. The
         // ring holds a few thousand entries, so pulling the whole window is cheap — and
@@ -122,7 +127,7 @@ public static class LocalApiState
         // query return whatever happened to fall inside the first N. Asking for
         // `?source=LocalApi&limit=50` really would come back empty while the
         // entries sat further along.
-        LogEntry[] entries = svc.Log.SnapshotAfter(since, out long newestSeq, out _);
+        LogEntry[] entries = log.SnapshotAfter(since, out long newestSeq, out _);
 
         // Sequences are derived rather than stored per entry: the batch is
         // contiguous and ends at newestSeq. Numbering BEFORE filtering is what
@@ -130,17 +135,9 @@ public static class LocalApiState
         // rescanning them forever.
         long firstSeq = newestSeq - entries.Length + 1;
         var matched = entries
-            .Select((e, i) => new
-            {
-                seq = firstSeq + i,
-                at = e.Timestamp,
-                severity = e.Severity,
-                source = e.Source,
-                message = e.Message,
-                context = e.Context,
-            })
-            .Where(r => severities.Count == 0 || severities.Contains(r.severity))
-            .Where(r => source is null || r.source.Equals(source, StringComparison.OrdinalIgnoreCase))
+            .Select((e, i) => (Seq: firstSeq + i, Entry: e))
+            .Where(r => severities.Count == 0 || severities.Contains(r.Entry.Severity))
+            .Where(r => source is null || r.Entry.Source.Equals(source, StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
         // Two different intents, so two paging rules:
@@ -157,31 +154,50 @@ public static class LocalApiState
         // remainder would be skipped; otherwise it advances to the newest entry
         // examined, so filtered-out entries aren't rescanned.
         long nextSince = !tail && page.Length < matched.Length && page.Length > 0
-            ? page[^1].seq
+            ? page[^1].Seq
             : newestSeq;
 
         return new
         {
             newestSeq,
             nextSince,
-            retained = svc.Log.Count,
+            retained = log.Count,
             matched = matched.Length,
             count = page.Length,
-            entries = page,
+            // Masked here, after paging: only what is sent pays for it.
+            entries = page.Select(r => new
+            {
+                seq = r.Seq,
+                at = r.Entry.Timestamp,
+                severity = r.Entry.Severity,
+                source = r.Entry.Source,
+                message = scrubber.Apply(r.Entry.Message),
+                context = r.Entry.Context is { } context ? scrubber.Apply(context) : null,
+            }).ToArray(),
         };
     }
 
-    public static object Scrollback(AppServices svc, TerminalEmulator emulator, int lines)
+    // only is the time spent in the game (InGameCapture.Window), the window a bug
+    // report's scrollback is held to: a board's login screen, with the account
+    // name as typed, is not sent. scrubber masks the saved login name and
+    // passwords in what is left. The caller builds it for this one response.
+    public static object Scrollback(TerminalEmulator emulator, CaptureWindow only,
+        BugReportScrub.Scrubber scrubber, int lines)
     {
-        ArgumentNullException.ThrowIfNull(svc);
         ArgumentNullException.ThrowIfNull(emulator);
+        ArgumentNullException.ThrowIfNull(only);
+        ArgumentNullException.ThrowIfNull(scrubber);
+        IReadOnlyList<TranscriptSnapshot.Line> tail = TranscriptSnapshot.Tail(emulator, lines, only: only);
+        // Masked as one text, so a value the terminal wrapped onto the next row is
+        // still found. The scrubber gives back as many rows as it was given.
+        string[] texts = scrubber.Apply(string.Join('\n', tail.Select(l => l.Text))).Split('\n');
         // Timestamps come through as their own field rather than baked into the
         // text: a consumer correlating a screen line with a log entry needs to
         // compare them, not parse them back out of a rendered string.
-        var rows = TranscriptSnapshot.Tail(emulator, lines)
-            .Select(l => new { at = l.Timestamp, text = l.Text })
+        var rows = tail
+            .Select((l, i) => new { at = l.Timestamp, text = texts[i] })
             .ToArray();
-        return new { requested = lines, count = rows.Length, lines = rows };
+        return new { requested = lines, count = rows.Length, inGameNow = only.IsOn, lines = rows };
     }
 
     // How long a capture is reused before a fresh one is built. One call costs

@@ -95,6 +95,35 @@ public sealed class BugReportScrubTests
         Assert.Contains("12:00:02 next", scrubbed);
     }
 
+    // A caller that masks rows as one text and splits it again gets back as many
+    // rows as it gave, however many breaks a match ran over.
+    [Fact]
+    public void Apply_KeepsEveryRowBreakAMatchRanOver()
+    {
+        string[] rows = [$"a {Suicide[..3]}", Suicide[3..6], $"{Suicide[6..]} b", "next"];
+
+        string[] scrubbed = MakeScrubber().Apply(string.Join('\n', rows)).Split('\n');
+
+        Assert.Equal(new[] { "a " + BugReportScrub.Mask, "", " b", "next" }, scrubbed);
+    }
+
+    // The local API builds a scrubber for every response, without compiling its
+    // patterns: it masks exactly what the report's does.
+    [Fact]
+    public void AnUncompiledScrubber_MasksTheSame()
+    {
+        BugReportScrub.Scrubber uncompiled = BugReportScrub.Build(
+        [
+            new(BugReportScrub.LoginNameLabel, Login),
+            new(BugReportScrub.LoginPasswordLabel, Password),
+            new(BugReportScrub.SuicidePasswordLabel, Suicide),
+        ], ["Tester"], compiled: false);
+        string text = $"12:00:01 {Login.ToUpperInvariant()} {Password[..5]}\n12:00:01 {Password[5..]} ^[[1m{Suicide[..2]}^[[0m{Suicide[2..]}";
+
+        Assert.Equal(MakeScrubber().Apply(text), uncompiled.Apply(text));
+        Assert.DoesNotContain(Suicide[2..], uncompiled.Apply(text));
+    }
+
     [Fact]
     public void Apply_IsCaseInsensitive()
     {

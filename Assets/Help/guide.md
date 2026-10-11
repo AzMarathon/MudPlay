@@ -4128,7 +4128,7 @@ A report stays under about 1 MB without the wire sections. If it would be larger
 **What is never in a report.**
 
 - **Your login name, login password and suicide password.** Each is written as `[redacted]` wherever it appears: in the scrollback, the wire, the log, the commands sent, a trigger's text, a setting, even your own description. A trigger, alias or macro that contains one is left out whole. These are the details **saved in MudPlay** for the character: a login you type by hand each time isn't known to the client, and the report's Session section says when none are saved. A password that is also an ordinary word is masked inside other words too. A very short value is masked only where it stands as a word of its own. A login name that is the same as your character's name in the game is left, since every player sees that name, and Session says so. If the saved details can't be read at all, no report is written and the terminal says why.
-- **Anything you type at a prompt that isn't the game's own.** The list of commands sent keeps a typed line only when it was typed at the normal game prompt. A line typed at a password prompt, a menu or a question is listed as *typed at a prompt: withheld*, with its time and no text, so a new suicide password you are setting is never kept.
+- **Anything you type at a prompt that isn't the game's own.** The list of commands sent keeps a typed line only when it was typed at the normal game prompt: the statline set in Settings → Statline, whatever shape you gave it. If the game is printing a statline that setting doesn't describe, typed lines are withheld until the two agree. A line typed at a password prompt, a menu or a question is listed as *typed at a prompt: withheld*, with its time and no text, so a new suicide password you are setting is never kept.
 - **Your login screen.** The scrollback and raw wire copy only what was written while you were inside the game: from your first game prompt, until you disconnect or exit to the board's menus, and again from the next game prompt. The list of commands sent keeps nothing typed outside the game or while a suicide password is being entered. The terminal and the Backscroll window go on showing everything.
 - **The Local API token.**
 
@@ -4184,8 +4184,8 @@ All of this is stored under a single MudPlay data folder (`~/.local/share/MudPla
 | `/state/full` | Every section a bug report captures, as JSON — add `?format=markdown` for the familiar rendered form. Builds the whole report, so repeat calls within a second reuse the previous one; poll `/state` instead if you want a fast tick. |
 | `/gates` | Recent pause/resume history: which gate, **who asserted it**, why, and when. |
 | `/log` | The program log, filterable by `severity=` (comma-separated names) and `source=`, with a `since=` cursor for tailing. |
-| `/scrollback` | The terminal transcript tail, with per-line timestamps. |
-| `/events` | A live stream (Server-Sent Events) of log entries and gate changes as they happen. |
+| `/scrollback` | The terminal transcript tail, with per-line timestamps. Only rows written **while in the game**, as in a bug report: a board's login screen is never sent. |
+| `/events` | A live stream (Server-Sent Events) of log entries and gate changes as they happen. If the stream has to leave events out it says so with a `lost` event carrying the count and the reason. |
 | `/loops` | Every saved loop with its area, room and lair-room counts, median and max exp of what spawns on it, the hardest-hitting monster, and the toughest three. |
 | `/loops/{name}` | One loop in full — each waypoint with its room name and the monsters at that stop. |
 | `/rooms/{map}/{room}` | A room: name, exits, its lair tag, and its monsters grouped as lair / placed / assigned, exactly as the map's ROOM INFO panel groups them. |
@@ -4206,6 +4206,8 @@ curl -H "Authorization: Bearer $(cat ~/.local/share/MudPlay/.apitoken)" \
 ```
 
 (On macOS the path is `~/Library/Application Support/MudPlay/.apitoken`.)
+
+**Account details are masked here too.** The login name, login password and suicide password saved in MudPlay are written as `[redacted]` in `/state/full`, `/log`, `/scrollback` and `/events`, exactly as in a bug report (see *Bug Report*). The masks are made fresh for each answer from what is saved at that moment and are not kept. If the saved details can't be read, `/log` and `/scrollback` answer *503* rather than send text they couldn't mask, and `/events` leaves those events out and says so. Chat is not censored here: that is for reports posted in public.
 
 **Issuing commands.** Beyond reading, the API can act:
 

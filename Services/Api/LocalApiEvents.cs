@@ -59,6 +59,10 @@ public sealed class LocalApiEvents : IDisposable
 
     public int SubscriberCount => _subscribers.Count;
 
+    // False while no stream is open: an event made then goes nowhere, so its
+    // maker needn't make it.
+    public bool HasSubscribers => !_disposed && !_subscribers.IsEmpty;
+
     // Whether a subscription is still live. A write that finds the socket dead
     // retires it, so the request handler parked on this stream polls here to know
     // when to unwind.

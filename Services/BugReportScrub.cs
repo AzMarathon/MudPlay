@@ -140,9 +140,11 @@ public static class BugReportScrub
                 text = pattern.Replace(text, m =>
                 {
                     count++;
-                    // A match that swallowed a row break keeps the break, so the
-                    // rows after it stay rows.
-                    return m.Value.Contains('\n') ? Mask + "\n" : Mask;
+                    // A match that swallowed row breaks keeps every one of them,
+                    // so the rows after it stay rows and a caller that masks rows
+                    // as one text gets as many back as it gave.
+                    int breaks = m.ValueSpan.Count('\n');
+                    return breaks == 0 ? Mask : Mask + new string('\n', breaks);
                 });
             }
             replaced = count;
@@ -165,10 +167,16 @@ public static class BugReportScrub
 
     // publicNames are the character's names as the game shows them: a login name
     // equal to one of them is not masked.
-    public static Scrubber Build(IEnumerable<Secret> secrets, IEnumerable<string?> publicNames, int unreadable = 0)
+    // compiled is for the scrubber a report builds once and runs over a megabyte.
+    // One built for every response of the local API masks a few short strings and
+    // is dropped: compiling its patterns would cost far more than running them.
+    public static Scrubber Build(IEnumerable<Secret> secrets, IEnumerable<string?> publicNames, int unreadable = 0,
+        bool compiled = true)
     {
         ArgumentNullException.ThrowIfNull(secrets);
         ArgumentNullException.ThrowIfNull(publicNames);
+        RegexOptions options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+            | (compiled ? RegexOptions.Compiled : RegexOptions.None);
 
         HashSet<string> shown = new(StringComparer.OrdinalIgnoreCase);
         foreach (string? name in publicNames)
@@ -204,13 +212,11 @@ public static class BugReportScrub
             string pattern = value.Length < MinLength
                 ? @"(?<![\p{L}\p{N}])" + Regex.Escape(value) + @"(?![\p{L}\p{N}])"
                 : SplitTolerant(value);
-            patterns.Add(new Regex(pattern,
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled));
+            patterns.Add(new Regex(pattern, options));
             // The same value as the terminal shows it when its bytes are read as
             // CP437 rather than Latin-1 (what the scrollback holds).
             if (value.Length >= MinLength && Cp437Rendering(value) is { } shownAs && seen.Add(shownAs))
-                patterns.Add(new Regex(SplitTolerant(shownAs),
-                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled));
+                patterns.Add(new Regex(SplitTolerant(shownAs), options));
         }
         // Longest first: a password that contains the login name is masked whole,
         // not left with its tail showing.

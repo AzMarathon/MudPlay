@@ -64,7 +64,8 @@ public static class BugReportBuilder
     // character, decrypted for the comparison only: they are held by the scrubber
     // and never written or logged. Every board's stored login is taken, not only
     // the active one's, since a profile moved between boards keeps the others.
-    public static BugReportScrub.Scrubber BuildScrubber(AppServices svc)
+    // compiled: see BugReportScrub.Build.
+    public static BugReportScrub.Scrubber BuildScrubber(AppServices svc, bool compiled = true)
     {
         ArgumentNullException.ThrowIfNull(svc);
         List<BugReportScrub.Secret> secrets = new();
@@ -95,7 +96,7 @@ public static class BugReportBuilder
         }
         // Only the name the game itself shows is exempt: a profile can be called
         // anything, the login name included.
-        return BugReportScrub.Build(secrets, [Guard<string?>(() => svc.PlayerStats.Name, null)], unreadable);
+        return BugReportScrub.Build(secrets, [Guard<string?>(() => svc.PlayerStats.Name, null)], unreadable, compiled);
     }
 
     // A report that could not be made safe to post. Thrown instead of writing one.
