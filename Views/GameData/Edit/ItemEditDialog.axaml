@@ -484,7 +484,7 @@
                                  exit names the item. -->
                             <StackPanel IsVisible="{Binding HasExitUses}" Margin="0,10,0,0">
                                 <TextBlock Classes="SectionHeader" Text="Used on"
-                                           ToolTip.Tip="Exits whose game data names this item as the one needed to pass. Both sides of a door that names it are listed apart."/>
+                                           ToolTip.Tip="Exits whose game data names this item as the one needed to pass, then the rooms where a command needs this item held to work an exit (marked Action; the exit it opens is named when the data names one). Both sides of a door that names it are listed apart."/>
                                 <ItemsControl ItemsSource="{Binding ExitUses.ShownRooms}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="vm:PlacedInRow">

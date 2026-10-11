@@ -139,6 +139,11 @@ public readonly partial record struct RoomExit(
     // cap, or both).
     public bool HasLevelGate => MinLevel > 0 || MaxLevel > 0;
 
+    // True when an `Action [on the X exit of …]` cell can be attached to this exit: a
+    // hidden exit that needs actions, or a door or key door a lever opens. Any other
+    // exit that an action cell happens to name keeps its own rule.
+    public bool AcceptsActions => Hint is RoomExitHint.MultiActionHidden or RoomExitHint.Door or RoomExitHint.KeyLocked;
+
     // True when this exit only admits a single character class.
     public bool HasClassGate => ClassGate > 0;
 

@@ -1,6 +1,6 @@
 # Version history
 
-## 3.174.14
+## 3.174.16
 
 - Remote commands: a sender without the permission gets only the Failure message; `@suicide`'s lives rule and `@do suicide` answer only a sender who holds it
 - Every refusal (bad or missing word, can't be done, state not read yet, mortally wounded) follows the Warn setting; answers another client waits on are still sent
@@ -14,6 +14,18 @@
 - Reply wording: `can't be hidden`, bare `@profile` without doubled braces, `My party is full: …`
 - A trailing `!` on any command (`@stop!`) is ignored on every path
 - `@help` texts and Talk tab tooltips corrected
+
+## 3.174.3
+
+- Used on also lists the rooms where a command needs the item held to work an exit (lever, rubbed orb, titanium fork), naming the exit it opens
+
+## 3.174.2
+
+- No fight is opened from a room you are stepping out of (a swing at you, a hit line, a room re-run); the attack used to land in the next room
+- A lair entered that way opens with its debuff, then the room attack
+- A step with no landing or refusal within 3 s counts as not taken: the attacker is fought back where you stand
+- Bug report shows an engage held for a move in flight
+- bug reports addressed: paradigm-20261010-231540
 
 ## 3.174.1
 
