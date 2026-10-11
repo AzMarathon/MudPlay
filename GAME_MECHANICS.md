@@ -1038,7 +1038,7 @@ How the game's talk modes and chat channels behave: say forms, the gang channel'
 
 **Client use:**
 - The client answers a say-channel `@`-command with a directed say at the sender (`RemoteCommandManager.SendReply`).
-- Yell lines from other players are chat: `ChatLineDetector` keeps all three forms (`From <name> (Yelling): "`, `Someone yells from … "`, `<name> yells "`) out of the game-output lane, and `DefaultPatterns` pattern `conversation.yell` (`KnownPatterns.ConversationYell`) classifies them for `ChatRouter` as `ChatChannel.Yell`. The unnamed next-room yell gets the speaker `Someone`, the word the game prints; its direction stays in the entry's raw text. A yell carries no remote command (`RemoteCommandManager.MapChannel` leaves `Yell` unmapped).
+- Yell lines from other players are chat: `ChatLineDetector` keeps all three forms (`From <name> (Yelling): "`, `Someone yells from … "`, `<name> yells "`) out of the game-output lane, and `DefaultPatterns` pattern `conversation.yell` (`KnownPatterns.ConversationYell`) classifies them for `ChatRouter` as `ChatChannel.Yell`. The unnamed next-room yell gets the speaker `Someone`, the word the game prints; where it came from (`above`, `below`, `the <direction>`) is carried from the line's own words in `ChatLogEntry.HeardFrom`, shown by the Conversation row as `Someone (from the north)` and kept in the talk log. A yell carries no remote command (`RemoteCommandManager.MapChannel` leaves `Yell` unmapped).
 
 ### Self-echo on public / broadcast channels
 *Status: CONFIRMED 2026-08-24 (user)*

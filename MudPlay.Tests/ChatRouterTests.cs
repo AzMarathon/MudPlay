@@ -250,6 +250,27 @@ public sealed class ChatRouterTests
         Assert.Equal(line, e.RawText);
     }
 
+    // Where a next-room yell came from is taken from the game's own words in the line;
+    // the same-room, own and bare forms carry none.
+    [Theory]
+    [InlineData(@"Someone yells from above ""over here""",         "above")]
+    [InlineData(@"Someone yells from below ""over here""",         "below")]
+    [InlineData(@"Someone yells from the north ""over here""",     "the north")]
+    [InlineData(@"Someone yells from the southwest ""over here""", "the southwest")]
+    [InlineData(@"From Alder (Yelling): ""over here""",            null)]
+    [InlineData(@"Alder yells ""over here""",                      null)]
+    [InlineData(@"You yell ""over here""",                         null)]
+    public void Yell_HeardFrom_IsTheGamesDirectionWords_OnlyForNextRoomYells(string line, string? heardFrom)
+    {
+        var (router, _, entries) = Setup();
+        router.Dispatch(Line(line));
+
+        ChatLogEntry e = Assert.Single(entries);
+        Assert.Equal(heardFrom, e.HeardFrom);
+        Assert.Null(e.DirectedTo);
+        Assert.Equal("over here", e.Message);
+    }
+
     [Theory]
     [InlineData(@"From Alder (Yelling): ""he said ""run"" and left""",           "he said \"run\" and left")]
     [InlineData(@"Someone yells from the east ""he said ""run"" and left""",     "he said \"run\" and left")]
