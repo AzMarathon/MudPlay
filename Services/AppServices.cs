@@ -2728,7 +2728,7 @@ public sealed class AppServices
         // per-name folders the rest of the bootstrap now expects.
         // Runs BEFORE any store touches disk; idempotent on
         // already-migrated trees.
-        LogService bootstrapLog = new();
+        LogService bootstrapLog = new(LogService.SessionCapacity);
         DataMigration.RunIfNeeded(bootstrapLog);
 
         _current = new AppServices(bootstrapLog);
