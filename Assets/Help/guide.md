@@ -1022,7 +1022,7 @@ Your client goes through these checks in this order. The first one that stops a 
 | Move player | `@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@rego` |
 | Execute commands | `@do`, `@kill`, `@heal`, `@trap`, `@train`, `@equip`, `@get-all`, `@get-stash`, `@drop-all`, `@hide-all`, `@deposit-all`, and relaying a `&@` command |
 | Hangup/disconnect | `@hangup`, `@relog` |
-| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@reset` |
+| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@events`, `@event`, `@reset` |
 | Divert conversations | `@divert` |
 | Elevated Commands | `@suicide`, `@dupe` |
 
@@ -1072,7 +1072,7 @@ In the reply tables of the command topics, a row that begins **Refusal:** is sen
 
 **Plain characters only.** Every reply is sent in plain ASCII, which is all the game's line carries safely. Where a reply has to carry a name with something else in it (a loop you named with a long dash, say), that character is spelled plainly (`-`) or, failing that, sent as `?`.
 
-**On the receiving side** nothing pops up. A plain query leaves no trace but the reply itself, which shows in your terminal as the telepath or say your client sent. A command that makes your client act shows there too, as whatever it sent to the game. Commands that change something are written to the program log with the sender's name (`@do`, `@kill`, the `@auto-…` toggles, `@atkprio`, `@atkorder`, `@reset`, `@dupe`, `@get-stash`, a loop send, a `&@` relay). A refused command is logged only with Debug diagnostics on.
+**On the receiving side** nothing pops up. A plain query leaves no trace but the reply itself, which shows in your terminal as the telepath or say your client sent. A command that makes your client act shows there too, as whatever it sent to the game. Commands that change something are written to the program log with the sender's name (`@do`, `@kill`, the `@auto-…` toggles, `@atkprio`, `@atkorder`, `@event` switching an event, `@reset`, `@dupe`, `@get-stash`, a loop send, a `&@` relay). A refused command is logged only with Debug diagnostics on.
 
 ### Commands that never answer
 
@@ -1164,6 +1164,8 @@ One row per command. **Needs** is the box the sender must have ticked on your Pl
 | `@roomba` | `@roomba <item>` · `@roomba sync` | Query Roomba | Where an item was last seen; `sync` hands over your whole log. |
 | `@auto-all` | `@auto-all` · `@auto-all on` · `@auto-all off` | Alter settings | The master switch. |
 | `@auto-combat` `@auto-nuke` `@auto-heal` `@auto-rest` `@auto-bless` `@auto-light` `@auto-cash` `@auto-get` `@auto-sneak` `@auto-hide` `@auto-search` | each one bare, or with `on` or `off` | Alter settings | Flips or sets that one auto toggle. |
+| `@events` | `@events` | Alter settings | Your Events by name, each on or off. |
+| `@event` | `@event <name>` · `@event <name> on` · `@event <name> off` | Alter settings | One of your Events: its state, or switches it on or off. |
 | `@reset` | `@reset` | Alter settings, or party member | Zeroes your session statistics. |
 | `@divert` | `@divert <player>` · `@divert` | Divert conversations | Forwards your incoming telepaths to that player; bare stops it. |
 | `@do` | `@do <command>` | Execute commands | Sends the command to the game as if you typed it. |
@@ -2485,6 +2487,62 @@ Eleven commands, one for each auto toggle on your toolbar and in Settings → Ge
 - **It is saved** to your character, like ticking the box yourself.
 - **Master switch off:** ignored, no answer. Only `@auto-all` is followed then.
 - **On your own screen:** a change is written to the program log with the sender's name.
+
+#### @events and @event
+
+`@events` lists the events you defined under Settings → Events. `@event` reports one of them, or switches it on or off. Switching an event is the same as ticking or clearing the **Disabled** box in its editor: it takes effect at once and is saved to your character.
+
+**Forms:**
+
+- `@events`: every event's name, and whether it is on.
+- `@event bank run`: that one event, on or off, and what kind it is.
+- `@event bank run off`: switch it off. `disable` is taken for `off`.
+- `@event bank run on`: switch it on. `enable` is taken for `on`.
+
+**How a name finds an event.** The same way `@loop` finds a loop. A name that equals what was typed (ignoring case) wins outright. Otherwise an event matches when its name holds **every typed word, in any order**: `@event run bank off` finds *Evening bank run*. If nothing matches, it is tried once more without apostrophes. Exactly one match is used; none, or more than one, is refused. An event with no name is listed as `(unnamed)` and can't be named in `@event`.
+
+The last word is read as the switch (`on`, `off`, `enable`, `disable`), unless everything after `@event` is itself an event's whole name. So an event called *Lights on* is asked about with `@event lights on` and switched with `@event lights on on`.
+
+**Who may send it:** a player with **Alter settings**, on any of the three channels. It is the permission `@settings`, `@profile` and the `@auto-…` toggles need: seeing how your client is set up needs the same grant as changing it. A player without it gets the Failure message whatever they typed, and so can't learn whether an event of some name exists.
+
+**What an answer may say.** An event's name, whether it is on, and the *kind* of its trigger and action in fixed words (`fires on a timer`, `sends a command`). Never what it sends, which loop or room it uses, or when it fires: an event's command can hold anything you typed.
+
+| Reply | When |
+|---|---|
+| `events: Night stats on, Bank run on, Sell junk off` | `@events`. The events in the order of the Events tab. |
+| `events (1/3): …` and so on | Too long for one line: the whole list is sent over several replies. |
+| `events (all disabled): …` | **Disable all events** is ticked on the Events tab. Each event's own state is still shown; none fires until the box is cleared. |
+| any of the above, with `<name> off (target missing)` | That event is off because its saved loop or Auto-Lair setup no longer exists. It can't be switched on from here. |
+| `no events defined` | `@events`, and you have none. |
+| `event '<name>' is on: fires on a timer, makes a bank trip` | `@event <name>`. It reads `is off`, or `is off (target missing)`, for one that is. It ends `; all events are disabled` while **Disable all events** is ticked. |
+| `event '<name>' switched off` | It was on. It fires no more. |
+| `event '<name>' switched off; the run it has under way finishes` | The same, switched off in the middle of its own run. |
+| `event '<name>' switched on` | It was off. It ends `; all events are disabled, so it won't fire yet` while **Disable all events** is ticked. |
+| `event '<name>' is already on` (or `already off`) | Nothing needed changing, and nothing was saved. |
+| `event '<name>' can't be switched on: its loop is missing` (or `its Auto-Lair setup is missing`) | **Refusal:** the event names a saved loop or Auto-Lair setup that no longer exists. |
+| `no event named '<text>'` | **Refusal:** no event's name fits. |
+| `'<text>' matches 2 events: '<name>', '<name>'` | **Refusal:** the name fits more than one. Up to four are named. Nothing is switched. |
+| the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
+
+Two more refusals carry a usage line. `@event` with nothing after it, or with only `on` or `off`, is refused with `usage: @event <name> [on|off]`. `@events` with anything after it is refused with `usage: @events lists them; @event <name> on|off switches one`, and nothing is switched: `@events off` does not disable your events.
+
+The kinds an event is described by:
+
+| Part | Reads |
+|---|---|
+| Trigger | `fires on logon`, `fires on logoff`, `fires on re-log`, `fires at a set time`, `fires on a timer`, `fires on a condition`, `fires on a boss timer` |
+| Action | `walks to a room`, `runs a loop`, `runs Auto-Lair`, `sends a command`, `runs a Roomba sweep`, `waits`, `rests up`, `makes a bank trip`, `moves a stash to the bank` |
+
+**Situations:**
+
+- **An event that is running when it is switched off** finishes that run, its Then step included. What stops is every later firing; a firing of it that was waiting its turn behind another event is dropped when its turn comes. To stop the run itself, stop what it is doing (`@stop`, or Stop in the client).
+- **An event the client switched off for a missing target** can't be switched on by `@event`. Put the loop or Auto-Lair setup back, or point the event at another one in its editor, and clear its **Disabled** box there.
+- **Disable all events** is not changed by either command. There is no remote command for that box.
+- **The Settings window open on the Events tab** shows the change at once: a disabled event carries an `off` badge in the list.
+- **Timers start over.** Switching any event restarts the countdown of every **Every** event, as saving an event from its editor does.
+- **Through the Local control API** (`POST /command`) both work the same, with no permission check, and a refusal's reason is always returned.
+- **Master switch off:** ignored, no answer.
+- **On your own screen:** a switch is written to the program log with the sender's name, and the bug report's event list says who last switched an event. A list request is logged only with Debug diagnostics on.
 
 #### @reset
 
@@ -6480,7 +6538,7 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 ### Event list (New… / Modify… / Remove)
 
 **What it does:** Shows every scheduled event you've defined, with its **Name**, its trigger (**When**), a live countdown to its next fire (**Next**), and its action, its stop rule and its Then step (**What**, e.g. `Loop "Sewer" (until 3 laps) → go back`). **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
-**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time**, **Every** and timed **Boss** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
+**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A disabled event shows an **off** badge in the list. A player you grant **Alter settings** can list your events and switch one on or off with the remote commands `@events` and `@event` (see *Remote @-commands*); the list shows the change at once. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time**, **Every** and timed **Boss** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
 
 ### Event editor — Sound
 
