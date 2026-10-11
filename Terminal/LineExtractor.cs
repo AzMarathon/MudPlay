@@ -204,19 +204,6 @@ public sealed partial class LineExtractor
     [GeneratedRegex(@"^\[HP=[^\]]*\]:(?:\s\((?:Resting|Meditating)\))?", RegexOptions.CultureInvariant)]
     private static partial Regex PromptPrefix();
 
-    // Whether a terminal row starts with the game's statline prompt (with its
-    // Resting / Meditating tag, if any), and what follows it on the row. A row
-    // that is some other prompt (a password, a menu, a yes/no question) doesn't.
-    public static bool TrySplitPrompt(string? row, out string rest)
-    {
-        rest = string.Empty;
-        if (string.IsNullOrEmpty(row)) return false;
-        Match m = PromptPrefix().Match(row);
-        if (!m.Success || m.Length == 0) return false;
-        rest = row[m.Length..];
-        return true;
-    }
-
     // Public for testability: converts a raw cell row into the EmittedLine the
     // event surfaces. Trims trailing blank cells (unless trimTrailingBlanks is
     // false — a soft-wrapped fragment is full to the margin and a trailing space

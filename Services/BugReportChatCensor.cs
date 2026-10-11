@@ -167,27 +167,6 @@ public sealed partial class BugReportChatCensor
         }
     }
 
-    // Terminal rows, oldest first, for rows with no record of where the terminal
-    // wrapped: a row that follows a full-width chat row is taken as its
-    // continuation. A guess, and it can take the game's row for chat; the report
-    // uses the overload above.
-    public void CensorRows(IList<string> rows, int terminalColumns)
-    {
-        ArgumentNullException.ThrowIfNull(rows);
-        bool continues = false;
-        for (int i = 0; i < rows.Count; i++)
-        {
-            string row = rows[i];
-            // The backscroll doesn't record which rows the terminal wrapped, so a
-            // continuation is told by the row before it being full. A row that
-            // starts with the game's prompt is never one.
-            bool chat = ChatLineDetector.IsChat(row)
-                || (continues && row.Length > 0 && !LineExtractor.TrySplitPrompt(row, out _));
-            if (chat) rows[i] = CensorText(row);
-            continues = chat && terminalColumns > 0 && row.Length >= terminalColumns - 1;
-        }
-    }
-
     // A command the client put on the wire: masked when it speaks on a channel.
     public string CensorSentCommand(string command) =>
         IsChatCommand(command) ? CensorText(command) : command;

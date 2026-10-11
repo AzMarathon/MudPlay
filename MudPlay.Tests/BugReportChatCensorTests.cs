@@ -66,22 +66,23 @@ public sealed class BugReportChatCensorTests
         Assert.Equal(combat, Censor.CensorIfChat(combat));
     }
 
+    // A chat line the terminal wrapped is masked on the row it starts on and on
+    // the row it carries on to; the game's rows either side are left.
     [Fact]
-    public void CensorRows_FollowsAWrappedChatLineOntoItsNextRow()
+    public void CensorRows_AWrappedChatLine_IsMaskedOnBothItsRows()
     {
-        string first = "Somebody gossips: " + new string('x', 61);   // 79 of 80 columns
         List<string> rows =
         [
             "You notice a flibber here.",
-            first,
+            "Somebody gossips: zorptang " + new string('x', 53),   // all 80 columns
             "and then flibber to finish",
             "Obvious exits: flibber",
         ];
 
-        Censor.CensorRows(rows, terminalColumns: 80);
+        Censor.CensorRows(rows, wrappedOntoNext: [false, true, false, false]);
 
         Assert.Equal("You notice a flibber here.", rows[0]);
-        Assert.Equal(first, rows[1]);
+        Assert.Equal("Somebody gossips: [censored] " + new string('x', 53), rows[1]);
         Assert.Equal("and then [censored] to finish", rows[2]);
         Assert.Equal("Obvious exits: flibber", rows[3]);
     }
