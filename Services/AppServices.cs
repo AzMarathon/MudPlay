@@ -2728,7 +2728,11 @@ public sealed class AppServices
     // The Simulator's finished area rankings, by the game data and character each was
     // made on. Here and not on the Simulator's view-model, which goes with the
     // Navigation window: a ranking is the pairing's for as long as the client runs.
-    public Game.Simulation.AreaRankingStore SimulatorRankings { get; } = new();
+    public Game.Simulation.AreaRankingStore SimulatorRankings { get; private set; } = null!;
+
+    // Reads the file side of what a kept ranking is compared by (table stamps, the
+    // seed, the user's record overrides), remembering content hashes between asks.
+    private readonly RankingStampReader _rankingStamps = new();
 
     // The data of set was replaced (an import over it, a Manage Sets change): what the
     // Simulator ranked on the old data is stale, whichever set is active.
@@ -7743,6 +7747,7 @@ public sealed class AppServices
         // A refused automatic walk names the line to tick by its title on that tab.
         Walker.SetTeleportChoices(() => TeleportChoices);
         RoomGraph.GraphReloaded += () => _teleportChoices = null;
+        RoomGraph.GraphReloaded += () => _simulatorGateItems = null;
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo
         // (canDrive), pre-flighting the floor-1 timer against live encumbrance +
@@ -8431,6 +8436,10 @@ public sealed class AppServices
         // The Simulator's rankings follow the set too, but nothing reloads: a switch
         // leaves each set's where they are. The active set's name coming round again
         // is that set read in afresh, and what was ranked on its old tables is stale.
+        // Each ranking is also kept in a file in its set's folder, so it is there
+        // after a restart; what a read finds is handed back on the UI thread.
+        SimulatorRankings = new Game.Simulation.AreaRankingStore(
+            new AreaRankingFiles(), act => Avalonia.Threading.Dispatcher.UIThread.Post(act), Log);
         SimulatorRankings.NoteActiveSet(GameData.ActiveSet);
         GameData.ActiveSetChanged += setName =>
             LogStaleSimulatorRankings(setName, "was read in again", SimulatorRankings.NoteActiveSet(setName));
@@ -8445,6 +8454,17 @@ public sealed class AppServices
             if (carried > 0)
                 Log.Info("Simulator", $"character '{was ?? "(none)"}' is now '{now ?? "(none)"}': {carried} area ranking(s) kept for it go with it");
         };
+        // The files are named by BBS and profile, so the same holds for a profile
+        // that is not loaded, and a deleted profile's go with it: the name may be
+        // given to another character later. A copied profile is another character
+        // and takes none.
+        Profile.StoredProfileMoved += (was, now) => SimulatorRankings.RenameCharacter(
+            Game.Simulation.SimulatorOwner.CharacterKey(was.Bbs, was.Name),
+            Game.Simulation.SimulatorOwner.CharacterKey(now.Bbs, now.Name));
+        Profile.ProfileDeleted += gone => SimulatorRankings.ForgetCharacter(
+            Game.Simulation.SimulatorOwner.CharacterKey(gone.Bbs, gone.Name));
+        Profile.BbsRenamed += SimulatorRankings.RenameBbs;
+        Profile.BbsDeleted += SimulatorRankings.ForgetBbs;
 
         // Which loops and auto-lair setups are favourites is each character's own.
         // Built after the first LoadAll above so a profile already loaded finds its
@@ -11499,8 +11519,43 @@ public sealed class AppServices
 
     public Game.Simulation.SimulationSource LoopSimulationSource =>
         _loopSimulationSource ??= new(BuildLoopSimulation, () => PlayerStats.Name, () => PlayerStats.Level,
-            LoopSimulationWalkSeconds, () => RoomTracker.State.CurrentRoom?.Key, AppPaths.LogsDir);
+            LoopSimulationWalkSeconds, () => RoomTracker.State.CurrentRoom?.Key, AppPaths.LogsDir,
+            SimulatorWorld, SimulatorCharacterAt);
     private Game.Simulation.SimulationSource? _loopSimulationSource;
+
+    // The game data as it is now, for a ranking kept between sessions (RankingWorld):
+    // the active set's table files and the monster seed in use.
+    private Game.Simulation.RankingWorld? SimulatorWorld() =>
+        GameData.ActiveSet is { } set
+            ? _rankingStamps.World(AppPaths.GameDataSetDir(set),
+                MonsterOverlaySeed.ActiveRealm is { } realm ? AppPaths.MonsterOverlaySeedFile(realm) : null)
+            : null;
+
+    // The character as a ranking at `level` would simulate it now, as the groups a
+    // kept ranking is compared by (RankingCharacter). Null while it can't be read: no
+    // `stat` yet (BuildLoopSimulation), or no inventory, without which the worn gear
+    // and the gate items carried are unknown and every ranking would read as changed.
+    private Game.Simulation.RankingCharacter? SimulatorCharacterAt(int level)
+    {
+        if (!Inventory.IsLoaded || GameData.ActiveSet is not { } set || BuildLoopSimulation(level) is not { } built)
+            return null;
+        // The record overrides that apply to this character: Global, its realm's,
+        // its own.
+        var tiers = new List<string> { Path.Combine(AppPaths.DataRoot, "Global") };
+        if (ActiveRealmFolder() is { } realm) tiers.Add(realm);
+        if (Profile.CurrentProfileName is { } name && Profile.CurrentBbsName is { } bbs)
+            tiers.Add(AppPaths.ProfileFolder(bbs, name));
+        _simulatorGateItems ??= Game.Simulation.RankingReach.GateItems(RoomGraph.Rooms);
+        return Game.Simulation.RankingCharacter.Of(
+            built.Character,
+            _rankingStamps.GameDataEdits(tiers, set),
+            Game.Simulation.RankingReach.Hash(
+                Movement.Avoided, Movement.ClassNumberProvider?.Invoke(), Movement.RaceNumberProvider?.Invoke(),
+                _simulatorGateItems.Where(IsItemCarried)));
+    }
+
+    // Every item an exit of the loaded map wants carried; rebuilt after the map is.
+    private IReadOnlySet<int>? _simulatorGateItems;
 
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the

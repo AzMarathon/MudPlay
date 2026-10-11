@@ -2655,7 +2655,15 @@ public static class BugReportBuilder
         // Results are kept apart by game data and character; a report of "the list is
         // empty" or "these aren't my numbers" turns on which pairing is on show.
         Kv(sb, "Results are for", $"game data {snap.ForSet ?? "(none)"} · character {snap.ForCharacter ?? "(none loaded)"}");
-        Kv(sb, "Area rankings kept this session", $"{snap.RankingsKept} of at most {Game.Simulation.AreaRankingStore.MaxKept}");
+        Kv(sb, "Area rankings held in memory", $"{snap.RankingsKept} of at most {Game.Simulation.AreaRankingStore.MaxKept}");
+        // A ranking is kept on disk between sessions: figures that look wrong may be
+        // an earlier day's, listed marked, and an empty list may be a file dropped.
+        Kv(sb, "Area ranking listed", snap.ListedRanking ?? "(none)");
+        if (snap.RankingFiles.Count > 0)
+        {
+            sb.Append("\n**Area ranking files** (latest last)\n\n");
+            foreach (string line in snap.RankingFiles) sb.Append("- ").Append(line).Append('\n');
+        }
 
         sb.Append("\n**Character simulation**\n\n");
         if (snap.Simulation is null) sb.Append("_(not run)_\n");

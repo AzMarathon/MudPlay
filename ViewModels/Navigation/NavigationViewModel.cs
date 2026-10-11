@@ -184,6 +184,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Profile.ProfileClosed += OnSimulatorCharacterClosed;
         _services.Profile.ProfileRenamed += OnSimulatorCharacterRenamed;
         _services.GameData.ActiveSetChanged += OnSimulatorGameDataChanged;
+        // A ranking kept from an earlier session is listed before the character has
+        // been read, marked as not checked; the first `stat` and inventory check it.
+        _services.Stats.ScreenParsed += OnSimulatorStatRead;
+        _services.Inventory.FullInventoryParsed += Simulator.CharacterRead;
     }
 
     // The loaded character as the Simulator keys its results.
@@ -193,6 +197,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void OnSimulatorCharacterLoaded(Models.Profile.CharacterProfile _) => Simulator.CharacterChanged();
     private void OnSimulatorCharacterClosed() => Simulator.CharacterChanged();
     private void OnSimulatorCharacterRenamed(string? oldBbs, string? oldName) => Simulator.CharacterRenamed();
+    private void OnSimulatorStatRead(LastKnownStats _) => Simulator.CharacterRead();
     private void OnSimulatorGameDataChanged(string? set)
     {
         Simulator.GameDataChanged(set);
@@ -345,6 +350,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Profile.ProfileClosed -= OnSimulatorCharacterClosed;
         _services.Profile.ProfileRenamed -= OnSimulatorCharacterRenamed;
         _services.GameData.ActiveSetChanged -= OnSimulatorGameDataChanged;
+        _services.Stats.ScreenParsed -= OnSimulatorStatRead;
+        _services.Inventory.FullInventoryParsed -= Simulator.CharacterRead;
     }
 
     // Loops + lairs share the on-disk folder tree; a folder add / rename /

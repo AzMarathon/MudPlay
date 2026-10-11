@@ -80,8 +80,9 @@ public sealed partial class SimulatorViewModel : ObservableObject
         _owner = new SimulatorOwner(gameData.ActiveSet, character());
         RefreshRoutes();
         // The store outlives the Navigation window this lives with, so a ranking made
-        // before the window was last closed is listed again.
-        ShowRanking(_rankings.Get(_owner), kept: true);
+        // before the window was last closed is listed again, and one made before the
+        // client was last closed is looked for on disk.
+        ListKept(_owner);
     }
 
     // ----- Whose results these are ---------
@@ -146,36 +147,83 @@ public sealed partial class SimulatorViewModel : ObservableObject
         if (Rankings.Count > 0)
             _log?.Info("Simulator", $"the area ranking for {_owner.Label} is off the list: it is {owner.Label} now");
         _owner = owner;
+        ListKept(owner);
+    }
+
+    // List what is kept for owner, the pairing now on show: the ranking held in
+    // memory, or, the first time the pairing is shown with none there, the one on
+    // disk from an earlier session. The file is read off the UI thread and listed
+    // when it arrives, unless the pairing has changed, a ranking has started or one
+    // has been listed meanwhile.
+    private void ListKept(SimulatorOwner owner)
+    {
         AreaRanking? own = _rankings.Get(owner);
         ShowRanking(own, kept: true);
-        if (own is not null)
-            _log?.Info("Simulator", $"listing the area ranking kept for {owner.Label}, made at L{own.Level} ({own.Rows.Count} options)");
+        if (own is not null) { LogListed(owner, own); return; }
+        if (_simulation?.World() is not { } world) return;
+        _rankings.Load(owner, world, saved =>
+        {
+            if (saved is null || owner != _owner || IsRanking || Rankings.Count > 0) return;
+            ShowRanking(saved, kept: true);
+            LogListed(owner, saved);
+        });
     }
+
+    // After ShowRanking, which worked out how the ranking stands (_keptCheck).
+    private void LogListed(SimulatorOwner owner, AreaRanking ranking) => _log?.Info("Simulator",
+        $"listing the area ranking kept for {owner.Label}{(ranking.FromDisk ? ", read back from disk" : "")} ({ranking.Rows.Count} options): " +
+        ranking.KeptNote(_simulation?.Level() ?? 0, DateTimeOffset.Now, _keptCheck));
 
     // List a ranking (null: none). No row is picked: picking one puts its tour on
     // the map as the estimator's sketch, which a switch must not do by itself.
     //
     // kept: it comes from those kept, not from a ranking that has just finished. It
-    // then says when it was made and at what level, and is marked when the character
-    // has changed level since (user, 2026-10-11): it is listed as what it is, a
-    // ranking of the character as it was.
+    // then says when it was made and at what level, and is marked when it is not
+    // known to be about the character as it is now (user, 2026-10-11): the level
+    // has changed, something the simulator reads has, or the character can't be
+    // read yet. It is listed as what it is, a ranking of the character as it was.
     private void ShowRanking(AreaRanking? ranking, bool kept = false)
     {
         SelectedRanking = null;
         _shown = ranking;
+        _shownKept = kept && ranking is not null;
         Rankings.Clear();
         if (ranking is not null)
             foreach (AreaRank r in ranking.Rows) Rankings.Add(r);
         OnPropertyChanged(nameof(HasRankings));
-        int levelNow = _simulation?.Level() ?? 0;
-        RankingNotCurrent = kept && ranking is not null && !ranking.IsCurrentAt(levelNow);
-        RankStatus = ranking is null ? ""
-            : kept ? $"{ranking.KeptNote(levelNow, DateTimeOffset.Now)} {ranking.Summary}"
-            : ranking.Summary;
+        _keptCheck = default;
+        RankingNotCurrent = false;
+        RankStatus = ranking?.Summary ?? "";
+        if (_shownKept) NoteKept(ranking!);
     }
 
-    // The ranking listed was made at another level of the character than it is at
-    // now: the table is shown muted.
+    // Lead the status line of the kept ranking on show with how it stands now.
+    private void NoteKept(AreaRanking ranking)
+    {
+        int levelNow = _simulation?.Level() ?? 0;
+        _keptCheck = CheckKept(ranking);
+        RankingNotCurrent = !ranking.IsCurrentAt(levelNow, _keptCheck);
+        RankStatus = $"{ranking.KeptNote(levelNow, DateTimeOffset.Now, _keptCheck)} {ranking.Summary}";
+    }
+
+    // The character as it would be simulated now at the ranking's level, against
+    // the one it was made for.
+    private RankingCheck CheckKept(AreaRanking ranking) =>
+        RankingCheck.Of(ranking.Character, _simulation?.CharacterAt(ranking.Level));
+
+    // A `stat` screen or a full inventory was read. A kept ranking listed before the
+    // character could be read says "not checked against the character yet"; it is
+    // checked now. One already checked is left: it says how it stood when listed.
+    public void CharacterRead()
+    {
+        if (_shownKept && _shown is { } ranking && _keptCheck.Unchecked && !IsRanking) NoteKept(ranking);
+    }
+
+    private bool _shownKept;
+    private RankingCheck _keptCheck;
+
+    // The ranking listed is not known to be about the character as it is now: the
+    // table is shown muted.
     [ObservableProperty] private bool _rankingNotCurrent;
 
     public string RealmLabel => _gameData.ActiveRealm == RealmType.ParaMud ? "Paradigm" : "Stock";
@@ -570,6 +618,10 @@ public sealed partial class SimulatorViewModel : ObservableObject
         // character cancels it, and by the time it finds that out the list on show is
         // another pairing's.
         SimulatorOwner owner = _owner;
+        // What it is made in and for, taken as it starts: a ranking kept between
+        // sessions is listed again by these.
+        RankingWorld? madeIn = _simulation.World();
+        RankingCharacter? madeFor = _simulation.CharacterAt(level);
         using var cts = new CancellationTokenSource();
         _rankCts = cts;
         CancellationToken cancel = cts.Token;
@@ -674,7 +726,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
                 + (gatedAreas > 0 ? $"; {gatedAreas} area(s) you can't reach at L{level} left out" : "") + skipped
                 + ". Pick one to see its route and details, show it on the map, and save it as a loop to run.";
             ListFinishedRanking(owner, new AreaRanking(
-                ranked, level, step, hours, runs, here, RealmLabel, summary, DateTimeOffset.Now, ownLevel));
+                ranked, level, step, hours, runs, here, RealmLabel, summary, DateTimeOffset.Now, ownLevel, madeIn, madeFor));
             _log?.Info("Simulator", $"ranked {ranked.Count} options at L{level} for {owner.Label} ({gatedAreas} areas unreachable, " +
                 $"{skippedAreas} areas and {skippedLoops} loops skipped): " +
                 string.Join(" | ", ranked.Take(10).Select(r => r.Label)));
@@ -944,7 +996,24 @@ public sealed partial class SimulatorViewModel : ObservableObject
                         : RankStats.Select(s => "  " + Line(s)).Prepend($"Picked: {RankHeadline}"))
                     .Where(l => !string.IsNullOrEmpty(l)).ToList(),
             SimResult is null ? null : _simRouteName,
-            _owner.Set, _owner.Character, _rankings.Count);
+            _owner.Set, _owner.Character, _rankings.Count,
+            DescribeListedRanking(), _rankings.DiskNotes);
+    }
+
+    // Where the ranking on show came from and how it stands, for the bug report: a
+    // report of figures that look wrong turns on whether they are today's.
+    private string? DescribeListedRanking()
+    {
+        if (_shown is not { } ranking) return null;
+        TimeSpan age = DateTimeOffset.Now - ranking.MadeAt;
+        string made = $"made {ranking.MadeAt.ToLocalTime():yyyy-MM-dd HH:mm} " +
+                      $"({(age.TotalDays >= 1 ? $"{age.TotalDays:0} day(s)" : $"{age.TotalHours:0.#} h")} ago) at L{ranking.Level}, character L{ranking.CharacterLevel} then";
+        if (!_shownKept) return $"just made this session; {made}";
+        string from = ranking.FromDisk ? "read back from disk" : "kept in memory this session";
+        string stands = _keptCheck.Unchecked ? "not checked against the character yet"
+            : _keptCheck.Changed is { Count: > 0 } changed ? $"marked for {string.Join(", ", changed)}"
+            : "the character's stats, gear, spells, settings, game-data edits and reach are as they were";
+        return $"{from}; {made}; {stands}{(RankingNotCurrent ? "; shown as not current" : "")}";
     }
 }
 
