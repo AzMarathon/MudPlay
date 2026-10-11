@@ -462,7 +462,11 @@ public sealed class EquipmentManager
         if (!_slotOwners.TryGetValue(slot, out List<SlotClaim>? claims))
             _slotOwners[slot] = claims = new List<SlotClaim>();
         List<SlotClaim> others = claims.Where(c => c.Owner != owner).ToList();
-        bool newlyOwned = others.Count == claims.Count;
+        // A claim is an owner's on one item. The same owner can have a second
+        // piece claimed for the slot while the first is still unanswered (the
+        // counter's next candidate), and each is let go by its own name.
+        bool Mine(SlotClaim c) => c.Owner == owner && string.Equals(c.Item, name, StringComparison.OrdinalIgnoreCase);
+        bool newlyOwned = !claims.Any(Mine);
 
         SlotClaimResult result;
         if (worn)
@@ -485,7 +489,7 @@ public sealed class EquipmentManager
         else
             result = SlotClaimResult.Sent;
 
-        claims.RemoveAll(c => c.Owner == owner);
+        claims.RemoveAll(Mine);
         claims.Add(new SlotClaim(owner, name, urgent));
         switch (result)
         {
@@ -538,13 +542,14 @@ public sealed class EquipmentManager
         string name = itemName?.Trim() ?? "";
         if (name.Length == 0) return SlotReleaseResult.NotOwned;
         if (_resolveItemSlot?.Invoke(name) is not { } slot) return SlotReleaseResult.NotOwned;
-        if (!_slotOwners.TryGetValue(slot, out List<SlotClaim>? claims) || !claims.Any(c => c.Owner == owner))
+        bool Mine(SlotClaim c) => c.Owner == owner && string.Equals(c.Item, name, StringComparison.OrdinalIgnoreCase);
+        if (!_slotOwners.TryGetValue(slot, out List<SlotClaim>? claims) || !claims.Any(Mine))
             return SlotReleaseResult.NotOwned;
         // Checked before the slot is released, so the redo still finds it owned.
         if (!throughSneak
             && HoldGear($"override:{slot}:{owner}", () => ClearSlotOverride(name, owner, otherwise), $"{owner} revert of '{name}'"))
             return SlotReleaseResult.Held;
-        claims.RemoveAll(c => c.Owner == owner);
+        claims.RemoveAll(Mine);
 
         InventorySnapshot snap = _getSnapshot();
         bool IsOn(string item) => snap.EquippedItems.Any(
@@ -555,10 +560,9 @@ public sealed class EquipmentManager
             _slotOwners.Remove(slot);
         else
         {
-            // Still wanted by another owner. One that holds it with this same piece
-            // keeps it on; one whose own piece was pushed out gets it back now. In a
-            // pair the other's piece can be on beside this one, which then comes off
-            // like any other.
+            // Still claimed. A claim on this same piece keeps it on; one whose own
+            // piece was pushed out gets it back now. In a pair the other's piece
+            // can be on beside this one, which then comes off like any other.
             SlotClaim next = claims[^1];
             if (string.Equals(next.Item, name, StringComparison.OrdinalIgnoreCase))
                 return SlotReleaseResult.Released;
@@ -624,15 +628,17 @@ public sealed class EquipmentManager
         return members.FirstOrDefault(item => !isOn(item) && IsHeld(held, item));
     }
 
-    // Let go of the owner's claim on the slot `itemName` fills with nothing sent:
-    // the wear that claimed it was refused, or the item is no longer on.
+    // Let go of the owner's claim for `itemName` with nothing sent: the wear that
+    // claimed it was refused, or the item is no longer on. Only that item's claim:
+    // the owner's claim for another piece in the same slot (the counter's second
+    // candidate, by then the one that is on) stands.
     public void DropSlotOverride(string itemName, string owner)
     {
         string name = itemName?.Trim() ?? "";
         _pending.RemoveAll(p => p.Owner == owner && string.Equals(p.ItemName, name, StringComparison.OrdinalIgnoreCase));
         if (_resolveItemSlot?.Invoke(name) is not { } slot
             || !_slotOwners.TryGetValue(slot, out List<SlotClaim>? claims)) return;
-        claims.RemoveAll(c => c.Owner == owner);
+        claims.RemoveAll(c => c.Owner == owner && string.Equals(c.Item, name, StringComparison.OrdinalIgnoreCase));
         if (claims.Count == 0) _slotOwners.Remove(slot);
     }
 

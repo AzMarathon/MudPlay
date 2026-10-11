@@ -439,10 +439,15 @@ public sealed class RoomSpellCounterWear
     // again, and the counter is left off until the character stands somewhere
     // else, so the two don't trade the slot back and forth in one room. Our own
     // restore lets go of the item before its `rem` goes out, so it never lands here.
+    //
+    // Not so a counter of ours pushed out by another wear of ours into the same
+    // slot: the first candidate answered late, with the second already sent. That
+    // is our own doing. The second takes over what the first had pushed out, and
+    // only the first one's claim is let go.
     public void NoteRemoved(string itemName)
     {
         string name = itemName?.Trim() ?? string.Empty;
-        IEnumerable<Wear> waiting = _pending is { } pending ? _late.Values.Append(pending) : _late.Values;
+        List<Wear> waiting = _pending is { } pending ? _late.Values.Append(pending).ToList() : _late.Values.ToList();
         foreach (Wear wear in waiting)
             if (wear.InSlotBefore.Contains(name, StringComparer.OrdinalIgnoreCase)) wear.Evicted = name;
         foreach ((int id, Owned owned) in _owned.ToList())
@@ -451,8 +456,15 @@ public sealed class RoomSpellCounterWear
                 || _pending?.Id == id || _late.ContainsKey(id)) continue;
             _confirmedOn.Remove(id);
             _owned.Remove(id);
-            _takenOffHere = true;
             _equipment.DropSlotOverride(owned.Name, Owner);
+            if (waiting.FirstOrDefault(w => SharePlaces(w.Id, id)) is { } pusher)
+            {
+                pusher.Evicted = owned.Displaced;
+                _log?.Info(LogCategory,
+                    $"{Owner}: '{owned.Name}' gave its place to '{pusher.Name}', which was sent while it had not answered");
+                continue;
+            }
+            _takenOffHere = true;
             _log?.Info(LogCategory,
                 $"{Owner}: '{owned.Name}' was taken off — its slot goes back to the gear sets, and it is left off until the next room");
         }
@@ -465,6 +477,9 @@ public sealed class RoomSpellCounterWear
         foreach (int id in freed) _shelved.Remove(id);
         UsabilityChanged?.Invoke();
     }
+
+    private bool SharePlaces(int item, int other) =>
+        _describe(item) is { } a && _describe(other) is { } b && EquipmentManager.SharePlaces(a.Slot, b.Slot);
 
     // Another character: nothing of the old one's is owned, and nothing is sent.
     public void Reset()

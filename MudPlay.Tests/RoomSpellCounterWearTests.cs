@@ -649,6 +649,46 @@ public sealed class RoomSpellCounterWearTests
     }
 
     [Fact]
+    public void TheFirstCandidateNeverAnswers_TheSecondGoesOn_AndIsStillOwnedWhenTheFirstIsGivenUpOn()
+    {
+        // The feather's clean-up lets go of the feather's claim, not of the amulet's.
+        World w = Volcano();
+        Assert.False(w.Wear.ReadyToEnter(At(3)));      // wear phoenix feather, held
+        w.Timers[0]();                                 // 3 s: no answer
+        Assert.True(w.Wear.ReadyToEnter(At(3)));       // the amulet goes out, no hold
+        w.Pack.Remove("phoenix feather");              // (the feather really isn't there)
+        w.GameWears("magma amulet");                   // pushes the necklace out
+        foreach (Action t in w.Timers.ToList()) t();   // the time a late answer is listened for ends
+
+        Assert.Equal(("magma amulet", "silver necklace", MagmaHeat), w.Wear.OwnedSnapshot().Single());
+
+        foreach (int room in new[] { 3, 4, 5, 6 }) w.Arrive(room);
+        Assert.Equal(new[] { "wear phoenix feather", "wear magma amulet", "wear silver necklace" }, w.Sent);
+        Assert.Empty(w.Wear.OwnedSnapshot());
+    }
+
+    [Fact]
+    public void TheFirstCandidateAnswersLate_TheSecondThenPushesItOut_AndTakesOverWhatItHadPushedOut()
+    {
+        // Lag over the cap: both wears land, the feather first. The feather coming
+        // off again is our own second wear's doing, not other hands'.
+        World w = Volcano();
+        Assert.False(w.Wear.ReadyToEnter(At(3)));
+        w.Timers[0]();
+        Assert.True(w.Wear.ReadyToEnter(At(3)));       // wear magma amulet sent
+        w.GameWears("phoenix feather");                // late: necklace out, feather on
+        w.GameWears("magma amulet");                   // then the amulet pushes the feather out
+        foreach (Action t in w.Timers.ToList()) t();
+
+        Assert.Equal(("magma amulet", "silver necklace", MagmaHeat), w.Wear.OwnedSnapshot().Single());
+        Assert.DoesNotContain(w.Info, l => l.Contains("was taken off"));
+
+        foreach (int room in new[] { 3, 4, 5, 6 }) w.Arrive(room);
+        Assert.Equal(new[] { "wear phoenix feather", "wear magma amulet", "wear silver necklace" }, w.Sent);
+        Assert.Empty(w.Wear.OwnedSnapshot());
+    }
+
+    [Fact]
     public void AnUnansweredItem_IsNotTriedAgainRoomAfterRoom_OnlyAfterAFullInventoryRead()
     {
         World w = Volcano();
