@@ -783,6 +783,7 @@ public static class BugReportBuilder
         // screen, a password prompt) was up.
         Kv(sb, "Backstab opener spent", svc.Combat.BackstabOpenerSpent.ToString());
         Kv(sb, "Attack held by send gate", svc.Combat.AttackHeldBySendGate.ToString());
+        Kv(sb, "Engage held for our move in flight", svc.Combat.MoveHoldSummary);
         Kv(sb, "Awaiting backstab resolution", combat.AwaitingBackstabResolution
             ? $"yes (target={combat.PendingBackstabSpecies ?? "(none)"})"
             : "no");
