@@ -222,7 +222,7 @@ public static class LocalApiState
         {
             capturedAt = capture.CapturedAt,
             realm = capture.Realm.ToString(),
-            sections = capture.Sections.ToDictionary(s => s.Heading, s => s.Body),
+            sections = BugReportBuilder.SectionTexts(capture),
         };
     }
 

@@ -1,5 +1,19 @@
 # Version history
 
+## 3.169.0
+
+- Bug report: your login name, login password and suicide password are masked everywhere in it, and in a crash report
+- Bug report: racist and other offensive words on chat lines are masked, in the report only
+- Bug report: a list of every command sent, held or dropped, with who sent it
+- Bug report: Holds and waits near the top: the send gate, each movement gate with who raised it and since when, time in state for every engine, what each is waiting on
+- Bug report: the whole program log with millisecond times; warnings and errors kept apart so routine lines can't push them out; 3,000 lines of scrollback
+- Bug report: the build, when the client started, your system, the connection, open windows, pending work, triggers / aliases / macros, remote-command permissions, death history
+- Bug report: state first, settings after, histories last and oldest first; under 1 MB without the wire sections
+- The wire sections follow the Wire Inspector's tick boxes and show when each read arrived
+- The last 2 to 4 minutes of the program log are always on disk, for a hang or a forced kill (Logs folder, `…-recent-a.log` / `-b.log`)
+- Program log: a startup block, a status line every 3 minutes, and how a walk ended even with the Navigation window closed
+- `@suicide` sends the stored password only when the game asks for it
+
 ## 3.168.0
 
 - A follower left behind sends `@comeback`: a follow that failed at an exit, the leader seen leaving without it, or (Stock) its own `par` showing the leader `[Invited]`

@@ -4495,6 +4495,27 @@ public sealed class AutoWalkManager : IRecoverableEngine
         State = WalkState.Idle;
     }
 
+    // How a walk began and ended goes in the program log from here, whoever is
+    // listening. It used to be logged by the Navigation window's view-model, so
+    // with that window closed a walk that failed left no line saying why.
+    private void LogLifecycle(WalkEvent evt)
+    {
+        string verb;
+        switch (evt.Kind)
+        {
+            case WalkEventKind.Started: verb = "started"; break;
+            case WalkEventKind.Resumed: verb = "resumed"; break;
+            case WalkEventKind.Paused: verb = "paused"; break;
+            case WalkEventKind.Stopped: verb = "stopped"; break;
+            case WalkEventKind.Finished: verb = "arrived"; break;
+            case WalkEventKind.Failed: verb = "FAILED"; break;
+            default: return;   // per-step events are the listeners' to report
+        }
+        _log?.Info("Walker", $"walk {verb}"
+            + (evt.Destination is { } to ? $" (to {to})" : string.Empty)
+            + (string.IsNullOrWhiteSpace(evt.Detail) ? string.Empty : $": {evt.Detail}"));
+    }
+
     private void Raise(WalkEvent evt)
     {
         // A stop ends the journey whichever leg it catches. Arriving or failing ends
@@ -4505,6 +4526,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             || (evt.Kind is WalkEventKind.Finished or WalkEventKind.Failed && _legToJourneyGoal);
         if (endsJourney) EndJourney();
         LastEvent = evt;
+        LogLifecycle(evt);
         Event?.Invoke(evt);
         // The doors this trip gave up on go with it, after the listeners had their
         // look at them: a Shortcut journey's silent legs, begun with no walk of the

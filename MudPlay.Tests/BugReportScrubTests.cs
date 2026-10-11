@@ -66,6 +66,22 @@ public sealed class BugReportScrubTests
     }
 
     [Fact]
+    public void SectionTexts_AreMaskedTooAndCarryTheirEntries()
+    {
+        BugReportBuilder.BugReportCapture capture = new(
+            new DateTimeOffset(2026, 10, 10, 14, 0, 0, TimeSpan.Zero), RealmType.Stock,
+            [new BugReportBuilder.Section("Program log (oldest first)", "2 entries.", ["12:00:01.000  [Info]  A: one", $"12:00:02.000  [Info]  A: {Suicide}"])],
+            MakeScrubber());
+
+        IReadOnlyDictionary<string, string> texts = BugReportBuilder.SectionTexts(capture);
+
+        string log = texts["Program log (oldest first)"];
+        Assert.Contains("A: one", log);
+        Assert.Contains("A: " + BugReportScrub.Mask, log);
+        Assert.DoesNotContain(Suicide, log);
+    }
+
+    [Fact]
     public void Apply_MasksAValueSplitByAWrappedRow()
     {
         // The terminal wrapped the row mid-word; the next row carries its own time.

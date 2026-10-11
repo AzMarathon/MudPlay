@@ -102,7 +102,8 @@ public sealed class BugReportBudgetTests
         string md = BugReportBuilder.Render(capture, "it stopped");
 
         int withoutWire = Encoding.UTF8.GetByteCount(md) - 400_000;
-        Assert.True(withoutWire <= BugReportBudget.MaxBytes + 1_000, $"report is {withoutWire} bytes without the wire");
+        // Trimmed to the budget, not far under it: nothing is thrown away for nothing.
+        Assert.InRange(withoutWire, BugReportBudget.MaxBytes - 5_000, BugReportBudget.MaxBytes + 1_000);
         Assert.Contains("## Program log (oldest first) — ", md);
         Assert.Contains("oldest entries left out to keep the report under 1000 KB", md);
         // The newest entries of both histories are there, the wire is whole.

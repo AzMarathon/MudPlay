@@ -2597,9 +2597,35 @@ Press **F5** to open the **Wire Inspector** — a troubleshooting view of the da
 - **Auto-scroll** keeps the panes pinned to the newest bytes, and **Sync scroll** ties the Raw and Stripped panes' scrolling together.
 - **Find next** locates a term in the Stripped pane, and **Export raw… / Export stripped… / Export classified…** save any pane to a file.
 
-Reach for this when reporting a display or parsing glitch — it shows exactly what arrived on the wire. Because **Raw and Classified are on by default**, a **Bug Report** attaches the last 750 lines of each unless you turn them off — so a combat-recognition problem lands with the exact wire and the engine's read of every combat line and death.
+Reach for this when reporting a display or parsing glitch — it shows exactly what arrived on the wire. A **Bug Report** includes the Raw and Classified sections only while their boxes here are ticked (both are ticked when the client starts): the last 750 lines of each, the raw one with the time each read arrived. Untick a box and that section is left out. They are never added on their own and don't count toward the report's size.
 
-**A bug report leaves your login out.** The report's **Scrollback** and raw-wire sections copy only what was written while you were inside the game: from your first game prompt, until you disconnect or exit to the board's menus, and again from the next game prompt. The menu itself isn't copied. So the board's login screen, with your account name on it, isn't in a report even when it's still on your terminal or in the Backscroll window, which go on showing everything. A report made before you've entered the game says the section was left out. The program log section was already safe: what you type isn't logged, and the automatic login logs only the prompts it waits for, not what it sends.
+## Bug Report
+
+**Bug Report** (the toolbar button, or right-click the terminal → *Bug report…*) freezes the client's state at the moment you click, asks you what went wrong, and writes a Markdown file to your Desktop named for the realm and the time. Attach that file to an issue. Click it as soon as you see the problem: the report reaches back several minutes, not hours.
+
+**What it contains**, in this order:
+
+- **Your description**, then **Session** and **Client and connection**: the build and when the client was started, your system, the connection, which diagnostics were on, the open windows, and where the log files are.
+- **Holds and waits**: everything that can make the client sit still. The send gate and what it dropped, every movement gate with who raised it, why and since when, how long each engine has been in its state, and what each is waiting on. **Pending work** lists what the smaller engines have queued.
+- **The live state**: player, party, inventory, movement and navigation, combat, spells.
+- **What is configured**: combat profiles, room markers, the Workshop, your triggers, aliases and macros, who may send you remote commands, your deaths, changed keybindings, monster and item overrides, every setting.
+- **The histories, last, each oldest first** so the incident is at the end: warnings and errors (kept apart, so routine lines can't push them out), **Commands sent** (every command the client sent, held or dropped, with who sent it), the whole program log with millisecond times, and up to 3,000 lines of scrollback. Then the wire sections, if ticked.
+
+A report stays under about 1 MB without the wire sections. If it would be larger, the oldest entries of the largest history are left out and that section's heading says how many.
+
+**What is never in a report.**
+
+- **Your login name, login password and suicide password.** Each is written as `[redacted]` wherever it appears: in the scrollback, the wire, the log, the commands sent, a trigger's text, a setting, even your own description. A trigger, alias or macro that contains one is left out whole. Two exceptions, and the report's Session section names either when it applies: a value shorter than three characters is not masked (masking it would blank ordinary text everywhere), and a login name that is the same as your character's name is left, since every player sees that name.
+- **Your login screen.** The scrollback and raw wire copy only what was written while you were inside the game: from your first game prompt, until you disconnect or exit to the board's menus, and again from the next game prompt. The list of commands sent keeps nothing typed outside the game or while a suicide password is being entered. The terminal and the Backscroll window go on showing everything.
+- **The Local API token.**
+
+Your character's name, the BBS and its address, and other players' names and chat are in a report: they are what anyone in the game can see.
+
+**Offensive words in chat are masked, in the report only.** On player chat lines (gossip, auction, gangpath, telepath, broadcast, yell, say, and your own chat commands), racial, ethnic, religious, homophobic, transphobic and ableist slurs and the strongest sexual profanity are written as `[censored]`. Ordinary swearing is left. Whole words only, so a word that merely contains one is untouched, and game text (room, monster, item and combat lines) is never changed. Your terminal, the Conversation window and the log files on your machine are not censored.
+
+**After a hang or a forced kill** there is no client left to make a report. Send the **last-minutes log** instead: two small files in the **Logs** folder of your app data folder, named `…-recent-a.log` and `…-recent-b.log` with the time the client started and its process number. Between them they always hold the last two to four minutes of the program log, each opening with the build and system it came from. They are written as the client runs (never more than 1 MB each) and the three most recent clients' pairs are kept. If **Auto-collect logs** is on, the full `…-program.log` in the same folder is written instead and is the one to send. A report's Client and connection section names the folder and the files, and so does a crash report. These files are not censored or masked: they stay on your machine until you choose to send them, and like the program log they hold no login.
+
+**An `@suicide` from a trusted player** sends your stored suicide password only when the game is seen asking for it, within ten seconds of `suicide`. If the game doesn't ask, the password is never sent and the sender is told (unless *Warn on invalid remote command* is off).
 
 **At the board's menu the client stands down.** If you `exit` the game to the board's menu without disconnecting, MudPlay stops sending anything on its own until you're back in: no party poll, buffs, sneaking, statline repair or loop steps, since at the menu each would be read as a menu selection. What you type still goes through, and `e` to enter the realm isn't mistaken for a step east. Everything resumes at your first game prompt.
 

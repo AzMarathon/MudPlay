@@ -231,6 +231,23 @@ public static class BugReportBuilder
         return Scrubbed(capture, sb.ToString());
     }
 
+    // Each section's whole text by heading, for a caller that wants the sections
+    // apart (the local API's JSON form). Masked like a rendered report: this is
+    // the same content leaving the client by another door.
+    public static IReadOnlyDictionary<string, string> SectionTexts(BugReportCapture capture)
+    {
+        ArgumentNullException.ThrowIfNull(capture);
+        Dictionary<string, string> texts = new(StringComparer.Ordinal);
+        foreach (Section section in BugReportBudget.Fit(capture.Sections).Sections)
+        {
+            string text = section.Body.TrimEnd();
+            if (section.Entries is { } entries)
+                text += (text.Length > 0 ? "\n\n" : string.Empty) + "```\n" + string.Join('\n', entries) + "\n```";
+            texts[section.Heading + BugReportBudget.TrimNote(section.TrimmedEntries)] = Scrubbed(capture, text);
+        }
+        return texts;
+    }
+
     // Every section, after the size budget has had its say over the history
     // sections (BugReportBudget).
     private static void AppendSections(StringBuilder sb, BugReportCapture capture, int overheadBytes)
@@ -399,10 +416,9 @@ public static class BugReportBuilder
             itemCharges.Count == 0
                 ? "(no limited-use items carried)"
                 : string.Join(", ", itemCharges.Select(c => $"{c.Name}={(c.Remaining is { } n ? n.ToString() : "?")}")));
-        // Diagnostic-channel state gates whether the Program-log tail carries any
-        // decision trail: both flags default off, and every _log?.Debug/Combat
-        // site is skipped at generation time when off, so a report captured with
-        // them off has Info-only logs. Surface the state so a triager knows why.
+        // Whether the program log carries the decision trail: both channels are on
+        // unless the user turned them off, and one that is off was never
+        // generated, so its lines are absent rather than quiet.
         Kv(sb, "Debug diagnostics", (svc.Log.Diagnostics?.DebugDiagnostics ?? false) ? "on" : "off");
         Kv(sb, "Combat diagnostics", (svc.Log.Diagnostics?.CombatDiagnostics ?? false) ? "on" : "off");
         // Whether a session-statistics file exists to ask for alongside the report.
@@ -1800,7 +1816,7 @@ public static class BugReportBuilder
         Kv(sb, "Auto-deposit reroute", svc.AutoDeposit.RerouteStatus);
         Kv(sb, "Sell detour", svc.SellDetour.Status);
         Kv(sb, "Default-gear pool baseline", svc.PoolBaseline.Current is { } pb
-            ? $"HP {pb.MaxHp}, pool {pb.MaxMa} at level {pb.Level} (gear +{pb.DefaultGearHp}/+{pb.DefaultGearMa}, {pb.RecordedAt:u})"
+            ? $"HP {pb.MaxHp}, pool {pb.MaxMa} at level {pb.Level} (gear +{pb.DefaultGearHp}/+{pb.DefaultGearMa}, {pb.RecordedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss})"
               + (svc.PoolBaseline.IsStale ? " — stale, re-reading `stat` in Default gear" : "")
             : "none yet — using the gear estimate");
         Kv(sb, "Party @ok held for gear", svc.Health.IsPartyOkHeldForGear.ToString());
@@ -1998,7 +2014,7 @@ public static class BugReportBuilder
         IReadOnlyList<Game.Map.RoomKey> history = svc.RoomTracker.GetHistory();
         if (history.Count > 0)
         {
-            sb.Append("\nRecent confirmed positions (newest first): ");
+            sb.Append("\nRecent confirmed positions (newest first; when each was entered is under Holds and waits, Room): ");
             sb.Append(string.Join(", ", history.Take(10).Select(k => $"{k.Map}/{k.Room}")));
             sb.Append('\n');
         }

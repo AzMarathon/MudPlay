@@ -162,16 +162,30 @@ public static class CrashReporter
 
     // Walk the inner-exception chain so a wrapped fault (AggregateException, a
     // rethrow, etc.) shows every layer, not just the outermost message.
-    private static void AppendException(StringBuilder sb, Exception ex)
+    private static void AppendException(StringBuilder sb, Exception ex, int depth = 0)
     {
         for (Exception? e = ex; e is not null; e = e.InnerException)
         {
             sb.Append("**").Append(e.GetType().FullName).Append("**: ")
               .Append(e.Message).Append("\n\n```\n")
               .Append(e.StackTrace ?? "(no stack trace)").Append("\n```\n\n");
+            // An AggregateException's InnerException is only the first of its
+            // faults: a task that failed twice over shows every one.
+            if (e is AggregateException { InnerExceptions.Count: > 1 } aggregate && depth < MaxAggregateDepth)
+            {
+                for (int i = 0; i < aggregate.InnerExceptions.Count; i++)
+                {
+                    sb.Append("Fault ").Append(i + 1).Append(" of ").Append(aggregate.InnerExceptions.Count).Append(":\n\n");
+                    AppendException(sb, aggregate.InnerExceptions[i], depth + 1);
+                }
+                return;
+            }
             if (e.InnerException is not null) sb.Append("Caused by:\n\n");
         }
     }
+
+    // Aggregates nested inside aggregates are followed this far and no further.
+    private const int MaxAggregateDepth = 4;
 
     private static string? SafeState()
     {
