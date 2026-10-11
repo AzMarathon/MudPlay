@@ -882,6 +882,10 @@ public sealed class AppServices
     // pollute the input.
     public EngineSendGate EngineGate { get; } = new();
 
+    // The last commands sent, held or dropped, with who sent each: a bug
+    // report's answer to "why did it send that" (SentCommandTrail).
+    public SentCommandTrail SentCommands { get; } = new();
+
     // Two-flag one-shot coordinator for "intentional hangup" intent.
     // Set by every engine that deliberately drops the carrier
     // (Game.Remote.HangupHandler; the hang-up-if-naked /
@@ -5998,6 +6002,11 @@ public sealed class AppServices
         // A bug report copies the terminal only from the time spent in the game, so a
         // login screen never rides along in one.
         InGameCapture = new Game.InGameCapture(Router, PromptScanner, Wire, Log);
+        // The sent-command trail keeps nothing typed outside the game (a login is)
+        // and nothing that may be a suicide password, typed or sent by @suicide.
+        EngineGate.Trail = SentCommands;
+        SentCommands.Withhold = () =>
+            !InGameCapture.InGame || SuicidePassword.PasswordEntryLikely || Suicide.SendingPassword;
         // Out to the board's menu with the link still up: nothing automatic may be
         // sent (it would be a menu selection), a typed selection isn't a move, the
         // menu's lines aren't unknown game lines, and its prompt isn't a broken

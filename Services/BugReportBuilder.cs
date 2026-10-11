@@ -142,6 +142,8 @@ public static class BugReportBuilder
         // end of the section and the end of the file.
         sections.Add(SafeSection("Warnings and errors (oldest first)",
             () => BugReportLogSections.Problems(svc.Log, Censor)));
+        sections.Add(SafeSection(BugReportSentCommands.Heading,
+            () => BugReportSentCommands.Build(svc.SentCommands, Censor)));
         sections.Add(SafeSection("Program log (oldest first)",
             () => BugReportLogSections.ProgramLog(svc.Log, Censor)));
         sections.Add(SafeSection("Scrollback (oldest first)",

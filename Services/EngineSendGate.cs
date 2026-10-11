@@ -95,13 +95,30 @@ public sealed class EngineSendGate
         ArgumentNullException.ThrowIfNull(rawSender);
         return bytes =>
         {
-            if (IsLocked) return;
-            string? command = _takeForLater is null && _sent is null
-                ? null
-                : System.Text.Encoding.Latin1.GetString(bytes).TrimEnd('\r', '\n');
-            if (!routeSteps && command is not null && _takeForLater?.Invoke(command) == true) return;
+            string command = System.Text.Encoding.Latin1.GetString(bytes).TrimEnd('\r', '\n');
+            SentCommandTrail.Origin origin = routeSteps ? SentCommandTrail.Origin.RouteStep
+                : _sendingUserCommand ? SentCommandTrail.Origin.UserRelayed
+                : SentCommandTrail.Origin.Engine;
+            if (IsLocked)
+            {
+                // Dropped, not queued: the sender is told nothing. The trail and
+                // the count are the only record that it tried.
+                DroppedCount++;
+                LastDropped = (DateTimeOffset.Now, command, _senderLabel);
+                Trail?.Record(command, origin, _senderLabel, SentCommandTrail.Outcome.Dropped,
+                    "send gate held: " + string.Join(", ", _holds));
+                return;
+            }
+            if (!routeSteps && _takeForLater?.Invoke(command) == true)
+            {
+                Trail?.Record(command, origin, _senderLabel, SentCommandTrail.Outcome.HeldForLater, "sneak keeping");
+                return;
+            }
+            // Before the send: what the send itself causes (a replay, an observer's
+            // own command) then lands after it in the trail, as on the wire.
+            Trail?.Record(command, origin, _senderLabel, SentCommandTrail.Outcome.Sent);
             SendAsClient(rawSender, bytes);
-            if (command is not null) _sent?.Invoke(command);
+            _sent?.Invoke(command);
             // Remember the just-sent client command so a confusion fumble can re-fire
             // it. The replay goes back through THIS sender (they all funnel to the same
             // SendUserInput), so re-firing lands on the wire exactly as the original did.
@@ -128,6 +145,42 @@ public sealed class EngineSendGate
     // A wrapped sender for a source whose commands are the user's own, relayed by the
     // client: a macro, a trigger's response, an event's Command action. They hold and
     // drop like any wrapped send; the mark only says whose command it is.
+    // ----- Who sent it, for the sent-command trail ------------------------
+
+    // Where every command through a wrapped sender is recorded. Null until
+    // AppServices wires it.
+    public SentCommandTrail? Trail { get; set; }
+
+    // The holds now up, for a bug report: a send gate that is held explains a
+    // client that sends nothing.
+    public IReadOnlyCollection<string> Holds => _holds.ToArray();
+
+    // How many commands a hold has dropped this session, and the last of them.
+    public int DroppedCount { get; private set; }
+    public (DateTimeOffset At, string Command, string? Sender)? LastDropped { get; private set; }
+
+    private string? _senderLabel;
+
+    // The sender's name, read as a command of its goes by. Null between sends,
+    // and for a command no named sender put out (typed input).
+    public string? CurrentSender => _senderLabel;
+
+    // A sender that carries its owner's name into the trail. Wrap whatever the
+    // engine is handed: a gate-wrapped sender, or a raw one that goes round the
+    // gate (those have no other point where their command can be named).
+    public Action<byte[]> Named(Action<byte[]> sender, string name)
+    {
+        ArgumentNullException.ThrowIfNull(sender);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        return bytes =>
+        {
+            string? outer = _senderLabel;
+            _senderLabel = name;
+            try { sender(bytes); }
+            finally { _senderLabel = outer; }
+        };
+    }
+
     public Action<byte[]> MarkUserCommands(Action<byte[]> wrappedSender)
     {
         ArgumentNullException.ThrowIfNull(wrappedSender);
@@ -172,6 +225,8 @@ public sealed class EngineSendGate
         if (_lastClientCommand is not { Length: > 0 } cmd) return;
         if (_replaySender is not { } send) return;
         if (IsBareMovementCommand(cmd)) return;
+        Trail?.Record(LastClientCommandText!, SentCommandTrail.Origin.Engine, _senderLabel,
+            SentCommandTrail.Outcome.Sent, "re-sent after a fumble ate it");
         SendAsClient(send, cmd);
         // Reported like the send it repeats: the fumbled one never ran, so this is
         // the one that ends a sneak.
