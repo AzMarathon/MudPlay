@@ -1,5 +1,4 @@
 using System.Text;
-using MudPlay.Game.Map;
 
 namespace MudPlay.Game.Combat;
 
@@ -58,7 +57,7 @@ public sealed class OutboundBreakObserver
         }
 
         bool attackWord = AttackCommandWords.IsAttack(word)
-            && !(AttackCommandWords.IsBash(word) && DirectionExtensions.TryFromToken(target, out _));
+            && !AttackCommandWords.IsDoorBash(word, target);
         if (attackWord || _isAttackSpell(word)) _onAttack(word, target);
     }
 }

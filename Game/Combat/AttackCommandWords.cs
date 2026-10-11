@@ -9,10 +9,10 @@ namespace MudPlay.Game.Combat;
 // Paradigm's table isn't on record, so Stock's is used on both realms: a short form
 // Paradigm doesn't take is a line the game does nothing with.
 //
-// OutboundAttackObserver keeps its own shorter list on purpose: it decides whose
-// attack a round is, and has always counted only the forms a player types in a
-// fight. This is the whole table, for a caller that must not miss an attack however
-// it was spelt.
+// It is the one list: the round override (OutboundAttackObserver) and the user's
+// break hold (OutboundBreakObserver) both read it (user, 2026-10-10). `au`, `al` …
+// `allout` and `forc` / `force` are in the parser's table and so in this one,
+// though players don't use them (same answer).
 public static class AttackCommandWords
 {
     // Whether word starts an attack. The martial-arts strikes (punch, kick, jumpkick)
@@ -40,6 +40,10 @@ public static class AttackCommandWords
         => word is { Length: > 0 }
            && (word.Equals("aa", StringComparison.OrdinalIgnoreCase)
                || IsLead(word, "bash", 3) || IsLead(word, "allout", 2) || IsLead(word, "force", 4));
+
+    // The bash command aimed at a direction: the door on that exit, not a monster.
+    public static bool IsDoorBash(string? word, string? target)
+        => IsBash(word) && Map.DirectionExtensions.TryFromToken(target, out _);
 
     // Whether word is `break`: `bre`, `brea` or `break`. `br` is the channel
     // broadcast, and `breaks` is nothing.

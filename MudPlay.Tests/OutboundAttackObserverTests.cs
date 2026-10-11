@@ -92,6 +92,46 @@ public sealed class OutboundAttackObserverTests
         Assert.Equal(new string?[] { "nasty orc", "n" }, targets);
     }
 
+    // The override reads the same table as the user's break hold (user, 2026-10-10),
+    // so it knows every spelling the game takes: backstab in full, the martial-arts
+    // strikes, the longer leads of attack and smash.
+    [Theory]
+    [InlineData("backs")] [InlineData("backst")] [InlineData("backsta")] [InlineData("backstab")]
+    [InlineData("pu")] [InlineData("pun")] [InlineData("punc")] [InlineData("punch")]
+    [InlineData("kic")] [InlineData("kick")]
+    [InlineData("ju")] [InlineData("jum")] [InlineData("jump")] [InlineData("jumpk")]
+    [InlineData("jumpki")] [InlineData("jumpkic")] [InlineData("jumpkick")]
+    [InlineData("atta")] [InlineData("attac")] [InlineData("attack")]
+    [InlineData("smas")] [InlineData("bas")]
+    public void WordsOfTheSharedTable_Fire(string verb)
+    {
+        (OutboundAttackObserver obs, List<string> seen, List<string?> targets) = New();
+        Send(obs, verb + " giant rat");
+        Assert.Equal(new[] { verb }, seen);
+        Assert.Equal(new string?[] { "giant rat" }, targets);
+    }
+
+    // Short of the lead the game takes, or past the word, it is no attack.
+    [Theory]
+    [InlineData("back")] [InlineData("ki")] [InlineData("p")] [InlineData("j")]
+    [InlineData("kicks")] [InlineData("punches")] [InlineData("kill")]
+    public void WordsTheGameDoesNotTakeForAnAttack_StaySilent(string verb)
+    {
+        (OutboundAttackObserver obs, List<string> seen, _) = New();
+        Send(obs, verb + " giant rat");
+        Assert.Empty(seen);
+    }
+
+    // The bash command is a door under each of its names.
+    [Theory]
+    [InlineData("bas n")] [InlineData("allout se")] [InlineData("force up")]
+    public void BashUnderItsOtherNames_AtADirection_IsADoor(string line)
+    {
+        (OutboundAttackObserver obs, List<string> seen, _) = New();
+        Send(obs, line);
+        Assert.Empty(seen);
+    }
+
     [Fact]
     public void EmptyOrOversized_Ignored()
     {

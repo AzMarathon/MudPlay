@@ -4783,8 +4783,8 @@ public sealed partial class CombatManager : IDisposable
     // the room spell again, which breaks the one running and costs the round.
     //
     // Paradigm prints no *Combat Off* for a room spell's kill while a monster stands,
-    // and one after the kill that empties the room; what its spell does after that
-    // one is not on record, and it is read as before.
+    // and one after the kill that empties the room, where its spell has ended (user,
+    // 2026-10-10): that Off is read as the end, as before.
     private bool StockRoomSpellRunsOn()
         => _lastExpWasRoomSpellKill && _offProbe.FollowsExpLine && _onStock?.Invoke() == true;
 
