@@ -1580,4 +1580,188 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Equal(1, h.Sent);                       // the @comeback, and nothing since
         Assert.DoesNotContain("join Boss", h.Wire);
     }
+
+    // Stock: an exit turned us away with no word more, we asked, and the leader
+    // says it has found us. We are still on its list, so we join ourselves.
+    [Fact]
+    public void Stock_TheLeaderSaysItFoundUs_WeJoinOurselves()
+    {
+        using Harness h = NewFollower();
+        h.Requester.OnStock = () => true;
+        AskedOnStock(h);
+
+        h.Feed("Boss telepaths: {found you - re-inviting Me}");
+
+        Assert.Equal("join Boss", h.LastWire);
+        Assert.True(h.Requester.JoinJustSentTo("Boss"));
+    }
+
+    // An older leader's wording, with the long dash, is read the same.
+    [Fact]
+    public void Stock_FoundYouFromAnOlderLeader_IsReadTheSame()
+    {
+        using Harness h = NewFollower();
+        h.Requester.OnStock = () => true;
+        AskedOnStock(h);
+
+        h.Feed("Boss telepaths: {found you — re-inviting Me}");
+
+        Assert.Equal("join Boss", h.LastWire);
+    }
+
+    // The leader we asked is in the room with us: a leader who walked back by
+    // hand, or one whose client says nothing.
+    [Fact]
+    public void Stock_TheLeaderWeAskedIsSeenInTheRoom_WeJoinOurselves_Once()
+    {
+        using Harness h = NewFollower();
+        h.Requester.OnStock = () => true;
+        AskedOnStock(h);
+
+        h.Requester.NotePlayerInRoom("Other");
+        Assert.Equal(1, h.Sent);                       // not the leader we asked
+        h.Requester.NotePlayerInRoom("Boss");
+        Assert.Equal("join Boss", h.LastWire);
+        h.Requester.NotePlayerInRoom("Boss");          // the room shown again
+        Assert.Equal(2, h.Sent);
+
+        h.Advance(TimeSpan.FromSeconds(30));           // they had stepped out; here again
+        h.Requester.NotePlayerInRoom("Boss");
+        Assert.Equal(3, h.Sent);
+    }
+
+    // The fallback: the game says we are off the list after all. Nothing more is
+    // tried, the roster is told, and the leader's invite is still ours to take.
+    [Fact]
+    public void Stock_TheGameSaysInvitedFirst_WeStopJoining_AndWaitForTheInvite()
+    {
+        using Harness h = NewFollower();
+        h.Requester.OnStock = () => true;
+        List<string> offTheList = new();
+        h.Requester.NotOnTheirList = offTheList.Add;
+        AskedOnStock(h);
+        h.Feed("Boss telepaths: {found you - re-inviting Me}");
+        Assert.Equal("join Boss", h.LastWire);
+
+        h.Feed("You must be invited first!");
+
+        Assert.Equal(new[] { "Boss" }, offTheList);
+        Assert.True(h.Requester.IsLeaderWeAsked("Boss"));        // their invite is taken
+        h.Advance(TimeSpan.FromSeconds(30));
+        h.Requester.NotePlayerInRoom("Boss");
+        Assert.Equal(2, h.Sent);                                 // no second join
+        Assert.Contains("must be invited first", h.Requester.JoinSummary);
+    }
+
+    // The same line to a join the player typed themselves is not ours to read.
+    [Fact]
+    public void Stock_InvitedFirst_WithNoJoinOfOurs_ChangesNothing()
+    {
+        using Harness h = NewFollower();
+        h.Requester.OnStock = () => true;
+        List<string> offTheList = new();
+        h.Requester.NotOnTheirList = offTheList.Add;
+        AskedOnStock(h);
+
+        h.Feed("You must be invited first!");
+
+        Assert.Empty(offTheList);
+        h.Feed("Boss telepaths: {found you - re-inviting Me}");
+        Assert.Equal("join Boss", h.LastWire);
+    }
+
+    // The game told us we stopped following (a hold or a too-heavy drop takes a
+    // follower off the list): only an invite brings us back, so no join is sent.
+    [Fact]
+    public void Stock_ToldWeNoLongerFollow_WeAreOffTheList_AndWaitForTheInvite()
+    {
+        using Harness h = NewFollower();
+        h.Requester.OnStock = () => true;
+        h.Feed("You can't seem to move anywhere!");
+        h.Feed("You are no longer following Boss.");
+        h.Party.IsInParty = false;                     // as PartyManager clears it on that line
+        h.Party.LeaderName = null;
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+
+        h.Feed("Boss telepaths: {found you - re-inviting Me}");
+        h.Requester.NotePlayerInRoom("Boss");
+
+        Assert.Equal(1, h.Sent);
+    }
+
+    // After the follow was given up the roster is solo, and still counts us on the
+    // leader's list (PartyManager.ListedWithLeader): the leader turning up is
+    // enough.
+    [Fact]
+    public void Stock_AfterTheFollowWasGivenUp_StillListed_TheLeaderTurnsUp_WeJoin()
+    {
+        using Harness h = NewFollower();
+        h.Requester.OnStock = () => true;
+        AskedOnStock(h);
+        string? listedWith = null;
+        h.Requester.ListedWith = () => listedWith;
+        h.Requester.FireWaitLapsedForTests();          // nobody came in time: given up
+        Assert.False(h.Party.IsInParty);
+
+        h.Requester.NotePlayerInRoom("Boss");
+        Assert.Equal(1, h.Sent);                       // the roster doesn't count us listed
+
+        listedWith = "Boss";
+        h.Requester.NotePlayerInRoom("Boss");
+        Assert.Equal("join Boss", h.LastWire);
+    }
+
+    // A leader who refused is not joined: it said it isn't taking us.
+    [Fact]
+    public void Stock_ALeaderWhoRefused_IsNotJoined()
+    {
+        using Harness h = NewFollower();
+        h.Requester.OnStock = () => true;
+        h.Requester.ListedWith = () => "Boss";
+        AskedOnStock(h);
+        h.Feed("Boss telepaths: {my party is full - can't take you back}");
+
+        h.Requester.NotePlayerInRoom("Boss");
+
+        Assert.Equal(1, h.Sent);
+    }
+
+    // With the master switch off, or a send the client can't make, nothing goes out.
+    [Fact]
+    public void Stock_MasterSwitchOff_OrSendsHeld_NoJoin()
+    {
+        using Harness h = NewFollower();
+        h.Requester.OnStock = () => true;
+        AskedOnStock(h);
+
+        h.MasterSwitchOn = false;
+        h.Requester.NotePlayerInRoom("Boss");
+        h.MasterSwitchOn = true;
+        h.SendBlocked = "we are at the board's menu";
+        h.Requester.NotePlayerInRoom("Boss");
+        Assert.Equal(1, h.Sent);
+
+        h.SendBlocked = null;
+        h.Requester.NotePlayerInRoom("Boss");
+        Assert.Equal("join Boss", h.LastWire);
+    }
+
+    // The leader's @join had us send the join (PartyEssentialHandlers): ours isn't
+    // sent on top of it, and the game's answer to it is read here all the same.
+    [Fact]
+    public void Stock_AJoinSentForTheLeadersAtJoin_IsNotDoubled_AndItsRefusalIsRead()
+    {
+        using Harness h = NewFollower();
+        h.Requester.OnStock = () => true;
+        List<string> offTheList = new();
+        h.Requester.NotOnTheirList = offTheList.Add;
+        AskedOnStock(h);
+
+        h.Requester.NoteJoinSent("Boss");
+        h.Feed("Boss telepaths: {found you - re-inviting Me}");
+        Assert.Equal(1, h.Sent);
+
+        h.Feed("You must be invited first!");
+        Assert.Equal(new[] { "Boss" }, offTheList);
+    }
 }

@@ -10005,6 +10005,24 @@ public sealed class AppServices
         // A leader who refused, or never came: the follow the game ended without a
         // line is ended on our side too.
         ComebackRequest.FollowGivenUp = (leader, _) => Party.NoteFollowGivenUp(leader);
+        // Stock leaves a follower an exit turned away on the leader's member list,
+        // where an invite prints them nothing and a `join` of theirs needs none: the
+        // follower's client joins by itself once the leader it asked is with it.
+        ComebackRequest.OnStock = () => GameData.ActiveRealm != Game.RealmType.ParaMud;
+        ComebackRequest.ListedWith = () => Party.ListedWithLeader;
+        ComebackRequest.NotOnTheirList = leader => Party.NoteNotListedWith(leader);
+        // One join, whichever of the two sends it: ours, or the one the leader's
+        // @join asks for. The game's answer to either is read in one place.
+        PartyEssentials.JoinSent = ComebackRequest.NoteJoinSent;
+        PartyEssentials.JoinAlreadySent = ComebackRequest.JoinJustSentTo;
+        RoomClassifier.EntitiesObserved += observation =>
+        {
+            foreach (Game.Combat.RoomEntity entity in observation.Entities)
+            {
+                if (entity.Kind != Game.Combat.EntityKind.Player) continue;
+                ComebackRequest.NotePlayerInRoom(Models.GameData.PlayerObservation.SplitName(entity.ResolvedName).Given);
+            }
+        };
         // The trip's leader may tell us it is over after an exit has turned us out
         // of the party on our own side.
         RemoteCommands.PartyTrainEligibility = sender => PartyTrain.InTripOf(sender);

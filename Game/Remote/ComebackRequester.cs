@@ -208,6 +208,107 @@ public sealed partial class ComebackRequester : IDisposable
     // Long enough for a leader to finish a fight and walk back its return distance.
     private static readonly TimeSpan AskedLife = TimeSpan.FromMinutes(10);
 
+    // ----- joining the leader ourselves (Stock) ------------------------------
+
+    // True on a Stock realm. Stock ends a follow an exit refused and leaves us on
+    // the leader's member list: an invite of theirs prints us nothing (the game
+    // tells only someone it newly adds), and a `join` of ours works without one
+    // (GAME_MECHANICS "A follower who can't move is left behind"). Unset reads as
+    // Paradigm, where a follower is dropped and waits for the invite as it always
+    // did.
+    public Func<bool>? OnStock { get; set; }
+
+    // The leader whose list the party roster still counts us on after a follow was
+    // given up (PartyManager.ListedWithLeader), or null.
+    public Func<string?>? ListedWith { get; set; }
+
+    // Told with the leader when the game answers a join of ours "You must be
+    // invited first!": we are off their list after all (PartyManager.NoteNotListedWith).
+    public Action<string>? NotOnTheirList { get; set; }
+
+    // The last `join <leader>` this client sent, from here or for the leader's
+    // @join (NoteJoinSent), and whether the game refused this split's.
+    private string? _joinedLeader;
+    private DateTimeOffset _joinSentAt = DateTimeOffset.MinValue;
+    private bool _joinRefused;
+
+    // The game answers a join in the same tick; this only covers lag.
+    private static readonly TimeSpan JoinReplyWindow = TimeSpan.FromSeconds(3);
+    // A join that drew no answer we know (the leader had stepped out again) is
+    // tried again no sooner than this.
+    private static readonly TimeSpan JoinRetryGap = TimeSpan.FromSeconds(20);
+
+    // For the bug report: what became of our own join this split.
+    public string? JoinSummary => _joinedLeader is null ? null
+        : $"`join {_joinedLeader}` sent {_joinSentAt.ToLocalTime():HH:mm:ss}"
+          + (_joinRefused ? "; the game answered \"You must be invited first!\": waiting for their invite" : string.Empty);
+
+    // A `join <leader>` went out because that leader's @join asked for one
+    // (PartyEssentialHandlers.JoinSent): the game's answer to it is read here too.
+    public void NoteJoinSent(string leader)
+    {
+        _joinedLeader = leader;
+        _joinSentAt = NowProvider();
+    }
+
+    // Whether a join to that leader went out a moment ago, so a second one isn't
+    // sent on top of it.
+    public bool JoinJustSentTo(string leader) =>
+        _joinedLeader is { } joined && joined.Equals(leader, StringComparison.OrdinalIgnoreCase)
+        && NowProvider() - _joinSentAt <= JoinReplyWindow;
+
+    // A player is in the room with us, as the room was just shown or as they
+    // walked in. The leader we asked back standing here is all a Stock follower
+    // still on their list needs.
+    public void NotePlayerInRoom(string given)
+    {
+        if (string.IsNullOrEmpty(given) || _tracker.IsPeekSuppressed(NowProvider())) return;
+        TryJoin(given, "they are in the room with us");
+    }
+
+    // On Stock, join the leader we asked back, ourselves. No invite is coming that
+    // we would see, and having asked for the pickup is our consent, as it is for
+    // taking their invite (IsLeaderWeAsked). Only while the game has not told us
+    // we are off their list: after "You are no longer following X." (a hold or a
+    // too-heavy drop takes a follower off it) only an invite brings us back.
+    //
+    // That the join works for a member still listed is read from the Stock DLL
+    // and not yet seen in play. When the game answers "You must be invited
+    // first!" this falls back to what it always did: wait for the invite.
+    private void TryJoin(string leader, string because)
+    {
+        if (OnStock?.Invoke() != true || _joinRefused) return;
+        if (!IsLeaderWeAsked(leader)) return;
+        bool stillFollowingByOurBooks = BelievedLeader() is { } believed
+            && believed.Equals(leader, StringComparison.OrdinalIgnoreCase);
+        bool listed = stillFollowingByOurBooks
+            || (ListedWith?.Invoke() is { } listedWith && listedWith.Equals(leader, StringComparison.OrdinalIgnoreCase));
+        if (!listed) return;
+        if (MasterSwitchOff?.Invoke() == true || _sendBlocked?.Invoke() is { Length: > 0 }) return;
+        DateTimeOffset now = NowProvider();
+        if (_joinedLeader is { } joined && joined.Equals(leader, StringComparison.OrdinalIgnoreCase)
+            && now - _joinSentAt < JoinRetryGap)
+            return;
+        byte[] bytes = Encoding.Latin1.GetBytes($"join {leader}\r");
+        LastSentForTests.Add(bytes);
+        _wireSender?.Invoke(bytes);
+        _joinedLeader = leader;
+        _joinSentAt = now;
+        _log?.Info(LogCategory,
+            $"{because}, and we are still on {leader}'s member list (Stock): sent `join {leader}` ourselves, no invite needed. If the game says we must be invited first, we wait for the invite as before.");
+    }
+
+    // "You must be invited first!" to a join this client sent: we are off that
+    // leader's list after all. Nothing more is tried; their invite is waited for.
+    private void OnMustBeInvited(MatchResult _)
+    {
+        if (_joinedLeader is not { } leader || NowProvider() - _joinSentAt > JoinReplyWindow) return;
+        _joinRefused = true;
+        _log?.Info(LogCategory,
+            $"the game answered our `join {leader}` with \"You must be invited first!\": we are off their list after all. Falling back to waiting for {leader}'s invite, which is taken as that of a leader we asked.");
+        NotOnTheirList?.Invoke(leader);
+    }
+
     // For the bug report: a refusal or a departure still waiting out SettleTime,
     // and a request waiting for the client to be able to send.
     public string? PendingCheckFor => _pendingLeader;
@@ -253,6 +354,7 @@ public sealed partial class ComebackRequester : IDisposable
         _subs.Add(router.Subscribe(KnownPatterns.PartyMemberDied, OnPlayerDown));
         _subs.Add(router.Subscribe(KnownPatterns.PartyMemberDropped, OnPlayerDown));
         _subs.Add(router.Subscribe(KnownPatterns.ConversationTelepathIn, OnTelepathIn));
+        _subs.Add(router.Subscribe(KnownPatterns.PartyMustBeInvited, OnMustBeInvited));
 
         _tracker.ManualMoveObserved += OnManualMove;
         _tracker.PlayerDeathObserved += OnSelfDied;
@@ -342,6 +444,9 @@ public sealed partial class ComebackRequester : IDisposable
         DropHeld();
         StopWaiting();
         ClearEvidence();
+        // Leaving the game takes us off every member list: until we follow again
+        // only an invite brings us back, and no join of ours is tried.
+        _joinRefused = true;
         if (BelievedLeader() is not { } leader) return;
         _incidentAnswered = true;
         DateTimeOffset now = NowProvider();
@@ -462,6 +567,8 @@ public sealed partial class ComebackRequester : IDisposable
         _incidentAnswered = false;
         StopWaiting();
         _askedBack = null;
+        _joinedLeader = null;
+        _joinRefused = false;
         _typedLeaveAt = DateTimeOffset.MinValue;
     }
 
@@ -695,6 +802,9 @@ public sealed partial class ComebackRequester : IDisposable
         _wireSender?.Invoke(bytes);
         _askedLeader = leader;
         _askedBack = (leader, now);
+        // A fresh split: whatever a join of the last one drew says nothing here.
+        _joinedLeader = null;
+        _joinRefused = false;
         Record($"{incident}: sent `{payload}`", now);
         _log?.Info(LogCategory, $"{incident} — sent {payload}");
         // A leader takes the request for this long ("If leading, accept @comeback
@@ -838,11 +948,16 @@ public sealed partial class ComebackRequester : IDisposable
     // long wait behind a leader who had just said no.
     private void OnTelepathIn(MatchResult result)
     {
-        if (_askedLeader is not { } leader || result.Groups.Count < 2) return;
-        if (!result.Groups[0].Trim().Equals(leader, StringComparison.OrdinalIgnoreCase)) return;
+        if (result.Groups.Count < 2) return;
+        string sender = result.Groups[0].Trim();
         string body = result.Groups[1].Trim();
         if (body.Length < 3 || body[0] != '{' || body[^1] != '}') return;
         string answer = body[1..^1].Trim();
+        // "found you": they stand in the room with us. Read whether or not the
+        // wait on them has lapsed; TryJoin checks they are the leader we asked.
+        if (answer.StartsWith(PartyComebackManager.FoundYou, StringComparison.OrdinalIgnoreCase))
+            TryJoin(sender, $"{sender} says they found us");
+        if (_askedLeader is not { } leader || !sender.Equals(leader, StringComparison.OrdinalIgnoreCase)) return;
         if (LeaderDeclined().IsMatch(answer))
         {
             _lastAnswer = answer;
