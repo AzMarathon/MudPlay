@@ -234,6 +234,17 @@ public sealed class HangupItemRecheckTests
         public bool Stock { get; set; } = true;
         // Item names that stay with the character through a death (loyal, cursed).
         public HashSet<string> Stays { get; } = new(StringComparer.OrdinalIgnoreCase);
+        // The room the character comes back in is read against the real list of
+        // where the dead arrive (HangupDeathArrivalRooms), as the app wires it: an
+        // unmodified Stock set, or Paradigm when Stock above is off. Set, the
+        // board is a Stock one whose sysop may have edited its rooms, where the
+        // list isn't trusted to say "wrong room".
+        public bool EditedBoard { get; set; }
+        // The graph's word on which rooms the map can't tell an arrival room from.
+        public Func<RoomKey, RoomKey, bool>? CouldBeTakenFor { get; set; }
+        // Paradigm's Albion: the rooms the graph can walk to from the Burial Vault.
+        public HashSet<RoomKey> Albion { get; } = new();
+        public Dictionary<RoomKey, string> RoomNames { get; } = new();
         public List<MudPlay.Game.Recovery.UnwitnessedDeath> Deaths { get; } = new();
         public HangupItemRecheck Check { get; }
 
@@ -273,11 +284,19 @@ public sealed class HangupItemRecheckTests
                     DeathRecord record = new(death.At, death.Room, death.LivesRemaining, death.Message)
                     {
                         RecordNumber = Profile.DeathHistory.Count + 1,
+                        NothingLost = death.NothingLost,
                     };
                     Profile.DeathHistory.Add(record);
                     return record;
                 },
-                staysOnDeath: Stays.Contains);
+                staysOnDeath: Stays.Contains,
+                entryRoomSays: (hungUpIn, enteredIn) => MudPlay.Game.Recovery.HangupDeathArrivalRooms.Read(
+                    hungUpIn, enteredIn,
+                    !Stock ? MudPlay.Game.Recovery.HangupArrivalListTrust.Paradigm
+                    : EditedBoard ? MudPlay.Game.Recovery.HangupArrivalListTrust.Unverified
+                    : MudPlay.Game.Recovery.HangupArrivalListTrust.VanillaStock,
+                    CouldBeTakenFor, Albion.Contains),
+                roomLabel: room => RoomNames.TryGetValue(room, out string? name) ? $"{name} ({room})" : $"room {room}");
             Check.SetWireSender(_ => { });
         }
 
@@ -329,7 +348,7 @@ public sealed class HangupItemRecheckTests
         // or not, the login's `stat` or not, then its `i`.
         public void ComeBack(int hp, int? lives, InventorySnapshot held, bool boardLine = true, RoomKey? room = null)
         {
-            Room = room ?? new RoomKey(1, 1);
+            Room = room ?? HallsOfTheDead;
             Now = Now.AddMinutes(1);
             Check.NoteConnected();
             if (boardLine) BoardSaysHungUp();
@@ -1391,10 +1410,15 @@ public sealed class HangupItemRecheckTests
             Currency = new CurrencyHoldings(0, 0, 25, 0, 0, 2500),
         };
 
+    // What a record made for a hang-up in room 1/3 says of the room the character
+    // came back in, when that is the temple (no room names are given to the
+    // harness in these tests).
+    private const string TempleFromRoom3 = "room 1/2189, where the dead of room 1/3 arrive";
+
     // Back in the temple, full HP, a life down, the board saying it was a hang-up.
     private static void ComeBackDead(Harness h, int? lives = 6, params string[] floor)
     {
-        h.Room = new RoomKey(1, 1);
+        h.Room = HallsOfTheDead;
         h.Check.NoteConnected();
         h.BoardSaysHungUp();
         h.ShowRoom(floor);
@@ -1419,7 +1443,8 @@ public sealed class HangupItemRecheckTests
         Assert.Equal(new RoomRef(1, 3).Room, death.Room!.Room);
         Assert.Equal(dropped, death.At);
         Assert.Equal(6, death.LivesRemaining);
-        Assert.Equal(HangupItemRecheck.DeathMessage, death.Message);
+        // Back in the temple, where the dead of room 1/3 arrive: the line says so.
+        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in {TempleFromRoom3}.", death.Message);
         DeathItem worn = Assert.Single(death.Equipped!);
         Assert.Equal(("chainmail hauberk", "Torso"), (worn.Name, worn.Slot));
         Assert.Equal(new[] { "3 torch", "rope" }, death.Lost!.Select(i => i.Name).ToArray());
@@ -1664,7 +1689,7 @@ public sealed class HangupItemRecheckTests
 
         // Entered by hand later; the user's `stat` and `i` are all it needs.
         h.BoardSaysHungUp();
-        h.Room = new RoomKey(1, 1);
+        h.Room = HallsOfTheDead;
         h.ShowRoom();
         h.Vitals = (200, 200);
         h.Check.OnInGameChanged(true);
@@ -1767,7 +1792,7 @@ public sealed class HangupItemRecheckTests
         Harness h = new() { MaxItems = 0, PvpShare = 50, Stock = false };
         h.StoredAt(-5, Geared, pvp: true);
 
-        h.Room = new RoomKey(1, 1);
+        h.Room = HallsOfTheDead;
         h.Check.NoteConnected();
         h.ShowRoom();
         h.Vitals = (200, 200);
@@ -1779,18 +1804,21 @@ public sealed class HangupItemRecheckTests
         if (!died) Assert.Contains("still worn", Assert.Single(h.Notices));
     }
 
-    // The list has no lives (none was read on the connection it was written on):
-    // nothing will tell. Nothing is recorded, whatever the pack and the room look
-    // like, and it is said once.
+    // The list has no lives (none was read on the connection it was written on),
+    // and the room it came back in has nothing to say: it hung up in the temple
+    // itself, where its dead arrive anyway, or the map isn't sure of the room.
+    // Then nothing will tell. Nothing is recorded, whatever the pack looks like,
+    // and it is said once. (Where the room does speak, it settles this case: the
+    // tests under "The room it comes back in".)
     [Theory]
-    [InlineData(true)]    // in the room it left
+    [InlineData(true)]    // in the room it left, which is the temple
     [InlineData(false)]   // the map isn't sure where it is
-    public void WhenItCantBeTold_NothingIsRecorded_AndOneNoticeSaysWhatWasSeen(bool sameRoom)
+    public void WhenNeitherTheLivesNorTheRoomCanTell_NothingIsRecorded_AndOneNoticeSaysWhatWasSeen(bool sameRoom)
     {
         Harness h = new() { PveShare = 50, AutoAll = false };
-        h.StoredAt(-5, Geared, lives: null);
+        h.StoredAt(-5, Geared, lives: null, room: sameRoom ? new RoomRef(1, 2189) : null);
 
-        h.Room = sameRoom ? new RoomKey(1, 3) : null;
+        h.Room = sameRoom ? HallsOfTheDead : null;
         h.Check.NoteConnected();
         h.BoardSaysHungUp();
         h.ShowRoom("3 torch");
@@ -2038,7 +2066,7 @@ public sealed class HangupItemRecheckTests
     {
         Harness h = new() { MaxItems = 0, PveShare = 50 };
         h.StoredAt(-5, Geared);
-        h.Room = new RoomKey(1, 1);
+        h.Room = HallsOfTheDead;
         h.Check.NoteConnected();
         h.ShowRoom();
         h.Vitals = (200, 200);
@@ -2069,7 +2097,7 @@ public sealed class HangupItemRecheckTests
     {
         Harness h = new() { MaxItems = 0, PveShare = 50 };
         h.StoredAt(90, Geared);
-        h.Room = new RoomKey(1, 1);
+        h.Room = HallsOfTheDead;
         h.Check.NoteConnected();
         h.BoardSaysHungUp();
         h.Heartbeats(180);
@@ -2097,6 +2125,9 @@ public sealed class HangupItemRecheckTests
     // everything again. Back here at full HP, in another room, with 6 lives and
     // nothing missing. A death takes all but what stays with the character, so
     // one that still holds everything didn't die to this hang-up.
+    //
+    // The other room is the temple: the one room that wouldn't itself say "not
+    // this hang-up's", so it is the pack that speaks here.
     [Fact]
     public void ALifeLostElsewhere_WithNothingMissing_IsNotRecorded_OnEitherRealm()
     {
@@ -2109,7 +2140,7 @@ public sealed class HangupItemRecheckTests
             // On Stock the gear is back but not worn, and the board printed its
             // lines for some later hang-up: only what is held speaks.
             h.ComeBack(hp: 200, lives: 6, stock ? Geared with { EquippedItems = [], CarriedItems = ["chainmail hauberk", "3 torch", "rope"] } : Geared,
-                boardLine: stock, room: new RoomKey(1, 700));
+                boardLine: stock, room: HallsOfTheDead);
 
             Assert.Empty(h.Deaths);
             Assert.Null(h.Profile.DeathHistory);
@@ -2213,8 +2244,13 @@ public sealed class HangupItemRecheckTests
 
     // With Auto-All off no `stat` goes out for it. The list then carries no count,
     // and the next entry says it can't tell where it used to say nothing.
+    //
+    // The second hang-up is in the temple (where the first death left it), which
+    // is why nothing tells: back in the room its own dead arrive in, the room has
+    // nothing to say. Hung up anywhere else, the room would settle it without a
+    // count (the test after this one).
     [Fact]
-    public void ALifeGivenBack_WithNoStatReadAfter_TheNextEntryIsToldItCantTell()
+    public void ALifeGivenBack_WithNoStatReadAfter_AndHungUpInTheTempleItself_TheNextEntryIsToldItCantTell()
     {
         Harness h = new() { MaxItems = 0, PveShare = 50 };
         h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
@@ -2239,6 +2275,36 @@ public sealed class HangupItemRecheckTests
 
         Assert.Single(h.Deaths);
         Assert.Contains("No death was recorded: its lives weren't read", Assert.Single(h.Notices.Skip(said)));
+    }
+
+    // The same, but it had walked out to Darkwood Forest before the second
+    // hang-up: back stripped in the temple, the room tells the death the missing
+    // count can't.
+    [Fact]
+    public void ALifeGivenBack_WithNoStatReadAfter_TheRoomStillTellsTheNextDeath()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
+        h.ComeBack(hp: 200, lives: 6, Snap());
+        Assert.Single(h.Deaths);
+
+        h.AutoAll = false;
+        h.Check.NoteLivesChangedUnread("a level was trained");
+        h.ReadInventory(Geared);
+        h.Room = Darkwood;
+        h.Vitals = (-8, 200);
+        h.MonsterFight = true;
+        h.Now = h.Now.AddMinutes(5);
+        h.Check.NoteLinkDropping();
+        h.Check.NoteDisconnected();
+        h.MonsterFight = false;
+        Assert.Null(h.Profile.HeldAtDisconnect!.Lives);
+
+        h.ComeBack(hp: 200, lives: 6, Snap());
+
+        Assert.Equal(2, h.Deaths.Count);
+        Assert.Equal((1, 109), (h.Deaths[1].Room!.Map, h.Deaths[1].Room!.Room));
+        Assert.Contains("its lives weren't read on the connection it left the game on", h.Check.LastDeathCheck);
     }
 
     // A death that was seen gives the lives in its own readout, but not when the
@@ -2407,7 +2473,7 @@ public sealed class HangupItemRecheckTests
         Assert.Equal(3, death.Room!.Room);
         Assert.Equal(secondDrop, death.At);
         Assert.Equal(6, death.LivesRemaining);
-        Assert.Equal(HangupItemRecheck.DeathMessage, death.Message);
+        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in {TempleFromRoom3}.", death.Message);
         Assert.Equal(("chainmail hauberk", "Torso"), (Assert.Single(death.Equipped!).Name, death.Equipped![0].Slot));
         Assert.Equal(new[] { "3 torch", "rope" }, death.Lost!.Select(i => i.Name).ToArray());
         Assert.Equal(25, death.Coins!.Value.Gold);
@@ -2467,7 +2533,7 @@ public sealed class HangupItemRecheckTests
         h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
         DateTimeOffset firstDrop = h.Profile.HeldAtDisconnect!.At;
 
-        h.Room = new RoomKey(1, 1);
+        h.Room = HallsOfTheDead;
         h.Now = h.Now.AddMinutes(1);
         h.Check.NoteConnected();
         h.BoardSaysHungUp();
@@ -2517,7 +2583,7 @@ public sealed class HangupItemRecheckTests
         Harness h = new() { MaxItems = 0, PveShare = 50, AutoAll = false };
         h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
 
-        h.Room = new RoomKey(1, 1);
+        h.Room = HallsOfTheDead;
         h.Now = h.Now.AddMinutes(1);
         h.Check.NoteConnected();
         h.BoardSaysHungUp();
@@ -2546,7 +2612,7 @@ public sealed class HangupItemRecheckTests
         h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
 
         h.Now = h.Now.AddMinutes(1);
-        h.Room = new RoomKey(1, 1);
+        h.Room = HallsOfTheDead;
         h.Check.NoteConnected();
         h.BoardSaysHungUp();
         h.Profile.DeathHistory = [new DeathRecord(h.Now, new RoomRef(1, 3), 6, "You have 6 lives left.") { RecordNumber = 1 }];
@@ -2574,16 +2640,20 @@ public sealed class HangupItemRecheckTests
     // and none was read: the older list is told about, not recorded, at the stale
     // room. On Stock the board's lines are still there to ask for; they were not
     // printed here, so it is told as well.
+    //
+    // The room it came back in must not be what answers, for this to be about the
+    // inventory and the lines. Off Stock it hung up in one of Paradigm's own
+    // rooms, whose arrival room isn't known; on Stock it is back in the temple.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void AnOlderHangUp_JudgedWithNoInventoryRead_IsToldNotRecorded_WhereNothingElseSeparatesItFromAnotherClient(bool stock)
     {
         Harness h = new() { MaxItems = 0, PveShare = 50, Stock = stock };
-        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 80, new RoomKey(1, 3));
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 80, stock ? new RoomKey(1, 3) : new RoomKey(18, 40));
 
         h.Now = h.Now.AddDays(4);
-        h.Room = new RoomKey(1, 700);
+        h.Room = stock ? HallsOfTheDead : new RoomKey(18, 41);
         h.Check.NoteConnected();
         h.Check.NoteRoomDisplayed();
         h.Vitals = (200, 200);
@@ -2618,7 +2688,7 @@ public sealed class HangupItemRecheckTests
         h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3), fight: false);
 
         h.Now = h.Now.AddMinutes(1);
-        h.Room = new RoomKey(1, 1);
+        h.Room = HallsOfTheDead;
         h.Check.NoteConnected();
         h.BoardSaysHungUp();
         h.Check.NoteRoomDisplayed();
@@ -2650,6 +2720,8 @@ public sealed class HangupItemRecheckTests
     // the one torch, and a death was recorded at the stale room with a pile of one
     // torch. A death takes every item that doesn't stay with the character, so
     // holding even one of them says the life wasn't lost to this hang-up.
+    //
+    // It is back in the temple, so the room it came back in is not what says so.
     [Fact]
     public void ALifeLostElsewhere_WithThePileBackButOneTorchBurnt_IsNotRecorded()
     {
@@ -2659,7 +2731,7 @@ public sealed class HangupItemRecheckTests
         h.Now = h.Now.AddDays(4);
         h.ComeBack(hp: 200, lives: 6,
             Geared with { EquippedItems = [], CarriedItems = ["chainmail hauberk", "2 torch", "rope"] },
-            boardLine: false, room: new RoomKey(1, 700));
+            boardLine: false, room: HallsOfTheDead);
 
         Assert.Empty(h.Deaths);
         string notice = Assert.Single(h.Notices);
@@ -2796,7 +2868,7 @@ public sealed class HangupItemRecheckTests
 
         // The first entry after the hang-up: the board's lines, full HP, the
         // temple. The link drops again before `stat` or `i`.
-        h.Room = new RoomKey(1, 1);
+        h.Room = HallsOfTheDead;
         h.Now = h.Now.AddMinutes(1);
         h.Check.NoteConnected();
         h.BoardSaysHungUp();
@@ -2898,12 +2970,14 @@ public sealed class HangupItemRecheckTests
     [Fact]
     public void AnAnswerDuringThePickup_EndsThePassCleanly()
     {
+        // It hung up in the temple itself: back there, the room says nothing either
+        // way, so the question stays open while the floor is looked at.
         Harness h = new() { MaxItems = 5, PveShare = 50 };
-        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, HallsOfTheDead);
 
         // Back in the room it left, by the map, with a rope on the floor and no
         // `stat` read: one is sent and goes unanswered.
-        h.Room = new RoomKey(1, 3);
+        h.Room = HallsOfTheDead;
         h.Now = h.Now.AddMinutes(1);
         h.Check.NoteConnected();
         h.BoardSaysHungUp();
@@ -2938,5 +3012,802 @@ public sealed class HangupItemRecheckTests
         string notice = Assert.Single(h.Notices);
         Assert.Contains("This client last had it in the game at", notice);
         Assert.Contains("another client", notice);
+    }
+
+    // ----- The room it comes back in ----------------------------------------
+    //
+    // A death puts the character where the dead of that room arrive. So the first
+    // room the map is sure of on the way back in, before the character has moved,
+    // is one more mark: there, having hung up somewhere else, the hang-up killed
+    // it; back where it left, or anywhere else, it did not. Darkwood Forest's dead
+    // arrive in the Temple, Halls of the Dead.
+
+    private static readonly RoomKey Darkwood = new(1, 109);
+    private static readonly RoomKey HallsOfTheDead = new(1, 2189);
+    private const string BackInTheHalls =
+        "Temple, Halls of the Dead (1/2189), where the dead of Darkwood Forest (1/109) arrive";
+
+    private static Harness WithArrivalRooms(bool stock = true)
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, Stock = stock };
+        h.RoomNames[Darkwood] = "Darkwood Forest";
+        h.RoomNames[HallsOfTheDead] = "Temple, Halls of the Dead";
+        return h;
+    }
+
+    // The owner's example: in Darkwood Forest, low, hung up under a penalty; back
+    // in the Halls of the Dead with a life less.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void HungUpLowInDarkwood_BackInTheHallsOfTheDead_ALifeDown_IsRecorded_NamingTheRoom(bool stock)
+    {
+        Harness h = WithArrivalRooms(stock);
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 40, Darkwood);
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: HallsOfTheDead);
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.Equal((1, 109), (death.Room!.Map, death.Room.Room));
+        Assert.Equal(6, death.LivesRemaining);
+        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in {BackInTheHalls}.", death.Message);
+        Assert.Contains($": it came back in {BackInTheHalls}. ", Assert.Single(h.Notices));
+        Assert.Contains($"lives went from 7 to 6, and it came back in {BackInTheHalls}", h.Check.LastDeathCheck);
+        Assert.Contains("a death by this hang-up puts it there", h.Check.LastDeathCheck);
+    }
+
+    // A life is gone, but the character stands where it left the game: no death
+    // moved it, so that life was lost somewhere else.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BackWhereItLeft_ALifeDown_IsNotThisHangUps(bool stock)
+    {
+        Harness h = WithArrivalRooms(stock);
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, Darkwood);
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: Darkwood);
+
+        Assert.Empty(h.Deaths);
+        string notice = Assert.Single(h.Notices);
+        Assert.Contains("No death was recorded", notice);
+        Assert.Contains("it came back in Darkwood Forest (1/109), the room it left the game in", notice);
+        Assert.Contains("can't tell", h.Check.LastDeathCheck);
+    }
+
+    // Back in a room that is neither. Where the list is the world's own, the life
+    // was lost somewhere else: an unmodified Stock set, and Paradigm for a room it
+    // shares with Stock (the owner, 2026-10-10). On a Stock board whose sysop may
+    // have edited its rooms the list can't say a room is the wrong one, and the
+    // lives decide as they did.
+    [Theory]
+    [InlineData(true, false, 0)]
+    [InlineData(false, false, 0)]
+    [InlineData(true, true, 1)]
+    public void BackSomewhereElse_ALifeDown_IsNotThisHangUps_WhereTheListIsTheWorldsOwn(bool stock, bool edited, int recorded)
+    {
+        Harness h = WithArrivalRooms(stock);
+        h.EditedBoard = edited;
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, Darkwood);
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: new RoomKey(1, 110));
+
+        Assert.Equal(recorded, h.Deaths.Count);
+        if (recorded == 1) Assert.Equal(HangupItemRecheck.DeathMessage, h.Deaths[0].Message);
+        else Assert.Contains("which is not where a death by this hang-up puts it", Assert.Single(h.Notices));
+    }
+
+    // The lives weren't read on the connection it left on, so there is no count to
+    // compare. Back in the Halls of the Dead with nothing left of what a death
+    // takes, the room says it.
+    [Fact]
+    public void LivesNotReadBefore_BackStrippedInTheHallsOfTheDead_IsRecorded()
+    {
+        Harness h = WithArrivalRooms();
+        h.StoredAt(40, Geared, lives: null, room: new RoomRef(1, 109));
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: HallsOfTheDead);
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.Equal(6, death.LivesRemaining);
+        Assert.Contains($"It came back in {BackInTheHalls}.", death.Message);
+        Assert.Contains("its lives weren't read on the connection it left the game on", h.Check.LastDeathCheck);
+        Assert.Single(death.Equipped!);
+    }
+
+    // The record carries the lives the character has now, so with no `stat` read
+    // yet one is asked for, where before nothing could have told.
+    [Fact]
+    public void LivesNotReadBefore_BackStrippedInTheHallsOfTheDead_WaitsForAStat()
+    {
+        Harness h = WithArrivalRooms();
+        h.StoredAt(40, Geared, lives: null, room: new RoomRef(1, 109));
+
+        h.ComeBack(hp: 200, lives: null, Snap(), room: HallsOfTheDead);
+        Assert.Empty(h.Deaths);
+        Assert.Contains("stat\r", h.Sent);
+
+        h.Lives = 6;
+        h.ReadLives(6);
+        Assert.Equal(6, Assert.Single(h.Deaths).LivesRemaining);
+    }
+
+    // The room alone records nothing: a character that walked to the temple on
+    // another client and left the game there still holds its gear.
+    [Fact]
+    public void LivesNotReadBefore_BackInTheHallsOfTheDead_StillHoldingItsGear_IsNotRecorded()
+    {
+        Harness h = WithArrivalRooms();
+        h.StoredAt(40, Geared, lives: null, room: new RoomRef(1, 109));
+
+        h.ComeBack(hp: 200, lives: 6, Geared, room: HallsOfTheDead);
+
+        Assert.Empty(h.Deaths);
+        Assert.Contains("its lives weren't read on the connection it left the game on", Assert.Single(h.Notices));
+    }
+
+    // Hung up in the Halls of the Dead themselves: standing there afterwards says
+    // nothing, and the lives decide alone, as they did.
+    [Fact]
+    public void HungUpInTheRoomItsDeadArriveIn_TheRoomSaysNothing()
+    {
+        Harness h = WithArrivalRooms();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, HallsOfTheDead);
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: HallsOfTheDead);
+
+        Assert.Equal(HangupItemRecheck.DeathMessage, Assert.Single(h.Deaths).Message);
+        Assert.Contains("which says nothing either way", h.Check.LastDeathCheck);
+
+        // With no count from before, nothing says it there.
+        Harness o = WithArrivalRooms();
+        o.StoredAt(-5, Geared, lives: null, room: new RoomRef(1, 2189));
+        o.ComeBack(hp: 200, lives: 6, Snap(), room: HallsOfTheDead);
+        Assert.Empty(o.Deaths);
+    }
+
+    // The map isn't sure of the room on the way back in: the mark says nothing.
+    [Fact]
+    public void TheRoomItCameBackIn_NotConfirmed_SaysNothing()
+    {
+        Harness h = WithArrivalRooms();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, Darkwood);
+
+        h.Room = null;
+        h.Now = h.Now.AddMinutes(1);
+        h.Check.NoteConnected();
+        h.BoardSaysHungUp();
+        h.Check.NoteRoomDisplayed();
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        h.ReadLives(6);
+        h.ReadInventory(Snap());
+
+        Assert.Equal(HangupItemRecheck.DeathMessage, Assert.Single(h.Deaths).Message);
+        Assert.Contains("the room it came back in not confirmed before it moved", h.Check.LastDeathCheck);
+    }
+
+    // Only the room it comes back in counts, not one it has walked to: with a move
+    // sent before any room was confirmed, the room it is confirmed in later (here
+    // the one it left, which would say "no death") is not taken.
+    [Fact]
+    public void ARoomConfirmedOnlyAfterAMove_IsNotTheRoomItCameBackIn()
+    {
+        Harness h = WithArrivalRooms();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, Darkwood);
+
+        h.Room = Darkwood;
+        h.Now = h.Now.AddMinutes(1);
+        h.Check.NoteConnected();
+        h.BoardSaysHungUp();
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        h.Check.NoteMoveSent();
+        h.Check.NoteRoomDisplayed();
+        h.ReadLives(6);
+        h.ReadInventory(Snap());
+
+        Assert.Single(h.Deaths);
+        Assert.Contains("the room it came back in not confirmed before it moved", h.Check.LastDeathCheck);
+    }
+
+    // A connection that came and went with no inventory read saw the room the
+    // character came back in. The one that judges the list finds it somewhere
+    // else by then, so the first one's room is kept on the list for it.
+    [Fact]
+    public void AMiddleConnectionThatJudgedNothing_HandsOnTheRoomItCameBackIn()
+    {
+        Harness h = WithArrivalRooms();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, Darkwood);
+
+        h.Room = HallsOfTheDead;
+        h.Now = h.Now.AddMinutes(1);
+        h.Check.NoteConnected();
+        h.BoardSaysHungUp();
+        h.Check.NoteRoomDisplayed();
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        h.Check.NoteLinkDropping();
+        h.Check.NoteDisconnected();
+
+        RoomRef kept = h.Profile.HeldAtDisconnect!.EntryRoomSince!;
+        Assert.Equal((1, 2189), (kept.Map, kept.Room));
+        RoomRef back = JsonSerializer.Deserialize<CharacterProfile>(
+            JsonSerializer.Serialize(h.Profile, JsonStore.Options), JsonStore.Options)!.HeldAtDisconnect!.EntryRoomSince!;
+        Assert.Equal((1, 2189), (back.Map, back.Room));
+
+        // Walked out of the temple on another client since: this entry is in a room
+        // that, taken for the one it came back in, would say "no death".
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: new RoomKey(1, 110));
+
+        Assert.Contains($"It came back in {BackInTheHalls}.", Assert.Single(h.Deaths).Message);
+    }
+
+    // ----- Dropped in an arena room -----------------------------------------
+    //
+    // A hang-up while dropped in an arena room is the arena's death: the engine
+    // puts HP back and moves the character to where that room's dead arrive, and
+    // takes no life and no item, on any board, penalty or none. The lives can't
+    // say it, so the room it comes back in does, and it is recorded as an arena
+    // death: nothing lost, no pile. The Training Grounds' dead arrive in their own
+    // Halls of the Dead (16/542).
+
+    private static readonly RoomKey TrainingGrounds = new(16, 500);
+    private static readonly RoomKey ArenaHalls = new(16, 542);
+    private const string BackInTheArenaHalls =
+        "Training Grounds, Halls of the Dead (16/542), where the dead of Training Grounds (16/500) arrive";
+
+    // No penalty set for the realm unless a test gives one.
+    private static Harness InTheArena(bool stock = true, int? pveShare = null)
+    {
+        Harness h = new() { MaxItems = 0, PveShare = pveShare, Stock = stock };
+        h.RoomNames[TrainingGrounds] = "Training Grounds";
+        h.RoomNames[ArenaHalls] = "Training Grounds, Halls of the Dead";
+        return h;
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DroppedInAnArenaRoom_BackWhereItsDeadArrive_IsRecordedAsAnArenaDeath(bool stock)
+    {
+        Harness h = InTheArena(stock);
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, TrainingGrounds);
+        DateTimeOffset dropped = h.Profile.HeldAtDisconnect!.At;
+
+        // HP put back, everything still held and worn, the lives as they were. A
+        // free hang-up prints no board line.
+        h.ComeBack(hp: 150, lives: 7, Geared, boardLine: false, room: ArenaHalls);
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.True(death.NothingLost);
+        Assert.Null(death.Equipped);
+        Assert.Null(death.Lost);
+        Assert.Null(death.Coins);
+        Assert.Equal((16, 500), (death.Room!.Map, death.Room.Room));
+        Assert.Equal(dropped, death.At);
+        Assert.Equal(7, death.LivesRemaining);
+        Assert.True(death.AtEntry);
+        Assert.Equal($"{HangupItemRecheck.ArenaDeathMessage} It came back in {BackInTheArenaHalls}.", death.Message);
+
+        string notice = Assert.Single(h.Notices);
+        Assert.Contains("died in the arena after the link went down", notice);
+        Assert.Contains($"came back in {BackInTheArenaHalls}", notice);
+        Assert.Contains("it has 7 lives, and there is no pile to recover", notice);
+        Assert.DoesNotContain("Recover Now", notice);
+        Assert.Contains("died in the arena", h.Check.LastDeathCheck);
+        Assert.Contains("(an arena room)", h.Check.LastDeathCheck);
+        Assert.False(h.Held);
+        Assert.Empty(h.Sent);
+        // The list is spent, and what is held now replaces it.
+        Assert.NotEmpty(h.Profile.HeldAtDisconnect!.Items);
+        Assert.Equal(150, h.Profile.HeldAtDisconnect.Hp);
+    }
+
+    // No `stat` was read on the way in: one is asked for, since the record carries
+    // a count read on this connection.
+    [Fact]
+    public void AnArenaDeath_WithNoStatRead_AsksForOne_AndRecordsWithItsCount()
+    {
+        Harness h = InTheArena();
+        h.StoredAt(-5, Geared, lives: null, room: new RoomRef(16, 500), inFight: false);
+
+        h.ComeBack(hp: 150, lives: null, Geared, boardLine: false, room: ArenaHalls);
+        Assert.Empty(h.Deaths);
+        Assert.Contains("stat\r", h.Sent);
+        Assert.True(h.Held);
+
+        h.Lives = 6;
+        h.ReadLives(6);
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.True(death.NothingLost);
+        Assert.Equal(6, death.LivesRemaining);
+        Assert.False(h.Held);
+    }
+
+    // On Stock the arena switch can be off, and an arena room is then a room like
+    // any other: a penalised hang-up while dropped there is an ordinary death, a
+    // life down and stripped, with a pile.
+    [Fact]
+    public void DroppedInAnArenaRoom_BackStrippedWithALifeDown_IsAnOrdinaryDeath_WithItsPile()
+    {
+        Harness h = InTheArena(pveShare: 50);
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, TrainingGrounds);
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: ArenaHalls);
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.False(death.NothingLost);
+        Assert.Single(death.Equipped!);
+        Assert.Equal(6, death.LivesRemaining);
+        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in {BackInTheArenaHalls}.", death.Message);
+        Assert.Contains("Recover Now", Assert.Single(h.Notices));
+    }
+
+    // Back dropped where it left (the arena switch off, the hang-up free or too
+    // small to kill), or standing there: no death of either kind, and nothing said.
+    [Theory]
+    [InlineData(-5, null)]
+    [InlineData(-5, 50)]
+    [InlineData(150, null)]
+    public void DroppedInAnArenaRoom_BackWhereItLeft_IsNoDeath(int hpAtEntry, int? pveShare)
+    {
+        Harness h = InTheArena(pveShare: pveShare);
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, TrainingGrounds);
+
+        h.ComeBack(hp: hpAtEntry, lives: 7, Geared, boardLine: false, room: TrainingGrounds);
+
+        Assert.Empty(h.Deaths);
+        Assert.Empty(h.Notices);
+        Assert.Contains("no death", h.Check.LastDeathCheck);
+        Assert.False(h.Held);
+    }
+
+    // Hung up in the arena's own Halls of the Dead, or back in a room the map
+    // wasn't sure of: the room says nothing, and without it nothing tells an
+    // arena death.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DroppedInAnArenaRoom_WithNothingTheRoomCanSay_RecordsNothing(bool hungUpInTheHalls)
+    {
+        Harness h = InTheArena();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, hungUpInTheHalls ? ArenaHalls : TrainingGrounds);
+
+        h.Now = h.Now.AddMinutes(1);
+        h.Room = hungUpInTheHalls ? ArenaHalls : null;
+        h.Check.NoteConnected();
+        h.Check.NoteRoomDisplayed();
+        h.Vitals = (150, 200);
+        h.Check.OnInGameChanged(true);
+        h.ReadLives(7);
+        h.ReadInventory(Geared);
+
+        Assert.Empty(h.Deaths);
+        Assert.Empty(h.Notices);
+        Assert.Contains("no arena death", h.Check.LastDeathCheck);
+    }
+
+    // Standing in an arena room when the link went down, on a realm with no
+    // penalty: nothing to look into, and movement is not held.
+    [Fact]
+    public void StandingInAnArenaRoom_OnARealmWithNoPenalty_IsNotLookedAt()
+    {
+        Harness h = InTheArena();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 40, TrainingGrounds);
+
+        h.Room = ArenaHalls;
+        h.Check.NoteConnected();
+
+        Assert.False(h.Held);
+    }
+
+    // An arena death costs no life, so it is recorded with no count from before
+    // the hang-up (the owner, 2026-10-10), here for a character that also held
+    // nothing a death takes. On a realm that doesn't penalise the hang-up it can
+    // only have been the arena's death.
+    [Fact]
+    public void AnArenaDeath_WithNoCountFromBefore_AndNothingOwned_IsRecorded_WhereNoPenaltyCouldHaveKilled()
+    {
+        Harness h = InTheArena();
+        h.StoredAt(-5, Snap(), lives: null, room: new RoomRef(16, 500), inFight: false);
+
+        h.ComeBack(hp: 150, lives: 6, Snap(), boardLine: false, room: ArenaHalls);
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.True(death.NothingLost);
+        Assert.Equal(6, death.LivesRemaining);
+    }
+
+    // The one corner told and not recorded: the realm penalises that hang-up, so
+    // with the board's arenas off it would have been an ordinary death, a life
+    // gone. With no count from before and a pack that can't say, nothing tells
+    // which of the two it was.
+    [Fact]
+    public void AnArenaDeath_WithNoCountAndAPackThatCantSay_OnARealmThatPenalises_IsTold_NotRecorded()
+    {
+        Harness h = InTheArena(pveShare: 50);
+        h.StoredAt(-5, Snap(), lives: null, room: new RoomRef(16, 500));
+
+        h.ComeBack(hp: 150, lives: 6, Snap(), boardLine: false, room: ArenaHalls);
+
+        Assert.Empty(h.Deaths);
+        string notice = Assert.Single(h.Notices);
+        Assert.Contains("No death was recorded", notice);
+        Assert.Contains("doesn't tell an arena death, which takes nothing, from an ordinary one", notice);
+    }
+
+    // ----- Rooms the map can't tell apart ------------------------------------
+    //
+    // The dead of map 11's arena arrive in the Portal Room 11/35, which prints only
+    // its south exit: the map confirms the other Portal Room, 11/37, whose exits
+    // are exactly that. The dead of the Dark Cave 15/2057 arrive in 15/2056, which
+    // looks the same, so the map never leaves 15/2057. The graph says which rooms
+    // look alike (RoomGraphManager.CouldBeTakenFor; pinned with the real rows in
+    // HangupDeathArrivalRoomsTests).
+
+    private static Harness WithLookAlikes(int? pveShare)
+    {
+        Harness h = new() { MaxItems = 0, PveShare = pveShare };
+        h.CouldBeTakenFor = (shown, other) =>
+            (shown == new RoomKey(11, 35) && other == new RoomKey(11, 37))
+            || (shown == new RoomKey(15, 2056) && other == new RoomKey(15, 2057));
+        h.RoomNames[new RoomKey(11, 5)] = "Crimson Passage";
+        h.RoomNames[new RoomKey(11, 44)] = "Ebony Passage";
+        h.RoomNames[new RoomKey(11, 35)] = "Portal Room";
+        h.RoomNames[new RoomKey(11, 37)] = "Portal Room";
+        return h;
+    }
+
+    [Fact]
+    public void AnArenaDeath_ConfirmedInTheArrivalRoomsTwin_IsStillRecorded_AndNamesTheRealRoom()
+    {
+        Harness h = WithLookAlikes(pveShare: null);
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(11, 5));
+
+        h.ComeBack(hp: 150, lives: 7, Geared, boardLine: false, room: new RoomKey(11, 37));
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.True(death.NothingLost);
+        Assert.Contains("It came back in Portal Room (11/37), which the map can't tell from Portal Room (11/35), "
+            + "where the dead of Crimson Passage (11/5) arrive.", death.Message);
+    }
+
+    // An ordinary hang-up death in 11/44 on Stock (not an arena room): a life down
+    // and stripped, confirmed in 11/37. It is recorded, as it was before the room
+    // was read at all, and not told as "the wrong room".
+    [Fact]
+    public void AnOrdinaryDeath_ConfirmedInTheArrivalRoomsTwin_IsRecorded()
+    {
+        Harness h = WithLookAlikes(pveShare: 50);
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(11, 44));
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: new RoomKey(11, 37));
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.False(death.NothingLost);
+        Assert.Contains("Portal Room (11/37), which the map can't tell from Portal Room (11/35)", death.Message);
+        Assert.Contains("Recover Now", Assert.Single(h.Notices));
+    }
+
+    // Killed in the Dark Cave, the map still shows the Dark Cave it left: that is
+    // not "back where it left", and the lives decide alone.
+    [Fact]
+    public void ADeathInARoomThatLooksLikeItsArrivalRoom_IsNotTakenForNeverHavingMoved()
+    {
+        Harness h = WithLookAlikes(pveShare: 50);
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(15, 2057));
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: new RoomKey(15, 2057));
+
+        Assert.Equal(HangupItemRecheck.DeathMessage, Assert.Single(h.Deaths).Message);
+        Assert.Contains("which says nothing either way", h.Check.LastDeathCheck);
+    }
+
+    // ----- What the review and the owner's rulings added ---------------------
+
+    // No count was kept, and the character is back in the (ordinary) room it left:
+    // no death moved it. The question closes without a word and the item check
+    // has its say, where it used to be "can't tell".
+    [Fact]
+    public void BackInTheRoomItLeft_WithNoCountKept_IsNoDeath_AndTheItemCheckGoesOn()
+    {
+        Harness h = new() { PveShare = 50 };
+        h.StoredAt(-5, Geared, lives: null);
+
+        h.Room = new RoomKey(1, 3);
+        h.Check.NoteConnected();
+        h.BoardSaysHungUp();
+        h.ShowRoom("3 torch");
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        h.ReadLives(6);
+        h.ReadInventory(Snap());
+
+        Assert.Empty(h.Deaths);
+        Assert.Contains("no death", h.Check.LastDeathCheck);
+        Assert.Contains("the room it left the game in", h.Check.LastDeathCheck);
+        Assert.DoesNotContain(h.Notices, n => n.Contains("No death was recorded"));
+        // The item check goes on in the same pass, still holding movement: the
+        // torches on the floor are asked for, and nothing has been said yet.
+        Assert.Contains(("torch", 3), h.Collected);
+        Assert.True(h.Held);
+        Assert.Empty(h.Notices);
+
+        // They land, and the pass ends as any pickup does: what came back, what
+        // didn't, the equipment manager asked, movement let go.
+        h.Check.OnItemTaken("torch", 3);
+
+        Assert.False(h.Held);
+        Assert.Equal(2, h.Notices.Count);
+        Assert.Contains("picked up 3 torch", h.Notices[0]);
+        Assert.Contains("chainmail hauberk", h.Notices[1]);
+        Assert.Contains("rope", h.Notices[1]);
+        Assert.Equal(new[] { "torch" }, Assert.Single(h.GearAsked));
+        Assert.Empty(h.Deaths);
+        Assert.Null(h.Profile.DeathHistory);
+    }
+
+    // A connection that came and went with no inventory read never learned the
+    // room it came back in, and moved on. The room the next connection starts in
+    // is where it walked to, not where the hang-up left it: read as the entry
+    // room it would say "it never moved" (or, in the temple, "it died") wrongly.
+    [Theory]
+    [InlineData(true)]    // walked back to where it hung up: must not read as "never moved"
+    [InlineData(false)]   // walked into the temple alive: must not read as "back where its dead arrive"
+    public void AMiddleConnectionThatMovedBeforeItsRoomWasKnown_LeavesTheRoomUnknownForGood(bool died)
+    {
+        Harness h = WithArrivalRooms();
+        if (died) h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, Darkwood);
+        else h.StoredAt(40, Geared, lives: null, room: new RoomRef(1, 109));
+
+        // The map isn't sure of the room at the first display, and a move goes out.
+        h.Room = null;
+        h.Now = h.Now.AddMinutes(1);
+        h.Check.NoteConnected();
+        h.BoardSaysHungUp();
+        h.Check.NoteRoomDisplayed();
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        h.Check.NoteMoveSent();
+        h.Room = died ? Darkwood : HallsOfTheDead;
+        h.Check.NoteRoomDisplayed();
+        h.Check.NoteLinkDropping();
+        h.Check.NoteDisconnected();
+
+        HeldAtDisconnect list = h.Profile.HeldAtDisconnect!;
+        Assert.Null(list.EntryRoomSince);
+        Assert.True(list.MovedBeforeEntryRoomKnownSince);
+        Assert.True(JsonSerializer.Deserialize<CharacterProfile>(
+            JsonSerializer.Serialize(h.Profile, JsonStore.Options), JsonStore.Options)!
+            .HeldAtDisconnect!.MovedBeforeEntryRoomKnownSince);
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: died ? Darkwood : HallsOfTheDead);
+
+        if (died)
+        {
+            // A life down, and the room says nothing: recorded, as by the lives alone.
+            Assert.Equal(HangupItemRecheck.DeathMessage, Assert.Single(h.Deaths).Message);
+        }
+        else
+        {
+            // No count from before, and no room to go by: can't tell.
+            Assert.Empty(h.Deaths);
+            Assert.Contains("only a life lost tells a death", h.Check.LastDeathCheck);
+        }
+        Assert.Contains("the room it came back in not confirmed before it moved", h.Check.LastDeathCheck);
+    }
+
+    // With the master switch off no `stat` is sent. A character back stripped
+    // where its dead arrive, with no count from before, is still in question, and
+    // is told so with what will answer it, as one with a count is.
+    [Fact]
+    public void AutoAllOff_BackStrippedWhereItsDeadArrive_WithNoCountFromBefore_IsToldAStatWillAnswer()
+    {
+        Harness h = WithArrivalRooms();
+        h.AutoAll = false;
+        h.StoredAt(40, Geared, lives: null, room: new RoomRef(1, 109));
+
+        h.ComeBack(hp: 200, lives: null, Snap(), room: HallsOfTheDead);
+
+        Assert.Empty(h.Sent);
+        Assert.Empty(h.Deaths);
+        string notice = Assert.Single(h.Notices);
+        Assert.Contains("Auto-All is off", notice);
+        Assert.Contains("Type `stat` and `i`", notice);
+
+        h.Lives = 6;
+        h.ReadLives(6);
+        Assert.Contains($"It came back in {BackInTheHalls}.", Assert.Single(h.Deaths).Message);
+    }
+
+    // The same character still holding its gear: a `stat` would answer nothing,
+    // so nothing asks for one.
+    [Fact]
+    public void AutoAllOff_BackWhereItsDeadArrive_StillHoldingItsGear_IsNotToldToTypeStat()
+    {
+        Harness h = WithArrivalRooms();
+        h.AutoAll = false;
+        h.StoredAt(40, Geared, lives: null, room: new RoomRef(1, 109));
+
+        h.ComeBack(hp: 200, lives: null, Geared, room: HallsOfTheDead);
+
+        Assert.Empty(h.Deaths);
+        Assert.DoesNotContain(h.Notices, n => n.Contains("Type `stat`"));
+    }
+
+    // Naked and broke: the character owned nothing a death takes, so there is
+    // nothing for it to come back stripped of. With no count from before, the
+    // room it comes back in is enough (the owner, 2026-10-10).
+    [Fact]
+    public void OwningNothingADeathTakes_WithNoCountFromBefore_BackWhereItsDeadArrive_IsRecorded()
+    {
+        Harness h = WithArrivalRooms();
+        h.Stays.Add("soulbound amulet");
+        h.StoredAt(-5, Snap(carried: ["soulbound amulet"]), lives: null, room: new RoomRef(1, 109));
+
+        h.ComeBack(hp: 200, lives: 6, Snap(carried: ["soulbound amulet"]), room: HallsOfTheDead);
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.Equal(6, death.LivesRemaining);
+        Assert.Empty(death.Equipped!);
+        Assert.Empty(death.Lost!);
+        Assert.Contains($"It came back in {BackInTheHalls}.", death.Message);
+        Assert.Contains("held nothing a death takes when it left", h.Check.LastDeathCheck);
+    }
+
+    // Every "no" that still applies is kept for it: the board's lines on Stock,
+    // the room it left, HP at the first prompt.
+    [Theory]
+    [InlineData(false, 2189, 200)]   // Stock, and the board printed no hang-up lines
+    [InlineData(true, 109, 200)]     // back in the room it left
+    [InlineData(true, 2189, -5)]     // back where its dead arrive, still dropped
+    public void OwningNothingADeathTakes_IsNotRecordedAgainstWhatStillSaysNo(bool boardLine, int roomBack, int hpAtEntry)
+    {
+        Harness h = WithArrivalRooms();
+        h.StoredAt(-5, Snap(), lives: null, room: new RoomRef(1, 109));
+
+        h.ComeBack(hp: hpAtEntry, lives: 6, Snap(), boardLine: boardLine, room: new RoomKey(1, roomBack));
+
+        Assert.Empty(h.Deaths);
+    }
+
+    // What a character held isn't the same as holding nothing: a list written
+    // with no inventory read doesn't know, and the room alone is not enough then.
+    [Fact]
+    public void AListThatDoesNotKnowWhatWasHeld_IsNotTakenForOwningNothing()
+    {
+        Harness h = WithArrivalRooms();
+        h.StoredAt(-5, Snap(), lives: null, room: new RoomRef(1, 109));
+        h.Profile.HeldAtDisconnect!.ItemsUnknown = true;
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: HallsOfTheDead);
+
+        Assert.Empty(h.Deaths);
+        Assert.Contains("what it holds doesn't bear a death out", Assert.Single(h.Notices));
+    }
+
+    // ----- Paradigm's own rooms ----------------------------------------------
+    //
+    // Paradigm sends the dead of Albion to 14/1077, the Burial Vault, and Albion
+    // is "the rooms that can be reached from 14/1077 without taking the boat" (the
+    // owner, 2026-10-10). For a room in it, being found in the vault is a yes and
+    // no other room is ever a no. Paradigm's other own rooms (Port Blackwater,
+    // Terra Ista, Terra Fuego, Tal'kiran, Shadowmere) have no known arrival room.
+    // The Stock list speaks only for the zones Paradigm shares with Stock: 14/1 is
+    // a Stock room number, and on Paradigm it is the Bank of Albion.
+
+    private static readonly RoomKey Kingsport = new(14, 5000);
+    private static readonly RoomKey BankOfAlbion = new(14, 1);
+    private static readonly RoomKey BurialVault = new(14, 1077);
+
+    private static Harness OnParadigm()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, Stock = false };
+        h.Albion.UnionWith([BurialVault, Kingsport, BankOfAlbion]);
+        h.RoomNames[BurialVault] = "Burial Vault";
+        h.RoomNames[BankOfAlbion] = "Bank of Albion";
+        return h;
+    }
+
+    private const string BackInTheVault = "Burial Vault (14/1077), where the dead of ";
+    private const string ByAlbion = " arrive (Albion: reachable from that room without a boat)";
+
+    [Fact]
+    public void Paradigm_HungUpInAlbion_BackInTheBurialVault_IsRecorded_NamingIt()
+    {
+        Harness h = OnParadigm();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, Kingsport);
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
+
+        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in {BackInTheVault}room 14/5000{ByAlbion}.",
+            Assert.Single(h.Deaths).Message);
+
+        // With no count from before, back there stripped is enough.
+        Harness o = OnParadigm();
+        o.StoredAt(-5, Geared, lives: null, room: new RoomRef(14, 5000));
+        o.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
+        Assert.Single(o.Deaths);
+    }
+
+    // The case that was lost by reading Stock's list by room number: 14/1 is in
+    // Stock's range, where that list sends its dead to the Temple. On Paradigm it
+    // is the Bank of Albion. A life down and stripped in the Burial Vault is a
+    // death, with a count from before or without one.
+    [Theory]
+    [InlineData(7)]
+    [InlineData(null)]
+    public void Paradigm_AStockRoomNumberThatIsAlbion_BackInTheBurialVault_IsRecorded(int? livesBefore)
+    {
+        Harness h = OnParadigm();
+        h.StoredAt(-5, Geared, lives: livesBefore, room: new RoomRef(14, 1));
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.Equal(6, death.LivesRemaining);
+        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in {BackInTheVault}Bank of Albion (14/1){ByAlbion}.",
+            death.Message);
+    }
+
+    // Anywhere else, the room says nothing for an Albion room: a hang-up goes
+    // through the room's leave-the-game room first and Paradigm's aren't in the
+    // data, so neither "the wrong room" nor "it never moved" can be said, and the
+    // lives decide alone.
+    [Theory]
+    [InlineData(14, 5001)]
+    [InlineData(14, 5000)]
+    [InlineData(1, 2189)]
+    public void Paradigm_HungUpInAlbion_NoOtherRoomSaysNo(int map, int room)
+    {
+        Harness h = OnParadigm();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, Kingsport);
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: new RoomKey(map, room));
+
+        Assert.Equal(HangupItemRecheck.DeathMessage, Assert.Single(h.Deaths).Message);
+    }
+
+    // One of Paradigm's own rooms outside Albion: Terra Ista (14/1813, across the
+    // water), Port Blackwater (14/9, a Stock room number), Shadowmere (5/3, Stock's
+    // Tournament Arena), map 18. Where its dead arrive isn't known, so the Burial
+    // Vault says nothing for it either. With a life down the lives decide alone,
+    // and the record names no room; with no count from before nothing tells.
+    [Theory]
+    [InlineData(14, 1813)]
+    [InlineData(14, 9)]
+    [InlineData(5, 3)]
+    [InlineData(18, 40)]
+    public void Paradigm_OneOfItsOwnRoomsOutsideAlbion_TheBurialVaultSaysNothing(int map, int room)
+    {
+        Harness h = OnParadigm();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(map, room));
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
+        Assert.Equal(HangupItemRecheck.DeathMessage, Assert.Single(h.Deaths).Message);
+        Assert.Contains("which says nothing either way", h.Check.LastDeathCheck);
+
+        Harness o = OnParadigm();
+        o.StoredAt(-5, Geared, lives: null, room: new RoomRef(map, room));
+        o.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
+        Assert.Empty(o.Deaths);
+        Assert.Contains("only a life lost tells a death", Assert.Single(o.Notices));
+    }
+
+    // A room Paradigm only renamed is still shared with Stock: 15/1530 is `Old
+    // Mine Tunnel` there and `Webbed Mine Tunnel` here, with the same exits. Its
+    // dead arrive in the Temple on both, and another room is the wrong one.
+    [Fact]
+    public void Paradigm_ARoomOnlyRenamed_StillGoesByTheStockList()
+    {
+        Harness h = OnParadigm();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(15, 1530));
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: HallsOfTheDead);
+        Assert.Contains("It came back in room 1/2189, where the dead of room 15/1530 arrive.", Assert.Single(h.Deaths).Message);
+
+        Harness o = OnParadigm();
+        o.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(15, 1530));
+        o.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: BurialVault);
+        Assert.Empty(o.Deaths);
+        Assert.Contains("which is not where a death by this hang-up puts it", Assert.Single(o.Notices));
     }
 }

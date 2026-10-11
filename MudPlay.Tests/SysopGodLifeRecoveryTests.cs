@@ -23,6 +23,21 @@ public sealed class SysopGodLifeRecoveryTests
         Assert.Equal(new[] { "sys god Grimlock add life" }, sent);
     }
 
+    // An arena death spends no life on either realm: asking one back would leave
+    // the character a life up.
+    [Fact]
+    public void AnArenaDeath_AsksNoLifeBack()
+    {
+        var (rec, sent) = Make(enabled: true, name: "Grimlock");
+        int asked = 0;
+        rec.LifeRequested += () => asked++;
+
+        rec.OnDeath(tookNothing: true);
+
+        Assert.Empty(sent);
+        Assert.Equal(0, asked);
+    }
+
     [Fact]
     public void Disabled_OnDeath_SendsNothing()
     {

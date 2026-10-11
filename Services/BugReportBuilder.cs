@@ -210,7 +210,11 @@ public static class BugReportBuilder
         Kv(sb, "Held list on file", svc.Profile.Current?.HeldAtDisconnect is { } heldList
             ? $"{heldList.Items.Count} kind(s) of item, written {heldList.At.ToLocalTime():yyyy-MM-dd HH:mm:ss} "
               + $"on {heldList.Realm ?? "(no realm)"}, "
-              + (heldList.Room is { } heldRoom ? $"room {heldRoom.Map}/{heldRoom.Room}" : "room not known")
+              + (heldList.Room is { } heldRoom
+                  ? $"room {heldRoom.Map}/{heldRoom.Room}"
+                    // A hang-up while dropped in one is the arena's death: no life or item taken.
+                    + (Game.Recovery.ArenaDeathRooms.Contains(new Game.Map.RoomKey(heldRoom.Map, heldRoom.Room)) ? " (an arena room)" : "")
+                  : "room not known")
               + (heldList.PenaltiesSpanned > 1 ? $", covering {heldList.PenaltiesSpanned} drops of the link" : "")
               // What a death by the hang-up penalty is told by on the next entry.
               + $"; HP {(heldList.Hp is { } heldHp ? $"{heldHp}" : "not known")}"
@@ -218,6 +222,13 @@ public static class BugReportBuilder
               + $", lives {(heldList.Lives is { } heldLives ? $"{heldLives}" : "not known")}"
               + (heldList.PvpFight ? ", in a fight with a player" : heldList.InCombat ? ", in a fight with a monster" : ", in no fight")
               + $", {heldList.Worn?.Count ?? 0} worn, {heldList.Coins?.TotalCoinCount ?? 0} coin(s)"
+              // Where a death by a hang-up in that room would put the character, and
+              // what an earlier connection that judged nothing saw of the way back in.
+              // The list is the Stock map file's, and the row says how far it is
+              // trusted for the active game data.
+              + (heldList.Room is { } hungUpIn ? "; " + HangupArrivalText(svc, new Game.Map.RoomKey(hungUpIn.Map, hungUpIn.Room)) : "")
+              + (heldList.EntryRoomSince is { } cameBack ? $"; came back in {cameBack.Map}/{cameBack.Room} on a connection since" : "")
+              + (heldList.MovedBeforeEntryRoomKnownSince ? "; a connection since moved before the room it came back in was known" : "")
             : "(none)");
         // Whether the last hang-up the penalty could have killed for was taken
         // for a death, and on what.
@@ -383,6 +394,29 @@ public static class BugReportBuilder
         if (svc.DeathRecovery.SpillSweepPlan is { Length: > 0 } plan)
             Kv(sb, "Stock spill sweep rooms, in order", plan);
         return sb.ToString();
+    }
+
+    // Where a death by a hang-up in this room would put the character on the
+    // active game data, and what that rests on: the Stock map file's list (with
+    // how far it is trusted here), Paradigm's Albion, or nothing known.
+    private static string HangupArrivalText(AppServices svc, Game.Map.RoomKey hungUpIn)
+    {
+        Game.Recovery.HangupArrivalListTrust trust = svc.HangupArrivalListTrust;
+        (IReadOnlyList<Game.Map.RoomKey>? rooms, bool allKnown, bool albion) =
+            Game.Recovery.HangupDeathArrivalRooms.ArrivalsOn(hungUpIn, trust, svc.InParadigmAlbion);
+        if (albion)
+            return $"its dead arrive in {string.Join(" or ", rooms!)}: Albion (reachable from "
+                + $"{Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault} without a boat); that room says yes, no other says no";
+        if (rooms is null || !allKnown)
+            return trust == Game.Recovery.HangupArrivalListTrust.Paradigm
+                ? "where its dead arrive isn't known (one of Paradigm's own rooms, outside Albion)"
+                : "where its dead arrive isn't known (a room the Stock map file doesn't have)";
+        return $"by the Stock map file its dead arrive in {string.Join(" or ", rooms)}" + trust switch
+        {
+            Game.Recovery.HangupArrivalListTrust.VanillaStock => "",
+            Game.Recovery.HangupArrivalListTrust.Paradigm => " (a zone Paradigm shares with Stock)",
+            _ => " (not confirmed for this game data: the room it comes back in can say yes, never no)",
+        };
     }
 
     // Party roster snapshot — who's grouped, their roles, and the pending-invite

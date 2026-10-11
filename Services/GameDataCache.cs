@@ -120,6 +120,28 @@ public sealed class GameDataCache
         }
     }
 
+    // Whether the active set is the unmodified Stock world: its Info row says
+    // Legit 1 and Custom "Default", as the 1.11p export does. ActiveRealm calls
+    // everything that isn't Paradigm Stock, which is right for the formulas; a
+    // board whose sysop edited the rooms is Stock that way and still isn't the
+    // world the Stock files describe room by room. False with no set active.
+    public bool ActiveSetIsVanillaStock
+    {
+        get
+        {
+            GameTable? info = GetTable("Info");
+            if (info is null || info.Rows.Count == 0)
+                return false;
+            // Info.json is a one-element array holding the export's own description.
+            GameRow row = info.Rows[0];
+            return row.TryGetProperty("Legit", out GameValue legit)
+                && legit.ValueKind == JsonValueKind.Number && legit.TryGetInt32(out int code) && code == 1
+                && row.TryGetProperty("Custom", out GameValue custom)
+                && custom.ValueKind == JsonValueKind.String
+                && string.Equals(custom.GetString(), "Default", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     // Fires whenever ActiveSet changes — including the transition from a real set
     // to null (no set picked). Carries the new set name. Subscribers should drop
     // any per-set state they had cached and re-pull whatever they need from the
