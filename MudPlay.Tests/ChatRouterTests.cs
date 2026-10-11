@@ -290,6 +290,48 @@ public sealed class ChatRouterTests
         Assert.False(users);
     }
 
+    // The same when the later telepath is itself addressed by a shortened name, as
+    // one sent for another player's `@do` may be: it has more letters than the
+    // request the game refused, so the confirmation is its own.
+    [Theory]
+    [InlineData("/bel hi")]
+    [InlineData("/Bella hi")]
+    public void TelepathOut_AConfirmation_IsNotHandedToAShorterSendThatReachedNobody(string later)
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/b @timer sync"), usersOwn: true);
+        chat.ObserveOutbound(Wire(later));
+        router.Dispatch(Line("--- Telepath sent to Bella ---"));
+
+        (ChatLogEntry e, bool users) = Assert.Single(seen);
+        Assert.Equal(("Bella", "hi"), (e.Speaker, e.Message));
+        Assert.False(users);
+    }
+
+    // Of the pending sends whose addressed name begins the name confirmed, a
+    // confirmation takes the one addressed by the most letters, and the oldest of
+    // those addressed alike, whatever order they went out in.
+    [Fact]
+    public void TelepathOut_AConfirmation_TakesTheSendAddressedByTheMostLetters_TheOldestOfEquals()
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/b one letter"), usersOwn: true);
+        chat.ObserveOutbound(Wire("/bel three, first"));
+        chat.ObserveOutbound(Wire("/be two letters"));
+        chat.ObserveOutbound(Wire("/BEL three, second"));
+        chat.ObserveOutbound(Wire("/Bob another player"));
+        for (int i = 0; i < 5; i++) router.Dispatch(Line("--- Telepath sent to Bella ---"));
+
+        Assert.Equal(
+            new[] { "three, first", "three, second", "two letters", "one letter", string.Empty },
+            seen.Select(s => s.Entry.Message));
+        Assert.Equal(new[] { false, false, false, true, false }, seen.Select(s => s.Users));
+    }
+
     // A shortened request that did reach its player, with a telepath of the
     // client's to the same player going out before or after it: the two
     // confirmations take the two sends, the full-name one first, and the request

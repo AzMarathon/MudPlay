@@ -151,6 +151,25 @@ public sealed class SentCommandTrailTests
         Assert.Equal("/bo @timer sync", Assert.Single(told));
     }
 
+    // A typed line longer than the game takes is not kept by the trail, which
+    // holds only its head: it is told to nobody either. One of the full length is.
+    [Fact]
+    public void TypedLineEntered_IsNotToldALineLongerThanTheTrailKeeps()
+    {
+        SentCommandTrail trail = new();
+        List<string> told = new();
+        trail.TypedLineEntered = told.Add;
+        trail.TypedAtGamePrompt = _ => true;
+
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("/bo " + new string('x', SentCommandTrail.MaxTextLength) + "\r"));
+        Assert.Empty(told);
+        Assert.Equal(SentCommandTrail.TooLong, Assert.Single(trail.Snapshot()).Text);
+
+        string full = "/bo " + new string('x', SentCommandTrail.MaxTextLength - 4);
+        trail.ObserveTyped(Encoding.Latin1.GetBytes(full + "\r"));
+        Assert.Equal(full, Assert.Single(told));
+    }
+
     [Fact]
     public void TypedLineEntered_IsNotToldALineTypedWhileNothingIsKept()
     {

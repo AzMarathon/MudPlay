@@ -1,12 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.7**
-> - Sync Timers compares every answer with the timer you hold. One player asked by telepath: merged in when you hold none, synced when it differs. Asked on gang, say or broadcast: replies are gathered for 10 seconds, merged in only if they all agree, listed for you to pick otherwise
-> - A timer of yours that changed after you asked is never replaced as a sync answer arrives; the boss is listed instead
-> - Remote commands are read on the broadcast channel when "Disallow @commands from broadcast" is unticked, under each player's permissions, answered on the channel once a minute per player
-> - Picking the active game-data set again no longer deletes its saved Simulator rankings; one is dropped only if its tables changed (an import rewrites them, so it still drops them)
-> - Saved Simulator rankings older than 180 days are deleted once each start, for every character
+> **Version 3.180.10**
+> - Remote commands are read on the broadcast channel when "Disallow @commands from broadcast" is unticked, under each player's permissions, and answered there: once a minute per player, four players a minute
+> - A relay-back (`&@command`) heard on broadcast is sent back on broadcast
+> - Sync Timers, one player asked by telepath: their timer is merged in when you hold none and synced when it differs
+> - Sync Timers on gang, say or broadcast: replies are gathered for 10 seconds and judged together; merged in only if all agree, listed for you to pick otherwise
+> - A timer of yours that changed after you asked is never replaced by a sync answer; the boss is listed instead
+> - Only a `@timer sync`, `@roomba sync` or `@loop send yes` you sent yourself counts as your request; one your client sent for another player's remote command merges nothing
+> - Picking the active game-data set again keeps its saved Simulator rankings; one is dropped when its tables changed, or at the next load when it has no record of them
+> - Saved Simulator rankings older than 180 days are deleted at each start, for every character
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

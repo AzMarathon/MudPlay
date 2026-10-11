@@ -2065,6 +2065,45 @@ public sealed class BossTimerTests : IDisposable
         }
     }
 
+    // Nor can a player with Execute commands choose who is. The window's request
+    // goes to letters that fit two players and reaches nobody; she then has the
+    // client telepath one of them (`@do /bel hi`), by more letters or by the full
+    // name, and the game confirms that telepath. The confirmation is that send's,
+    // not the request's: the player it names was not asked, and the timers she
+    // then sends are listed, never merged in or synced.
+    [Theory]
+    [InlineData("/bel hi", true)]
+    [InlineData("/Bella hi", true)]
+    [InlineData("/bel hi", false)]
+    [InlineData("/Bella hi", false)]
+    public void SyncWindow_ATelepathSentForAnotherPlayerAfterARequestThatReachedNobody_AsksNobody(
+        string sentForHer, bool weHoldOne)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            DateTimeOffset? ours = weHoldOne ? Held : null;
+            if (weHoldOne) timers.MarkKilled("ogre king", Held);
+            Requests(window, 1, "b");
+            Assert.Equal("/b @timer sync", _syncSent.Single());
+            BoardShows("Please be more specific.  You could have meant any of these:");
+            ClientSends(sentForHer);
+            BoardShows(sentForHer);
+            GameConfirms("Bella");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bella");
+
+            Assert.Equal(ours, timers.KilledAt("ogre king"));
+            Assert.False(window.CollectorForTests.OnePlayerAsked);
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.WasAutoMerged);
+            Assert.False(row.WasSynced);
+            Assert.True(row.KeepOursSelected);
+            Assert.Equal("Bella", Assert.Single(row.Responders).Responder);
+            Assert.Equal("1 responder(s): 1 to pick, 0 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
     // A shortened request that really reached its player, with a telepath of the
     // client's to the same player going out around it, in either order: the player
     // is the one asked, once, and their timer is merged in.

@@ -426,16 +426,21 @@ public sealed class ChatRouter : IDisposable
         _lastEnqueuedTelepath = text;
     }
 
-    // The pending send a "--- Telepath Sent to <name> ---" confirmation is for.
-    // First the oldest one still fresh that was addressed to exactly the name
-    // confirmed; only with none of those, the oldest whose addressed name begins
-    // it. The game takes the first letters of a name for a player and confirms
-    // with the name in full ("/raij" reaches Raijin). But the client addresses its
-    // own telepaths by the full name, so a confirmation for one of those must take
-    // that send, and not an older shortened request of the user's that reached
-    // nobody (its letters fitted two players): that would make the player named
-    // here the one the user asked. A send addressed to anyone else is never the
-    // one confirmed, however long it has waited: its own reply was something other
+    // The pending send a "--- Telepath Sent to <name> ---" confirmation is for:
+    // of those still fresh whose addressed name begins the name confirmed, the one
+    // addressed by the most letters, and the oldest of those when several are
+    // addressed alike. The game takes the first letters of a name for a player and
+    // confirms with the name in full ("/raij" reaches Raijin), but only when the
+    // letters fit that one player: letters that fit two reach neither. So of two
+    // pending sends that both begin this player's name, the one with fewer letters
+    // may be the one the game refused as fitting somebody else as well, and the one
+    // with more letters fits no player the other does not. The confirmation is the
+    // more specific one's; the full name is simply the most specific there is.
+    // Without this, a shortened request of the user's that reached nobody would be
+    // handed the confirmation of a later telepath to any player its letters begin,
+    // one the client sent for another player included, and that player would be
+    // the one the user asked. A send addressed to anyone else is never the one
+    // confirmed, however long it has waited: its own reply was something other
     // than a confirmation (no such player, letters that fit two players, the
     // telepath not sent), and handing it to this one would say the player named
     // here was sent a message they never were. Null when no pending send fits.
@@ -460,8 +465,13 @@ public sealed class ChatRouter : IDisposable
                 + "match for this one.");
         }
         if (string.IsNullOrEmpty(name)) return null;
-        int at = _pendingTelepaths.FindIndex(p => name.Equals(p.Target, StringComparison.OrdinalIgnoreCase));
-        if (at < 0) at = _pendingTelepaths.FindIndex(p => name.StartsWith(p.Target, StringComparison.OrdinalIgnoreCase));
+        int at = -1;
+        for (int i = 0; i < _pendingTelepaths.Count; i++)
+        {
+            string addressed = _pendingTelepaths[i].Target;
+            if (!name.StartsWith(addressed, StringComparison.OrdinalIgnoreCase)) continue;
+            if (at < 0 || addressed.Length > _pendingTelepaths[at].Target.Length) at = i;
+        }
         if (at < 0) return null;
         PendingTelepath sent = _pendingTelepaths[at];
         _pendingTelepaths.RemoveAt(at);

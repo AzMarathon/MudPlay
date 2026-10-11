@@ -192,10 +192,13 @@ public sealed class SentCommandTrail
     // (the chat log, for a request telepathed to another client) is told from
     // here. Told only a line this trail itself keeps in the clear. One it
     // withholds for any reason (typed while nothing is kept, or at a prompt that
-    // is not the game's own) may be a password, and is told to nobody.
+    // is not the game's own) may be a password, and is told to nobody. Neither is
+    // one past MaxTextLength, which the trail does not keep either and holds only
+    // the head of.
     public Action<string>? TypedLineEntered { get; set; }
 
-    // True when the line was kept as it was sent, false when it was withheld.
+    // True when the line was kept as it was sent, false when it was withheld or
+    // stood in for (TooLong).
     private bool UserLineSent(string line, Origin origin)
     {
         bool nothingIsKept = Withhold?.Invoke() == true;
@@ -205,7 +208,7 @@ public sealed class SentCommandTrail
             return false;
         }
         Record(line, origin, sender: null, Outcome.Sent);   // counts the line and keeps none of it while nothing is kept
-        return !nothingIsKept;
+        return !nothingIsKept && line.Length <= MaxTextLength;
     }
 
     private void Store(Entry entry)
