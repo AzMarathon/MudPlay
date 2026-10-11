@@ -86,6 +86,97 @@ public sealed class BugReportChatCensorTests
         Assert.Equal("Obvious exits: flibber", rows[3]);
     }
 
+    // A chat line that reaches the right margin and ends there is followed by the
+    // game's own row: it is never masked. Only the terminal's record of a wrap
+    // makes the next row a continuation.
+    [Theory]
+    [InlineData(79)]
+    [InlineData(80)]
+    public void CensorRows_AGameRowAfterAFullWidthChatRow_IsNeverAltered(int width)
+    {
+        string chat = "Bob gossips: " + new string('a', width - "Bob gossips: ".Length);
+        List<string> rows =
+        [
+            chat,
+            "You notice a zorptang here.",
+            "Also here: flibber warrior.",
+        ];
+
+        Censor.CensorRows(rows, wrappedOntoNext: [false, false, false]);
+
+        Assert.Equal(new[] { chat, "You notice a zorptang here.", "Also here: flibber warrior." }, rows);
+    }
+
+    [Fact]
+    public void CensorRows_FollowsAChatLineOnlyOntoTheRowsTheTerminalWrappedItOnto()
+    {
+        string first = "Somebody gossips: " + new string('x', 62);   // all 80 columns
+        string second = new string('y', 70) + " flibber ";
+        List<string> rows =
+        [
+            "You notice a flibber here.",
+            first,
+            second,
+            "zorptang to finish",
+            "Obvious exits: flibber",
+        ];
+
+        Censor.CensorRows(rows, wrappedOntoNext: [false, true, true, false, false]);
+
+        Assert.Equal("You notice a flibber here.", rows[0]);
+        Assert.Equal(first, rows[1]);
+        Assert.Equal(new string('y', 70) + " [censored] ", rows[2]);
+        Assert.Equal("[censored] to finish", rows[3]);
+        Assert.Equal("Obvious exits: flibber", rows[4]);
+    }
+
+    // A long line of the game's own wraps too: its continuation is the game's.
+    [Fact]
+    public void CensorRows_AWrappedGameLine_IsNotChatOnEitherRow()
+    {
+        List<string> rows =
+        [
+            "The room is strewn with the bones of a great " + new string('z', 35),
+            "flibber, long dead.",
+            "Somebody gossips: flibber",
+        ];
+
+        Censor.CensorRows(rows, wrappedOntoNext: [true, false, false]);
+
+        Assert.Equal("flibber, long dead.", rows[1]);
+        Assert.Equal("Somebody gossips: [censored]", rows[2]);
+    }
+
+    // End to end through the terminal: the wrap is what the emulator did, not
+    // what the row's length suggests.
+    [Fact]
+    public void CensorRows_ThroughTheTerminal_OnlyARealWrapIsFollowed()
+    {
+        // Three rows of screen, so the wrapped row is in the backscroll by the end.
+        MudPlay.Terminal.TerminalEmulator emulator = new(80, 3);
+        static byte[] B(string s) => System.Text.Encoding.Latin1.GetBytes(s);
+
+        // Exactly 80 columns, then a real line end: nothing wrapped.
+        emulator.Feed(B("Bob gossips: " + new string('a', 67) + "\r\n"));
+        emulator.Feed(B("You notice a zorptang here.\r\n"));
+        // 100 columns: the terminal wraps it, and the tail is still Bob's.
+        emulator.Feed(B("Bob gossips: " + new string('b', 67) + "and a flibber for you\r\n"));
+        emulator.Feed(B("Also here: flibber warrior.\r\n"));
+        emulator.Feed(B("[HP=100/MA=50]:"));
+
+        IReadOnlyList<MudPlay.Terminal.TranscriptSnapshot.Line> lines =
+            MudPlay.Terminal.TranscriptSnapshot.Tail(emulator, 0);
+        List<string> rows = lines.Select(l => l.Text).ToList();
+        Assert.Equal(3, emulator.Screen.Scrollback.Count);
+        Assert.Equal(new[] { false, false, true, false, false, false }, lines.Select(l => l.SoftWrapped));
+
+        Censor.CensorRows(rows, lines.Select(l => l.SoftWrapped).ToList());
+
+        Assert.Equal("You notice a zorptang here.", rows[1]);
+        Assert.Equal("and a [censored] for you", rows[3]);
+        Assert.Equal("Also here: flibber warrior.", rows[4]);
+    }
+
     [Theory]
     [InlineData("gos flibber", "gos [censored]")]
     [InlineData("/Somebody flibber you", "/Somebody [censored] you")]

@@ -206,6 +206,9 @@ public sealed class TerminalEmulator
         ReadOnlySpan<Cell> cells = Screen.Row(Screen.CursorY);
         LineCompleted?.Invoke(new ScrollbackBuffer.Row(DateTimeOffset.Now, cells.ToArray(), softWrap));
         _rowWritten = false;
+        // The row keeps how it was left, into the scrollback: a reader of the
+        // transcript can then tell the row below is this line carrying on.
+        Screen.SetRowSoftWrapped(Screen.CursorY, softWrap);
 
         if (Screen.CursorY == _scrollBottom)
         {
@@ -228,6 +231,9 @@ public sealed class TerminalEmulator
     {
         if (!_rowWritten || newRow == Screen.CursorY) return;
         _rowWritten = false;
+        // Written again and left by a move: whatever once wrapped from this row
+        // is not what it holds now.
+        Screen.SetRowSoftWrapped(Screen.CursorY, false);
         ReadOnlySpan<Cell> cells = Screen.Row(Screen.CursorY);
         bool blank = true;
         foreach (Cell cell in cells)

@@ -142,8 +142,29 @@ public sealed partial class BugReportChatCensor
         ChatLineDetector.IsChat(line) ? CensorText(line) : line;
 
     // Terminal rows, oldest first. A chat line the terminal wrapped carries on
-    // into the rows after it, which no longer start with the channel's words: a
-    // row that follows a full-width chat row is taken as its continuation.
+    // into the rows after it, which no longer start with the channel's words.
+    // wrappedOntoNext[i] is the terminal's own record that it left row i by
+    // wrapping at the right margin: only then is row i + 1 the same line, and
+    // only a chat line's continuation is masked. Nothing is inferred from how
+    // full a row is: a chat line can end at the margin, and the row after it is
+    // then the game's.
+    public void CensorRows(IList<string> rows, IReadOnlyList<bool> wrappedOntoNext)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        ArgumentNullException.ThrowIfNull(wrappedOntoNext);
+        bool continuesChat = false;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            bool chat = continuesChat || ChatLineDetector.IsChat(rows[i]);
+            if (chat) rows[i] = CensorText(rows[i]);
+            continuesChat = chat && i < wrappedOntoNext.Count && wrappedOntoNext[i];
+        }
+    }
+
+    // Terminal rows, oldest first, for rows with no record of where the terminal
+    // wrapped: a row that follows a full-width chat row is taken as its
+    // continuation. A guess, and it can take the game's row for chat; the report
+    // uses the overload above.
     public void CensorRows(IList<string> rows, int terminalColumns)
     {
         ArgumentNullException.ThrowIfNull(rows);
