@@ -233,14 +233,13 @@ public sealed class TransferChannelsTests
             && l.Message == $"Following {command} from Friend, said on the broadcast channel.");
     }
 
-    // What is no command stays unread there, and so does a relay-back: the channel
-    // was opened to commands, and the echo would be a bare command to everyone on it.
+    // What is no command stays unread there, relayed or not.
     [Theory]
-    [InlineData("&@health")]
-    [InlineData("&@timer sync")]
     [InlineData("@nosuchcommand sync")]
     [InlineData("hello @health")]
-    public void ARelayBackOrAWordThatIsNoCommand_OnTheBroadcastChannel_IsPassedOver(string line)
+    [InlineData("&@nosuchcommand")]
+    [InlineData("&@")]
+    public void AWordThatIsNoCommand_OnTheBroadcastChannel_IsPassedOver(string line)
     {
         Engine e = new();
 
@@ -249,6 +248,116 @@ public sealed class TransferChannelsTests
 
         Assert.Empty(e.Ran);
         Assert.Empty(e.Wire);
+    }
+
+    // A relay-back asked for on the broadcast channel goes back on it, bare, as on
+    // any channel: the asker's client then takes it as a command of ours. Nothing
+    // is run here for it.
+    [Theory]
+    [InlineData("&@health", "br @health\r")]
+    [InlineData("&@timer sync", "br @timer sync\r")]
+    [InlineData("&@loop kings road", "br @loop kings road\r")]
+    public void ARelayBackOnTheBroadcastChannel_IsEchoedThere(string line, string expected)
+    {
+        Engine e = new();
+
+        e.Commands.DispatchForTests(Broadcast("Friend", line));
+
+        Assert.Empty(e.Ran);
+        Assert.Equal(expected, e.Wire.Single());
+        Assert.Contains(e.Log.Snapshot(), l => l.Severity == LogSeverity.Info
+            && l.Message == $"Relaying {line[1..]} back to Friend on Broadcast (&@ request).");
+    }
+
+    // Sneaking, a relay asked for on say goes back by telepath; one asked for on
+    // the broadcast channel stays there, where speaking ends no sneak.
+    [Fact]
+    public void ARelayBackOnTheBroadcastChannel_StaysThereWhileSneaking()
+    {
+        Engine e = new();
+        e.Commands.StealthedProvider = () => true;
+
+        e.Commands.DispatchForTests(Broadcast("Friend", "&@health"));
+        e.Commands.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Local, "Friend", "&@health", "raw"));
+
+        Assert.Equal(new[] { "br @health\r", "/Friend @health\r" }, e.Wire);
+    }
+
+    // Every gate a relay-back has elsewhere stands there: the grant (denied on the
+    // channel, by the Warn setting), the master switch, the box, and the payloads
+    // that are never relayed.
+    [Fact]
+    public void ARelayBackOnTheBroadcastChannel_IsHeldToTheUsualGates()
+    {
+        Engine denied = new();
+        denied.Commands.DispatchForTests(Broadcast("Stranger", "&@health"));
+        Assert.Equal("br {command invalid or not allowed}\r", denied.Wire.Single());
+
+        Engine deniedQuietly = new(warn: false);
+        deniedQuietly.Commands.DispatchForTests(Broadcast("Stranger", "&@health"));
+        Assert.Empty(deniedQuietly.Wire);
+
+        Engine off = new(masterSwitchOff: true);
+        off.Commands.DispatchForTests(Broadcast("Friend", "&@health"));
+        Assert.Empty(off.Wire);
+
+        Engine ticked = new(broadcastOpen: false);
+        ticked.Commands.DispatchForTests(Broadcast("Friend", "&@health"));
+        ticked.Commands.DispatchForTests(Broadcast("Stranger", "&@health"));
+        Assert.Empty(ticked.Wire);
+
+        Engine blocked = new(everyCommand: true);
+        foreach (string line in new[] { "&@do reroll", "&@party set suicide", "&@health reroll" })
+        {
+            blocked.Clock += TimeSpan.FromMinutes(2);
+            blocked.Commands.DispatchForTests(Broadcast("Friend", line));
+        }
+        Assert.Empty(blocked.Wire);
+        Assert.Empty(blocked.Ran);
+    }
+
+    // The echo is a line said on the channel, so it is one of the minute's answers:
+    // a second relay from the same player inside the minute sends nothing, and so
+    // does any relay once the channel has had its answers. A relay also uses up the
+    // answer a command would have had.
+    [Fact]
+    public void ARelayBackOnTheBroadcastChannel_IsHeldToTheChannelsBound()
+    {
+        Engine e = new();
+
+        e.Commands.DispatchForTests(Broadcast("Friend", "&@health"));
+        e.Commands.DispatchForTests(Broadcast("Friend", "&@timer"));
+        e.Commands.DispatchForTests(Broadcast("Friend", "@health"));
+
+        Assert.Equal("br @health\r", e.Wire.Single());
+        Assert.Empty(e.Ran);
+        Assert.Contains(DebugLines(e), l => l ==
+            "Passing over &@timer from Friend on the broadcast channel: they were answered there less than a minute ago.");
+
+        Engine full = new();
+        for (int i = 0; i < BroadcastAnswerBudget.AnswersPerWindow; i++)
+            full.Commands.DispatchForTests(Broadcast($"Passerby{i}", "&@health"));
+        full.Commands.DispatchForTests(Broadcast("Friend", "&@health"));
+        Assert.Equal(BroadcastAnswerBudget.AnswersPerWindow, full.Wire.Length);
+        Assert.DoesNotContain("br @health\r", full.Wire);
+    }
+
+    // On Paradigm the channel shows us our own line. The command we relayed comes
+    // back under our own name and is not a command to us: nothing runs, nothing is
+    // said, and it uses up nobody's answer.
+    [Fact]
+    public void OurOwnRelayedCommand_EchoedBackOnTheBroadcastChannel_IsNotRun()
+    {
+        Engine e = new();
+        e.Commands.DispatchForTests(Broadcast("Friend", "&@health"));
+        Assert.Equal("br @health\r", e.Wire.Single());
+
+        e.Commands.DispatchForTests(Broadcast("Us", "@health"));
+        e.Commands.DispatchForTests(Broadcast("Us", "&@health"));
+
+        Assert.Empty(e.Ran);
+        Assert.Single(e.Wire);
+        Assert.Equal(1, e.Commands.BroadcastSpeakersRememberedForTests);
     }
 
     // Every gate that stands on the other channels stands there for an ordinary
@@ -417,7 +526,8 @@ public sealed class TransferChannelsTests
     // from a player with every permission and from one with none. With the box
     // ticked: nothing. Unticked, each line is held to the gates of any other
     // channel (ExpectedOnBroadcast spells them out), a handler runs only for a
-    // player who holds the command's permission, and nothing is relayed.
+    // player who holds the command's permission, and a relay-back sends the
+    // command back on the channel only for a player with the grant for that.
     [Theory]
     [InlineData(true, true)]
     [InlineData(true, false)]
@@ -464,11 +574,20 @@ public sealed class TransferChannelsTests
     {
         string[] none = Array.Empty<string>();
         string[] failure = warn ? new[] { "br {command invalid or not allowed}\r" } : none;
-        if (!open || line.StartsWith('&')) return (none, false);
-        string[] tokens = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (!open) return (none, false);
+        bool relay = line.StartsWith("&@", StringComparison.Ordinal);
+        string[] tokens = (relay ? line[1..] : line).Split(' ', StringSplitOptions.RemoveEmptyEntries);
         string command = tokens[0].TrimEnd('!');
         string[] args = tokens[1..];
         if (!command.StartsWith('@') || !RemoteCommandCatalog.Help.ContainsKey(command)) return (none, false);
+        // A relay-back runs nothing here. A known command is sent back bare, as it
+        // was typed, for a player with the grant; a blocked word in it is never
+        // relayed, a help question included.
+        if (relay)
+        {
+            if (args.Any(a => a.Contains("reroll"))) return (none, false);
+            return (sender == "Stranger" ? failure : new[] { $"br {line[1..]}\r" }, false);
+        }
         // A blocked word anywhere in the line is never answered, on any channel.
         // Asking what a command does is not sending it.
         if (command != "@help" && args.Any(a => a.Contains("reroll"))) return (none, false);

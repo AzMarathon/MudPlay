@@ -19,13 +19,13 @@ namespace MudPlay.Game.Remote;
 //   b. The channel: telepath, gangpath, say or the numbered broadcast channel,
 //      each with its own off switch. The broadcast channel's starts on: it is
 //      public, so nothing is read there until the user opens it.
-//   c. Our own echo, and anything that doesn't start with `@` (or `&@`). A
-//      relay-back (`&@`) is not read on the broadcast channel.
+//   c. Our own echo, and anything that doesn't start with `@` (or `&@`).
 //   d. Reserved words other subsystems own (ailment announces, @panic, sync
 //      data) — swallowed.
-//   d2. On the broadcast channel only: a speaker already answered there this
-//      minute, or a channel that has had its answers for the minute — passed
-//      over before anything runs (BroadcastAnswerBudget).
+//   d2. On the broadcast channel only, for a command and for a relay-back: a
+//      speaker already answered there this minute, or a channel that has had
+//      its answers for the minute — passed over before anything runs
+//      (BroadcastAnswerBudget).
 //   e. The master switch: off, only @auto-all is followed; no answer.
 //   f. Hard-blocks (1 below) — no answer, whatever the Warn setting says.
 //   g. A word that is no command — no answer.
@@ -489,11 +489,14 @@ public sealed class RemoteCommandManager : IDisposable
 
         if (relayBack)
         {
-            // No relay on the broadcast channel. It was opened to commands, not to
-            // relays (user, 2026-10-11), and the echo would be a bare @-command in
-            // front of every client listening there, not the asker's alone.
-            if (channel.Value == RemoteChannel.Broadcast) return;
-            HandleRelayBack(entry.Speaker, entry.Message, channel.Value);
+            // A relay-back goes out on the channel it was asked on, the broadcast
+            // channel included (user, 2026-10-11: "if a remote command was issued on
+            // a channel, it should respond on that channel except for the sneak/say
+            // case"). The echo is a line said there, so it is held to the channel's
+            // bound like any answer, and one the bound would hold back is not
+            // looked at.
+            if (!OpenBroadcastAnswer(channel.Value, entry.Speaker, entry.Message, out BroadcastAnswer? echo)) return;
+            HandleRelayBack(entry.Speaker, entry.Message, channel.Value, echo);
             return;
         }
 
@@ -520,17 +523,7 @@ public sealed class RemoteCommandManager : IDisposable
         // minute, or a channel that has had its answers for the minute, is passed
         // over before anything runs for the line (BroadcastAnswerBudget): a command
         // that would get no answer is not carried out either.
-        BroadcastAnswer? answer = null;
-        if (channel.Value == RemoteChannel.Broadcast)
-        {
-            if (_broadcastAnswers.WhyNot(entry.Speaker, Now()) is { } spent)
-            {
-                _log?.Log(LogSeverity.Debug, "RemoteCmd",
-                    $"Passing over {command} from {entry.Speaker} on the broadcast channel: {spent}.");
-                return;
-            }
-            answer = new BroadcastAnswer();
-        }
+        if (!OpenBroadcastAnswer(channel.Value, entry.Speaker, command, out BroadcastAnswer? answer)) return;
 
         // Ahead of every block and denial below, so nothing here answers while
         // the switch is off. Only a command this client knows: ordinary chat that
@@ -682,7 +675,7 @@ public sealed class RemoteCommandManager : IDisposable
     // put the same line on the wire. Only a command this client knows is relayed — the
     // echo is never arbitrary text — and a nested `&@&@…` isn't a known command, so it
     // can't ping-pong. The reroll / set-suicide hard-blocks apply to the payload too.
-    private void HandleRelayBack(string sender, string message, RemoteChannel channel)
+    private void HandleRelayBack(string sender, string message, RemoteChannel channel, BroadcastAnswer? answer)
     {
         string payload = message[1..].Trim();
         string[] tokens = payload.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -710,13 +703,33 @@ public sealed class RemoteCommandManager : IDisposable
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
                 $"Denied relay-back of {command} for {sender} (lacks {RelayBackCategory}).");
-            SendDenialReply(channel, sender);
+            SendDenialReply(channel, sender, answer: answer);
             return;
         }
 
         _log?.Log(LogSeverity.Info, "RemoteCmd",
             $"Relaying {payload} back to {sender} on {channel} (&@ request).");
-        SendLine(channel, sender, payload);
+        SendLine(channel, sender, payload, answer);
+    }
+
+    // On the broadcast channel: whether a line from speaker may be answered now,
+    // asked before anything is done for it. False, with the reason logged, when
+    // the speaker was answered there this minute or the channel has had its
+    // answers for the minute (BroadcastAnswerBudget); the line is then passed
+    // over whole. answer is what the replies to the line are counted as. On any
+    // other channel there is no bound: true, and no answer to count.
+    private bool OpenBroadcastAnswer(RemoteChannel channel, string speaker, string what, out BroadcastAnswer? answer)
+    {
+        answer = null;
+        if (channel != RemoteChannel.Broadcast) return true;
+        if (_broadcastAnswers.WhyNot(speaker, Now()) is { } spent)
+        {
+            _log?.Log(LogSeverity.Debug, "RemoteCmd",
+                $"Passing over {what} from {speaker} on the broadcast channel: {spent}.");
+            return false;
+        }
+        answer = new BroadcastAnswer();
+        return true;
     }
 
     // A `@comeback` dropped for the master switch. FromMember: the sender was in
