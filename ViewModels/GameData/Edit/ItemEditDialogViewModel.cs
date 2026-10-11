@@ -171,6 +171,12 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     public IReadOnlyList<RoomCommandRow> RoomCommands { get; }
     public bool HasRoomCommands => RoomCommands.Count > 0;
 
+    // Exits whose game data names this item as the one needed to pass (a key on a
+    // locked door, an item to carry, a ticket), one room link per exit. Held as the
+    // capped list the Room command group uses; null when no exit names the item.
+    public RoomCommandRow? ExitUses { get; }
+    public bool HasExitUses => ExitUses is not null;
+
     // Spells the item casts (use-cast / proc), each a clickable link to that spell's
     // record — where the cast's on-use / proc wording lives, shared across every item
     // casting it. Empty for an item that casts nothing.
@@ -271,7 +277,8 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         IReadOnlyList<PlacedInRow>? teleportsTo = null,
         Func<Task<string?>>? editAttachedMessage = null,
         IReadOnlyList<RoomCommandRow>? roomCommands = null,
-        string? attachedMessageSummary = null)
+        string? attachedMessageSummary = null,
+        IReadOnlyList<PlacedInRow>? exitUses = null)
     {
         WccNoStr     = wccNoStr;
         Name         = existing?.Name ?? mdbName;
@@ -289,6 +296,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         DroppedBy    = droppedBy ?? Array.Empty<DroppedByRow>();
         PlacedIn     = placedIn  ?? Array.Empty<PlacedInRow>();
         RoomCommands = roomCommands ?? Array.Empty<RoomCommandRow>();
+        ExitUses     = exitUses is { Count: > 0 } ? new RoomCommandRow(Array.Empty<string>(), string.Empty, exitUses, "uses") : null;
         CastsSpells  = castsSpells ?? Array.Empty<CastsSpellRow>();
         Summons      = summons ?? Array.Empty<DroppedByRow>();
         TeleportsTo  = teleportsTo ?? Array.Empty<PlacedInRow>();

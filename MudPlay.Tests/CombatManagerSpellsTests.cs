@@ -712,6 +712,284 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("a giant rat", h.LastSent);
     }
 
+    // ----- a swing while our move is in flight (report paradigm-20261010-231540) -----
+
+    // A loop that only attacks in lairs walks through a room with one brute zombie in
+    // it and sends its step into the lair next door. From then combat reads as on (the
+    // lair is what it is judged against) though the character still stands outside.
+    // deferPost: the game's lines come in between a dispatch being scheduled and run.
+    private static Harness AtTheLairDoorstepWithTheStepSent(out Action land)
+    {
+        Harness h = new(deferPost: true);
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "aslt" };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "isto", MinEnemies = 2, MaxCastsPerRoom = 1 };
+        h.AddMonster(2739, "brute zombie");
+        bool moving = false;
+        DateTimeOffset stepSentAt = DateTimeOffset.UtcNow;
+        h.Combat.SetMoveInFlightProbe(() => moving, () => stepSentAt);
+        land = () => moving = false;
+
+        h.Feed("*Combat Off*");                     // the last lair's fight ended
+        h.AutoCombatEnabled = false;                // not a lair: combat suppressed here
+        h.Feed("Also here: brute zombie.");
+        h.DrainPosted();
+        Assert.Empty(h.Sent);
+
+        h.Combat.NotePreMove();
+        h.Combat.NoteMoveSent();
+        moving = true;
+        h.AutoCombatEnabled = true;
+        return h;
+    }
+
+    // The capture, line for line: the zombie swings as we leave, three more shamble in
+    // before the lair displays, and the first one follows us in. Nothing is sent from
+    // the room being left, and the lair opens as any lair does: debuff, then room attack.
+    // Whichever room the three shambled into, the lair's own display decides.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_IsNotAnswered_AndTheLairOpensWithItsDebuff()
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out Action land);
+
+        h.Feed("The brute zombie swings at you, but you dodge out of the way!");
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.DrainPosted();
+        Assert.Empty(h.Sent);
+        Assert.Null(h.Combat.CurrentTarget);
+
+        h.Arrive("brute zombie");
+        h.Arrive("brute zombie");
+        h.Arrive("brute zombie");
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie.");
+        land();
+        h.Arrive("brute zombie");
+        h.DrainPosted();
+
+        Assert.Equal(new[] { "isto", "hsto" }, h.AllSent);
+    }
+
+    // The same swing with the step refused: we never left, so it is answered.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_MoveRefused_IsAnsweredInTheRoomWeStayedIn()
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out Action land);
+
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.DrainPosted();
+        Assert.Empty(h.Sent);
+
+        land();
+        h.Combat.NoteMoveRefused();
+        h.DrainPosted();
+
+        Assert.Equal(new[] { "aslt brute zombie" }, h.AllSent);
+    }
+
+    // With the last fight's *Combat Off* still standing, any hit line wakes the
+    // re-attack: a party member's hit on the monster, or the monster's named attack
+    // landing on us, which is not worded as a swing.
+    [Theory]
+    [InlineData("Bob hits the brute zombie for 30 damage!")]
+    [InlineData("The brute zombie crushes you with a huge fist for 3 damage!")]
+    public void HitLineWhileOurMoveIsInFlight_OpensNoFightInTheRoomBeingLeft(string line)
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out _);
+
+        h.Feed(line);
+        h.DrainPosted();
+
+        Assert.Empty(h.Sent);
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    // A Friend that hit us as we left stays behind. The room we land in holds another of
+    // its name: that one never attacked, and is left alone until it does.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_AttackerStaysBehind_ItsNamesakeNextDoorIsLeftAlone()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "big gravedigger");
+        h.SetOverlay(1, relationship: MonsterRelationship.Friend);
+        bool moving = false;
+        h.Combat.SetMoveInFlightProbe(() => moving);
+
+        h.Feed("Also here: big gravedigger.");
+        moving = true;
+        h.Feed("The big gravedigger hits you for 12 damage!");
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("gravedigger"));
+
+        h.Feed("Also here: big gravedigger.");      // the room we land in
+        moving = false;
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("gravedigger"));
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.False(h.Combat.IsUserEngagedInstance("big gravedigger"));
+
+        h.Feed("The big gravedigger hits you for 12 damage!");
+        Assert.Equal("a big gravedigger", h.LastSent);
+    }
+
+    // The room we land in is empty: nothing is left to attack and no target stands.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_AttackerStaysBehind_EmptyRoomLeavesNoTarget()
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out Action land);
+
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.Classifier.NoteRoomChanged();
+        land();
+        h.DrainPosted();
+
+        Assert.Empty(h.Sent);
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    // The step is never answered: no landing, no refusal the client reads. The hold
+    // lasts three seconds from the step, then the attacker is answered where we stand,
+    // on the hold's own timer (a quiet attacker) or on the next line that comes.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SwingWhileOurMoveIsInFlight_StepNeverLands_IsAnsweredAfterTheBound(bool byTimer)
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out _);
+
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.AdvanceClock(TimeSpan.FromSeconds(2));
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.FireSettle();                              // a timer firing early changes nothing
+        h.DrainPosted();
+        Assert.Empty(h.Sent);
+
+        h.AdvanceClock(TimeSpan.FromSeconds(2));
+        if (byTimer) h.FireSettle();
+        else h.Feed("The brute zombie swings at you with its arm!");
+        h.DrainPosted();
+
+        Assert.Equal(new[] { "aslt brute zombie" }, h.AllSent);
+    }
+
+    // Three callers hand the roster we already had back to the engine with no line from
+    // the game behind them: a switch re-running the room, a rest that wants the room
+    // cleared, a ShadowRest ending. With the step in flight that roster is the room
+    // being left, and the fight waits as it does for a swing; a refusal or the bound
+    // then opens it where we stand.
+    [Theory]
+    [InlineData("reemit", true)]
+    [InlineData("reemit", false)]
+    [InlineData("rest-clear", true)]
+    [InlineData("rest-clear", false)]
+    [InlineData("shadowrest", true)]
+    [InlineData("shadowrest", false)]
+    public void OldRosterHandedBackWhileOurMoveIsInFlight_OpensNoFightUntilTheHoldEnds(string caller, bool refused)
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out Action land);
+        h.Combat.SetRestClearGate(() => caller == "rest-clear");
+
+        switch (caller)
+        {
+            case "reemit": h.Classifier.ReemitCurrent(); break;
+            case "rest-clear": h.Combat.RequestRestClearEngage(); break;
+            default: h.Combat.ResumeAfterShadowRest(); break;
+        }
+        h.DrainPosted();
+        Assert.Empty(h.Sent);
+        Assert.Null(h.Combat.CurrentTarget);
+
+        if (refused)
+        {
+            land();
+            h.Combat.NoteMoveRefused();
+        }
+        else
+        {
+            h.AdvanceClock(TimeSpan.FromSeconds(4));
+            h.FireSettle();
+        }
+        h.DrainPosted();
+
+        Assert.Equal(new[] { "aslt brute zombie" }, h.AllSent);
+    }
+
+    // The lair's own display is a room read anew, and is engaged with the step still
+    // unconfirmed: the tracker confirms a move only on the exits line that follows.
+    [Fact]
+    public void RoomReadAnewWhileOurMoveIsInFlight_IsEngagedAtOnce()
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out _);
+        h.Classifier.ReemitCurrent();
+
+        h.Feed("Also here: brute zombie, brute zombie.");
+        h.DrainPosted();
+
+        Assert.Equal(new[] { "isto", "hsto" }, h.AllSent);
+    }
+
+    // A Friend is engaged only on the mark its attack earns, so the bound has to hand
+    // that mark over, not just stop holding.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_FriendAttacker_StepNeverLands_IsFoughtBackAfterTheBound()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "big gravedigger");
+        h.SetOverlay(1, relationship: MonsterRelationship.Friend);
+        DateTimeOffset stepSentAt = DateTimeOffset.UtcNow;
+        h.Combat.SetMoveInFlightProbe(() => true, () => stepSentAt);
+
+        h.Feed("Also here: big gravedigger.");
+        h.Feed("The big gravedigger hits you for 12 damage!");
+        h.AdvanceClock(TimeSpan.FromSeconds(2));
+        h.FireSettle();
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("gravedigger"));
+
+        h.AdvanceClock(TimeSpan.FromSeconds(2));
+        h.FireSettle();
+
+        Assert.Equal("a big gravedigger", h.LastSent);
+    }
+
+    // The arrival's hold is under the same bound: a monster that came in as a step
+    // went out, the step never answered, is engaged once the bound has passed.
+    [Fact]
+    public void ArrivalSettle_OurMoveInFlight_StepNeverLands_EngagesAfterTheBound()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        DateTimeOffset stepSentAt = DateTimeOffset.UtcNow;
+        h.Combat.SetMoveInFlightProbe(() => true, () => stepSentAt);
+
+        h.Arrive("giant rat");
+        h.FireSettle();                              // the settle elapses: held for the move
+        Assert.Equal(string.Empty, h.LastSent);
+
+        h.AdvanceClock(TimeSpan.FromSeconds(4));
+        h.FireSettle();                              // the hold's timer
+
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
+    // A Friend that hit us with the step refused is fought back, as it is with no move.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_FriendAttacker_MoveRefused_IsFoughtBack()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "big gravedigger");
+        h.SetOverlay(1, relationship: MonsterRelationship.Friend);
+        bool moving = true;
+        h.Combat.SetMoveInFlightProbe(() => moving);
+
+        h.Feed("Also here: big gravedigger.");
+        h.Feed("The big gravedigger hits you for 12 damage!");
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("gravedigger"));
+
+        moving = false;
+        h.Combat.NoteMoveRefused();
+
+        Assert.Equal("a big gravedigger", h.LastSent);
+    }
+
     // Post-kill re-engage race (reports 081053, 081654, 103708, 135433). Each realm
     // gives monsters custom death messages we can't map to the flavored target, so
     // the specific-death matcher misses and combat used to re-cast at the corpse on
@@ -3093,6 +3371,44 @@ public sealed class CombatManagerSpellsTests
 
         Assert.DoesNotContain("curse", h.AllSent);   // debuff deferred to priority
         Assert.DoesNotContain("blast", h.AllSent);   // attack deferred to the resume
+    }
+
+    // A listener keeping the round's between-round cast for the debuff (a loop's
+    // lair-entry hold) is told when an engage has none to cast, and which debuff it
+    // was when one goes out. Not when the debuff is only put off behind another cast.
+    [Fact]
+    public void Engage_TellsWhetherADebuffWentOutAheadOfTheAttack()
+    {
+        using Harness none = new();
+        int noDebuff = 0;
+        none.Combat.SetNoDebuffOnEngageSink(() => noDebuff++);
+        none.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        none.AddMonster(1, "giant rat");
+        none.Feed("Also here: giant rat.");
+        Assert.Equal(1, noDebuff);                   // no debuff set: the attack goes with nothing ahead of it
+        Assert.Contains("blast", none.AllSent);
+
+        using Harness sent = new();
+        List<string> debuffs = new();
+        noDebuff = 0;
+        sent.Combat.SetNoDebuffOnEngageSink(() => noDebuff++);
+        sent.Combat.SetBetweenRoundSlotMarker(debuffs.Add);
+        sent.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
+        sent.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        sent.AddMonster(1, "giant rat");
+        sent.Feed("Also here: giant rat.");
+        Assert.Equal(new[] { "curse" }, debuffs);    // sent, and named
+        Assert.Equal(0, noDebuff);
+
+        using Harness putOff = new();
+        noDebuff = 0;
+        putOff.Combat.SetNoDebuffOnEngageSink(() => noDebuff++);
+        putOff.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
+        putOff.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        putOff.Combat.SetInBetweenEvaluator(() => "heal");   // a heal takes the cast: the debuff is still coming
+        putOff.AddMonster(1, "giant rat");
+        putOff.Feed("Also here: giant rat.");
+        Assert.Equal(0, noDebuff);
     }
 
     // ----- backstab gate -----------------------------------------------

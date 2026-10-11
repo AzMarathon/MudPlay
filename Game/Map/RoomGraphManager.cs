@@ -11,10 +11,10 @@ namespace MudPlay.Game.Map;
 // for the navigation stack (room tracker, BFS mapper, walker, loop manager,
 // auto-lair scheduler).
 //
-// Seeding: the graph reads Rooms.json through GameDataCache.GetRawTable once per
+// Seeding: the graph reads Rooms.json through GameDataCache.GetTable once per
 // active-set switch. Every row turns into a typed Room indexed by RoomKey.
 // RoomExit values are produced inline from the per-direction MDB cells
-// ("1/3" / "1/3 (Door)" / "0"). The raw JsonDocument is evicted from
+// ("1/3" / "1/3 (Door)" / "0"). The Rooms table is evicted from
 // GameDataCache immediately after conversion (per the project's memory-hygiene
 // pattern set by MonsterOverlaySeedStore).
 //
@@ -329,7 +329,7 @@ public sealed class RoomGraphManager
             return;
         }
 
-        JsonDocument? doc = _cache.GetRawTable("Rooms");
+        GameTable? doc = _cache.GetTable("Rooms");
         if (doc is null)
         {
             _log?.Log(LogSeverity.Warn, "RoomGraph",
@@ -351,7 +351,7 @@ public sealed class RoomGraphManager
         // 57,000 of a full realm are spread over every core: read on one thread they
         // were over a second of the launch freeze. The results are folded in below in
         // row order, as a plain loop would have.
-        JsonElement[] rows = doc.RootElement.EnumerateArray().ToArray();
+        GameRow[] rows = doc.Rows.ToArray();
         RowRead[] read = new RowRead[rows.Length];
         Parallel.For(0, rows.Length, i => read[i] = ReadRow(rows[i]));
         foreach (RowRead row in read)
@@ -424,7 +424,7 @@ public sealed class RoomGraphManager
             // text / teleport exits that happen to collide with an action key
             // are left as-is.
             bool leverDoor = exit.Hint is RoomExitHint.Door or RoomExitHint.KeyLocked;
-            if (exit.Hint != RoomExitHint.MultiActionHidden && !leverDoor) continue;
+            if (!exit.AcceptsActions) continue;
 
             // With no explicit "Needs N Actions" modifier, actions that share a
             // StepNumber are redundant alternatives (e.g. two guardroom levers that
@@ -468,7 +468,7 @@ public sealed class RoomGraphManager
         ApplyStockArenaEntryBlock();
         BuildSecondaryIndexes();
 
-        // Free the raw JSON; the typed graph is the source of truth now.
+        // Hand the Rooms table back; the typed graph is the source of truth now.
         _cache.EvictTable("Rooms");
 
         _log?.Log(LogSeverity.Info, "RoomGraph",
@@ -589,13 +589,12 @@ public sealed class RoomGraphManager
 
         // Build a small id → (greet, name) map of only monsters carrying a greet,
         // then evict the raw table — memory-hygiene parity with the Rooms load.
-        JsonDocument? monstersDoc = _cache.GetRawTable("Monsters");
+        GameTable? monstersDoc = _cache.GetTable("Monsters");
         if (monstersDoc is null) return new();
 
         var greeters = new Dictionary<int, (int Greet, string Name)>();
-        foreach (JsonElement row in monstersDoc.RootElement.EnumerateArray())
+        foreach (GameRow row in monstersDoc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryReadInt(row, "Number", out int num) || num <= 0) continue;
             int greet = TryReadIntOrZero(row, "GreetTXT");
             if (greet <= 0) continue;
@@ -994,16 +993,15 @@ public sealed class RoomGraphManager
     private void BuildItemUseTeleportEdges()
     {
         if (_tbinfo is null || _spellCatalog is null) return;
-        JsonDocument? itemsDoc = _cache.GetRawTable("Items");
+        GameTable? itemsDoc = _cache.GetTable("Items");
         if (itemsDoc is null) return;
 
         // Number → "Obtained From" text, for anchoring a teleport's roomitem gate to
         // its source room. Built once; the raw Items table stays cached for the many
         // lazy runtime consumers (unlike Rooms / Monsters, it is NOT evicted here).
         Dictionary<int, string> obtainedFrom = new();
-        foreach (JsonElement row in itemsDoc.RootElement.EnumerateArray())
+        foreach (GameRow row in itemsDoc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryReadInt(row, "Number", out int num) || num <= 0) continue;
             if (TryReadString(row, "Obtained From") is { } src && !string.IsNullOrWhiteSpace(src))
                 obtainedFrom[num] = src;
@@ -1301,7 +1299,7 @@ public sealed class RoomGraphManager
     private readonly record struct RowRead(
         Room? Room, List<MultiActionExitData.ActionCell>? Actions, Dictionary<Direction, string>? Modifiers);
 
-    private static RowRead ReadRow(JsonElement row)
+    private static RowRead ReadRow(GameRow row)
     {
         if (!TryReadRoom(row, out Room room)) return default;
 
@@ -1332,10 +1330,9 @@ public sealed class RoomGraphManager
         return new RowRead(room, actions, modBucket);
     }
 
-    private static bool TryReadRoom(JsonElement row, out Room room)
+    private static bool TryReadRoom(GameRow row, out Room room)
     {
         room = null!;
-        if (row.ValueKind != JsonValueKind.Object) return false;
 
         if (!TryReadInt(row, "Map Number", out int map)) return false;
         if (!TryReadInt(row, "Room Number", out int roomNumber)) return false;
@@ -1400,9 +1397,9 @@ public sealed class RoomGraphManager
         return false;
     }
 
-    private static bool TryReadInt(JsonElement row, string property, out int value)
+    private static bool TryReadInt(GameRow row, string property, out int value)
     {
-        if (row.TryGetProperty(property, out JsonElement el) &&
+        if (row.TryGetProperty(property, out GameValue el) &&
             el.ValueKind == JsonValueKind.Number &&
             el.TryGetInt32(out value))
             return true;
@@ -1410,11 +1407,11 @@ public sealed class RoomGraphManager
         return false;
     }
 
-    private static int TryReadIntOrZero(JsonElement row, string property)
+    private static int TryReadIntOrZero(GameRow row, string property)
         => TryReadInt(row, property, out int v) ? v : 0;
 
-    private static string? TryReadString(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el) && el.ValueKind == JsonValueKind.String
+    private static string? TryReadString(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el) && el.ValueKind == JsonValueKind.String
             ? el.GetString()
             : null;
 

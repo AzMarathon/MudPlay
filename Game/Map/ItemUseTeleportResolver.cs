@@ -32,15 +32,14 @@ public static class ItemUseTeleportResolver
         int HolderItemId, string HolderItemName, int GateItemId, RoomKey Destination, int MinLevel);
 
     public static IEnumerable<ItemUseTeleport> Enumerate(
-        JsonDocument itemsDoc, KnownSpellCatalog catalog, TBInfoStore store)
+        GameTable itemsDoc, KnownSpellCatalog catalog, TBInfoStore store)
     {
         ArgumentNullException.ThrowIfNull(itemsDoc);
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(store);
 
-        foreach (JsonElement row in itemsDoc.RootElement.EnumerateArray())
+        foreach (GameRow row in itemsDoc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryReadInt(row, "Number", out int itemNumber) || itemNumber <= 0) continue;
 
             for (int i = 0; i < AbilitySlots; i++)
@@ -94,15 +93,15 @@ public static class ItemUseTeleportResolver
         return 0;
     }
 
-    private static bool TryReadInt(JsonElement row, string prop, out int value)
+    private static bool TryReadInt(GameRow row, string prop, out int value)
     {
         value = 0;
-        return row.TryGetProperty(prop, out JsonElement el)
+        return row.TryGetProperty(prop, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out value);
     }
 
-    private static string? TryReadString(JsonElement row, string prop)
-        => row.TryGetProperty(prop, out JsonElement el) && el.ValueKind == JsonValueKind.String
+    private static string? TryReadString(GameRow row, string prop)
+        => row.TryGetProperty(prop, out GameValue el) && el.ValueKind == JsonValueKind.String
             ? el.GetString() : null;
 }

@@ -4,6 +4,7 @@ using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
 using MudPlay.Game.Spells;
 using MudPlay.Services;
 
@@ -310,6 +311,46 @@ public sealed class ItemMdbViewBuilder
         }
         return new ItemMdbView(otherInfo, shops, isLight, isContainer, droppedBy, placedIn, castsSpells, summons, teleportsTo,
             roomCommands);
+    }
+
+    // Used on: one row per exit whose cell names the item as the one needed to pass (a key
+    // on a locked door, an item to carry, a ticket), "{room} - {map}/{room} - {direction}
+    // ({Key|Item|Ticket})", each linking to the room like the other room rows. Both sides
+    // of a door that names the key are two rows. A blacklisted room is left out.
+    //
+    // After those come the room actions that need the item held (a lever, a rubbed orb),
+    // one row per action cell, linking to the room the commands are typed in: "{room} -
+    // {map}/{room} - {commands} opens {direction} (Action)", with " in {other room}" when
+    // the exit is in another room, and no "opens" part when the data names no exit the
+    // action can be attached to. The commands are the alternatives the data lists, joined
+    // as the map tooltip's lever lines join them.
+    //
+    // Kept out of Build: the index behind it reads the whole Rooms table the first time
+    // it is asked, and Build also runs for an Item Finder tooltip and a message dialog,
+    // which have no use for it. Only the item record asks.
+    public IReadOnlyList<PlacedInRow> ExitUsesOf(int itemNumber)
+    {
+        static string Where(RoomKey room, string name) =>
+            string.IsNullOrEmpty(name) ? $"Room {room.Map}/{room.Room}" : $"{name} - {room.Map}/{room.Room}";
+
+        List<PlacedInRow> rows = new();
+        foreach (Game.GameData.ExitKeyUse use in Game.GameData.ItemUsedOnIndex.UsesOf(_cache, itemNumber))
+        {
+            if (_isRoomBlacklisted(use.Room.Map, use.Room.Room)) continue;
+            rows.Add(new PlacedInRow(
+                $"{Where(use.Room, use.RoomName)} - {use.Exit.ToLongName()} ({use.KindLabel})", use.Room.Map, use.Room.Room));
+        }
+        foreach (Game.GameData.ActionUse use in Game.GameData.ItemUsedOnIndex.ActionsOf(_cache, itemNumber))
+        {
+            if (_isRoomBlacklisted(use.Room.Map, use.Room.Room)) continue;
+            string commands = string.Join(" / ", use.Commands);
+            string opens = use.Opens is not { } target ? string.Empty
+                : target.Room == use.Room ? $" opens {target.Exit.ToLongName()}"
+                : $" opens {target.Exit.ToLongName()} in {Where(target.Room, target.RoomName)}";
+            rows.Add(new PlacedInRow(
+                $"{Where(use.Room, use.RoomName)} - {commands}{opens} (Action)", use.Room.Map, use.Room.Room));
+        }
+        return rows;
     }
 
     // Room command: one row per "Room(<command>) <rooms>" entry in Obtained From,

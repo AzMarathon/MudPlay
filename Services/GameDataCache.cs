@@ -379,18 +379,6 @@ public sealed class GameDataCache
         return result;
     }
 
-    // INTERIM, for the room-graph builder alone until it reads GameRows: a table
-    // parsed afresh on every call and never kept.
-    public JsonDocument? GetRawTable(string tableName)
-    {
-        if (ActiveSet is null) return null;
-        string? path;
-        lock (_tables) path = ResolveTablePath(ActiveSet, tableName);
-        if (path is null || !File.Exists(path)) return null;
-        try { return JsonDocument.Parse(File.ReadAllBytes(path)); }
-        catch (JsonException) { return null; }
-    }
-
     // One table file into its compact form, a block at a time: the file is never
     // whole in memory. The stream does no buffering of its own; the reader's block
     // is the buffer.

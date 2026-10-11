@@ -340,7 +340,8 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
             summons:          mdb.Summons,
             teleportsTo:      mdb.TeleportsTo,
             editAttachedMessage:    editMsg,
-            attachedMessageSummary: msgSummary);
+            attachedMessageSummary: msgSummary,
+            exitUses:         new ItemMdbViewBuilder(_cache, 50).ExitUsesOf(itemNum));
 
         // Replace any open item menu with the new one: a double-click on another
         // row swaps the shown item instead of opening a second window. Closing
