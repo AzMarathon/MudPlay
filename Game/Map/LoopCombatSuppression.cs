@@ -7,7 +7,9 @@ namespace MudPlay.Game.Map;
 //
 // Two independent sources suppress, ORed:
 //   - a per-waypoint DoNotAttack on the exact current room, OR
-//   - the loop-wide OnlyAttackInLairRooms while standing in a non-lair room.
+//   - the loop-wide OnlyAttackInLairRooms while standing in a non-lair room. That
+//     one is the loaded character's setting for the loop, not the loop file's
+//     (Loop.OnlyAttackInLairRooms).
 // DoNotAttack winning even on a lair room falls out of the OR (it suppresses
 // regardless of lair status). Suppression only affects the ENGAGE decision;
 // the rest-clear path bypasses it (a triggered rest still clears the room),

@@ -223,6 +223,23 @@ public sealed class EventManagerResumeTests : IDisposable
         Assert.Equal("(none)", h.Events.RunSummary);
     }
 
+    // While the event runs, the loop it goes back to is held by the event alone. It
+    // is offered up so a change to the character's settings for it can reach it.
+    [Fact]
+    public void LoopAnEventGoesBackTo_IsOfferedUpWhileTheEventRuns()
+    {
+        using Harness h = NewHarness();
+        Assert.Null(h.Events.ResumeLoop);
+        Loop loop = RunLoop(h);
+
+        h.Events.Fire(WalkToEvent(1, 3));
+        Assert.Null(h.Runner.CurrentLoop);
+        Assert.Same(loop, h.Events.ResumeLoop);
+
+        h.Events.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "arrived", new RoomKey(1, 3)));
+        Assert.Null(h.Events.ResumeLoop);
+    }
+
     // A boss room marked "stop before entering" ends the walk one room short, and
     // the walker says which room was asked for. The event has to take that as
     // arrival: waiting for the boss room itself left it running for good, Then

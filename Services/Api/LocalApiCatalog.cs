@@ -48,6 +48,8 @@ public static class LocalApiCatalog
             name = loop.Name,
             folder = loop.Folder,
             notes = loop.Notes,
+            // The next three are the loaded character's own for this loop, not the
+            // loop file's.
             favorite = loop.Favorite,
             onlyAttackInLairRooms = loop.OnlyAttackInLairRooms,
             lairEntryDebuff = loop.LairEntryDebuff.ToString(),

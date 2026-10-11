@@ -11,6 +11,12 @@
 - Paradigm: Albion takes in the rooms only a room command on the same map reaches (Chamber of Wisdom, Castle Courtyard)
 - Bug report shows the learned arrival rooms, disputes, rooms at odds with their land, and the board's contradictions of the standard list
 
+## 3.176.3
+
+- A loop's Only attack in lair rooms and Wait to enter lairs settings are now each character's own; a loop a character hasn't set them for runs with what the loop file holds
+- Ticking either no longer rewrites the shared loop file
+- `@loop send`: a loop whose name you already have is rejected when it is the same loop, and saved as `<name> 2` when it differs; your own loop and its settings are never changed
+
 ## 3.176.1
 
 - Switching game data sets is quicker: the room map's doors, teleports, boats and lookups build about three times faster, with far less memory churned

@@ -169,8 +169,9 @@ public sealed class LoopManagerTests : IDisposable
     [Fact]
     public void Save_RoundTripsCombatSuppressionFlags()
     {
-        // Loop-wide OnlyAttackInLairRooms + per-waypoint DoNotAttack must survive
-        // a save + reload.
+        // The per-waypoint DoNotAttack is the loop's and must survive a save +
+        // reload, and so must the loop-wide flag the file held from when it was
+        // shared. With no character loaded, that one is what the loop runs with.
         LoopManager m1 = NewManager();
         m1.LoadAll(_setName);
         m1.Save(new Loop("Suppress loop", new[]
@@ -178,19 +179,41 @@ public sealed class LoopManagerTests : IDisposable
             new LoopWaypoint(new RoomKey(1, 1), doNotAttack: true),
             new LoopWaypoint(new RoomKey(1, 2)),
         })
-        { OnlyAttackInLairRooms = true });
+        { SharedOnlyAttackInLairRooms = true });
 
         LoopManager m2 = NewManager();
         m2.LoadAll(_setName);
         Loop? round = m2.Get("Suppress loop");
         Assert.NotNull(round);
-        Assert.True(round!.OnlyAttackInLairRooms);
+        Assert.True(round!.SharedOnlyAttackInLairRooms);
+        Assert.True(round.OnlyAttackInLairRooms);
         Assert.True(round.Waypoints[0].DoNotAttack);
         Assert.False(round.Waypoints[1].DoNotAttack);
     }
 
-    // The loop file keeps the way of waiting before lairs by the mode's name, and
-    // reads a number too (what a shared loop carries).
+    // The two loop-wide settings a loop is saved with are the loaded character's
+    // (LoopSettingsStore), so the file every character reads gets neither.
+    [Fact]
+    public void Save_KeepsTheCharactersLoopSettingsOutOfTheFile()
+    {
+        LoopManager m1 = NewManager();
+        m1.LoadAll(_setName);
+        m1.Save(new Loop("Mine only", new[] { new RoomKey(1, 1), new RoomKey(1, 2) })
+        {
+            OnlyAttackInLairRooms = true, LairEntryDebuff = LairEntryDebuffMode.BlockSpells,
+        });
+
+        LoopManager m2 = NewManager();
+        m2.LoadAll(_setName);
+        Loop round = m2.Get("Mine only")!;
+        Assert.False(round.SharedOnlyAttackInLairRooms);
+        Assert.Equal(LairEntryDebuffMode.Off, round.SharedLairEntryDebuff);
+        Assert.False(round.OnlyAttackInLairRooms);
+        Assert.Equal(LairEntryDebuffMode.Off, round.LairEntryDebuff);
+    }
+
+    // The loop file keeps the way of waiting before lairs it held by the mode's
+    // name, and reads a number too (what a shared loop carries).
     [Theory]
     [InlineData(LairEntryDebuffMode.WaitForSpells)]
     [InlineData(LairEntryDebuffMode.BlockSpells)]
@@ -199,7 +222,7 @@ public sealed class LoopManagerTests : IDisposable
     {
         LoopManager m1 = NewManager();
         m1.LoadAll(_setName);
-        m1.Save(new Loop("Debuff loop", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }) { LairEntryDebuff = mode });
+        m1.Save(new Loop("Debuff loop", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }) { SharedLairEntryDebuff = mode });
 
         string path = Path.Combine(
             AppPaths.GameDataSetLoopsFolder(_setName), "Debuff loop" + LoopManager.LoopFileSuffix);
@@ -208,6 +231,7 @@ public sealed class LoopManagerTests : IDisposable
 
         LoopManager m2 = NewManager();
         m2.LoadAll(_setName);
+        Assert.Equal(mode, m2.Get("Debuff loop")!.SharedLairEntryDebuff);
         Assert.Equal(mode, m2.Get("Debuff loop")!.LairEntryDebuff);
     }
 

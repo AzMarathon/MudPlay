@@ -52,7 +52,9 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // Loop-wide "only attack in lair rooms" (an Entire Loop Setting). When set,
     // the loop only engages hostiles in game-data lair rooms; every other room
     // is walked through as if auto-combat were off. Mirrored by the nav rail's
-    // Entire Loop Settings flyout.
+    // Entire Loop Settings flyout. This and the lair wait below are the loaded
+    // character's settings for the loop, as Favorite is its choice: the window
+    // opens on that character's and Save keeps them for it, not in the loop file.
     [ObservableProperty] private bool _onlyAttackInLairRooms;
     [ObservableProperty] private bool _waitToDebuffBeforeLairs;
     [ObservableProperty] private int _lairDebuffWaitChoice;
@@ -411,6 +413,8 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         // Rename → delete the old file (LoopManager keys by Loop.Name
         // on disk) before saving under the new name. (Skip for a
         // brand-new loop — there's nothing on disk yet to delete.)
+        // The delete drops the character's two loop settings with the old name;
+        // the save keeps the ones set above under the new one, apart from the file.
         if (renamed && !_isNew) _loops.Delete(oldName);
         _loops.Save(_original);
         // The tick box is this character's choice, kept apart from the loop file.
