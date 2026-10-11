@@ -281,15 +281,20 @@ public sealed class RankingStampTests : IDisposable
     // ----- Reach ---------
 
     [Fact]
-    public void ReachChangesWithAvoidedRoomsClassRaceAndTheGateItemsCarried_NotWithTheirOrder()
+    public void ReachChangesWithAvoidedAndBlacklistedRoomsClassRaceAndTheGateItemsCarried_NotWithTheirOrder()
     {
         RoomKey[] avoided = { new(1, 5), new(2, 9) };
-        string made = RankingReach.Hash(avoided, 3, 2, new[] { 807, 12 });
+        RoomKey[] blacklisted = { new(4, 1), new(3, 7) };
+        string made = RankingReach.Hash(avoided, blacklisted, 3, 2, new[] { 807, 12 });
 
-        Assert.Equal(made, RankingReach.Hash(avoided.Reverse(), 3, 2, new[] { 12, 807, 12 }));
-        Assert.NotEqual(made, RankingReach.Hash(avoided.Take(1), 3, 2, new[] { 807, 12 }));
-        Assert.NotEqual(made, RankingReach.Hash(avoided, 4, 2, new[] { 807, 12 }));
-        Assert.NotEqual(made, RankingReach.Hash(avoided, 3, null, new[] { 807, 12 }));
-        Assert.NotEqual(made, RankingReach.Hash(avoided, 3, 2, new[] { 807 }));
+        Assert.Equal(made, RankingReach.Hash(avoided.Reverse(), blacklisted.Reverse(), 3, 2, new[] { 12, 807, 12 }));
+        Assert.NotEqual(made, RankingReach.Hash(avoided.Take(1), blacklisted, 3, 2, new[] { 807, 12 }));
+        Assert.NotEqual(made, RankingReach.Hash(avoided, blacklisted.Take(1), 3, 2, new[] { 807, 12 }));
+        Assert.NotEqual(made, RankingReach.Hash(avoided, blacklisted.Append(new RoomKey(9, 9)), 3, 2, new[] { 807, 12 }));
+        // A room avoided is not the same room blacklisted.
+        Assert.NotEqual(made, RankingReach.Hash(blacklisted, avoided, 3, 2, new[] { 807, 12 }));
+        Assert.NotEqual(made, RankingReach.Hash(avoided, blacklisted, 4, 2, new[] { 807, 12 }));
+        Assert.NotEqual(made, RankingReach.Hash(avoided, blacklisted, 3, null, new[] { 807, 12 }));
+        Assert.NotEqual(made, RankingReach.Hash(avoided, blacklisted, 3, 2, new[] { 807 }));
     }
 }

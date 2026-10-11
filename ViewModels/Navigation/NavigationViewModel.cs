@@ -187,13 +187,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // A ranking kept from an earlier session is listed before the character has
         // been read, marked as not checked; the first `stat` and inventory check it.
         // It is checked again on every one after, when the level changes, and when
-        // the profile (settings, avoided rooms) or a game-data edit is saved, so the
-        // mark follows the character for as long as the ranking is on show.
+        // the profile (settings, avoided rooms), a game-data edit or the realm's room
+        // blacklist is saved, so the mark follows the character for as long as the
+        // ranking is on show.
         _services.Stats.ScreenParsed += OnSimulatorStatRead;
         _services.Inventory.FullInventoryParsed += Simulator.RecheckKept;
         _services.PlayerStats.PropertyChanged += OnSimulatorPlayerStatsChanged;
         _services.Profile.ProfileSaving += OnSimulatorProfileSaving;
         _services.Resolver.GameDataChanged += OnSimulatorGameDataEdited;
+        _services.RoomBlacklist.Changed += RecheckSimulatorSoon;
     }
 
     // The loaded character as the Simulator keys its results.
@@ -387,6 +389,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.PlayerStats.PropertyChanged -= OnSimulatorPlayerStatsChanged;
         _services.Profile.ProfileSaving -= OnSimulatorProfileSaving;
         _services.Resolver.GameDataChanged -= OnSimulatorGameDataEdited;
+        _services.RoomBlacklist.Changed -= RecheckSimulatorSoon;
     }
 
     // Loops + lairs share the on-disk folder tree; a folder add / rename /

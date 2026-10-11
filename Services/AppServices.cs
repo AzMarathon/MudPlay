@@ -11597,7 +11597,8 @@ public sealed class AppServices
             built.Character,
             _rankingStamps.GameDataEdits(tiers, set),
             Game.Simulation.RankingReach.Hash(
-                Movement.Avoided, Movement.ClassNumberProvider?.Invoke(), Movement.RaceNumberProvider?.Invoke(),
+                Movement.Avoided, RoomBlacklist.Blacklisted,
+                Movement.ClassNumberProvider?.Invoke(), Movement.RaceNumberProvider?.Invoke(),
                 _simulatorGateItems.Where(IsItemCarried)));
     }
 
