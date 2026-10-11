@@ -843,6 +843,47 @@ public sealed class RemoteCommandManagerTests
         Assert.Empty(engine.LastSentForTests);
     }
 
+    // The real yell lines from other players, fed through the pattern catalog and
+    // ChatRouter into the engine: yells are chat now, but still carry no command.
+    // "Someone" is granted too, so the name alone cannot be what stops it. The say
+    // line is the control: the same text on a command channel does run.
+    [Theory]
+    [InlineData("From Alder (Yelling): \"@health\"")]
+    [InlineData("Someone yells from the north \"@health\"")]
+    [InlineData("Someone yells from above \"@health\"")]
+    [InlineData("Someone yells from below \"@health\"")]
+    [InlineData("Alder yells \"@health\"")]
+    public void RealYellLines_RunNothingAndSendNothing(string wireLine)
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        ChatRouter chat = new(router);
+        PartyState party = new();
+        PlayerDatabase players = new();
+        RemoteCommandManager engine = new(chat, party, players);
+        SeedPlayer(players, "Alder", PlayerRemoteControls.QueryHealthStatus);
+        SeedPlayer(players, "Someone", PlayerRemoteControls.QueryHealthStatus);
+        int fired = 0;
+        engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus,
+            ctx => { fired++; ctx.Reply("hi"); });
+        List<ChatLogEntry> heard = new();
+        chat.EntryClassified += heard.Add;
+
+        void Hear(string text) => router.Dispatch(new MudPlay.Terminal.LineExtractor.EmittedLine(
+            text, new MudPlay.Terminal.CellAttributes[text.Length], Now, IsPromptLine: false, IsChat: true));
+
+        Hear(wireLine);
+
+        Assert.Equal(ChatChannel.Yell, Assert.Single(heard).Channel);
+        Assert.Equal(0, fired);
+        Assert.Empty(engine.LastSentForTests);
+
+        Hear("Alder says \"@health\"");
+
+        Assert.Equal(1, fired);
+        Assert.Single(engine.LastSentForTests);
+    }
+
     [Fact]
     public void Broadcast_IsIgnoredEvenWithAuthorisedSender()
     {

@@ -57,6 +57,7 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
             _restHereHp = w.RestHereHp;
             _restHereMana = w.RestHereMana;
         }
+        _asTranslated = Settings;
     }
 
     // A row the user inserted: no .mp step on its left, its room whatever is typed in.
@@ -98,10 +99,14 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
         : IsRemoved ? "Put this step back in the loop" : "Leave this step out of the loop";
 
     // An inserted row names the room typed into it as it's typed.
-    partial void OnRoomTextChanged(string value)
+    partial void OnRoomTextChanged(string value) => NameTypedRoom();
+
+    // Named again from the map data: a room typed into an inserted row while another
+    // game data was active was named from that set's rooms.
+    public void NameTypedRoom()
     {
         if (!IsInserted) return;
-        RoomName = RoomKey.TryParseWire(value.Trim(), out RoomKey k)
+        RoomName = RoomKey.TryParseWire(RoomText.Trim(), out RoomKey k)
             ? $"{_graph.GetRoom(k)?.Name ?? "(not in map data)"}  ·  {k}"
             : "— type a map/room —";
     }
@@ -129,6 +134,18 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
     [ObservableProperty] private bool _restHereMana;
 
     public bool RoomEdited => !IsInserted && RoomText.Trim() != _originalRoomText;
+
+    // The row's command, delay and ticks, and what they were as translated, to tell
+    // what the user changed from what the translation put there.
+    private readonly (string? Command, int DelayMs, bool Stash, bool NoRest, bool NoAttack, bool RestHp, bool RestMana) _asTranslated;
+    private (string? Command, int DelayMs, bool Stash, bool NoRest, bool NoAttack, bool RestHp, bool RestMana) Settings =>
+        (string.IsNullOrWhiteSpace(Command) ? null : Command.Trim(), DelayMs, MarkStash, DoNotRest, DoNotAttack, RestHereHp, RestHereMana);
+
+    // True when the user changed this row's command, delay or ticks and rebuilt, the
+    // row a re-translation put in its place, doesn't hold them. They are carried over
+    // only where the step's room stayed the same (CopyEditsFrom).
+    public bool SettingsLostIn(MpTranslatedRowViewModel rebuilt) =>
+        !Settings.Equals(_asTranslated) && !Settings.Equals(rebuilt.Settings);
 
     public void CopyEditsFrom(MpTranslatedRowViewModel other)
     {

@@ -2002,6 +2002,15 @@ public static class BugReportBuilder
         // what @path reports when idle so a party member can help the player
         // resume the circuit they were on.
         Kv(sb, "Last run loop", loop.LastRunLoopName ?? "(none)");
+        // Whose rooms they are: a loop or marks from before a switch of game data
+        // are refused a save and a restart under another set, and a report of
+        // either needs the set each was stamped with beside the active one.
+        Kv(sb, "Running / last run loop's game data", loop.LastRunLoop is null
+            ? "(no loop run yet)"
+            : $"'{loop.LastRunLoopGameData ?? "(none)"}' (active: '{svc.GameData.ActiveSet ?? "(none)"}')");
+        Kv(sb, "Lair marks' game data", svc.AutoLair.Marked.Count == 0
+            ? "(nothing marked)"
+            : $"'{svc.AutoLair.MarksGameData ?? "(none)"}', {svc.AutoLair.Marked.Count} mark(s)");
         Kv(sb, "Last run auto-lair", svc.AutoLair.LastRunLairName ?? "(none)");
         Kv(sb, "Auto-Lair phase", svc.AutoLair.Phase.ToString());
         Kv(sb, "Auto-Lair active", svc.AutoLair.IsActive.ToString());
@@ -2132,6 +2141,17 @@ public static class BugReportBuilder
         Kv(sb, "Current room",
             roomState.CurrentRoom is { } room ? $"{room.Key.Map}/{room.Key.Room} — {room.DisplayName}" : "(unknown)");
         Kv(sb, "Room confidence", roomState.Confidence.ToString());
+        // A room the data gives no name answers to the name this realm saw for it:
+        // "the map lost me in my gang house" turns on whether one is held and on
+        // the map, or was never kept.
+        Kv(sb, "Learned room names (this realm, for the active game-data set)",
+            svc.LearnedRoomNames.RealmFolder is null
+                ? "none kept (no realm)"
+                : $"{svc.LearnedRoomNames.CountForActiveSet} held, {svc.LearnedRoomNames.OnRoomMap} on the room map"
+                    + (svc.LearnedRoomNames.ReplacedThisSession > 0
+                        ? $", {svc.LearnedRoomNames.ReplacedThisSession} replaced this session by a name the game "
+                            + "printed since (not saved)"
+                        : string.Empty));
         // A room whose cast-on-enter Spell strips buffs suppresses auto-bless —
         // a "buffs won't cast here" report needs this to explain the silence.
         Kv(sb, "Room strips buffs",

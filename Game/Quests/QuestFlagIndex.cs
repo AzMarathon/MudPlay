@@ -45,6 +45,10 @@ public sealed class QuestFlagIndex
     // mutated in place after a reader could be holding it.
     private Snapshot _snapshot = Snapshot.Empty;
     private GameDataCache.Load _builtFor;
+    // A room source's text carries the room's name, and for a room the data leaves
+    // unnamed that is a name the client learned, which changes with the realm: the
+    // cache's count of those changes, as it stood at the build.
+    private long _builtForRoomNames;
     private bool _built;
 
     // Provenance-walk safety cap — a Called-From chain is a small acyclic tree in practice, but
@@ -106,8 +110,9 @@ public sealed class QuestFlagIndex
             // The load, read before the build: a set imported again over itself
             // keeps its name, so the name alone is no test.
             GameDataCache.Load load = _cache.ActiveLoad;
-            if (_built && _builtFor == load) return _snapshot;
-            return Rebuild(load);
+            long roomNames = _cache.LearnedRoomNamesVersion;
+            if (_built && _builtFor == load && _builtForRoomNames == roomNames) return _snapshot;
+            return Rebuild(load, roomNames);
         }
     }
 
@@ -116,7 +121,7 @@ public sealed class QuestFlagIndex
     // Caller holds _gate. Builds into fresh local collections, then publishes them whole — so
     // a concurrent reader (Entries) sees either the previous snapshot or this finished one,
     // never a list being cleared/appended/sorted underneath it.
-    private Snapshot Rebuild(GameDataCache.Load load)
+    private Snapshot Rebuild(GameDataCache.Load load, long roomNames)
     {
         string? active = load.Set;
         Snapshot snapshot = Snapshot.Empty;
@@ -202,6 +207,7 @@ public sealed class QuestFlagIndex
 
         _snapshot = snapshot;
         _builtFor = load;
+        _builtForRoomNames = roomNames;
         _built = true;
         return snapshot;
     }

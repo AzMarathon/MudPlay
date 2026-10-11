@@ -181,10 +181,19 @@ public sealed class ChatRouter : IDisposable
                   ChatChannel.Gangpath,       groupPlayer: 0, groupMessage: 1);
         Subscribe(router, KnownPatterns.ConversationBroadcast,
                   ChatChannel.Broadcast,      groupPlayer: 0, groupMessage: 1);
-        // Yell combines "X yells …" + "You yell …". The player group is
-        // empty in the self-yell case; ClassifyAndEmit handles that.
-        Subscribe(router, KnownPatterns.ConversationYell,
-                  ChatChannel.Yell,           groupPlayer: 0, groupMessage: 1);
+        // Yell combines every form: "You yell …" (player group empty → speaker null =
+        // us), "From X (Yelling): …", and "Someone yells from …" (speaker "Someone",
+        // with where it came from in HeardFrom; empty for the other forms).
+        _subs.Add(router.Subscribe(KnownPatterns.ConversationYell, result =>
+        {
+            EntryClassified?.Invoke(new ChatLogEntry(
+                result.Line.Timestamp,
+                ChatChannel.Yell,
+                NullIfEmpty(SafeGroup(result, 0)),
+                SafeGroup(result, 2) ?? string.Empty,
+                result.Line.Text,
+                HeardFrom: NullIfEmpty(SafeGroup(result, 1))));
+        }));
 
         // Realm events: speaker is the moving / dropping player. Message
         // is a short verb phrase that ChatHistoryStore / Conversation
