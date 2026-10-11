@@ -4336,11 +4336,12 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
 
 ### Monster movement lines
 
-*Status: CONFIRMED 2026-09-09 (user) for yellow-indexed arrival names; CONFIRMED 2026-09-24 (user + contributor capture, PR #690) for generic movement lines*
+*Status: CONFIRMED 2026-09-09 (user) for yellow-indexed arrival names; CONFIRMED 2026-09-24 (user + contributor capture, PR #690) for generic movement lines; CONFIRMED 2026-10-10 (user; report `paradigm-20261010-231540`) for one arrival line serving a spawn and a roam*
 
 **Arrival lines carry a yellow-indexed name** *([CONFIRMED] 2026-09-09, user)*
 
 - **Arrival wording is per-monster and NOT exported.** A monster entering the room prints an arrival line; it can be the structured `"<name> <verb> into the room from <dir>."` form OR an arbitrary custom line with no such marker (e.g. `"A muckworm darts out of the mud!"`).
+- **The same arrival line is printed when the monster spawns into the room and when it roams in** *([CONFIRMED] 2026-10-10, user; report `paradigm-20261010-231540`; Realm: Paradigm)*. `A brute zombie shambles into the room from the north!` is the brute zombie's line for both, so the line alone doesn't say which happened. Which room it was printed in depends on when it prints: see *Movement & navigation → Movement on the wire — command echo, failure lines, and what actually moves you*.
 - **Constant across every monster: the name is tagged the yellow ANSI colour index** (standard 3 / bright 11) — sometimes just the name, sometimes the whole line.
   - Yellow is not strictly monster-only: the player sneak-notice line (`You notice <name> sneaking in from the <dir>.`) may also be painted yellow (see *Movement & navigation → Observing another player's failed sneak into your room*).
 - **This is an index, not a rendered colour.** The user confirmed the arrival name's yellow index is **not remapped or stripped by the client palette** — a custom palette only changes how index 3 *looks*, not that the cell carries index 3. So the index is the one palette-stable signal.
@@ -4403,6 +4404,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **A command sent while a move is in flight runs in the room you land in.** *([OBSERVED] Paradigm, report `paradigm-20260927-121050`.)*
   - The capture: `d` / `Sneaking...` / `smit` / `sn`, then the Arena display (`Also here: big carrion beast.`), *then* `You cast smite on Raijin!` and `You may not sneak right now!`. The cast went off in the Arena and broke sneak there.
   - **Client use:** `SneakGuard.Holds` (its `MoveInFlight` hold) holds sneak-maintenance casts while our move is in flight (RoomTracker Pending), via `CastingDirector.SetStealthMaintenanceDeferGate`. (An earlier note named a `StealthCastHold.ShouldHold`; that class is gone, corrected 2026-10-10.)
+  - A second capture *([OBSERVED] Paradigm, report `paradigm-20261010-231540`)*: `w` / `The brute zombie swings at you with its arm!` / `aslt brute zombie`, then the next room's display (`Also here: brute zombie, brute zombie, brute zombie.`), *then* `*Combat Engaged*`. The attack sent at the monster in the room being left began the fight in the room landed in.
+  - **Client use:** `CombatManager.OnAttackedInSelfDefense` and `CombatManager.HoldsNewFightForOurMove` open no fight on a swing or a hit line while our move is in flight and no fight of ours is on (`SetMoveInFlightProbe`). The landing room's display decides, and a refused move (`NoteMoveRefused`) answers the attacker in the room we stayed in (report `paradigm-20261010-231540`).
 - **Moves sent ahead run one at a time in the order sent, and a refusal comes in its own turn, so it can answer an older move than the last one sent.** *([OBSERVED] 2026-10-09, report `paradigm-20261009-082958`; Realm: Paradigm)*
   - The capture: five `w` went out from Ghille Village, Docks `14/3799`, two in the same second and then one behind each of the first three room displays. The game showed four rooms a second or two apart (`Ghille Pond, Near Docks`, `Ghille Pond`, `Ghille Pond`, `Ghille Pond, Outflow`), then printed `There is no exit in that direction!` for the fifth, straight after the Outflow's display (`Obvious exits: south, east, northeast, northwest, southeast`) and ahead of the prompt carrying the next move, `nw`.
   - The three `nw` sent next all ran, through `14/3944` and `14/3945` to `14/3946`, where a fourth was refused and an `rm` answered `Location:            14,3946`.

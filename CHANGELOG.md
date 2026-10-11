@@ -1,5 +1,11 @@
 # Version history
 
+## 3.172.1
+
+- A monster swinging at you as you step out of its room is no longer attacked from there; the attack used to land in the next room
+- A lair entered that way opens with its debuff, then the room attack
+- bug reports addressed: paradigm-20261010-231540
+
 ## 3.172.0
 
 - Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay

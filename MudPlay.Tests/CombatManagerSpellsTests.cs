@@ -712,6 +712,159 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("a giant rat", h.LastSent);
     }
 
+    // ----- a swing while our move is in flight (report paradigm-20261010-231540) -----
+
+    // A loop that only attacks in lairs walks through a room with one brute zombie in
+    // it and sends its step into the lair next door. From then combat reads as on (the
+    // lair is what it is judged against) though the character still stands outside.
+    // deferPost: the game's lines come in between a dispatch being scheduled and run.
+    private static Harness AtTheLairDoorstepWithTheStepSent(out Action land)
+    {
+        Harness h = new(deferPost: true);
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "aslt" };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "isto", MinEnemies = 2, MaxCastsPerRoom = 1 };
+        h.AddMonster(2739, "brute zombie");
+        bool moving = false;
+        h.Combat.SetMoveInFlightProbe(() => moving);
+        land = () => moving = false;
+
+        h.Feed("*Combat Off*");                     // the last lair's fight ended
+        h.AutoCombatEnabled = false;                // not a lair: combat suppressed here
+        h.Feed("Also here: brute zombie.");
+        h.DrainPosted();
+        Assert.Empty(h.Sent);
+
+        h.Combat.NotePreMove();
+        h.Combat.NoteMoveSent();
+        moving = true;
+        h.AutoCombatEnabled = true;
+        return h;
+    }
+
+    // The capture, line for line: the zombie swings as we leave, three more shamble in
+    // before the lair displays, and the first one follows us in. Nothing is sent from
+    // the room being left, and the lair opens as any lair does: debuff, then room attack.
+    // Whichever room the three shambled into, the lair's own display decides.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_IsNotAnswered_AndTheLairOpensWithItsDebuff()
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out Action land);
+
+        h.Feed("The brute zombie swings at you, but you dodge out of the way!");
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.DrainPosted();
+        Assert.Empty(h.Sent);
+        Assert.Null(h.Combat.CurrentTarget);
+
+        h.Arrive("brute zombie");
+        h.Arrive("brute zombie");
+        h.Arrive("brute zombie");
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie.");
+        land();
+        h.Arrive("brute zombie");
+        h.DrainPosted();
+
+        Assert.Equal(new[] { "isto", "hsto" }, h.AllSent);
+    }
+
+    // The same swing with the step refused: we never left, so it is answered.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_MoveRefused_IsAnsweredInTheRoomWeStayedIn()
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out Action land);
+
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.DrainPosted();
+        Assert.Empty(h.Sent);
+
+        land();
+        h.Combat.NoteMoveRefused();
+        h.DrainPosted();
+
+        Assert.Equal(new[] { "aslt brute zombie" }, h.AllSent);
+    }
+
+    // With the last fight's *Combat Off* still standing, any hit line wakes the
+    // re-attack: a party member's hit on the monster, or the monster's named attack
+    // landing on us, which is not worded as a swing.
+    [Theory]
+    [InlineData("Bob hits the brute zombie for 30 damage!")]
+    [InlineData("The brute zombie crushes you with a huge fist for 3 damage!")]
+    public void HitLineWhileOurMoveIsInFlight_OpensNoFightInTheRoomBeingLeft(string line)
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out _);
+
+        h.Feed(line);
+        h.DrainPosted();
+
+        Assert.Empty(h.Sent);
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    // A Friend that hit us as we left stays behind. The room we land in holds another of
+    // its name: that one never attacked, and is left alone until it does.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_AttackerStaysBehind_ItsNamesakeNextDoorIsLeftAlone()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "big gravedigger");
+        h.SetOverlay(1, relationship: MonsterRelationship.Friend);
+        bool moving = false;
+        h.Combat.SetMoveInFlightProbe(() => moving);
+
+        h.Feed("Also here: big gravedigger.");
+        moving = true;
+        h.Feed("The big gravedigger hits you for 12 damage!");
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("gravedigger"));
+
+        h.Feed("Also here: big gravedigger.");      // the room we land in
+        moving = false;
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("gravedigger"));
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.False(h.Combat.IsUserEngagedInstance("big gravedigger"));
+
+        h.Feed("The big gravedigger hits you for 12 damage!");
+        Assert.Equal("a big gravedigger", h.LastSent);
+    }
+
+    // The room we land in is empty: nothing is left to attack and no target stands.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_AttackerStaysBehind_EmptyRoomLeavesNoTarget()
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out Action land);
+
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.Classifier.NoteRoomChanged();
+        land();
+        h.DrainPosted();
+
+        Assert.Empty(h.Sent);
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    // A Friend that hit us with the step refused is fought back, as it is with no move.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_FriendAttacker_MoveRefused_IsFoughtBack()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "big gravedigger");
+        h.SetOverlay(1, relationship: MonsterRelationship.Friend);
+        bool moving = true;
+        h.Combat.SetMoveInFlightProbe(() => moving);
+
+        h.Feed("Also here: big gravedigger.");
+        h.Feed("The big gravedigger hits you for 12 damage!");
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("gravedigger"));
+
+        moving = false;
+        h.Combat.NoteMoveRefused();
+
+        Assert.Equal("a big gravedigger", h.LastSent);
+    }
+
     // Post-kill re-engage race (reports 081053, 081654, 103708, 135433). Each realm
     // gives monsters custom death messages we can't map to the flavored target, so
     // the specific-death matcher misses and combat used to re-cast at the corpse on
