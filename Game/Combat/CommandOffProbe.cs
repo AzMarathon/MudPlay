@@ -65,6 +65,10 @@ public sealed class CommandOffProbe : IDisposable
     // from a handler of that line.
     public string? CommandAnswered => _previousLineWasExp ? null : _echoSinceExp;
 
+    // Whether the line now being dispatched comes straight after an exp line, with
+    // at most a redrawn prompt between them: where a kill's own *Combat Off* stands.
+    public bool FollowsExpLine => _previousLineWasExp;
+
     // Runs ahead of every pattern handler of the same line, so by the time one asks,
     // the fields are about the lines before it. A redrawn prompt is not a line of
     // its own: it neither separates an exp line from its Off nor ends an echo.

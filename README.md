@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.169.6**
+> **Version 3.170.5**
 > - Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held until after the fight
 > - Every lair wait also holds while mana is under the debuff's Min mana per cast (nav chip: Waiting for Mana to Debuff)
 > - A lair wait ends at once when the loop is stopped or paused, or Auto-Combat or the master switch goes off

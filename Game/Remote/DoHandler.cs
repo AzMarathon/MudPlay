@@ -51,6 +51,14 @@ public sealed class DoHandler : IDisposable
         _wireSender = sender;
     }
 
+    // Who asked for the command going out right now, while it is being sent; null
+    // otherwise. The send is the gate-wrapped one, so to an outbound observer the
+    // line is the client's; a `break` asked for this way holds the combat engine's
+    // attack as the user's own does (user, 2026-10-10), and the observer that reads
+    // it needs to know the line is one of these, and whose. Read at the wire, so a
+    // line the gate dropped holds nothing.
+    public string? SendingFor { get; private set; }
+
     // Test seam — most recent bytes the handler asked to write.
     internal List<byte[]> LastSentForTests { get; } = new();
 
@@ -74,7 +82,9 @@ public sealed class DoHandler : IDisposable
         string command = string.Join(" ", ctx.Args);
         byte[] bytes = Encoding.Latin1.GetBytes(command + "\r");
         LastSentForTests.Add(bytes);
-        _wireSender(bytes);
+        SendingFor = ctx.Sender;
+        try { _wireSender(bytes); }
+        finally { SendingFor = null; }
         _log?.Log(LogSeverity.Info, "RemoteCmd",
             $"@do from {ctx.Sender}: '{command}'");
         // Acknowledge the request — sender gets {ok} on the same

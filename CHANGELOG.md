@@ -1,6 +1,6 @@
 # Version history
 
-## 3.169.6
+## 3.170.5
 
 - Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held until after the fight
 - Every lair wait also holds while mana is under the debuff's Min mana per cast (nav chip: Waiting for Mana to Debuff)
@@ -8,6 +8,20 @@
 - A buff you can't pay for is passed over for the next due buff, not waited behind
 - Entire Loop Settings offers the lair wait while a loop walks to its first room
 - Program log and bug report say what a lair wait is for, what it holds back and why it ended
+
+## 3.170.0
+
+- A `break` you type holds Auto-Combat's attack until you attack, the monster dies or leaves, or you leave the room
+- A party member's `@do break` or `@party break` holds it the same way; an attack they relay lifts it
+- The hold ends when any monster of that name dies or leaves
+- A round with no attack from it makes the client look at the room: gone ends the hold, still listed keeps it; in the dark the silence alone ends it
+- A neutral you hit and then broke from isn't fought again until you attack it again
+- A flee still runs under the hold; a loop or walk waits
+- Typed `backstab`, `punch`, `kick` and `jumpkick` count as taking the round yourself; a text exit such as `jump pool` doesn't
+- Room-spell kills are counted against every monster the room listed, neutrals included
+- Only the room spell's own damage line counts as the spell landing
+- Stock: a room spell is left running through the `*Combat Off*` after its kill
+- Temp-death response goes out once for a room spell's kills, mixed rooms included
 
 ## 3.169.1
 
