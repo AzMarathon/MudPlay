@@ -93,10 +93,10 @@ public static class BankCatalog
     private static IEnumerable<(int Number, string Name, int Map, int Room)> EnumerateRaw(GameDataCache gameData)
     {
         ArgumentNullException.ThrowIfNull(gameData);
-        JsonDocument? doc = gameData.GetRawTable("Shops");
+        GameTable? doc = gameData.GetTable("Shops");
         if (doc is null) yield break;
 
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        foreach (GameRow el in doc.Rows)
         {
             if (GetInt(el, "ShopType") != BankShopType) continue;
 
@@ -107,11 +107,11 @@ public static class BankCatalog
         }
     }
 
-    private static int GetInt(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out JsonElement v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n)
+    private static int GetInt(GameRow el, string prop) =>
+        el.TryGetProperty(prop, out GameValue v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n)
             ? n : 0;
 
-    private static string GetString(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out JsonElement v) && v.ValueKind == JsonValueKind.String
+    private static string GetString(GameRow el, string prop) =>
+        el.TryGetProperty(prop, out GameValue v) && v.ValueKind == JsonValueKind.String
             ? v.GetString() ?? string.Empty : string.Empty;
 }

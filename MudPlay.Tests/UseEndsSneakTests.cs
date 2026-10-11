@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Map;
 using MudPlay.Game.Stealth;
@@ -90,7 +89,7 @@ public sealed class UseEndsSneakTests : IDisposable
         List<ItemUseStealthRule.Facts> records = new();
         foreach (Dictionary<string, string> table in new[] { Items, Namesakes })
             if (table.TryGetValue(name, out string? json))
-                records.Add(ItemUseStealthRule.Facts.Read(JsonDocument.Parse(json).RootElement, TargetsOf));
+                records.Add(ItemUseStealthRule.Facts.Read(TestRows.Row(json), TargetsOf));
         return records;
     }
 

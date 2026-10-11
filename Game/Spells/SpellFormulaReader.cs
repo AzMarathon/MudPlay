@@ -1,9 +1,10 @@
 using System.Collections.Generic;
 using System.Text.Json;
+using MudPlay.Services;
 
 namespace MudPlay.Game.Spells;
 
-// Projects a raw Spells-table row into a SpellFormulaInput — the level-scaling
+// Projects a Spells-table row into a SpellFormulaInput — the level-scaling
 // fields (Min/Max base + slope, duration, cap, energy, mana) plus the 10
 // Abil-N / AbilVal-N slots. Shared so the class spell-book catalog and the
 // monster catalog read a spell's formula the same way instead of each
@@ -12,7 +13,7 @@ public static class SpellFormulaReader
 {
     private const int AbilitySlots = 10;
 
-    public static SpellFormulaInput Read(JsonElement row)
+    public static SpellFormulaInput Read(GameRow row)
     {
         List<SpellAbility> abilities = new();
         for (int x = 0; x < AbilitySlots; x++)
@@ -45,9 +46,9 @@ public static class SpellFormulaReader
         };
     }
 
-    private static int ReadInt(JsonElement row, string property)
+    private static int ReadInt(GameRow row, string property)
     {
-        if (!row.TryGetProperty(property, out JsonElement el)) return 0;
+        if (!row.TryGetProperty(property, out GameValue el)) return 0;
         if (el.ValueKind != JsonValueKind.Number) return 0;
         return el.TryGetInt32(out int n) ? n : 0;
     }

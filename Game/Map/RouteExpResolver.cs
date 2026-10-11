@@ -255,15 +255,14 @@ public sealed class RouteExpResolver : IDisposable
     {
         if (_spellTextBlocks is not null) return _spellTextBlocks;
         var map = new Dictionary<int, (int, string)>();
-        if (_cache.GetRawTable("Spells") is { } doc && doc.RootElement.ValueKind == JsonValueKind.Array)
+        if (_cache.GetTable("Spells") is { } doc)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (row.ValueKind != JsonValueKind.Object) continue;
                 SpellFormulaInput spell = SpellFormulaReader.Read(row);
                 int tb = SpellTextBlock.First(spell);
                 if (spell.Number <= 0 || tb <= 0) continue;
-                string name = row.TryGetProperty("Name", out JsonElement nm) && nm.ValueKind == JsonValueKind.String
+                string name = row.TryGetProperty("Name", out GameValue nm) && nm.ValueKind == JsonValueKind.String
                     ? nm.GetString()?.Trim() ?? string.Empty : string.Empty;
                 map[spell.Number] = (tb, name);
             }
@@ -277,12 +276,12 @@ public sealed class RouteExpResolver : IDisposable
     {
         if (_tbActions is not null) return _tbActions;
         var map = new Dictionary<int, string>();
-        if (_cache.GetRawTable("TBInfo") is { } doc && doc.RootElement.ValueKind == JsonValueKind.Array)
+        if (_cache.GetTable("TBInfo") is { } doc)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Number", out JsonElement n) || !n.TryGetInt32(out int id)) continue;
-                if (row.TryGetProperty("Action", out JsonElement a) && a.ValueKind == JsonValueKind.String)
+                if (!row.TryGetProperty("Number", out GameValue n) || !n.TryGetInt32(out int id)) continue;
+                if (row.TryGetProperty("Action", out GameValue a) && a.ValueKind == JsonValueKind.String)
                     map[id] = a.GetString() ?? string.Empty;
             }
         }
@@ -390,21 +389,21 @@ public sealed class RouteExpResolver : IDisposable
     {
         if (_monsters is not null) return _monsters;
         var map = new Dictionary<int, MonsterInfo>();
-        if (_cache.GetRawTable("Monsters") is { } doc && doc.RootElement.ValueKind == JsonValueKind.Array)
+        if (_cache.GetTable("Monsters") is { } doc)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Number", out JsonElement n) || !n.TryGetInt32(out int id)) continue;
-                int baseExp = row.TryGetProperty("EXP", out JsonElement e) && e.TryGetInt32(out int ev) ? ev : 0;
+                if (!row.TryGetProperty("Number", out GameValue n) || !n.TryGetInt32(out int id)) continue;
+                int baseExp = row.TryGetProperty("EXP", out GameValue e) && e.TryGetInt32(out int ev) ? ev : 0;
                 // True exp is EXP × ExpMulti (the boss/exp multiplier). The Game-Data
                 // browser already displays it this way; the estimator read only EXP
                 // before, so a ×20 boss showed 1/20th its real value.
-                int multi = row.TryGetProperty("ExpMulti", out JsonElement em) && em.TryGetInt32(out int mvv) && mvv > 0 ? mvv : 1;
-                int regen = row.TryGetProperty("RegenTime", out JsonElement rt) && rt.TryGetInt32(out int rv) ? rv : 0;
-                int limit = row.TryGetProperty("GameLimit", out JsonElement gl) && gl.TryGetInt32(out int lv) ? lv : 0;
-                string name = row.TryGetProperty("Name", out JsonElement nm) && nm.ValueKind == JsonValueKind.String
+                int multi = row.TryGetProperty("ExpMulti", out GameValue em) && em.TryGetInt32(out int mvv) && mvv > 0 ? mvv : 1;
+                int regen = row.TryGetProperty("RegenTime", out GameValue rt) && rt.TryGetInt32(out int rv) ? rv : 0;
+                int limit = row.TryGetProperty("GameLimit", out GameValue gl) && gl.TryGetInt32(out int lv) ? lv : 0;
+                string name = row.TryGetProperty("Name", out GameValue nm) && nm.ValueKind == JsonValueKind.String
                     ? nm.GetString() ?? string.Empty : string.Empty;
-                int deathSpell = row.TryGetProperty("DeathSpell", out JsonElement ds) && ds.TryGetInt32(out int dv) ? dv : 0;
+                int deathSpell = row.TryGetProperty("DeathSpell", out GameValue ds) && ds.TryGetInt32(out int dv) ? dv : 0;
                 bool isBoss = Game.GameData.BossCatalog.IsBoss(limit);
                 map[id] = new MonsterInfo(baseExp * multi, isBoss, Math.Max(1, regen), name, deathSpell, regen > 0);
             }
@@ -421,18 +420,18 @@ public sealed class RouteExpResolver : IDisposable
     {
         if (_summonSpells is not null) return _summonSpells;
         var map = new Dictionary<int, List<int>>();
-        if (_cache.GetRawTable("Spells") is { } doc && doc.RootElement.ValueKind == JsonValueKind.Array)
+        if (_cache.GetTable("Spells") is { } doc)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Number", out JsonElement n) || !n.TryGetInt32(out int id)) continue;
-                if (row.TryGetProperty("Targets", out JsonElement t) && t.TryGetInt32(out int targets) && targets is 0 or 8) continue;
+                if (!row.TryGetProperty("Number", out GameValue n) || !n.TryGetInt32(out int id)) continue;
+                if (row.TryGetProperty("Targets", out GameValue t) && t.TryGetInt32(out int targets) && targets is 0 or 8) continue;
                 List<int>? ids = null;
                 // Slots are Abil-0..Abil-N / AbilVal-0..AbilVal-N; walk while the pair exists.
-                for (int i = 0; row.TryGetProperty($"Abil-{i}", out JsonElement ab); i++)
+                for (int i = 0; row.TryGetProperty($"Abil-{i}", out GameValue ab); i++)
                 {
                     if (ab.TryGetInt32(out int abv) && abv == SummonAbility
-                        && row.TryGetProperty($"AbilVal-{i}", out JsonElement av) && av.TryGetInt32(out int mon) && mon > 0)
+                        && row.TryGetProperty($"AbilVal-{i}", out GameValue av) && av.TryGetInt32(out int mon) && mon > 0)
                         (ids ??= new List<int>()).Add(mon);
                 }
                 if (ids is not null) map[id] = ids;

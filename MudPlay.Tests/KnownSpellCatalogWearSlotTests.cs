@@ -1,5 +1,5 @@
-using System.Text.Json;
 using MudPlay.Game.Spells;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -10,8 +10,8 @@ namespace MudPlay.Tests;
 // Armour, Worn=12 Off-Hand) mislabeled itself "Weapon Hand", stranding the swap.
 public sealed class KnownSpellCatalogWearSlotTests
 {
-    private static JsonElement Row(int itemType, int worn)
-        => JsonDocument.Parse($"{{\"ItemType\":{itemType},\"Worn\":{worn}}}").RootElement;
+    private static GameRow Row(int itemType, int worn)
+        => TestRows.Row($"{{\"ItemType\":{itemType},\"Worn\":{worn}}}");
 
     [Theory]
     [InlineData(0, 12, "Off-Hand")]    // engraved warhorn: Armour worn off-hand (the bug)

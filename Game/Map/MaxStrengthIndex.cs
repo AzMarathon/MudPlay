@@ -72,9 +72,9 @@ public sealed class MaxStrengthIndex
 
     private int Compute()
     {
-        JsonDocument? races = _cache.GetRawTable("Races");
-        JsonDocument? classes = _cache.GetRawTable("Classes");
-        JsonDocument? items = _cache.GetRawTable("Items");
+        GameTable? races = _cache.GetTable("Races");
+        GameTable? classes = _cache.GetTable("Classes");
+        GameTable? items = _cache.GetTable("Items");
         if (races is null || classes is null || items is null)
             return DoorPolicy.UnbashableStrengthThreshold;
 
@@ -88,11 +88,10 @@ public sealed class MaxStrengthIndex
         //    (ParaMUD's floating spheres), ungated by class / StrReq. Only one item may be
         //    held per pool, so a pool contributes its single strongest +Strength piece;
         //    distinct pools stack.
-        List<(JsonElement Row, int Bonus, EquipmentSlot Slot)> candidates = new();
+        List<(GameRow Row, int Bonus, EquipmentSlot Slot)> candidates = new();
         Dictionary<int, int> bestPerPool = new();
-        foreach (JsonElement row in items.RootElement.EnumerateArray())
+        foreach (GameRow row in items.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             int bonus = StrengthBonus(row, ItemAbilitySlots);
 
             if (TryUniquePool(row, out int pool))
@@ -109,9 +108,8 @@ public sealed class MaxStrengthIndex
         }
 
         int bestGear = 0;
-        foreach (JsonElement classRow in classes.RootElement.EnumerateArray())
+        foreach (GameRow classRow in classes.Rows)
         {
-            if (classRow.ValueKind != JsonValueKind.Object) continue;
             string? name = ReadString(classRow, "Name");
             if (string.IsNullOrWhiteSpace(name)) continue;
             ClassEquipProfile cp = ItemEquipFilter.ResolveClassProfile(_cache, name);
@@ -125,12 +123,11 @@ public sealed class MaxStrengthIndex
     }
 
     // Highest trainable Strength across races: Races.xSTR plus any innate +Strength.
-    private static int MaxRacialStrength(JsonDocument races)
+    private static int MaxRacialStrength(GameTable races)
     {
         int best = 0;
-        foreach (JsonElement race in races.RootElement.EnumerateArray())
+        foreach (GameRow race in races.Rows)
         {
-            if (race.ValueKind != JsonValueKind.Object) continue;
             int str = ReadInt(race, "xSTR") + StrengthBonus(race, RaceAbilitySlots);
             if (str > best) best = str;
         }
@@ -140,11 +137,11 @@ public sealed class MaxStrengthIndex
     // Sum of the strongest wearable +Strength item per slot for one class; the doubled
     // Finger / Wrist slots count their best piece twice.
     private static int GearBonusForClass(
-        IReadOnlyList<(JsonElement Row, int Bonus, EquipmentSlot Slot)> candidates,
+        IReadOnlyList<(GameRow Row, int Bonus, EquipmentSlot Slot)> candidates,
         ClassEquipProfile cp)
     {
         Dictionary<EquipmentSlot, int> bestPerSlot = new();
-        foreach ((JsonElement row, int bonus, EquipmentSlot slot) in candidates)
+        foreach ((GameRow row, int bonus, EquipmentSlot slot) in candidates)
         {
             // level 0 / null alignment ⇒ only class + weapon/armour-type gating applies.
             if (!ItemEquipFilter.CanEquip(row, level: 0, cp, alignment: null)) continue;
@@ -163,7 +160,7 @@ public sealed class MaxStrengthIndex
     private static int PhysicalSlots(EquipmentSlot slot) =>
         slot is EquipmentSlot.Finger1 or EquipmentSlot.Wrist1 ? 2 : 1;
 
-    private static int StrengthBonus(JsonElement row, int slots)
+    private static int StrengthBonus(GameRow row, int slots)
     {
         int sum = 0;
         for (int i = 0; i < slots; i++)
@@ -177,7 +174,7 @@ public sealed class MaxStrengthIndex
     // A Unique-Pool (code 188) item's stats apply while carried, not worn; its AbilVal is
     // the pool id, and only one item per pool may be held. Returns false when the row
     // carries no such flag (so it flows through the normal worn/wielded gear path).
-    private static bool TryUniquePool(JsonElement row, out int pool)
+    private static bool TryUniquePool(GameRow row, out int pool)
     {
         for (int i = 0; i < ItemAbilitySlots; i++)
         {
@@ -189,12 +186,12 @@ public sealed class MaxStrengthIndex
         return false;
     }
 
-    private static int ReadInt(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el)
+    private static int ReadInt(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el)
            && el.ValueKind == JsonValueKind.Number
            && el.TryGetInt32(out int v) ? v : 0;
 
-    private static string? ReadString(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el)
+    private static string? ReadString(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el)
            && el.ValueKind == JsonValueKind.String ? el.GetString() : null;
 }

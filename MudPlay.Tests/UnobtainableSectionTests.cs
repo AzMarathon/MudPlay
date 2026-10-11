@@ -1,6 +1,5 @@
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using MudPlay.Game.GameData;
 using MudPlay.Services;
@@ -145,7 +144,6 @@ public sealed class UnobtainableSectionTests : IDisposable
     [InlineData("[0]", false)]                   // not a row
     public void InGameFlag_OnlyAnExplicitNumericZeroIsOutOfPlay(string json, bool outOfPlay)
     {
-        using JsonDocument doc = JsonDocument.Parse(json);
-        Assert.Equal(outOfPlay, InGameFlag.IsOutOfPlay(doc.RootElement));
+        Assert.Equal(outOfPlay, InGameFlag.IsOutOfPlay(TestRows.Row(json)));
     }
 }

@@ -1,5 +1,5 @@
-using System.Text.Json;
 using MudPlay.Models.GameData;
+using MudPlay.Services;
 
 namespace MudPlay.Game.Spells;
 
@@ -50,11 +50,10 @@ public sealed class SummonLineSet
     }
 
     // The Spells-table numbers of every spell with a Summon ability.
-    public static IReadOnlyList<int> SummonSpells(JsonElement spellsTable)
+    public static IReadOnlyList<int> SummonSpells(GameTable spellsTable)
     {
         List<int> summons = new();
-        if (spellsTable.ValueKind != JsonValueKind.Array) return summons;
-        foreach (JsonElement row in spellsTable.EnumerateArray())
+        foreach (GameRow row in spellsTable.Rows)
         {
             SpellFormulaInput formula = SpellFormulaReader.Read(row);
             if (formula.Abilities.Any(a => a.Code == AbilSummon)) summons.Add(formula.Number);

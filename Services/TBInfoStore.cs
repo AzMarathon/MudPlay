@@ -6,8 +6,8 @@ namespace MudPlay.Services;
 
 // In-memory index of TBInfo.json for the active game-data set. Mirrors
 // RoomGraphManager's lifecycle: subscribes to GameDataCache.ActiveSetChanged,
-// loads the raw JSON via GameDataCache.GetRawTable, evicts the document after
-// typed conversion (memory-hygiene parity), and re-publishes StoreReloaded for
+// loads the table via GameDataCache.GetTable, evicts it after typed
+// conversion (memory-hygiene parity), and re-publishes StoreReloaded for
 // consumers. The teleport handler parses each entry's Action directive chain
 // into the keyword → destination map the walker uses.
 public sealed class TBInfoStore
@@ -59,7 +59,7 @@ public sealed class TBInfoStore
             return;
         }
 
-        JsonDocument? doc = _cache.GetRawTable("TBInfo");
+        GameTable? doc = _cache.GetTable("TBInfo");
         if (doc is null)
         {
             _log?.Log(LogSeverity.Info, "TBInfo",
@@ -70,7 +70,7 @@ public sealed class TBInfoStore
 
         int parsed = 0;
         int skipped = 0;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             if (!TryReadEntry(row, out TBInfoEntry? entry))
             {
@@ -90,24 +90,23 @@ public sealed class TBInfoStore
         StoreReloaded?.Invoke();
     }
 
-    private static bool TryReadEntry(JsonElement row, out TBInfoEntry entry)
+    private static bool TryReadEntry(GameRow row, out TBInfoEntry entry)
     {
         entry = null!;
-        if (row.ValueKind != JsonValueKind.Object) return false;
 
-        if (!row.TryGetProperty("Number", out JsonElement nEl)
+        if (!row.TryGetProperty("Number", out GameValue nEl)
             || nEl.ValueKind != JsonValueKind.Number
             || !nEl.TryGetInt32(out int number)
             || number <= 0)
             return false;
 
         int linkTo = 0;
-        if (row.TryGetProperty("LinkTo", out JsonElement linkEl)
+        if (row.TryGetProperty("LinkTo", out GameValue linkEl)
             && linkEl.ValueKind == JsonValueKind.Number)
             linkEl.TryGetInt32(out linkTo);
 
         string? action = null;
-        if (row.TryGetProperty("Action", out JsonElement actEl)
+        if (row.TryGetProperty("Action", out GameValue actEl)
             && actEl.ValueKind == JsonValueKind.String)
         {
             action = actEl.GetString();
@@ -118,7 +117,7 @@ public sealed class TBInfoStore
         }
 
         string? calledFrom = null;
-        if (row.TryGetProperty("Called From", out JsonElement cfEl)
+        if (row.TryGetProperty("Called From", out GameValue cfEl)
             && cfEl.ValueKind == JsonValueKind.String)
             calledFrom = cfEl.GetString();
 

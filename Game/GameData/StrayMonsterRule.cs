@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using MudPlay.Game.Map;
+using MudPlay.Services;
 
 namespace MudPlay.Game.GameData;
 
@@ -20,15 +21,14 @@ public static class StrayMonsterRule
 {
     // Out of play for either reason: flagged by the game data, or a stray as above.
     // getRoom null skips the stray check (no room graph to check it against).
-    public static bool IsOutOfPlay(JsonElement row, Func<RoomKey, Room?>? getRoom)
+    public static bool IsOutOfPlay(GameRow row, Func<RoomKey, Room?>? getRoom)
         => InGameFlag.IsOutOfPlay(row) || (getRoom is not null && IsStray(row, getRoom));
 
-    public static bool IsStray(JsonElement row, Func<RoomKey, Room?> getRoom)
+    public static bool IsStray(GameRow row, Func<RoomKey, Room?> getRoom)
     {
-        if (row.ValueKind != JsonValueKind.Object) return false;
-        if (!row.TryGetProperty("Number", out JsonElement numEl) || !numEl.TryGetInt32(out int number))
+        if (!row.TryGetProperty("Number", out GameValue numEl) || !numEl.TryGetInt32(out int number))
             return false;
-        if (!row.TryGetProperty("Summoned By", out JsonElement sbEl) || sbEl.ValueKind != JsonValueKind.String)
+        if (!row.TryGetProperty("Summoned By", out GameValue sbEl) || sbEl.ValueKind != JsonValueKind.String)
             return false;
 
         // Token by token over the text, not split up front: a wandering monster lists

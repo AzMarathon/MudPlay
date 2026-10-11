@@ -363,6 +363,52 @@ public sealed class LoopManager
     public Loop? Get(string name) =>
         _loops.TryGetValue(name, out Loop? loop) ? loop : null;
 
+    // "<name> 2", or the next number up that no loop has: what a loop is saved as
+    // when its own name belongs to another loop, so that one is never overwritten.
+    // Names are matched without case, as the catalogue matches them.
+    public string NumberedName(string name)
+    {
+        for (int n = 2; ; n++)
+        {
+            string candidate = $"{name} {n}";
+            if (!_loops.ContainsKey(candidate)) return candidate;
+        }
+    }
+
+    // The same rule read the other way: the number n when candidate is "<name> <n>"
+    // exactly as NumberedName writes it (one space, then digits only, 2 or more, no
+    // leading zero, the name matched without case), and 0 for any other name. So a
+    // loop the user named "<name> 2a", "<name>2" or "<name> (old)" is not taken for
+    // a numbered copy. The two must change together.
+    public static int NumberedCopyOf(string candidate, string name)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        ArgumentNullException.ThrowIfNull(name);
+        if (candidate.Length <= name.Length + 1
+            || !candidate.StartsWith(name, StringComparison.OrdinalIgnoreCase)
+            || candidate[name.Length] != ' ')
+            return 0;
+        ReadOnlySpan<char> digits = candidate.AsSpan(name.Length + 1);
+        if (digits[0] == '0') return 0;
+        foreach (char c in digits)
+            if (c is < '0' or > '9') return 0;
+        return int.TryParse(digits, System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out int n) && n >= 2 ? n : 0;
+    }
+
+    // The loop named name, then the loops NumberedName has saved beside it, lowest
+    // number first: every loop an earlier copy of the same loop may be held as.
+    public IEnumerable<Loop> WithNumberedCopies(string name)
+    {
+        if (Get(name) is { } named) yield return named;
+        foreach ((Loop Loop, int Number) copy in _loops.Values
+                     .Select(l => (Loop: l, Number: NumberedCopyOf(l.Name, name)))
+                     .Where(p => p.Number > 0)
+                     .OrderBy(p => p.Number)
+                     .ToList())
+            yield return copy.Loop;
+    }
+
     // Resolve a typed loop name the way the remote @loop commands do: an exact
     // (case-insensitive) name wins outright; otherwise every loop whose name holds
     // every typed word, in any order ("godfrey bank" → "Bank of Godfrey Loop").

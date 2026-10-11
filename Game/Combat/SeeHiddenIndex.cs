@@ -39,17 +39,17 @@ public sealed class SeeHiddenIndex
         if (_numbers is { } cached) return cached;
 
         HashSet<int> set = new();
-        JsonDocument? doc = _cache.GetRawTable("Monsters");
+        GameTable? doc = _cache.GetTable("Monsters");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Number", out JsonElement numEl)) continue;
+                if (!row.TryGetProperty("Number", out GameValue numEl)) continue;
                 if (numEl.ValueKind != JsonValueKind.Number) continue;
                 if (!numEl.TryGetInt32(out int number)) continue;
                 for (int i = 0; i < AbilitySlots; i++)
                 {
-                    if (!row.TryGetProperty($"Abil-{i}", out JsonElement abilEl)) continue;
+                    if (!row.TryGetProperty($"Abil-{i}", out GameValue abilEl)) continue;
                     if (abilEl.ValueKind != JsonValueKind.Number) continue;
                     if (abilEl.TryGetInt32(out int code) && code == SeeHiddenAbilityCode)
                     {
@@ -60,8 +60,8 @@ public sealed class SeeHiddenIndex
             }
         }
 
-        // Folded into the HashSet — release the pinned raw Monsters
-        // JsonDocument (GetRawTable re-parses it if another index asks).
+        // Folded into the HashSet — the cache may drop the Monsters table
+        // (GetTable re-reads it if another index asks).
         _cache.EvictTable("Monsters");
         _numbers = set;
         return set;

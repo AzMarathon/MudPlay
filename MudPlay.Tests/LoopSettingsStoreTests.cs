@@ -654,24 +654,6 @@ public sealed class LoopSettingsStoreTests : IDisposable
         Assert.Contains("saved as 'Dragons 2'", notices.Single());
     }
 
-    [Theory]
-    [InlineData("Dragons 2", 2)]
-    [InlineData("dragons 17", 17)]
-    [InlineData("Dragons", 0)]
-    [InlineData("Dragons 1", 0)]
-    [InlineData("Dragons 0", 0)]
-    [InlineData("Dragons 02", 0)]
-    [InlineData("Dragons 2a", 0)]
-    [InlineData("Dragons2", 0)]
-    [InlineData("Dragons  2", 0)]
-    [InlineData("Dragons 2 ", 0)]
-    [InlineData("Dragons -2", 0)]
-    [InlineData("Dragons (old)", 0)]
-    [InlineData("Dragons 99999999999999999999", 0)]
-    [InlineData("Wyrms 2", 0)]
-    public void SiblingNumber_IsTheNumberANumberedSaveWrote_OrNone(string candidate, int expected) =>
-        Assert.Equal(expected, LoopShareReceiver.SiblingNumber(candidate, "Dragons"));
-
     // The rule goes by name. The same loop under a name we don't have is saved under
     // it; the two carry the same code, which is how they can be told to be the same.
     [Fact]

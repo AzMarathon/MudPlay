@@ -1,8 +1,8 @@
-using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Spells;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -58,8 +58,7 @@ public sealed class EvilPointRangeTests
     [Fact]
     public void CanEquip_EvilOnlyValue_GatesOnTheRange()
     {
-        using JsonDocument doc = JsonDocument.Parse("""{ "Abil-0": 98, "AbilVal-0": 200 }""");
-        JsonElement robes = doc.RootElement;
+        GameRow robes = TestRows.Row("""{ "Abil-0": 98, "AbilVal-0": 200 }""");
         ClassEquipProfile cls = new(1, 8, 9, false);
         EvilPointRange villain = EvilPointRange.ForTitle("Villain", RealmType.Stock)!.Value;
 
@@ -73,11 +72,11 @@ public sealed class EvilPointRangeTests
     [Fact]
     public void CanEquip_PlainEvilOnly_BarsSeedyOnParadigm()
     {
-        using JsonDocument doc = JsonDocument.Parse("""{ "Abil-0": 98, "AbilVal-0": 0 }""");
+        GameRow doc = TestRows.Row("""{ "Abil-0": 98, "AbilVal-0": 0 }""");
         ClassEquipProfile cls = new(1, 8, 9, false);
-        Assert.False(ItemEquipFilter.CanEquip(doc.RootElement, 30, cls, AlignmentBucket.Evil, RealmType.ParaMud,
+        Assert.False(ItemEquipFilter.CanEquip(doc, 30, cls, AlignmentBucket.Evil, RealmType.ParaMud,
             EvilPointRange.ForTitle("Seedy", RealmType.ParaMud)));
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, 30, cls, AlignmentBucket.Evil, RealmType.ParaMud,
+        Assert.True(ItemEquipFilter.CanEquip(doc, 30, cls, AlignmentBucket.Evil, RealmType.ParaMud,
             EvilPointRange.ForTitle("Outlaw", RealmType.ParaMud)));
     }
 

@@ -72,10 +72,10 @@ public static class QuestEligibility
         return num > 0 ? num : null;
     }
 
-    private static int GetInt(JsonElement? rowOpt, string prop)
+    private static int GetInt(GameRow? rowOpt, string prop)
     {
-        if (rowOpt is not JsonElement row || row.ValueKind != JsonValueKind.Object) return 0;
-        if (!row.TryGetProperty(prop, out JsonElement v)) return 0;
+        if (rowOpt is not GameRow row) return 0;
+        if (!row.TryGetProperty(prop, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 }

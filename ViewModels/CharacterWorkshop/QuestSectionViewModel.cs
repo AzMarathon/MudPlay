@@ -556,10 +556,10 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     private static string ResolveTitle(QuestDefinition def, CrawledQuest q) =>
         !string.IsNullOrWhiteSpace(def.Name) ? def.Name : QuestTextFormatter.FallbackTitle(q);
 
-    private static int GetInt(JsonElement? row, string property)
+    private static int GetInt(GameRow? row, string property)
     {
-        if (row is not JsonElement el || el.ValueKind != JsonValueKind.Object) return 0;
-        if (!el.TryGetProperty(property, out JsonElement v)) return 0;
+        if (row is not GameRow el) return 0;
+        if (!el.TryGetProperty(property, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 

@@ -38,7 +38,7 @@ public static class ClassCapabilities
 
         // The quest/textblock table imports as TBInfo.json (MDB "TBInfo"), not
         // "TextBlocks" — reading the wrong name silently disables smash gating.
-        JsonDocument? textBlocks = cache.GetRawTable("TBInfo");
+        GameTable? textBlocks = cache.GetTable("TBInfo");
         if (textBlocks is null) return null;
 
         Dictionary<int, string> classIdToName = BuildClassIdToNameMap(cache);
@@ -46,9 +46,9 @@ public static class ClassCapabilities
 
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (JsonElement block in textBlocks.RootElement.EnumerateArray())
+        foreach (GameRow block in textBlocks.Rows)
         {
-            if (!block.TryGetProperty("Action", out JsonElement actionEl)) continue;
+            if (!block.TryGetProperty("Action", out GameValue actionEl)) continue;
             if (actionEl.ValueKind != JsonValueKind.String) continue;
             string? action = actionEl.GetString();
             if (string.IsNullOrEmpty(action) || action == "\0") continue;
@@ -98,32 +98,32 @@ public static class ClassCapabilities
     }
 
     // True if the race row grants innate stealth (Abil-0..9 == 102).
-    public static bool RaceHasStealth(JsonElement? raceRow) => HasAbility(raceRow, RaceStealthAbilityId);
+    public static bool RaceHasStealth(GameRow? raceRow) => HasAbility(raceRow, RaceStealthAbilityId);
 
     // True if the class row grants innate stealth (Abil-0..9 == 103).
-    public static bool ClassHasStealth(JsonElement? classRow) => HasAbility(classRow, ClassStealthAbilityId);
+    public static bool ClassHasStealth(GameRow? classRow) => HasAbility(classRow, ClassStealthAbilityId);
 
     // Martial-arts strikes the class innately grants (Abil-0..9 == 29 / 30 / 35).
     // Only classes that carry the ability get the strike row in the combat panel.
-    public static bool ClassHasPunch(JsonElement? classRow) => HasAbility(classRow, PunchAbilityId);
-    public static bool ClassHasKick(JsonElement? classRow) => HasAbility(classRow, KickAbilityId);
-    public static bool ClassHasJumpKick(JsonElement? classRow) => HasAbility(classRow, JumpKickAbilityId);
+    public static bool ClassHasPunch(GameRow? classRow) => HasAbility(classRow, PunchAbilityId);
+    public static bool ClassHasKick(GameRow? classRow) => HasAbility(classRow, KickAbilityId);
+    public static bool ClassHasJumpKick(GameRow? classRow) => HasAbility(classRow, JumpKickAbilityId);
 
     // The hit magic a class or race carries of its own (Abil-0..9 == 142): what a
     // Mystic's strikes and a Witchunter's swings hurt magical monsters with,
     // whatever weapon is or isn't in hand. 0 when the record has none.
-    public static int InnateHitMagic(JsonElement? classOrRaceRow)
+    public static int InnateHitMagic(GameRow? classOrRaceRow)
     {
-        if (classOrRaceRow is not JsonElement data || data.ValueKind != JsonValueKind.Object) return 0;
+        if (classOrRaceRow is not GameRow data) return 0;
         int total = 0;
         for (int i = 0; i < MaxRecordAbilSlots; i++)
             if (GetInt(data, $"Abil-{i}") == HitMagicAbilityId) total += GetInt(data, $"AbilVal-{i}");
         return total;
     }
 
-    private static bool HasAbility(JsonElement? row, int abilityId)
+    private static bool HasAbility(GameRow? row, int abilityId)
     {
-        if (row is not JsonElement data || data.ValueKind != JsonValueKind.Object) return false;
+        if (row is not GameRow data) return false;
         for (int i = 0; i < MaxRecordAbilSlots; i++)
         {
             if (GetInt(data, $"Abil-{i}") == abilityId) return true;
@@ -134,14 +134,14 @@ public static class ClassCapabilities
     private static Dictionary<int, string> BuildClassIdToNameMap(GameDataCache cache)
     {
         var map = new Dictionary<int, string>();
-        JsonDocument? classes = cache.GetRawTable("Classes");
+        GameTable? classes = cache.GetTable("Classes");
         if (classes is null) return map;
 
-        foreach (JsonElement cls in classes.RootElement.EnumerateArray())
+        foreach (GameRow cls in classes.Rows)
         {
             int num = GetInt(cls, "Number");
             if (num <= 0) continue;
-            if (cls.TryGetProperty("Name", out JsonElement nameEl)
+            if (cls.TryGetProperty("Name", out GameValue nameEl)
                 && nameEl.ValueKind == JsonValueKind.String)
             {
                 string? name = nameEl.GetString();
@@ -152,10 +152,9 @@ public static class ClassCapabilities
     }
 
     // Safe numeric read of a game-data field: missing / non-numeric reads as 0.
-    private static int GetInt(JsonElement row, string property)
+    private static int GetInt(GameRow row, string property)
     {
-        if (row.ValueKind != JsonValueKind.Object) return 0;
-        if (!row.TryGetProperty(property, out JsonElement el)) return 0;
+        if (!row.TryGetProperty(property, out GameValue el)) return 0;
         return el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int v) ? v : 0;
     }
 }

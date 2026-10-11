@@ -44,7 +44,7 @@ public static class QuestStepGraph
 
     private static IReadOnlyList<QuestStep> BuildSteps(GameDataCache cache, int flag, bool byAbilityValue)
     {
-        JsonDocument? tbinfo = cache.GetRawTable("TBInfo");
+        GameTable? tbinfo = cache.GetTable("TBInfo");
         if (tbinfo is null) return Array.Empty<QuestStep>();
 
         var steps = new List<QuestStep>();
@@ -52,11 +52,11 @@ public static class QuestStepGraph
 
         // Index every block by its textblock number so a guard-led (command-less) step
         // can walk its Called-From chain up to the NPC whose ask-keyword branches to it.
-        Dictionary<int, JsonElement> byNumber = IndexByNumber(tbinfo);
+        Dictionary<int, GameRow> byNumber = IndexByNumber(tbinfo);
 
-        foreach (JsonElement block in tbinfo.RootElement.EnumerateArray())
+        foreach (GameRow block in tbinfo.Rows)
         {
-            if (!block.TryGetProperty("Action", out JsonElement actionEl)) continue;
+            if (!block.TryGetProperty("Action", out GameValue actionEl)) continue;
             if (actionEl.ValueKind != JsonValueKind.String) continue;
             string? action = actionEl.GetString();
             if (string.IsNullOrEmpty(action) || action == "\0") continue;
@@ -175,9 +175,9 @@ public static class QuestStepGraph
         return DirectiveKeywords.Contains(kw) ? null : first;
     }
 
-    private static string? ReadLocation(JsonElement block)
+    private static string? ReadLocation(GameRow block)
     {
-        if (!block.TryGetProperty("Called From", out JsonElement cf)) return null;
+        if (!block.TryGetProperty("Called From", out GameValue cf)) return null;
         if (cf.ValueKind != JsonValueKind.String) return null;
         string? s = cf.GetString();
         return string.IsNullOrWhiteSpace(s) ? null : s;
@@ -185,12 +185,12 @@ public static class QuestStepGraph
 
     // Index blocks by textblock number (first row wins — a number is unique in
     // practice) so ResolveAsk can hop a step's Called-From chain by number.
-    private static Dictionary<int, JsonElement> IndexByNumber(JsonDocument tbinfo)
+    private static Dictionary<int, GameRow> IndexByNumber(GameTable tbinfo)
     {
-        var map = new Dictionary<int, JsonElement>();
-        foreach (JsonElement block in tbinfo.RootElement.EnumerateArray())
+        var map = new Dictionary<int, GameRow>();
+        foreach (GameRow block in tbinfo.Rows)
         {
-            if (block.TryGetProperty("Number", out JsonElement n)
+            if (block.TryGetProperty("Number", out GameValue n)
                 && n.ValueKind == JsonValueKind.Number && n.TryGetInt32(out int num))
                 map.TryAdd(num, block);
         }
@@ -206,7 +206,7 @@ public static class QuestStepGraph
     // steps, and steps rooted on a room / monster / spell rather than a textblock, are
     // left untouched.
     private static QuestStep ResolveAsk(QuestStep step, GameDataCache cache,
-        Dictionary<int, JsonElement> byNumber)
+        Dictionary<int, GameRow> byNumber)
     {
         if (step.Command is not null) return step;
         if (ParseTextblockRef(step.Location) is null) return step;
@@ -230,7 +230,7 @@ public static class QuestStepGraph
     // greeting textblock, a spell/room root, the NPC being the step's direct parent
     // (no intermediate textblock names the keyword), or an unresolvable ref.
     private static (int Monster, string Keyword)? ResolveAskSource(
-        string? stepCalledFrom, Dictionary<int, JsonElement> byNumber)
+        string? stepCalledFrom, Dictionary<int, GameRow> byNumber)
     {
         int? cur = ParseTextblockRef(stepCalledFrom);
         if (cur is null) return null;
@@ -240,7 +240,7 @@ public static class QuestStepGraph
         int guard = 0;
         while (cur is int c && seen.Add(c) && guard++ < 64)
         {
-            if (!byNumber.TryGetValue(c, out JsonElement block)) return null;
+            if (!byNumber.TryGetValue(c, out GameRow block)) return null;
             string? parent = ReadStringProp(block, "Called From");
 
             if (ParseMonsterRef(parent) is int monster)
@@ -288,8 +288,8 @@ public static class QuestStepGraph
         return keywords;
     }
 
-    private static string? ReadStringProp(JsonElement block, string prop)
-        => block.TryGetProperty(prop, out JsonElement el) && el.ValueKind == JsonValueKind.String
+    private static string? ReadStringProp(GameRow block, string prop)
+        => block.TryGetProperty(prop, out GameValue el) && el.ValueKind == JsonValueKind.String
             ? el.GetString()
             : null;
 

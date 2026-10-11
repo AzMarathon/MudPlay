@@ -80,7 +80,7 @@ public sealed class RoomNamePersistence
         File.WriteAllText(tempPath, root.ToJsonString(opts));
         File.Move(tempPath, path, overwrite: true);
 
-        // Evict the cached JsonDocument so the next read re-picks up
+        // Evict the cached Rooms table so the next read re-picks up
         // the disk content with the learned name.
         _cache.EvictTable("Rooms");
 

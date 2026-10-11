@@ -28,8 +28,8 @@ public static class GameDataLongTextCheck
     public static int CountDamagedCells(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
-        return CountIn(cache.GetRawTable("Monsters"), "Summoned By")
-             + CountIn(cache.GetRawTable("Items"), "Obtained From");
+        return CountIn(cache.GetTable("Monsters"), "Summoned By")
+             + CountIn(cache.GetTable("Items"), "Obtained From");
     }
 
     // True when a cell that long opens with a known entry word missing its first two
@@ -48,13 +48,12 @@ public static class GameDataLongTextCheck
         return false;
     }
 
-    private static int CountIn(JsonDocument? table, string column)
+    private static int CountIn(GameTable? table, string column)
     {
-        if (table is null || table.RootElement.ValueKind != JsonValueKind.Array) return 0;
+        if (table is null) return 0;
         int damaged = 0;
-        foreach (JsonElement row in table.RootElement.EnumerateArray())
-            if (row.ValueKind == JsonValueKind.Object
-                && row.TryGetProperty(column, out JsonElement cell)
+        foreach (GameRow row in table.Rows)
+            if (row.TryGetProperty(column, out GameValue cell)
                 && cell.ValueKind == JsonValueKind.String
                 && IsDamaged(cell.GetString()))
                 damaged++;

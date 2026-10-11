@@ -31,7 +31,7 @@ namespace MudPlay.Services;
 // monsters summoned there — for room tooltips): this index is item-first and
 // drop-scoped. Mirrors ShopStockIndex: subscribes to
 // GameDataCache.ActiveSetChanged, reads the raw table once, builds the maps,
-// and evicts the JsonDocument.
+// and evicts the table.
 public sealed class MonsterDropIndex
 {
     // One monster that drops an item, with its drop chance.
@@ -99,7 +99,7 @@ public sealed class MonsterDropIndex
             return;
         }
 
-        JsonDocument? doc = _cache.GetRawTable("Monsters");
+        GameTable? doc = _cache.GetTable("Monsters");
         if (doc is null)
         {
             _log?.Info("MonsterDropIndex", $"Active set '{setName}' has no Monsters.json; empty.");
@@ -107,12 +107,11 @@ public sealed class MonsterDropIndex
             return;
         }
 
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryReadInt(row, "Number", out int monsterId) || monsterId <= 0) continue;
 
-            string name = row.TryGetProperty("Name", out JsonElement nameEl)
+            string name = row.TryGetProperty("Name", out GameValue nameEl)
                           && nameEl.ValueKind == JsonValueKind.String
                 ? nameEl.GetString() ?? string.Empty
                 : string.Empty;
@@ -144,9 +143,9 @@ public sealed class MonsterDropIndex
         StoreReloaded?.Invoke();
     }
 
-    private void IndexSpawnRooms(JsonElement row, int monsterId)
+    private void IndexSpawnRooms(GameRow row, int monsterId)
     {
-        if (!row.TryGetProperty("Summoned By", out JsonElement summonEl)
+        if (!row.TryGetProperty("Summoned By", out GameValue summonEl)
             || summonEl.ValueKind != JsonValueKind.String)
             return;
         List<RoomKey>? rooms = ParseSummonedByRooms(summonEl.GetString());
@@ -178,10 +177,10 @@ public sealed class MonsterDropIndex
         return rooms;
     }
 
-    private static bool TryReadInt(JsonElement row, string property, out int value)
+    private static bool TryReadInt(GameRow row, string property, out int value)
     {
         value = 0;
-        return row.TryGetProperty(property, out JsonElement el)
+        return row.TryGetProperty(property, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out value);
     }

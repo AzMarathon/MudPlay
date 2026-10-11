@@ -55,17 +55,16 @@ public sealed class LightItemIndex
         List<LightItem> list = new();
         Dictionary<string, LightItem> map = new(StringComparer.OrdinalIgnoreCase);
 
-        JsonDocument? doc = _cache.GetRawTable("Items");
+        GameTable? doc = _cache.GetTable("Items");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (row.ValueKind != JsonValueKind.Object) continue;
                 if (ReadInt(row, "ItemType") != LightItemType) continue;
-                if (!row.TryGetProperty("Number", out JsonElement numEl)
+                if (!row.TryGetProperty("Number", out GameValue numEl)
                     || !numEl.TryGetInt32(out int number) || number <= 0)
                     continue;
-                if (!row.TryGetProperty("Name", out JsonElement nameEl)
+                if (!row.TryGetProperty("Name", out GameValue nameEl)
                     || nameEl.ValueKind != JsonValueKind.String)
                     continue;
                 string? name = nameEl.GetString();
@@ -80,20 +79,20 @@ public sealed class LightItemIndex
             }
         }
 
-        // Folded into the catalogue — release the pinned raw Items JsonDocument.
+        // Folded into the catalogue — the cache may drop the Items table.
         _cache.EvictTable("Items");
         byName = map;
         return list;
     }
 
-    private static int ReadIlluTarget(JsonElement row)
+    private static int ReadIlluTarget(GameRow row)
     {
         for (int i = 0; i < AbilitySlots; i++)
         {
-            if (!row.TryGetProperty($"Abil-{i}", out JsonElement abilEl)) continue;
+            if (!row.TryGetProperty($"Abil-{i}", out GameValue abilEl)) continue;
             if (abilEl.ValueKind != JsonValueKind.Number) continue;
             if (!abilEl.TryGetInt32(out int code) || code != IlluTargetAbilityCode) continue;
-            if (!row.TryGetProperty($"AbilVal-{i}", out JsonElement valEl)) continue;
+            if (!row.TryGetProperty($"AbilVal-{i}", out GameValue valEl)) continue;
             if (valEl.ValueKind == JsonValueKind.Number && valEl.TryGetInt32(out int val))
                 return val;
             return 0;
@@ -101,8 +100,8 @@ public sealed class LightItemIndex
         return 0;
     }
 
-    private static int ReadInt(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el)
+    private static int ReadInt(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el)
            && el.ValueKind == JsonValueKind.Number
            && el.TryGetInt32(out int v)
             ? v : 0;

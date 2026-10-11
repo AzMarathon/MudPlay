@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Globalization;
 using System.Linq;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
@@ -145,9 +144,9 @@ public sealed class SpellsSectionViewModel : JsonTableSectionViewModel, IEditabl
         base.Dispose();
     }
 
-    protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(JsonElement element)
+    protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(GameRow element)
     {
-        if (!element.TryGetProperty("Number", out JsonElement num) || !num.TryGetInt32(out int number))
+        if (!element.TryGetProperty("Number", out GameValue num) || !num.TryGetInt32(out int number))
             return null;
         return _seedStates.TryGetValue(number, out string? state)
             ? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) { [SeedColumn] = state }

@@ -141,12 +141,12 @@ public sealed class ClassCapabilitiesTests : IDisposable
                 Row(("Number", 1), ("Name", "Warrior")),
             }));
 
-        JsonElement? mystic = cache.FindRowByName("Classes", "Mystic");
+        GameRow? mystic = cache.FindRowByName("Classes", "Mystic");
         Assert.True(ClassCapabilities.ClassHasPunch(mystic));
         Assert.True(ClassCapabilities.ClassHasKick(mystic));
         Assert.True(ClassCapabilities.ClassHasJumpKick(mystic));
 
-        JsonElement? warrior = cache.FindRowByName("Classes", "Warrior");
+        GameRow? warrior = cache.FindRowByName("Classes", "Warrior");
         Assert.False(ClassCapabilities.ClassHasPunch(warrior));
         Assert.False(ClassCapabilities.ClassHasKick(warrior));
         Assert.False(ClassCapabilities.ClassHasJumpKick(warrior));

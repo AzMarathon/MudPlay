@@ -349,6 +349,64 @@ public sealed class LoopManagerTests : IDisposable
         Assert.Equal("loop/with:bad*chars", m2.Loops[0].Name);
     }
 
+    [Fact]
+    public void NumberedName_IsTheFirstNumberFromTwoThatNoLoopHas_MatchedWithoutCase()
+    {
+        LoopManager m = NewManager();
+        m.LoadAll(_setName);
+        var pair = new[] { new RoomKey(1, 1), new RoomKey(1, 2) };
+        Assert.Equal("Sewers 2", m.NumberedName("Sewers"));
+
+        m.Save(new Loop("Sewers", pair));
+        m.Save(new Loop("SEWERS 2", pair));
+        Assert.Equal("Sewers 3", m.NumberedName("Sewers"));
+
+        m.Save(new Loop("Sewers 4", pair));
+        Assert.Equal("Sewers 3", m.NumberedName("Sewers"));
+    }
+
+    // NumberedCopyOf is NumberedName read the other way: it knows exactly the names
+    // that rule writes, and no name a user typed that only looks like one.
+    [Theory]
+    [InlineData("Dragons 2", 2)]
+    [InlineData("dragons 17", 17)]
+    [InlineData("Dragons", 0)]
+    [InlineData("Dragons 1", 0)]
+    [InlineData("Dragons 0", 0)]
+    [InlineData("Dragons 02", 0)]
+    [InlineData("Dragons 2a", 0)]
+    [InlineData("Dragons2", 0)]
+    [InlineData("Dragons  2", 0)]
+    [InlineData("Dragons 2 ", 0)]
+    [InlineData("Dragons -2", 0)]
+    [InlineData("Dragons (old)", 0)]
+    [InlineData("Dragons 99999999999999999999", 0)]
+    [InlineData("Wyrms 2", 0)]
+    public void NumberedCopyOf_IsTheNumberANumberedSaveWrote_OrNone(string candidate, int expected) =>
+        Assert.Equal(expected, LoopManager.NumberedCopyOf(candidate, "Dragons"));
+
+    [Fact]
+    public void WhatNumberedNameWrites_IsReadBackAsANumberedCopy_LowestFirst()
+    {
+        LoopManager m = NewManager();
+        m.LoadAll(_setName);
+        var pair = new[] { new RoomKey(1, 1), new RoomKey(1, 2) };
+        m.Save(new Loop("Sewers", pair));
+        for (int expected = 2; expected <= 11; expected++)
+        {
+            string written = m.NumberedName("sewers");
+            Assert.Equal(expected, LoopManager.NumberedCopyOf(written, "Sewers"));
+            m.Save(new Loop(written, pair));
+        }
+        m.Save(new Loop("Sewers 2a", pair));
+        m.Save(new Loop("Sewers (old)", pair));
+
+        // Number order, not name order ("sewers 10" sorts before "sewers 2").
+        Assert.Equal(new[] { "Sewers" }.Concat(Enumerable.Range(2, 10).Select(n => $"sewers {n}")),
+            m.WithNumberedCopies("SEWERS").Select(l => l.Name));
+        Assert.Empty(m.WithNumberedCopies("Drains"));
+    }
+
     // ----- ExpandWaypoints --------------------------------------------
 
     [Fact]

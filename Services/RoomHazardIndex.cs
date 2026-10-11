@@ -43,7 +43,7 @@ namespace MudPlay.Services;
 // GameDataCache.ActiveSetChanged, reads the raw tables it needs once (Rooms for
 // the room-entry spell set, Spells for the ability chains, Items for the
 // NegateSpell / CastsSp reverse maps, TBInfo for the failitem / checkspell
-// directives), builds the map, and evicts every JsonDocument it touched.
+// directives), builds the map, and evicts every table it touched.
 public sealed class RoomHazardIndex
 {
     // One protectable room-entry hazard: the player is safe iff they carry at
@@ -274,8 +274,8 @@ public sealed class RoomHazardIndex
             return;
         }
 
-        JsonDocument? rooms = _cache.GetRawTable("Rooms");
-        JsonDocument? spells = _cache.GetRawTable("Spells");
+        GameTable? rooms = _cache.GetTable("Rooms");
+        GameTable? spells = _cache.GetTable("Spells");
         if (rooms is null || spells is null)
         {
             _log?.Info("RoomHazardIndex",
@@ -745,23 +745,21 @@ public sealed class RoomHazardIndex
         return 0;
     }
 
-    private static HashSet<int> CollectRoomSpells(JsonDocument rooms)
+    private static HashSet<int> CollectRoomSpells(GameTable rooms)
     {
         HashSet<int> set = new();
-        foreach (JsonElement row in rooms.RootElement.EnumerateArray())
+        foreach (GameRow row in rooms.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (TryReadInt(row, "Spell", out int spell) && spell > 0) set.Add(spell);
         }
         return set;
     }
 
-    private static Dictionary<int, (int[] Abil, int[] Val, int MinBase, int MaxBase)> ReadSpellAbils(JsonDocument spells)
+    private static Dictionary<int, (int[] Abil, int[] Val, int MinBase, int MaxBase)> ReadSpellAbils(GameTable spells)
     {
         Dictionary<int, (int[], int[], int, int)> map = new();
-        foreach (JsonElement row in spells.RootElement.EnumerateArray())
+        foreach (GameRow row in spells.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryReadInt(row, "Number", out int number) || number <= 0) continue;
 
             int[] abil = new int[SpellAbilSlots];
@@ -791,12 +789,11 @@ public sealed class RoomHazardIndex
     // duration up with level, the real in-play buff lasts at least this long, so
     // using it as the refresh interval never under-covers (it only re-uses a
     // touch early). 0 when the spell confers no timed effect.
-    private static Dictionary<int, int> ReadSpellDurations(JsonDocument spells)
+    private static Dictionary<int, int> ReadSpellDurations(GameTable spells)
     {
         Dictionary<int, int> map = new();
-        foreach (JsonElement row in spells.RootElement.EnumerateArray())
+        foreach (GameRow row in spells.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryReadInt(row, "Number", out int number) || number <= 0) continue;
 
             TryReadInt(row, "Dur", out int dur);
@@ -825,12 +822,11 @@ public sealed class RoomHazardIndex
         Dictionary<int, List<int>> negatorsBySpell,
         Dictionary<int, List<int>> castersBySpell)
     {
-        JsonDocument? items = _cache.GetRawTable("Items");
+        GameTable? items = _cache.GetTable("Items");
         if (items is null) return;
 
-        foreach (JsonElement row in items.RootElement.EnumerateArray())
+        foreach (GameRow row in items.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryReadInt(row, "Number", out int itemId) || itemId <= 0) continue;
 
             for (int k = 0; k < NegateSlots; k++)
@@ -850,14 +846,13 @@ public sealed class RoomHazardIndex
     private Dictionary<int, string> ReadTbActions()
     {
         Dictionary<int, string> map = new();
-        JsonDocument? tb = _cache.GetRawTable("TBInfo");
+        GameTable? tb = _cache.GetTable("TBInfo");
         if (tb is null) return map;
 
-        foreach (JsonElement row in tb.RootElement.EnumerateArray())
+        foreach (GameRow row in tb.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryReadInt(row, "Number", out int number) || number <= 0) continue;
-            if (row.TryGetProperty("Action", out JsonElement el)
+            if (row.TryGetProperty("Action", out GameValue el)
                 && el.ValueKind == JsonValueKind.String)
             {
                 string? action = el.GetString();
@@ -909,10 +904,10 @@ public sealed class RoomHazardIndex
             : 0;
     }
 
-    private static bool TryReadInt(JsonElement row, string property, out int value)
+    private static bool TryReadInt(GameRow row, string property, out int value)
     {
         value = 0;
-        return row.TryGetProperty(property, out JsonElement el)
+        return row.TryGetProperty(property, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out value);
     }

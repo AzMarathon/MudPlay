@@ -49,11 +49,11 @@ public sealed class KnownSpellCatalog
     public int? ResolveClassNumber(string className)
     {
         if (string.IsNullOrWhiteSpace(className)) return null;
-        JsonDocument? doc = _cache.GetRawTable("Classes");
+        GameTable? doc = _cache.GetTable("Classes");
         if (doc is null) return null;
 
         string target = className.Trim();
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             string? name = ReadString(row, "Name");
             if (name is not null && string.Equals(name.Trim(), target, StringComparison.OrdinalIgnoreCase))
@@ -69,7 +69,7 @@ public sealed class KnownSpellCatalog
     public string? ResolveClassName(int classNumber)
     {
         if (classNumber < 1) return null;
-        JsonElement? row = _cache.FindRowByNumber("Classes", classNumber);
+        GameRow? row = _cache.FindRowByNumber("Classes", classNumber);
         return row is null ? null : ReadString(row.Value, "Name");
     }
 
@@ -79,7 +79,7 @@ public sealed class KnownSpellCatalog
     {
         mageryLvl = 0;
         if (classNumber < 1) return MageryNone;
-        JsonElement? row = _cache.FindRowByNumber("Classes", classNumber);
+        GameRow? row = _cache.FindRowByNumber("Classes", classNumber);
         if (row is null) return MageryNone;
 
         mageryLvl = ReadInt(row.Value, "MageryLVL");
@@ -143,11 +143,11 @@ public sealed class KnownSpellCatalog
     public IReadOnlyList<KnownSpell> Query(int classNumber, int level, int charAlign = 0)
     {
         List<KnownSpell> results = new();
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null) return results;
 
         int classMagery = ResolveClassMagery(classNumber, out int classMageryLvl);
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             if (!IsUsable(row, classNumber, classMagery, classMageryLvl, level, charAlign, andLearnable: true))
                 continue;
@@ -175,10 +175,10 @@ public sealed class KnownSpellCatalog
     public IReadOnlyList<KnownSpell> RollSpells()
     {
         List<KnownSpell> results = new();
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null) return results;
 
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             KnownSpell spell = ToKnownSpell(row);
             if (RegenSpellClassifier.Has(spell.Formula, RegenSpellTraits.ManaRegenRoll))
@@ -199,12 +199,12 @@ public sealed class KnownSpellCatalog
     public KnownSpell? GetByShort(string shortCode, int classNumber, int level = 0, int charAlign = 0)
     {
         if (string.IsNullOrWhiteSpace(shortCode)) return null;
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null) return null;
 
         string target = shortCode.Trim();
         int classMagery = ResolveClassMagery(classNumber, out int classMageryLvl);
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             string? s = ReadString(row, "Short");
             if (s is null || !string.Equals(s.Trim(), target, StringComparison.OrdinalIgnoreCase)) continue;
@@ -223,12 +223,12 @@ public sealed class KnownSpellCatalog
     public KnownSpell? GetByName(string name, int classNumber, int level = 0, int charAlign = 0)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null) return null;
 
         string target = name.Trim();
         int classMagery = ResolveClassMagery(classNumber, out int classMageryLvl);
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             string? n = ReadString(row, "Name");
             if (n is null || !string.Equals(n.Trim(), target, StringComparison.OrdinalIgnoreCase)) continue;
@@ -246,7 +246,7 @@ public sealed class KnownSpellCatalog
     public string? GetSpellNameByNumber(int spellNumber)
     {
         if (spellNumber < 1) return null;
-        JsonElement? row = _cache.FindRowByNumber("Spells", spellNumber);
+        GameRow? row = _cache.FindRowByNumber("Spells", spellNumber);
         return row is null ? null : ReadString(row.Value, "Name");
     }
 
@@ -258,7 +258,7 @@ public sealed class KnownSpellCatalog
     public int? GetTargetsByNumber(int spellNumber)
     {
         if (spellNumber < 1) return null;
-        JsonElement? row = _cache.FindRowByNumber("Spells", spellNumber);
+        GameRow? row = _cache.FindRowByNumber("Spells", spellNumber);
         return row is null ? null : ReadInt(row.Value, "Targets");
     }
 
@@ -269,7 +269,7 @@ public sealed class KnownSpellCatalog
     public SpellFormulaInput? GetFormulaByNumber(int spellNumber)
     {
         if (spellNumber < 1) return null;
-        JsonElement? row = _cache.FindRowByNumber("Spells", spellNumber);
+        GameRow? row = _cache.FindRowByNumber("Spells", spellNumber);
         return row is null ? null : ToFormula(row.Value);
     }
 
@@ -284,11 +284,11 @@ public sealed class KnownSpellCatalog
     // has no Spells table.
     public IReadOnlyDictionary<int, IReadOnlyList<KnownSpell>> BuildCastByTextblockIndex()
     {
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null) return EmptyCastIndex;
 
         Dictionary<int, List<KnownSpell>> map = new();
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             string? castedBy = ReadString(row, "Casted By");
             if (castedBy is null) continue;
@@ -371,12 +371,12 @@ public sealed class KnownSpellCatalog
         List<ClassCastItem> results = new();
         if (classNumber < 1) return results;
 
-        JsonDocument? items = _cache.GetRawTable("Items");
+        GameTable? items = _cache.GetTable("Items");
         if (items is null) return results;
 
         Dictionary<int, (string Name, int ManaCost)>? spellInfo = null; // built lazily on first cast item
         IReadOnlyDictionary<int, IReadOnlyList<KnownSpell>>? tbIndex = null; // ditto, for textblock casts
-        foreach (JsonElement row in items.RootElement.EnumerateArray())
+        foreach (GameRow row in items.Rows)
         {
             if (!ItemUsableByClass(row, classNumber)) continue;
             // An item with no equip slot counts only when it is kept after use — a
@@ -473,12 +473,12 @@ public sealed class KnownSpellCatalog
     public int GetTeachingItemNumber(int spellNumber)
     {
         if (spellNumber <= 0) return 0;
-        JsonDocument? items = _cache.GetRawTable("Items");
+        GameTable? items = _cache.GetTable("Items");
         if (items is null) return 0;
 
         HashSet<int> named = LearnedFromItems(spellNumber);
         int inPlay = 0, outOfPlay = 0;
-        foreach (JsonElement row in items.RootElement.EnumerateArray())
+        foreach (GameRow row in items.Rows)
         {
             if (!TeachesSpell(row, spellNumber)) continue;
             int number = ReadInt(row, "Number");
@@ -494,10 +494,10 @@ public sealed class KnownSpellCatalog
     public IReadOnlyList<TeachingItem> GetTeachingItems(int classNumber)
     {
         List<TeachingItem> results = new();
-        JsonDocument? items = _cache.GetRawTable("Items");
+        GameTable? items = _cache.GetTable("Items");
         if (items is null) return results;
 
-        foreach (JsonElement row in items.RootElement.EnumerateArray())
+        foreach (GameRow row in items.Rows)
         {
             if (InGameFlag.IsOutOfPlay(row) || !ItemUsableByClass(row, classNumber)) continue;
             string name = ReadString(row, "Name")?.Trim() ?? string.Empty;
@@ -512,7 +512,7 @@ public sealed class KnownSpellCatalog
         return results;
     }
 
-    private static bool TeachesSpell(JsonElement item, int spellNumber)
+    private static bool TeachesSpell(GameRow item, int spellNumber)
     {
         for (int i = 0; i < ItemAbilSlots; i++)
             if (ReadInt(item, $"Abil-{i}") == LearnSpAbilityCode
@@ -545,7 +545,7 @@ public sealed class KnownSpellCatalog
     public int GetTeachingNpcNumber(int spellNumber)
     {
         if (spellNumber <= 0) return 0;
-        JsonElement? row = _cache.FindRowByNumber("Spells", spellNumber);
+        GameRow? row = _cache.FindRowByNumber("Spells", spellNumber);
         if (row is null) return 0;
         Match m = LearnedFromNpcRe.Match(ReadString(row.Value, "Learned From") ?? string.Empty);
         return m.Success && int.TryParse(m.Groups[1].Value, out int n) ? n : 0;
@@ -572,10 +572,10 @@ public sealed class KnownSpellCatalog
     {
         Dictionary<int, int> result = new();
         if (classNumber < 1) return result;
-        JsonDocument? doc = _cache.GetRawTable("TBInfo");
+        GameTable? doc = _cache.GetTable("TBInfo");
         if (doc is null) return result;
 
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             string? action = ReadString(row, "Action");
             if (string.IsNullOrEmpty(action)
@@ -666,7 +666,7 @@ public sealed class KnownSpellCatalog
 
         Match table = RandomTableStep.Match(action);
         if (!table.Success || !int.TryParse(table.Groups[1].Value, out int tableNumber)) return true;
-        List<JsonElement> outcomes = new();
+        List<GameRow> outcomes = new();
         foreach (int dealt in SpellsCastByTextblock(tableNumber))
             if (_cache.FindRowByNumber("Spells", dealt) is { } row) outcomes.Add(row);
 
@@ -681,7 +681,7 @@ public sealed class KnownSpellCatalog
                     if (ReadInt(cast, $"Abil-{i}") == RemovesSpellAbilityCode) removed.Add(ReadInt(cast, $"AbilVal-{i}"));
                 continue;
             }
-            foreach (JsonElement outcome in outcomes)
+            foreach (GameRow outcome in outcomes)
             {
                 if (removed.Contains(ReadInt(outcome, "Number"))) continue;
                 for (int i = 0; i < SpellAbilSlots; i++)
@@ -694,10 +694,10 @@ public sealed class KnownSpellCatalog
     // The spells whose "Casted By" names a textblock: the outcomes of a random table.
     private IEnumerable<int> SpellsCastByTextblock(int textblock)
     {
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null) yield break;
         Regex named = new($@"Textblock\s*#{textblock}\b", RegexOptions.IgnoreCase);
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
             if (ReadString(row, "Casted By") is { } by && named.IsMatch(by))
                 yield return ReadInt(row, "Number");
     }
@@ -716,11 +716,11 @@ public sealed class KnownSpellCatalog
     // number in others.
     private string? TextblockAction(int number)
     {
-        JsonDocument? doc = _cache.GetRawTable("TBInfo");
+        GameTable? doc = _cache.GetTable("TBInfo");
         if (doc is null) return null;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (!row.TryGetProperty("Number", out JsonElement n)) continue;
+            if (!row.TryGetProperty("Number", out GameValue n)) continue;
             bool match = n.ValueKind == JsonValueKind.Number
                 ? n.TryGetInt32(out int asInt) && asInt == number
                 : int.TryParse(n.GetString(), out int asText) && asText == number;
@@ -742,7 +742,7 @@ public sealed class KnownSpellCatalog
     // Item class-usability: an item with no non-zero ClassRest-N slot is
     // universal (usable by every class); otherwise it's restricted to the
     // listed class numbers.
-    private static bool ItemUsableByClass(JsonElement row, int classNumber)
+    private static bool ItemUsableByClass(GameRow row, int classNumber)
     {
         bool anyRestriction = false;
         for (int i = 0; i < ItemClassRestSlots; i++)
@@ -760,7 +760,7 @@ public sealed class KnownSpellCatalog
     // use. Distinct from ItemUsableByClass (which also passes universal items):
     // the Spell Book surfaces only the class-specific ones so a caster isn't
     // buried under every generic wand / scroll in the game.
-    private static bool ItemClassRestricted(JsonElement row, int classNumber)
+    private static bool ItemClassRestricted(GameRow row, int classNumber)
     {
         for (int i = 0; i < ItemClassRestSlots; i++)
             if (ReadInt(row, $"ClassRest-{i}") == classNumber) return true;
@@ -772,7 +772,7 @@ public sealed class KnownSpellCatalog
     // slot) or an item worn in a real body / Off-Hand / Worn slot. Excludes
     // non-equippable "use" items (potions, food, containers, scrolls,
     // projectiles, room Signs) that can't be readied to cast a buff.
-    private static bool IsEquippableCastItem(JsonElement row)
+    private static bool IsEquippableCastItem(GameRow row)
     {
         if (ReadInt(row, "ItemType") == WeaponItemType) return true;
         int worn = ReadInt(row, "Worn");
@@ -789,7 +789,7 @@ public sealed class KnownSpellCatalog
     // JSON field, so the string reader hands back null and the slot came back empty
     // (the bug that mislabeled the warhorn "Weapon Hand"). Empty only when neither
     // a mapped Worn slot nor a weapon, which the equippable filter already excludes.
-    internal static string WearSlotFor(JsonElement row)
+    internal static string WearSlotFor(GameRow row)
     {
         int worn = ReadInt(row, "Worn");
         if (worn is >= FirstWornSlot and <= LastWornSlot)
@@ -804,9 +804,9 @@ public sealed class KnownSpellCatalog
     private Dictionary<int, (string Name, int ManaCost)> BuildSpellInfoMap()
     {
         Dictionary<int, (string Name, int ManaCost)> map = new();
-        JsonDocument? spells = _cache.GetRawTable("Spells");
+        GameTable? spells = _cache.GetTable("Spells");
         if (spells is null) return map;
-        foreach (JsonElement row in spells.RootElement.EnumerateArray())
+        foreach (GameRow row in spells.Rows)
         {
             int number = ReadInt(row, "Number");
             if (number <= 0) continue;
@@ -826,7 +826,7 @@ public sealed class KnownSpellCatalog
     // / classMageryLvl are the pre-resolved magery type / level for
     // classNumber.
     private bool IsUsable(
-        JsonElement row, int classNumber, int classMagery, int classMageryLvl,
+        GameRow row, int classNumber, int classMagery, int classMageryLvl,
         int level, int charAlign, bool andLearnable)
     {
         if (classNumber < 1) return true;       // no class → treat as usable
@@ -902,7 +902,7 @@ public sealed class KnownSpellCatalog
     }
 
     // Project a Spells row into a KnownSpell + its formula inputs.
-    private static KnownSpell ToKnownSpell(JsonElement row)
+    private static KnownSpell ToKnownSpell(GameRow row)
         => new(
             Number: ReadInt(row, "Number"),
             Short: ReadString(row, "Short") ?? string.Empty,
@@ -915,16 +915,16 @@ public sealed class KnownSpellCatalog
 
     // The formula projection is shared with MonsterCatalog via SpellFormulaReader
     // so both read a spell's scaling fields the same way.
-    private static SpellFormulaInput ToFormula(JsonElement row) => SpellFormulaReader.Read(row);
+    private static SpellFormulaInput ToFormula(GameRow row) => SpellFormulaReader.Read(row);
 
     // ----- NUL-aware JSON readers ---------------------------------------
     // The MdbImporter writes a literal NUL char ("\0") for empty Jet text
     // columns, so a plain GetString can hand back "\0" rather than null.
     // These mirror the same sentinel handling SpellCoverageAuditor uses.
 
-    private static string? ReadString(JsonElement row, string property)
+    private static string? ReadString(GameRow row, string property)
     {
-        if (!row.TryGetProperty(property, out JsonElement el)) return null;
+        if (!row.TryGetProperty(property, out GameValue el)) return null;
         if (el.ValueKind != JsonValueKind.String) return null;
         string? raw = el.GetString();
         if (string.IsNullOrWhiteSpace(raw)) return null;
@@ -933,9 +933,9 @@ public sealed class KnownSpellCatalog
         return null;
     }
 
-    private static int ReadInt(JsonElement row, string property)
+    private static int ReadInt(GameRow row, string property)
     {
-        if (!row.TryGetProperty(property, out JsonElement el)) return 0;
+        if (!row.TryGetProperty(property, out GameValue el)) return 0;
         if (el.ValueKind != JsonValueKind.Number) return 0;
         return el.TryGetInt32(out int n) ? n : 0;
     }

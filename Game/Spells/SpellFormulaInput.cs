@@ -59,7 +59,7 @@ public readonly record struct SpellFormulaInput
     // it adds directly to the caster's Spellcasting to give the cast-success
     // chance (see SpellCastChance). A value >= 200 marks an always-succeeds
     // utility spell. Carried here so the success calc and the Game Data view can
-    // read it without re-touching the raw JSON.
+    // read it without going back to the Spells table.
     public int Diff { get; init; }
 
     // Attack type (AttType): the spell's damage element for resist purposes —

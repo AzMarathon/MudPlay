@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using MudPlay.Game.Map;
 using MudPlay.Services;
@@ -230,7 +229,7 @@ public sealed class LoopShareReceiver : IDisposable
         // same loop sent twice to someone whose own loop of that name differs piled
         // up as "<name> 2", "<name> 3" (user, 2026-10-11). Each is compared as this
         // character runs it, with its own two settings for that loop.
-        if (Family(loop.Name).FirstOrDefault(held => LoopSignature.Of(held) == theirs) is { } same)
+        if (_loops.WithNumberedCopies(loop.Name).FirstOrDefault(held => LoopSignature.Of(held) == theirs) is { } same)
         {
             _log?.Info("LoopShare",
                 $"loop '{loop.Name}' {checkedAs} from {sender} is the loop we have as '{same.Name}' — nothing saved, nothing changed.");
@@ -255,7 +254,7 @@ public sealed class LoopShareReceiver : IDisposable
         // for it, and theirs is saved beside it under a numbered name. Taking their
         // two settings for the loop we have would change a run already under way.
         string original = loop.Name;
-        loop.Name = NumberedName(original);
+        loop.Name = _loops.NumberedName(original);
         _loops.Save(loop);
         string ourCode = LoopSignature.ShortOf(existing);
         _log?.Info("LoopShare",
@@ -264,45 +263,6 @@ public sealed class LoopShareReceiver : IDisposable
         _notice($"[Received loop '{original}' {rooms} rooms from {sender} {checkedAs}, saved as '{loop.Name}': "
             + $"your '{existing.Name}' is a different loop ({ourCode})]");
         Tell(channel, sender, theirCode, $"saved as '{loop.Name}'");
-    }
-
-    // "<name> 2", or the next number up that no loop has. Loop names are matched
-    // without case, as the catalogue matches them.
-    private string NumberedName(string name)
-    {
-        for (int n = 2; ; n++)
-        {
-            string candidate = $"{name} {n}";
-            if (_loops.Get(candidate) is null) return candidate;
-        }
-    }
-
-    // The loop named name, then the loops NumberedName has saved beside it, lowest
-    // number first.
-    private IEnumerable<Loop> Family(string name)
-    {
-        if (_loops.Get(name) is { } named) yield return named;
-        foreach ((Loop Loop, int Number) sibling in _loops.Loops
-                     .Select(l => (Loop: l, Number: SiblingNumber(l.Name, name)))
-                     .Where(p => p.Number > 0)
-                     .OrderBy(p => p.Number))
-            yield return sibling.Loop;
-    }
-
-    // The number in "<name> <n>" exactly as NumberedName writes it: one space, then
-    // digits only, 2 or more, no leading zero. 0 for any other name, so a loop the
-    // user named "<name> 2a", "<name>2" or "<name> (old)" is not taken for a copy.
-    internal static int SiblingNumber(string candidate, string name)
-    {
-        if (candidate.Length <= name.Length + 1
-            || !candidate.StartsWith(name, StringComparison.OrdinalIgnoreCase)
-            || candidate[name.Length] != ' ')
-            return 0;
-        ReadOnlySpan<char> digits = candidate.AsSpan(name.Length + 1);
-        if (digits[0] == '0') return 0;
-        foreach (char c in digits)
-            if (c is < '0' or > '9') return 0;
-        return int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out int n) && n >= 2 ? n : 0;
     }
 
     // Parse "@loopdata <id> <i>/<n> <chunk>", tolerating the {} a remote reply is

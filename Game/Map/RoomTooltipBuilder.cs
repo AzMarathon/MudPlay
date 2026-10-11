@@ -160,7 +160,7 @@ public static class RoomTooltipBuilder
         foreach (RoomMonsterRef m in ResolveRoomMonsters(room, data, spawnIndex).Placed)
         {
             if (data.FindRowByNumber("Monsters", m.Id) is not { } row) continue;
-            int greet = row.TryGetProperty("GreetTXT", out System.Text.Json.JsonElement g)
+            int greet = row.TryGetProperty("GreetTXT", out MudPlay.Services.GameValue g)
                         && g.ValueKind == System.Text.Json.JsonValueKind.Number && g.TryGetInt32(out int n) ? n : 0;
             if (greet <= 0) continue;
             foreach (GreetTeleportResolver.GreetTeleport t in GreetTeleportResolver.Resolve(tbinfo, greet, m.Name))
@@ -611,7 +611,7 @@ public static class RoomTooltipBuilder
             foreach (RoomMonsterRef m in ResolveRoomMonsters(room, data, spawnIndex).Placed)
             {
                 if (data.FindRowByNumber("Monsters", m.Id) is not { } row) continue;
-                int greet = row.TryGetProperty("GreetTXT", out System.Text.Json.JsonElement g)
+                int greet = row.TryGetProperty("GreetTXT", out MudPlay.Services.GameValue g)
                             && g.ValueKind == System.Text.Json.JsonValueKind.Number && g.TryGetInt32(out int n) ? n : 0;
                 if (greet <= 0) continue;
                 foreach (GuardDoorCommandResolver.GuardDoorCommand ask in
@@ -665,7 +665,7 @@ public static class RoomTooltipBuilder
                 if (exit.Hint == RoomExitHint.KeyLocked
                     && itemName is not { Length: > 0 }
                     && exit.StatRequirement > 0
-                    && data?.GetRawTable("Items") is not null)
+                    && data?.GetTable("Items") is not null)
                     return $"Door: {FormatDoorSkill(exit)}";
 
                 string baseText = itemName is { Length: > 0 }

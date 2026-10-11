@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -216,8 +216,8 @@ public sealed class UnmodifiedStatResolverTests
         [5574] = """{"Number":5574,"Name":"giant strength","MinBase":0,"MaxBase":0,"MinInc":10,"MinIncLVLs":45,"MaxInc":10,"MaxIncLVLs":45,"Abil-0":46,"AbilVal-0":0}""",
     };
 
-    private static JsonElement? SpellRow(int number) =>
-        SpellRows.TryGetValue(number, out string? json) ? JsonDocument.Parse(json).RootElement.Clone() : null;
+    private static GameRow? SpellRow(int number) =>
+        SpellRows.TryGetValue(number, out string? json) ? TestRows.Row(json) : null;
 
     private static readonly MessageRecord[] Catalogue =
     {

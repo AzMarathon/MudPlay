@@ -15,8 +15,8 @@ namespace MudPlay.Services;
 // render a result:
 //   - A copy/move into or out of the active set fires reloadActive with the parts
 //     that changed, so the live stores pick them up.
-//   - Deleting the active set switches the cache to no-set first (so no
-//     JsonDocument handle pins the directory), then fires onSetDeleted so the
+//   - Deleting the active set switches the cache to no-set first (so nothing
+//     is still loaded from the directory), then fires onSetDeleted so the
 //     caller can clear any profile / global reference that named the removed set.
 // The manager itself only touches the filesystem + GameDataCache;
 // settings/profile writes are the caller's job via the injected callbacks, which
@@ -209,7 +209,7 @@ public sealed class GameDataSetManager
         if (!Directory.Exists(dir))
             return new OpResult(false, $"Set '{setName}' does not exist.");
 
-        // Release any live JsonDocument handles into the directory before
+        // Drop the tables loaded from the directory before
         // we remove it; this also clears the live loop/lair caches via the
         // ActiveSetChanged wiring.
         if (string.Equals(_cache.ActiveSet, setName, StringComparison.OrdinalIgnoreCase))

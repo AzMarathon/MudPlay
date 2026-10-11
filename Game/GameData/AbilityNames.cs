@@ -156,20 +156,20 @@ public static class AbilityNames
     // signed when non-zero, name-only when the ability has no magnitude (flag-style
     // abilities). Empty string when no slots are populated.
     public static string SummarizeAbilities(
-        System.Text.Json.JsonElement element,
+        MudPlay.Services.GameRow element,
         int slots = 10,
         IReadOnlyCollection<int>? skipCodes = null)
     {
         List<string> parts = new();
         for (int i = 0; i < slots; i++)
         {
-            if (!element.TryGetProperty($"Abil-{i}", out System.Text.Json.JsonElement codeEl)) continue;
+            if (!element.TryGetProperty($"Abil-{i}", out MudPlay.Services.GameValue codeEl)) continue;
             if (codeEl.ValueKind != System.Text.Json.JsonValueKind.Number) continue;
             if (!codeEl.TryGetInt32(out int code) || code == 0) continue;
             if (skipCodes is not null && skipCodes.Contains(code)) continue;
 
             int val = 0;
-            if (element.TryGetProperty($"AbilVal-{i}", out System.Text.Json.JsonElement valEl)
+            if (element.TryGetProperty($"AbilVal-{i}", out MudPlay.Services.GameValue valEl)
                 && valEl.ValueKind == System.Text.Json.JsonValueKind.Number
                 && valEl.TryGetInt32(out int v))
             {
@@ -184,7 +184,7 @@ public static class AbilityNames
     }
 
     // Comma-joined summary of a sequence of (ability code, value) pairs — the
-    // in-memory counterpart to the JsonElement overload, for callers that already
+    // in-memory counterpart to the row overload, for callers that already
     // hold decoded ability slots (e.g. the Spell Book's per-spell effect rollup).
     // Same formatting: signed magnitude when non-zero, name-only for flag-style
     // abilities; zero codes and any skipCodes are omitted.
@@ -212,12 +212,12 @@ public static class AbilityNames
     // the grant differently. A row carrying any of these can disarm.
     private static readonly System.Collections.Generic.HashSet<int> TrapGrantCodes = new() { 40, 41, 1002 };
 
-    // True when the JSON row (a Classes / Races record) carries any trap-skill grant
+    // True when the row (a Classes / Races record) carries any trap-skill grant
     // in its Abil-0..9 slots — used by the trap-delegation capability check to decide
     // whether a party member's class or race makes them worth firing @trap at.
     // element is the source Classes / Races object; slots is the number of Abil-N
     // slots to scan (defaults to 10).
-    public static bool HasTrapAbility(System.Text.Json.JsonElement element, int slots = 10)
+    public static bool HasTrapAbility(MudPlay.Services.GameRow element, int slots = 10)
         => HasAnyAbility(element, TrapGrantCodes, slots);
 
     // True when the named class OR race grants the Traps skill in the active
@@ -259,23 +259,23 @@ public static class AbilityNames
     // A null row (unknown class / race, or no game data) contributes nothing.
     // Perception is deliberately absent: every class carries it, so it needs no gate.
     public static (bool Thievery, bool Traps, bool Picklocks, bool Tracking) GetThiefSkillGrants(
-        System.Text.Json.JsonElement? classRow, System.Text.Json.JsonElement? raceRow)
+        MudPlay.Services.GameRow? classRow, MudPlay.Services.GameRow? raceRow)
         => (Grants(classRow, raceRow, ThieveryGrantCodes),
             Grants(classRow, raceRow, TrapGrantCodes),
             Grants(classRow, raceRow, PicklockGrantCodes),
             Grants(classRow, raceRow, TrackingGrantCodes));
 
-    private static bool Grants(System.Text.Json.JsonElement? classRow, System.Text.Json.JsonElement? raceRow,
+    private static bool Grants(MudPlay.Services.GameRow? classRow, MudPlay.Services.GameRow? raceRow,
                                System.Collections.Generic.IReadOnlySet<int> codes)
         => (classRow is { } c && HasAnyAbility(c, codes)) || (raceRow is { } r && HasAnyAbility(r, codes));
 
     // True when the row carries any of the given ability codes in its Abil-N slots.
-    private static bool HasAnyAbility(System.Text.Json.JsonElement element,
+    private static bool HasAnyAbility(MudPlay.Services.GameRow element,
                                       System.Collections.Generic.IReadOnlySet<int> codes, int slots = 10)
     {
         for (int i = 0; i < slots; i++)
         {
-            if (!element.TryGetProperty($"Abil-{i}", out System.Text.Json.JsonElement codeEl)) continue;
+            if (!element.TryGetProperty($"Abil-{i}", out MudPlay.Services.GameValue codeEl)) continue;
             if (codeEl.ValueKind != System.Text.Json.JsonValueKind.Number) continue;
             if (codeEl.TryGetInt32(out int code) && codes.Contains(code)) return true;
         }
@@ -288,15 +288,15 @@ public static class AbilityNames
     // maps to "ShadowRest" above.
     private const int ShadowRestCode = 1103;
 
-    // True when the JSON row (a Classes record) carries the ShadowRest grant in any
+    // True when the row (a Classes record) carries the ShadowRest grant in any
     // of its Abil-0..9 slots — the capability gate for the shadow-rest resting
     // behavior. element is the source Classes object; slots is the number of Abil-N
     // slots to scan (defaults to 10).
-    public static bool HasShadowRest(System.Text.Json.JsonElement element, int slots = 10)
+    public static bool HasShadowRest(MudPlay.Services.GameRow element, int slots = 10)
     {
         for (int i = 0; i < slots; i++)
         {
-            if (!element.TryGetProperty($"Abil-{i}", out System.Text.Json.JsonElement codeEl)) continue;
+            if (!element.TryGetProperty($"Abil-{i}", out MudPlay.Services.GameValue codeEl)) continue;
             if (codeEl.ValueKind != System.Text.Json.JsonValueKind.Number) continue;
             if (codeEl.TryGetInt32(out int code) && code == ShadowRestCode) return true;
         }
@@ -306,13 +306,12 @@ public static class AbilityNames
     // True when any class in the given Classes table carries ShadowRest — the
     // realm-level capability gate (Paradigm ships classes with 1103; stock ships
     // none). Lets the UI hide the Utilize-shadowrest toggle entirely on a realm
-    // where no class could ever use it. classesTable is the raw imported "Classes"
-    // JSON array; null/non-array (no set imported) reads as "not available".
-    public static bool AnyClassHasShadowRest(System.Text.Json.JsonDocument? classesTable)
+    // where no class could ever use it. classesTable is the imported "Classes"
+    // table; null (no set imported) reads as "not available".
+    public static bool AnyClassHasShadowRest(MudPlay.Services.GameTable? classesTable)
     {
         if (classesTable is null) return false;
-        if (classesTable.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array) return false;
-        foreach (System.Text.Json.JsonElement row in classesTable.RootElement.EnumerateArray())
+        foreach (MudPlay.Services.GameRow row in classesTable.Rows)
             if (HasShadowRest(row)) return true;
         return false;
     }
