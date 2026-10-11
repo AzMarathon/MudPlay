@@ -3908,6 +3908,10 @@ public partial class MainWindowViewModel : ObservableObject
         // display is dropped as a peek) and text-exit movement verbs
         // (so the step is captured for replay-from-last-Confirmed).
         AppServices.Current.OutboundMovement.ObserveOutbound(data);
+        // Between a death and the first display of the room it left the character
+        // in, a room command that moves the character means the next display is of
+        // some other room: nothing is learned from that death.
+        AppServices.Current.ArrivalLearner.ObserveOutbound(data);
         // Cast observer — a manually-typed cast-code either overrides the round (a
         // combat spell — the user's attack; the engine holds its auto attack) or arms
         // the between-round-cast resume (an in-between heal/buff so a still-alive target

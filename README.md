@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.178.0**
+> **Version 3.179.0**
 > - New remote commands `@events` (lists your Events, each on or off) and `@event <name> [on|off]` (one event's state, or switches it); both need Alter settings
 > - Answers give an event's name, state and kind only, never what it sends
 > - The Events tab shows an `off` badge on a disabled event, and follows a remote switch at once

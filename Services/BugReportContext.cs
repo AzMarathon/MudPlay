@@ -114,7 +114,11 @@ public static class BugReportContext
         string dir = AppPaths.GameDataSetDir(set);
         if (!Directory.Exists(dir)) { Kv(sb, "Game data files", $"{set}: its folder is missing"); return; }
 
+        // The learned arrival rooms are kept in the set's folder and are not one of
+        // its tables: what the client saw, not what was imported.
+        string learned = Path.GetFileName(AppPaths.LearnedArrivalRoomsFile(set));
         List<FileInfo> files = new DirectoryInfo(dir).EnumerateFiles("*.json", SearchOption.TopDirectoryOnly)
+            .Where(f => !string.Equals(f.Name, learned, StringComparison.OrdinalIgnoreCase))
             .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ToList();
         Kv(sb, "Game data files", $"{set}: {files.Count} table file(s), {files.Sum(f => f.Length) / 1024} KB, "
             + (files.Count == 0 ? "none" : $"written {files.Min(f => f.LastWriteTime):yyyy-MM-dd HH:mm} to {files.Max(f => f.LastWriteTime):yyyy-MM-dd HH:mm}")
