@@ -115,7 +115,7 @@ public sealed class TollPurseDoubtTests : IDisposable
     // way there.
     //
     //   1/1 Home ──N── 1/2 Tavern ~ask barmaid adventure (10 gold)~ 1/391 Guild
-    private const string FareRoomsJson = """
+    internal const string FareRoomsJson = """
         [
           { "Map Number": 1, "Room Number": 1, "Name": "Home", "CMD": 0,
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "NPC": 0,
@@ -132,11 +132,11 @@ public sealed class TollPurseDoubtTests : IDisposable
         ]
         """;
 
-    private const string FareMonstersJson = """
+    internal const string FareMonstersJson = """
         [ { "Number": 248, "Name": "the barmaid", "GreetTXT": 40 } ]
         """;
 
-    private const string FareTbInfoJson = """
+    internal const string FareTbInfoJson = """
         [
           { "Number": 40, "LinkTo": 0, "Action": "adventure:41\n", "Called From": "Monster #248" },
           { "Number": 41, "LinkTo": 0, "Action": "price 1000 318:teleport 391 1:message 1\n", "Called From": "" }
@@ -146,7 +146,7 @@ public sealed class TollPurseDoubtTests : IDisposable
     // A pier whose sailing (1 gold) is the only way to the island.
     //
     //   1/1 Home ──N── 1/2 Pier ~secure passage to islea~ 1/10 Isle Port ──N── 1/11 Isle Town
-    private const string BoatRoomsJson = """
+    internal const string BoatRoomsJson = """
         [
           { "Map Number": 1, "Room Number": 1, "Name": "Home", "CMD": 0,
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
@@ -167,7 +167,7 @@ public sealed class TollPurseDoubtTests : IDisposable
         ]
         """;
 
-    private const string BoatTbInfoJson = """
+    internal const string BoatTbInfoJson = """
         [
           { "Number": 100, "LinkTo": 0,
             "Action": "secure passage to islea:minlevel 1 0:price 100 0:random 200:text 0\n",
@@ -176,7 +176,7 @@ public sealed class TollPurseDoubtTests : IDisposable
         ]
         """;
 
-    private const string BoatSpellsJson = """
+    internal const string BoatSpellsJson = """
         [
           { "Number": 600, "Name": "isle trip", "MinBase": 0, "MaxBase": 0, "Dur": 20,
             "Abil-0": 151, "AbilVal-0": 601 },
@@ -1117,21 +1117,34 @@ public sealed class TollPurseDoubtTests : IDisposable
         Assert.Single(rig.Unpaid);
     }
 
-    // Leading a party, with our own purse plenty and a follower's fresh reading
-    // short: the sailing is still the only crossing and is sailed with its warning,
-    // as before this change. What a party does at a fare is a ruling of its own.
+    // Leading a party, with our own purse plenty: a follower's short reading alone
+    // closes nothing, since the party's check asks at the dock and may pay for
+    // them. Once that check has closed the sailing to the party, the walk doesn't
+    // set out for it, and says who can't pay (user, 2026-10-10: a ride is checked
+    // as a toll is).
     [Fact]
-    public void AWalk_WhoseOnlyWayIsASailingAFollowerCantPay_StillSails()
+    public void AWalk_WhoseOnlyWayIsASailingThePartyCantAllPay_DoesNotSetOut_AndNamesWho()
     {
         Rig rig = NewRig(BoatRoomsJson, CoinBeforeTheDeath, tbInfoJson: BoatTbInfoJson, spellsJson: BoatSpellsJson);
         rig.Filter.PartyWealthProvider = () => 50;
         rig.Tracker.SetLocated(new RoomKey(1, 1));
 
         Assert.True(rig.Walker.WalkTo(new RoomKey(1, 11)));
-
         Assert.Equal(new[] { "n" }, rig.Sent);
-        Assert.DoesNotContain(rig.Events, e => e.Kind == WalkEventKind.Failed);
         Assert.Empty(rig.Unpaid);
+
+        rig.Walker.Stop("test");
+        rig.Sent.Clear();
+        rig.Filter.PartyTollClosedProbe = exit => exit.FareCopper == 100;
+        rig.Filter.PartyTollClosedReason = exit => exit.FareCopper == 100 ? "a member holds 5 silver, 5 silver short" : null;
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Assert.False(rig.Walker.WalkTo(new RoomKey(1, 11)));
+        Assert.Empty(rig.Sent);
+        Assert.Equal(
+            "all routes blocked by the boat 'secure passage to islea' from 1/2 (Pier) (1 gold per person) "
+            + "the party can't all pay: a member holds 5 silver, 5 silver short",
+            Assert.Single(rig.Unpaid).Reason);
     }
 
     // ----- a queued walk's route card ------------------------------------------

@@ -136,14 +136,26 @@ public sealed class PartyTollGateTests : IDisposable
             LoopEvents.Where(e => e.Kind == LoopEventKind.Failed).Select(e => e.Detail).SingleOrDefault();
     }
 
-    private Rig NewRig(string roomsJson)
+    // monstersJson and tbInfoJson give the graph an NPC's paid transport;
+    // tbInfoJson and spellsJson a sailing, and the walker its boat planner.
+    private Rig NewRig(string roomsJson, string? monstersJson = null, string? tbInfoJson = null, string? spellsJson = null)
     {
         string set = Path.Combine(_root, "alpha");
         Directory.CreateDirectory(set);
         File.WriteAllText(Path.Combine(set, "Rooms.json"), roomsJson);
+        if (monstersJson is not null) File.WriteAllText(Path.Combine(set, "Monsters.json"), monstersJson);
+        if (tbInfoJson is not null) File.WriteAllText(Path.Combine(set, "TBInfo.json"), tbInfoJson);
+        if (spellsJson is not null) File.WriteAllText(Path.Combine(set, "Spells.json"), spellsJson);
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
-        RoomGraphManager graph = new(cache);
+        TBInfoStore? tbInfo = null;
+        if (tbInfoJson is not null)
+        {
+            tbInfo = new TBInfoStore(cache);
+            tbInfo.OnActiveSetChanged("alpha");
+        }
+        RoomGraphManager graph = new(cache, log: null, tbinfo: tbInfo,
+            spellCatalog: spellsJson is null ? null : new MudPlay.Game.Spells.KnownSpellCatalog(cache));
         graph.OnActiveSetChanged("alpha");
         BfsMapper bfs = new(graph);
         RoomTracker tracker = new(graph);
@@ -196,6 +208,7 @@ public sealed class PartyTollGateTests : IDisposable
         };
 
         AutoWalkManager walker = new(graph, bfs, tracker, coordinator, filter);
+        if (spellsJson is not null) walker.SetBoatPlanner(new BoatRoutePlanner(graph, bfs));
         LoopRunner runner = new(tracker, coordinator, graph: graph, bfs: bfs, filter: filter, postToUi: act => act());
         runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
 
@@ -1488,6 +1501,162 @@ public sealed class PartyTollGateTests : IDisposable
         Assert.Equal(PartyTollGate.StepVerdict.Closed, off.Gate.BeforeSailing(in sailing));
         Assert.Empty(off.Gives);
         Assert.Equal(ExitBlockReason.Fare, off.Filter.DescribeBoatBlock(in sailing));
+    }
+
+    // ----- rides, through the walker ------------------------------------------------------------
+
+    // The tavern's barmaid takes whoever asks to the guild for 10 gold, the only way there.
+    private Rig AtTheTavern(bool party = true)
+    {
+        Rig rig = NewRig(TollPurseDoubtTests.FareRoomsJson,
+            monstersJson: TollPurseDoubtTests.FareMonstersJson, tbInfoJson: TollPurseDoubtTests.FareTbInfoJson);
+        if (party)
+        {
+            rig.Follower("Bob");
+            rig.Follower("Cal");
+            rig.Lead();
+        }
+        rig.Gold = 30;
+        rig.Tracker.SetLocated(new RoomKey(1, 2));
+        return rig;
+    }
+
+    // The pier's sailing (1 gold) is the only way to the island.
+    private Rig AtThePier(bool party = true)
+    {
+        Rig rig = NewRig(TollPurseDoubtTests.BoatRoomsJson,
+            tbInfoJson: TollPurseDoubtTests.BoatTbInfoJson, spellsJson: TollPurseDoubtTests.BoatSpellsJson);
+        if (party)
+        {
+            rig.Follower("Bob");
+            rig.Follower("Cal");
+            rig.Lead();
+        }
+        rig.Tracker.SetLocated(new RoomKey(1, 2));
+        return rig;
+    }
+
+    private static readonly RoomKey Guild = new(1, 391), IsleTown = new(1, 11);
+    private const string AskTheBarmaid = "ask barmaid adventure", Sail = "secure passage to islea";
+
+    [Fact]
+    public void AWalkThroughAnNpcsFare_WithFundingOn_GivesThenConfirmsThenAsks()
+    {
+        Rig rig = AtTheTavern();
+        rig.Fund = true;
+        Assert.True(rig.Walker.WalkTo(Guild));
+        Assert.Equal(BothAsked, rig.Asked);
+        Assert.Empty(rig.Moves);                                  // the keyword waits for the purses
+
+        rig.Says("Bob", 400);
+        rig.Says("Cal", 1_000);
+        Assert.Equal(new[] { "give 6 gold to Bob" }, rig.Gives);
+        Assert.Empty(rig.Moves);                                  // and for the game to confirm the coin
+
+        rig.Confirms("Bob", 6);
+        Assert.Equal(new[] { AskTheBarmaid }, rig.Moves);
+        Assert.Null(rig.WalkFailure);
+    }
+
+    [Fact]
+    public void AWalkThroughAnNpcsFare_WithFundingOff_EndsNamingTheRideAndTheSetting()
+    {
+        Rig rig = AtTheTavern();
+        Assert.True(rig.Walker.WalkTo(Guild));
+        rig.Says("Bob", 400);
+        rig.Says("Cal", 1_000);
+
+        Assert.Empty(rig.Gives);
+        Assert.Empty(rig.Moves);
+        Assert.Equal(WalkState.Idle, rig.Walker.State);
+        Assert.Equal(
+            "all routes blocked by a paid transport from 1/2 (Tavern) (10 gold per person) the party can't all pay: "
+            + "Bob holds 4 gold, 6 gold short; "
+            + "\"Fund party members' tolls / rides if short\" is off (Settings, Cash + Items), so no coin is handed over",
+            Assert.Single(rig.Notices));
+    }
+
+    [Fact]
+    public void AWalkThroughAnNpcsFare_Solo_AsAFollower_OrWithTheMasterSwitchOff_AsksNobody()
+    {
+        Rig solo = AtTheTavern(party: false);
+        Assert.True(solo.Walker.WalkTo(Guild));
+        Assert.Equal(new[] { AskTheBarmaid }, solo.Moves);
+        Assert.Empty(solo.Asked);
+
+        Rig follower = AtTheTavern(party: false);
+        follower.Follower("Bob");
+        follower.Party.IsInParty = true;                          // in a party, and not its leader
+        Assert.True(follower.Walker.WalkTo(Guild));
+        Assert.Equal(new[] { AskTheBarmaid }, follower.Moves);
+        Assert.Empty(follower.Asked);
+
+        Rig off = AtTheTavern();
+        off.MasterOff = true;
+        Assert.True(off.Walker.WalkTo(Guild));
+        Assert.Equal(new[] { AskTheBarmaid }, off.Moves);
+        Assert.Empty(off.Asked);
+        Assert.Empty(off.Gives);
+    }
+
+    [Fact]
+    public void AWalkThroughASailing_WithFundingOn_GivesThenConfirmsThenBoards()
+    {
+        Rig rig = AtThePier();
+        rig.Fund = true;
+        Assert.True(rig.Walker.WalkTo(IsleTown));
+        Assert.Equal(BothAsked, rig.Asked);
+        Assert.Empty(rig.Moves);
+
+        rig.Says("Bob", 0);
+        rig.Says("Cal", 100);
+        Assert.Equal(new[] { "give 1 gold to Bob" }, rig.Gives);
+        Assert.Empty(rig.Moves);
+
+        rig.Confirms("Bob", 1);
+        Assert.Equal(new[] { Sail }, rig.Moves);
+        Assert.Null(rig.WalkFailure);
+    }
+
+    [Fact]
+    public void AWalkThroughASailing_WithFundingOff_EndsNamingTheRideAndTheSetting()
+    {
+        Rig rig = AtThePier();
+        Assert.True(rig.Walker.WalkTo(IsleTown));
+        rig.Says("Bob", 0);
+        rig.Says("Cal", 100);
+
+        Assert.Empty(rig.Gives);
+        Assert.Empty(rig.Moves);
+        Assert.Equal(WalkState.Idle, rig.Walker.State);
+        Assert.Equal(
+            "all routes blocked by the boat 'secure passage to islea' from 1/2 (Pier) (1 gold per person) "
+            + "the party can't all pay: Bob holds 0 copper, 1 gold short; "
+            + "\"Fund party members' tolls / rides if short\" is off (Settings, Cash + Items), so no coin is handed over",
+            Assert.Single(rig.Notices));
+    }
+
+    [Fact]
+    public void AWalkThroughASailing_Solo_AsAFollower_OrWithTheMasterSwitchOff_AsksNobody()
+    {
+        Rig solo = AtThePier(party: false);
+        Assert.True(solo.Walker.WalkTo(IsleTown));
+        Assert.Equal(new[] { Sail }, solo.Moves);
+        Assert.Empty(solo.Asked);
+
+        Rig follower = AtThePier(party: false);
+        follower.Follower("Bob");
+        follower.Party.IsInParty = true;
+        Assert.True(follower.Walker.WalkTo(IsleTown));
+        Assert.Equal(new[] { Sail }, follower.Moves);
+        Assert.Empty(follower.Asked);
+
+        Rig off = AtThePier();
+        off.MasterOff = true;
+        Assert.True(off.Walker.WalkTo(IsleTown));
+        Assert.Equal(new[] { Sail }, off.Moves);
+        Assert.Empty(off.Asked);
+        Assert.Empty(off.Gives);
     }
 
     // ----- a trip's bank stop -----------------------------------------------------------------
