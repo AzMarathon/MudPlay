@@ -22,6 +22,9 @@ public sealed class RelogSignal
 {
     private bool _relogPending;
 
+    // For a bug report: a relog that is owed, or null.
+    public string? DescribePending() => _relogPending ? "a relog is pending" : null;
+
     // Arm the one-shot relog flag. Called by Game.Remote.RelogHandler just
     // before the wire exit command lands, so the Disconnected handler (which
     // races with the wire round-trip) sees the intent.

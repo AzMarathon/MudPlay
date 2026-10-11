@@ -840,6 +840,31 @@ public sealed class HealthManager : IDisposable
     // True between the rest emit and the corresponding stand emit.
     public bool RestInFlight => _restInFlight;
 
+    // The rest and flee latches that are set right now, for a bug report: what a
+    // character that won't rest, won't stop resting or won't come back is held on.
+    public IReadOnlyList<string> DescribeWaits()
+    {
+        List<string> waits = new();
+        if (_hpGateAsserted) waits.Add("HP recovery gate asserted");
+        if (_maGateAsserted) waits.Add("mana recovery gate asserted");
+        if (_restInFlight)
+            waits.Add("rest sent" + (_restConfirmedByPrompt ? ", confirmed by the prompt" : ", not yet confirmed by the prompt"));
+        if (_restResumeOwed) waits.Add("a rest resume is owed");
+        if (_restHeldPendingReconfirm)
+            waits.Add($"rest held pending a re-read since {_restHoldSetAt.ToLocalTime():HH:mm:ss}");
+        if (_restOwedFromDamagingRoom) waits.Add("a rest put off for the room's spell is owed");
+        if (RestWaitingOnSneak) waits.Add("rest waiting on a kept sneak");
+        if (_partyWaitSignaled) waits.Add("@wait sent, @ok not yet");
+        if (_partyOkHeldSince is { } okHeld) waits.Add($"@ok held for gear since {okHeld.ToLocalTime():HH:mm:ss}");
+        if (_fledThisCombat) waits.Add("fled this combat (waits for it to end)");
+        if (_fleeEngine is not null) waits.Add($"fleeing, {_fleeQueue.Count} step(s) left");
+        if (_deferredFleeReason is { } deferred) waits.Add($"a flee is deferred: {deferred}");
+        if (_fleeResumeAwaitsPrompt) waits.Add("the flee's resume waits for a prompt");
+        if (_escapeSentAt is { } escape) waits.Add($"escape sent at {escape.ToLocalTime():HH:mm:ss}");
+        if (_forceClearForRest) waits.Add("engaging to clear a rest-blocker");
+        return waits;
+    }
+
     // True between the run-if-below reaction (a flee for leader / solo, or a
     // broadcast @heal for a party follower) and the next time
     // PlayerState.InCombat goes false. Single-shot per combat so a low-HP fight

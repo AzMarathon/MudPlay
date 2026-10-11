@@ -65,6 +65,9 @@ public sealed partial class TelepathPacer
     private int _resendsQueued;
     private int _resends;
     private int _givenUp;
+    // Nothing leaves the outbox while this is set (Hold / Release). Under _lock
+    // like the outbox it stops.
+    private bool _held;
 
     public TelepathPacer(Action<TimeSpan, Action> armTimer, Func<DateTimeOffset>? now = null, LogService? log = null)
     {
@@ -84,7 +87,30 @@ public sealed partial class TelepathPacer
         _lines.LineEmitted += OnLine;
     }
 
+    // Keep every queued telepath (and any resend) off the wire until Release.
+    // The pacer writes from its own timer, past the send gate and past whoever
+    // watches what is typed, so a caller that has put a question to the game and
+    // must be the next to answer it holds the pacer as well: the game would take
+    // a telepath written in between as the answer. @suicide does, from `suicide`
+    // to the password. Safe from any thread.
+    public void Hold()
+    {
+        lock (_lock) _held = true;
+    }
+
+    // Let the outbox go again; what waited is written in its order, paced as ever.
+    public void Release()
+    {
+        lock (_lock)
+        {
+            if (!_held) return;
+            _held = false;
+        }
+        Pump();
+    }
+
     // Bug-report surface.
+    public bool Held { get { lock (_lock) return _held; } }
     public int Queued { get { lock (_lock) return _outbox.Count; } }
     public int InFlight { get { lock (_lock) return _inFlight.Count; } }
     public int Resends { get { lock (_lock) return _resends; } }
@@ -99,7 +125,17 @@ public sealed partial class TelepathPacer
         int start = 0;
         lock (_lock)
         {
-            for (int i = 0; i < data.Length; i++)
+            // While the outbox is held, what is handed over is the holder's own
+            // answer: every other sender is stopped at the send gate or ends the
+            // hold before it gets here. It is written at once whatever it looks
+            // like. A password that begins with a slash and a letter must not
+            // wait in the outbox as a telepath, behind the ones already there.
+            if (_held)
+            {
+                passThrough.AddRange(data);
+                start = data.Length;
+            }
+            for (int i = start; i < data.Length; i++)
             {
                 if (data[i] != (byte)'\r') continue;
                 int end = i + 1;
@@ -130,7 +166,7 @@ public sealed partial class TelepathPacer
         TimeSpan wait = TimeSpan.Zero;
         lock (_lock)
         {
-            if (_outbox.First is null || _pumpArmed) return;
+            if (_held || _outbox.First is null || _pumpArmed) return;
             DateTimeOffset now = _now();
             DateTimeOffset due = _lastSent + Gap;
             if (now < due)

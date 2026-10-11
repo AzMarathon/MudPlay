@@ -15,6 +15,10 @@ namespace MudPlay.Game.Recovery;
 // engines and clear the buff timers as a death does: a verdict that arrives
 // later (a `stat` typed hours in) finds a character that has been playing since,
 // with buffs cast after the death and a loop that is doing fine.
+//
+// NothingLost says it was an arena death (a hang-up while dropped in an arena
+// room): no life, item or coin was taken, so the record lists no pile and is
+// written as a witnessed arena death's is.
 public sealed record UnwitnessedDeath(
     RoomRef? Room,
     DateTimeOffset At,
@@ -23,4 +27,5 @@ public sealed record UnwitnessedDeath(
     List<DeathItem>? Equipped,
     List<DeathItem>? Lost,
     CurrencyHoldings? Coins,
-    bool AtEntry = true);
+    bool AtEntry = true,
+    bool NothingLost = false);

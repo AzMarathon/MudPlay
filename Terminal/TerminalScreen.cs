@@ -15,6 +15,13 @@ public sealed class TerminalScreen
     // leaving them blank — a scrolled-off row already carries its own capture
     // time in the scrollback ring, but the rows still visible did not until now.
     private DateTimeOffset[] _rowStamps;
+    // Per-row: the emulator left this row by wrapping a long line at the right
+    // margin, so the row below carries on the same line. Kept in lockstep with
+    // _rowStamps and handed to the scrollback with the row, so a reader of the
+    // transcript can tell a continuation from a new line (a full row proves
+    // nothing: a line can end exactly at the margin). Set per line, never per
+    // cell.
+    private bool[] _rowSoftWrapped;
     private uint _revision;
 
     public int Cols { get; private set; }
@@ -50,6 +57,17 @@ public sealed class TerminalScreen
         _cells = new Cell[cols * rows];
         Array.Fill(_cells, Cell.Blank);
         _rowStamps = new DateTimeOffset[rows];
+        _rowSoftWrapped = new bool[rows];
+    }
+
+    // Whether row y was left by a wrap at the right margin (the row below
+    // continues its line).
+    public bool RowSoftWrapped(int y) => (uint)y < (uint)Rows && _rowSoftWrapped[y];
+
+    // The emulator's word on how row y was left: by a wrap, or by a real line end.
+    public void SetRowSoftWrapped(int y, bool wrapped)
+    {
+        if ((uint)y < (uint)Rows) _rowSoftWrapped[y] = wrapped;
     }
 
     // Read a cell at (x, y). Caller is responsible for bounds.
@@ -74,6 +92,7 @@ public sealed class TerminalScreen
         var fresh = new Cell[cols * rows];
         Array.Fill(fresh, Cell.Blank);
         var freshStamps = new DateTimeOffset[rows];
+        var freshWrapped = new bool[rows];
 
         int copyCols = Math.Min(cols, Cols);
         int copyRows = Math.Min(rows, Rows);
@@ -85,16 +104,18 @@ public sealed class TerminalScreen
         // Push the rows we're about to lose into scrollback so the user
         // can still scrub them in the Backscroll window.
         for (int y = 0; y < dropFromTop; y++)
-            Scrollback.Append(_cells.AsSpan(y * Cols, Cols), _rowStamps[y]);
+            Scrollback.Append(_cells.AsSpan(y * Cols, Cols), _rowStamps[y], _rowSoftWrapped[y]);
 
         for (int y = 0; y < copyRows; y++)
         {
             Array.Copy(_cells, (y + dropFromTop) * Cols, fresh, y * cols, copyCols);
             freshStamps[y] = _rowStamps[y + dropFromTop];
+            freshWrapped[y] = _rowSoftWrapped[y + dropFromTop];
         }
 
         _cells = fresh;
         _rowStamps = freshStamps;
+        _rowSoftWrapped = freshWrapped;
         Cols = cols;
         Rows = rows;
         CursorX = Math.Min(CursorX, cols - 1);
@@ -127,6 +148,7 @@ public sealed class TerminalScreen
         var blank = new Cell(' ', attr);
         Array.Fill(_cells, blank);
         Array.Clear(_rowStamps);
+        Array.Clear(_rowSoftWrapped);
         Bump();
     }
 
@@ -145,6 +167,11 @@ public sealed class TerminalScreen
         var blank = new Cell(' ', attr);
         for (int x = fromCol; x <= toColInclusive; x++)
             _cells[y * Cols + x] = blank;
+        // Erased to the margin: whatever wrapped from here is no longer this
+        // row's line. Erased from its start: this row no longer carries on the
+        // line of the row above (a prompt rewritten in place does this).
+        if (toColInclusive == Cols - 1) _rowSoftWrapped[y] = false;
+        if (fromCol == 0 && y > 0) _rowSoftWrapped[y - 1] = false;
     }
 
     // Clear a contiguous block of rows [fromRow, toRow] inclusive. Captures
@@ -160,6 +187,7 @@ public sealed class TerminalScreen
             for (int x = 0; x < Cols; x++)
                 _cells[y * Cols + x] = blank;
             _rowStamps[y] = default;
+            _rowSoftWrapped[y] = false;
         }
     }
 
@@ -175,7 +203,7 @@ public sealed class TerminalScreen
 
         for (int y = fromRow; y <= lastNonBlank; y++)
         {
-            Scrollback.Append(_cells.AsSpan(y * Cols, Cols), _rowStamps[y]);
+            Scrollback.Append(_cells.AsSpan(y * Cols, Cols), _rowStamps[y], _rowSoftWrapped[y]);
         }
     }
 
@@ -208,7 +236,7 @@ public sealed class TerminalScreen
         {
             for (int y = 0; y < n; y++)
             {
-                Scrollback.Append(_cells.AsSpan(y * Cols, Cols), _rowStamps[y]);
+                Scrollback.Append(_cells.AsSpan(y * Cols, Cols), _rowStamps[y], _rowSoftWrapped[y]);
             }
         }
         // Move surviving rows up.
@@ -216,6 +244,7 @@ public sealed class TerminalScreen
         {
             Array.Copy(_cells, (y + n) * Cols, _cells, y * Cols, Cols);
             _rowStamps[y] = _rowStamps[y + n];
+            _rowSoftWrapped[y] = _rowSoftWrapped[y + n];
         }
         // Blank the freshly-revealed rows at the bottom of the region.
         var blank = new Cell(' ', attr);
@@ -224,6 +253,7 @@ public sealed class TerminalScreen
             for (int x = 0; x < Cols; x++)
                 _cells[y * Cols + x] = blank;
             _rowStamps[y] = default;
+            _rowSoftWrapped[y] = false;
         }
     }
 
@@ -239,6 +269,7 @@ public sealed class TerminalScreen
         {
             Array.Copy(_cells, (y - n) * Cols, _cells, y * Cols, Cols);
             _rowStamps[y] = _rowStamps[y - n];
+            _rowSoftWrapped[y] = _rowSoftWrapped[y - n];
         }
         var blank = new Cell(' ', attr);
         for (int y = top; y < top + n; y++)
@@ -246,6 +277,7 @@ public sealed class TerminalScreen
             for (int x = 0; x < Cols; x++)
                 _cells[y * Cols + x] = blank;
             _rowStamps[y] = default;
+            _rowSoftWrapped[y] = false;
         }
     }
 

@@ -77,14 +77,29 @@ public sealed class InGameCapture : IDisposable
     // while out of it. A report's raw wire section starts from here.
     public long? WireMark { get; private set; }
 
-    public void NotifyConnected() => LinkChanged("a new connection");
-    public void NotifyDisconnected() => LinkChanged("the link dropped");
+    public void NotifyConnected()
+    {
+        ConnectedAt = DateTimeOffset.Now;
+        LinkChanged("a new connection");
+    }
+
+    public void NotifyDisconnected()
+    {
+        ConnectedAt = null;
+        LinkChanged("the link dropped");
+    }
+
+    // When the present link came up, and when the game was last entered on it;
+    // null while there is none. A bug report reads both.
+    public DateTimeOffset? ConnectedAt { get; private set; }
+    public DateTimeOffset? InGameSince { get; private set; }
 
     private void OnPrompt(PromptObservation _)
     {
         SetAtBoardMenu(false);
         if (Window.IsOn) return;
         Window.Set(true, DateTimeOffset.Now);
+        InGameSince = DateTimeOffset.Now;
         WireMark = _wire.TotalBytes;
         _log?.Info(LogCategory, "in the game: a bug report copies the terminal from here");
         InGameChanged?.Invoke(true);
@@ -108,6 +123,7 @@ public sealed class InGameCapture : IDisposable
     private void Close(DateTimeOffset at, string why)
     {
         Window.Set(false, at);
+        InGameSince = null;
         WireMark = null;
         _log?.Info(LogCategory, $"out of the game ({why}): a bug report copies nothing from here until the next game prompt");
         InGameChanged?.Invoke(false);
