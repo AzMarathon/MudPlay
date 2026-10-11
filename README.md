@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.179.9**
-> - Switching game-data sets: the indexes built from each set (monster drops and spawns, room hazards, quest steps and others) build several times faster and allocate a fraction of the memory; the first item window and first room hover after a load no longer pause to read the Rooms table back
-> - Program log shows how long the per-set indexes took on each set load
+> **Version 3.179.12**
+> - A BBS, realm, profile or game-data set name that can't be a folder's name is refused wherever a path is made from it; a name like `..` could delete a BBS with its characters, or the whole data folder
+> - The naming boxes refuse the same names and say why as you type; the Settings BBS Name box is checked too
+> - Profiles, realms and BBSes already under such a name still load and can be renamed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

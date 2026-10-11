@@ -4807,8 +4807,10 @@ You can edit **several boards in one visit**: click between them freely and ever
 ### Name
 
 **Default:** empty
-**What it does:** The display name for this saved BBS entry (also its on-disk filename).
-**Important notes:** Renaming moves the underlying save file (and every character profile stored under it) to the new name the moment you save — not deferred to a later step. If another entry already has that name, the rename is silently rejected.
+**What it does:** The display name for this saved BBS entry (also the name of its folder on disk).
+**Important notes:** Renaming moves the BBS's folder (and every character profile stored under it) to the new name the moment you save — not deferred to a later step. If another entry already has that name, or the name can't be a folder's, the BBS keeps the name it had and a message says why; the rest of what you changed is still saved.
+
+**Names that become folders.** A BBS, a realm, a character profile and a game-data set are each a folder on disk named after what you call it, so the same rule applies to all four, on every platform: the name can't be empty, `.` or `..`; can't contain `/`, `\`, `:` or a control character (on Windows also `<`, `>`, `"`, `|`, `?`, `*`); can't end with a dot or a space; and can't be one of the names Windows keeps for devices (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`, with or without an extension). The naming boxes tell you as you type. A game-data set is named after the database file you import, so rename a file whose name breaks the rule before importing it. A profile, realm or BBS you already have under a name the rule now refuses still loads, saves and plays as before, and can be renamed, copied, moved to another BBS and deleted; it just can't be renamed to another such name.
 
 ### Host / Port
 
