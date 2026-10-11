@@ -3966,6 +3966,12 @@ public partial class MainWindowViewModel : ObservableObject
         // conversation entry is attributed. Typed telepaths render on-screen
         // and are caught by the router's line sniff instead.
         AppServices.Current.Chat.ObserveOutbound(data);
+        // Timer sync — a `@timer sync` telepath the client sends for another player
+        // (a relay-back, a `@do`) is told from the user's own when its echo comes.
+        AppServices.Current.TimerSyncOrigin.ObserveOutbound(data,
+            usersOwn: AppServices.Current.EngineGate.SendingUsersOwnCommand
+                && AppServices.Current.Do.SendingFor is null
+                && AppServices.Current.PartyEssentials.RelayingFor is null);
         // Auto-party — every outbound `invite X` (whoever sent it) starts X's invite
         // cooldown, so two re-invite paths firing together send one invite.
         AppServices.Current.AutoParty.ObserveOutbound(data);
@@ -4108,10 +4114,14 @@ public partial class MainWindowViewModel : ObservableObject
         switch (asked.Transfer)
         {
             case Game.Remote.Transfer.TimerSync:
-                // A telepath's echo names the player it went to: the one whose
-                // answer is an answer to that request.
+                // A telepath's echo names the player it reached: the one whose
+                // answer is an answer to that request, when the request was the
+                // user's. One the client sent for another player (a relay-back, a
+                // `@do`) still opens the window, and its answer is a pick.
                 OpenTimerSyncWindow(asked.Channel,
-                    asked.Channel == Game.Remote.RemoteChannel.Telepath ? e.Speaker : null);
+                    asked.Channel == Game.Remote.RemoteChannel.Telepath && AppServices.Current.TimerSyncOrigin.MadeByUser(e)
+                        ? e.Speaker
+                        : null);
                 break;
             case Game.Remote.Transfer.RoombaSync:
                 AppServices.Current.RoombaSync.NoteSyncRequested();

@@ -17,7 +17,7 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
 {
     public string BossName { get; }
     public int? MonsterNumber { get; }
-    public string? MatchName { get; }        // our BossStore name (null = untracked by us)
+    public string? MatchName { get; private set; }   // our BossStore name (null = untracked by us)
     // The name a responder sent (may be null for a number-only record) — the adoption
     // fallback when the identity isn't in our catalog by number.
     public string? SentName { get; }
@@ -86,6 +86,15 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
         OursText = text;
         WasAutoMerged = true;
         if (!HasConflict) ResolvedStatus = $"Adopted {responder}'s timer — {text}";
+    }
+
+    // The boss was not on our list when the row was built and is on it now, under
+    // matchName: the row is weighed against our timer for it from here on. With no
+    // timer yet it reads as any tracked boss we hold none for.
+    public void Track(string matchName, string noTimerText)
+    {
+        MatchName = matchName;
+        if (OursKilledAt is null) OursText = noTimerText;
     }
 
     // Our timer for this boss is no longer the one the row was showing (a kill of

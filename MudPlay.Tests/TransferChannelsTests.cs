@@ -199,10 +199,12 @@ public sealed class TransferChannelsTests
         private readonly PlayerDatabase _players = new();
 
         // Give a player every permission.
-        public void Grant(string name)
+        public void Grant(string name) => Grant(name, (PlayerRemoteControls)~0);
+
+        public void Grant(string name, PlayerRemoteControls controls)
         {
             _players.RecordObservation(name, null, null, null, null, null, null, Now);
-            _players.EditCustomization(name, new PlayerCustomization(RemoteControls: (PlayerRemoteControls)~0));
+            _players.EditCustomization(name, new PlayerCustomization(RemoteControls: controls));
         }
     }
 
@@ -716,7 +718,10 @@ public sealed class TransferChannelsTests
             if (args.Any(a => a.Contains("reroll"))) return (none, false);
             // A command for telepath and gangpath only is put on no channel by us.
             if (RemoteCommandCatalog.IsPathChannelOnly(command)) return (none, false);
-            return (sender == "Stranger" ? failure : new[] { $"br {line[1..]}\r" }, false);
+            if (sender == "Stranger") return (failure, false);
+            // What `@do` may not send for a player, a relay may not either.
+            if (command == "@suicide") return (warn ? new[] { "br {suicide is not relayed}\r" } : none, false);
+            return (new[] { $"br {line[1..]}\r" }, false);
         }
         // A blocked word anywhere in the line is never answered, on any channel.
         // Asking what a command does is not sending it.
@@ -893,6 +898,95 @@ public sealed class TransferChannelsTests
         e.Commands.DispatchForTests(Broadcast("Stranger", "@health"));
         Assert.Equal("br {command invalid or not allowed}\r", e.Wire.Last());
         Assert.Equal(cap, e.Ran.Count);
+
+        // A minute after the first of those answers, there is room for one more.
+        e.Clock += BroadcastAnswerBudget.Window;
+        e.Commands.DispatchForTests(Broadcast($"Granted{cap}", "@health"));
+        Assert.Equal(cap + 1, e.Ran.Count);
+    }
+
+    // One speaker, one answer a minute, whichever kind it is: a player who holds
+    // some permissions and not others does not draw an answer and then a refusal,
+    // or a refusal and then an answer. The second line inside the minute is passed
+    // over, and a command among them is not run; a minute on, it is.
+    [Theory]
+    [InlineData("@health", "br {HP=1/1}\r", "@timer")]
+    [InlineData("@timer", "br {command invalid or not allowed}\r", "@health")]
+    public void OnTheBroadcastChannel_ASpeakerHasOneAnswerAMinute_AcrossAnswersAndRefusals(
+        string first, string firstAnswer, string second)
+    {
+        Engine e = new();
+        e.Grant("Half", PlayerRemoteControls.QueryHealthStatus);
+
+        e.Commands.DispatchForTests(Broadcast("Half", first));
+        e.Commands.DispatchForTests(Broadcast("Half", second));
+
+        Assert.Equal(firstAnswer, e.Wire.Single());
+        Assert.Equal(first == "@health" ? 1 : 0, e.Ran.Count);
+        Assert.Contains(DebugLines(e), l => l ==
+            $"Passing over {second} from Half on the broadcast channel: they were answered there less than a minute ago.");
+
+        e.Clock += BroadcastAnswerBudget.Window;
+        e.Commands.DispatchForTests(Broadcast("Half", second));
+        Assert.Equal(2, e.Wire.Length);
+        Assert.Single(e.Ran);
+    }
+
+    // What `@do` may not send for a player, a relay may not send for them: the
+    // words go out as ours either way. `&@suicide` and `&@do suicide` are refused
+    // on every channel, to a player with the grant by the Warn setting and with the
+    // reason, and to one without it with the Failure message alone. A command the
+    // `@do` rule does not cover is relayed as ever.
+    [Theory]
+    [InlineData(RemoteChannel.Telepath, "/Friend ")]
+    [InlineData(RemoteChannel.Gangpath, "bg ")]
+    [InlineData(RemoteChannel.Local, ">Friend ")]
+    [InlineData(RemoteChannel.Broadcast, "br ")]
+    public void ARelayBackOfSuicide_IsRefusedAsDoIs_OnEveryChannel(RemoteChannel channel, string verb)
+    {
+        foreach (string line in new[] { "&@suicide", "&@suicide!", "&@do suicide", "&@do br @suicide", "&@do /Friend \"suicide\"" })
+        {
+            Engine e = new(everyCommand: true);
+            e.Commands.DispatchForTests(On(channel, "Friend", line));
+            Assert.Equal($"{verb}{{suicide is not relayed}}\r", e.Wire.Single());
+            Assert.Empty(e.Ran);
+
+            Engine quiet = new(warn: false, everyCommand: true);
+            quiet.Commands.DispatchForTests(On(channel, "Friend", line));
+            Assert.Empty(quiet.Wire);
+
+            Engine stranger = new(everyCommand: true);
+            stranger.Commands.DispatchForTests(On(channel, "Stranger", line));
+            Assert.EndsWith("{command invalid or not allowed}\r", stranger.Wire.Single());
+        }
+
+        Engine other = new(everyCommand: true);
+        other.Commands.DispatchForTests(On(channel, "Friend", "&@hangup"));
+        Assert.Equal($"{verb}@hangup\r", other.Wire.Single());
+        // A word that only contains it is not the command.
+        other.Clock += TimeSpan.FromMinutes(2);
+        other.Commands.DispatchForTests(On(channel, "Friend", "&@do say suicidal"));
+        Assert.Equal($"{verb}@do say suicidal\r", other.Wire.Last());
+    }
+
+    // A block that never answers is on record at Info where its sender had to reach
+    // us by telepath, in our gang or our room. On the broadcast channel anyone can
+    // say such a line as often as they like, so it is logged at Debug there.
+    [Theory]
+    [InlineData("@do reroll", "Blocked @do from Stranger")]
+    [InlineData("&@do reroll", "Blocked relay-back of @do for Stranger")]
+    [InlineData("@dupe Friend", "Ignoring @dupe from Stranger on")]
+    public void ASilentBlock_IsLoggedAtDebugOnTheBroadcastChannel_AndAtInfoElsewhere(string line, string logged)
+    {
+        Engine onBroadcast = new(everyCommand: true);
+        onBroadcast.Commands.DispatchForTests(Broadcast("Stranger", line));
+        LogEntry there = Assert.Single(onBroadcast.Log.Snapshot(), l => l.Message.StartsWith(logged));
+        Assert.Equal(LogSeverity.Debug, there.Severity);
+
+        Engine onSay = new(everyCommand: true);
+        onSay.Commands.DispatchForTests(On(RemoteChannel.Local, "Stranger", line));
+        LogEntry here = Assert.Single(onSay.Log.Snapshot(), l => l.Message.StartsWith(logged));
+        Assert.Equal(LogSeverity.Info, here.Severity);
     }
 
     // A refusal a handler gives a granted player (a transfer on a channel it does
@@ -1002,6 +1096,11 @@ public sealed class TransferChannelsTests
         e.Commands.DispatchForTests(Broadcast("Friend", "@timer sync"));
         Assert.Single(e.Ran);
         Assert.Equal(cap + 1, e.Wire.Length);
+
+        // A minute after the first of the refusals, there is room for one more.
+        e.Commands.DispatchForTests(Broadcast("Latecomer", "@timer sync"));
+        Assert.Equal(cap + 2, e.Wire.Length);
+        Assert.Equal("br {command invalid or not allowed}\r", e.Wire.Last());
         Assert.Equal(cap + 1, e.Commands.BroadcastSpeakersRememberedForTests);
     }
 

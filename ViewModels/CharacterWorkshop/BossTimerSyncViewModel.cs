@@ -68,7 +68,9 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     // preArmedOn is set when the window is auto-opened because the user just sent
     // `@timer sync` from the terminal (rather than clicking Request here), and is the
     // channel that request went out on: we begin collecting its answers immediately
-    // without re-sending it. preArmedTo is the player a telepathed one went to.
+    // without re-sending it. preArmedTo is the player the game showed a telepathed
+    // one reaching, when the telepath was the user's own; null when the client sent
+    // it for another player (a relay-back, a `@do`), whose answer is then a pick.
     public BossTimerSyncViewModel(
         BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send,
         RemoteChannel? preArmedOn = null, string? preArmedTo = null)
@@ -77,7 +79,8 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             () => AppServices.Current.RemoteCommands.DisableBroadcastChannel,
             AppServices.Current.RemoteCommands.IsSelfEcho,
             active => AppServices.Current.TimerSyncWindowActive = active,
-            preArmedTo)
+            preArmedTo,
+            telepathWasUsers: AppServices.Current.TimerSyncOrigin.MadeByUser)
     {
     }
 
@@ -86,7 +89,8 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     internal BossTimerSyncViewModel(
         BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send,
         RemoteChannel? preArmedOn, LogService log, Func<bool> broadcastOff, Func<string, bool> isOurName,
-        Action<bool> windowActive, string? preArmedTo = null, Action<Action>? onUiThread = null)
+        Action<bool> windowActive, string? preArmedTo = null, Action<Action>? onUiThread = null,
+        Func<ChatLogEntry, bool>? telepathWasUsers = null)
     {
         ArgumentNullException.ThrowIfNull(bosses);
         ArgumentNullException.ThrowIfNull(timers);
@@ -109,7 +113,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             else Dispatcher.UIThread.Post(act);
         });
 
-        _collector = new BossTimerSyncCollector(chat, log, broadcastOff, isOurName);
+        _collector = new BossTimerSyncCollector(chat, log, broadcastOff, isOurName, telepathWasUsers);
         _collector.ResponseReceived += OnResponse;
         _windowActive(true);   // suppress a duplicate auto-open
 
@@ -146,6 +150,13 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             Status = "Enter a player name to telepath, then request again.";
             return;
         }
+        // A telepath is addressed with one word. With two, the game would take the
+        // first as the player and the rest as part of the message.
+        if (ChannelIndex == 1 && target.Any(char.IsWhiteSpace))
+        {
+            Status = "A telepath goes to one name: enter the player's first name, with no spaces, then request again.";
+            return;
+        }
 
         const string request = "@timer sync";
         (RemoteChannel channel, string wire) = ChannelIndex switch
@@ -155,11 +166,15 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             BroadcastChoice => (RemoteChannel.Broadcast, $"br {request}"),          // the numbered channel's speak verb
             _ => (RemoteChannel.Gangpath, $"bg {request}"),                         // gang (default)
         };
-        _collector.Begin(channel, channel == RemoteChannel.Telepath ? target : null);
+        // The channel is listened on from now. Who a telepath reached is not known
+        // yet: the name typed may be the first letters of a player's, and the game
+        // names the player when it shows the telepath sent, which the collector
+        // reads. Only that player's answer is then adopted.
+        _collector.Begin(channel);
         Requested = true;
         _send(wire);
         Status = _collector.OnlyTelepathsAsked
-            ? "Requested — a timer you had none for is taken from the player you asked as it arrives…"
+            ? "Requested — once the game shows the telepath sent, a timer you had none for is taken from that player as it arrives…"
             : "Requested — pick the timers to take in as they arrive, then Apply Selected; nothing is written before that…";
     }
 
@@ -251,15 +266,22 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     }
 
     // Bring a row's "ours" up to what the timer store holds now, when that is no
-    // longer what the row was built against. True when it had moved.
+    // longer what the row was built against. True when it had moved. A row built
+    // for a boss that was not on our list is looked up afresh first: the boss may
+    // be on it by now, added on the Bosses tab or by an earlier Apply, and a timer
+    // of ours for it counts like any other.
     private bool Rebased(BossTimerSyncRowViewModel row)
     {
+        if (row.MatchName is null && ResolveOurBoss(row.MonsterNumber, row.SentName) is { } ours)
+            row.Track(ours.Name, NoTimerText);
         if (row.MatchName is not { } name) return false;
         DateTimeOffset? now = _timers.KilledAt(name);
         if (now == row.OursKilledAt) return false;
         row.Rebase(now, now is { } k ? FormatKilled(k) : NoTimerText);
         return true;
     }
+
+    private static string TrackedKey(BossDef ours) => "b:" + ours.Name.ToLowerInvariant();
 
     private const string NoTimerText = "— no timer —";
 
@@ -288,11 +310,14 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     private BossTimerSyncRowViewModel EnsureRow(int? number, string? name)
     {
         BossDef? ours = ResolveOurBoss(number, name);
-        string key = ours is not null
-            ? "b:" + ours.Name.ToLowerInvariant()
-            : number is { } n ? "#" + n : "n:" + (name ?? "?").ToLowerInvariant();
+        string untrackedKey = number is { } n ? "#" + n : "n:" + (name ?? "?").ToLowerInvariant();
+        string key = ours is not null ? TrackedKey(ours) : untrackedKey;
 
         if (_rowsByKey.TryGetValue(key, out BossTimerSyncRowViewModel? existing)) return existing;
+        // The row built for this boss while it was not on our list is still its
+        // row now that it is (IngestOffer brings it up to date).
+        if (ours is not null && _rowsByKey.TryGetValue(untrackedKey, out BossTimerSyncRowViewModel? builtUntracked))
+            return builtUntracked;
 
         string display = ours?.Name ?? (name is { Length: > 0 } ? name : number is { } num ? $"Monster #{num}" : "(unknown)");
         DateTimeOffset? oursKilled = ours is not null ? _timers.KilledAt(ours.Name) : null;
@@ -337,18 +362,26 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         foreach (BossTimerSyncRowViewModel row in Rows)
         {
             if (row.SelectedKilledAt is not { } chosen) continue;
+            // Every kind of row: one built for a boss off our list is looked up as
+            // the list is now, and held to the same check.
+            if (Rebased(row)) { moved.Add(row.BossName); continue; }
             if (row.MatchName is { } target)
             {
-                if (Rebased(row)) { moved.Add(row.BossName); continue; }
                 if (row.OursKilledAt == chosen) continue;   // no-op
                 _timers.MarkKilled(target, chosen);
-                row.Rebase(chosen, FormatKilled(chosen));
-                applied++;
             }
-            else if (AdoptUntracked(row, chosen))   // a boss we weren't tracking
+            else if (AdoptUntracked(row, chosen) is { } adoptedAs)   // a boss we weren't tracking
             {
-                applied++;
+                row.Track(adoptedAs, NoTimerText);
             }
+            else
+            {
+                continue;
+            }
+            // Written: the row now shows that timer as ours and its pick is spent,
+            // so a second Apply writes it again for nobody.
+            row.Rebase(chosen, FormatKilled(chosen));
+            applied++;
         }
         if (applied > 0) _wroteAny = true;
         if (moved.Count > 0)
@@ -367,12 +400,13 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     // catalog (a seed boss we'd removed, or an overlay one) — or, failing that, synth a
     // minimal def from the sent name — un-hide it on the active realm, then stamp the
     // timer. A number-only identity we can't resolve to any catalog boss is skipped.
-    private bool AdoptUntracked(BossTimerSyncRowViewModel row, DateTimeOffset chosen)
+    // Returns the name the boss is now on our list under, or null when skipped.
+    private string? AdoptUntracked(BossTimerSyncRowViewModel row, DateTimeOffset chosen)
     {
         BossDef? def = _bosses.FindInCatalog(row.MonsterNumber, row.SentName);
         if (def is null)
         {
-            if (row.SentName is not { Length: > 0 } sent) return false;
+            if (row.SentName is not { Length: > 0 } sent) return null;
             def = new BossDef { Name = sent, MonsterNumber = row.MonsterNumber };
         }
         if (_realm == RealmType.ParaMud) def.InParadigm = true; else def.InStock = true;
@@ -383,7 +417,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         list.Add(def);
         _bosses.Save(list);
         _timers.MarkKilled(def.Name, chosen);
-        return true;
+        return def.Name;
     }
 
     // Closing without applying still keeps any auto-merges already written, so tell the

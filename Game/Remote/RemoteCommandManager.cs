@@ -553,7 +553,7 @@ public sealed class RemoteCommandManager : IDisposable
         // to a malicious caller.
         if (!isHelp && IsHardBlocked(command, args, out string? reason))
         {
-            _log?.Log(LogSeverity.Info, "RemoteCmd",
+            _log?.Log(SilentBlockSeverity(channel.Value), "RemoteCmd",
                 $"Blocked {command} from {entry.Speaker}: {reason}");
             return;
         }
@@ -588,7 +588,7 @@ public sealed class RemoteCommandManager : IDisposable
         if (channel.Value is RemoteChannel.Local or RemoteChannel.Broadcast
             && RemoteCommandCatalog.IsPathChannelOnly(command))
         {
-            _log?.Log(LogSeverity.Info, "RemoteCmd",
+            _log?.Log(SilentBlockSeverity(channel.Value), "RemoteCmd",
                 $"Ignoring {command} from {entry.Speaker} on {TransferChannels.NameOf(channel.Value)} — telepath / gangpath only.");
             return;
         }
@@ -692,7 +692,7 @@ public sealed class RemoteCommandManager : IDisposable
 
         if (IsHardBlocked(command, args, out string? reason))
         {
-            _log?.Log(LogSeverity.Info, "RemoteCmd",
+            _log?.Log(SilentBlockSeverity(channel), "RemoteCmd",
                 $"Blocked relay-back of {command} for {sender}: {reason}");
             return;
         }
@@ -736,6 +736,19 @@ public sealed class RemoteCommandManager : IDisposable
             SendDenialReply(channel, sender, answer: answer);
             return;
         }
+        // What `@do` may not send for a player, a relay may not send for them
+        // either: the words go out as ours all the same (`&@suicide` as our
+        // `@suicide` to whoever hears it, `&@do suicide` as our `@do suicide`). The
+        // same test, over every word of the payload, with the same reply policy:
+        // after the grant, so a sender without it learns nothing, and by the Warn
+        // setting.
+        if (SendsSuicide(tokens))
+        {
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Relay-back of {command} for {sender} refused: suicide is not relayed.");
+            SendDenialReply(channel, sender, specificReason: "suicide is not relayed", answer: answer);
+            return;
+        }
 
         _log?.Log(LogSeverity.Info, "RemoteCmd",
             $"Relaying {payload} back to {sender} on {channel} (&@ request).");
@@ -761,7 +774,7 @@ public sealed class RemoteCommandManager : IDisposable
         answer = null;
         if (channel != RemoteChannel.Broadcast) return true;
         BroadcastAnswerBudget budget = granted ? _broadcastAnswers : _broadcastRefusals;
-        if (budget.WhyNot(speaker, Now()) is { } spent)
+        if (WhyNotOnBroadcast(budget, speaker, Now()) is { } spent)
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
                 $"Passing over {what} from {speaker} on the broadcast channel: {spent}.");
@@ -770,6 +783,23 @@ public sealed class RemoteCommandManager : IDisposable
         answer = new BroadcastAnswer(budget);
         return true;
     }
+
+    // Why speaker would not be answered now out of budget, or null. A speaker has
+    // one answer a minute whichever of the two kinds it was: one who holds some
+    // permissions and not others does not draw an answer and a refusal. The few
+    // speakers a minute are each kind's own.
+    private string? WhyNotOnBroadcast(BroadcastAnswerBudget budget, string speaker, DateTimeOffset now)
+    {
+        BroadcastAnswerBudget other = ReferenceEquals(budget, _broadcastAnswers) ? _broadcastRefusals : _broadcastAnswers;
+        return other.AnsweredLately(speaker, now) ? BroadcastAnswerBudget.AnsweredLatelyReason : budget.WhyNot(speaker, now);
+    }
+
+    // A block that never answers is on record at Info where its sender had to reach
+    // us by telepath, in our gang or in our room. On the broadcast channel anyone
+    // who has joined can say such a line as often as they like, each one a line of
+    // the program log: Debug there.
+    private static LogSeverity SilentBlockSeverity(RemoteChannel channel) =>
+        channel == RemoteChannel.Broadcast ? LogSeverity.Debug : LogSeverity.Info;
 
     // A `@comeback` dropped for the master switch. FromMember: the sender was in
     // the party when they asked (not a member who had already dropped out of it).
@@ -1005,10 +1035,17 @@ public sealed class RemoteCommandManager : IDisposable
     private static string? GetForcedSuicideRedirectReply(string command, string[] args)
     {
         if (!command.Equals("@do", StringComparison.OrdinalIgnoreCase)) return null;
-        foreach (string arg in args)
-            if (HasLetterRun(arg, "suicide"))
-                return "@do suicide is not allowed, use @suicide";
-        return null;
+        return SendsSuicide(args) ? "@do suicide is not allowed, use @suicide" : null;
+    }
+
+    // The test of the rule above, for whatever words this client is asked to put
+    // on the wire for another player: `@do`'s, and a relay-back's payload.
+    private static bool SendsSuicide(IEnumerable<string> words)
+    {
+        foreach (string word in words)
+            if (HasLetterRun(word, "suicide"))
+                return true;
+        return false;
     }
 
     // True when one of the unbroken runs of letters in text is word, ignoring case.
@@ -1292,7 +1329,7 @@ public sealed class RemoteCommandManager : IDisposable
         if (answer is { Begun: true }) return true;
         BroadcastAnswerBudget budget = answer?.Budget ?? _broadcastRefusals;
         DateTimeOffset now = Now();
-        if (budget.WhyNot(recipient, now) is { } spent)
+        if (WhyNotOnBroadcast(budget, recipient, now) is { } spent)
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
                 $"Not said to {recipient} on the broadcast channel: {spent}.");

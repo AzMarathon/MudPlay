@@ -195,6 +195,67 @@ public sealed class BossTimerSyncCollectorTests
         Assert.Equal(new[] { true, false }, got.Select(r => r.AskedOfSenderAlone));
     }
 
+    // A telepath of ours that the client sent for another player (their relay-back,
+    // a `@do` of theirs) asks nobody on the user's behalf: its channel is listened
+    // on, and the player it went to is no more adopted from than anyone.
+    [Fact]
+    public void ATelepathTheClientSentForAnotherPlayer_AsksNobody()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        BossTimerSyncCollector c = new(new ChatRouter(router), telepathWasUsers: echo => echo.Speaker == "Bob");
+        List<BossTimerSyncResponse> got = new();
+        c.ResponseReceived += got.Add;
+        c.Begin(RemoteChannel.Telepath);
+
+        c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, ChatChannel.TelepathOutgoing, "Friend", "@timer sync", "raw"));
+        c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, ChatChannel.TelepathOutgoing, "Bob", "@timer sync", "raw"));
+        FeedResponse(c, "Friend", OneTimer, 6, ChatChannel.TelepathIncoming);
+        FeedResponse(c, "Bob", OneTimer, 6, ChatChannel.TelepathIncoming);
+
+        Assert.Equal(new[] { false, true }, got.Select(r => r.AskedOfSenderAlone));
+    }
+
+    // Asked by telepath with no word yet from the game of who it reached, nobody
+    // has been asked: the name typed is not a player's name until the game says so.
+    [Fact]
+    public void UntilTheGameNamesWhoATelepathReached_NoSetIsOnePlayersAnswer()
+    {
+        BossTimerSyncCollector c = NewCollector(out var got);
+        c.Begin(RemoteChannel.Telepath);
+        Assert.True(c.OnlyTelepathsAsked);
+
+        FeedResponse(c, "Bob", OneTimer, 6, ChatChannel.TelepathIncoming);
+        Assert.False(Assert.Single(got).AskedOfSenderAlone);
+
+        c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, ChatChannel.TelepathOutgoing, "Bob", "@timer sync", "raw"));
+        FeedResponse(c, "Bob", OneTimer, 6, ChatChannel.TelepathIncoming);
+        Assert.True(got[1].AskedOfSenderAlone);
+    }
+
+    // A set is as public as its most public piece: with one line of it heard on the
+    // broadcast channel it is a set heard there, whichever channel the last came by.
+    [Fact]
+    public void ASetWithAPieceHeardOnBroadcast_IsASetHeardOnBroadcast()
+    {
+        BossTimerSyncCollector c = NewCollector(out var got);
+        c.Begin(RemoteChannel.Broadcast);
+        c.Begin(RemoteChannel.Telepath, "Bob");
+        IReadOnlyList<string> chunks = BossTimerSyncCodec.Chunk(BossTimerSyncCodec.Encode(OneTimer), 6);
+        Assert.True(chunks.Count >= 2);
+
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            string line = $"{{{BossTimerQueryHandler.SyncResponseToken} {i + 1}/{chunks.Count} {chunks[i]}}}";
+            ChatChannel by = i == chunks.Count - 1 ? ChatChannel.TelepathIncoming : ChatChannel.Broadcast;
+            c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, by, "Bob", line, line));
+        }
+
+        BossTimerSyncResponse response = Assert.Single(got);
+        Assert.Equal(RemoteChannel.Broadcast, response.Channel);
+        Assert.False(response.AskedOfSenderAlone);
+    }
+
     // A request adds to what was asked: a responder half-way through a set keeps
     // what has arrived, and one whose set was delivered may send again.
     [Fact]

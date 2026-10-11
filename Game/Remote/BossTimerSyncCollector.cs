@@ -50,32 +50,46 @@ public sealed class BossTimerSyncCollector : IDisposable
     // isOurName: whether a speaker is our own character. A shared channel can echo
     // our own lines back under our name: a request we typed, or data we sent in
     // answer to someone else's request while this window is open.
+    // telepathWasUsers: whether a telepathed request of ours, seen going out, was the
+    // user's own and not one the client sent for another player (a relay-back, a
+    // `@do`). Only the user's asks a player whose answer is then taken as theirs.
     public BossTimerSyncCollector(
-        ChatRouter chat, LogService? log = null, Func<bool>? broadcastOff = null, Func<string, bool>? isOurName = null)
+        ChatRouter chat, LogService? log = null, Func<bool>? broadcastOff = null, Func<string, bool>? isOurName = null,
+        Func<ChatLogEntry, bool>? telepathWasUsers = null)
     {
         ArgumentNullException.ThrowIfNull(chat);
         _chat = chat;
         _log = log;
         _broadcastOff = broadcastOff ?? (static () => false);
         _isOurName = isOurName ?? (static _ => false);
+        _telepathWasUsers = telepathWasUsers ?? (static _ => true);
         _chat.EntryClassified += Ingest;
     }
 
-    // A request of ours went out on askedOn (telepathedTo: the player it was
-    // telepathed to). Its answers are taken from here on, with those of every
-    // request made before it while collecting: a second request on another channel
-    // adds that channel, and late answers to the first are still read. Whether the
-    // request came from the window's button or was typed by hand makes no
-    // difference; Ingest tells of the typed ones.
+    private readonly Func<ChatLogEntry, bool> _telepathWasUsers;
+
+    // A request of ours went out on askedOn. Its answers are taken from here on,
+    // with those of every request made before it while collecting: a second
+    // request on another channel adds that channel, and late answers to the first
+    // are still read. Whether the request came from the window's button or was
+    // typed by hand makes no difference; Ingest tells of the typed ones.
+    //
+    // telepathReached: the player a telepath of the user's reached, as the game's
+    // own `--- Telepath Sent to <Name> ---` names them; that player's answer is then
+    // theirs alone. Never the name as typed: a typed name may be the first letters
+    // of a player's, the game says whose it took them for, and a telepath whose
+    // letters fit two players reaches neither (GAME_MECHANICS "Telepath throttle
+    // and per-telepath acknowledgement"). Until the game has named who a telepath
+    // reached, nobody was asked, and every answer is one of several.
     //
     // A responder whose set has been delivered may send again for the new request.
     // One whose set is half here keeps what has arrived.
-    public void Begin(RemoteChannel askedOn, string? telepathedTo = null)
+    public void Begin(RemoteChannel askedOn, string? telepathReached = null)
     {
         _collecting = true;
         _askedOn.Add(askedOn);
-        if (askedOn == RemoteChannel.Telepath && !string.IsNullOrWhiteSpace(telepathedTo))
-            _telepathed.Add(RemoteCommandManager.GivenName(telepathedTo.Trim()));
+        if (askedOn == RemoteChannel.Telepath && !string.IsNullOrWhiteSpace(telepathReached))
+            _telepathed.Add(RemoteCommandManager.GivenName(telepathReached.Trim()));
         foreach (string delivered in _partial.Where(p => p.Value.Done).Select(p => p.Key).ToList())
             _partial.Remove(delivered);
     }
@@ -104,6 +118,8 @@ public sealed class BossTimerSyncCollector : IDisposable
         public required int N;
         public required string?[] Chunks;
         public bool Done;
+        // A piece of the set came on the broadcast channel.
+        public bool OnBroadcast;
     }
 
     internal void Ingest(ChatLogEntry e)
@@ -114,7 +130,11 @@ public sealed class BossTimerSyncCollector : IDisposable
         // open, or the button's own. A telepath's echo names who it went to.
         if (TransferChannels.OwnRequest(e, _isOurName) is { Transfer: Transfer.TimerSync } own)
         {
-            if (TransferChannels.Allows(Transfer.TimerSync, own.Channel)) Begin(own.Channel, e.Speaker);
+            if (!TransferChannels.Allows(Transfer.TimerSync, own.Channel)) return;
+            // A telepath the client sent for another player asks nobody on the
+            // user's behalf: its channel is listened on, its answer is a pick.
+            bool users = own.Channel != RemoteChannel.Telepath || _telepathWasUsers(e);
+            Begin(own.Channel, users ? e.Speaker : null);
             return;
         }
 
@@ -132,6 +152,7 @@ public sealed class BossTimerSyncCollector : IDisposable
         }
         if (p.Done) return;                 // already delivered this sender's set
         p.Chunks[index - 1] = blob;
+        p.OnBroadcast |= heardOn == RemoteChannel.Broadcast;
         _log?.Debug("BossTimerSync", $"received line {index}/{count} from {sender} ({blob.Length} chars)");
         if (p.Chunks.Any(c => c is null)) return;   // still missing pieces
 
@@ -148,7 +169,10 @@ public sealed class BossTimerSyncCollector : IDisposable
         }
         _log?.Info("BossTimerSync",
             $"received {records.Count} timer(s) from {sender} in {p.N} line(s): {Describe(records)}");
-        ResponseReceived?.Invoke(new BossTimerSyncResponse(sender, records, heardOn, AskedOfSenderAlone(heardOn, sender)));
+        // A set is as public as its most public piece: one line of it on the
+        // broadcast channel, and it is a set heard there, wherever the last came.
+        RemoteChannel cameBy = p.OnBroadcast ? RemoteChannel.Broadcast : heardOn;
+        ResponseReceived?.Invoke(new BossTimerSyncResponse(sender, records, cameBy, AskedOfSenderAlone(cameBy, sender)));
     }
 
     // An answer comes back on the channel it was asked on (RemoteCommandManager
