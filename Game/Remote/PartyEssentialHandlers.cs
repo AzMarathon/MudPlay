@@ -657,7 +657,7 @@ public sealed class PartyEssentialHandlers : IDisposable
                 if (!string.IsNullOrEmpty(g)) followers.Add(g);
             }
             string list = followers.Count == 0 ? "(roster unknown)" : string.Join(", ", followers);
-            ctx.Refuse($"My Party is full, {list} are following me.");
+            ctx.Refuse($"My party is full: {list} {(followers.Count == 1 ? "is" : "are")} following me.");
             return;
         }
         if (_wireSender is null) return;

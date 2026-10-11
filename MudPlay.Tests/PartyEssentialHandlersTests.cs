@@ -1246,7 +1246,7 @@ public sealed class PartyEssentialHandlersTests
         engine.DispatchForTests(Telepath("Raijin", "@invite"));
 
         // Comma-joined given names of the 5 followers (skipping self).
-        Assert.Contains("{My Party is full, Helper, Buddy, Lou, Sam, Pal are following me.}", LastReply(engine));
+        Assert.Contains("{My party is full: Helper, Buddy, Lou, Sam, Pal are following me.}", LastReply(engine));
         Assert.Empty(relay);
     }
 

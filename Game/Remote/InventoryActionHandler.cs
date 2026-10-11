@@ -305,7 +305,8 @@ public sealed class InventoryActionHandler : IDisposable
         Dispatch(commands);
 
         // Wire replies are ASCII-only; the list of kept items is short.
-        string keeping = kept.Count == 0 ? "" : $" (keeping {kept.Count} that can't be {verb}ped: {string.Join(", ", kept)})";
+        string done = verb == "hide" ? "hidden" : "dropped";
+        string keeping = kept.Count == 0 ? "" : $" (keeping {kept.Count} that can't be {done}: {string.Join(", ", kept)})";
         if (items == 0 && coinKinds == 0) return $"nothing to {verb}{keeping}";
         string status = scope switch
         {

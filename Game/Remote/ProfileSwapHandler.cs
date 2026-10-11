@@ -43,8 +43,10 @@ public sealed class ProfileSwapHandler : IDisposable
         string arg = string.Join(' ', ctx.Args).Trim();
         if (arg.Length == 0)
         {
+            // The roster comes wrapped in braces for the terminal; the engine wraps
+            // every reply in its own pair, so that pair is taken off here.
             string? roster = _profiles.RosterReport();
-            if (roster is not null) ctx.Reply(roster);
+            if (roster is not null) ctx.Reply(ForTheWire(Unbraced(roster)));
             else ctx.Refuse("no combat profiles configured");
             return;
         }
@@ -57,6 +59,9 @@ public sealed class ProfileSwapHandler : IDisposable
     // The swap report is written for our own terminal and log, with a long dash
     // after the profile and dots between the slots. Neither survives the wire
     // (WireText), so the copy sent to the asker uses a hyphen and commas.
+    private static string Unbraced(string text) =>
+        text.Length >= 2 && text[0] == '{' && text[^1] == '}' ? text[1..^1] : text;
+
     private static string ForTheWire(string report) =>
         report.Replace(" — ", " - ", StringComparison.Ordinal)
               .Replace(" · ", ", ", StringComparison.Ordinal);
