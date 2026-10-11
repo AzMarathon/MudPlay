@@ -4,6 +4,7 @@ using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
 using MudPlay.Game.Spells;
 using MudPlay.Services;
 
@@ -310,6 +311,28 @@ public sealed class ItemMdbViewBuilder
         }
         return new ItemMdbView(otherInfo, shops, isLight, isContainer, droppedBy, placedIn, castsSpells, summons, teleportsTo,
             roomCommands);
+    }
+
+    // Used on: one row per exit whose cell names the item as the one needed to pass (a key
+    // on a locked door, an item to carry, a ticket), "{room} - {map}/{room} - {direction}
+    // ({Key|Item|Ticket})", each linking to the room like the other room rows. Both sides
+    // of a door that names the key are two rows. A blacklisted room is left out.
+    //
+    // Kept out of Build: the index behind it reads the whole Rooms table the first time
+    // it is asked, and Build also runs for an Item Finder tooltip and a message dialog,
+    // which have no use for it. Only the item record asks.
+    public IReadOnlyList<PlacedInRow> ExitUsesOf(int itemNumber)
+    {
+        List<PlacedInRow> rows = new();
+        foreach (Game.GameData.ExitKeyUse use in Game.GameData.ExitKeyIndex.UsesOf(_cache, itemNumber))
+        {
+            if (_isRoomBlacklisted(use.Room.Map, use.Room.Room)) continue;
+            string locator = $"{use.Room.Map}/{use.Room.Room}";
+            string where = string.IsNullOrEmpty(use.RoomName) ? $"Room {locator}" : $"{use.RoomName} - {locator}";
+            rows.Add(new PlacedInRow(
+                $"{where} - {use.Exit.ToLongName()} ({use.KindLabel})", use.Room.Map, use.Room.Room));
+        }
+        return rows;
     }
 
     // Room command: one row per "Room(<command>) <rooms>" entry in Obtained From,

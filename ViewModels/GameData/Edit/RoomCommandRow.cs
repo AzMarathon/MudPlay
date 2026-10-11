@@ -10,12 +10,15 @@ namespace MudPlay.ViewModels.GameData.Edit;
 // "Placed in".
 //
 // The room list can run to a couple of hundred (every coffin room), so it opens
-// showing the first few, with a toggle for the rest.
+// showing the first few, with a toggle for the rest. The item dialog's "Used on"
+// list reuses it with no command, for the same cap on a long list; its entries are
+// exits, so the toggle says "uses".
 public sealed partial class RoomCommandRow : ObservableObject
 {
     private const int ShownWhenCollapsed = 6;
 
     private readonly IReadOnlyList<PlacedInRow> _rooms;
+    private readonly string _noun;
 
     // The commands, alternatives joined with " / ", and the chance when there is one.
     public string Header { get; }
@@ -30,11 +33,13 @@ public sealed partial class RoomCommandRow : ObservableObject
 
     public string ToggleLabel => IsExpanded
         ? "Show fewer"
-        : $"Show all {_rooms.Count} rooms";
+        : $"Show all {_rooms.Count} {_noun}";
 
-    public RoomCommandRow(IReadOnlyList<string> commands, string chance, IReadOnlyList<PlacedInRow> rooms)
+    public RoomCommandRow(
+        IReadOnlyList<string> commands, string chance, IReadOnlyList<PlacedInRow> rooms, string noun = "rooms")
     {
         _rooms = rooms;
+        _noun = noun;
         string typed = string.Join(" / ", commands);
         Header = chance.Length == 0 ? typed : $"{typed} — {chance}";
         Show();

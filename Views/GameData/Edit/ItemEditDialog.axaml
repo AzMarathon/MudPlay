@@ -477,6 +477,41 @@
                                 </ItemsControl>
                             </StackPanel>
 
+                            <!-- Used on — the exits whose game data names this item as the
+                                 one needed to pass (a key, an item to carry, a ticket), one
+                                 room link per exit with a Queue-Walk action. A long list shows
+                                 the first few with a toggle, like Room command. Hidden when no
+                                 exit names the item. -->
+                            <StackPanel IsVisible="{Binding HasExitUses}" Margin="0,10,0,0">
+                                <TextBlock Classes="SectionHeader" Text="Used on"
+                                           ToolTip.Tip="Exits whose game data names this item as the one needed to pass. Both sides of a door that names it are listed apart."/>
+                                <ItemsControl ItemsSource="{Binding ExitUses.ShownRooms}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="vm:PlacedInRow">
+                                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,1,0,1">
+                                                <Button Classes="MdbLink"
+                                                        Content="{Binding Location}"
+                                                        Command="{Binding Open}"
+                                                        IsEnabled="{Binding CanOpen}"
+                                                        HorizontalAlignment="Left"
+                                                        ToolTip.Tip="Open this room in the Game Data browser"/>
+                                                <Button Classes="MdbLink"
+                                                        Content="Queue Walking here →"
+                                                        Command="{Binding QueueWalk}"
+                                                        IsEnabled="{Binding CanOpen}"
+                                                        HorizontalAlignment="Left"
+                                                        ToolTip.Tip="Arm a walk to this room (opens the map; then click Run)"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Classes="MdbLink" Margin="0,2,0,0"
+                                        Content="{Binding ExitUses.ToggleLabel}"
+                                        Command="{Binding ExitUses.ToggleCommand}"
+                                        IsVisible="{Binding ExitUses.CanExpand}"
+                                        HorizontalAlignment="Left"/>
+                            </StackPanel>
+
                             <!-- Chest Contents — containers only. Decoded loot table:
                                  item · at-least-once drop chance for one `open`, plus a
                                  yield summary. Read-only; hidden for non-containers. -->
