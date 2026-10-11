@@ -12,6 +12,9 @@ namespace MudPlay.Game.Map;
 // keeps asking; when it turns yes the gate clears, which re-drives the step. From then
 // until the step lands buffs are held back (BlockingBuffs), so nothing takes the cast
 // during the last stride.
+//
+// With the cast free, the loop still stays (on LairDebuffManaGate) while mana is under
+// the debuff's own minimum: see ShortOfManaForTheDebuff.
 public sealed class LairEntryDebuffHold
 {
     // Rounds a WaitForSpells hold lets other casts have before it stops letting them.
@@ -25,6 +28,10 @@ public sealed class LairEntryDebuffHold
     public const int MaxSendsOfOnePriorityBuff = 3;
 
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(200);
+    // Mana comes back by the tick, and a wait for it can last minutes: it is looked
+    // at less often, and said in the log no more than once a minute.
+    private static readonly TimeSpan ManaPoll = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan ManaLogEvery = TimeSpan.FromMinutes(1);
     // Something due that never casts must not park the loop. A WaitForSpells hold that
     // has run this long, or a WaitForPriorityBuffs hold that has gone this long with no
     // priority buff going out, enters as soon as the cast is free, whatever is still due.
@@ -45,6 +52,7 @@ public sealed class LairEntryDebuffHold
     private readonly Func<bool, IReadOnlyList<string>>? _buffsDue;
     private readonly Func<bool>? _stillWanted;
     private readonly Func<string?>? _healOrCureDue;
+    private readonly Func<(string Spell, int Needed, int Mana, int MaxMana)?>? _debuffMana;
 
     private LairEntryDebuffMode _mode;
     private bool _waiting;
@@ -66,6 +74,14 @@ public sealed class LairEntryDebuffHold
     private readonly Dictionary<string, int> _prioritySends = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _givenUpOn = new(StringComparer.OrdinalIgnoreCase);
     private bool _ranOutHere;
+    private bool _unmeetableManaSaid;
+    // The wait is past its casts and stands for mana: what the debuff needs against
+    // what there is, as last read; when that was last said in the log; and, once mana
+    // is back, the read that ended it.
+    private (string Spell, int Needed, int Mana, int MaxMana)? _forMana;
+    private DateTimeOffset _manaSaidAt;
+    private bool _stoodForMana;
+    private (string Spell, int Needed, int Mana, int MaxMana)? _manaCameBack;
     private string? _lastOutcome;
     private int _generation;
 
@@ -76,10 +92,13 @@ public sealed class LairEntryDebuffHold
     // what a wait is for. stillWanted: the loop is still
     // about to step into a lair it waits outside (asked while a wait stands, since a
     // loop that was stopped or switched off never asks ReadyToEnter again).
+    // debuffMana: the debuff the wait is for, the mana its "min mana per cast" asks
+    // for, and current and maximum mana; null when there is no minimum to wait for.
     public LairEntryDebuffHold(MovementCoordinator coordinator, Func<bool> slotUsed, Func<bool> castDue,
         Action<TimeSpan, Action> scheduleAfter, Func<DateTimeOffset>? now = null, LogService? log = null,
         Func<bool, IReadOnlyList<string>>? buffsDue = null, Func<bool>? stillWanted = null,
-        Func<string?>? healOrCureDue = null)
+        Func<string?>? healOrCureDue = null,
+        Func<(string Spell, int Needed, int Mana, int MaxMana)?>? debuffMana = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(slotUsed);
@@ -94,6 +113,7 @@ public sealed class LairEntryDebuffHold
         _buffsDue = buffsDue;
         _stillWanted = stillWanted;
         _healOrCureDue = healOrCureDue;
+        _debuffMana = debuffMana;
     }
 
     // Every buff waits: the loop is at a lair's doorstep with no more casts allowed
@@ -131,11 +151,32 @@ public sealed class LairEntryDebuffHold
         if (!_waiting)
         {
             _waiting = true;
-            _log?.Info("Loop", WaitStartedMessage());
-            _coordinator.AssertGate(MovementCoordinator.LairDebuffGate, Asserter, "waiting for the between-round cast");
+            // A wait that begins on mana alone has said so already.
+            if (_forMana is null) _log?.Info("Loop", WaitStartedMessage());
             SchedulePoll();
         }
+        HoldTheWalker();
         return false;
+    }
+
+    // One gate while the wait is for the cast, another while it is for mana, so the
+    // Navigation window can say which. The new one goes up before the old one comes
+    // down: the walker never sees a moment with neither.
+    private void HoldTheWalker()
+    {
+        (string gate, string other, string reason) = _forMana is null
+            ? (MovementCoordinator.LairDebuffGate, MovementCoordinator.LairDebuffManaGate,
+                "waiting for the between-round cast")
+            : (MovementCoordinator.LairDebuffManaGate, MovementCoordinator.LairDebuffGate,
+                "waiting for mana for the debuff");
+        _coordinator.AssertGate(gate, Asserter, reason);
+        _coordinator.ClearGate(other, Asserter, reason);
+    }
+
+    private void ReleaseTheWalker(string reason)
+    {
+        _coordinator.ClearGate(MovementCoordinator.LairDebuffGate, Asserter, reason);
+        _coordinator.ClearGate(MovementCoordinator.LairDebuffManaGate, Asserter, reason);
     }
 
     // The cast scheduler sent a buff ticked "Priority buff" (named as BuffsDue names
@@ -176,20 +217,23 @@ public sealed class LairEntryDebuffHold
         _roundsWaited = 0;
         _slotWasUsed = false;
         _limitReached = WaitLimit.None;
+        _forMana = null;
+        _manaCameBack = null;
         if (!_waiting) return;
         _waiting = false;
         _lastOutcome = $"{LocalTime()} {why}";
         _log?.Info("Loop", $"the wait outside the lair is over, buffs released — {why}");
-        _coordinator.ClearGate(MovementCoordinator.LairDebuffGate, Asserter, why);
+        ReleaseTheWalker(why);
     }
 
-    // What a WaitForPriorityBuffs wait has learned about the lair it stands outside.
+    // What the waits outside one lair have learned about it.
     private void ForgetDoorstep()
     {
         _doorstep = null;
         _prioritySends.Clear();
         _givenUpOn.Clear();
         _ranOutHere = false;
+        _unmeetableManaSaid = false;
     }
 
     // What the hold is doing and how its last wait ended, for the bug report.
@@ -197,10 +241,14 @@ public sealed class LairEntryDebuffHold
     {
         string last = _lastOutcome is null ? string.Empty : $"; last wait: {_lastOutcome}";
         if (!_waiting) return (BlockingBuffs ? "stepping in, buffs held" : "not waiting") + last;
+        DateTimeOffset now = _now();
+        if (_forMana is { } need)
+            return $"waiting for mana ({LairEntryDebuffModes.Label(_mode)}; {(now - _waitStarted).TotalSeconds:0}s; "
+                + $"mana {need.Mana} of the {need.Needed} the debuff {need.Spell} needs, its min mana per cast; "
+                + "every buff held)" + last;
         string held = BlockingBuffs ? "every buff held"
             : _blockOrdinaryWhileWaiting ? "buffs not ticked priority held"
             : "nothing held";
-        DateTimeOffset now = _now();
         string limits = _mode == LairEntryDebuffMode.WaitForPriorityBuffs
             ? $"{(now - _waitStarted).TotalSeconds:0}s, {(now - _lastPriorityCast).TotalSeconds:0}/"
                 + $"{MaxWait.TotalSeconds:0}s since a priority buff went out; sent: {PrioritySends()}; "
@@ -219,6 +267,9 @@ public sealed class LairEntryDebuffHold
             _waitStarted = now;
             _lastPriorityCast = now;
             _ranOutThisWait = false;
+            _forMana = null;
+            _manaCameBack = null;
+            _stoodForMana = false;
         }
 
         bool used = _slotUsed();
@@ -228,22 +279,29 @@ public sealed class LairEntryDebuffHold
         // WaitForSpells is bounded by rounds and time. WaitForPriorityBuffs waits for
         // every priority buff however many are due, so it is bounded by time without
         // one going out; once that has run out at a doorstep it isn't waited again there.
-        _limitReached = _mode switch
+        // A wait that has come to stand for mana is past its casts: its limits stay as
+        // they were when it got there.
+        if (_forMana is null)
         {
-            LairEntryDebuffMode.WaitForSpells =>
-                _roundsWaited >= MaxRoundsWaited ? WaitLimit.Rounds
-                : now - _waitStarted >= MaxWait ? WaitLimit.Time
-                : WaitLimit.None,
-            LairEntryDebuffMode.WaitForPriorityBuffs =>
-                _ranOutThisWait ? WaitLimit.NothingWentOut
-                : _ranOutHere ? WaitLimit.RanOutBefore
-                : now - _lastPriorityCast >= MaxWait ? WaitLimit.NothingWentOut
-                : WaitLimit.None,
-            _ => WaitLimit.None,
-        };
-        if (_limitReached == WaitLimit.NothingWentOut) _ranOutThisWait = _ranOutHere = true;
+            _limitReached = _mode switch
+            {
+                LairEntryDebuffMode.WaitForSpells =>
+                    _roundsWaited >= MaxRoundsWaited ? WaitLimit.Rounds
+                    : now - _waitStarted >= MaxWait ? WaitLimit.Time
+                    : WaitLimit.None,
+                LairEntryDebuffMode.WaitForPriorityBuffs =>
+                    _ranOutThisWait ? WaitLimit.NothingWentOut
+                    : _ranOutHere ? WaitLimit.RanOutBefore
+                    : now - _lastPriorityCast >= MaxWait ? WaitLimit.NothingWentOut
+                    : WaitLimit.None,
+                _ => WaitLimit.None,
+            };
+            if (_limitReached == WaitLimit.NothingWentOut) _ranOutThisWait = _ranOutHere = true;
+        }
         bool waitsForCasts = _mode is LairEntryDebuffMode.WaitForSpells or LairEntryDebuffMode.WaitForPriorityBuffs;
-        bool letSpellsCast = waitsForCasts && _limitReached == WaitLimit.None;
+        // While it stands for mana every buff waits: one cast now would spend what the
+        // wait is for.
+        bool letSpellsCast = waitsForCasts && _limitReached == WaitLimit.None && _forMana is null;
         _blockWhileWaiting = !letSpellsCast;
         // Set ahead of the castDue read below: a buff this holds back is not counted
         // as due, so the wait is only for the priority buffs (and heals and cures).
@@ -251,7 +309,53 @@ public sealed class LairEntryDebuffHold
 
         if (used) return false;
         // The cast is free. In a mode that waits a due spell is about to take it; let it.
-        return !(letSpellsCast && _castDue());
+        if (letSpellsCast && _castDue()) return false;
+        return !ShortOfManaForTheDebuff(now);
+    }
+
+    // The cast is free and nothing more is waited for. The debuff the wait is for has
+    // a mana minimum of its own (the slot's "min mana per cast"), and under it the
+    // combat engine won't cast it: walking in now would be the very entry without a
+    // debuff this hold exists to prevent. So the loop stays until mana is back (user,
+    // 2026-10-10: "we should also hold to get mana back and make a program log entry
+    // saying why we're waiting"). No time limit: resting, if the player's rest settings
+    // call for it here, or standing regen, bring the mana back, and Stop, a pause or
+    // the master switch end the wait. A minimum over maximum mana can never be met and
+    // is not waited for.
+    private bool ShortOfManaForTheDebuff(DateTimeOffset now)
+    {
+        (string Spell, int Needed, int Mana, int MaxMana)? read = _debuffMana?.Invoke();
+        if (read is not { } need || need.Mana >= need.Needed)
+        {
+            if (_forMana is not null) _manaCameBack = read;
+            _forMana = null;
+            return false;
+        }
+        if (need.Needed > need.MaxMana)
+        {
+            if (!_unmeetableManaSaid)
+            {
+                _unmeetableManaSaid = true;
+                _log?.Info("Loop",
+                    $"the debuff {need.Spell} asks for {need.Needed} mana (its min mana per cast) and maximum mana "
+                    + $"is {need.MaxMana}: that can never be met, so the lair is entered without waiting for it");
+            }
+            _forMana = null;
+            return false;
+        }
+
+        bool saidBefore = _forMana is not null;
+        _forMana = need;
+        _stoodForMana = true;
+        _blockWhileWaiting = true;
+        if (!saidBefore || now - _manaSaidAt >= ManaLogEvery)
+        {
+            _manaSaidAt = now;
+            _log?.Info("Loop",
+                $"waiting outside the lair for mana: {need.Mana} of the {need.Needed} the debuff {need.Spell} needs "
+                + "(its min mana per cast) — every buff held back meanwhile");
+        }
+        return true;
     }
 
     private void GoIn()
@@ -264,11 +368,13 @@ public sealed class LairEntryDebuffHold
         _roundsWaited = 0;
         _slotWasUsed = false;
         _limitReached = WaitLimit.None;
+        _forMana = null;
+        _manaCameBack = null;
         if (!_waiting) return;
         _waiting = false;
         _lastOutcome = $"{LocalTime()} {reason}";
         _log?.Info("Loop", reason);
-        _coordinator.ClearGate(MovementCoordinator.LairDebuffGate, Asserter, "the between-round cast is free");
+        ReleaseTheWalker(reason);
     }
 
     private string WaitStartedMessage() => _mode switch
@@ -286,6 +392,11 @@ public sealed class LairEntryDebuffHold
     private string EntryReason()
     {
         const string Entering = "holding the buffs back and entering the lair on a free between-round cast";
+        if (_stoodForMana)
+            return _manaCameBack is { } back
+                ? $"mana is back at {back.Mana}, and the debuff {back.Spell} needs {back.Needed} — entering the lair"
+                : "mana for the debuff is no longer waited for (a fight here, or its minimum was taken off) — "
+                    + "entering the lair on a free between-round cast";
         switch (_limitReached)
         {
             case WaitLimit.NothingWentOut:
@@ -341,12 +452,16 @@ public sealed class LairEntryDebuffHold
     private void SchedulePoll()
     {
         int generation = _generation;
-        _scheduleAfter(Poll, () =>
+        _scheduleAfter(_forMana is null ? Poll : ManaPoll, () =>
         {
             if (generation != _generation || !_waiting) return;
             if (WhyNoLongerWanted() is { } why) Reset(why);
             else if (Decide()) GoIn();
-            else SchedulePoll();
+            else
+            {
+                HoldTheWalker();
+                SchedulePoll();
+            }
         });
     }
 

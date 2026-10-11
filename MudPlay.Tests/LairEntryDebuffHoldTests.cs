@@ -26,14 +26,22 @@ public sealed class LairEntryDebuffHoldTests
         public LogService Log { get; } = new();
         // The loop is still about to step into the lair it waits outside.
         public bool StillWanted = true;
+        // The debuff's "min mana per cast" against the character's mana; null = none set.
+        public (string Spell, int Needed, int Mana, int MaxMana)? DebuffMana;
+        // The delay each look was scheduled with, newest last.
+        public List<TimeSpan> ScheduledDelays { get; } = new();
 
         public Harness() =>
             Hold = new LairEntryDebuffHold(Coordinator, () => SlotUsed, () => CastDue,
-                (_, action) => Scheduled.Add(action), () => Now, Log,
+                (delay, action) => { ScheduledDelays.Add(delay); Scheduled.Add(action); }, () => Now, Log,
                 priority => priority ? PriorityDue : OrdinaryDue,
-                stillWanted: () => StillWanted);
+                stillWanted: () => StillWanted,
+                debuffMana: () => DebuffMana);
 
         public bool Held => Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffGate);
+        public bool HeldForMana => Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffManaGate);
+
+        public void SetMana(int mana) => DebuffMana = DebuffMana!.Value with { Mana = mana };
 
         public IEnumerable<string> LoopLog => Log.Snapshot().Where(e => e.Source == "Loop").Select(e => e.Message);
 
@@ -207,6 +215,148 @@ public sealed class LairEntryDebuffHoldTests
         Assert.False(h.Hold.IsWaiting);
         Assert.False(h.Hold.BlockingBuffs);
         Assert.DoesNotContain(MovementCoordinator.LairDebuffGate, h.Coordinator.ParkedGates);
+    }
+
+    // ----- Mana for the debuff ---------------------------------------
+
+    // The cast is free and nothing is due, but mana is under the debuff's own "min
+    // mana per cast": the combat engine wouldn't cast it, so walking in now would be
+    // the entry without a debuff this hold is for. Every mode stays until mana is back.
+    [Theory]
+    [InlineData(LairEntryDebuffMode.WaitForSpells)]
+    [InlineData(LairEntryDebuffMode.BlockSpells)]
+    [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
+    public void ManaUnderTheDebuffsMinimum_HoldsAndSaysWhy_ThenEntersWhenManaIsBack(LairEntryDebuffMode mode)
+    {
+        Harness h = new() { DebuffMana = ("dbuf", 60, 35, 100) };
+
+        Assert.False(h.Hold.ReadyToEnter(mode));
+
+        Assert.True(h.HeldForMana);
+        Assert.False(h.Held);                       // its own gate, so the window says "for mana"
+        Assert.True(h.Hold.BlockingBuffs);          // a buff now would spend what it waits for
+        const string Why = "waiting outside the lair for mana: 35 of the 60 the debuff dbuf needs "
+            + "(its min mana per cast) — every buff held back meanwhile";
+        Assert.Equal(new[] { Why }, h.LoopLog);
+        Assert.StartsWith("waiting for mana (", h.Hold.Describe());
+        Assert.Contains("mana 35 of the 60 the debuff dbuf needs, its min mana per cast", h.Hold.Describe());
+        Assert.Equal(TimeSpan.FromSeconds(1), h.ScheduledDelays[^1]);
+
+        h.SetMana(50);
+        h.Now = h.Now.AddSeconds(30);
+        h.Poll();
+        Assert.True(h.HeldForMana);
+        Assert.Single(h.LoopLog);                   // not said again within the minute
+
+        h.Now = h.Now.AddSeconds(31);
+        h.Poll();
+        Assert.Equal(2, h.LoopLog.Count());         // once a minute while it stands
+        Assert.StartsWith("waiting outside the lair for mana: 50 of the 60", h.LoopLog.Last());
+
+        h.SetMana(60);
+        h.Poll();
+
+        Assert.False(h.HeldForMana);
+        Assert.False(h.Held);
+        Assert.True(h.Hold.BlockingBuffs);          // held for the step in, as ever
+        Assert.Equal("mana is back at 60, and the debuff dbuf needs 60 — entering the lair", h.LoopLog.Last());
+    }
+
+    [Theory]
+    [InlineData(LairEntryDebuffMode.WaitForSpells)]
+    [InlineData(LairEntryDebuffMode.BlockSpells)]
+    [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
+    public void MinimumAboveMaximumMana_CanNeverBeMet_IsNotWaitedFor_AndSaidOnce(LairEntryDebuffMode mode)
+    {
+        RoomKey lair = new(1, 100);
+        Harness h = new() { DebuffMana = ("dbuf", 150, 80, 100) };
+
+        Assert.True(h.Hold.ReadyToEnter(mode, lair));
+        Assert.True(h.Hold.ReadyToEnter(mode, lair));   // the step is asked for again
+
+        Assert.False(h.HeldForMana);
+        Assert.Equal(new[]
+        {
+            "the debuff dbuf asks for 150 mana (its min mana per cast) and maximum mana is 100: that can never "
+                + "be met, so the lair is entered without waiting for it",
+        }, h.LoopLog);
+    }
+
+    [Theory]
+    [InlineData(LairEntryDebuffMode.WaitForSpells)]
+    [InlineData(LairEntryDebuffMode.BlockSpells)]
+    [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
+    public void ManaAtTheMinimum_OrNoMinimumSet_NothingIsWaitedFor(LairEntryDebuffMode mode)
+    {
+        Harness atMinimum = new() { DebuffMana = ("dbuf", 60, 60, 100) };
+        Assert.True(atMinimum.Hold.ReadyToEnter(mode));
+        Assert.Empty(atMinimum.LoopLog);
+
+        Harness noMinimum = new();
+        Assert.True(noMinimum.Hold.ReadyToEnter(mode));
+        Assert.Empty(noMinimum.LoopLog);
+    }
+
+    // The casts come first, then the mana they left: and once the wait stands for
+    // mana, a buff that comes due is held with the rest.
+    [Fact]
+    public void ManaWait_FollowsTheCasts_AndHoldsABuffThatComesDueMeanwhile()
+    {
+        Harness h = new() { CastDue = true, DebuffMana = ("dbuf", 60, 35, 100) };
+
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForSpells));
+        Assert.True(h.Held);                        // for the cast, first
+        Assert.False(h.HeldForMana);
+        Assert.False(h.Hold.BlockingBuffs);
+
+        h.CastDue = false;                          // what was due has gone out
+        h.Poll();
+        Assert.True(h.HeldForMana);
+        Assert.False(h.Held);
+        Assert.True(h.Hold.BlockingBuffs);
+
+        h.CastDue = true;                           // another buff comes due
+        h.Poll();
+        Assert.True(h.Hold.BlockingBuffs);          // held: it isn't let through to spend the mana
+
+        h.SetMana(70);
+        h.Poll();
+        Assert.False(h.HeldForMana);
+    }
+
+    // Nothing but the loop going away, or a fight, ends a wait for mana before the mana
+    // is there: no time limit.
+    [Fact]
+    public void ManaWait_HasNoTimeLimit_ButEndsWhenTheLoopStops_OrAFightStarts()
+    {
+        Harness h = new() { DebuffMana = ("dbuf", 60, 35, 100) };
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs));
+        h.Now = h.Now.AddMinutes(10);
+        h.Poll();
+        Assert.True(h.HeldForMana);
+
+        h.StillWanted = false;                      // Stop
+        h.Poll();
+        Assert.False(h.HeldForMana);
+        Assert.False(h.Hold.BlockingBuffs);
+
+        Harness fight = new() { DebuffMana = ("dbuf", 60, 35, 100) };
+        Assert.False(fight.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells));
+        fight.DebuffMana = null;                    // a monster came out: there is no minimum to wait for now
+        fight.Poll();
+        Assert.False(fight.HeldForMana);
+        Assert.StartsWith("mana for the debuff is no longer waited for", fight.LoopLog.Last());
+    }
+
+    [Fact]
+    public void TheNavigationWindow_SaysItIsManaTheLoopWaitsFor()
+    {
+        Assert.Equal(("Waiting — Waiting for Mana to Debuff", MudPlay.ViewModels.Navigation.NavActivityKind.Waiting),
+            MudPlay.ViewModels.Navigation.NavActivity.Describe(
+                new[] { MovementCoordinator.LairDebuffManaGate }, isPaused: true, isMovementPrevented: false));
+        Assert.Contains(("Waiting for Mana to Debuff", MudPlay.ViewModels.Navigation.NavChipTone.Wait),
+            MudPlay.ViewModels.Navigation.NavActivity.ActiveHolds(
+                new[] { MovementCoordinator.LairDebuffManaGate }, isMovementPrevented: false));
     }
 
     // ----- Wait for priority buff spells -----------------------------

@@ -35,6 +35,8 @@ public sealed class LairEntryPriorityBuffWaitTests
         public bool AutoHeal { get; set; } = true;
         public bool AutoBless { get; set; } = true;
         public bool SneakKept { get; set; }
+        // The debuff slot's "min mana per cast", as mana; null = none set.
+        public int? DebuffMinMana { get; set; }
         // False once the loop is stopped (or otherwise no longer about to enter).
         public bool LoopStillAtTheDoor { get; set; } = true;
         // The combat profile's debuff, offered once the loop is in the lair.
@@ -77,7 +79,11 @@ public sealed class LairEntryPriorityBuffWaitTests
                 log: Log,
                 buffsDue: Director.BuffsDue,
                 stillWanted: () => LoopStillAtTheDoor,
-                healOrCureDue: Director.HealOrCureDue);
+                healOrCureDue: Director.HealOrCureDue,
+                // As the app reads it: nothing to wait for with a fight already on.
+                debuffMana: () => DebuffMinMana is { } min && !State.InCombat
+                    ? ("dbuf", min, State.Ma, State.MaxMa)
+                    : null);
             Director.SetLairEntryBuffHold(
                 () => Hold.BlockingBuffs, () => Hold.BlockingOrdinaryBuffs,
                 Hold.NotePriorityBuffCast, Hold.HoldsPriorityBuff);
@@ -574,6 +580,62 @@ public sealed class LairEntryPriorityBuffWaitTests
         Assert.False(h.Held);
         Assert.Contains(h.InfoLog("Loop"), m => m.StartsWith(
             "no priority buff went out for 18 seconds (a heal or cure still due: heal)"));
+    }
+
+    // The priority buff goes out and leaves mana under the debuff's own minimum. The
+    // loop stays for the mana, with every buff held (the ordinary one, and a priority
+    // one that comes due meanwhile), then walks in and the debuff gets the cast.
+    [Fact]
+    public void ManaUnderTheDebuffsMinimumAfterThePriorityBuffs_HoldsForMana_ThenEntersAndDebuffs()
+    {
+        using Harness h = new() { DebuffMinMana = 40 };
+        h.AddBuff("star", priority: true);
+        h.AddBuff("plai", priority: false);
+
+        Assert.False(h.AskToEnter());
+        Assert.Equal("star", h.Director.Evaluate());
+        h.State.Ma = 25;                                    // what the buff cost
+        h.Poll();
+        h.NextRound(); h.Poll();
+
+        Assert.True(h.Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffManaGate));
+        Assert.False(h.Held);
+        Assert.Contains("waiting outside the lair for mana: 25 of the 40 the debuff dbuf needs "
+            + "(its min mana per cast) — every buff held back meanwhile", h.InfoLog("Loop"));
+
+        h.AddBuff("late", priority: true);                  // comes due while it stands there
+        h.NextRound(seconds: 30);
+        Assert.Null(h.Director.Evaluate());                 // held, like plai
+        h.Poll();
+        Assert.True(h.Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffManaGate));
+
+        h.State.Ma = 45;                                    // regenerated (or rested) back over it
+        h.Poll();
+
+        Assert.False(h.Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffManaGate));
+        Assert.Equal("mana is back at 45, and the debuff dbuf needs 40 — entering the lair", h.InfoLog("Loop").Last());
+        h.DebuffOwed = "dbuf";
+        Assert.Equal("dbuf", h.Director.Evaluate());
+        Assert.Equal(new[] { "star", "dbuf" }, h.CastsSent);
+    }
+
+    // A monster comes out to the doorstep while the loop stands there for mana: the
+    // wait lets go, as a wait for the cast does, and the fight is fought.
+    [Fact]
+    public void FightAtTheDoorstepDuringAManaWait_ReleasesIt()
+    {
+        using Harness h = new() { DebuffMinMana = 40 };
+        h.AutoBless = false;                                // keep the mana change from casting anything
+        h.State.Ma = 25;
+        h.AutoBless = true;
+        Assert.False(h.AskToEnter());
+        Assert.True(h.Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffManaGate));
+
+        h.State.InCombat = true;
+        h.Poll();
+
+        Assert.False(h.Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffManaGate));
+        Assert.False(h.Hold.IsWaiting);
     }
 
     // An item-cast buff ticked priority is a priority buff to the scheduler, so it is

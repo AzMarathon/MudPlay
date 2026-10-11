@@ -8224,7 +8224,8 @@ public sealed class AppServices
             log: Log,
             buffsDue: priority => CastDirector.BuffsDue(priority),
             stillWanted: () => LairEntryDebuffModeForNextStep(out _) != Game.Map.LairEntryDebuffMode.Off,
-            healOrCureDue: () => CastDirector.HealOrCureDue());
+            healOrCureDue: () => CastDirector.HealOrCureDue(),
+            debuffMana: LairEntryDebuffMana);
         CastDirector.SetLairEntryBuffHold(
             () => LairDebuffHold.BlockingBuffs, () => LairDebuffHold.BlockingOrdinaryBuffs,
             buff => LairDebuffHold.NotePriorityBuffCast(buff),
@@ -11218,6 +11219,21 @@ public sealed class AppServices
         bool debuffConfigured = !string.IsNullOrWhiteSpace(combat.AreaDebuffSpell.SpellName)
                                 || !string.IsNullOrWhiteSpace(combat.SingleTargetDebuffSpell.SpellName);
         return debuffConfigured ? loop.LairEntryDebuff : Game.Map.LairEntryDebuffMode.Off;
+    }
+
+    // The debuff a lair wait is for and the mana its slot's "min mana per cast" asks
+    // for, against what the character has. Null when there is nothing to wait for: no
+    // minimum set, mana not read yet, or a fight already on (a monster at the doorstep
+    // ends the wait as it always has; the engine fights with what mana there is).
+    private (string Spell, int Needed, int Mana, int MaxMana)? LairEntryDebuffMana()
+    {
+        if (PlayerState.InCombat || PlayerState.MaxMa <= 0) return null;
+        Models.Profile.CombatSettings combat =
+            ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
+        return Game.Combat.CombatSpellChooser.EntryDebuffReserve(
+                combat, ReadAutoModeFlag(d => d.AutoNuke), PlayerState.MaxMa) is { } reserve
+            ? (reserve.Spell, reserve.Mana, PlayerState.Ma, PlayerState.MaxMa)
+            : null;
     }
 
     private Game.Map.RoomKey? NextPlannedRoomForEquip(Game.Map.Direction? dir)

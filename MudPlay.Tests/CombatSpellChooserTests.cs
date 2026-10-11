@@ -2148,4 +2148,54 @@ public sealed class CombatSpellChooserTests
             sut.MarkCast(d, "a rat");
         }
     }
+
+    // ----- The entry debuff's mana reserve (what a lair wait holds for) -----
+
+    [Fact]
+    public void EntryDebuffReserve_IsTheAoeDebuffs_WhenItCouldCoverTheRoom_ElseTheSingleTargetOnes()
+    {
+        CombatSettings settings = new()
+        {
+            SpellManaThresholdMode = ThresholdMode.Absolute,
+            AreaDebuffSpell = Slot("blind", minMana: 60),
+            SingleTargetDebuffSpell = Slot("curse", minMana: 25),
+        };
+
+        Assert.Equal(("blind", 60), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200));
+        // Auto-Nuke off: the AoE debuff isn't cast, the single-target one is.
+        Assert.Equal(("curse", 25), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: false, maxMa: 200));
+
+        settings.AreaDebuffSpell = Slot(null);
+        Assert.Equal(("curse", 25), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200));
+    }
+
+    [Fact]
+    public void EntryDebuffReserve_NoMinimumOnTheDebuff_OrNoDebuff_IsNothingToWaitFor()
+    {
+        CombatSettings noMinimum = new() { AreaDebuffSpell = Slot("blind"), SingleTargetDebuffSpell = Slot("curse", minMana: 25) };
+        Assert.Null(CombatSpellChooser.EntryDebuffReserve(noMinimum, allowNukes: true, maxMa: 200));
+
+        Assert.Null(CombatSpellChooser.EntryDebuffReserve(new CombatSettings(), allowNukes: true, maxMa: 200));
+
+        // Only an AoE debuff, and Auto-Nuke is off: no debuff goes out on entry.
+        CombatSettings aoeOnly = new() { AreaDebuffSpell = Slot("blind", minMana: 60) };
+        Assert.Null(CombatSpellChooser.EntryDebuffReserve(aoeOnly, allowNukes: false, maxMa: 200));
+    }
+
+    // The amount is the one the cast-time gate compares against: a percentage is the
+    // rounded share of maximum mana the settings label shows.
+    [Theory]
+    [InlineData(ThresholdMode.Absolute, 82, 66, 82)]
+    [InlineData(ThresholdMode.Percentage, 82, 66, 54)]
+    [InlineData(ThresholdMode.Percentage, 150, 66, 99)]
+    public void EntryDebuffReserve_ReadsTheMinimumPerTheManaMode(ThresholdMode mode, int minMana, int maxMa, int expected)
+    {
+        CombatSettings settings = new() { SpellManaThresholdMode = mode, SingleTargetDebuffSpell = Slot("curse", minMana: minMana) };
+
+        (string Spell, int Mana)? reserve = CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa);
+
+        Assert.Equal(expected, reserve!.Value.Mana);
+        Assert.True(CombatSpellChooser.ManaMeetsReserve(minMana, expected, maxMa, mode));
+        Assert.False(CombatSpellChooser.ManaMeetsReserve(minMana, expected - 1, maxMa, mode));
+    }
 }

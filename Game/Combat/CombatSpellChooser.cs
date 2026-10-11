@@ -638,8 +638,29 @@ public sealed class CombatSpellChooser
         if (minManaPerCast <= 0) return true;
         if (mode == ThresholdMode.Absolute) return ma >= minManaPerCast;
         if (maxMa <= 0) return false;
-        int threshold = (int)System.Math.Round(maxMa * minManaPerCast / 100.0);
-        return ma >= threshold;
+        return ma >= ReserveInMana(minManaPerCast, maxMa, mode);
+    }
+
+    // A per-cast mana reserve as the amount of mana ManaMeetsReserve compares against.
+    public static int ReserveInMana(int minManaPerCast, int maxMa, ThresholdMode mode) =>
+        mode == ThresholdMode.Absolute
+            ? minManaPerCast
+            : (int)System.Math.Round(maxMa * minManaPerCast / 100.0);
+
+    // The debuff a profile casts on walking into a room, and the mana its slot's "min
+    // mana per cast" asks for; null with no debuff to cast or no minimum on it. Asked
+    // from outside the room, where the head count isn't known: the AoE debuff is taken
+    // to be the one whenever it could cover the room (configured, Auto-Nuke on), as
+    // TryDebuffing would pick it there at or over its minimum enemies, and the
+    // single-target one otherwise.
+    public static (string Spell, int Mana)? EntryDebuffReserve(CombatSettings settings, bool allowNukes, int maxMa)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        CombatSpellSlot? slot = IsConfigured(settings.AreaDebuffSpell) && allowNukes ? settings.AreaDebuffSpell
+            : IsConfigured(settings.SingleTargetDebuffSpell) ? settings.SingleTargetDebuffSpell
+            : null;
+        if (slot is null || slot.MinManaPerCast <= 0) return null;
+        return (slot.SpellName!.Trim(), ReserveInMana(slot.MinManaPerCast, maxMa, settings.SpellManaThresholdMode));
     }
 }
 
