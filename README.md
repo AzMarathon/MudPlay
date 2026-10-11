@@ -1,16 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.171.0**
-> - Hazard buff (desert waterskin) tracked: drinks again only shortly before it runs out
-> - Auto-Sneak on: from 60 s before, with a hazard room here or within 5 steps, the drink waits for a room with no NPCs, then re-sneaks before stepping on
-> - Auto-Sneak off, or the last 15 s: it drinks where you stand; a sneak spent that way counts as lost there
-> - Kept up while you stand in a hazard room by hand too, with Auto-All on
-> - The drink takes the round's in-between cast; a refused one is retried next round or set aside
-> - The step into a hazard room waits for the drink's answer
-> - A dropped link pauses its clock; death, a buff-stripping room or room command, and a token end it
-> - Paradigm: the desert's thirst line is read, and counts the buff as off
-> - Bug report shows the tracked hazard buff
+> **Version 3.172.0**
+> - Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay
+> - Members who are short are handed exactly what they lack when you can spare it and your coins make the amount; the step waits for the game to confirm it
+> - Otherwise the route goes round the toll, or the walk or loop ends naming the toll and who can't pay
+> - A member paid for at a toll that still turned them away is not paid for twice there
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

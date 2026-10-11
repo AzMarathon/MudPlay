@@ -1,5 +1,12 @@
 # Version history
 
+## 3.172.0
+
+- Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay
+- Members who are short are handed exactly what they lack when you can spare it and your coins make the amount; the step waits for the game to confirm it
+- Otherwise the route goes round the toll, or the walk or loop ends naming the toll and who can't pay
+- A member paid for at a toll that still turned them away is not paid for twice there
+
 ## 3.171.0
 
 - Hazard buff (desert waterskin) tracked: drinks again only shortly before it runs out
