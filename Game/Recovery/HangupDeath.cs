@@ -46,6 +46,10 @@ namespace MudPlay.Game.Recovery;
 //     entry after a hang-up it didn't let go free, and no other.
 // A life lost with one of those missing is not recorded, and is told.
 //
+// A hang-up while dropped in an arena room is its own case, JudgeArena: the death
+// it gets there takes no life and nothing else, so it is told by the room alone
+// and recorded as an arena death, with no pile.
+//
 // One case nothing on the connection separates: the character was played from
 // another client in between and that session itself ended in a death by a
 // hang-up. It comes back stripped, a life down, on Stock with the board's lines
@@ -175,6 +179,43 @@ public static class HangupDeath
         return (HangupDeathVerdict.Died, entryRoom == true && entryRoomText is not null
             ? $"lives went from {before} to {now}, and it came back in {entryRoomText}"
             : $"lives went from {before} to {now}");
+    }
+
+    // A hang-up while dropped in an arena room (ArenaDeathRooms). The Stock engine
+    // gives a dropped character the arena's free death as it takes it out of the
+    // game, on any board, penalty or none: HP put back, the character moved to
+    // where that room's dead arrive, and no life, item or coin taken
+    // (GAME_MECHANICS "Hang-up / lost carrier", the Colliseum exception). On
+    // Paradigm an arena death takes none of those either (the owner, 2026-10-10).
+    // So the lives never say it, and only the room it comes back in does: the
+    // first room confirmed on the way in is where that arena room's dead arrive.
+    //
+    // What else is seen can only hand it back to Judge, which NotSuspected means
+    // here. A life lost, or nothing left of what a death takes, is the mark of an
+    // ordinary death (on Stock the arena switch can be off, and an arena room is
+    // then a room like any other). A character still dropped was not killed.
+    //
+    // The record carries a count read on this connection, as Judge's does.
+    //   takenStillHeld / entryRoom / entryRoomText — as Judge's.
+    public static (HangupDeathVerdict Verdict, string Why) JudgeArena(
+        int? hpAtDrop, int? hpAtEntry, int? livesBefore, int? livesNow, bool? takenStillHeld,
+        bool? entryRoom, string? entryRoomText)
+    {
+        if (hpAtDrop is not <= 0)
+            return (HangupDeathVerdict.NotSuspected, "the character wasn't dropped when it left the game");
+        if (entryRoom != true)
+            return (HangupDeathVerdict.NotSuspected, "it didn't come back where that arena room's dead arrive");
+        if (hpAtEntry is <= 0)
+            return (HangupDeathVerdict.NotSuspected, "it came back dropped");
+        if (takenStillHeld == false)
+            return (HangupDeathVerdict.NotSuspected, "it came back with nothing left of what a death takes, where an arena death takes nothing");
+        if (livesNow is not { } now)
+            return (HangupDeathVerdict.NeedsLives, "no `stat` has given the lives on this connection");
+        if (livesBefore is { } before && now < before)
+            return (HangupDeathVerdict.NotSuspected, $"a life was lost (lives {before} to {now}), where an arena death takes none");
+        return (HangupDeathVerdict.Died,
+            $"it left the game dropped in an arena room and came back in {entryRoomText ?? "the room that arena's dead arrive in"}, "
+            + (livesBefore is null ? "its lives not read on the connection it left on" : $"its lives still {now}"));
     }
 
     // The pile for the record: the worn pieces with their slots and everything

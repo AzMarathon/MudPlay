@@ -7228,9 +7228,12 @@ public sealed class AppServices
         AutoModeController.KillSwitchToggled += _ => AutoOpen.Recheck();
         Profile.ProfileLoaded += _ => AutoOpen.Reset();
         RoomTracker.PlayerDeathObserved += AutoOpen.OnPlayerDied;
+        // Not for an arena death: it took nothing, so what the entry read found
+        // gone didn't go into a pile.
         RoomTracker.UnwitnessedDeathRecorded += () =>
         {
-            if (Profile.Current?.DeathHistory?.LastOrDefault() is { } record) AutoOpen.OnUnwitnessedDeath(record.At);
+            if (Profile.Current?.DeathHistory?.LastOrDefault() is { NothingLost: false } record)
+                AutoOpen.OnUnwitnessedDeath(record.At);
         };
         // Settings → Talk auto-greet. Self name resolves through the
         // PartyManager's LocalCharacterName first (set on connect), then

@@ -79,18 +79,17 @@ public static class HangupDeathArrivalRooms
     // hang-up: true, that is where its dead arrive; false, a death would have put
     // the character somewhere else; null, nothing.
     //   - Nothing when either room isn't known, or the list doesn't cover the room.
-    //   - Nothing for a hang-up in an arena room: it is free there, and the death
-    //     the engine gives a dropped character in one takes neither a life nor an
-    //     item, though it moves the character like any other.
     //   - Nothing for a hang-up in a room that is its own dead's arrival room, or
     //     whose leave-the-game room is.
     //   - Standing in the room it left: no death moved it.
     //   - Anywhere else that is not an arrival room: no death by this hang-up, on
     //     Stock. On Paradigm nothing, the list being Stock's.
+    // An arena room is a room like any other here: its dead are moved the same way
+    // whether the death was the arena's free one or not (HangupDeath.JudgeArena
+    // tells those apart).
     public static bool? EntrySays(RoomKey? hungUpIn, RoomKey? enteredIn, bool stock)
     {
         if (hungUpIn is not { } left || enteredIn is not { } entered) return null;
-        if (ArenaDeathRooms.Contains(left)) return null;
         if (For(left) is not { } arrivals || arrivals.Contains(left)) return null;
         if (Array.IndexOf(LeftThroughTheirArrivalRoom, left) >= 0) return null;
         if (entered == left) return false;

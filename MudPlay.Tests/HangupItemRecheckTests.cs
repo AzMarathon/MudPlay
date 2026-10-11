@@ -279,6 +279,7 @@ public sealed class HangupItemRecheckTests
                     DeathRecord record = new(death.At, death.Room, death.LivesRemaining, death.Message)
                     {
                         RecordNumber = Profile.DeathHistory.Count + 1,
+                        NothingLost = death.NothingLost,
                     };
                     Profile.DeathHistory.Add(record);
                     return record;
@@ -3172,5 +3173,164 @@ public sealed class HangupItemRecheckTests
         h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: new RoomKey(1, 110));
 
         Assert.Contains($"It came back in {BackInTheHalls}.", Assert.Single(h.Deaths).Message);
+    }
+
+    // ----- Dropped in an arena room -----------------------------------------
+    //
+    // A hang-up while dropped in an arena room is the arena's death: the engine
+    // puts HP back and moves the character to where that room's dead arrive, and
+    // takes no life and no item, on any board, penalty or none. The lives can't
+    // say it, so the room it comes back in does, and it is recorded as an arena
+    // death: nothing lost, no pile. The Training Grounds' dead arrive in their own
+    // Halls of the Dead (16/542).
+
+    private static readonly RoomKey TrainingGrounds = new(16, 500);
+    private static readonly RoomKey ArenaHalls = new(16, 542);
+    private const string BackInTheArenaHalls =
+        "Training Grounds, Halls of the Dead (16/542), where the dead of Training Grounds (16/500) arrive";
+
+    // No penalty set for the realm unless a test gives one.
+    private static Harness InTheArena(bool stock = true, int? pveShare = null)
+    {
+        Harness h = new() { MaxItems = 0, PveShare = pveShare, Stock = stock, ArrivalRoomsKnown = true };
+        h.RoomNames[TrainingGrounds] = "Training Grounds";
+        h.RoomNames[ArenaHalls] = "Training Grounds, Halls of the Dead";
+        return h;
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DroppedInAnArenaRoom_BackWhereItsDeadArrive_IsRecordedAsAnArenaDeath(bool stock)
+    {
+        Harness h = InTheArena(stock);
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, TrainingGrounds);
+        DateTimeOffset dropped = h.Profile.HeldAtDisconnect!.At;
+
+        // HP put back, everything still held and worn, the lives as they were. A
+        // free hang-up prints no board line.
+        h.ComeBack(hp: 150, lives: 7, Geared, boardLine: false, room: ArenaHalls);
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.True(death.NothingLost);
+        Assert.Null(death.Equipped);
+        Assert.Null(death.Lost);
+        Assert.Null(death.Coins);
+        Assert.Equal((16, 500), (death.Room!.Map, death.Room.Room));
+        Assert.Equal(dropped, death.At);
+        Assert.Equal(7, death.LivesRemaining);
+        Assert.True(death.AtEntry);
+        Assert.Equal($"{HangupItemRecheck.ArenaDeathMessage} It came back in {BackInTheArenaHalls}.", death.Message);
+
+        string notice = Assert.Single(h.Notices);
+        Assert.Contains("died in the arena after the link went down", notice);
+        Assert.Contains($"came back in {BackInTheArenaHalls}", notice);
+        Assert.Contains("still has 7 lives", notice);
+        Assert.DoesNotContain("Recover Now", notice);
+        Assert.Contains("died in the arena", h.Check.LastDeathCheck);
+        Assert.Contains("(an arena room)", h.Check.LastDeathCheck);
+        Assert.False(h.Held);
+        Assert.Empty(h.Sent);
+        // The list is spent, and what is held now replaces it.
+        Assert.NotEmpty(h.Profile.HeldAtDisconnect!.Items);
+        Assert.Equal(150, h.Profile.HeldAtDisconnect.Hp);
+    }
+
+    // No `stat` was read on the way in: one is asked for, since the record carries
+    // a count read on this connection.
+    [Fact]
+    public void AnArenaDeath_WithNoStatRead_AsksForOne_AndRecordsWithItsCount()
+    {
+        Harness h = InTheArena();
+        h.StoredAt(-5, Geared, lives: null, room: new RoomRef(16, 500), inFight: false);
+
+        h.ComeBack(hp: 150, lives: null, Geared, boardLine: false, room: ArenaHalls);
+        Assert.Empty(h.Deaths);
+        Assert.Contains("stat\r", h.Sent);
+        Assert.True(h.Held);
+
+        h.Lives = 6;
+        h.ReadLives(6);
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.True(death.NothingLost);
+        Assert.Equal(6, death.LivesRemaining);
+        Assert.False(h.Held);
+    }
+
+    // On Stock the arena switch can be off, and an arena room is then a room like
+    // any other: a penalised hang-up while dropped there is an ordinary death, a
+    // life down and stripped, with a pile.
+    [Fact]
+    public void DroppedInAnArenaRoom_BackStrippedWithALifeDown_IsAnOrdinaryDeath_WithItsPile()
+    {
+        Harness h = InTheArena(pveShare: 50);
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, TrainingGrounds);
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), room: ArenaHalls);
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.False(death.NothingLost);
+        Assert.Single(death.Equipped!);
+        Assert.Equal(6, death.LivesRemaining);
+        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in {BackInTheArenaHalls}.", death.Message);
+        Assert.Contains("Recover Now", Assert.Single(h.Notices));
+    }
+
+    // Back dropped where it left (the arena switch off, the hang-up free or too
+    // small to kill), or standing there: no death of either kind, and nothing said.
+    [Theory]
+    [InlineData(-5, null)]
+    [InlineData(-5, 50)]
+    [InlineData(150, null)]
+    public void DroppedInAnArenaRoom_BackWhereItLeft_IsNoDeath(int hpAtEntry, int? pveShare)
+    {
+        Harness h = InTheArena(pveShare: pveShare);
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, TrainingGrounds);
+
+        h.ComeBack(hp: hpAtEntry, lives: 7, Geared, boardLine: false, room: TrainingGrounds);
+
+        Assert.Empty(h.Deaths);
+        Assert.Empty(h.Notices);
+        Assert.Contains("no death", h.Check.LastDeathCheck);
+        Assert.False(h.Held);
+    }
+
+    // Hung up in the arena's own Halls of the Dead, or back in a room the map
+    // wasn't sure of: the room says nothing, and without it nothing tells an
+    // arena death.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DroppedInAnArenaRoom_WithNothingTheRoomCanSay_RecordsNothing(bool hungUpInTheHalls)
+    {
+        Harness h = InTheArena();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, hungUpInTheHalls ? ArenaHalls : TrainingGrounds);
+
+        h.Now = h.Now.AddMinutes(1);
+        h.Room = hungUpInTheHalls ? ArenaHalls : null;
+        h.Check.NoteConnected();
+        h.Check.NoteRoomDisplayed();
+        h.Vitals = (150, 200);
+        h.Check.OnInGameChanged(true);
+        h.ReadLives(7);
+        h.ReadInventory(Geared);
+
+        Assert.Empty(h.Deaths);
+        Assert.Empty(h.Notices);
+        Assert.Contains("no arena death", h.Check.LastDeathCheck);
+    }
+
+    // Standing in an arena room when the link went down, on a realm with no
+    // penalty: nothing to look into, and movement is not held.
+    [Fact]
+    public void StandingInAnArenaRoom_OnARealmWithNoPenalty_IsNotLookedAt()
+    {
+        Harness h = InTheArena();
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 40, TrainingGrounds);
+
+        h.Room = ArenaHalls;
+        h.Check.NoteConnected();
+
+        Assert.False(h.Held);
     }
 }

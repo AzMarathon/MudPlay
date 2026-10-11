@@ -107,14 +107,16 @@ public sealed class HangupDeathArrivalRoomsTests
         Assert.Null(HangupDeathArrivalRooms.EntrySays(new RoomKey(18, 40), new RoomKey(18, 40), stock: false));
     }
 
-    // A hang-up in an arena room is free, and the death the engine gives a dropped
-    // character there takes no life and no item: the lives rule has nothing to
-    // pair the room with.
+    // An arena room's dead are moved like any other room's, whether the death was
+    // the arena's free one or an ordinary one. The Training Grounds' arrive in
+    // their own Halls of the Dead (16/542), itself an arena room.
     [Fact]
-    public void HungUpInAnArenaRoom_SaysNothing()
+    public void AnArenaRoom_IsARoomLikeAnyOther()
     {
         RoomKey trainingGrounds = new(16, 500);
-        Assert.Null(HangupDeathArrivalRooms.EntrySays(trainingGrounds, new RoomKey(16, 542), stock: true));
-        Assert.Null(HangupDeathArrivalRooms.EntrySays(trainingGrounds, trainingGrounds, stock: true));
+        Assert.True(HangupDeathArrivalRooms.EntrySays(trainingGrounds, new RoomKey(16, 542), stock: true));
+        Assert.False(HangupDeathArrivalRooms.EntrySays(trainingGrounds, trainingGrounds, stock: true));
+        Assert.Null(HangupDeathArrivalRooms.EntrySays(new RoomKey(16, 542), new RoomKey(16, 542), stock: true));
+        Assert.True(HangupDeathArrivalRooms.EntrySays(new RoomKey(1, 206), new RoomKey(1, 205), stock: false));
     }
 }

@@ -210,7 +210,11 @@ public static class BugReportBuilder
         Kv(sb, "Held list on file", svc.Profile.Current?.HeldAtDisconnect is { } heldList
             ? $"{heldList.Items.Count} kind(s) of item, written {heldList.At.ToLocalTime():yyyy-MM-dd HH:mm:ss} "
               + $"on {heldList.Realm ?? "(no realm)"}, "
-              + (heldList.Room is { } heldRoom ? $"room {heldRoom.Map}/{heldRoom.Room}" : "room not known")
+              + (heldList.Room is { } heldRoom
+                  ? $"room {heldRoom.Map}/{heldRoom.Room}"
+                    // A hang-up while dropped in one is the arena's death: no life or item taken.
+                    + (Game.Recovery.ArenaDeathRooms.Contains(new Game.Map.RoomKey(heldRoom.Map, heldRoom.Room)) ? " (an arena room)" : "")
+                  : "room not known")
               + (heldList.PenaltiesSpanned > 1 ? $", covering {heldList.PenaltiesSpanned} drops of the link" : "")
               // What a death by the hang-up penalty is told by on the next entry.
               + $"; HP {(heldList.Hp is { } heldHp ? $"{heldHp}" : "not known")}"

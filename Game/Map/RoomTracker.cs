@@ -211,9 +211,11 @@ public sealed class RoomTracker
     // room wasn't known.
     public RoomKey? LastDeathRoom { get; private set; }
 
-    // Whether the last witnessed death was an arena death, which takes no item,
-    // coin or key (NoteDeath's tookNothing). For the same listeners: what they do
-    // about a pile, a purse or a life spent doesn't apply to one.
+    // Whether the last death recorded was an arena death, which takes no item,
+    // coin or key: a witnessed one (NoteDeath's tookNothing) or one worked out
+    // after the fact (UnwitnessedDeath.NothingLost). For the listeners of the
+    // death events: what they do about a pile, a purse or a life spent doesn't
+    // apply to one.
     public bool LastDeathTookNothing { get; private set; }
 
     // The exit the one move in flight is crossing: what a refusal of that move is a
@@ -1406,14 +1408,20 @@ public sealed class RoomTracker
     // Nothing about the position changes: the character is already in the room the
     // game put it in and the map has read that room, so there is no respawn display
     // to wait for. Hence PlayerDeathInferred, not PlayerDeathObserved.
+    //
+    // An arena death (UnwitnessedDeath.NothingLost) is recorded as NoteDeath
+    // records one: no pile, written Recovered.
     // Returns the record made, or null with no profile to put it on.
     public DeathRecord? NoteUnwitnessedDeath(Recovery.UnwitnessedDeath death)
     {
         ArgumentNullException.ThrowIfNull(death);
         if (_profile is null) return null;
+        LastDeathTookNothing = death.NothingLost;
         string? roomName = death.Room is { } room ? _graph.GetRoom(new RoomKey(room.Map, room.Room))?.Name : null;
         DeathRecord record = AppendDeathRecord(_profile, death.At, death.Room, roomName,
-            death.LivesRemaining, death.Message, death.Equipped, death.Lost, death.Coins);
+            death.LivesRemaining, death.Message,
+            death.NothingLost ? null : death.Equipped, death.NothingLost ? null : death.Lost,
+            death.NothingLost ? null : death.Coins, nothingLost: death.NothingLost);
         UnwitnessedDeathRecorded?.Invoke();
         if (death.AtEntry) PlayerDeathInferred?.Invoke();
         return record;

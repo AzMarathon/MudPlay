@@ -325,6 +325,57 @@ public sealed class HangupDeathTests
         Assert.Equal(HangupDeathVerdict.Unsure, RoomVerdict(entryRoom: true, hpAtEntry: -5).Verdict);
     }
 
+    // ----- Dropped in an arena room ---------------------------------------
+    //
+    // A hang-up while dropped in an arena room is the arena's death: HP put back,
+    // the character moved to where that room's dead arrive, and no life or item
+    // taken. So the lives never say it, and only the room it comes back in does.
+
+    private const string InTheArenaHalls =
+        "Training Grounds, Halls of the Dead (16/542), where the dead of Training Grounds (16/500) arrive";
+
+    private static (HangupDeathVerdict Verdict, string Why) ArenaVerdict(
+        int? hpAtDrop = -5, int? hpAtEntry = 150, int? livesBefore = 7, int? livesNow = 7, bool? takenStillHeld = true,
+        bool? entryRoom = true) =>
+        HangupDeath.JudgeArena(hpAtDrop, hpAtEntry, livesBefore, livesNow, takenStillHeld, entryRoom, InTheArenaHalls);
+
+    [Fact]
+    public void DroppedInAnArenaRoom_BackWhereItsDeadArrive_IsAnArenaDeath_WithNoLifeLost()
+    {
+        (HangupDeathVerdict verdict, string why) = ArenaVerdict();
+
+        Assert.Equal(HangupDeathVerdict.Died, verdict);
+        Assert.Equal($"it left the game dropped in an arena room and came back in {InTheArenaHalls}, its lives still 7", why);
+        // The count from before wasn't read: an arena death takes none, so the one
+        // read now is the record's.
+        Assert.Equal(HangupDeathVerdict.Died, ArenaVerdict(livesBefore: null, livesNow: 6).Verdict);
+        // The list had nothing a death takes, or isn't known; HP not read at the first prompt.
+        Assert.Equal(HangupDeathVerdict.Died, ArenaVerdict(takenStillHeld: null, hpAtEntry: null).Verdict);
+    }
+
+    [Fact]
+    public void AnArenaDeath_WaitsForALivesCountReadOnThisConnection() =>
+        Assert.Equal(HangupDeathVerdict.NeedsLives, ArenaVerdict(livesNow: null).Verdict);
+
+    // Everything that isn't the arena's death is handed back to the ordinary rule.
+    [Fact]
+    public void NotAnArenaDeath_WhenTheRoomDoesNotSayIt_OrTheMarksAreAnOrdinaryDeaths()
+    {
+        // Standing when it left: a free hang-up there does nothing to it.
+        Assert.Equal(HangupDeathVerdict.NotSuspected, ArenaVerdict(hpAtDrop: 40).Verdict);
+        Assert.Equal(HangupDeathVerdict.NotSuspected, ArenaVerdict(hpAtDrop: null).Verdict);
+        // Back where it left, somewhere else, or in a room that wasn't confirmed.
+        Assert.Equal(HangupDeathVerdict.NotSuspected, ArenaVerdict(entryRoom: false).Verdict);
+        Assert.Equal(HangupDeathVerdict.NotSuspected, ArenaVerdict(entryRoom: null).Verdict);
+        // Still dropped: the arena's death puts HP back.
+        Assert.Equal(HangupDeathVerdict.NotSuspected, ArenaVerdict(hpAtEntry: -5).Verdict);
+        // A life gone, or nothing left of what a death takes: an ordinary death,
+        // as in an arena room on Stock with the arena switch off.
+        Assert.Equal(HangupDeathVerdict.NotSuspected, ArenaVerdict(livesNow: 6).Verdict);
+        Assert.Equal(HangupDeathVerdict.NotSuspected, ArenaVerdict(takenStillHeld: false).Verdict);
+        Assert.Equal(HangupDeathVerdict.NotSuspected, ArenaVerdict(takenStillHeld: false, livesNow: null).Verdict);
+    }
+
     // ----- The pile ------------------------------------------------------
 
     private static InventorySnapshot Snap((string Name, string Slot)[]? worn = null, params string[] carried) =>
@@ -514,6 +565,41 @@ public sealed class HangupDeathTests
         Assert.Equal(25, record.CoinsAtDeath!.Value.Gold);
         // Nothing was on screen to keep.
         Assert.Null(record.DeathLogFile);
+    }
+
+    // An arena death worked out afterwards gets the record a witnessed one does:
+    // in the history, nothing lost, written Recovered so nothing sets out for a pile.
+    [Fact]
+    public void AnUnwitnessedArenaDeath_IsRecordedWithNothingLost_LikeOneThatWasSeen()
+    {
+        using TrackerHarness h = new();
+
+        DeathRecord made = h.Tracker.NoteUnwitnessedDeath(Unseen() with
+        {
+            Message = HangupItemRecheck.ArenaDeathMessage,
+            LivesRemaining = 7,
+            NothingLost = true,
+        })!;
+
+        Assert.Same(made, Assert.Single(h.Profile.DeathHistory!));
+        Assert.True(made.NothingLost);
+        Assert.Equal(DeathRecoveryStatus.Recovered, made.Status);
+        Assert.Equal(RoomTracker.ArenaDeathNote, made.RecoveryMessage);
+        Assert.Equal(7, made.LivesRemaining);
+        Assert.Equal(HangupItemRecheck.ArenaDeathMessage, made.MessageText);
+        // Whatever the caller listed, an arena death has no pile.
+        Assert.Null(made.EquippedAtDeath);
+        Assert.Null(made.LostItems);
+        Assert.Null(made.CoinsAtDeath);
+        Assert.True(h.Tracker.LastDeathTookNothing);
+        // A death all the same: the engines stop, as for one that was seen.
+        Assert.Equal(1, h.Inferred);
+        Assert.Equal(1, h.Recorded);
+        Assert.Equal(1, h.EngineStops);
+
+        // The next one, an ordinary death, is not taken for an arena death.
+        h.Tracker.NoteUnwitnessedDeath(Unseen());
+        Assert.False(h.Tracker.LastDeathTookNothing);
     }
 
     // The character is already in the room the game put it in and the map has
