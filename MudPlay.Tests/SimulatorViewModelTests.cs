@@ -152,6 +152,24 @@ public sealed class SimulatorViewModelTests : IDisposable
     }
 
     [Fact]
+    public void SavingATourTheCharacterCantWalkNowSaysSo()
+    {
+        using Harness h = Build(saveLoops: true);
+        h.Simulator.SelectedRanking = new AreaRank("Walkable", 40, new[] { new RoomKey(1, 1), new RoomKey(1, 2) }, 2,
+            new LoopSimSummary(new[] { Run }));
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+        Assert.DoesNotContain("can't be walked", h.Simulator.RankStatus);
+
+        // 1/9 is on no map here, so no leg reaches it or leaves it.
+        h.Simulator.SelectedRanking = new AreaRank("Shut", 40, new[] { new RoomKey(1, 1), new RoomKey(1, 9) }, 2,
+            new LoopSimSummary(new[] { Run }));
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+
+        Assert.NotNull(h.Loops.Get("Shut (L40 sim)"));
+        Assert.Contains("2 of its 2 legs can't be walked", h.Simulator.RankStatus);
+    }
+
+    [Fact]
     public void ASavedLoopRowOffersNoSave()
     {
         using Harness h = Build();

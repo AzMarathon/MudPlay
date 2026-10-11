@@ -684,13 +684,21 @@ public sealed partial class SimulatorViewModel : ObservableObject
             RankStatus = $"Couldn't save the loop: {ex.Message}";
             return;
         }
+        // The ranking walked the tour with level gates judged at the ranked level and
+        // for the character alone; a run walks it with every gate as it is then. Legs
+        // shut today are named now, not left for the run to find.
+        int shut = _loops.ExpandWaypoints(loop.Waypoints, _filter).UnreachableSegments.Count;
         _log?.Info("Simulator", $"saved ranked tour '{rank.Area}' (L{rank.Level}, {rank.Tour.Count} waypoints, " +
-                                $"{rank.LapRooms} rooms a lap, {rank.Result.ExpPerHour:N0} exp/hr) as loop '{name}'");
+                                $"{rank.LapRooms} rooms a lap, {rank.Result.ExpPerHour:N0} exp/hr) as loop '{name}'" +
+                                (shut > 0 ? $"; {shut} of its legs can't be walked as the character is now" : ""));
         RefreshRoutes();
         if (Routes.FirstOrDefault(o => o.Loop is { } l && string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase)) is { } saved)
             SelectedRoute = saved;
-        RankStatus = $"Saved as loop \"{name}\" — it's in the Navigation window's Loops list to run, and picked as the Route above. " +
-                     "Its notes say how it was tested.";
+        RankStatus = shut > 0
+            ? $"Saved as loop \"{name}\", but {shut} of its {loop.Waypoints.Count} legs can't be walked as you are now " +
+              $"(it was ranked at L{rank.Level}) — it won't run right until they open. Its notes say how it was tested."
+            : $"Saved as loop \"{name}\" — it's in the Navigation window's Loops list to run, and picked as the Route above. " +
+              "Its notes say how it was tested.";
     }
 
     // A ★ row is already saved, so only an area row offers Save as loop.
