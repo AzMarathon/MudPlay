@@ -127,18 +127,45 @@ public sealed class RemoteCommandCheckOrderTests
         Assert.Empty(engine.LastSentForTests);
     }
 
-    // @do sends its words to the game, so only the game's own word is refused.
-    [Fact]
-    public void Do_WithAWordThatOnlyContainsSuicide_IsSent()
+    // @do sends its words to the game, so only the game's own word is refused: a
+    // longer word that contains it is not the command.
+    [Theory]
+    [InlineData("@do say suicidal")]
+    [InlineData("@do suicidal")]
+    [InlineData("@do say unsuicided")]
+    public void Do_WithALongerWordThatContainsSuicide_IsSent(string message)
     {
         var (engine, players) = Engine();
         Seed(players, "Trusted", PlayerRemoteControls.All);
         bool fired = false;
         engine.RegisterHandler("@do", PlayerRemoteControls.ExecuteCommands, _ => fired = true);
 
-        engine.DispatchForTests(Telepath("Trusted", "@do say suicidal"));
+        engine.DispatchForTests(Telepath("Trusted", message));
 
         Assert.True(fired);
+        Assert.Empty(engine.LastSentForTests);
+    }
+
+    // Punctuation and quotes around the word don't hide it.
+    [Theory]
+    [InlineData("@do suicide!")]
+    [InlineData("@do suicide.")]
+    [InlineData("@do \"suicide\"")]
+    [InlineData("@do 'suicide'")]
+    [InlineData("@do suicide;")]
+    [InlineData("@do rest;suicide")]
+    [InlineData("@do (Suicide)")]
+    public void Do_WithSuicideInPunctuationOrQuotes_IsRefused(string message)
+    {
+        var (engine, players) = Engine();
+        Seed(players, "Trusted", PlayerRemoteControls.All);
+        bool fired = false;
+        engine.RegisterHandler("@do", PlayerRemoteControls.ExecuteCommands, _ => fired = true);
+
+        engine.DispatchForTests(Telepath("Trusted", message));
+
+        Assert.False(fired);
+        Assert.Equal("/Trusted {@do suicide is not allowed, use @suicide}\r", Assert.Single(Sent(engine)));
     }
 
     [Fact]

@@ -861,8 +861,10 @@ public sealed class RemoteCommandManager : IDisposable
     // Returns the reply payload (bare text — engine wraps in {} at SendReply
     // time) for the sender; null when the command isn't a forcible @do suicide.
     //
-    // Only @do, and only when one of the words it would send is `suicide` itself:
-    // a word that merely contains it (`suicidal`) is not the game's command.
+    // Only @do, and only when one of the words it would send is `suicide` itself.
+    // Punctuation and quotes around the word don't hide it (`suicide!`,
+    // `"suicide"`, `suicide;`): the game may well take those as the command. A
+    // longer word that merely contains it (`suicidal`) is not the command.
     // @party is a passthrough whose suicide policy is enforced entirely by
     // IsHardBlocked (only the `set suicide` phrase is refused); a plain
     // @party suicide relays like any other command, so it must NOT redirect.
@@ -870,9 +872,26 @@ public sealed class RemoteCommandManager : IDisposable
     {
         if (!command.Equals("@do", StringComparison.OrdinalIgnoreCase)) return null;
         foreach (string arg in args)
-            if (arg.Equals("suicide", StringComparison.OrdinalIgnoreCase))
+            if (HasLetterRun(arg, "suicide"))
                 return "@do suicide is not allowed, use @suicide";
         return null;
+    }
+
+    // True when one of the unbroken runs of letters in text is word, ignoring case.
+    private static bool HasLetterRun(string text, string word)
+    {
+        int start = -1;
+        for (int i = 0; i <= text.Length; i++)
+        {
+            bool letter = i < text.Length && char.IsLetter(text[i]);
+            if (letter && start < 0) start = i;
+            if (letter || start < 0) continue;
+            if (i - start == word.Length
+                && string.Compare(text, start, word, 0, word.Length, StringComparison.OrdinalIgnoreCase) == 0)
+                return true;
+            start = -1;
+        }
+        return false;
     }
 
     // User-configured policy block for @suicide based on the lives threshold.

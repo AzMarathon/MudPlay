@@ -1057,7 +1057,7 @@ No grant gets around these.
 
 - **`reroll`.** A command with `reroll` anywhere in it, in the command word or in what follows, is dropped. It is checked before the permission, and no answer is sent, whatever the Warn setting says, so nobody can probe for it.
 - **`@party set suicide`** is dropped the same way.
-- **`@do` with the word `suicide`** among what it would send is answered `@do suicide is not allowed, use @suicide` (a **Refusal**) and nothing is sent to the game. This is checked after the permission: a sender without Execute commands gets the Failure message like for any other `@do`. Only the word itself counts; `@do say suicidal` is sent.
+- **`@do` with the word `suicide`** among what it would send is answered `@do suicide is not allowed, use @suicide` (a **Refusal**) and nothing is sent to the game. This is checked after the permission: a sender without Execute commands gets the Failure message like for any other `@do`. Only the word itself counts, with or without punctuation or quotes around it (`suicide!`, `"suicide"`); `@do say suicidal` is sent.
 
 No other command is touched for having `suicide` among its words: `@have suicide note` is an ordinary `@have`.
 
@@ -2505,7 +2505,7 @@ Sends a command to the game as if you had typed it. This is the highest-trust co
 **Situations:**
 
 - **`reroll` is dropped for anyone,** with or without the box, before anything else is looked at. It is matched anywhere, inside a longer word too.
-- **The `suicide` refusal is for a sender who holds the box.** The permission is checked first, so a player without Execute commands gets the Failure message whatever followed `@do`, and learns nothing else. The word must be `suicide` itself: `@do say suicidal` is sent like any other command.
+- **The `suicide` refusal is for a sender who holds the box.** The permission is checked first, so a player without Execute commands gets the Failure message whatever followed `@do`, and learns nothing else. The word must be `suicide` itself, anywhere after `@do`; punctuation or quotes around it don't hide it (`suicide!`, `"suicide"`, `suicide;`). A longer word is not it: `@do say suicidal` is sent like any other command.
 - **Master switch off:** ignored, no answer.
 - **`@do break` holds your attack.** A `break` sent this way puts the attack hold on your character exactly as a `break` you type does: Auto-Combat stops attacking the monster it was fighting and attacks nothing else in the room. An attack sent the same way (`@do a orc`) lifts the hold, as an attack of your own would. Your terminal shows `[Attack on <monster> held by Leader's @do break: attack to carry on]` when the hold goes on and `[Attack hold on <monster> ended: …]` when it ends, and the program log and a bug report name Leader as the one who asked. What the hold does and how it ends is under *Combat → The round loop*, **Stopping the fight yourself**.
 - **On your own screen:** each `@do` is written to the program log with the sender's name and the command.
