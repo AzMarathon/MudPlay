@@ -145,6 +145,14 @@ public sealed class CombatManagerBreakHoldTests
             DrainPosted();
         }
 
+        // The same for a command a member's `@party <command>` relayed
+        // (PartyEssentialHandlers.RelayingFor).
+        public void PartyMemberRelays(string member, string line)
+        {
+            UserCommands.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), $"{member}'s @party");
+            DrainPosted();
+        }
+
         // The game's answer to a `break` typed in a fight: the echo, then the Off.
         public void GameAnswersBreak()
         {
@@ -334,6 +342,44 @@ public sealed class CombatManagerBreakHoldTests
         Assert.Null(h.Combat.UserBreakHoldTarget);
         Assert.Equal(Rat, h.Combat.CurrentTarget);
         Assert.Contains("'a rat' sent by Leader's @do", h.Combat.UserBreakHoldSummary);
+    }
+
+    // A `break` a party member relays with `@party` holds the attack exactly as a
+    // `@do break` does (user, 2026-10-10, asked whether it should: "yes"), and the
+    // log, the terminal and the bug report say who asked.
+    [Fact]
+    public void PartyMembersPartyBreak_HoldsTheAttack_AndSaysWhoAsked()
+    {
+        using Harness h = FightingARat();
+        int sent = h.Sent.Count;
+
+        h.PartyMemberRelays("Leader", "break");
+        h.GameAnswersBreak();
+        h.Feed(RatBites);
+        h.Tick();
+
+        Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);
+        Assert.Equal(sent, h.Sent.Count);
+        Assert.Contains("Leader's @party break", Assert.Single(h.Notices));
+        Assert.Contains("asked for by Leader's @party", h.Combat.UserBreakHoldSummary);
+        Assert.Contains(h.Log.Snapshot(), e =>
+            e.Severity == LogSeverity.Info && e.Message.Contains("Leader's @party 'break'")
+            && e.Message.Contains($"attack held on '{Rat}'"));
+    }
+
+    // An attack relayed the same way lifts the hold, as a `@do` attack does.
+    [Fact]
+    public void PartyMembersPartyAttack_EndsTheHold_AndSaysWhoAsked()
+    {
+        using Harness h = FightingARat();
+        h.PartyMemberRelays("Leader", "break");
+        h.GameAnswersBreak();
+
+        h.PartyMemberRelays("Leader", "a rat");
+
+        Assert.Null(h.Combat.UserBreakHoldTarget);
+        Assert.Equal(Rat, h.Combat.CurrentTarget);
+        Assert.Contains("'a rat' sent by Leader's @party", h.Combat.UserBreakHoldSummary);
     }
 
     // ----- no attack path fires under it ---------------------------------

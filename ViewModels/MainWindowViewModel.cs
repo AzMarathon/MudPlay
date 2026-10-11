@@ -3832,9 +3832,13 @@ public partial class MainWindowViewModel : ObservableObject
         // the monster it was fighting, and their own attack lets it go: typed, or
         // sent by a macro, trigger or event of theirs. An engine's break or attack is
         // neither, and the raw wire's lines (`sys goto` sends a break ahead of a
-        // jump) are an engine's although nothing wraps them. A party member's `@do`
-        // line counts with the user's (user, 2026-10-10) and carries their name.
-        string? relayedFor = AppServices.Current.Do.SendingFor is { } doSender ? $"{doSender}'s @do" : null;
+        // jump) are an engine's although nothing wraps them. A line a party member
+        // relayed with `@do` or `@party` counts with the user's (user, 2026-10-10)
+        // and carries their name.
+        string? relayedFor =
+            AppServices.Current.Do.SendingFor is { } doSender ? $"{doSender}'s @do"
+            : AppServices.Current.PartyEssentials.RelayingFor is { } partySender ? $"{partySender}'s @party"
+            : null;
         if (typed && !AppServices.Current.SendingEngineRawCommand
             && (AppServices.Current.EngineGate.SendingUsersOwnCommand || relayedFor is not null))
             AppServices.Current.OutboundBreak.ObserveOutbound(data, relayedFor);

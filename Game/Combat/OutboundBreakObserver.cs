@@ -13,9 +13,10 @@ namespace MudPlay.Game.Combat;
 //
 // Hooked into the wire-send pipeline by MainWindowViewModel.SendUserInput, which
 // hands it the user's own lines: typed, or sent by a macro, trigger or event they
-// set up (EngineSendGate.SendingUsersOwnCommand). A command a party member sent
-// with `@do` is handed over too, with that member's name (user, 2026-10-10, asked
-// which breaks sent on someone's behalf hold the attack: "only the @do break"). An
+// set up (EngineSendGate.SendingUsersOwnCommand). A command a party member
+// relayed with `@do` or `@party` is handed over too, with that member's name
+// (user, 2026-10-10: asked which breaks sent on someone's behalf hold the attack,
+// "only the @do break"; asked then whether a `@party break` should, "yes"). An
 // engine's `break` (a flee, a room attack broken off for a bystander, the combat
 // toggle going off, `sys goto`) and an engine's attack never reach it. The line is
 // read as it is sent, so a `break` typed ahead of the round that the game answers
@@ -30,7 +31,7 @@ public sealed class OutboundBreakObserver
     private readonly Action<string, string?, string?> _onAttack;
 
     // onBreak(word, askedBy) and onAttack(word, target, askedBy): askedBy says whose
-    // relay sent the line ("<name>'s @do"), null for the user's own.
+    // relay sent the line ("<name>'s @do", "<name>'s @party"), null for the user's own.
     public OutboundBreakObserver(
         Func<string, bool> isAttackSpell,
         Action<string, string?> onBreak,
