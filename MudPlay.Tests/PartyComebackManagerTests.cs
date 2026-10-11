@@ -2419,4 +2419,43 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.DoesNotContain("invite Tank", partyWire);
         Assert.False(Sent(h, "/Tank @join"));
     }
+
+    private static int JoinsAsked(Harness h, string given) =>
+        h.Comeback.LastSentForTests.Count(b => Encoding.Latin1.GetString(b).Contains($"/{given} @join"));
+
+    // On Stock the row never left, so it can't mean they are back: the pass that
+    // finds them tells them to join, as it promised.
+    [Fact]
+    public void Stock_AutoLairOnSight_TellsAMemberStillOnOurListToJoin()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.OnStock = () => true;
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+
+        AlsoHere(h, "Tank");
+        Assert.Equal(1, JoinsAsked(h, "Tank"));
+        Assert.Empty(partyWire);
+        AlsoHere(h, "Tank");                                     // the room shown again
+        Assert.Equal(1, JoinsAsked(h, "Tank"));
+
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        Assert.Empty(h.Comeback.InviteOnSight);
+        Assert.Empty(h.Comeback.AskedToJoin);
+        Assert.Empty(partyWire);
+    }
+
+    [Fact]
+    public void Stock_AutoLairOnSight_NoFollowAfterTheJoin_InvitesAfterAll()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.OnStock = () => true;
+        h.Comeback.JoinFirstWait = TimeSpan.Zero;
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+
+        AlsoHere(h, "Tank");
+        h.Comeback.FireJoinFallbackForTests();
+
+        Assert.Equal(1, JoinsAsked(h, "Tank"));
+        Assert.Single(partyWire, w => w == "invite Tank");
+    }
 }

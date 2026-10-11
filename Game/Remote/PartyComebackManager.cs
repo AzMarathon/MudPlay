@@ -885,11 +885,16 @@ public sealed class PartyComebackManager : IDisposable
         {
             if (entity.Kind != EntityKind.Player) continue;
             string given = GivenName(entity.ResolvedName);
-            if (!_inviteOnSight.Contains(given) || MemberInParty(given)) continue;
+            if (!_inviteOnSight.Contains(given)) continue;
+            // A row on our roster means they are back with us, on Paradigm. On
+            // Stock the row never left when the exit turned them away, so it says
+            // nothing: they are owed this until they follow, which is what takes
+            // them off _inviteOnSight.
+            if (MemberInParty(given) && !StillOnOurList(given)) continue;
             if (now - _invitedOnSightAt.GetValueOrDefault(given, DateTimeOffset.MinValue) < OnSightInviteCooldown) continue;
             _invitedOnSightAt[given] = now;
-            _log?.Info(LogCategory, $"{given} is here — inviting them back, as Auto-Lair's pass found them.");
-            _party.Invite(given);
+            _log?.Info(LogCategory, $"{given} is here — bringing them back, as Auto-Lair's pass found them.");
+            AskBack(given, removedByAHold: false);
         }
     }
 
