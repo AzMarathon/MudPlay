@@ -190,23 +190,6 @@ public sealed class GameTable
         }
     }
 
-    internal bool TryGetInt64(int cell, out long value)
-    {
-        switch (_kinds[cell])
-        {
-            case Int32Cell:
-                value = _values[cell];
-                return true;
-            case NumberCell:
-                ReadOnlySpan<byte> text = Utf8(_values[cell]);
-                if (Utf8Parser.TryParse(text, out value, out int used) && used == text.Length) return true;
-                value = 0;
-                return false;
-            default:
-                throw WrongKind(cell, "Number");
-        }
-    }
-
     internal bool TryGetDouble(int cell, out double value)
     {
         switch (_kinds[cell])
@@ -223,13 +206,6 @@ public sealed class GameTable
                 throw WrongKind(cell, "Number");
         }
     }
-
-    internal bool GetBoolean(int cell) => _kinds[cell] switch
-    {
-        TrueCell => true,
-        FalseCell => false,
-        _ => throw WrongKind(cell, "Boolean"),
-    };
 
     // Most cells are small whole numbers, and most of those are 0: one shared string
     // each instead of a new one per read (the Game Data browser reads every cell of

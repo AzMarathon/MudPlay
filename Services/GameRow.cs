@@ -32,7 +32,7 @@ public readonly struct GameRow
     // The row's fields in the order the file wrote them.
     public FieldList Fields => new(_table, _row);
 
-    public readonly struct FieldList : IReadOnlyList<GameField>
+    public readonly struct FieldList : IEnumerable<GameField>
     {
         private readonly GameTable? _table;
         private readonly int _row;
@@ -43,12 +43,7 @@ public readonly struct GameRow
             _row = row;
         }
 
-        public int Count => _table?.FieldCount(_row) ?? 0;
-
-        public GameField this[int index] =>
-            (uint)index < (uint)Count ? _table!.FieldAt(_row, index) : throw new ArgumentOutOfRangeException(nameof(index));
-
-        public Enumerator GetEnumerator() => new(_table, _row, Count);
+        public Enumerator GetEnumerator() => new(_table, _row, _table?.FieldCount(_row) ?? 0);
         IEnumerator<GameField> IEnumerable<GameField>.GetEnumerator() => GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 

@@ -29,15 +29,7 @@ public readonly struct GameValue
 
     public int GetInt32() => TryGetInt32(out int value) ? value : throw new FormatException("The number is not a 32-bit whole number.");
 
-    public bool TryGetInt64(out long value) => Table.TryGetInt64(_cell, out value);
-
-    public long GetInt64() => TryGetInt64(out long value) ? value : throw new FormatException("The number is not a 64-bit whole number.");
-
     public bool TryGetDouble(out double value) => Table.TryGetDouble(_cell, out value);
-
-    public double GetDouble() => TryGetDouble(out double value) ? value : throw new FormatException("The number is not a double.");
-
-    public bool GetBoolean() => Table.GetBoolean(_cell);
 
     // The value as JSON text; a number exactly as the file wrote it.
     public string GetRawText() => Table.GetRawText(_cell);

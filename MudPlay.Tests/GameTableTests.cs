@@ -20,7 +20,6 @@ public sealed class GameTableTests
         {
             sb.Append('|').Append(v.GetRawText());
             sb.Append('|').Append(v.TryGetInt32(out int i)).Append(i);
-            sb.Append('|').Append(v.TryGetInt64(out long l)).Append(l);
             sb.Append('|').Append(v.TryGetDouble(out double d)).Append(d.ToString("R", CultureInfo.InvariantCulture));
         }
         else if (v.ValueKind is JsonValueKind.String or JsonValueKind.Null)
@@ -38,7 +37,6 @@ public sealed class GameTableTests
         {
             sb.Append('|').Append(v.GetRawText());
             sb.Append('|').Append(v.TryGetInt32(out int i)).Append(i);
-            sb.Append('|').Append(v.TryGetInt64(out long l)).Append(l);
             sb.Append('|').Append(v.TryGetDouble(out double d)).Append(d.ToString("R", CultureInfo.InvariantCulture));
         }
         else if (v.ValueKind is JsonValueKind.String or JsonValueKind.Null)
@@ -170,16 +168,16 @@ public sealed class GameTableTests
         GameValue Field(string name) => row.TryGetProperty(name, out GameValue v) ? v : throw new KeyNotFoundException(name);
 
         Assert.Throws<InvalidOperationException>(() => Field("Text").TryGetInt32(out _));
-        Assert.Throws<InvalidOperationException>(() => Field("Text").GetDouble());
-        Assert.Throws<InvalidOperationException>(() => Field("Null").TryGetInt64(out _));
+        Assert.Throws<InvalidOperationException>(() => Field("Text").TryGetDouble(out _));
+        Assert.Throws<InvalidOperationException>(() => Field("Null").GetInt32());
+        Assert.Throws<InvalidOperationException>(() => Field("Flag").TryGetInt32(out _));
         Assert.Throws<InvalidOperationException>(() => Field("Whole").GetString());
-        Assert.Throws<InvalidOperationException>(() => Field("Whole").GetBoolean());
         Assert.Throws<FormatException>(() => Field("Fraction").GetInt32());
-        Assert.Throws<FormatException>(() => Field("Fraction").GetInt64());
         Assert.False(Field("Fraction").TryGetInt32(out int left));
         Assert.Equal(0, left);                       // not the digits it got through
-        Assert.Equal(1.5, Field("Fraction").GetDouble());
-        Assert.True(Field("Flag").GetBoolean());
+        Assert.True(Field("Fraction").TryGetDouble(out double fraction));
+        Assert.Equal(1.5, fraction);
+        Assert.Equal("True", Field("Flag").ToString());
         Assert.Null(Field("Null").GetString());
 
         // A value no row produced, and a row no table produced.
