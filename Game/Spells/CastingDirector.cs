@@ -358,7 +358,7 @@ public sealed class CastingDirector : IDisposable
     // winner keeps stripping them), for ANY target; the watchdog labels them "covered by".
     private Func<IReadOnlyDictionary<string, string>>? _suppressedBuffs;
     // STOCK one-directional conflicts: loser cast code → remover cast code. Both are
-    // maintained (not suppressed); PickUnifiedBuff orders each remover before the losers it
+    // maintained (not suppressed); DueUnifiedBuffs orders each remover before the losers it
     // removes so the at-cast strip doesn't knock them off. Empty off stock.
     private Func<IReadOnlyDictionary<string, string>>? _collisionOrder;
     private Action<string>? _selfBuffCastSink;
@@ -658,23 +658,32 @@ public sealed class CastingDirector : IDisposable
     // While it returns true the buff categories wait: a loop is about to step into a
     // lair and the round's one between-round cast is being kept for the combat
     // profile's pre-attack debuff. Heals and cures still go out. Optional.
-    public void SetLairEntryBuffHold(Func<bool> holdBuffs)
+    // holdOrdinaryBuffs (LairEntryDebuffHold.BlockingOrdinaryBuffs) holds only the
+    // buffs not ticked "Priority buff": the loop is letting the priority ones go first.
+    public void SetLairEntryBuffHold(Func<bool> holdBuffs, Func<bool>? holdOrdinaryBuffs = null)
     {
         ArgumentNullException.ThrowIfNull(holdBuffs);
         _lairEntryBuffHold = holdBuffs;
+        _lairEntryOrdinaryBuffHold = holdOrdinaryBuffs;
     }
     private Func<bool>? _lairEntryBuffHold;
+    private Func<bool>? _lairEntryOrdinaryBuffHold;
+
+    // Connected, in the game and alive: the state every decision needs first.
+    private bool CanDecide =>
+        _isConnected?.Invoke() != false && !_suspended
+        && _state.HasPromptData && _state.MaxHp > 0 && _state.Hp > 0;
 
     // A heal, cure or buff is due and would be cast as soon as the round's
     // between-round cast is free. The debuff isn't counted: it is what a caller
-    // waiting on this wants the cast kept for.
+    // waiting on this wants the cast kept for. Nor is a buff a lair-entry hold is
+    // keeping back: it won't take the cast.
     public bool HasCastDue()
     {
-        if (_isConnected?.Invoke() == false || _suspended) return false;
+        if (!CanDecide) return false;
         bool healEnabled = _isEnabled();
         bool blessEnabled = _autoBlessEnabled?.Invoke() ?? true;
         if (!healEnabled && !blessEnabled) return false;
-        if (!_state.HasPromptData || _state.MaxHp <= 0 || _state.Hp <= 0) return false;
 
         SpellsSettings spells = _readSpells();
         HealthSettings health = _readHealth();
@@ -690,6 +699,22 @@ public sealed class CastingDirector : IDisposable
             return true;
         return blessEnabled
             && (PickBuff(health, priority: true) is not null || PickBuff(health, priority: false) is not null);
+    }
+
+    // The buffs of one kind (ticked "Priority buff", or the rest) that are due now, in
+    // cast order, by the rules the decision pass picks with; a buff aimed at a party
+    // member reads "code on name". A lair-entry hold is not applied, so the caller can
+    // name what it is keeping back as well as what it is waiting for.
+    public IReadOnlyList<string> BuffsDue(bool priority)
+    {
+        if (!CanDecide || _autoBlessEnabled?.Invoke() == false) return [];
+        List<string> names = new();
+        foreach (CastCandidate due in DueBuffs(_readHealth(), priority))
+        {
+            string name = due.Target is null ? due.Spell : $"{due.Spell} on {due.Target}";
+            if (!names.Contains(name)) names.Add(name);   // a staged reroll and its own slot
+        }
+        return names;
     }
 
     // Wire the sneak-keeping gate (Game.Stealth.SneakGuard.Holds). While it returns
@@ -923,7 +948,7 @@ public sealed class CastingDirector : IDisposable
         => _selfBuffCoverage?.Invoke() ?? _emptyCoverage;
 
     // Wire the permanently-suppressed-buff source: loser cast code → winning buff name for
-    // one-directional conflicts (Paradigm continuous removal). PickUnifiedBuff skips a
+    // one-directional conflicts (Paradigm continuous removal). DueUnifiedBuffs skips a
     // suppressed slot for any target so we never waste rounds casting a buff the winner
     // re-strips; the Buff Watchdog labels it "covered by".
     public void SetSuppressedBuffs(Func<IReadOnlyDictionary<string, string>> suppressed)
@@ -940,7 +965,7 @@ public sealed class CastingDirector : IDisposable
 
     // Wire the STOCK collision-free ordering source: loser cast code → remover cast code for
     // one-directional conflicts, where (unlike Paradigm) removes fire only at cast so both
-    // can coexist if the remover is cast first. PickUnifiedBuff re-sorts the priority list so
+    // can coexist if the remover is cast first. DueUnifiedBuffs re-sorts the priority list so
     // each remover precedes the losers it removes; the loser is still maintained (not
     // suppressed), and the clobber-clear re-applies it after each remover recast. Empty off
     // stock (the Paradigm branch suppresses instead — SetSuppressedBuffs).
@@ -2051,7 +2076,11 @@ public sealed class CastingDirector : IDisposable
             if (category is SpellCategory.Buffing or SpellCategory.PriorityBuffing
                 && ItemCastToken.IsToken(cand.Spell))
             {
-                if (TryFireItemCast(cand.Spell, cand.RecastMarginSec)) return cand.Spell;
+                if (TryFireItemCast(cand.Spell, cand.RecastMarginSec))
+                {
+                    NoteCastDuringLairWait(category, cand);
+                    return cand.Spell;
+                }
                 continue; // unresolved / non-buff item — let a later category try
             }
 
@@ -2128,6 +2157,7 @@ public sealed class CastingDirector : IDisposable
                 // re-stages one if the fresh roll is still below threshold).
                 if (string.Equals(cand.Spell, _pendingManaRegenReroll, StringComparison.OrdinalIgnoreCase))
                     _pendingManaRegenReroll = null;
+                NoteCastDuringLairWait(category, cand);
             }
 
             _log?.Combat(LogCategory,
@@ -2140,6 +2170,16 @@ public sealed class CastingDirector : IDisposable
         }
 
         return null;
+    }
+
+    // A priority buff went out while a loop stands outside a lair letting those go
+    // first. The loop's wait is on the always-on log, so each cast it waited for is too.
+    private void NoteCastDuringLairWait(SpellCategory category, CastCandidate cast)
+    {
+        if (category != SpellCategory.PriorityBuffing || _lairEntryOrdinaryBuffHold?.Invoke() != true) return;
+        string onWhom = cast.Target is { } target ? $" on {target}" : string.Empty;
+        _log?.Info(LogCategory,
+            $"priority buff {cast.Spell}{onWhom} cast while the loop waits outside the lair.");
     }
 
     // Combat-diagnostics view of the between-round queue: every DUE candidate the
@@ -2636,13 +2676,27 @@ public sealed class CastingDirector : IDisposable
     // their own rank; everything else about a buff is the same in either.
     private CastCandidate? PickBuff(HealthSettings health, bool priority)
     {
+        // A loop is about to step into a lair and is keeping the round's cast for the
+        // pre-attack debuff (LairEntryDebuffHold logs its own wait). While it lets the
+        // priority buffs go first, only the others are kept back.
+        if (_lairEntryBuffHold?.Invoke() == true) return null;
+        if (!priority && _lairEntryOrdinaryBuffHold?.Invoke() == true) return null;
+
+        foreach (CastCandidate due in DueBuffs(health, priority)) return due;
+        return null;
+    }
+
+    // Every due buff of one kind, in cast order: PickBuff casts the first. Lazy, so
+    // taking only the first does no more work than picking it did.
+    private IEnumerable<CastCandidate> DueBuffs(HealthSettings health, bool priority)
+    {
         // Buff-strip-room gate: the room casts a buff-removal spell on entry, so
         // any buff we put up is torn straight back off. Skip the whole category
         // here — heals / cures still run their own paths.
         if (_buffStripRoom?.Invoke() == true)
         {
             _log?.Combat(LogCategory, "buff skipped — room strips buffs on entry.");
-            return null;
+            yield break;
         }
 
         // Token buff-pause: a transport-token use is imminent and will wipe every buff
@@ -2651,19 +2705,15 @@ public sealed class CastingDirector : IDisposable
         if (_tokenBuffPause?.Invoke() == true)
         {
             _log?.Combat(LogCategory, "buff skipped — token use imminent (buffs about to be wiped).");
-            return null;
+            yield break;
         }
-
-        // A loop is about to step into a lair and is keeping the round's cast for the
-        // pre-attack debuff (LairEntryDebuffHold logs its own wait).
-        if (_lairEntryBuffHold?.Invoke() == true) return null;
 
         // A staged mana-regen reroll leads — it's an immediate below-threshold recast
         // (front of the queue). Then the ONE unified buff list (self bless / regen /
         // when-full, whole-party, per-member). Mana-regen maintenance is just a
-        // CastOnSelf slot in that list, so PickUnifiedBuff handles it in place.
-        if (PickManaRegenReroll(health, priority) is { } rr) return rr;
-        return PickUnifiedBuff(health, priority);
+        // CastOnSelf slot in that list, so DueUnifiedBuffs handles it in place.
+        if (PickManaRegenReroll(health, priority) is { } rr) yield return rr;
+        foreach (CastCandidate due in DueUnifiedBuffs(health, priority)) yield return due;
     }
 
     // Whether mana is at or above this buff's own floor (BuffSlot.BlessIfAboveMa,
@@ -2693,7 +2743,7 @@ public sealed class CastingDirector : IDisposable
     // slot's rest / combat conditions and mana floor. If it can't be paid for right
     // now, drop it (the reroller re-stages on the next landing if still below
     // threshold) rather than stall the walk. The mana-regen buff's own MAINTENANCE
-    // recast is a normal CastOnSelf slot in the unified list (PickUnifiedBuff).
+    // recast is a normal CastOnSelf slot in the unified list (DueUnifiedBuffs).
     private CastCandidate? PickManaRegenReroll(HealthSettings health, bool priority)
     {
         if (_pendingManaRegenReroll is not { } reroll) return null;
@@ -2723,7 +2773,8 @@ public sealed class CastingDirector : IDisposable
     }
 
     // Walk the ONE unified buff list (CharacterProfile.PartyBuffs) in priority order
-    // and pick the first due buff to cast. A slot can target ourselves (CastOnSelf),
+    // and give each due buff in turn; the first is the one to cast. A slot can target
+    // ourselves (CastOnSelf),
     // the whole party in one cast (Targets 10 / 13, WholePartyOn — lands on us too),
     // and/or selected members (Targets 2). Every target obeys the slot's own
     // conditions (the mana floor, the rest / combat switches, OnlyWhenHpFull /
@@ -2734,9 +2785,9 @@ public sealed class CastingDirector : IDisposable
     // a roster name is in the room) — the one exception being a member who's HIDING:
     // the cast returns "You do not see <name> here!" and we back off (_hiddenTargets)
     // until we move or they reappear in "Also here:".
-    private CastCandidate? PickUnifiedBuff(HealthSettings health, bool priority)
+    private IEnumerable<CastCandidate> DueUnifiedBuffs(HealthSettings health, bool priority)
     {
-        if (_readPartyBuffs?.Invoke() is not { } buffs) return null;
+        if (_readPartyBuffs?.Invoke() is not { } buffs) yield break;
 
         // "When HP / MA full" fires at the REST-MAX target (the level we rest up to,
         // HealthSettings.RestMaxHp / RestMaxMa read per the threshold mode), not literal
@@ -2832,7 +2883,7 @@ public sealed class CastingDirector : IDisposable
                 ? slot.WholePartyOn && (inParty ? partyAllowed : slot.CastSolo && selfEligible)
                 : slot.CastOnSelf && selfEligible && (covered is null || !covered.ContainsKey(slot.Spell));
             if (wantSelfCast && IsRecastDue("", slot.Spell))
-                return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
+                yield return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
 
             // Member targets (single-target spell) — party-gated, one per pass. Skipped for
             // a whole-party spell (no aimed form — it only casts untargeted, above) and for
@@ -2853,11 +2904,10 @@ public sealed class CastingDirector : IDisposable
                         _hiddenTargets.Remove(key);
                     }
                     if (!IsRecastDue(key, slot.Spell)) continue;
-                    return new CastCandidate(slot.Spell, given, slot.RecastMarginSec);
+                    yield return new CastCandidate(slot.Spell, given, slot.RecastMarginSec);
                 }
             }
         }
-        return null;
     }
 
     // Arm the pending party-buff confirmation: resolve the buff's CasterMessage

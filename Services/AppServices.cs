@@ -8222,8 +8222,10 @@ public sealed class AppServices
                 timer.Tick += (_, _) => { timer.Stop(); action(); };
                 timer.Start();
             },
-            log: Log);
-        CastDirector.SetLairEntryBuffHold(() => LairDebuffHold.BlockingBuffs);
+            log: Log,
+            buffsDue: priority => CastDirector.BuffsDue(priority));
+        CastDirector.SetLairEntryBuffHold(
+            () => LairDebuffHold.BlockingBuffs, () => LairDebuffHold.BlockingOrdinaryBuffs);
         LoopRunner.SetMoveReadyCheck(() =>
         {
             // A "rest up here" room holds the step until the rest is done.

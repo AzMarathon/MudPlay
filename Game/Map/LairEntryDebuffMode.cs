@@ -14,4 +14,9 @@ public enum LairEntryDebuffMode
     // Hold buffs back from the moment the loop reaches the lair's doorstep and enter
     // as soon as the cast is free (a round at most). Buffs go out after the fight.
     BlockSpells = 2,
+    // Between the two: the buffs ticked "Priority buff" that are due are cast first,
+    // under the same limit as WaitForSpells, and every other buff is held back as in
+    // BlockSpells. The numbers are stored in loop files and sent when a loop is
+    // shared, so a new member takes the next one.
+    WaitForPriorityBuffs = 3,
 }
