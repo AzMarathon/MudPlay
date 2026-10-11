@@ -90,6 +90,9 @@ public sealed partial class PartyManager : IDisposable
     // X." ahead of the header, and a player who follows nobody isn't printed it.
     private string? _parFollowedLeader;
     private bool _parFollowing;
+    // This block is the reply to a `par` of a client that is on a leader's list
+    // and follows nobody (ListedWithLeader): its rows are recorded, not applied.
+    private bool _parListedOnly;
     private DateTimeOffset _parFollowingLineAt = DateTimeOffset.MinValue;
     // The following line and the header are one reply; this only has to span them.
     private static readonly TimeSpan ParFollowingLineWindow = TimeSpan.FromSeconds(2);
@@ -824,6 +827,7 @@ public sealed partial class PartyManager : IDisposable
     private void LeavePartySolo()
     {
         _parState = ParState.Idle;
+        _parListedOnly = false;
         _parBlockNames.Clear();
         ResetPartyMembership();
     }
@@ -901,7 +905,17 @@ public sealed partial class PartyManager : IDisposable
         bool saysFollowing = NowProvider() - _parFollowingLineAt <= ParFollowingLineWindow;
         _parFollowingLineAt = DateTimeOffset.MinValue;
         _parFollowing = saysFollowing || _parFollowedLeader is not null;
-        if (saysFollowing) _parFollowedLeader = null;
+        if (saysFollowing)
+        {
+            _parFollowedLeader = null;
+            SetListedWith(null, "`par` says we follow someone");
+        }
+        // Stock: we follow nobody and are still on a leader's list. What this reply
+        // lists is that leader's party, every row [Invited] because we follow none
+        // of them and our own row last. None of it is an invite of ours, so none of
+        // it is applied: read as such, it made this client a leader with the old
+        // party as its pending invites.
+        _parListedOnly = ListedWithLeader is not null;
     }
 
     // ----- disconnect / death / reconnect ---------------
@@ -1377,6 +1391,15 @@ public sealed partial class PartyManager : IDisposable
             EndParBlock();
             return;
         }
+        if (_parListedOnly)
+        {
+            // Only who is listed matters: whether the leader still is.
+            Match listed = ParInvitedRow().Match(text);
+            if (!listed.Success) listed = ParRow().Match(text);
+            if (listed.Success && listed.Groups["name"].Value.Trim() is { Length: > 0 } listedName)
+                _parBlockNames.Add(listedName);
+            return;
+        }
         // Pending-invitee row — check this first because the regex is
         // strictly narrower than ParRow (no [H:]/[M:]/rank), and we
         // need to skip the HP / Position / Rank assignments below
@@ -1540,6 +1563,24 @@ public sealed partial class PartyManager : IDisposable
         _parState = ParState.Idle;
         // A block with no rows was cut short or misread, and answers nothing.
         bool read = _parBlockNames.Count > 0;
+        if (_parListedOnly)
+        {
+            _parListedOnly = false;
+            if (read && ListedWithLeader is { } leader)
+            {
+                bool stillListed = false;
+                foreach (string name in _parBlockNames)
+                    if (GivenNameOf(name).Equals(GivenNameOf(leader), StringComparison.OrdinalIgnoreCase)) stillListed = true;
+                if (stillListed)
+                    _log?.Info("Party",
+                        $"`par` lists {leader}'s party as [Invited]: we are on their list and follow nobody (Stock). The rows are not invites of ours and the roster stays solo.");
+                else
+                    SetListedWith(null, "a `par` of ours no longer lists them");
+            }
+            _parBlockNames.Clear();
+            if (read) ParReplyRead?.Invoke();
+            return;
+        }
         ReconcileMissingFromPar();
         _parBlockNames.Clear();
         if (read) ParReplyRead?.Invoke();

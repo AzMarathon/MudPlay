@@ -1951,4 +1951,74 @@ public sealed class PartyManagerTests
         Assert.True(p.State.SelfIsLeader);
         Assert.Contains(p.State.Members, m => m.Name == "Boss Hogg" && m.IsInvited);
     }
+
+    // On Stock the same reply is the old leader's party, listed [Invited] because
+    // we follow none of them: no invite of ours, so nothing makes us a leader.
+    [Fact]
+    public void Stock_AfterTheFollowIsGivenUp_AParOfInvitedRows_LeavesUsSolo_AndStillListed()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+        int replies = 0;
+        p.ParReplyRead += () => replies++;
+
+        ParOfAListedFollower(router, p);
+
+        Assert.False(p.State.IsInParty);
+        Assert.False(p.State.SelfIsLeader);
+        Assert.Null(p.State.LeaderName);
+        Assert.DoesNotContain(p.State.Members, m => !m.IsSelf);
+        Assert.Equal("Boss", p.ListedWithLeader);
+        Assert.Equal(1, replies);
+    }
+
+    // The leader is gone from the list (they left the game): we are listed with
+    // nobody, and the rows of that reply are still not applied.
+    [Fact]
+    public void Stock_AParThatNoLongerListsTheLeader_EndsListedWith()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+
+        router.Dispatch(Line("The following people are in your travel party:"));
+        p.FeedTestLines(new[]
+        {
+            "  Other Guy                      (Mage)       [Invited]",
+            "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Midrank",
+        });
+        p.FeedTestPromptLine();
+
+        Assert.Null(p.ListedWithLeader);
+        Assert.False(p.State.SelfIsLeader);
+        Assert.False(p.State.IsInParty);
+    }
+
+    // The game's own "You are following X." outranks the belief: an ordinary
+    // follower's reply, read as one.
+    [Fact]
+    public void Stock_AParThatSaysWeFollow_IsReadAsAFollowers()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Boss");
+
+        router.Dispatch(Line("You are following Boss."));
+        router.Dispatch(Line("The following people are in your travel party:"));
+        p.FeedTestLines(new[]
+        {
+            "  Boss Hogg                      (Warrior)             [H:100%]   - Frontrank",
+            "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Midrank",
+        });
+        p.FeedTestPromptLine();
+
+        Assert.Null(p.ListedWithLeader);
+        Assert.True(p.State.IsInParty);
+        Assert.False(p.State.SelfIsLeader);
+        Assert.Contains(p.State.Members, m => m.Name == "Boss Hogg" && !m.IsInvited);
+    }
 }
