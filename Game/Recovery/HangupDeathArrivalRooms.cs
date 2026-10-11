@@ -185,9 +185,9 @@ public static class HangupDeathArrivalRooms
     //     leave-the-game room (17/3250 and 94 more on Stock, both 17/3247), a
     //     character that hangs up and lives comes back in the very room a death
     //     there was seen to end in. So a learned yes records no death by itself.
-    //     Where the list's yes can stand alone (no count from before, nothing
-    //     owned for a death to take), HangupDeath.Judge asks one more sign with
-    //     a learned one: HP at the first prompt above what it left with.
+    //     With no count from before, HangupDeath.Judge asks for HP read at the
+    //     first prompt with it, and above what the character left with where
+    //     the list's yes could stand alone (nothing owned for a death to take).
     public static (IReadOnlyList<RoomKey>? Rooms, bool AllKnown, bool Albion) ArrivalsOn(
         RoomKey hungUpIn, HangupArrivalListTrust trust, Func<RoomKey, bool>? inAlbion,
         Func<RoomKey, IReadOnlyList<LearnedArrival>?>? learned = null)
