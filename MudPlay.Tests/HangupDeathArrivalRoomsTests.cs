@@ -180,9 +180,8 @@ public sealed class HangupDeathArrivalRoomsTests
         Assert.Null(OnParadigm(left, new RoomKey(1, 110)).Says);
     }
 
-    // Which Stock numbers are another place on Paradigm: maps 5 and 14 whole, four
-    // rooms with another name and no neighbour in common, and the `Blank`
-    // placeholders of map 1 that Paradigm made a dungeon of.
+    // Which Stock numbers are another place on Paradigm: maps 5 and 14 whole, and
+    // four rooms with another name and no neighbour in common.
     [Theory]
     [InlineData(5, 1)]
     [InlineData(5, 25)]
@@ -192,8 +191,6 @@ public sealed class HangupDeathArrivalRoomsTests
     [InlineData(6, 1338)]
     [InlineData(12, 2383)]
     [InlineData(16, 2272)]
-    [InlineData(1, 2171)]
-    [InlineData(1, 2188)]
     public void AStockNumberThatIsAnotherPlaceOnParadigm_IsNotCoveredThere(int map, int room)
     {
         RoomKey key = new(map, room);
@@ -208,11 +205,18 @@ public sealed class HangupDeathArrivalRoomsTests
     // Paradigm with the same exits, 15/851 a ganghouse room Stock ships unnamed,
     // 1/2182 the `Park` that sits among map 1's placeholders. The Stock list
     // holds for them, "wrong room" included.
+    //
+    // 1/2171 and 1/2188 are two of the sixteen rooms Stock only has as `Blank`
+    // placeholders, a dungeon on Paradigm. Stock's file names no graveyard for
+    // them, which sends their dead to the Temple, and the owner confirmed that is
+    // where they arrive on Paradigm (2026-10-10). So they go by the list as well.
     [Theory]
     [InlineData(15, 1530)]
     [InlineData(15, 851)]
     [InlineData(1, 2182)]
     [InlineData(1, 109)]
+    [InlineData(1, 2171)]
+    [InlineData(1, 2188)]
     public void ARoomParadigmOnlyRenamed_IsStillSharedWithStock(int map, int room)
     {
         RoomKey left = new(map, room);

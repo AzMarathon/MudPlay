@@ -82,15 +82,16 @@ public static class HangupDeathArrivalRooms
     //   - maps 5 and 14, where every Stock room does: the Tournament Arena is
     //     Shadowmere there, and the Silver River is Albion and Port Blackwater;
     //   - four rooms with another name and no neighbour in common with the Stock
-    //     room (4/2, 6/1338, 12/2383, 16/2272);
-    //   - sixteen rooms Stock only has as `Blank` placeholders (map 1), which
-    //     Paradigm made a dungeon of. There is no Stock zone there to share.
-    // The other 411 keep a neighbour (382 keep every exit): the same room under a
-    // new name, shared like the rest.
+    //     room (4/2, 6/1338, 12/2383, 16/2272).
+    // The other 427 keep a neighbour (383 keep every exit): the same room under a
+    // new name, shared like the rest. Sixteen of them are rooms Stock only has as
+    // `Blank` placeholders on map 1 (1/2171 to 1/2188), which Paradigm made a
+    // dungeon of. Stock's file names no graveyard for them, so the list sends
+    // their dead to the Temple, and that is where they arrive on Paradigm (the
+    // owner, 2026-10-10).
     private static readonly (int Map, int First, int Last)[] AnotherPlaceOnParadigm =
     {
-        (1, 2171, 2174), (1, 2176, 2181), (1, 2183, 2188), (4, 2, 2), (5, 1, 25), (6, 1338, 1338),
-        (12, 2383, 2383), (14, 1, 28), (16, 2272, 2272),
+        (4, 2, 2), (5, 1, 25), (6, 1338, 1338), (12, 2383, 2383), (14, 1, 28), (16, 2272, 2272),
     };
 
     // The rooms a character killed by a hang-up in this room can arrive in by the
