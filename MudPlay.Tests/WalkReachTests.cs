@@ -90,10 +90,10 @@ public sealed class WalkReachTests : IDisposable
         try { Directory.Delete(_root, recursive: true); } catch { /* temp cleanup */ }
     }
 
-    private RoomGraphManager NewGraph()
+    private RoomGraphManager NewGraph(string rooms = Rooms, string tbInfo = TbInfo)
     {
-        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Rooms);
-        File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"), TbInfo);
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), rooms);
+        File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"), tbInfo);
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
         TBInfoStore store = new(cache);
@@ -124,6 +124,62 @@ public sealed class WalkReachTests : IDisposable
             new HashSet<RoomKey>(reached));
     }
 
+    // A room command that lands on the room's own map is a way through the same
+    // place, and is followed: the Chamber of Wisdom is reached only by `touch
+    // altar`, and its dead arrive in the Burial Vault like the rest of Albion's
+    // (the owner, 2026-10-10). What lies beyond the room it lands in is reached
+    // too, and a command there that leads off the map is still not followed.
+    [Fact]
+    public void ARoomCommandThatStaysOnTheMap_IsFollowed()
+    {
+        const string rooms = """
+            [
+              { "Map Number": 14, "Room Number": 1077, "Name": "Burial Vault",
+                "Light": -50, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 5,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "14/10438", "D": "0" },
+              { "Map Number": 14, "Room Number": 10438, "Name": "Altar of the Old One",
+                "Light": 0, "Shop": 0, "NPC": 0, "CMD": 9001, "Lair": "", "Delay": 5,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "14/1077" },
+              { "Map Number": 14, "Room Number": 10440, "Name": "Chamber of Wisdom",
+                "Light": 0, "Shop": 0, "NPC": 0, "CMD": 9002, "Lair": "", "Delay": 5,
+                "N": "14/10441", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 14, "Room Number": 10441, "Name": "Chamber of Wisdom",
+                "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 5,
+                "N": "0", "S": "14/10440", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 8, "Room Number": 1225, "Name": "Negative Power Plane",
+                "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 5,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string tbInfo = """
+            [ { "Number": 9001, "LinkTo": 0,
+                "Action": "touch altar:teleport 10440 14\n",
+                "Called From": "Room 14/10438" },
+              { "Number": 9002, "LinkTo": 0,
+                "Action": "go portal:teleport 1225 8\n",
+                "Called From": "Room 14/10440" } ]
+            """;
+        RoomGraphManager graph = NewGraph(rooms, tbInfo);
+        // Guard the fixture: both commands are edges of the graph.
+        Assert.True(graph.GetRoom(new RoomKey(14, 10438))!.Exits.TryGetValue(Direction.Teleport, out RoomExit altar)
+                    && altar.Target == new RoomKey(14, 10440)
+                    && graph.GetRoom(new RoomKey(14, 10440))!.Exits.TryGetValue(Direction.Teleport, out RoomExit portal)
+                    && portal.Target == new RoomKey(8, 1225),
+            "fixture no longer produces the two room-command teleport edges");
+
+        IReadOnlySet<RoomKey> reached = WalkReach.From(graph, Vault);
+
+        Assert.Equal(
+            new HashSet<RoomKey> { Vault, new(14, 10438), new(14, 10440), new(14, 10441) },
+            new HashSet<RoomKey>(reached));
+    }
+
+    // One that lands on another map is a way out of the place, and is not.
     [Fact]
     public void ARoomCommandThatMovesTheCharacter_IsNotWalking()
     {
