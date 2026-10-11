@@ -7,7 +7,9 @@ namespace MudPlay.Services;
 // buffs on entry — a room whose cast-on-enter spell (Room.Spell) removes or
 // dispels magical effects. Backs the auto-buff suppression gate: re-casting a buff
 // in a room that immediately strips it just burns mana, so CastingDirector skips
-// the Buffing category while the player stands in such a room.
+// the Buffing category while the player stands in such a room. It also tells the
+// hazard-buff tracker which rooms end a buff it can only time (StripsBuff): "dying
+// or walking through a room that purges buffs, negate magic" (user, 2026-10-10).
 //
 // A room-entry spell strips buffs when any member of its EndCast chain carries a
 // buff-removal ability: RemovesSpell (Abil 122 — removes a specific spell effect)
@@ -28,7 +30,10 @@ public sealed class RoomBuffStripIndex
 
     private readonly GameDataCache _cache;
     private readonly LogService? _log;
-    private readonly HashSet<int> _stripSpells = new();
+    // Per stripping room-entry spell, what its chain takes off: everything (a
+    // DispellMagic ability: negate magic), and the spells its RemovesSpell abilities
+    // name.
+    private readonly Dictionary<int, (bool Dispels, HashSet<int> Removes)> _stripSpells = new();
 
     // Set the index was last built from, or null if empty.
     public string? ActiveSet { get; private set; }
@@ -50,7 +55,17 @@ public sealed class RoomBuffStripIndex
     // True when a room's cast-on-enter spell strips buffs. Pass Room.Spell (0 =
     // no room spell). Benign, unknown, and zero spells all read false.
     public bool StripsBuffs(int spell)
-        => spell > 0 && _stripSpells.Contains(spell);
+        => spell > 0 && _stripSpells.ContainsKey(spell);
+
+    // True when a room's cast-on-enter spell takes this one buff off: its chain
+    // dispels magic, or removes the buff by number. For a buff tracked by its clock
+    // alone (no wear-off line to read), where a room that only removes other spells
+    // must not count: the drowning cure's rooms share a map with the desert, and
+    // take nothing off but drowning.
+    public bool StripsBuff(int roomSpell, int buffSpell)
+        => roomSpell > 0
+           && _stripSpells.TryGetValue(roomSpell, out (bool Dispels, HashSet<int> Removes) strip)
+           && (strip.Dispels || strip.Removes.Contains(buffSpell));
 
     // Reload the index for setName. Pass null to clear. Wired by AppServices to
     // GameDataCache.ActiveSetChanged.
@@ -83,8 +98,10 @@ public sealed class RoomBuffStripIndex
 
         foreach (int spell in roomSpells)
         {
-            if (ChainStripsBuffs(spell, 0, spellAbils, new HashSet<int>()))
-                _stripSpells.Add(spell);
+            bool dispels = false;
+            HashSet<int> removes = new();
+            if (ChainStripsBuffs(spell, 0, spellAbils, new HashSet<int>(), ref dispels, removes))
+                _stripSpells[spell] = (dispels, removes);
         }
 
         _cache.EvictTable("Rooms");
@@ -97,23 +114,34 @@ public sealed class RoomBuffStripIndex
     }
 
     // Depth-first walk of a spell's EndCast chain. Returns true when any chain
-    // member carries a buff-removal ability (RemovesSpell / DispellMagic).
+    // member carries a buff-removal ability (RemovesSpell / DispellMagic), and says
+    // which: dispels for a DispellMagic, removes for the spells a RemovesSpell names.
     private bool ChainStripsBuffs(
-        int spell, int depth, Dictionary<int, int[]> spellAbils, HashSet<int> seen)
+        int spell, int depth, Dictionary<int, int[]> spellAbils, HashSet<int> seen,
+        ref bool dispels, HashSet<int> removes)
     {
         if (depth > MaxChainDepth || spell <= 0 || !seen.Add(spell)) return false;
         if (!spellAbils.TryGetValue(spell, out int[]? abil)) return false;
 
+        bool strips = false;
         for (int k = 0; k < SpellAbilSlots; k++)
         {
             int a = abil[k * 2];
             int v = abil[k * 2 + 1];
-            if (a is AbilRemovesSpell or AbilDispelMagic) return true;
-            if (a == AbilEndCast && v > 0
-                && ChainStripsBuffs(v, depth + 1, spellAbils, seen))
-                return true;
+            if (a == AbilDispelMagic)
+            {
+                strips = true;
+                dispels = true;
+            }
+            else if (a == AbilRemovesSpell)
+            {
+                strips = true;
+                if (v > 0) removes.Add(v);
+            }
+            else if (a == AbilEndCast && v > 0)
+                strips |= ChainStripsBuffs(v, depth + 1, spellAbils, seen, ref dispels, removes);
         }
-        return false;
+        return strips;
     }
 
     private static HashSet<int> CollectRoomSpells(JsonDocument rooms)

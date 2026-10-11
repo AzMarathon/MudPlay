@@ -126,6 +126,9 @@ public sealed class AutoHazardCounterProvisioner
     // Auto-Sneak is on: the refresh gets its window and its look ahead, to find a
     // room with no NPCs in. Null → off.
     private readonly Func<bool>? _autoSneakOn;
+    // RoomBuffStripIndex.StripsBuff: a room's cast-on-enter spell (first) takes the
+    // buff (second) off. Null → no room is known to.
+    private readonly Func<int, int, bool>? _roomStripsBuff;
     // Charges left in the carried item, null when the client doesn't know.
     private readonly Func<int, int?>? _chargesLeft;
     // The engine send gate is up (a password prompt, mortally wounded): a send now
@@ -195,7 +198,8 @@ public sealed class AutoHazardCounterProvisioner
         Func<bool>? sneakKept = null,
         Func<int, int?>? chargesLeft = null,
         Func<bool>? sendBlocked = null,
-        Func<bool>? autoSneakOn = null)
+        Func<bool>? autoSneakOn = null,
+        Func<int, int, bool>? roomStripsBuff = null)
     {
         ArgumentNullException.ThrowIfNull(resolveRoom);
         ArgumentNullException.ThrowIfNull(hazardForSpell);
@@ -217,6 +221,7 @@ public sealed class AutoHazardCounterProvisioner
         _chargesLeft = chargesLeft;
         _sendBlocked = sendBlocked;
         _autoSneakOn = autoSneakOn;
+        _roomStripsBuff = roomStripsBuff;
     }
 
     // Bind the wire-sender — the gate-wrapped engine pipeline from
@@ -268,6 +273,42 @@ public sealed class AutoHazardCounterProvisioner
         if (known) _log?.Info(LogCategory, $"buff tracking reset ({why}) — treated as off until used again");
     }
 
+    // What ends the buff early: "dying or walking through a room that purges buffs,
+    // negate magic" (user, 2026-10-10). It has no wear-off line to say so, which is
+    // how the cast scheduler learns of its own buffs going, so the room's spell is
+    // asked instead: the same index that keeps buffs from being cast in such a room.
+    private void DropBuffsStrippedBy(Room room)
+    {
+        if (_roomStripsBuff is null || _on.Count == 0) return;
+        List<int>? gone = null;
+        foreach (int buffSpell in _on.Keys)
+            if (_roomStripsBuff(room.Spell, buffSpell)) (gone ??= new()).Add(buffSpell);
+        if (gone is null) return;
+        DropTracked(gone);
+        _log?.Info(LogCategory,
+            $"buff {string.Join(", ", gone)} taken off by {Describe(room)}, whose spell strips it — treated as off until used again");
+    }
+
+    // Negate magic was cast on the character by something other than a room's own
+    // spell (a transport token casts it before it teleports): every buff is gone.
+    public void NoteNegateMagic(string from)
+    {
+        if (_on.Count == 0) return;
+        DropTracked(_on.Keys.ToList());
+        _log?.Info(LogCategory, $"buff tracking reset (negate magic: {from}) — treated as off until used again");
+    }
+
+    private void DropTracked(List<int> buffSpells)
+    {
+        foreach (int buffSpell in buffSpells)
+        {
+            _on.Remove(buffSpell);
+            if (_pending is { } sent && sent.BuffSpell == buffSpell) _pending = null;
+        }
+        _dueSaid = DueSaid.Nothing;
+        _waitLogged = false;
+    }
+
     // ----- when a `use` goes out --------------------------------------------
 
     // Predictive last call. The walker / loop-runner ask this as they commit to a
@@ -288,13 +329,16 @@ public sealed class AutoHazardCounterProvisioner
         }
     }
 
-    // A follower just arrived in a room (the leader's move carried it). Raise the
-    // room's hazard buff the same way the approach hook does for our own walk. Our
-    // own walk, if one is running, already covered this room on approach.
+    // The character arrived in a room, however it got there. A room whose own spell
+    // strips the buff has just taken it off. Then, for a follower (the leader's move
+    // carried it), raise the room's hazard buff the same way the approach hook does
+    // for our own walk; our own walk, if one is running, already covered this room on
+    // approach.
     public void OnArrivedInRoom(RoomKey room)
     {
-        if (!_followingLeader() || _walkActive()) return;
         if (_resolveRoom(room) is not { } r || r.Spell <= 0) return;
+        DropBuffsStrippedBy(r);
+        if (!_followingLeader() || _walkActive()) return;
         if (_hazardForSpell(r.Spell) is not { } hazard) return;
         foreach (RoomHazardIndex.BuffCounter counter in hazard.BuffCounters)
         {

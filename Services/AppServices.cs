@@ -7894,7 +7894,10 @@ public sealed class AppServices
             sendBlocked:    () => EngineGate.IsLocked,
             // The early window and the look ahead are for finding a room with no
             // NPCs to drink in, so they come with Auto-Sneak and not without.
-            autoSneakOn:    () => ReadAutoModeFlag(d => d.AutoSneak));
+            autoSneakOn:    () => ReadAutoModeFlag(d => d.AutoSneak),
+            // The buff has no wear-off line, so a room that strips it is known by
+            // its spell: the index the cast pass skips buffing by.
+            roomStripsBuff: (roomSpell, buffSpell) => RoomBuffStrip.StripsBuff(roomSpell, buffSpell));
         // The refresh inside its window is sent by the between-round cast pass: one
         // cast a round, held while a sneak is being kept, then the fight's resume and
         // the re-sneak. Nothing is offered while the master switch is off. A `use`
@@ -7917,6 +7920,8 @@ public sealed class AppServices
         RoomTracker.PlayerDeathInferred += () => AutoHazardCounterProvisioner.Forget("death");
         Profile.ProfileLoaded += _ => AutoHazardCounterProvisioner.Forget("profile loaded");
         GameData.ActiveSetChanged += _ => AutoHazardCounterProvisioner.Forget("game data changed");
+        // Every arrival: a room whose own spell strips the buff ends it, and a
+        // follower raises the buff of a hazard room it was carried into.
         RoomTracker.StateChanged += t =>
         {
             if (t.NewRoom is { } arrived && !Equals(arrived.Key, t.PreviousRoom?.Key))
@@ -9530,6 +9535,9 @@ public sealed class AppServices
         // After the coordinator has seen it: a token the route didn't send (the user
         // used one by hand) ends all movement where we land — nothing walks on from
         // there — and either way the followers it drops aren't left-behind members.
+        // A token's textblock casts negate magic (#310) ahead of its teleport, which
+        // takes a tracked hazard buff with everything else.
+        Tokens.TokenUsed += place => AutoHazardCounterProvisioner.NoteNegateMagic($"token of {place}");
         Tokens.TokenUsed += place =>
         {
             PartyComeback.NoteOwnTeleport();

@@ -38,6 +38,12 @@ public sealed class HazardBuffRefreshTests : IDisposable
     private static readonly RoomKey Oasis = new(1, 1);
     private static readonly RoomKey Dunes = new(1, 2);
     private static readonly RoomKey DeepDesert = new(1, 3);
+    // Their own spells: negate magic (#310), and the drowning cure (#515), which
+    // removes two spells by number and nothing else.
+    private static readonly RoomKey Crypt = new(1, 4);
+    private static readonly RoomKey Shallows = new(1, 5);
+    private const int NegateMagic = 310;
+    private const int StopDrowning = 515;
 
     private const int Waterskin = 60;
     private const int BuffSpell = 300;
@@ -52,6 +58,11 @@ public sealed class HazardBuffRefreshTests : IDisposable
     private static Room Desert(RoomKey key) => new()
     {
         Key = key, Name = "Scorching Desert", Spell = 700, Exits = new Dictionary<Direction, RoomExit>(),
+    };
+
+    private static Room Casting(RoomKey key, int spell) => new()
+    {
+        Key = key, Name = "Elsewhere", Spell = spell, Exits = new Dictionary<Direction, RoomExit>(),
     };
 
     private static readonly RoomHazardIndex.BuffCounter Counter =
@@ -82,7 +93,10 @@ public sealed class HazardBuffRefreshTests : IDisposable
         public Field()
         {
             Engine = new AutoHazardCounterProvisioner(
-                resolveRoom: key => key == Dunes || key == DeepDesert ? Desert(key) : null,
+                resolveRoom: key => key == Dunes || key == DeepDesert ? Desert(key)
+                    : key == Crypt ? Casting(key, NegateMagic)
+                    : key == Shallows ? Casting(key, StopDrowning)
+                    : null,
                 hazardForSpell: spell => spell == 700 ? Heat : null,
                 carriedCount: id => id == Waterskin ? Carried : 0,
                 itemName: id => id == Waterskin ? "waterskin" : null,
@@ -102,7 +116,9 @@ public sealed class HazardBuffRefreshTests : IDisposable
                 sneakKept: () => SneakKept,
                 chargesLeft: _ => Charges,
                 sendBlocked: () => SendBlocked,
-                autoSneakOn: () => AutoSneak);
+                autoSneakOn: () => AutoSneak,
+                roomStripsBuff: (roomSpell, buffSpell) =>
+                    roomSpell == NegateMagic || (roomSpell == StopDrowning && buffSpell is 512 or 513));
             Engine.SetWireSender(b => Wire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
             Engine.UseSent += () => UsesSent++;
             Engine.SneakSpentHere += () => SneakSpent++;
@@ -149,6 +165,79 @@ public sealed class HazardBuffRefreshTests : IDisposable
 
         Assert.Equal(2, f.Wire.Count);
         Assert.Contains(f.LogLines, l => l.Contains("buff tracking reset (death)"));
+    }
+
+    // "dying or walking through a room that purges buffs, negate magic" (user,
+    // 2026-10-10): the buff has no wear-off line, so the room's own spell says it.
+    [Fact]
+    public void ARoomWhoseSpellDispels_EndsTheTrackedBuff()
+    {
+        Field f = new();
+        f.Engine.OnServerLine(SwigLine);
+
+        f.Engine.OnArrivedInRoom(Crypt);
+
+        Assert.Empty(f.Engine.DescribeTracking());
+        Assert.Contains(f.LogLines, l => l.StartsWith("buff 300 taken off by 1/4 (Elsewhere), whose spell strips it"));
+        f.Engine.OnApproachingRoom(Dunes);
+        Assert.Equal(new[] { "use waterskin" }, f.Wire);
+    }
+
+    // A room that removes other spells by number takes nothing off this one: the
+    // drowning cure's rooms are on the desert's own map.
+    [Fact]
+    public void ARoomThatOnlyRemovesOtherSpells_LeavesTheBuffOn()
+    {
+        Field f = new();
+        f.Engine.OnServerLine(SwigLine);
+
+        f.Engine.OnArrivedInRoom(Shallows);
+        f.Engine.OnApproachingRoom(Dunes);
+
+        Assert.Empty(f.Wire);
+        Assert.Single(f.Engine.DescribeTracking());
+    }
+
+    // The index answers for one buff: a dispel takes everything, a RemovesSpell only
+    // what it names.
+    [Fact]
+    public void StripIndex_ADispelTakesAnyBuff_ARemoveOnlyTheSpellsItNames()
+    {
+        string dir = Path.Combine(_root, "strip");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"), """
+            [ { "Map Number": 1, "Room Number": 4, "Name": "Crypt", "Spell": 310 },
+              { "Map Number": 12, "Room Number": 5, "Name": "Shallows", "Spell": 515 },
+              { "Map Number": 12, "Room Number": 6, "Name": "Scorching Desert", "Spell": 683 } ]
+            """);
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), """
+            [ { "Number": 310, "Abil-0": 73, "AbilVal-0": 0 },
+              { "Number": 515, "Abil-0": 122, "AbilVal-0": 512, "Abil-1": 122, "AbilVal-1": 513 },
+              { "Number": 683, "Abil-0": 148, "AbilVal-0": 2653 } ]
+            """);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("strip");
+        RoomBuffStripIndex index = new(cache);
+        index.OnActiveSetChanged("strip");
+
+        Assert.True(index.StripsBuff(310, 711));
+        Assert.True(index.StripsBuffs(515));
+        Assert.False(index.StripsBuff(515, 711));
+        Assert.True(index.StripsBuff(515, 512));
+        Assert.False(index.StripsBuff(683, 711));
+    }
+
+    // A transport token casts negate magic ahead of its teleport.
+    [Fact]
+    public void NegateMagicFromAToken_EndsTheTrackedBuff()
+    {
+        Field f = new();
+        f.Engine.OnServerLine(SwigLine);
+
+        f.Engine.NoteNegateMagic("token of Silvermere");
+
+        Assert.Empty(f.Engine.DescribeTracking());
+        Assert.Contains(f.LogLines, l => l.StartsWith("buff tracking reset (negate magic: token of Silvermere)"));
     }
 
     [Fact]
