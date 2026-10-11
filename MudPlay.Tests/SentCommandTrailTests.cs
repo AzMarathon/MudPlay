@@ -161,6 +161,90 @@ public sealed class SentCommandTrailTests
         finally { Directory.Delete(tmp, recursive: true); }
     }
 
+    // An engine's line goes out between the typed `suicide` and the password. The
+    // game takes the engine's line for the password, so the user's lands at the
+    // ordinary game prompt, where the cursor-row rule keeps it. The tracker's
+    // cover must still be standing: an engine's line doesn't use it up.
+    [Theory]
+    [InlineData("suicide")]
+    [InlineData("reroll")]
+    public void ATypedPassword_AtTheStatlineAfterAnEngineLineAteItsPrompt_IsNotKept(string command)
+    {
+        MessageRouter router = new();
+        MudPlay.Services.Patterns.DefaultPatterns.Seed(router);
+        ProfileService profile = new();
+        profile.LoadBlank();
+        string tmp = Path.Combine(Path.GetTempPath(), "mudplay-trail-cover-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tmp);
+        try
+        {
+            EngineSendGate gate = new();
+            MudPlay.Game.SuicidePasswordTracker tracker =
+                new(router, gate, profile, new PasswordProtector(Path.Combine(tmp, ".credkey")));
+            SentCommandTrail trail = new()
+            {
+                Withhold = () => tracker.PasswordEntryLikely,
+                // The statline is on the cursor row throughout.
+                TypedAtGamePrompt = line => SentCommandTrail.RowIsGamePrompt("[HP=100/MA=50]:", line),
+            };
+            gate.Trail = trail;
+            void Typed(string line)
+            {
+                byte[] data = Encoding.Latin1.GetBytes(line + "\r");
+                tracker.ObserveOutbound(data, usersOwn: true);
+                trail.ObserveTyped(data);
+            }
+            Action<byte[]> engine = gate.Named(
+                gate.WrapEngineSender(data => tracker.ObserveOutbound(data, usersOwn: false)), "PartyPoller");
+
+            Typed(command);
+            engine(Line("par"));
+            engine(Line("stat"));
+            Typed("s3cretpw");
+            Typed("look");
+
+            // While the cover stands nothing is kept, the engine's lines included;
+            // it ends with the user's own second line.
+            Assert.DoesNotContain(trail.Snapshot(), e => e.Text.Contains("s3cretpw"));
+            Assert.Equal(new[] { "look" }, trail.Snapshot().Select(e => e.Text));
+            Assert.Equal(4, trail.Withheld);
+        }
+        finally { Directory.Delete(tmp, recursive: true); }
+    }
+
+    // A line is kept whole or not at all. Cut short, it could end in the first
+    // half of a password, and the report's masking looks for the whole value.
+    [Fact]
+    public void ALineUpToTheGamesLimit_IsKeptWhole_AndALongerOneIsNotKeptInPart()
+    {
+        const string placeholder = "placeholder-password";
+        // The value lies across what used to be the cut, at 160 characters.
+        string line = "say " + new string('x', 146) + placeholder + " tail";
+        Assert.True(line.IndexOf(placeholder, StringComparison.Ordinal) < 160
+            && line.IndexOf(placeholder, StringComparison.Ordinal) + placeholder.Length > 160);
+        SentCommandTrail trail = new();
+
+        trail.ObserveTyped(Encoding.Latin1.GetBytes(line + "\r"));
+        trail.Record(new string('y', SentCommandTrail.MaxTextLength), SentCommandTrail.Origin.Engine, "E", SentCommandTrail.Outcome.Sent);
+        trail.ObserveUserLine(Encoding.Latin1.GetBytes(new string('z', 250) + placeholder + "\r\n"), SentCommandTrail.Origin.Api);
+        trail.ObserveTyped(Encoding.Latin1.GetBytes(new string('w', 250) + placeholder + "\r"));
+
+        SentCommandTrail.Entry[] entries = trail.Snapshot();
+        Assert.Equal(line, entries[0].Text);
+        Assert.Equal(SentCommandTrail.MaxTextLength, entries[1].Text.Length);
+        Assert.Equal(SentCommandTrail.TooLong, entries[2].Text);
+        Assert.Equal(SentCommandTrail.TooLong, entries[3].Text);
+
+        // So the report's masking finds the whole value, and nothing of it is left.
+        BugReportBuilder.BugReportCapture capture = new(
+            DateTimeOffset.Now, MudPlay.Game.RealmType.Stock,
+            [BugReportSentCommands.Build(trail, new BugReportChatCensor(Array.Empty<ulong>()))],
+            BugReportScrub.Build([new(BugReportScrub.SuicidePasswordLabel, placeholder)], []));
+        string md = BugReportBuilder.Render(capture, "x");
+        Assert.DoesNotContain("placeholder", md);
+        Assert.Contains(new string('x', 146) + BugReportScrub.Mask + " tail", md);
+    }
+
     [Fact]
     public void ATypedPassword_IsWithheld_WhenAnEngineCommandWentOutBetween()
     {

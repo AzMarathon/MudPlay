@@ -22,8 +22,11 @@ public sealed class SentCommandTrail
     // prints in about 35 KB and reaches back several minutes of a busy session.
     public const int Capacity = 500;
 
-    // A longer line is a paste, not a command; its head is enough to place it.
-    private const int MaxTextLength = 160;
+    // The game's own line limit: a command it takes whole is never longer. A
+    // longer line is a paste, and is not kept in part: a line cut short can end
+    // in the first half of a password, which the report's masking, looking for
+    // the whole value, would then leave standing.
+    public const int MaxTextLength = Terminal.LocalInputBuffer.MaxLength;
 
     public enum Origin
     {
@@ -65,7 +68,7 @@ public sealed class SentCommandTrail
             lock (_ringLock) { _withheld++; }
             return;
         }
-        if (text.Length > MaxTextLength) text = text[..MaxTextLength] + "…";
+        if (text.Length > MaxTextLength) text = TooLong;
         // A command dropped again and again under one long hold is one entry with
         // a count, not a page of them.
         if (outcome == Outcome.Dropped)
@@ -91,6 +94,9 @@ public sealed class SentCommandTrail
     }
 
     private int _repeats = 1;
+
+    // What stands in the trail for a line past MaxTextLength.
+    public const string TooLong = "(a line longer than the game takes: not kept)";
 
     private static string? BaseWhy(string? why)
     {

@@ -85,8 +85,11 @@ public sealed class SuicidePasswordTracker : IDisposable
     // Current state of the flow — exposed for tests + diagnostics.
     public FlowState State => _state;
 
-    // Counts down the outbound lines a bare `suicide` covers: itself and the
-    // password that answers it.
+    // Counts down the lines of the user's own a bare `suicide` of theirs covers:
+    // itself and the password that answers it. A line an engine sends in between
+    // doesn't use the cover up: the game takes that line for the password, and
+    // the user's, typed next, then lands at the ordinary prompt, where nothing
+    // else would keep it out of a record of what was sent.
     private int _useFlowLines;
 
     // True while an outbound line may be a suicide password: from `set suicide` or
@@ -144,7 +147,11 @@ public sealed class SuicidePasswordTracker : IDisposable
     //   Line-mode (LocalInputBuffer flushes the entire line + CR in one call).
     // Backspace bytes (0x08 / 0x7F) shrink the in-flight line so a typo +
     // correct produces the right captured value.
-    public void ObserveOutbound(ReadOnlySpan<byte> bytes)
+    //
+    // usersOwn: the bytes are the user's own (typed, or sent as their line from
+    // an alias, a window or the local API), not an engine's. Only those count
+    // toward the cover a bare `suicide` gives the password that follows it.
+    public void ObserveOutbound(ReadOnlySpan<byte> bytes, bool usersOwn = true)
     {
         if (bytes.IsEmpty) return;
 
@@ -154,7 +161,7 @@ public sealed class SuicidePasswordTracker : IDisposable
             {
                 case 0x0D: // CR
                 case 0x0A: // LF
-                    FinalizeOutboundLine();
+                    FinalizeOutboundLine(usersOwn);
                     break;
                 case 0x08: // backspace
                 case 0x7F: // delete
@@ -175,7 +182,7 @@ public sealed class SuicidePasswordTracker : IDisposable
     // 1-deep buffer preserves the LATEST candidate so the old-password line
     // (which the user typed first) is overwritten by the new-password line
     // (which they typed second), and OnPasswordChanged commits the right value.
-    private void FinalizeOutboundLine()
+    private void FinalizeOutboundLine(bool usersOwn)
     {
         string completed = _currentOutLine.ToString();
         _currentOutLine.Clear();
@@ -185,9 +192,12 @@ public sealed class SuicidePasswordTracker : IDisposable
         // with the password as the very next line, typed before the game's prompt
         // for it has reached us as a line.
         string trimmed = completed.Trim();
-        if (trimmed.Equals("suicide", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("reroll", StringComparison.OrdinalIgnoreCase)) _useFlowLines = 2;
-        else if (_useFlowLines > 0) _useFlowLines--;
+        if (usersOwn)
+        {
+            if (trimmed.Equals("suicide", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("reroll", StringComparison.OrdinalIgnoreCase)) _useFlowLines = 2;
+            else if (_useFlowLines > 0) _useFlowLines--;
+        }
 
         if (!_captureArmed)
         {

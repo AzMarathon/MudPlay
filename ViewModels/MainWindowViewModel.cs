@@ -3874,11 +3874,14 @@ public partial class MainWindowViewModel : ObservableObject
         // Suicide-password capture — during the AwaitingNewPassword
         // state, the next bytes the user types ARE the password. We
         // peek here (the bytes still flow to the server unchanged).
-        AppServices.Current.SuicidePassword.ObserveOutbound(data);
+        // Whether the line is the user's own (typed, an alias, a window, the local
+        // API) and not an engine's decides what a typed `suicide` covers.
+        EngineSendGate sendGate = AppServices.Current.EngineGate;
+        AppServices.Current.SuicidePassword.ObserveOutbound(data,
+            usersOwn: !sendGate.SendingClientCommand && sendGate.CurrentSender is null);
         // Sent-command trail. A line a wrapped sender is putting out is already
         // in it (the gate records each command once); what reaches here unwrapped
         // is typed, or a named sender going round the gate.
-        EngineSendGate sendGate = AppServices.Current.EngineGate;
         // An @suicide waiting to answer the game's password prompt: any other
         // line that goes out first is what the game takes as the password, so
         // the stored one must not follow it.
