@@ -1446,12 +1446,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // sole crossing.
             int? landHops = path is { Count: > 0 } ? path.Count : (int?)null;
             boatPlan = ChooseBoatRoute(source.Key, destination, landHops);
-            // A sailing whose fare can't be paid is not set out for, sole crossing or
-            // not: the captain leaves whoever can't pay on the dock, so the walk
-            // would only stand there. Kept to name it if nothing else gets there. One
-            // gated on level alone still sails, with its warning.
+            // A sailing whose fare our own purse can't pay is not set out for, sole
+            // crossing or not: the captain leaves whoever can't pay on the dock, so
+            // the walk would only stand there. Kept to name it if nothing else gets
+            // there. One gated on level, or on a follower's purse, still sails with
+            // its warning.
             BoatRoutePlan? unpaidBoat = null;
-            if (boatPlan is { } gatedBoat && gatedBoat.Block.HasFlag(ExitBlockReason.Fare))
+            if (boatPlan is { } gatedBoat && gatedBoat.Block.HasFlag(ExitBlockReason.Fare)
+                && PaidCrossingDescriber.OwnPurseShortOfFare(Filter, gatedBoat.Passage.ArrivalRoom, gatedBoat.Passage.FareCopper))
             {
                 unpaidBoat = gatedBoat;
                 boatPlan = null;
@@ -1814,10 +1816,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
         // Accept a fare- / level-gated sailing ONLY when there's no land route —
         // the sail is then the sole crossing, so surfacing it beats a bare "no
-        // path": the caller sails one gated on level with a warning that a member
-        // may be refused at the dock, and names one gated on its fare in the walk's
-        // failure. With a land route in hand, a gated boat is skipped so we never
-        // split the party for a crossing a member can't make.
+        // path": the caller sails it with a warning that a member may be refused at
+        // the dock, unless it is our own purse that can't pay the fare, when it
+        // names the sailing in the walk's failure. With a land route in hand, a
+        // gated boat is skipped so we never split the party for a crossing a member
+        // can't make.
         if (_boatPlanner.TryPlan(source, destination, Filter, allowGated: landHops is null)
             is not { } plan)
             return null;
@@ -3060,11 +3063,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _sailingPlace = passage.Place;
         _sailingEta = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(voyageSeconds);
 
-        // A sole-crossing sail gated on level still boards — the captain refuses
-        // only the under-level members at the dock and leaves them behind. Warn so
-        // the user knows a member may not make the crossing, rather than the walk
-        // silently splitting the party a head short. (One gated on its fare never
-        // gets here: WalkToImmediate fails the walk naming it.)
+        // A gated sole-crossing sail still boards — the captain refuses only the
+        // under-level / too-poor members at the dock and leaves them behind. Warn
+        // so the user knows a member may not make the crossing, rather than the
+        // walk silently splitting the party a head short. (One whose fare our own
+        // purse can't pay never gets here: WalkToImmediate fails the walk naming it.)
         ExitBlockReason gate = Filter?.DescribeBoatBlock(passage) ?? ExitBlockReason.None;
         if (gate != ExitBlockReason.None)
             _log?.Warn("Walker",
@@ -3449,7 +3452,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return false;
         }
 
-        ReplanInPlace(dest);
+        ReplanOnceThePurseIsRead();
         return true;
 
         // The answer belongs to the walk that asked. A stop, or another walk begun
@@ -3459,9 +3462,42 @@ public sealed class AutoWalkManager : IRecoverableEngine
         void OnLocateAnswered()
         {
             if (!ReferenceEquals(_locateAsk, ask)) return;
+            ReplanOnceThePurseIsRead();
+        }
+
+        // A refused toll has just asked for the inventory, and what can be planned
+        // depends on the answer: planned ahead of it every toll is closed, and a
+        // walk the purse could pay for stops. The re-plan waits for the read on the
+        // locate's terms (the same ask, dropped the same way), for no longer than
+        // the read's own bound.
+        void ReplanOnceThePurseIsRead()
+        {
+            _locateAsk = ask;
+            if (_purseReadWait?.Invoke(OnPurseAnswered) == true)
+            {
+                _log?.Info("Walker",
+                    $"step {_index + 1}: re-plan waits for the inventory read the refused toll asked for");
+                return;
+            }
+            OnPurseAnswered();
+        }
+
+        void OnPurseAnswered()
+        {
+            if (!ReferenceEquals(_locateAsk, ask)) return;
             _locateAsk = null;
             ReplanInPlace(dest);
         }
+    }
+
+    // Asked before a re-plan: if an inventory read a refused toll asked for is still
+    // unanswered, takes the re-plan to run when it answers and returns true
+    // (OwedPurseRead.WaitForAnswer). Unset, nothing waits.
+    private Func<Action, bool>? _purseReadWait;
+    public void SetPurseReadWait(Func<Action, bool> wait)
+    {
+        ArgumentNullException.ThrowIfNull(wait);
+        _purseReadWait = wait;
     }
 
     // Re-source the path from the tracker's best-guess current room. WalkTo

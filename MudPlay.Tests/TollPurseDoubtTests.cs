@@ -81,6 +81,36 @@ public sealed class TollPurseDoubtTests : IDisposable
         ]
         """;
 
+    // Toll A (5 gold) has a way round; toll B (1 gold), further on, has none.
+    //
+    //   1/3 Lane ──E── 1/4 Bridge
+    //    │S             │S
+    //   1/1 Bailey ─E (Toll: 5)─ 1/2 Road ─E (Toll: 1)─ 1/5 Far
+    internal const string TwoTollsJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Bailey",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "0", "E": "1/2 (Toll: 5)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Road",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "0", "E": "1/5 (Toll: 1)", "W": "1/1 (Toll: 5)",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Lane",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "1/4", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Bridge",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Far",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2 (Toll: 1)",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
     // An NPC in the tavern takes whoever asks to the guild, for 10 gold: the only
     // way there.
     //
@@ -181,9 +211,20 @@ public sealed class TollPurseDoubtTests : IDisposable
         public List<WalkEvent> Events { get; } = new();
         public List<(RoomKey Destination, string Reason)> Unpaid { get; } = new();
         public List<(RoomExit? Crossing, long? Named)> Refusals { get; } = new();
-        // The `i` AppServices.OnPaidCrossingRefused asks for.
+        // The `i` AppServices.OnPaidCrossingRefused asks for, and its bound.
+        public required OwedPurseRead PurseRead { get; init; }
         public int InventoryAsked { get; set; }
+        public Action? AnswerBound { get; set; }
         public long? Purse { get; set; }
+
+        // The `i` is answered: the record now holds this much, and the gate and the
+        // owed read hear of it in AppServices' order.
+        public void AnswerInventory(long purse)
+        {
+            Purse = purse;
+            Filter.NotePurseRead();
+            PurseRead.Settle();
+        }
     }
 
     private Rig NewRig(string roomsJson, long? purse, bool recovery = false,
@@ -213,11 +254,21 @@ public sealed class TollPurseDoubtTests : IDisposable
         AutoWalkManager walker = new(graph, bfs, tracker, new MovementCoordinator(), filter, recovery: gate);
         if (spellsJson is not null) walker.SetBoatPlanner(new BoatRoutePlanner(graph, bfs));
         MovementRefusalDetector detector = new(new LineExtractor(new TerminalEmulator(80, 25)), tracker);
-        Rig rig = new()
+        Rig? made = null;
+        OwedPurseRead purseRead = new(
+            held: () => false,
+            send: () => made!.InventoryAsked++,
+            schedule: (_, onBound) =>
+            {
+                made!.AnswerBound = onBound;
+                return new NoTimer();
+            });
+        Rig rig = made = new()
         {
             Graph = graph, Bfs = bfs, Tracker = tracker, Filter = filter, Walker = walker, Detector = detector,
-            Gate = gate, Purse = purse,
+            Gate = gate, Purse = purse, PurseRead = purseRead,
         };
+        walker.SetPurseReadWait(purseRead.WaitForAnswer);
         filter.WealthProvider = () => rig.Purse;
         filter.TripUnderWayProbe = () => walker.State != WalkState.Idle;
         walker.SetWireSender(bytes => rig.Sent.Add(Encoding.Latin1.GetString(bytes).Trim()));
@@ -232,7 +283,7 @@ public sealed class TollPurseDoubtTests : IDisposable
         detector.PaidCrossingRefused += (crossing, named) =>
         {
             rig.Refusals.Add((crossing, named));
-            if (filter.NoteCrossingRefused(crossing, named)) rig.InventoryAsked++;
+            if (filter.NoteCrossingRefused(crossing, named)) purseRead.Ask();
         };
         return rig;
     }
@@ -341,29 +392,59 @@ public sealed class TollPurseDoubtTests : IDisposable
 
     // ----- a death in an arena room ---------------------------------------------
 
-    // A death in an arena room takes no item, coin or key (user, 2026-10-10), so
-    // the purse on record stands. The room is the one died in, not the graveyard.
+    // An arena death takes no item, coin or key (user, 2026-10-10), so tolls are
+    // not closed for it. The room is the one died in, not the graveyard.
     [Fact]
-    public void ADeathInAnArenaRoom_LeavesThePurseOnRecordStanding()
+    public void AnArenaDeath_ClosesNoToll()
     {
         MovementFilter filter = FilterWithPurse(CoinBeforeTheDeath);
 
-        filter.NoteDeath(new RoomKey(16, 500));          // Training Grounds
+        filter.NoteDeath(new RoomKey(16, 500), tookNothing: true);
         Assert.Equal("you carry 2 runic 5 platinum 99 gold", filter.DescribePurse());
         Assert.False(filter.IsExitBlocked(TollExit(5)));
 
-        filter.NoteDeath(new RoomKey(17, 25));           // anywhere else
+        filter.NoteDeath(new RoomKey(17, 25), tookNothing: false);
         Assert.True(filter.IsExitBlocked(TollExit(5)));
     }
 
+    // Paradigm: the room decides, as the owner ruled; no line is on record there.
     [Fact]
-    public void ADeathInARoomNobodyKnows_EmptiesThePurse()
+    public void OnParadigm_ADeathInAnArenaRoom_TookNothing()
     {
-        MovementFilter filter = FilterWithPurse(CoinBeforeTheDeath);
+        Assert.True(ArenaDeathRooms.DeathTookNothing(new RoomKey(16, 500), colliseumLineSeen: false, paradigm: true));
+        Assert.False(ArenaDeathRooms.DeathTookNothing(new RoomKey(17, 25), colliseumLineSeen: false, paradigm: true));
+        Assert.False(ArenaDeathRooms.DeathTookNothing(diedIn: null, colliseumLineSeen: false, paradigm: true));
+    }
 
-        filter.NoteDeath(diedIn: null);
+    // Stock: the engine says so itself, and only with its arena switch on. An arena
+    // room with the switch off prints the ordinary lines and is an ordinary death.
+    [Fact]
+    public void OnStock_TheColliseumLineDecides_NotTheRoom()
+    {
+        Assert.True(ArenaDeathRooms.DeathTookNothing(new RoomKey(16, 500), colliseumLineSeen: true, paradigm: false));
+        Assert.False(ArenaDeathRooms.DeathTookNothing(new RoomKey(16, 500), colliseumLineSeen: false, paradigm: false));
+        Assert.True(ArenaDeathRooms.DeathTookNothing(diedIn: null, colliseumLineSeen: true, paradigm: false));
+    }
 
-        Assert.True(filter.IsExitBlocked(TollExit(5)));
+    [Fact]
+    public void TheDeathDetector_TellsAColliseumDeath_ByTheEnginesLine()
+    {
+        Rig rig = NewRig(TollWithAWayRoundJson, CoinBeforeTheDeath);
+        MudPlay.Game.DeathDetector deaths = new(rig.Tracker);
+        List<bool> saved = new();
+        rig.Tracker.PlayerDeathObserved += () => saved.Add(deaths.LastDeathSavedInColliseum);
+
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        deaths.FeedTestLine("You have been killed!");
+        deaths.FeedTestLine("But, because you were in a colliseum, you have been saved.");
+        deaths.FeedTestLine("You have 6 lives left.");
+
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        deaths.FeedTestLine("You have been killed!");
+        deaths.FeedTestLine("But, due to a miracle, you have been saved.");
+        deaths.FeedTestLine("You have 5 lives left.");
+
+        Assert.Equal(new[] { true, false }, saved);
     }
 
     [Theory]
@@ -450,11 +531,64 @@ public sealed class TollPurseDoubtTests : IDisposable
         Assert.False(filter.IsExitBlocked(TollExit(4)));     // 400 is still affordable
     }
 
-    // The game's word outranks the data: a toll the data has at 5 gold and the
-    // game refuses for 50 stays closed until a full read shows 50, whatever the
-    // record says of 5.
+    // A record that already said "short" was right, so it is believed as it goes
+    // on changing: carry 3 gold, walk into the 5-gold toll, pick up coin to 50 gold.
+    // The toll stayed closed until an `i` nobody was asked to send.
     [Fact]
-    public void ARefusedToll_TheGamePricesAboveTheData_StaysClosedUntilAReadShowsTheGamesPrice()
+    public void ARefusedToll_TheRecordAlreadyShort_OpensWhenTheRecordCoversThePrice_WithNoRead()
+    {
+        long? purse = 300;
+        MovementFilter filter = new(new ProfileService()) { WealthProvider = () => purse };
+        Assert.False(filter.NoteCrossingRefused(TollExit(5), 500));
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+        Assert.Equal(
+            "the game refused it, naming 5 gold: you carry 3 gold, 2 gold short",
+            filter.DescribePurseFor(TollExit(5)));
+
+        purse = 5_000;                    // picked up since: no `i`
+
+        Assert.False(filter.IsExitBlocked(TollExit(5)));
+        Assert.Equal("you carry 50 gold", filter.DescribePurseFor(TollExit(5)));
+    }
+
+    // The report's own sequel: refused on a record that was wrong, the `i` shows 2
+    // gold, then the corpse's coin comes back as pickup lines. One full read since
+    // the refusal makes the record good again; no second one is waited for.
+    [Fact]
+    public void ARefusedToll_TheRecordWrong_OpensOnPickups_OnceOneReadHasLanded()
+    {
+        long? purse = CoinBeforeTheDeath;
+        MovementFilter filter = new(new ProfileService()) { WealthProvider = () => purse };
+        Assert.True(filter.NoteCrossingRefused(TollExit(5), 500));
+
+        purse = 20_000;                   // the record patched before any read: not believed yet
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+
+        purse = 200;
+        filter.NotePurseRead();           // the `i`: 2 gold
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+
+        purse = 20_000;                   // the corpse's coin, picked up
+        Assert.False(filter.IsExitBlocked(TollExit(5)));
+    }
+
+    [Fact]
+    public void RefusedCrossings_AreForgotten_WithTheGameDataSetTheyWereKeyedOn()
+    {
+        MovementFilter filter = FilterWithPurse(1_000);
+        filter.NoteCrossingRefused(TollExit(5), 5_000);
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
+
+        filter.ForgetRefusedCrossings();
+
+        Assert.False(filter.IsExitBlocked(TollExit(5)));
+    }
+
+    // The game's word outranks the data: a toll the data has at 5 gold and the
+    // game refuses for 50 stays closed until the record covers 50, whatever the
+    // record says of 5, and keeps that price over later reads.
+    [Fact]
+    public void ARefusedToll_TheGamePricesAboveTheData_StaysClosedUntilTheRecordCoversTheGamesPrice()
     {
         long? purse = 1_000;
         MovementFilter filter = new(new ProfileService()) { WealthProvider = () => purse };
@@ -466,14 +600,16 @@ public sealed class TollPurseDoubtTests : IDisposable
         Assert.Contains("naming 50 gold", filter.DescribePurseFor(TollExit(5)));
         Assert.Contains("you carry 10 gold", filter.DescribePurseFor(TollExit(5)));
 
-        purse = 4_999;                    // coin picked up since: not a full read
+        purse = 4_999;                    // coin picked up since
         Assert.True(filter.IsExitBlocked(TollExit(5)));
         filter.NotePurseRead();           // a full read, still short of the game's price
         Assert.True(filter.IsExitBlocked(TollExit(5)));
 
         purse = 5_000;
-        filter.NotePurseRead();
         Assert.False(filter.IsExitBlocked(TollExit(5)));
+
+        purse = 600;                      // spent again: the data's 5 gold would pass it
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
     }
 
     // A wording that names no price leaves nothing to compare a read with: the
@@ -565,7 +701,7 @@ public sealed class TollPurseDoubtTests : IDisposable
         filter.NotePurseRead();
         filter.NoteCrossingRefused(TollExit(2), 200);     // the 3 gold on record covered it
         Assert.Contains("the game refused a toll or fare the client took the purse to cover", filter.DescribePurseFor(TollExit(5)));
-        Assert.Contains("closed after a refusal: into 1/2 (named 2 gold)", filter.DescribePurse());
+        Assert.Contains("refused crossings: into 1/2 (the game named 2 gold, inventory not read since)", filter.DescribePurse());
 
         Assert.Contains("isn't known", FilterWithPurse(null).DescribePurse());
     }
@@ -694,9 +830,10 @@ public sealed class TollPurseDoubtTests : IDisposable
     }
 
     // The report's walk, with a record that is wrong for any reason: the first
-    // refusal re-plans round the toll rather than sending the same step again.
+    // refusal asks for the inventory once, and when it answers the walk re-plans
+    // round the toll rather than sending the same step again.
     [Fact]
-    public void AWalk_RefusedAtATollTheRecordCovered_RePlansRoundIt_WithoutASecondTry()
+    public void AWalk_RefusedAtATollTheRecordCovered_ReadsThePurse_ThenRePlansRoundIt_WithoutASecondTry()
     {
         Rig rig = NewRig(TollWithAWayRoundJson, CoinBeforeTheDeath);
         rig.Tracker.SetLocated(new RoomKey(1, 1));
@@ -704,11 +841,68 @@ public sealed class TollPurseDoubtTests : IDisposable
         Assert.Equal(new[] { "e" }, rig.Sent);
 
         rig.Detector.FeedTestLine(Refusal);
+        Assert.Equal(new[] { "e" }, rig.Sent);              // the re-plan waits for the read
+        Assert.Equal(1, rig.InventoryAsked);
+        Assert.Equal(WalkState.Walking, rig.Walker.State);
+
+        rig.AnswerInventory(0);
 
         Assert.Equal(new[] { "e", "n" }, rig.Sent);
         Assert.Equal(1, rig.InventoryAsked);
         Assert.Equal(WalkState.Walking, rig.Walker.State);
         Assert.DoesNotContain(rig.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    // Two tolls on the way, the first with a way round and the second without, and
+    // a purse that covers the second but not the first. Re-planned ahead of the
+    // read, every toll was closed and the walk stopped at the second, which the
+    // purse could pay.
+    [Fact]
+    public void AWalk_RefusedAtAToll_RePlansOnThePurseAsRead_NotOnTheDoubt()
+    {
+        Rig rig = NewRig(TwoTollsJson, CoinBeforeTheDeath);
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Walker.WalkTo(new RoomKey(1, 5));
+        Assert.Equal(new[] { "e" }, rig.Sent);
+
+        rig.Detector.FeedTestLine(Refusal);
+        rig.AnswerInventory(200);                           // 2 gold: short of 5, enough for 1
+
+        Assert.Equal(new[] { "e", "n" }, rig.Sent);         // round the first, on to the second
+        Assert.DoesNotContain(rig.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Empty(rig.Unpaid);
+    }
+
+    // The read never answers: past its bound the walk re-plans all the same, on
+    // the purse in doubt.
+    [Fact]
+    public void AWalk_RefusedAtAToll_WhoseReadNeverAnswers_RePlansWhenTheBoundPasses()
+    {
+        Rig rig = NewRig(TollWithAWayRoundJson, CoinBeforeTheDeath);
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Walker.WalkTo(new RoomKey(1, 2));
+        rig.Detector.FeedTestLine(Refusal);
+        Assert.Equal(new[] { "e" }, rig.Sent);
+
+        rig.AnswerBound!();
+
+        Assert.Equal(new[] { "e", "n" }, rig.Sent);
+    }
+
+    // A walk stopped while its re-plan waits is not set walking again by the answer.
+    [Fact]
+    public void AWalk_StoppedWhileItWaitsForTheRead_StaysStopped()
+    {
+        Rig rig = NewRig(TollWithAWayRoundJson, CoinBeforeTheDeath);
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+        rig.Walker.WalkTo(new RoomKey(1, 2));
+        rig.Detector.FeedTestLine(Refusal);
+
+        rig.Walker.Stop("test");
+        rig.AnswerInventory(0);
+
+        Assert.Equal(new[] { "e" }, rig.Sent);
+        Assert.Equal(WalkState.Idle, rig.Walker.State);
     }
 
     [Fact]
@@ -721,13 +915,31 @@ public sealed class TollPurseDoubtTests : IDisposable
         Assert.Equal(new[] { "e", "e" }, rig.Sent);
 
         rig.Detector.FeedTestLine(Refusal);
+        rig.AnswerInventory(200);
 
         Assert.Equal(new[] { "e", "e" }, rig.Sent);         // not a third
         Assert.Equal(WalkState.Idle, rig.Walker.State);
         WalkEvent failed = Assert.Single(rig.Events, e => e.Kind == WalkEventKind.Failed);
-        Assert.Contains("a toll east from 1/2 (Bailey) (5 gold) you can't pay", failed.Detail);
-        Assert.Contains("the game refused a toll or fare the client took the purse to cover", failed.Detail);
+        Assert.Equal(
+            "all routes blocked by a toll east from 1/2 (Bailey) (5 gold) you can't pay: you carry 2 gold, 3 gold short",
+            failed.Detail);
         Assert.Single(rig.Unpaid);
+    }
+
+    // The same with no answer inside the bound: stopped on the doubt, and saying so.
+    [Fact]
+    public void AWalk_RefusedAtTheOnlyTollOut_WithNoAnswer_StopsOnTheDoubt()
+    {
+        Rig rig = NewRig(TollTheOnlyWayJson, CoinBeforeTheDeath);
+        rig.Tracker.SetLocated(new RoomKey(1, 2));
+        rig.Walker.WalkTo(new RoomKey(1, 3));
+        rig.Detector.FeedTestLine(Refusal);
+
+        rig.AnswerBound!();
+
+        Assert.Equal(new[] { "e" }, rig.Sent);
+        WalkEvent failed = Assert.Single(rig.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Contains("the game refused a toll or fare the client took the purse to cover", failed.Detail);
     }
 
     // The game charges more than the data says (50 gold where the data has 5) and
@@ -762,6 +974,30 @@ public sealed class TollPurseDoubtTests : IDisposable
         Assert.Equal(new[] { "e" }, rig.Sent);
     }
 
+    // Refused by hand with 3 gold, with no way round: the walk says what the game
+    // named and what is carried. Coin picked up to 50 gold, with no `i`: the next
+    // walk pays the toll (it used to stay closed for want of a read nobody sent).
+    [Fact]
+    public void AWalk_AfterATollRefusedByHand_PaysIt_OnceTheRecordCoversThePrice()
+    {
+        Rig rig = NewRig(TollTheOnlyWayJson, purse: 300);
+        rig.Tracker.SetLocated(new RoomKey(1, 2));
+        rig.Tracker.NoteMoveSent(Direction.E);
+        rig.Detector.FeedTestLine(Refusal);
+        Assert.Equal(0, rig.InventoryAsked);
+
+        Assert.False(rig.Walker.WalkTo(new RoomKey(1, 3)));
+        Assert.Equal(
+            "all routes blocked by a toll east from 1/2 (Bailey) (5 gold) you can't pay: "
+            + "the game refused it, naming 5 gold: you carry 3 gold, 2 gold short",
+            Assert.Single(rig.Events, e => e.Kind == WalkEventKind.Failed).Detail);
+
+        rig.Purse = 5_000;
+        Assert.True(rig.Walker.WalkTo(new RoomKey(1, 3)));
+        Assert.Equal(new[] { "e" }, rig.Sent);
+        Assert.Equal(0, rig.InventoryAsked);
+    }
+
     // A wording that names no price, a record that covers the data's price, and
     // Paradigm's `rm` between the refusal and the re-plan: the `i` answer came back
     // first and re-opened the toll, so the re-plan went straight back into it
@@ -785,7 +1021,7 @@ public sealed class TollPurseDoubtTests : IDisposable
 
         rig.Detector.FeedTestLine("You do not have enough to cover the toll of 5 platinum pieces.");
         Assert.Equal(new[] { "e" }, rig.Sent);             // waiting on the locate
-        rig.Filter.NotePurseRead();                         // the `i` answer: the record unchanged
+        rig.AnswerInventory(CoinBeforeTheDeath);            // the `i` answer: the record unchanged
         foreach (Action answer in locateAnswers.ToArray()) answer();
 
         Assert.Equal(new[] { "e", "n" }, rig.Sent);
@@ -828,6 +1064,7 @@ public sealed class TollPurseDoubtTests : IDisposable
         Assert.Equal(new[] { "n", "ask barmaid adventure" }, rig.Sent);
 
         rig.Detector.FeedTestLine(PriceRefusal);
+        rig.AnswerInventory(300);
 
         (RoomExit? crossing, long? named) = Assert.Single(rig.Refusals);
         Assert.Equal(new RoomKey(1, 391), crossing!.Value.Target);
@@ -872,6 +1109,23 @@ public sealed class TollPurseDoubtTests : IDisposable
             + "your coin went with the deathpile and the inventory hasn't been read since (type i)",
             failed.Detail);
         Assert.Single(rig.Unpaid);
+    }
+
+    // Leading a party, with our own purse plenty and a follower's fresh reading
+    // short: the sailing is still the only crossing and is sailed with its warning,
+    // as before this change. What a party does at a fare is a ruling of its own.
+    [Fact]
+    public void AWalk_WhoseOnlyWayIsASailingAFollowerCantPay_StillSails()
+    {
+        Rig rig = NewRig(BoatRoomsJson, CoinBeforeTheDeath, tbInfoJson: BoatTbInfoJson, spellsJson: BoatSpellsJson);
+        rig.Filter.PartyWealthProvider = () => 50;
+        rig.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Assert.True(rig.Walker.WalkTo(new RoomKey(1, 11)));
+
+        Assert.Equal(new[] { "n" }, rig.Sent);
+        Assert.DoesNotContain(rig.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Empty(rig.Unpaid);
     }
 
     // ----- a queued walk's route card ------------------------------------------
@@ -919,7 +1173,7 @@ public sealed class TollPurseDoubtTests : IDisposable
     {
         bool held = true;
         int sent = 0;
-        OwedPurseRead read = new(() => held, () => sent++);
+        OwedPurseRead read = new(() => held, () => sent++, (_, _) => new NoTimer());
 
         read.Ask();
         Assert.Equal(0, sent);
@@ -942,7 +1196,7 @@ public sealed class TollPurseDoubtTests : IDisposable
     {
         bool held = true;
         int sent = 0;
-        OwedPurseRead read = new(() => held, () => sent++);
+        OwedPurseRead read = new(() => held, () => sent++, (_, _) => new NoTimer());
         read.Ask();
 
         read.Settle();                   // the user typed `i`
@@ -956,12 +1210,68 @@ public sealed class TollPurseDoubtTests : IDisposable
     public void TheReadARefusalAsksFor_WithNothingHoldingIt_GoesOutAtOnce()
     {
         int sent = 0;
-        OwedPurseRead read = new(() => false, () => sent++);
+        OwedPurseRead read = new(() => false, () => sent++, (_, _) => new NoTimer());
 
         read.Ask();
 
         Assert.Equal(1, sent);
         Assert.False(read.Owed);
+    }
+
+    // A death's own `i` going out covers a refusal's: one `i`, and its answer is
+    // still what a re-plan waits for.
+    [Fact]
+    public void TheReadARefusalAsksFor_IsNotSentBesideADeathsRead_ButItsAnswerIsStillAwaited()
+    {
+        bool held = true;
+        int sent = 0;
+        OwedPurseRead read = new(() => held, () => sent++, (_, _) => new NoTimer());
+        read.Ask();
+
+        read.CoveredByAnotherRead();
+        held = false;
+        read.Retry();
+        Assert.Equal(0, sent);
+
+        int ran = 0;
+        Assert.True(read.WaitForAnswer(() => ran++));
+        read.Settle();
+        Assert.Equal(1, ran);
+    }
+
+    // What a re-plan after a refusal waits on: the answer, or the bound.
+    [Fact]
+    public void AReadStillUnanswered_HoldsWhatWaitsOnIt_UntilItAnswersOrItsBoundPasses()
+    {
+        Action? bound = null;
+        TimeSpan asked = TimeSpan.Zero;
+        OwedPurseRead read = new(() => false, () => { }, (delay, onBound) =>
+        {
+            asked = delay;
+            bound = onBound;
+            return new NoTimer();
+        });
+        int ran = 0;
+
+        Assert.False(read.WaitForAnswer(() => ran++));      // nothing asked: nothing to wait for
+        Assert.Equal(0, ran);
+
+        read.Ask();
+        Assert.True(read.WaitForAnswer(() => ran++));
+        Assert.True(read.WaitForAnswer(() => ran++));
+        Assert.Equal(0, ran);
+        Assert.Equal(OwedPurseRead.AnswerBound, asked);
+
+        read.Settle();                                      // the read answered
+        Assert.Equal(2, ran);
+        Assert.False(read.WaitForAnswer(() => ran++));
+
+        read.Ask();
+        Assert.True(read.WaitForAnswer(() => ran++));
+        bound!();                                           // it never did
+        Assert.Equal(3, ran);
+        read.Settle();
+        Assert.Equal(3, ran);                               // not run twice
     }
 
     // The post-death `i` went through the engine send gate, which drops what it is

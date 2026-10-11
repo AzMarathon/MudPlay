@@ -75,6 +75,11 @@ public interface IRoomFilter
     // says anything.
     string? DescribePurseFor(in RoomExit exit) => null;
 
+    // Whether what this exit charges is beyond the crosser's OWN purse, as against
+    // a party member's. A walk or loop is refused outright only for this; a crossing
+    // only a follower can't pay keeps the party rules. Default: never.
+    bool IsOwnPurseShort(in RoomExit exit) => false;
+
     // Changes whenever the stats the door rule reads change, so a caller that
     // remembers "no route from here" can tell when the answer may have changed.
     int DoorRuleStamp => 0;

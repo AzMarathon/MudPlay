@@ -40,11 +40,23 @@ public static class PaidCrossingDescriber
     // the fare of an exit to the same place, which is all a filter judges by.
     public static string? PurseForFare(IRoomFilter? filter, RoomKey arrival, long fareCopper)
     {
-        RoomExit asFare = new(arrival, RoomExitHint.Teleport, RawHint: null, FareCopper: fareCopper);
+        RoomExit asFare = AsFare(arrival, fareCopper);
         return filter?.DescribePurseFor(in asFare);
     }
 
-    // The first hop of a path the filter turns away for a toll or a fare.
+    // Whether such a fare is beyond the crosser's own purse, asked the same way.
+    public static bool OwnPurseShortOfFare(IRoomFilter? filter, RoomKey arrival, long fareCopper)
+    {
+        RoomExit asFare = AsFare(arrival, fareCopper);
+        return filter?.IsOwnPurseShort(in asFare) == true;
+    }
+
+    private static RoomExit AsFare(RoomKey arrival, long fareCopper) =>
+        new(arrival, RoomExitHint.Teleport, RawHint: null, FareCopper: fareCopper);
+
+    // The first hop of a path the filter turns away for a toll or a fare the
+    // crosser's own purse doesn't cover. One only a party member can't pay is not
+    // it: that is the party rules' to judge.
     public static (RoomKey From, Direction Dir, RoomExit Exit)? FirstUnpaidOn(
         RoomGraphManager graph, RoomKey source, IReadOnlyList<Direction> path, IRoomFilter filter)
     {
@@ -55,7 +67,8 @@ public static class PaidCrossingDescriber
         foreach (Direction dir in path)
         {
             if (graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(dir, out RoomExit exit)) return null;
-            if ((filter.DescribeExitBlock(in exit) & (ExitBlockReason.Toll | ExitBlockReason.Fare)) != 0)
+            if ((filter.DescribeExitBlock(in exit) & (ExitBlockReason.Toll | ExitBlockReason.Fare)) != 0
+                && filter.IsOwnPurseShort(in exit))
                 return (at, dir, exit);
             at = exit.Target;
         }

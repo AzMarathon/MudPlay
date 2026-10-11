@@ -20,8 +20,8 @@ public readonly record struct BoatRoutePlan(
     // A gated plan is one the crosser can't currently board (a member falls under
     // the level floor or can't cover the fare). It's only ever returned when the
     // sail is the SOLE crossing, which is more useful than hiding the only route
-    // behind a bare "no path": the walker sails one gated on level with a warning
-    // and lets the captain refuse, and fails naming one gated on its fare.
+    // behind a bare "no path": the walker warns and lets the captain refuse, or,
+    // when it is the crosser's own purse that can't pay the fare, fails naming it.
     public bool IsGated => Block != ExitBlockReason.None;
 }
 
@@ -100,7 +100,7 @@ public sealed class BoatRoutePlanner
                 $"Boat route {source}→{destination} via '{plan.Passage.Keyword}' "
                 + $"(dock {plan.Passage.DockRoom}, arrive {plan.Passage.ArrivalRoom}): "
                 + $"{plan.ToDock.Count} hop(s) to dock + {plan.FromArrival.Count} from port"
-                + (plan.IsGated ? $"; GATED ({plan.Block}) — sole crossing." : "."));
+                + (plan.IsGated ? $"; GATED ({plan.Block}) — sole crossing, will warn." : "."));
         return best;
     }
 

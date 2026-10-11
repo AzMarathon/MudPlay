@@ -8628,35 +8628,56 @@ public sealed class AppServices
             if (RoomTracker.State.CurrentRoom is not null) InventoryAfterDeath.OnRoomKnown();
         };
         Profile.ProfileLoaded += _ => InventoryAfterDeath.Reset();
-        // Sent into a held send gate the `i` was dropped and never asked again.
-        InventoryAfterDeath.SendHeld = () => EngineGate.IsLocked;
+        // Sent into a held send gate, or with the character out of the game (a link
+        // dropped from the board's menu lets the gate go), the `i` was lost and
+        // never asked again.
+        InventoryAfterDeath.SendHeld = () => EngineGate.IsLocked || !InGameCapture.InGame;
 
         // The toll gate hears of the death too, with the room died in (an arena
         // death takes nothing). The stale record above reads as "purse unknown",
         // which a toll is not refused on, and the coin is known gone: until the
         // re-read lands a walk from the graveyard would head for a toll it can't pay
         // (report paradigm-20261010-145529).
-        RoomTracker.PlayerDeathObserved += () => Movement.NoteDeath(RoomTracker.LastDeathRoom);
-        Inventory.FullInventoryParsed += Movement.NotePurseRead;
+        RoomTracker.PlayerDeathObserved += () => Movement.NoteDeath(
+            RoomTracker.LastDeathRoom,
+            tookNothing: Game.Recovery.ArenaDeathRooms.DeathTookNothing(
+                RoomTracker.LastDeathRoom, Death.LastDeathSavedInColliseum,
+                paradigm: GameData.ActiveRealm == Game.RealmType.ParaMud));
         Movement.TripUnderWayProbe = () => MovementControl.IsActive;
         MovementControl.StateChanged += () =>
         {
             if (MovementControl.IsIdle) Movement.NoteTripEnded();
         };
+        GameData.ActiveSetChanged += _ => Movement.ForgetRefusedCrossings();
 
-        // The read a refused toll asks for: owed while the master switch is off or
-        // the send gate is held, and sent when that ends (SendOwedInventoryReads).
+        // The read a refused toll asks for: owed while the master switch is off,
+        // the character is out of the game or the send gate is held, and sent when
+        // that ends (SendOwedInventoryReads).
         PurseRead = new Game.Inventory.OwedPurseRead(
-            held: () => AutoModeController.Blocks("Info polls") || EngineGate.IsLocked,
+            held: () => AutoModeController.Blocks("Info polls") || EngineGate.IsLocked || !InGameCapture.InGame,
             send: () =>
             {
                 Log.Info(Game.Inventory.InventoryManager.LogCategory,
                     "Re-reading the inventory: the game refused a toll or fare the purse on record covered.");
                 SendGameCommand("i");
-            });
-        Inventory.FullInventoryParsed += PurseRead.Settle;
+            },
+            schedule: uiOneShot);
+        // In this order: the gate believes the record again before a re-plan held
+        // for the read (below) is let go by it.
+        Inventory.FullInventoryParsed += () =>
+        {
+            Movement.NotePurseRead();
+            PurseRead.Settle();
+        };
         Profile.ProfileLoaded += _ => PurseRead.Settle();
         EngineGate.Released += SendOwedInventoryReads;
+        InGameCapture.InGameChanged += inGame =>
+        {
+            if (inGame) SendOwedInventoryReads();
+        };
+        // A walk's or a loop's re-plan after a refused toll waits for that read.
+        Walker.SetPurseReadWait(PurseRead.WaitForAnswer);
+        LoopRunner.SetPurseReadWait(PurseRead.WaitForAnswer);
 
         // A walk or loop with no route for want of a toll or fare says so on the
         // terminal. Once per reason until a walk gets going: an engine that keeps
@@ -11725,7 +11746,7 @@ public sealed class AppServices
     {
         bool deathReadDue = InventoryAfterDeath.Due;
         if (deathReadDue && RoomTracker.State.CurrentRoom is not null) InventoryAfterDeath.OnRoomKnown();
-        if (deathReadDue && !InventoryAfterDeath.Due) PurseRead.Settle();
+        if (deathReadDue && !InventoryAfterDeath.Due) PurseRead.CoveredByAnotherRead();
         else PurseRead.Retry();
     }
 

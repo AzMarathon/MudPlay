@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.167.18**
 > - After a death no walk or loop takes a toll, fare or sailing until the inventory is read again (your coin went with the pile); a death in an arena room takes nothing
-> - A toll or fare the game refuses is never sent twice, and stays closed until an inventory read shows its price
+> - A toll or fare the game refuses is never sent twice; it reopens once your inventory has been read and you carry the price it named
 > - A walk with no way round one you can't pay says so on the terminal, naming it and how short you are
 > - A loop over a toll you can't pay is not started, and stops if refused mid-lap; such a loop could crash the client
 > - A sailing you can't pay for is not walked to

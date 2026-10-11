@@ -1,4 +1,5 @@
 using System.Text;
+using MudPlay.Game.Inventory;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 using MudPlay.Terminal;
@@ -88,9 +89,26 @@ public sealed class LoopUnpaidCrossingTests : IDisposable
         public List<string> Sent { get; } = new();
         public List<LoopEvent> Events { get; } = new();
         public List<string> Unpaid { get; } = new();
+        // The `i` AppServices.OnPaidCrossingRefused asks for, and its bound.
+        public OwedPurseRead? PurseRead { get; set; }
         public int InventoryAsked { get; set; }
+        public Action? AnswerBound { get; set; }
         public long? Purse { get; set; }
         public string? Failure => Events.Where(e => e.Kind == LoopEventKind.Failed).Select(e => e.Detail).SingleOrDefault();
+
+        // The `i` is answered: the record now holds this much, and the gate and the
+        // owed read hear of it in AppServices' order.
+        public void AnswerInventory(long purse)
+        {
+            Purse = purse;
+            Filter!.NotePurseRead();
+            PurseRead!.Settle();
+        }
+    }
+
+    private sealed class NoTimer : IDisposable
+    {
+        public void Dispose() { }
     }
 
     // hearsRefusals false is a client where nothing but the tracker reads the toll
@@ -115,10 +133,21 @@ public sealed class LoopUnpaidCrossingTests : IDisposable
         {
             filter.WealthProvider = () => rig.Purse;
             if (hearsRefusals)
+            {
+                OwedPurseRead purseRead = rig.PurseRead = new OwedPurseRead(
+                    held: () => false,
+                    send: () => rig.InventoryAsked++,
+                    schedule: (_, onBound) =>
+                    {
+                        rig.AnswerBound = onBound;
+                        return new NoTimer();
+                    });
+                runner.SetPurseReadWait(purseRead.WaitForAnswer);
                 detector.PaidCrossingRefused += (crossing, named) =>
                 {
-                    if (filter.NoteCrossingRefused(crossing, named)) rig.InventoryAsked++;
+                    if (filter.NoteCrossingRefused(crossing, named)) purseRead.Ask();
                 };
+            }
         }
         runner.SetWireSender(bytes => rig.Sent.Add(Encoding.Latin1.GetString(bytes).Trim()));
         runner.Event += rig.Events.Add;
@@ -181,7 +210,7 @@ public sealed class LoopUnpaidCrossingTests : IDisposable
     // ----- refused mid-lap --------------------------------------------------------
 
     [Fact]
-    public void ALoop_RefusedAtATollTheRecordCovered_Stops_NamingTheToll_OnOneSend()
+    public void ALoop_RefusedAtATollTheRecordCovered_ReadsThePurse_ThenStops_NamingTheToll_OnOneSend()
     {
         Rig rig = NewRig(TollPurseDoubtTests.TollTheOnlyWayJson, Plenty);
         rig.Tracker.SetLocated(Bailey);
@@ -189,13 +218,37 @@ public sealed class LoopUnpaidCrossingTests : IDisposable
         Assert.Equal(new[] { "e" }, rig.Sent);
 
         rig.Detector.FeedTestLine(Refusal);
+        Assert.Equal(LoopState.Recovering, rig.Runner.State);    // the reroute waits for the read
+        Assert.Equal(1, rig.InventoryAsked);
+
+        rig.AnswerInventory(200);
 
         Assert.Equal(new[] { "e" }, rig.Sent);
         Assert.Equal(1, rig.InventoryAsked);
         Assert.Equal(LoopState.Idle, rig.Runner.State);
+        Assert.Equal(
+            "loop 'toll': no way from 1/2 to 1/3 without a toll east from 1/2 (Bailey) (5 gold) you can't pay: "
+            + "you carry 2 gold, 3 gold short",
+            rig.Failure);
+        Assert.Equal(rig.Failure, Assert.Single(rig.Unpaid));
+    }
+
+    // The read never answers: past its bound the loop re-plans on the purse in
+    // doubt, and stops saying so.
+    [Fact]
+    public void ALoop_RefusedAtAToll_WhoseReadNeverAnswers_StopsWhenTheBoundPasses()
+    {
+        Rig rig = NewRig(TollPurseDoubtTests.TollTheOnlyWayJson, Plenty);
+        rig.Tracker.SetLocated(Bailey);
+        Assert.True(rig.Runner.Start(LoopOf(Bailey, Road)));
+        rig.Detector.FeedTestLine(Refusal);
+
+        rig.AnswerBound!();
+
+        Assert.Equal(new[] { "e" }, rig.Sent);
+        Assert.Equal(LoopState.Idle, rig.Runner.State);
         Assert.Contains("a toll east from 1/2 (Bailey) (5 gold) you can't pay", rig.Failure);
         Assert.Contains("the game refused a toll or fare the client took the purse to cover", rig.Failure);
-        Assert.Equal(rig.Failure, Assert.Single(rig.Unpaid));
     }
 
     [Fact]
@@ -206,11 +259,67 @@ public sealed class LoopUnpaidCrossingTests : IDisposable
         Assert.True(rig.Runner.Start(LoopOf(Bailey, Road)));
 
         rig.Detector.FeedTestLine(Refusal);
+        rig.AnswerInventory(0);
 
         Assert.Equal(new[] { "e" }, rig.Sent);
         Assert.Equal(1, rig.InventoryAsked);
         Assert.Equal(LoopState.Idle, rig.Runner.State);
         Assert.Single(rig.Unpaid);
+    }
+
+    // A loop over toll A (a way round) and toll B (none), with a record of plenty
+    // and 2 gold really carried: enough for B, not for A. Re-planned ahead of the
+    // read, every toll was closed and the loop stopped naming B, which it could pay.
+    [Fact]
+    public void ALoop_RefusedAtOneToll_RePlansOnThePurseAsRead_AndKeepsTheTollItCanPay()
+    {
+        Rig rig = NewRig(TollPurseDoubtTests.TwoTollsJson, Plenty);
+        RoomKey bailey = new(1, 1), road = new(1, 2), far = new(1, 5);
+        rig.Tracker.SetLocated(bailey);
+        Assert.True(rig.Runner.Start(LoopOf(bailey, road, far)));
+        Assert.Equal(new[] { "e" }, rig.Sent);
+
+        rig.Detector.FeedTestLine(Refusal);
+        rig.AnswerInventory(200);
+
+        Assert.Equal(new[] { "e", "n" }, rig.Sent);         // round A; B stays on the circuit
+        Assert.Equal(LoopState.Running, rig.Runner.State);
+        Assert.Null(rig.Failure);
+        Assert.Empty(rig.Unpaid);
+    }
+
+    // A loop stopped while its reroute waits is not started again by the answer.
+    [Fact]
+    public void ALoop_StoppedWhileItWaitsForTheRead_StaysStopped()
+    {
+        Rig rig = NewRig(TollPurseDoubtTests.TollWithAWayRoundJson, Plenty);
+        RoomKey bailey = new(1, 1), road = new(1, 2);
+        rig.Tracker.SetLocated(bailey);
+        Assert.True(rig.Runner.Start(LoopOf(bailey, road)));
+        rig.Detector.FeedTestLine(Refusal);
+
+        rig.Runner.Stop("test");
+        rig.AnswerInventory(0);
+
+        Assert.Equal(new[] { "e" }, rig.Sent);
+        Assert.Equal(LoopState.Idle, rig.Runner.State);
+    }
+
+    // Leading a party, our own purse plenty and a follower's fresh reading short:
+    // that is the party rules' to judge, and is not what this refusal is for. The
+    // loop gets no toll refusal (and, with no leg left, the plain failure).
+    [Fact]
+    public void ALoop_OverATollOnlyAFollowerCantPay_IsNotRefusedForTheToll()
+    {
+        Rig rig = NewRig(TollPurseDoubtTests.TollTheOnlyWayJson, Plenty);
+        rig.Filter!.PartyWealthProvider = () => 50;
+        rig.Tracker.SetLocated(Bailey);
+
+        Assert.Null(rig.Runner.RefusalFor(LoopOf(Bailey, Road)));
+        Assert.False(rig.Runner.Start(LoopOf(Bailey, Road)));
+
+        Assert.Equal("loop 'toll' has no leg that can be walked: no route from 1/2 to 1/3", rig.Failure);
+        Assert.Empty(rig.Unpaid);
     }
 
     // The coin ran out part-way round, and the record knows it: with nothing reading
@@ -243,6 +352,7 @@ public sealed class LoopUnpaidCrossingTests : IDisposable
         Assert.Equal(new[] { "e" }, rig.Sent);
 
         rig.Detector.FeedTestLine(Refusal);
+        rig.AnswerInventory(200);
 
         Assert.Equal(new[] { "e" }, rig.Sent);
         Assert.Equal(1, rig.InventoryAsked);
@@ -263,6 +373,7 @@ public sealed class LoopUnpaidCrossingTests : IDisposable
         Assert.Equal(new[] { "e" }, rig.Sent);
 
         rig.Detector.FeedTestLine(Refusal);
+        rig.AnswerInventory(200);
 
         Assert.Equal(new[] { "e", "n" }, rig.Sent);
         Assert.Equal(LoopState.Running, rig.Runner.State);
@@ -278,12 +389,14 @@ public sealed class LoopUnpaidCrossingTests : IDisposable
         Rig rig = NewRig(LineJson, purse: null, otherFilter: new AvoidOneRoom(new RoomKey(1, 2)));
         rig.Tracker.SetLocated(new RoomKey(1, 1));
 
-        rig.Runner.Start(LoopOf(new RoomKey(1, 1), new RoomKey(1, 3)));
+        // False: the caller is told the loop never ran (it used to hear true, and
+        // went on as if a run had begun).
+        Assert.False(rig.Runner.Start(LoopOf(new RoomKey(1, 1), new RoomKey(1, 3))));
 
         Assert.Empty(rig.Sent);
         Assert.Equal(LoopState.Idle, rig.Runner.State);
         Assert.Equal("loop 'toll' has no leg that can be walked: no route from 1/1 to 1/3", rig.Failure);
         Assert.Empty(rig.Unpaid);
-        Assert.DoesNotContain(rig.Events, e => e.Kind == LoopEventKind.ReachedFirstWaypoint);
+        Assert.DoesNotContain(rig.Events, e => e.Kind is LoopEventKind.Started or LoopEventKind.ReachedFirstWaypoint);
     }
 }

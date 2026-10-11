@@ -1243,6 +1243,9 @@ public sealed class LoopRunner : IRecoverableEngine
                 $"Start branch=at-waypoint: player already at {here}; no approach needed");
             _circleStartRoom = here;
             ExpandSteps();
+            // Ahead of Started: a loop with nothing to walk never started, and the
+            // caller is told so.
+            if (FailIfNothingToWalk()) return false;
             Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
             BeginCircle();
             return true;
@@ -1257,6 +1260,7 @@ public sealed class LoopRunner : IRecoverableEngine
             _log?.Info("LoopRunner",
                 $"Start branch=no-walker: walker={_walker is not null} bfs={_bfs is not null} currentKey={currentKey?.ToString() ?? "(null)"}; expanding from waypoint 0");
             ExpandSteps();
+            if (FailIfNothingToWalk()) return false;
             Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
             BeginCircle();
             return true;
@@ -1301,6 +1305,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _circleStartRoom = closest;
         _approachTarget  = closest;
         ExpandSteps();
+        if (FailIfNothingToWalk()) return false;
         State = LoopState.Approaching;
         Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
         _log?.Info("LoopRunner",
@@ -3184,7 +3189,34 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         if (_loop is null) return;
         if (State != LoopState.Recovering) return;
+        // A refused toll has just asked for the inventory, and what the loop can
+        // be re-planned over depends on the answer: ahead of it every toll is
+        // closed, and a loop the purse could pay for would stop at its next one.
+        // The walker holds its re-plan the same way (AutoWalkManager.TryReplanOrFail).
+        if (_purseReadWait?.Invoke(RerouteOnceThePurseIsRead) == true)
+        {
+            _log?.Info("LoopRunner", "recovery: reroute waits for the inventory read the refused toll asked for");
+            return;
+        }
         StartInternal(_loop, isRecovery: true);
+    }
+
+    // The read answered, or its bound passed. Still the same recovery, or nothing:
+    // a stop, or a reroute another road took meanwhile, has left that state.
+    private void RerouteOnceThePurseIsRead()
+    {
+        if (_loop is null || State != LoopState.Recovering) return;
+        StartInternal(_loop, isRecovery: true);
+    }
+
+    // Asked before a recovery's reroute: if an inventory read a refused toll asked
+    // for is still unanswered, takes the reroute to run when it answers and returns
+    // true (OwedPurseRead.WaitForAnswer). Unset, nothing waits.
+    private Func<Action, bool>? _purseReadWait;
+    public void SetPurseReadWait(Func<Action, bool> wait)
+    {
+        ArgumentNullException.ThrowIfNull(wait);
+        _purseReadWait = wait;
     }
 
     // Tracker transitions arriving while State == Recovering: once it firmly

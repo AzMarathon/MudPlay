@@ -20,6 +20,14 @@ public static class ArenaDeathRooms
         (17, 2426, 2432), (17, 2572, 2573),
     };
 
+    // Whether a death took nothing. The Stock engine says so itself: it tests its
+    // arena switch as well as the room, and prints its colliseum line
+    // (DeathDetector) only when both hold, so there the line decides and an arena
+    // room with the switch off is an ordinary death. No such line is on record for
+    // Paradigm, where the rule is the room (user, 2026-10-10).
+    public static bool DeathTookNothing(RoomKey? diedIn, bool colliseumLineSeen, bool paradigm) =>
+        colliseumLineSeen || (paradigm && diedIn is { } room && Contains(room));
+
     public static bool Contains(RoomKey room)
     {
         foreach ((int map, int first, int last) in Ranges)
