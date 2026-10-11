@@ -167,4 +167,46 @@ public sealed class ConversationViewModelTests
         Assert.Equal(1, wipes);
         Assert.Empty(vm.Rows);
     }
+
+    // A yell from the next room names no one, so its row says where it came from; a
+    // same-room yell, our own and the old bare form show no qualifier.
+    [Theory]
+    [InlineData("Someone yells from the north \"over here\"", "Someone (from the north):")]
+    [InlineData("Someone yells from above \"over here\"",     "Someone (from above):")]
+    [InlineData("Someone yells from below \"over here\"",     "Someone (from below):")]
+    [InlineData("From Alder (Yelling): \"over here\"",        "Alder:")]
+    [InlineData("Alder yells \"over here\"",                  "Alder:")]
+    [InlineData("You yell \"over here\"",                     "You:")]
+    public void YellRow_ShowsWhereItCameFrom_OnlyForTheNextRoomShapes(string wire, string speakerText)
+    {
+        (MessageRouter router, ChatHistoryStore history) = NewStore();
+        router.Dispatch(Line(wire, 0));
+        using ConversationViewModel vm = NewViewModel(history);
+
+        ConversationRowViewModel row = Assert.Single(vm.Rows);
+        Assert.Equal("YELL", row.ChannelText);
+        Assert.Equal(speakerText, row.SpeakerText);
+        Assert.Equal("over here", row.MessageText);
+        Assert.EndsWith($"{speakerText} over here", row.CopyText);
+    }
+
+    [Fact]
+    public void YellRow_NextRoomYell_StaysUnderTheYellFilterAndFoundBySearch()
+    {
+        (MessageRouter router, ChatHistoryStore history) = NewStore();
+        router.Dispatch(Line("Someone yells from the north \"over here\"", 0));
+        router.Dispatch(Line("Forged gossips: elsewhere", 1));
+        using ConversationViewModel vm = NewViewModel(history);
+        Assert.Equal(2, vm.Rows.Count);
+
+        vm.SearchText = "over here";
+        Assert.Equal(ChatChannel.Yell, Assert.Single(vm.Rows).Entry.Channel);
+
+        vm.SearchText = "Someone";
+        Assert.Equal(ChatChannel.Yell, Assert.Single(vm.Rows).Entry.Channel);
+
+        vm.SearchText = string.Empty;
+        vm.ShowYell = false;
+        Assert.Equal(ChatChannel.Gossip, Assert.Single(vm.Rows).Entry.Channel);
+    }
 }

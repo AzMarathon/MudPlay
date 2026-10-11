@@ -27,6 +27,33 @@ public static class RouteChoicePrompt
     // for the fork that actually fired (what the user sees), Debug for the plain
     // no-fork walk so an ordinary GOTO doesn't spam the log.
     private const string LogCat = "RoutePick";
+
+    // The cards on screen. A change of game data to another set closes them: they
+    // were planned on the last set's rooms, and a pick would walk to its numbers.
+    // Touched on the UI thread only.
+    private static readonly List<RouteChoiceDialogViewModel> OpenCards = new();
+
+    private static Task<RouteChoiceResult?> OpenCard(AppServices services, RouteChoiceDialogViewModel card)
+    {
+        Task<RouteChoiceResult?> closed = services.Dialogs
+            .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(card);
+        OpenCards.Add(card);
+        _ = ForgetWhenClosed(card, closed);
+        return closed;
+    }
+
+    private static async Task ForgetWhenClosed(RouteChoiceDialogViewModel card, Task<RouteChoiceResult?> closed)
+    {
+        try { await closed; }
+        finally { OpenCards.Remove(card); }
+    }
+
+    // Close every card on screen without a pick, as its Cancel does.
+    public static void CloseOpenCards()
+    {
+        foreach (RouteChoiceDialogViewModel card in OpenCards.ToArray()) card.Close();
+    }
+
     // previewSink: optional map-preview channel. When the user selects a route in
     // the picker (before committing), it's called with that route's RoomKey line
     // so the caller can draw it; called with null when the picker closes (the
@@ -149,8 +176,7 @@ public static class RouteChoicePrompt
             {
                 calcVm = new RouteChoiceDialogViewModel(
                     DestinationLabel(services, destination), DestinationLabel(services, src));
-                calcDialogTask = services.Dialogs
-                    .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(calcVm);
+                calcDialogTask = OpenCard(services, calcVm);
             }
             try
             {
@@ -672,8 +698,7 @@ public static class RouteChoicePrompt
                 freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter,
                 economyNote, sourceLabel: DestinationLabel(services, source),
                 teleportsOn: teleportsOn);
-            dialogTask = services.Dialogs
-                .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(vm);
+            dialogTask = OpenCard(services, vm);
         }
 
         // Draw the selected route's line while the picker is open; clear it when

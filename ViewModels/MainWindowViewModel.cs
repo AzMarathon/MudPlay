@@ -1756,6 +1756,10 @@ public partial class MainWindowViewModel : ObservableObject
         // write to the terminal, so it is posted.
         AppServices.Current.NoteRemoteStop = () => Dispatcher.UIThread.Post(
             () => OnUserStopped("@stop", endsTheRun: false));
+        // A change of game data stops a run as the Stop button does, and can arrive
+        // inside the line pump: posted for the same reason.
+        AppServices.Current.NoteGameDataStop = reason => Dispatcher.UIThread.Post(
+            () => OnUserStopped(reason, endsTheRun: true));
         AppServices.Current.Walker.SetPartySplitHandler(OnLeaderPartySplitTeleport);
         AppServices.Current.LoopRunner.SetPartySplitHandler(OnLeaderPartySplitTeleport);
 

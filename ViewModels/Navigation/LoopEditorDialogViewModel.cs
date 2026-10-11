@@ -27,14 +27,11 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // is modeless and stays open through a switch of game data, after which Save
     // would write it into the other set's Loops folder, a file every character and
     // running client on that set reads, and a room added would be the other set's.
-    private readonly string? _openedOn;
+    private readonly OpenedOnGameData _openedOn;
 
     // Why the loop can't be saved or added to right now, or null: another game-data
     // set is active than the one it was opened on.
-    private string? OtherGameDataRefusal() =>
-        string.Equals(_loops.SetName, _openedOn, StringComparison.OrdinalIgnoreCase) ? null
-        : $"This loop's rooms belong to game data '{_openedOn ?? "(none)"}', and '{_loops.SetName ?? "(none)"}' is active now — " +
-          "switch back to that game data to change or save it.";
+    private string? OtherGameDataRefusal() => _openedOn.Refusal("loop", _loops.SetName);
     private readonly RoomGraphManager _graph;
     private readonly LoopRunner? _runner;
     private readonly ConfirmService? _confirm;
@@ -116,14 +113,17 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         RoomGraphManager graph,
         LoopRunner? runner = null,
         ConfirmService? confirm = null,
-        bool isNew = false)
+        bool isNew = false,
+        OpenedOnGameData? roomsOf = null)
     {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(loops);
         ArgumentNullException.ThrowIfNull(graph);
         _original = loop;
         _loops = loops;
-        _openedOn = loops.SetName;
+        // roomsOf names the set for a loop that didn't come off the active one's
+        // catalogue or map: the running loop, stamped with the set it was started on.
+        _openedOn = roomsOf ?? new OpenedOnGameData(loops.SetName);
         _graph = graph;
         _runner = runner;
         _confirm = confirm;
@@ -201,8 +201,16 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // the Navigation search box: coordinate ("1/297", "1,297", "1 297", or
     // bare "297" across all maps) and room-name substring. Monster matches
     // are intentionally omitted.
-    private void RebuildSearchResults(string query)
+    internal void RebuildSearchResults(string query)
     {
+        // The rows listed are the active game data's rooms. Under another set than
+        // the loop's none are, so a row of that set can't be taken once back on it.
+        if (OtherGameDataRefusal() is { } refusal)
+        {
+            DropSearchResults();
+            AddWaypointError = refusal;
+            return;
+        }
         SearchResults.Clear();
         string needle = (query ?? string.Empty).Trim();
         if (needle.Length == 0)
@@ -253,6 +261,15 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         OnPropertyChanged(nameof(HasSearchResults));
     }
 
+    // Nothing listed or highlighted is kept through a refusal: whatever is held may
+    // have been picked while another game data's rooms were on show.
+    private void DropSearchResults()
+    {
+        SearchResults.Clear();
+        SelectedSearchResult = null;
+        OnPropertyChanged(nameof(HasSearchResults));
+    }
+
     // Parse a coordinate token. Returns (map, room) when both numbers were
     // supplied (separator: /, ,, or whitespace), (null, room) for a bare
     // single number, or (null, null) for non-numeric input.
@@ -278,6 +295,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     {
         if (OtherGameDataRefusal() is { } refusal)
         {
+            DropSearchResults();
             AddWaypointError = refusal;
             return;
         }

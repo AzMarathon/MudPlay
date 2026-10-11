@@ -580,9 +580,15 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.ConversationTelepathOut,
             @"^--- Telepath sent to (?<player>\w+) ---$",
             options: System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        // Yell: combined own + others into one regex; player group empty for "You yell".
+        // Yell: own + every form others' yells reach us in, as one regex; player group
+        // empty for "You yell". Same room: `From X (Yelling): "…"`. A room away the
+        // yeller is not named (`Someone yells from above|below|the <dir> "…"`) so the
+        // game's own word "Someone" is the speaker (never null, which means us) and
+        // `from` holds the game's words for where it came from ("above", "the north").
+        // The bare "X yells" form is kept. Groups: [0] player, [1] from, [2] message.
         yield return new RegexPattern(KnownPatterns.ConversationYell,
-            @"^(?:(?<player>\w+) yells|You yell) ""(?<message>.+)""");
+            @"^(?:(?<player>\w+) yells|You yell|From (?<player>\w+) \(Yelling\):"
+          + @"|(?<player>Someone) yells from (?<from>above|below|the \S+)) ""(?<message>.+)""");
         // Combined own + others, mirroring Yell: a third party emits
         // "X says ""…""" (player captured); the local character's own echo
         // is "You say ""…""" (player group empty → self). Splitting the

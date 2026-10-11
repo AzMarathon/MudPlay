@@ -1424,6 +1424,45 @@ public sealed class AppServices
         return givens;
     }
 
+    // The "Resume first?" question while it is on screen.
+    private ViewModels.ConfirmDialogViewModel? _resumeFirstQuestion;
+
+    // The game data was read in afresh, another set or the active one again
+    // (MovementController.StopForGameDataChange, ahead of its stop): end what holds a
+    // run of the old data's rooms that the stop doesn't end by itself, so nothing
+    // walks those numbers again unasked. Each is ended through its own cancel, with
+    // the reason, and named for the notice when it was under way. The money and
+    // training errands are ended by the controller through the errand hook, and the
+    // token route, the loop hand-off, the path-item routers and a deferred corpse
+    // sweep by its Stopping event. Reset States does more than this (exit FSMs,
+    // outstanding needs, party waits, stealth, combat and gear latches, a flee):
+    // none of those puts a stopped run back, and new game data is no reason to
+    // reset them.
+    private void EndHeldRunsForGameDataChange(string reason, List<string> stopped)
+    {
+        // An event standing in a wait or a rest, or suspended behind a detour, with
+        // its Then and everything queued behind it.
+        if (Events.RunningEventName is { } running) stopped.Add($"event '{running}'");
+        Events.NoteStop(reason);
+        // Waiting for its member, the pick-up holds the loop, Auto-Lair or walk it
+        // interrupted and puts it back when they join.
+        if (PartyComeback.RecoveringMember is not null) stopped.Add("the party pick-up");
+        PartyComeback.Cancel(reason);
+        // Selling at a shop, the tour walks to its next one when the sales are in.
+        if (ChestSellTour.IsRunning) stopped.Add("the sell tour");
+        ChestSellTour.Cancel(reason);
+        if (GhSweep.Phase != Game.Map.GhSweepManager.SweepPhase.Idle) stopped.Add("the Roomba sweep");
+        GhSweep.Stop(reason);
+        // Detours that hold a room to walk to, or back to, afterwards.
+        MonsterDropRouter.Cancel();
+        ShortcutSource.Cancel();
+        AutoLightShopRouter.Cancel();
+        // Route cards on screen were planned on the last set's rooms, and the
+        // "Resume first?" question is about a run of them.
+        ViewModels.Navigation.RouteChoicePrompt.CloseOpenCards();
+        _resumeFirstQuestion?.NoCommand.Execute(null);
+    }
+
     // The errand a user's Stop holds instead of ending, as it reads in a sentence;
     // null when none is under way. The money and training trips only: a party
     // comeback or a key detour is over in a few steps and is simply stopped.
@@ -2774,6 +2813,11 @@ public sealed class AppServices
     // auto toggles to the character's base modes as it does for the Stop button.
     public Action? NoteRemoteStop { get; set; }
 
+    // A change of game data stopped or dropped a run (the reason, as it reads in a
+    // log line). Set by MainWindowViewModel, which settles the auto toggles as it
+    // does for the Stop button.
+    public Action<string>? NoteGameDataStop { get; set; }
+
     // Folder CRUD over the shared per-BBS Loops directory that holds
     // both Loops and Lairs. Create / rename
     // / delete folders; reloads both catalogues after a filesystem
@@ -3952,6 +3996,34 @@ public sealed class AppServices
         {
             string? className = profile.LastKnownStats?.Class;
             Task.Run(() => WarmQuestData(className));
+        };
+        // Game data read in afresh stops whatever is walking by the old data's room
+        // numbers: another set become the active one, or the active one imported again
+        // or rewritten in Manage Sets, which may have changed its rooms (owner,
+        // 2026-10-11). Told by the cache's load, which moves on both. The Game Data
+        // menu's pick of the set already active reads it in again (ReloadActiveSet),
+        // so it stops like an import; only a SwitchSet to the active name, which the
+        // cache answers without a new load, raises nothing. Subscribed ahead of the room graph's own
+        // handler below, so the stop comes before the graph is rebuilt and nothing
+        // re-plans those numbers on the new rooms first. The movement controller is
+        // built further down: before it exists nothing is running.
+        GameDataCache.Load walkedOn = GameData.ActiveLoad;
+        GameData.ActiveSetChanged += set =>
+        {
+            GameDataCache.Load was = walkedOn;
+            walkedOn = GameData.ActiveLoad;
+            if (MovementControl is null || was == walkedOn) return;
+            bool readInAgain = string.Equals(was.Set, set, StringComparison.OrdinalIgnoreCase);
+            if (MovementControl.StopForGameDataChange(was.Set, set, readInAgain) is not { } ended) return;
+            string why = readInAgain
+                ? $"game data '{set ?? "(none)"}' was read in again"
+                : $"the game data changed from '{was.Set ?? "(none)"}' to '{set ?? "(none)"}'";
+            // Posted: a set change can come from inside the line pump, where writing
+            // to the terminal re-enters it.
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice($"[{ended}: {why}]"));
+            // The client is left as the Stop button leaves it: the autos a Run or
+            // Sprint start turned off for the trip are settled, as for any stop.
+            NoteGameDataStop?.Invoke(why);
         };
         GameData.ActiveSetChanged += RoomGraph.OnActiveSetChanged;
         if (GameData.ActiveSet is not null)
@@ -8856,6 +8928,14 @@ public sealed class AppServices
         // at a wait-room one hop short, then steps in on the tick.
         AutoLair = new Game.Map.AutoLairManager(
             Walker, RoomTracker, RoomGraph, Bfs, LairTimers, Log, MovementCoordinator);
+        // Nothing made of one game data's room numbers is saved under another: lair
+        // marks on the map are dropped, with a notice, when the set changes to another,
+        // as a loop being built is. Posted: a set change can come from inside the line
+        // pump, where writing to the terminal re-enters it.
+        GameData.ActiveSetChanged += set => AutoLair.DropMarksOfOtherGameData(set);
+        AutoLair.MarksOfOtherGameDataDropped += (markedOn, active) =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(
+                $"[Lair marks were dropped: their rooms belonged to game data '{markedOn ?? "(none)"}', and '{active ?? "(none)"}' is active now]"));
 
         // Auto-Lair beginning a run is a loop-start for gear purposes — swap to the
         // Default set, same as LoopRunner's ReachedFirstWaypoint above.
@@ -9822,13 +9902,20 @@ public sealed class AppServices
                 SellDetour.Cancel();
                 AutoDeposit.Cancel();
             },
-            askResume: errand => Dialogs.OpenWindowAsync<ViewModels.ConfirmDialogViewModel, bool>(
-                new ViewModels.ConfirmDialogViewModel(
+            askResume: async errand =>
+            {
+                ViewModels.ConfirmDialogViewModel question = new(
                     "Resume first?",
                     $"Stop is holding {errand}.\n\nResume it first? What you just started will begin when it is done.\n\n"
                     + $"No ends {errand} and starts this now.",
-                    yesLabel: "Resume it first", noLabel: "No, drop it")),
+                    yesLabel: "Resume it first", noLabel: "No, drop it");
+                // Kept while it is up, so a change of game data can take it down.
+                _resumeFirstQuestion = question;
+                try { return await Dialogs.OpenWindowAsync<ViewModels.ConfirmDialogViewModel, bool>(question); }
+                finally { if (ReferenceEquals(_resumeFirstQuestion, question)) _resumeFirstQuestion = null; }
+            },
             post: run => Avalonia.Threading.Dispatcher.UIThread.Post(run));
+        MovementControl.EndingForGameDataChange += EndHeldRunsForGameDataChange;
         StashTransfer.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainerWalk.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainFunding.Finished += _ => MovementControl.NoteErrandStateChanged();
@@ -10117,7 +10204,7 @@ public sealed class AppServices
         MovementControl.Stopping += TokenRoute.Cancel;
         // A stash transfer is between walks while it searches, collects or deposits,
         // so the walker's own Stopped wouldn't reach it there.
-        MovementControl.Stopping += () => StashTransfer.Cancel("stopped by the user");
+        MovementControl.Stopping += () => StashTransfer.Cancel(MovementControl.GameDataChangeStop ?? "stopped by the user");
         // So is a walk between two of its legs: standing at a giver, a shop or an
         // item's source, with the coordinator that brought it there about to issue
         // the next leg. The walker says Stopped for a journey left standing, which
@@ -10315,7 +10402,7 @@ public sealed class AppServices
         // Stop with no engine running to report it (an event waiting or resting, or
         // suspended behind a detour) still ends the event and its queue. Wired here,
         // after Events exists; MovementControl is built further up.
-        MovementControl.Stopping += Events.NoteUserStop;
+        MovementControl.Stopping += () => Events.NoteStop(MovementControl.GameDataChangeStop ?? "stopped by the user");
         Events.SetStatsReader(ReadEventReadings);
         GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
         BossTimers.BossKilled += def => Events.NoteBossKilled(def.Name);

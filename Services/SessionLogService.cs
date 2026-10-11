@@ -127,9 +127,15 @@ public sealed class SessionLogService : IDisposable
         RewriteTransactions(_transactions.Snapshot());
     }
 
+    // A yell heard from the next room is logged "Yell Someone (from the north): text".
+    // A player's name is one word, so the marker after the speaker is unambiguous, and a
+    // line written before the direction was kept ("Yell Someone: text") reads as no direction.
+    private const string HeardFromOpen = " (from ";
+
     internal static string FormatChatLine(ChatLogEntry entry)
     {
         string speaker = entry.Speaker is null ? string.Empty : $" {entry.Speaker}";
+        if (!string.IsNullOrEmpty(entry.HeardFrom)) speaker += $"{HeardFromOpen}{entry.HeardFrom})";
         return $"[{entry.Timestamp.ToLocalTime().ToString(StampFormat)}] {entry.Channel}{speaker}: {entry.Message}";
     }
 
@@ -217,7 +223,18 @@ public sealed class SessionLogService : IDisposable
         string? speaker = sp < 0 ? null : head[(sp + 1)..];
         if (!Enum.TryParse(channelName, out ChatChannel channel)) return false;
 
-        entry = new ChatLogEntry(stamp, channel, speaker, message, message);
+        string? heardFrom = null;
+        if (channel == ChatChannel.Yell && speaker is not null && speaker.EndsWith(')'))
+        {
+            int open = speaker.IndexOf(HeardFromOpen, StringComparison.Ordinal);
+            if (open > 0)
+            {
+                heardFrom = speaker[(open + HeardFromOpen.Length)..^1];
+                speaker = speaker[..open];
+            }
+        }
+
+        entry = new ChatLogEntry(stamp, channel, speaker, message, message, HeardFrom: heardFrom);
         return true;
     }
 

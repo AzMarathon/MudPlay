@@ -1209,11 +1209,19 @@ public sealed class EventManager : IDisposable
     // The user pressed Stop (MovementController.Stopping, the Navigation window's
     // Stop). The engines say so themselves when one of them is running; this is for
     // a run with none to say it: a wait, a rest, or one suspended behind a detour.
-    public void NoteUserStop()
+    public void NoteUserStop() => NoteStop("stopped by the user");
+
+    // The same stop with its own reason: a change of game data stops everything the
+    // way the user's Stop does (MovementController.StopForGameDataChange).
+    public void NoteStop(string why)
     {
         // Not a Stop this manager's own engine start set off.
-        if (!_driving) EndByUser("stopped by the user");
+        if (!_driving) EndByUser(why);
     }
+
+    // The event running now, by name, or null: for the notice of what a change of
+    // game data ended.
+    public string? RunningEventName => _run is { } run ? Label(run.Event) : null;
 
     // The connection dropped (EventScheduler.NotifyDisconnected, ahead of the
     // engines' own handling of the drop). Everything is kept; see the header.
@@ -1981,7 +1989,7 @@ public sealed class EventManager : IDisposable
             Dictionary<RoomKey, int?> snap = new();
             foreach (RoomKey k in al.Marked)
                 snap[k] = al.Overrides.TryGetValue(k, out int? v) ? v : null;
-            return new EventResumePlan.AutoLair(snap);
+            return new EventResumePlan.AutoLair(snap, OffARun: true, MarkedOn: al.MarksGameData);
         }
         if (_loopRunner is not null
             && _loopRunner.State is not LoopState.Idle
@@ -2028,9 +2036,17 @@ public sealed class EventManager : IDisposable
                     if (_autoLair is null) return EngineStart.Refused;
                     if (_autoLair.IsActive) return EngineStart.StillRunning;
                     EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Lair, "event resume");
-                    _autoLair.Clear();
-                    foreach (KeyValuePair<RoomKey, int?> kv in al.Markers)
-                        _autoLair.Mark(kv.Key, kv.Value);
+                    if (al.OffARun)
+                    {
+                        // Marked on another game data than the active one: not started.
+                        if (!_autoLair.RestoreMarks(al.Markers, al.MarkedOn)) return EngineStart.Refused;
+                    }
+                    else
+                    {
+                        _autoLair.Clear();
+                        foreach (KeyValuePair<RoomKey, int?> kv in al.Markers)
+                            _autoLair.Mark(kv.Key, kv.Value);
+                    }
                     return _autoLair.Start() ? EngineStart.Started : EngineStart.Refused;
                 case EventResumePlan.Walker w:
                     if (_walker is null) return EngineStart.Refused;
@@ -2055,7 +2071,11 @@ public sealed class EventManager : IDisposable
         {
             public override string Describe() => $"loop '{SavedLoop.Name}'";
         }
-        public sealed record AutoLair(Dictionary<RoomKey, int?> Markers) : EventResumePlan
+        // OffARun: the markers are what a run had when the event took over from it,
+        // with the game data they were marked on (MarkedOn). They go back only while
+        // that set is the active one. Markers read from a saved setup are the active
+        // set's.
+        public sealed record AutoLair(Dictionary<RoomKey, int?> Markers, bool OffARun = false, string? MarkedOn = null) : EventResumePlan
         {
             public override string Describe() => $"auto-lair ({Markers.Count} markers)";
         }
