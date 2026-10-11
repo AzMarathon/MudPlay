@@ -886,6 +886,10 @@ public sealed class AppServices
     // report's answer to "why did it send that" (SentCommandTrail).
     public SentCommandTrail SentCommands { get; } = new();
 
+    // How long each engine has been in its state, sampled once a second (probes
+    // are registered by BugReportHoldsAndWaits once every engine exists).
+    public EngineStateWatch StateWatch { get; } = new();
+
     // Two-flag one-shot coordinator for "intentional hangup" intent.
     // Set by every engine that deliberately drops the carrier
     // (Game.Remote.HangupHandler; the hang-up-if-naked /

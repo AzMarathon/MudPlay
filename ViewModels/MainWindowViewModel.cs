@@ -800,6 +800,7 @@ public partial class MainWindowViewModel : ObservableObject
     // enough to look live without burning cycles. State sourced from
     // AppServices.Tick (combat) + AppServices.Regen (HP / MA).
     private readonly DispatcherTimer _statusTickRefresh;
+    private readonly DispatcherTimer _engineStateSample;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CaptureMenuLabel))]
@@ -878,6 +879,17 @@ public partial class MainWindowViewModel : ObservableObject
             RefreshLocationSlot();
         };
         _statusTickRefresh.Start();
+
+        // Once a second: note how long each engine has been in its state (for a
+        // bug report's "Holds and waits"), and let the heartbeat decide whether
+        // its next status line is due.
+        BugReportHoldsAndWaits.RegisterProbes(AppServices.Current);
+        _engineStateSample = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = EngineStateWatch.SampleInterval,
+        };
+        _engineStateSample.Tick += (_, _) => AppServices.Current.StateWatch.Sample(DateTimeOffset.Now);
+        _engineStateSample.Start();
         RefreshStatusBarTicks();
 
         // Mirror RoomTracker into the status-bar location slot so the

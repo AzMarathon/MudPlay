@@ -107,6 +107,7 @@ public static class BugReportBuilder
         List<Section> sections =
         [
             new("Session", SafeSection(() => BuildSession(svc, realm, now) + AccountDetailNote(scrubber))),
+            new(BugReportHoldsAndWaits.Heading, SafeSection(() => BugReportHoldsAndWaits.Build(svc, now))),
             new("Player state", SafeSection(() => BuildPlayerState(svc))),
             new("Statline", SafeSection(() => BuildStatline(svc))),
             new("Party", SafeSection(() => BuildParty(svc))),

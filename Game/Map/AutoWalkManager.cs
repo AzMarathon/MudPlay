@@ -3938,6 +3938,26 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // as a force-clear, so the room is fought with Auto-Combat off.
     public bool AwaitingEmptyRoom => _emptyRoom.Active;
 
+    // What the walk is standing on right now, for a bug report: each answer it
+    // has sent for and not had. A walk that "just sits there" is in one of these.
+    public IReadOnlyList<string> DescribeWaits()
+    {
+        List<string> waits = new();
+        if (_stepInFlight) waits.Add("a step is in flight (sent, its room not seen yet)");
+        if (_awaitingPromptForCommand) waits.Add("the prompt after a command step");
+        if (_awaitingDoorOpen) waits.Add("the door handler");
+        if (_awaitingHiddenReveal) waits.Add("the hidden-exit search");
+        if (_awaitingWinch) waits.Add("the winch handler");
+        if (_awaitingTrapDisarm) waits.Add("the trap disarm");
+        if (_awaitingBoatArrival) waits.Add("a boat's arrival");
+        if (_awaitingSysGotoArrival) waits.Add("a sys goto landing");
+        if (_awaitingGreetTeleport) waits.Add("a greet teleport");
+        if (_emptyRoom.Active) waits.Add("an empty room for a room command");
+        if (_abandonHold) waits.Add("holds the AbandonedCombat gate");
+        if (_retryCount > 0) waits.Add($"{_retryCount} retry(ies) of the step");
+        return waits;
+    }
+
     // See EmptyRoomCommandHold.SetHooks.
     public void SetRoomClearHooks(Func<bool> roomHasMonster, Action requestRoomClear, Action abortPartyReform,
         Func<Room, string, bool> commandNeedsEmptyRoom)

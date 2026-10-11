@@ -287,6 +287,27 @@ public sealed class LoopRunner : IRecoverableEngine
 
     // True while a loop step is on the wire awaiting its landing — including while the
     // loop is paused mid-step (see LoopCombatSuppression.JudgeEnteringRoom).
+    // What the loop is standing on right now, for a bug report: each answer it has
+    // sent for and not had.
+    public IReadOnlyList<string> DescribeWaits()
+    {
+        List<string> waits = new();
+        if (_stepInFlight)
+            waits.Add("a step is in flight" + (_expectedMoveTarget is { } to ? $" (expects {to})" : string.Empty));
+        if (_awaitingCommandReplies)
+            waits.Add($"a command's replies ({_commandPromptsOwed} prompt(s) owed"
+                + (_commandRedisplayAwaited ? ", a room re-display awaited" : string.Empty) + ")");
+        if (_awaitingDoorOpen) waits.Add("the door handler");
+        if (_awaitingHiddenReveal) waits.Add("the hidden-exit search");
+        if (_awaitingWinch) waits.Add("the winch handler");
+        if (_awaitingTrapDisarm) waits.Add("the trap disarm");
+        if (_emptyRoom.Active) waits.Add("an empty room for a waypoint command");
+        if (_fleeHolding) waits.Add("held for a flee");
+        if (_recoverAttempts > 0)
+            waits.Add($"{_recoverAttempts} recovery attempt(s), the last at {_lastRecoveryAttemptAt.ToLocalTime():HH:mm:ss}");
+        return waits;
+    }
+
     public bool IsStepInFlight => _stepInFlight;
     public bool IsAwaitingTrapDisarm => _awaitingTrapDisarm;
 
