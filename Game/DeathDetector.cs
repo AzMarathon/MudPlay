@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using MudPlay.Game.Map;
+using MudPlay.Game.Recovery;
 using MudPlay.Services;
 using MudPlay.Terminal;
 
@@ -76,6 +77,10 @@ public sealed partial class DeathDetector : IDisposable
     // NoteDeath below.
     public bool LastDeathSavedInColliseum { get; private set; }
 
+    // Whether the realm is Paradigm, where an arena death is told by the room and
+    // not by that line (ArenaDeathRooms.DeathTookNothing). Unset reads as Stock.
+    public Func<bool>? IsParadigm { get; set; }
+
     private void OnLine(LineExtractor.EmittedLine line)
     {
         if (line.IsPromptLine) return;
@@ -89,10 +94,15 @@ public sealed partial class DeathDetector : IDisposable
         if (!int.TryParse(m.Groups[1].ValueSpan, out int lives)) return;
         LastDeathSavedInColliseum = _colliseumLineSeen;
         _colliseumLineSeen = false;
+        // Settled here, at the lives readout: the colliseum line comes ahead of it
+        // in the same burst, and the room is still the one died in (the graveyard
+        // is displayed after this line).
+        bool tookNothing = ArenaDeathRooms.DeathTookNothing(
+            _tracker.State.CurrentRoom?.Key, LastDeathSavedInColliseum, paradigm: IsParadigm?.Invoke() == true);
         _log?.Info("DeathDetector",
             $"Death observed: '{line.Text.Trim()}' → {lives} lives left."
-            + (LastDeathSavedInColliseum ? " A colliseum death: nothing was lost." : string.Empty));
-        _tracker.NoteDeath(lives, line.Text.Trim(), line.Timestamp);
+            + (tookNothing ? " An arena death: nothing was lost." : string.Empty));
+        _tracker.NoteDeath(lives, line.Text.Trim(), line.Timestamp, tookNothing);
     }
 
     // Both post-death lives readouts: "You now have N lives remaining." (suicide /

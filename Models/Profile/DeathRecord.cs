@@ -102,6 +102,16 @@ public sealed class DeathRecord
     // been observed.
     public CurrencyHoldings? CoinsAtDeath { get; set; }
 
+    // An arena death: the game took no item, coin or key, so there is no pile and
+    // nothing to recover. The record is in the history all the same, written
+    // Recovered with nothing listed. false on every other death, and on records
+    // from before it was kept.
+    public bool NothingLost { get; set; }
+
+    // What the detail panel's item columns say of such a death, in place of
+    // "None recorded.", which reads as a pile nobody listed.
+    private const string NothingLostText = "Nothing was lost: an arena death.";
+
     // "{Map}/{Room}" for the DEATH grid's map/room column, or "—" when the death
     // room was unknown. Display-only — not persisted.
     [JsonIgnore]
@@ -117,7 +127,7 @@ public sealed class DeathRecord
     // death" column, or a placeholder when none were recorded. Display-only —
     // not persisted.
     [JsonIgnore]
-    public string EquippedAtDeathText => DescribeItems(EquippedAtDeath);
+    public string EquippedAtDeathText => NothingLost ? NothingLostText : DescribeItems(EquippedAtDeath);
 
     // Newline-joined carried-item names for the DEATH detail panel's "Inventory
     // lost" column, followed by the coins-on-hand lines (each denomination the
@@ -128,6 +138,7 @@ public sealed class DeathRecord
     {
         get
         {
+            if (NothingLost) return NothingLostText;
             var lines = new List<string>();
             if (LostItems is { Count: > 0 })
                 lines.AddRange(LostItems.Select(i => i.Name));
