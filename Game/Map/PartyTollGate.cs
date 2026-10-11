@@ -79,8 +79,11 @@ public sealed class PartyTollGate
 
     // Guards the two mark tables, which a route search reads.
     private readonly object _marksLock = new();
-    // What each member was last handed at each toll, in copper.
-    private readonly Dictionary<(string Name, TollKey Toll), long> _funded = new(FundedComparer.Instance);
+    // What each member was last handed at each toll, in copper, and whether a toll
+    // has been crossed since: an answer of theirs after that is their own word, not
+    // the echo of what we handed them.
+    private readonly Dictionary<(string Name, TollKey Toll), (long Copper, bool CrossedSince)> _funded =
+        new(FundedComparer.Instance);
     // Members who can't be paid for at a toll for now, and why: a hand-over the
     // game refused or never confirmed, or one that didn't get them through.
     private readonly Dictionary<(string Name, TollKey Toll), (DateTime At, string Why)> _unable =
@@ -100,9 +103,12 @@ public sealed class PartyTollGate
     // under way (PartyComebackManager.WentBackFor): the toll turned them away once.
     public Func<string, RoomKey, RoomKey, bool>? WentBackFor { get; set; }
 
-    // For the bug report: the last decision made at a toll, with its time, and
-    // the purses it was made on.
-    public string LastDecision { get; private set; } = "(none)";
+    // For the bug report: the latest decisions made at tolls, oldest first, each
+    // with its time, and the purses the last one was made on. A hand-over and the
+    // crossing it paid for are two decisions, so one alone would hide the first.
+    private const int DecisionsKept = 8;
+    private readonly List<string> _decisions = new();
+    public IReadOnlyList<string> Decisions => _decisions.ToArray();
     public string LastReadings { get; private set; } = "(none)";
 
     public PartyTollGate(
@@ -286,25 +292,27 @@ public sealed class PartyTollGate
 
     // A member we handed coin at this toll, gone back for from it since, and short
     // again: the hand-over didn't get them through, and they aren't paid twice.
-    // One who now holds the toll is no longer about what we handed them.
+    // One who says, after a crossing, that they hold the toll themselves is no
+    // longer about what we handed them.
     private void NoteFundedAndTurnedAway(RoomKey from, TollKey toll, long cost, IReadOnlyList<string> followers)
     {
         foreach (string name in followers)
         {
-            long given;
+            (long Copper, bool CrossedSince) given;
             lock (_marksLock)
                 if (!_funded.TryGetValue((name, toll), out given)) continue;
             (PartyWealthTracker.PurseKnowledge knowledge, long copper) = _wealth.FreshPurse(name);
             if (knowledge == PartyWealthTracker.PurseKnowledge.Unasked) continue;
             if (knowledge == PartyWealthTracker.PurseKnowledge.Read && copper >= cost)
             {
-                lock (_marksLock) _funded.Remove((name, toll));
+                if (given.CrossedSince)
+                    lock (_marksLock) _funded.Remove((name, toll));
                 continue;
             }
             if (WentBackFor?.Invoke(name, from, toll.Target) != true) continue;
             lock (_marksLock)
                 _unable[(name, toll)] = (_clock(),
-                    $"was handed {CurrencyFormat.Full(given)} at this toll already and was still turned away: not paid for twice");
+                    $"was handed {CurrencyFormat.Full(given.Copper)} at this toll already and was still turned away: not paid for twice");
         }
     }
 
@@ -418,7 +426,7 @@ public sealed class PartyTollGate
         if (confirmed > 0)
         {
             _wealth.NoteGiven(name, confirmed);
-            lock (_marksLock) _funded[(name, funding.Toll)] = confirmed;
+            lock (_marksLock) _funded[(name, funding.Toll)] = (confirmed, CrossedSince: false);
         }
         if (failure is null)
             _log?.Info(LogCategory, $"{funding.Crossing}: the game confirmed {CurrencyFormat.Full(confirmed)} handed to {name}.");
@@ -450,6 +458,9 @@ public sealed class PartyTollGate
         {
             if (!IsToll(in exit) || (exit.Target != now && exit.Landing != now)) continue;
             _wealth.ExpireReadings();
+            lock (_marksLock)
+                foreach ((string Name, TollKey Toll) key in _funded.Keys.ToArray())
+                    _funded[key] = (_funded[key].Copper, CrossedSince: true);
             return;
         }
     }
@@ -471,7 +482,8 @@ public sealed class PartyTollGate
 
     private void Decide(string text)
     {
-        LastDecision = $"{_clock():HH:mm:ss} {text}";
+        if (_decisions.Count == DecisionsKept) _decisions.RemoveAt(0);
+        _decisions.Add($"{_clock():HH:mm:ss} {text}");
         _log?.Info(LogCategory, text);
     }
 
