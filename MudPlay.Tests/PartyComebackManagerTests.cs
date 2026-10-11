@@ -2183,4 +2183,125 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Party.Dispose();
         h.Engine.Dispose();
     }
+
+    // ----- a follower an exit refused: Stock keeps them on the leader's list -----
+    //
+    // GAME_MECHANICS "A follower who can't move is left behind". With the realm
+    // probe unset or false (Paradigm) nothing differs from what it always was;
+    // the tests named Paradigm_ pin that.
+
+    // Six rows, the member asking among them.
+    private static void SeatSix(Harness h, string asking)
+    {
+        SeatFollower(h, asking);
+        for (int i = 1; i <= 5; i++) SeatFollower(h, $"Member{i}");
+    }
+
+    [Fact]
+    public void Paradigm_PartyOfSix_TheAskingMembersOwnRowCounts_PartyIsFull()
+    {
+        using Harness h = NewHarness();
+        SeatSix(h, "Tank");
+        StartLair(h);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+
+        Assert.Contains("my party is full", h.LastReply);
+        Assert.True(Sent(h, "/Tank @forget"));
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    // On Stock the member an exit turned away is still on our list: the sixth row
+    // is their own seat, not one we refilled.
+    [Fact]
+    public void Stock_PartyOfSix_TheAskingMembersOwnRowIsTheirSeat_TheyAreFetched()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        SeatSix(h, "Tank");
+        StartLair(h);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+
+        Assert.Contains(PartyComebackManager.ComingForPickup, h.LastReply);
+        Assert.False(Sent(h, "/Tank @forget"));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+    }
+
+    // A seventh asking, with no row of their own: the party is full on Stock too.
+    [Fact]
+    public void Stock_PartyOfSix_SomeoneWithNoRowAsks_PartyIsFull()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        for (int i = 1; i <= 6; i++) SeatFollower(h, $"Member{i}");
+        h.Router.Dispatch(Line("Straggler started to follow you."));
+        h.Router.Dispatch(Line("Straggler stops following you."));
+        StartLair(h);
+
+        h.Engine.DispatchForTests(Telepath("Straggler", "@comeback 1/3"));
+
+        Assert.Contains("my party is full", h.LastReply);
+    }
+
+    // A member with a row on our roster asks from the room we stand in, so they
+    // are reached at once (ExplicitRoom_AlreadyThere_ReInvitesFollower has why the
+    // tracker is settled after the request). Returns what PartyManager sent.
+    private static List<string> ReachAMemberStillOnOurRoster(Harness h)
+    {
+        List<string> partyWire = new();
+        h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        SeatFollower(h, "Tank");
+        StartLair(h);
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/1"));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.Contains("found you - re-inviting Tank", h.LastReply);
+        return partyWire;
+    }
+
+    [Fact]
+    public void Paradigm_ReachingAMemberWithARosterRow_Invites_AndAsksNobodyToJoin()
+    {
+        using Harness h = NewHarness();
+
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+
+        Assert.Single(partyWire, w => w == "invite Tank");
+        Assert.False(Sent(h, "/Tank @join"));
+    }
+
+    // The game told us nothing of the drop (as on Stock); the member's request
+    // is how we know. They still have a row on our roster.
+    private static List<string> LeftAtAnExitByAutoLair_NoLineFromTheGame(Harness h)
+    {
+        h.Comeback.SetWireSender(_ => { });
+        List<string> partyWire = new();
+        h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        h.Lair.Mark(new RoomKey(1, 1));
+        h.Lair.Mark(new RoomKey(1, 3));
+        Assert.True(h.Lair.Start());
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        now += TimeSpan.FromSeconds(1);
+        StepThroughTheGate(h);
+        now += TimeSpan.FromSeconds(1);
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+        Assert.Contains(PartyComebackManager.LairGateReply, h.LastReply);
+        Assert.Equal(new[] { "Tank" }, h.Comeback.InviteOnSight);
+        return partyWire;
+    }
+
+    [Fact]
+    public void Paradigm_AutoLairOnSight_PassesOverAMemberWithARosterRow()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+
+        AlsoHere(h, "Tank");
+
+        Assert.DoesNotContain("invite Tank", partyWire);
+        Assert.False(Sent(h, "/Tank @join"));
+    }
 }

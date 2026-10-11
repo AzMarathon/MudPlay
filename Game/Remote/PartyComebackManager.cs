@@ -224,6 +224,21 @@ public sealed class PartyComebackManager : IDisposable
     // Test seam — every outbound wire buffer, in order.
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
+    // True on a Stock realm. Stock ends the follow of a member whose follow move
+    // an exit refused and leaves them on our member list: nothing is printed to
+    // us, and a `join` of theirs works with no fresh invite (GAME_MECHANICS "A
+    // follower who can't move is left behind"). Paradigm drops them and tells us.
+    // Unset reads as Paradigm, where nothing here differs from what it always did.
+    public Func<bool>? OnStock { get; set; }
+
+    // Stock, and that member has a row on our roster: by the game's rule they are
+    // still on our list, whether or not they follow. The game tells a Stock
+    // leader nothing when a follow ends, so the row is all there is to go on; a
+    // member it did take off the list (held, stunned or too heavy when we moved)
+    // keeps a row here until a `par` drops it, which is why everything built on
+    // this falls back to an invite.
+    private bool StillOnOurList(string given) => OnStock?.Invoke() == true && MemberInParty(given);
+
     public PartyComebackManager(
         RemoteCommandManager engine,
         PartyManager party,
@@ -1174,8 +1189,17 @@ public sealed class PartyComebackManager : IDisposable
         }
 
         // Party-full gate — we backfilled the empty slot while they were gone, so
-        // there's no seat to recover them into.
-        if (_party.State.Members.Count >= MaxPartySize)
+        // there's no seat to recover them into. On Stock a member an exit turned
+        // away is still on our list (StillOnOurList), so the row we hold for them is
+        // their own seat and not one we refilled.
+        int seatsTaken = _party.State.Members.Count;
+        if (seatsTaken >= MaxPartySize && StillOnOurList(senderGiven))
+        {
+            seatsTaken--;
+            _log?.Info(LogCategory,
+                $"{senderGiven} asks to be fetched and still has a row on our list (Stock keeps a member an exit turned away): their own seat isn't counted against a full party.");
+        }
+        if (seatsTaken >= MaxPartySize)
         {
             reply("my party is full - can't take you back");
             DeclineAndForget(senderGiven);
