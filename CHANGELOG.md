@@ -14,6 +14,7 @@
 - Off with the master switch
 - Bug report lists what was put on this way and what was set aside
 - Periodic Damage Room Spells: Paradigm's desert rows show desert damage, 5–20, cast without the waterskin buff
+- Periodic Damage Room Spells: chaos storm and the drowning spells show their set damage, no "more with level"
 
 ## 3.167.17
 

@@ -240,7 +240,9 @@ public sealed class RoomSpellDamageClassifierTests
     public void Reading_DamageThatMagicResistanceLessens_Counts()
     {
         // Chaos storm, the room spell of Paradigm's Barley Fields: ability 17, and a
-        // per-level step on the top of its range.
+        // per-level step on the top of its range. As a room's own spell it does its
+        // set damage (user, 2026-10-10: "chaos storm no, its set by the spell
+        // itself"); this test read "30–35, more with level" before that ruling.
         _spells[212] = new SpellFormulaInput
         {
             Number = 212, MinBase = 30, MaxBase = 35, MaxInc = 3, MaxIncLVLs = 1,
@@ -249,7 +251,44 @@ public sealed class RoomSpellDamageClassifierTests
 
         RoomSpellDamageReading r = Read(212);
         Assert.Equal(RoomSpellDamage.EveryTick, r.Kind);
-        Assert.Equal("30–35, more with level", RoomSpellDamageText.Damage(r));
+        Assert.Equal("30–35", RoomSpellDamageText.Damage(r));
+    }
+
+    // The drowning spells that are rooms' own spells on Paradigm: each record has a
+    // step of 1 every 2 levels on both ends and a cap of 50, and each does its set
+    // damage all the same (user, 2026-10-10: "they do their set damage as well").
+    [Theory]
+    [InlineData(5256)]   // ocean drowning, 1,346 rooms
+    [InlineData(5687)]   // murky drown, 44 rooms
+    public void Reading_ARoomsOwnSpell_DoesItsSetDamage_WhateverStepsItsRecordHas(int spell)
+    {
+        _spells[spell] = new SpellFormulaInput
+        {
+            Number = spell, MinBase = 5, MaxBase = 15, Cap = 50, Dur = 5,
+            MinInc = 1, MinIncLVLs = 2, MaxInc = 1, MaxIncLVLs = 2,
+            Abilities = [new SpellAbility(Damage, 0), new SpellAbility(144, 0), new SpellAbility(DescMsg, 66)],
+        };
+
+        RoomSpellDamageReading r = Read(spell);
+        Assert.Equal(RoomSpellDamage.EveryTick, r.Kind);
+        Assert.False(r.GrowsWithLevel);
+        Assert.Equal("5–15", RoomSpellDamageText.Damage(r));
+    }
+
+    [Fact]
+    public void Reading_ASpellATextblockCasts_StillGrowsWithTheCharactersLevel()
+    {
+        // Ice fall behind the cracked pit: cast from the textblock, which rolls it
+        // at the character's own level.
+        Spell(1213, 0, 0, (TextBlock, 4077));
+        Block(4077, "failitem 930:failitem 191:message 2979:teleport 1524 7:message 2980:cast 1142\n");
+        _spells[1142] = new SpellFormulaInput
+        {
+            Number = 1142, MinBase = 50, MaxBase = 60, Cap = 65, MinInc = 4, MinIncLVLs = 1, MaxInc = 7, MaxIncLVLs = 1,
+            Abilities = [new SpellAbility(Damage, 0)],
+        };
+
+        Assert.Equal("50–60, more with level", RoomSpellDamageText.Damage(Read(1213)));
     }
 
     [Fact]

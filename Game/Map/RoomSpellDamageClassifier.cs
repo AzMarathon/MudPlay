@@ -142,7 +142,13 @@ public static class RoomSpellDamageClassifier
                     (int min, int max) = ability.Value != 0 ? (ability.Value, ability.Value)
                         : baseIsBlock ? (0, 0)
                         : (Math.Min(spell.MinBase, spell.MaxBase), Math.Max(spell.MinBase, spell.MaxBase));
-                    bool grows = ability.Value == 0 && !baseIsBlock
+                    // The room's own spell is rolled between its two base values
+                    // and no level enters (GAME_MECHANICS "Resting in a room whose
+                    // spell does damage": chaos storm and the drowning spells do
+                    // their set damage). A spell a textblock casts is rolled at
+                    // the character's own level, so its per-level step counts.
+                    bool roomsOwnCast = depth == 0;
+                    bool grows = !roomsOwnCast && ability.Value == 0 && !baseIsBlock
                         && ((spell.MinInc != 0 && spell.MinIncLVLs != 0) || (spell.MaxInc != 0 && spell.MaxIncLVLs != 0));
                     hits.Add(new Hit(
                         conditions.Length > 0 ? RoomSpellDamage.Conditional : RoomSpellDamage.EveryTick,
