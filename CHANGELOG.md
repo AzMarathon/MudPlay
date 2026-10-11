@@ -1,6 +1,6 @@
 # Version history
 
-## 3.172.0
+## 3.173.0
 
 - Timers of the buffs on you stop while you are out of the game (dropped link, relog, the board's menu) and run on with the time they had left
 - None of yours is recast for time spent away; a buff on a party member keeps its real end, as before
@@ -8,6 +8,13 @@
 - A client killed while in the game saves none, and buffs afresh
 - A buff's wear-off line is read after a reconnect or a restart; a hang-up death found late drops the buffs carried over
 - Bug report says whether the timers are running or standing still, and what a load put back
+
+## 3.172.0
+
+- Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay
+- Members who are short are handed exactly what they lack when you can spare it and your coins make the amount; the step waits for the game to confirm it
+- Otherwise the route goes round the toll, or the walk or loop ends naming the toll and who can't pay
+- A member paid for at a toll that still turned them away is not paid for twice there
 
 ## 3.171.0
 

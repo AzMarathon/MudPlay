@@ -11,9 +11,9 @@ namespace MudPlay.Game.Remote;
 // carrying?" by broadcasting @wealth to every non-self member and aggregating
 // the replies into a single PartyWealthResult. Backs the leader-side toll-gate
 // check: a (Toll: N) exit is per-crosser — every member needs N*100 copper-value
-// on hand — so before routing the party through one the leader confirms every
-// follower can pay. A member who can't cover it (or doesn't reply) means the
-// route avoids that toll room (confirmed mechanic).
+// on hand — so before stepping the party through one the leader asks what every
+// follower holds. What is done about a member who is short or doesn't reply is
+// PartyTollGate's: paid for when we can spare it, the toll not taken otherwise.
 //
 // Same round-trip plumbing as PartyLevelProbe: the query goes out through
 // PartyBroadcaster.Broadcast (one /<given> @wealth per member) and each member's
@@ -29,8 +29,9 @@ namespace MudPlay.Game.Remote;
 // carries no "(= N copper)" tally — observed once as "{Wealth: 26 platinum pieces,
 // 4792 gold crowns}". We fold that in by scanning for "<count> <denomination>" coin
 // phrases and summing via the standard ratio ladder.
-// A member that answers "unknown" or never answers contributes no reading, so the
-// tracker treats them as unaffordable and avoids the toll — the conservative side.
+// A member that answers "unknown" or never answers contributes no reading: for a
+// toll the tracker notes them silent, which counts as unable to pay (user,
+// 2026-10-10); for a fare they are simply not counted.
 //
 // Unlike level, wealth is never persisted to the players table: it drifts
 // constantly with loot / spend, so the probe forwards each fresh reading to the
@@ -66,6 +67,8 @@ public sealed partial class PartyWealthProbe : IDisposable
         public readonly Dictionary<string, long> Wealth = new(StringComparer.OrdinalIgnoreCase);
         public readonly TaskCompletionSource<PartyWealthResult> Tcs =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Told the result where the query completes, on the thread it completes on.
+        public Action<PartyWealthResult>? OnComplete;
     }
 
     private readonly PartyBroadcaster _broadcaster;
@@ -112,6 +115,11 @@ public sealed partial class PartyWealthProbe : IDisposable
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex ForeignCoinPhrase();
 
+    // The shape of another client's answer: its "Wealth:" label, with or without
+    // the brace that client wraps a reply in.
+    [GeneratedRegex(@"^\s*\{?\s*Wealth\s*:", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex ForeignWealthReply();
+
     public PartyWealthProbe(
         PartyBroadcaster broadcaster, ChatRouter chat, PartyState party,
         Action<string, long>? recordWealth = null, LogService? log = null)
@@ -136,11 +144,27 @@ public sealed partial class PartyWealthProbe : IDisposable
     // Broadcast @wealth to the party and complete once every member replies or
     // QueryWindow elapses. Returns an empty result immediately when the party
     // has no one else to ask.
-    public Task<PartyWealthResult> QueryAsync()
-    {
-        if (_disposed) return Task.FromResult(PartyWealthResult.Empty);
+    public Task<PartyWealthResult> QueryAsync() => Begin(onComplete: null);
 
-        PendingQuery pending = new();
+    // The same round-trip for a caller that must act on the answer where it lands
+    // (the toll check holds a walk's step for it): onComplete runs once, when every
+    // member has replied or QueryWindow elapses, and at once when there is nobody
+    // to ask.
+    public void Query(Action<PartyWealthResult> onComplete)
+    {
+        ArgumentNullException.ThrowIfNull(onComplete);
+        Begin(onComplete);
+    }
+
+    private Task<PartyWealthResult> Begin(Action<PartyWealthResult>? onComplete)
+    {
+        if (_disposed)
+        {
+            onComplete?.Invoke(PartyWealthResult.Empty);
+            return Task.FromResult(PartyWealthResult.Empty);
+        }
+
+        PendingQuery pending = new() { OnComplete = onComplete };
         foreach (PartyMember m in _party.Members)
         {
             if (m.IsSelf) continue;
@@ -150,7 +174,10 @@ public sealed partial class PartyWealthProbe : IDisposable
         pending.Expected = pending.Remaining.Count;
 
         if (pending.Expected == 0)
+        {
+            onComplete?.Invoke(PartyWealthResult.Empty);
             return Task.FromResult(PartyWealthResult.Empty);
+        }
 
         _pending.Add(pending);
         _broadcaster.Broadcast("@wealth");
@@ -163,12 +190,14 @@ public sealed partial class PartyWealthProbe : IDisposable
         if (_disposed) return;
         _disposed = true;
         _chat.EntryClassified -= OnChatEntry;
-        foreach (PendingQuery p in _pending.ToArray())
+        PendingQuery[] open = _pending.ToArray();
+        _pending.Clear();
+        foreach (PendingQuery p in open)
         {
             p.Completed = true;
             p.Tcs.TrySetResult(PartyWealthResult.Empty);
+            p.OnComplete?.Invoke(PartyWealthResult.Empty);
         }
-        _pending.Clear();
     }
 
     private void OnChatEntry(ChatLogEntry entry)
@@ -213,11 +242,13 @@ public sealed partial class PartyWealthProbe : IDisposable
         _pending.Remove(p);
 
         int replied = p.Expected - p.Remaining.Count;
-        p.Tcs.TrySetResult(new PartyWealthResult(
+        PartyWealthResult result = new(
             p.Expected, replied,
-            new Dictionary<string, long>(p.Wealth, StringComparer.OrdinalIgnoreCase)));
+            new Dictionary<string, long>(p.Wealth, StringComparer.OrdinalIgnoreCase));
+        p.Tcs.TrySetResult(result);
         _log?.Info("PartyWealth",
             $"@wealth — {replied}/{p.Expected} replied, {p.Wealth.Count} wallets known.");
+        p.OnComplete?.Invoke(result);
     }
 
     private void DefaultArmWindow(Action onElapsed)
@@ -242,9 +273,16 @@ public sealed partial class PartyWealthProbe : IDisposable
             return true;
         }
 
-        // Foreign-client fallback: sum every "<count> <denomination>" coin phrase.
-        // Only treat as a reading when at least one phrase parses, so a non-coin
-        // line ("wealth unknown", chatter) still falls through to false.
+        // Foreign-client fallback: sum every "<count> <denomination>" coin phrase,
+        // in a message shaped like the one such answer on record ("{Wealth: …}").
+        // A telepath that merely mentions coins ("can you spare 2 gold for the
+        // toll") is talk, not an answer: read as a purse, it drew a hand-over.
+        // Only treat as a reading when at least one phrase parses.
+        if (!ForeignWealthReply().IsMatch(message))
+        {
+            copper = 0;
+            return false;
+        }
         long total = 0;
         bool any = false;
         foreach (Match cm in ForeignCoinPhrase().Matches(message))
