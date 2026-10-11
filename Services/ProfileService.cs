@@ -137,6 +137,30 @@ public sealed class ProfileService
         ProfileRenamed?.Invoke(oldBbs, oldName);
     }
 
+    // The same news for profiles that are not the loaded one, and for the ones that
+    // are gone: whatever is kept outside a profile under its BBS and name (files in a
+    // game-data set's folder, say) has to follow it or go with it, since the pair
+    // may be given to another character later.
+    //   StoredProfileMoved  a stored profile was renamed or moved to another BBS
+    //                       (the loaded one tells of itself through ProfileRenamed)
+    //   ProfileDeleted      a profile was deleted, loaded or not
+    //   BbsRenamed          a BBS was renamed: every profile under it, loaded or
+    //                       not, is now under the new name (raised after
+    //                       ProfileRenamed for the loaded one)
+    //   BbsDeleted          a BBS was removed, and every profile under it
+    // A copy of a profile raises nothing: the copy is another character.
+    public event Action<ProfileRef, ProfileRef>? StoredProfileMoved;
+    public event Action<ProfileRef>? ProfileDeleted;
+    public event Action<string, string>? BbsRenamed;
+    public event Action<string>? BbsDeleted;
+
+    // Raise BbsDeleted. The BBS folder is BbsProfileStore's to remove; whoever
+    // removes one says so here, as a rename is told through RenameBbs.
+    public void NotifyBbsDeleted(string bbsName)
+    {
+        if (!string.IsNullOrWhiteSpace(bbsName)) BbsDeleted?.Invoke(bbsName);
+    }
+
     // Load the profile stored at
     // Data/BBS/{bbsName}/profiles/{profileName}/profile.json and fire
     // ProfileLoaded. If a different profile is already loaded it is closed
@@ -433,6 +457,7 @@ public sealed class ProfileService
             Save();
             RaiseRenamedFrom(oldBbs, CurrentProfileName);
         }
+        BbsRenamed?.Invoke(oldBbs, newBbs);
     }
 
     // The realm a saved character is assigned to (CharacterProfile.Realm; null =
@@ -774,12 +799,14 @@ public sealed class ProfileService
             Close();
             if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
             Log?.Info(LogCategory, $"Deleted the loaded profile '{profileName}' on '{bbsName}'.");
+            ProfileDeleted?.Invoke(new ProfileRef(bbsName, profileName));
             LoadDefaultProfile();
             return;
         }
 
         if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
         Log?.Info(LogCategory, $"Deleted profile '{profileName}' on '{bbsName}'.");
+        ProfileDeleted?.Invoke(new ProfileRef(bbsName, profileName));
     }
 
     // Move a profile's folder to a new BBS and/or name — unifies rename (same
@@ -823,6 +850,7 @@ public sealed class ProfileService
             JsonStore.Save(path, moved);
         }
         Log?.Info(LogCategory, $"Moved profile '{fromName}' ({fromBbs}) → '{toName}' ({toBbs}).");
+        StoredProfileMoved?.Invoke(new ProfileRef(fromBbs, fromName), new ProfileRef(toBbs, toName));
     }
 
     // Enumerate every profile across every BBS that has a primary profile.json
