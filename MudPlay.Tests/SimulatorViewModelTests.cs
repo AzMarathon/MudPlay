@@ -54,6 +54,8 @@ public sealed class SimulatorViewModelTests : IDisposable
         public required AreaRankingStore Rankings { get; init; }
         // The loaded profile as the Simulator reads it; null is the default profile.
         public string? Character { get; set; } = One;
+        // The character's level as the last `stat` gave it; 0 before any.
+        public int Level { get; set; } = 30;
 
         // A profile swap as the Simulator hears of it: the loaded character is
         // closed, then the next is loaded.
@@ -98,11 +100,11 @@ public sealed class SimulatorViewModelTests : IDisposable
         var resolver = new RouteExpResolver(graph, new BfsMapper(graph), timers, cache);
         var loops = new LoopManager(new BfsMapper(graph), graph);
         if (saveLoops) loops.LoadAll(_loopSet);
+        Harness? harness = null;
         var simulation = new SimulationSource(
-            _ => null, () => null, () => 30, _ => 1.0, () => new RoomKey(1, 1), _root);
+            _ => null, () => null, () => harness?.Level ?? 30, _ => 1.0, () => new RoomKey(1, 1), _root);
         var session = new ExpEstimatorSessionViewModel(resolver, loops, graph, cache);
         SimulatorViewModel? sim = null;
-        Harness? harness = null;
         AreaRankingStore? store = rankings;
         if (store is null)
         {
@@ -125,9 +127,17 @@ public sealed class SimulatorViewModelTests : IDisposable
     }
 
     // A finished ranking of one area, as RankAreas hands one over.
-    private static AreaRanking Ranking(string area, int level = 40) => new(
+    private static AreaRanking Ranking(string area, int level = 30) => new(
         new[] { new AreaRank(area, level, new[] { new RoomKey(1, 1), new RoomKey(1, 2) }, 2, new LoopSimSummary(new[] { Run })) },
-        level, 1.25, 1.0, 3, new RoomKey(1, 1), "Stock", $"L{level}: {area} ranked");
+        level, 1.25, 1.0, 3, new RoomKey(1, 1), "Stock", $"L{level}: {area} ranked", DateTimeOffset.Now, CharacterLevel: 30);
+
+    // The status line of a ranking listed from those kept: when it was made and at
+    // what level, then its own summary.
+    private static void AssertListedAsKept(AreaRanking ranking, string status, string after = @"\.")
+    {
+        Assert.Matches($@"^Made \d\d:\d\d at L{ranking.Level}{after} ", status);
+        Assert.EndsWith(" " + ranking.Summary, status);
+    }
 
     [Fact]
     public void SketchIsOfferedOnceItHoldsARouteAndEditingItDropsTheResult()
@@ -321,17 +331,49 @@ public sealed class SimulatorViewModelTests : IDisposable
         h.Cache.SwitchSet("alpha");
 
         Assert.Equal(onAlpha.Rows, h.Simulator.Rankings);
-        Assert.Equal(onAlpha.Summary, h.Simulator.RankStatus);
+        AssertListedAsKept(onAlpha, h.Simulator.RankStatus);
         // Listed, not picked: a switch draws nothing on the map by itself.
         Assert.Null(h.Simulator.SelectedRanking);
         Assert.Empty(h.Session.Clicks);
         // A row picked now is quoted with the settings its own ranking ran with.
         h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
-        Assert.Contains(h.Simulator.RankStats, s => s.Label == "Tested" && s.Value.StartsWith("L40 · 3 × 1 h · "));
+        Assert.Contains(h.Simulator.RankStats, s => s.Label == "Tested" && s.Value.StartsWith("L30 · 3 × 1 h · "));
 
         h.Cache.SwitchSet("BETA");
         Assert.Equal(onBeta.Rows, h.Simulator.Rankings);
-        Assert.Equal(onBeta.Summary, h.Simulator.RankStatus);
+        AssertListedAsKept(onBeta, h.Simulator.RankStatus);
+    }
+
+    [Fact]
+    public void ARankingListedFromThoseKeptSaysWhenItWasMadeAndIsMarkedOnceTheCharacterHasLevelled()
+    {
+        using Harness h = Build();
+        AreaRanking made = Ranking("Hills");
+
+        // Just made: its own summary and nothing in front of it.
+        h.Simulator.ListFinishedRanking(made);
+        Assert.Equal(made.Summary, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+
+        // Listed again at the level it was made at: when, and no mark.
+        h.Cache.SwitchSet("beta");
+        h.Cache.SwitchSet("alpha");
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+
+        // Listed again a level on: marked, in the line and on the table.
+        h.Level = 31;
+        h.Cache.SwitchSet("beta");
+        Assert.False(h.Simulator.RankingNotCurrent);
+        h.Cache.SwitchSet("alpha");
+        AssertListedAsKept(made, h.Simulator.RankStatus, after: "; you are L31 now\\.");
+        Assert.True(h.Simulator.RankingNotCurrent);
+
+        // Ranked again at the new level: current, and plain.
+        AreaRanking again = Ranking("Hills") with { CharacterLevel = 31 };
+        h.Simulator.ListFinishedRanking(again);
+        Assert.Equal(again.Summary, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
     }
 
     [Fact]
@@ -416,7 +458,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         // The ranking that was running on alpha finds out it was cancelled only now.
         h.Simulator.RankingStopped(alpha, "Ranking cancelled.");
         Assert.Equal(onBeta.Rows, h.Simulator.Rankings);
-        Assert.Equal(onBeta.Summary, h.Simulator.RankStatus);
+        AssertListedAsKept(onBeta, h.Simulator.RankStatus);
 
         // Cancelled with its own game data still on show, its list is empty and says why.
         h.Simulator.RankingStopped(new SimulatorOwner("beta", One), "Ranking cancelled.");
@@ -471,7 +513,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         using Harness reopened = Build(rankings: kept);
 
         Assert.Equal(ranking.Rows, reopened.Simulator.Rankings);
-        Assert.Equal(ranking.Summary, reopened.Simulator.RankStatus);
+        AssertListedAsKept(ranking, reopened.Simulator.RankStatus);
     }
 
     [Fact]

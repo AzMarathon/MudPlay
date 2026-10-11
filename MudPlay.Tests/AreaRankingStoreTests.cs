@@ -19,7 +19,7 @@ public sealed class AreaRankingStoreTests
             new AreaRank(area, 40, new[] { new RoomKey(1, 1), new RoomKey(1, 2) }, 2,
                 new LoopSimSummary(Array.Empty<LoopSimRun>())),
         },
-        40, 1.0, 1.0, 3, new RoomKey(1, 1), "Stock", area);
+        40, 1.0, 1.0, 3, new RoomKey(1, 1), "Stock", area, DateTimeOffset.Now, 40);
 
     [Fact]
     public void APairingGetsItsOwnRankingBackAndNoOthers()

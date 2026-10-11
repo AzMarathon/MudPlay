@@ -81,7 +81,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
         RefreshRoutes();
         // The store outlives the Navigation window this lives with, so a ranking made
         // before the window was last closed is listed again.
-        ShowRanking(_rankings.Get(_owner));
+        ShowRanking(_rankings.Get(_owner), kept: true);
     }
 
     // ----- Whose results these are ---------
@@ -145,7 +145,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
         bool listed = Rankings.Count > 0;
         _owner = owner;
         AreaRanking? own = _rankings.Get(owner);
-        ShowRanking(own);
+        ShowRanking(own, kept: true);
         if (own is not null)
             _log?.Info("Simulator", $"now {owner.Label}: listing the area ranking made on it at L{own.Level} ({own.Rows.Count} options)");
         else if (listed)
@@ -154,7 +154,12 @@ public sealed partial class SimulatorViewModel : ObservableObject
 
     // List a ranking (null: none). No row is picked: picking one puts its tour on
     // the map as the estimator's sketch, which a switch must not do by itself.
-    private void ShowRanking(AreaRanking? ranking)
+    //
+    // kept: it comes from those kept, not from a ranking that has just finished. It
+    // then says when it was made and at what level, and is marked when the character
+    // has changed level since (user, 2026-10-11): it is listed as what it is, a
+    // ranking of the character as it was.
+    private void ShowRanking(AreaRanking? ranking, bool kept = false)
     {
         SelectedRanking = null;
         _shown = ranking;
@@ -162,8 +167,16 @@ public sealed partial class SimulatorViewModel : ObservableObject
         if (ranking is not null)
             foreach (AreaRank r in ranking.Rows) Rankings.Add(r);
         OnPropertyChanged(nameof(HasRankings));
-        RankStatus = ranking?.Summary ?? "";
+        int levelNow = _simulation?.Level() ?? 0;
+        RankingNotCurrent = kept && ranking is not null && !ranking.IsCurrentAt(levelNow);
+        RankStatus = ranking is null ? ""
+            : kept ? $"{ranking.KeptNote(levelNow, DateTimeOffset.Now)} {ranking.Summary}"
+            : ranking.Summary;
     }
+
+    // The ranking listed was made at another level of the character than it is at
+    // now: the table is shown muted.
+    [ObservableProperty] private bool _rankingNotCurrent;
 
     public string RealmLabel => _gameData.ActiveRealm == RealmType.ParaMud ? "Paradigm" : "Stock";
 
@@ -541,7 +554,8 @@ public sealed partial class SimulatorViewModel : ObservableObject
     private async Task RankAreasAsync()
     {
         if (_simulation is null || _filter is null) return;
-        int level = RankLevel > 0 ? RankLevel : _simulation.Level();
+        int ownLevel = _simulation.Level();
+        int level = RankLevel > 0 ? RankLevel : ownLevel;
         if (_simulation.Build(level) is not { } setup)
         {
             RankStatus = "No character yet — log in and type `stat` first.";
@@ -659,7 +673,8 @@ public sealed partial class SimulatorViewModel : ObservableObject
             string summary = $"L{level} from {here.Map}/{here.Room}: {safe} safe option(s) (areas and your loops), best first; {ranked.Count - safe} where you died listed last"
                 + (gatedAreas > 0 ? $"; {gatedAreas} area(s) you can't reach at L{level} left out" : "") + skipped
                 + ". Pick one to see its route and details, show it on the map, and save it as a loop to run.";
-            ListFinishedRanking(new AreaRanking(ranked, level, step, hours, runs, here, RealmLabel, summary));
+            ListFinishedRanking(new AreaRanking(
+                ranked, level, step, hours, runs, here, RealmLabel, summary, DateTimeOffset.Now, ownLevel));
             _log?.Info("Simulator", $"ranked {ranked.Count} options at L{level} for {owner.Label} ({gatedAreas} areas unreachable, " +
                 $"{skippedAreas} areas and {skippedLoops} loops skipped): " +
                 string.Join(" | ", ranked.Take(10).Select(r => r.Label)));
