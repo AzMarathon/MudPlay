@@ -216,6 +216,28 @@ public sealed class GameTableTests
         AssertSameAsDocument(json.ToString());
     }
 
+    // One value longer than the reader will hold is a damaged file and is refused as
+    // one. The real limit is far above any field; a small one stands in for it.
+    [Fact]
+    public void A_value_longer_than_the_readers_limit_is_refused()
+    {
+        static GameTable Read(int noteLength, int limit)
+        {
+            using MemoryStream stream = new(Encoding.ASCII.GetBytes(
+                "[{\"Number\":1,\"Note\":\"" + new string('x', noteLength) + "\"},{\"Number\":2,\"Note\":\"\"}]"));
+            return GameTableReader.Read(stream, limit);
+        }
+
+        // Past the first block and under the limit: read whole.
+        GameTable table = Read(150_000, limit: 200_000);
+        Assert.True(table.Rows[0].TryGetProperty("Note", out GameValue note));
+        Assert.Equal(150_000, note.GetString()!.Length);
+        Assert.Equal(2, table.Rows.Count);
+
+        JsonException refused = Assert.ThrowsAny<JsonException>(() => Read(600_000, limit: 200_000));
+        Assert.Contains("longer than 200000 bytes", refused.Message);
+    }
+
     [Fact]
     public void A_wrong_kind_read_throws_as_the_document_did()
     {

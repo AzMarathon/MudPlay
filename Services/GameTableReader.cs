@@ -24,7 +24,15 @@ internal static class GameTableReader
     // Larger than any field the importer writes; a longer token grows it.
     private const int BlockBytes = 128 * 1024;
 
-    public static GameTable Read(Stream stream)
+    // The block stops growing here. No field the importer writes comes within a
+    // thousandth of it, so a single value this long is a damaged file, and doubling
+    // on towards the largest array there is would fail far less plainly.
+    private const int MaxTokenBytes = 256 * 1024 * 1024;
+
+    public static GameTable Read(Stream stream) => Read(stream, MaxTokenBytes);
+
+    // The limit is a parameter so a test can meet it without a file that size.
+    internal static GameTable Read(Stream stream, int maxTokenBytes)
     {
         Builder builder = new();
         byte[] block = ArrayPool<byte>.Shared.Rent(BlockBytes);
@@ -62,7 +70,9 @@ internal static class GameTableReader
                 if (used == 0)
                 {
                     // One token longer than the block: it needs to be whole to be read.
-                    byte[] larger = ArrayPool<byte>.Shared.Rent(block.Length * 2);
+                    if (block.Length >= maxTokenBytes)
+                        throw new JsonException($"A single value in the table is longer than {maxTokenBytes} bytes.");
+                    byte[] larger = ArrayPool<byte>.Shared.Rent(Math.Min(block.Length * 2, maxTokenBytes));
                     block.AsSpan(0, filled).CopyTo(larger);
                     ArrayPool<byte>.Shared.Return(block);
                     block = larger;
