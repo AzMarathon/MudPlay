@@ -2663,6 +2663,10 @@ public sealed class HealthManager : IDisposable
     private bool MeditateRecentlyRefused() =>
         _meditateNotNeededAt is { } at && _now() - at < MeditateNotNeededWindow;
 
+    // For another engine that waits on mana: it is as high as the game will take it,
+    // though under the maximum the client believes in (see _manaGameFullAt).
+    public bool ManaIsAtGameFull => ManaAtGameFull();
+
     // True while mana is at the level the game last called full (see _manaGameFullAt).
     private bool ManaAtGameFull() =>
         _manaGameFullAt is { } full && _state.MaxMa == _manaGameFullMax && _state.Ma >= full;

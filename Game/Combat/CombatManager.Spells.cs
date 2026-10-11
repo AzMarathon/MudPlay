@@ -366,6 +366,24 @@ public sealed partial class CombatManager
         _markBetweenRoundSlotUsed = marker;
     }
 
+    // Told when a fresh engage has no debuff to cast: none set, none allowed on this
+    // target, its mana or cast cap not met. The attack goes out with nothing ahead of
+    // it, and a listener keeping the round's cast for that debuff has nothing to keep
+    // it for. Not told when the debuff is only put off a round (behind a backstab, or
+    // a cast already spent): it is still coming. Optional.
+    public void SetNoDebuffOnEngageSink(Action sink)
+    {
+        ArgumentNullException.ThrowIfNull(sink);
+        _noDebuffOnEngage = sink;
+    }
+    private Action? _noDebuffOnEngage;
+
+    private bool NoDebuffOnThisEngage()
+    {
+        _noDebuffOnEngage?.Invoke();
+        return false;
+    }
+
     // Wire the read-side of the one-between-round-cast slot (CastingDirector's
     // BetweenRoundSlotUsed). TryPreAttackInBetween consults it so it won't send a
     // pre-attack debuff into a slot a survival/buff cast already spent this round.
@@ -1216,13 +1234,13 @@ public sealed partial class CombatManager
         // .TryDebuffing); without this, the see-hidden force-clear override — which
         // engages hostiles with Auto-Combat OFF and reaches here — would leak the
         // debuff now that the Auto-Nuke gate no longer blocks the single rung.
-        if (!CombatSpellsWired || _cast is null || !Fighting()) return false;
+        if (!CombatSpellsWired || _cast is null || !Fighting()) return NoDebuffOnThisEngage();
 
         CombatSpellContext ctx = BuildContext(
             settings, obs, picked.RawName, CountEngageable(obs), picked.MonsterNumber);
-        if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return false;
-        if (!DebuffDecisionAllowed(decision, ctx, picked.MonsterNumber)) return false;
-        if (AreaDebuffPastFirstRound(settings, decision)) return false;
+        if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return NoDebuffOnThisEngage();
+        if (!DebuffDecisionAllowed(decision, ctx, picked.MonsterNumber)) return NoDebuffOnThisEngage();
+        if (AreaDebuffPastFirstRound(settings, decision)) return NoDebuffOnThisEngage();
         // A cast at the monster before the backstab spends the surprise (reports
         // paradigm-20260928-030642 / -031828), so the debuff waits for the round after
         // the backstab; the chooser then offers it again.

@@ -8432,13 +8432,13 @@ public sealed class AppServices
             stillWanted: LairWaitStillWanted,
             healOrCureDue: () => CastDirector.HealOrCureDue(),
             debuffMana: LairEntryDebuffMana,
-            inCombat: () => PlayerState.InCombat);
-        CastDirector.SetLairEntryBuffHold(
-            () => LairDebuffHold.BlockingBuffs, () => LairDebuffHold.BlockingOrdinaryBuffs,
-            buff => LairDebuffHold.NotePriorityBuffCast(buff),
-            buff => LairDebuffHold.HoldsPriorityBuff(buff),
-            () => LairDebuffHold.NoteOrdinaryBuffCast(),
-            spell => LairDebuffHold.NoteDebuffSent(spell));
+            inCombat: () => PlayerState.InCombat,
+            manaIsFull: () => Health.ManaIsAtGameFull);
+        CastDirector.SetLairEntryBuffHold(LairDebuffHold);
+        CastDirector.SetManaRegenBuffProbe(IsManaRegenRollSpell);
+        // An engage with no debuff to cast first: the hold has nothing to keep the
+        // round's cast for, and lets the buffs through.
+        Combat.SetNoDebuffOnEngageSink(() => LairDebuffHold.NoteNoDebuffThisFight());
         // A loop that stops or fails never asks again, so its wait is ended here rather
         // than left to the hold's own next look.
         LoopRunner.Event += e =>
@@ -11478,11 +11478,10 @@ public sealed class AppServices
 
     // The debuff a lair wait is for and the mana its slot's "min mana per cast" asks
     // for, against what the character has. Null when there is nothing to wait for: no
-    // minimum set, mana not read yet, or a fight already on (a monster at the doorstep
-    // ends the wait as it always has; the engine fights with what mana there is).
+    // minimum set, or mana not read yet.
     private (string Spell, int Needed, int Mana, int MaxMana)? LairEntryDebuffMana()
     {
-        if (PlayerState.InCombat || PlayerState.MaxMa <= 0) return null;
+        if (PlayerState.MaxMa <= 0) return null;
         Models.Profile.CombatSettings combat =
             ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
         return Game.Combat.CombatSpellChooser.EntryDebuffReserve(
