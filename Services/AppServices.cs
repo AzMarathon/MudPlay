@@ -1776,6 +1776,10 @@ public sealed class AppServices
     // + the user's Spells + Health tab thresholds.
     public Game.Spells.CastingDirector CastDirector { get; private set; } = null!;
 
+    // Stops every tracked buff's timer while the character is out of the game, and
+    // carries what each had left across a client restart in the character's profile.
+    public Game.Spells.BuffTimerKeeper BuffTimers { get; private set; } = null!;
+
     // Parser for abil <code> breakdown output. Attached to the
     // live line stream in the main VM; feeds ManaRegen the
     // rolled spells: slice of an abil 145 mana-regen read.
@@ -6086,10 +6090,10 @@ public sealed class AppServices
         // Same in-game gate arms unrecognized-line capture: nothing before the first
         // realm prompt (splash / login menu / connect banner) stages a candidate.
         PromptScanner.PromptObserved += _ => MessageCandidateWatcher.NotifyInGame();
-        // Same in-game gate resumes frozen buff timers after an unexpected drop: the
-        // disconnect handler paused them (kept the remaining), and this shifts each
-        // forward by the offline gap so the recast clock picks up where it left off.
-        // Idempotent — no-op unless a drop paused the timers.
+        // Same in-game gate lifts the cast pass's out-of-the-game latch and lets its
+        // buff timers run on: they stood still from the moment the game was left, and
+        // each expiry is moved on by the time spent away, so every buff has what it
+        // had left. Asked on every prompt; a no-op unless they were paused.
         PromptScanner.PromptObserved += _ => CastDirector.ResumeBuffTimers();
         // A fresh character starts disarmed: zero the counters, then Suspend so
         // accrual waits for that character's first in-game prompt. (Disconnect
@@ -8083,9 +8087,10 @@ public sealed class AppServices
         // timers).
         RoomTracker.PlayerDeathObserved += () => AutoHazardCounterProvisioner.Forget("death");
         RoomTracker.PlayerDeathInferred += () => AutoHazardCounterProvisioner.Forget("death");
-        // A dropped link only stops its clock (MainWindowViewModel's disconnect
-        // handler, beside the cast pass's own pause); the first prompt back in the
-        // game starts it again. No-op unless a drop paused it.
+        // Leaving the game only stops its clock (BuffTimerKeeper, with the cast
+        // pass's timers; MainWindowViewModel's disconnect handler for a drop outside
+        // it); the first prompt back in the game starts it again. No-op unless it
+        // was stopped.
         PromptScanner.PromptObserved += _ => AutoHazardCounterProvisioner.Resume();
         Profile.ProfileLoaded += _ => AutoHazardCounterProvisioner.Forget("profile loaded");
         GameData.ActiveSetChanged += _ => AutoHazardCounterProvisioner.Forget("game data changed");
@@ -10024,6 +10029,44 @@ public sealed class AppServices
         // The event the other engines take a death of our own from (both wordings).
         RoomTracker.PlayerDeathObserved += HangupItems.OnPlayerDied;
         InGameCapture.InGameChanged += HangupItems.OnInGameChanged;
+
+        // Buff timers stand still while the character is out of the game, and what
+        // they had left is kept in its profile between sessions. Wired here on
+        // purpose:
+        //  - after the hang-up check's own handler, so the profile save made on the
+        //    way out of the game finds that check already out of it and leaves its
+        //    list alone;
+        //  - after the cast pass's and the hazard counter's profile-load resets
+        //    (both subscribed far above), so the restore lands on a clean slate with
+        //    the character's game data already the active set;
+        //  - before the start-up profile is loaded below.
+        BuffTimers = new Game.Spells.BuffTimerKeeper(
+            CastDirector,
+            AutoHazardCounterProvisioner,
+            // A named character only, as for the hang-up list above.
+            profile: () => Profile.CurrentProfileName is null ? null : Profile.Current,
+            profileName: () => Profile.CurrentProfileName,
+            realmKey: () => ResolveActiveRealm() is { } played ? $"{played.Bbs.Name}/{played.Realm.Name}" : null,
+            // One of these runs inside the Disconnected handler, where a save that
+            // threw would skip the reconnect scheduling.
+            saveProfile: () =>
+            {
+                try { Profile.Save(); }
+                catch (Exception ex)
+                {
+                    Log.Warn(Game.Spells.BuffTimerKeeper.LogCategory,
+                        $"Couldn't save the buff timers ({ex.GetType().Name}: {ex.Message}).");
+                }
+            },
+            log: Log);
+        InGameCapture.InGameChanged += inGame =>
+        {
+            if (inGame) BuffTimers.NoteBackInGame();
+            else BuffTimers.NoteLeftGame("the link dropped or the game was left");
+        };
+        Profile.ProfileSaving += BuffTimers.WriteTo;
+        Profile.ProfileLoaded += BuffTimers.RestoreFrom;
+
         // The opens owed for what a hang-up took end with the check that would
         // have picked it back up (AutoOpen is built far above).
         HangupItems.CheckFinished += AutoOpen.OnHangupCheckFinished;
@@ -14733,7 +14776,10 @@ public sealed class AppServices
         Combat.ClearBackstabLatch();
         Equipment.DropHeldGear();
         ManaRegen.Reset();
-        CastDirector.ResumeBuffTimers();
+        // The cast pass's out-of-the-game latch, only when we are in it: out of the
+        // game the buff timers are standing still, and letting them run from here
+        // would count the rest of the time away against every buff.
+        if (InGameCapture.InGame) CastDirector.ResumeBuffTimers();
         SuicidePassword.Cancel(reason);
         Health.CancelFlee();
 

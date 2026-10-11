@@ -356,19 +356,55 @@ public sealed class AutoHazardCounterProvisioner
     // The moment the buffs' clocks are read at: the drop, while the link is down.
     private DateTimeOffset Clock() => _pausedAt ?? _now();
 
-    // The link dropped. The character's buffs stay on it and stop running down until
-    // it is back in the game, so the clocks stop here. The answer to a `use` still
-    // in flight went with the link.
-    public void Pause()
+    // The character is out of the game: the link dropped, or it left for the board's
+    // menu. Its buffs stay on it and stop running down until it is back, so the
+    // clocks stop here. The answer to a `use` still in flight went with it.
+    public void Pause(string why = "the link dropped")
     {
         if (_pausedAt is not null) return;
         _pausedAt = _now();
         _pending = null;
         _awaitingSwig = false;
         _roundWait = null;
-        ReleaseStep("the link dropped");
+        ReleaseStep(why);
         if (_on.Count > 0)
-            _log?.Info(LogCategory, $"buff clock paused (the link dropped) — {TimeLeftText()}, held until back in the game");
+            _log?.Info(LogCategory, $"buff clock paused ({why}) — {TimeLeftText()}, held until back in the game");
+    }
+
+    // What each tracked buff has left, for the profile (Game.Spells.BuffTimerKeeper).
+    // One whose length the game data doesn't give has no time left to tell.
+    public List<Models.Profile.SavedHazardBuff> SnapshotForSave()
+    {
+        DateTimeOffset now = Clock();
+        List<Models.Profile.SavedHazardBuff> saved = new();
+        foreach ((int buffSpell, (DateTimeOffset onSince, bool confirmed)) in _on)
+        {
+            if (CounterOf(buffSpell) is not { DurationSeconds: > 0 } counter) continue;
+            int left = (int)Math.Round((onSince + DurationOf(counter) - now).TotalSeconds);
+            if (left <= 0) continue;
+            saved.Add(new Models.Profile.SavedHazardBuff { BuffSpell = buffSpell, RemainingSec = left, Confirmed = confirmed });
+        }
+        return saved;
+    }
+
+    // Put back the buffs a profile was saved with, their clocks standing still until
+    // Resume. Called on a profile load, after Forget and with that profile's game
+    // data already the active set: a buff the set doesn't know as a hazard counter
+    // is left out. Returns how many were put back.
+    public int Restore(IReadOnlyList<Models.Profile.SavedHazardBuff> saved)
+    {
+        ArgumentNullException.ThrowIfNull(saved);
+        DateTimeOffset now = _now();
+        int restored = 0;
+        foreach (Models.Profile.SavedHazardBuff buff in saved)
+        {
+            if (buff.RemainingSec <= 0 || CounterOf(buff.BuffSpell) is not { DurationSeconds: > 0 } counter) continue;
+            _on[buff.BuffSpell] = (now - (DurationOf(counter) - TimeSpan.FromSeconds(buff.RemainingSec)), buff.Confirmed);
+            restored++;
+        }
+        // From now, not from an earlier drop: the time left is as of this moment.
+        if (restored > 0) _pausedAt = now;
+        return restored;
     }
 
     // The first prompt back in the game: the clocks run on with what they had left.

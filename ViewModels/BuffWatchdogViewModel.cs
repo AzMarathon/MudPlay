@@ -167,6 +167,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         _profile.ProfileLoaded += OnProfileLoaded;
         _profile.ProfileMutated += OnProfileMutated;
         _tick.HeartbeatElapsed += OnHeartbeat;
+        _castDirector.TimersResumed += OnTimersResumed;
         if (_party is not null) _party.Members.CollectionChanged += OnPartyMembersChanged;
         if (_tokens is not null)
         {
@@ -250,6 +251,19 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         if (_wholePartyCoverage.Count > 0)
             foreach (string gone in _wholePartyCoverage.Keys.Where(k => !active.Contains(k)).ToList())
                 _wholePartyCoverage.Remove(gone);
+    }
+
+    // The timers ran on after standing still out of the game, each expiry moved on
+    // by the time away. The expiries kept here move with them: a later expiry is how
+    // a recast is told, and this one is no recast, so the record of who the buff
+    // covered stays as it was.
+    private void OnTimersResumed(TimeSpan away)
+    {
+        foreach (string code in _wholePartyCoverage.Keys.ToList())
+        {
+            (DateTime until, HashSet<string> covered) = _wholePartyCoverage[code];
+            _wholePartyCoverage[code] = (until + away, covered);
+        }
     }
 
     // Lower-cased given names of the current non-self party members.
@@ -701,6 +715,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         _profile.ProfileLoaded -= OnProfileLoaded;
         _profile.ProfileMutated -= OnProfileMutated;
         _tick.HeartbeatElapsed -= OnHeartbeat;
+        _castDirector.TimersResumed -= OnTimersResumed;
         if (_party is not null) _party.Members.CollectionChanged -= OnPartyMembersChanged;
         if (_tokens is not null) _tokens.BuffPauseChanged -= OnTokenBuffPauseChanged;
         Buffs?.Dispose();

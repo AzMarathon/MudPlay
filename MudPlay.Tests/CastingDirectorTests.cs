@@ -2734,22 +2734,259 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PauseResume_DropsSelfTimerWhenGapOutlivesBuff()
+    public void PauseResume_GapLongerThanTheBuff_LeavesItTheTimeItHadLeft()
     {
-        // The flip side: a gap longer than the buff drops the (now genuinely expired) self
-        // timer on reconnect, so the normal cadence recasts it — "keep" is not "never
-        // expire".
+        // Time out of the game is not counted against a buff: "buffs survive
+        // disconnects, relogs", and "as soon as we've disconnected all timers need to
+        // be paused until we're back in the game, then they all resume" (user,
+        // 2026-10-10). Until that ruling this test pinned the opposite: a gap longer
+        // than the buff dropped its timer on the way back in, and it was recast.
         using CureHarness h = new();
         h.Spells.BlessSlots[1] = "bles";
         h.BuffInfo["bles"] = (string.Empty, 300);
         h.Director.NoteManualBuffCast("bles");
-        Assert.Single(h.Director.SnapshotActiveBuffs());
+        h.Now = h.Now.AddSeconds(100);             // 200 s left
+        DateTime left = h.Now;
 
         h.Director.PauseBuffTimers();
-        h.Now = h.Now.AddSeconds(400);             // outlived the 300s buff while offline
+        h.Now = h.Now.AddSeconds(400);             // longer out of the game than the buff lasts
         h.Director.ResumeBuffTimers();
 
-        Assert.Empty(h.Director.SnapshotActiveBuffs());   // expired → dropped → recast next pass
+        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal(200, (kept.Until - h.Now).TotalSeconds);
+        Assert.Equal(left.AddSeconds(600), kept.Until);
+    }
+
+    // What a timer has left, by the clock the Buff Watchdog reads it against: the
+    // moment the timers stopped while they stand still, else now.
+    private static double SecondsLeft(CastingDirector director, DateTime now, string target, string code)
+    {
+        foreach (Game.Spells.ActiveBuffTimer t in director.SnapshotActiveBuffs())
+            if (t.Target == target && t.Short == code)
+                return (t.Until - (director.PausedAtUtc ?? now)).TotalSeconds;
+        return double.NaN;
+    }
+
+    // Every timer stands still alike, the ones on party members with our own: from
+    // out of the game there is no knowing a member stayed in it (user, 2026-10-10:
+    // "for each buff we're tracking ... all timers need to be paused").
+    [Fact]
+    public void PauseResume_PartyMemberTimersStandStillWithOurOwn()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["mysh"] = (string.Empty, 200);
+        h.AddMember("Raijin");
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Raijin!");
+        h.Director.NoteManualBuffCast("mysh");
+        h.Now = h.Now.AddSeconds(50);
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(1000);
+        Assert.Equal(250, SecondsLeft(h.Director, h.Now, "raijin", "bles"));   // shown standing still
+        Assert.Equal(150, SecondsLeft(h.Director, h.Now, "", "mysh"));
+        TimeSpan? movedOn = null;
+        h.Director.TimersResumed += away => movedOn = away;
+        h.Director.ResumeBuffTimers();
+
+        Assert.Equal(250, SecondsLeft(h.Director, h.Now, "raijin", "bles"));
+        Assert.Equal(150, SecondsLeft(h.Director, h.Now, "", "mysh"));
+        Assert.Equal(TimeSpan.FromSeconds(1000), movedOn);
+    }
+
+    // A second drop before any prompt is the same stretch away: the first pause
+    // stands, and all of the time since it is given back.
+    [Fact]
+    public void PauseTwice_ResumeOnce_GivesBackTheWholeStretch()
+    {
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Director.NoteManualBuffCast("bles");
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(500);
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(500);
+        h.Director.ResumeBuffTimers();
+
+        Assert.Equal(300, SecondsLeft(h.Director, h.Now, "", "bles"));
+    }
+
+    // A buff whose line shows on the way back in, ahead of the first prompt, started
+    // then: the time away is not added to it on top.
+    [Fact]
+    public void PauseResume_ABuffRaisedWhileStandingStill_IsNotMovedOn()
+    {
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.Spells.BlessSlots[2] = "mysh";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.BuffInfo["mysh"] = (string.Empty, 200);
+        h.Director.NoteManualBuffCast("bles");
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(600);
+        h.Director.NoteManualBuffCast("mysh");
+        h.Director.ResumeBuffTimers();
+
+        Assert.Equal(300, SecondsLeft(h.Director, h.Now, "", "bles"));
+        Assert.Equal(200, SecondsLeft(h.Director, h.Now, "", "mysh"));
+    }
+
+    // An item-cast buff's timer is one of them: after a stretch away longer than it
+    // lasts the item is not used again until its own time has run.
+    [Fact]
+    public void PauseResume_AnItemCastBuffKeepsItsTime()
+    {
+        using CureHarness h = new();
+        const string token = "#emerald tipped crozier";
+        h.Spells.BlessSlots[1] = token;
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        int executed = 0;
+        h.Director.SetItemCastSource(
+            durationOf: t => t == token ? 600L : null,
+            execute: _ => { executed++; return true; });
+        h.Director.Evaluate();
+        Assert.Equal(1, executed);
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(5000);
+        h.Director.ResumeBuffTimers();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Equal(1, executed);                 // still up: 600 s left
+
+        h.Cast.OnCombatTick();
+        h.Now = h.Now.AddSeconds(601);
+        h.Director.Evaluate();
+        Assert.Equal(2, executed);
+    }
+
+    // So is a draw item's card, and the timer still names the card.
+    [Fact]
+    public void PauseResume_ADrawnCardKeepsItsTime()
+    {
+        using PartyBlessHarness h = DeckHarness(out Func<int> uses);
+        h.Director.Evaluate();
+        h.Director.NoteDrawOutcome(CardRecord("card-priest", 966));
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(5000);
+        h.Director.ResumeBuffTimers();
+        NextRound(h);
+
+        Assert.Equal(1, uses());
+        Game.Spells.ActiveBuffTimer card = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("card-priest", card.Outcome);
+    }
+
+    // What a profile is saved with: the timers on ourselves, each with what it has
+    // left. A party member's is left out (after a restart there is no knowing the
+    // member was out of the game for the same stretch).
+    [Fact]
+    public void SnapshotForSave_KeepsOurOwnTimers_WithWhatEachHasLeft()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["mysh"] = (string.Empty, 200);
+        h.AddMember("Raijin");
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Raijin!");
+        h.Director.NoteManualBuffCast("mysh");
+        h.Now = h.Now.AddSeconds(50);
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(900);             // standing still: still 150 s
+
+        SavedBuffTimer saved = Assert.Single(h.Director.SnapshotSelfTimersForSave());
+
+        Assert.Equal("mysh", saved.Short);
+        Assert.Equal(150, saved.RemainingSec);
+        Assert.Equal(200, saved.TotalSec);
+    }
+
+    // Put back on a load, the timers stand still and nothing is cast for them or for
+    // anything else until the game is entered; then each runs its remaining time, and
+    // the buff is cast again when that has gone.
+    [Fact]
+    public void RestoredTimers_StandStillUntilTheGameIsEntered_ThenRunTheirRemainingTime()
+    {
+        using CureHarness h = new();
+        h.AutoBlessEnabled = false;
+        h.Spells.BlessSlots[1] = "bless";
+        h.Spells.BlessSlotRecastMargins[1] = 0;
+        h.BuffInfo["bless"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        h.AutoBlessEnabled = true;
+
+        Assert.Equal(1, h.Director.RestoreSelfTimers(new[]
+        {
+            new SavedBuffTimer { Short = "bless", RemainingSec = 120, MarginSec = 0, TotalSec = 300 },
+        }));
+        Assert.Equal(h.Now, h.Director.PausedAtUtc);
+
+        h.Now = h.Now.AddSeconds(7200);            // two hours before the game is entered
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+        Assert.Equal(120, SecondsLeft(h.Director, h.Now, "", "bless"));
+
+        h.Director.ResumeBuffTimers();
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);                 // 120 s left: not due
+        h.Now = h.Now.AddSeconds(121);
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "bless" }, h.CastsSent);
+    }
+
+    // A buff's wear-off line still ends a timer that was put back from a profile.
+    [Fact]
+    public void RestoredTimer_IsEndedByItsWearOffLine()
+    {
+        using CureHarness h = new();
+        h.AutoBlessEnabled = false;
+        h.Spells.BlessSlots[1] = "bless";
+        h.BuffInfo["bless"] = (string.Empty, 300);
+        h.RecordCondition("bless", MessageFlags.None,
+            applied: "You are blessed!", endsWith: "Your blessing fades.");
+        h.Director.RestoreSelfTimers(new[]
+        {
+            new SavedBuffTimer { Short = "bless", RemainingSec = 120, MarginSec = 0, TotalSec = 300 },
+        });
+        h.Director.ResumeBuffTimers();
+        h.FeedLine("You are blessed!");            // latched as applied, as it was last session
+
+        h.FeedLine("Your blessing fades.");
+
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
+    // A death found at the login (a hang-up death) wipes what was put back.
+    [Fact]
+    public void RestoredTimers_AreWipedByADeath()
+    {
+        using CureHarness h = new();
+        h.Director.RestoreSelfTimers(new[]
+        {
+            new SavedBuffTimer { Short = "bless", RemainingSec = 120, MarginSec = 0, TotalSec = 300 },
+        });
+
+        h.Director.ClearSelfBuffTracking();
+
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+        Assert.Empty(h.Director.SnapshotSelfTimersForSave());
     }
 
     [Fact]
