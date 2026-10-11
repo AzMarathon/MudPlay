@@ -11,8 +11,9 @@ namespace MudPlay.Game.Remote;
 // catalogue.
 //
 // Lines are adopted only inside a window our OWN outbound `@loop send yes` opens
-// (NoteSendConfirmed, from the outbound-chat watcher), and — when we confirmed by
-// telepath, so we know who to — only from that player. The permission gate is on the
+// (NoteSendConfirmed, from the outbound-chat watcher), and only on the channel that
+// yes went by: from the player we said it to when it was a telepath, and on gangpath
+// or say from a player whose offer we heard there. The permission gate is on the
 // sender, who only offered because they grant us @loop; we just confirm we asked.
 //
 // A received loop never overwrites one of ours, nor changes how we run one (user,
@@ -43,17 +44,27 @@ public sealed class LoopShareReceiver : IDisposable
     private readonly LogService? _log;
     private readonly Dictionary<(string Sender, string Id), string?[]> _partial = new();
 
-    // The code on the last offer each player made us (null: the offer had none),
-    // by given name. The loop that player then sends is checked against it.
-    private readonly Dictionary<string, (string? Code, DateTimeOffset At)> _offered =
-        new(StringComparer.OrdinalIgnoreCase);
+    // One offer line heard from a player: its code (null: it had none, as an older
+    // client's has), when, and the channel it came by.
+    private readonly record struct Offer(string? Code, DateTimeOffset At, RemoteChannel Channel);
+
+    // Every offer each player made lately, by given name, oldest first. All of
+    // them, not the last: a player offers to others too, by telepath or where we
+    // hear it, and the offer made to us must not be lost under one made to someone
+    // else, or the loop we said yes to is turned away as not the one offered.
+    private readonly Dictionary<string, List<Offer>> _offered = new(StringComparer.OrdinalIgnoreCase);
 
     // An offer lapses on the sender's side after two minutes and a transfer has
     // AcceptWindow to arrive; an offer older than both was for some earlier ask.
     private static readonly TimeSpan OfferKept = TimeSpan.FromMinutes(5);
 
+    // What a talkative player, or many of them, can make us keep.
+    private const int MaxOffersPerPlayer = 8;
+    private const int MaxPlayersWithOffers = 32;
+
     private DateTimeOffset _acceptUntil = DateTimeOffset.MinValue;
     private string? _expectedSender;
+    private RemoteChannel _confirmedOn = RemoteChannel.Telepath;
     private bool _disposed;
 
     // Sends the sender our one answer when a transfer is over: channel, their name,
@@ -105,13 +116,75 @@ public sealed class LoopShareReceiver : IDisposable
         _ => RemoteChannel.Telepath,
     };
 
-    // We just sent `@loop send yes`. sender is the telepath recipient, or null when we
-    // confirmed on gangpath / say (then any player on that channel may answer).
-    public void NoteSendConfirmed(string? sender)
+    // We just sent `@loop send yes` on channel. sender is the telepath recipient, or
+    // null when we confirmed on gangpath / say, where the yes names nobody.
+    //
+    // The loop is then taken only on that channel. And when the yes named nobody,
+    // only from a player whose offer we heard on it (MadeAnOffer): without that,
+    // anyone could answer a yes said to the gang or the room with a loop of their
+    // own by telepath, have it saved, and be told so by our client, while the loop
+    // we asked for found the window shut (decided 2026-10-11).
+    //
+    // One honest case is lost to that: a sender who is sneaking answers a say by
+    // telepath (it will not speak aloud), so its loop does not come on the channel
+    // of a yes that was said. Asked by telepath it arrives as ever.
+    public void NoteSendConfirmed(string? sender, RemoteChannel channel = RemoteChannel.Telepath)
     {
         _acceptUntil = _now() + AcceptWindow;
         _expectedSender = string.IsNullOrWhiteSpace(sender) ? null : sender;
+        _confirmedOn = channel;
         _partial.Clear();
+    }
+
+    private void RememberOffer(string sender, string? code, RemoteChannel channel)
+    {
+        DateTimeOffset now = _now();
+        string given = Given(sender);
+        if (!_offered.TryGetValue(given, out List<Offer>? offers)) _offered[given] = offers = new List<Offer>();
+        offers.RemoveAll(o => now - o.At > OfferKept);
+        offers.Add(new Offer(code, now, channel));
+        if (offers.Count > MaxOffersPerPlayer) offers.RemoveAt(0);
+
+        if (_offered.Count <= MaxPlayersWithOffers) return;
+        // Over the bound: the player whose newest offer is the oldest goes.
+        string stalest = _offered.MinBy(p => p.Value[^1].At).Key;
+        _offered.Remove(stalest);
+    }
+
+    private List<Offer> LiveOffers(string sender)
+    {
+        if (!_offered.TryGetValue(Given(sender), out List<Offer>? offers)) return new List<Offer>();
+        DateTimeOffset now = _now();
+        offers.RemoveAll(o => now - o.At > OfferKept);
+        return offers;
+    }
+
+    private bool MadeAnOffer(string sender, RemoteChannel on) => LiveOffers(sender).Any(o => o.Channel == on);
+
+    // The code among that player's offers that the loop in hand answers to, taken
+    // off the list: an offer answers one transfer. matched is false with offered
+    // set when they offered codes and this loop has none of them; offered is null
+    // when no offer of theirs carried a code.
+    private bool TakeOfferFor(string sender, string signature, out string? offered)
+    {
+        List<Offer> offers = LiveOffers(sender);
+        int match = offers.FindIndex(o => o.Code is { } code && signature.StartsWith(code, StringComparison.Ordinal));
+        if (match >= 0)
+        {
+            offered = offers[match].Code;
+            offers.RemoveAt(match);
+            return true;
+        }
+        string[] codes = offers.Where(o => o.Code is not null).Select(o => o.Code!).Distinct().ToArray();
+        if (codes.Length > 0)
+        {
+            offered = string.Join(" or ", codes);
+            return false;
+        }
+        // An older sender's offer, with no code, is used up by the loop it led to.
+        if (offers.Count > 0) offers.RemoveAt(0);
+        offered = null;
+        return false;
     }
 
     public void Dispose()
@@ -126,11 +199,12 @@ public sealed class LoopShareReceiver : IDisposable
         if (e.Channel is not (ChatChannel.TelepathIncoming or ChatChannel.Gangpath or ChatChannel.Local))
             return;
         if (e.Speaker is not { Length: > 0 } sender) return;
+        RemoteChannel channel = ChannelOf(e.Channel);
         if (LoopShareHandler.TryParseOffer(e.Message, out string? offeredCode))
         {
             // Kept whether or not we go on to say yes: the code is what the loop
             // that arrives is checked against.
-            _offered[Given(sender)] = (offeredCode, _now());
+            RememberOffer(sender, offeredCode, channel);
             return;
         }
         if (!TryParse(e.Message, out string id, out int index, out int count, out string chunk)) return;
@@ -139,9 +213,24 @@ public sealed class LoopShareReceiver : IDisposable
             _log?.Debug("LoopShare", $"ignoring @loopdata from {sender} — no @loop send yes sent recently");
             return;
         }
-        if (_expectedSender is { } expected && !SameGiven(expected, sender))
+        // None of the three below closes the window: the loop we said yes to may
+        // still be on its way.
+        if (channel != _confirmedOn)
         {
-            _log?.Debug("LoopShare", $"ignoring @loopdata from {sender} — we confirmed with {expected}");
+            _log?.Debug("LoopShare", $"ignoring @loopdata from {sender} on {channel} — our yes went out on {_confirmedOn}");
+            return;
+        }
+        if (_expectedSender is { } expected)
+        {
+            if (!SameGiven(expected, sender))
+            {
+                _log?.Debug("LoopShare", $"ignoring @loopdata from {sender} — we confirmed with {expected}");
+                return;
+            }
+        }
+        else if (!MadeAnOffer(sender, channel))
+        {
+            _log?.Debug("LoopShare", $"ignoring @loopdata from {sender} — they offered us no loop on {channel}");
             return;
         }
 
@@ -162,10 +251,6 @@ public sealed class LoopShareReceiver : IDisposable
 
         _partial.Remove(key);
         _acceptUntil = DateTimeOffset.MinValue;   // one transfer per yes
-        // The offer this transfer answers: one per transfer, as the yes is.
-        string? offered = _offered.Remove(Given(sender), out (string? Code, DateTimeOffset At) offer)
-            && _now() - offer.At <= OfferKept ? offer.Code : null;
-        RemoteChannel channel = ChannelOf(e.Channel);
         Loop loop;
         bool lairWaitUnknown;
         try { loop = LoopShareCodec.Decode(parts!, out lairWaitUnknown); }
@@ -176,10 +261,10 @@ public sealed class LoopShareReceiver : IDisposable
             Tell(channel, sender, code: null, "not saved: it arrived damaged - send it again", failed: true);
             return;
         }
-        Save(loop, sender, channel, offered, lairWaitUnknown);
+        Save(loop, sender, channel, lairWaitUnknown);
     }
 
-    private void Save(Loop loop, string sender, RemoteChannel channel, string? offered, bool lairWaitUnknown)
+    private void Save(Loop loop, string sender, RemoteChannel channel, bool lairWaitUnknown)
     {
         // The sender's loop as the sender runs it: its route with the two settings it
         // sent. Ours, further down, is a loop here as this character runs it.
@@ -187,11 +272,13 @@ public sealed class LoopShareReceiver : IDisposable
         string theirCode = LoopSignature.Short(theirs);
         int rooms = loop.Waypoints.Count;
 
-        // The loop that arrived against the code the sender put on its offer. They
-        // differ when the transfer was damaged past what the packing catches, or
-        // when lines of two transfers were mixed: what arrived is then not what we
-        // said yes to, and it is not saved.
+        // The loop that arrived against the codes the sender put on its offers: the
+        // one it made us is among them. It matches none of them when the transfer
+        // was damaged past what the packing catches, or when lines of two transfers
+        // were mixed: what arrived is then not what we said yes to, and it is not
+        // saved.
         string verification;
+        string? offered = null;
         if (lairWaitUnknown)
         {
             // Its lair wait is a later version's and was read as off, so the loop in
@@ -200,13 +287,13 @@ public sealed class LoopShareReceiver : IDisposable
             // the other course was to turn it away as not the loop offered).
             verification = "not verified: it uses a setting this version does not know";
         }
+        else if (TakeOfferFor(sender, theirs, out offered))
+        {
+            verification = "verified";
+        }
         else if (offered is null)
         {
             verification = "not verified: no code came with the offer";
-        }
-        else if (theirs.StartsWith(offered, StringComparison.Ordinal))
-        {
-            verification = "verified";
         }
         else
         {
