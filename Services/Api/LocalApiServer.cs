@@ -133,12 +133,17 @@ public sealed class LocalApiServer : IAsyncDisposable
         if (_eventsAttached) return;
         _eventsAttached = true;
 
-        _log.EntryAdded += e => Events.Send("log", new
+        // Both kinds go through the masking pump, in the order they were made:
+        // a log message can quote anything, and a gate's reason is free text.
+        LocalApiMaskedEvents masked = new(BuildScrubberAsync, () => Events.HasSubscribers, Events.Send);
+        _maskedEvents = masked;
+
+        _log.EntryAdded += e => masked.Post("log", scrubber => new
         {
             at = e.Timestamp,
             severity = e.Severity.ToString(),
             source = e.Source,
-            message = e.Message,
+            message = scrubber.Apply(e.Message),
         });
 
         // The signal that mattered most in every wedge so far: which gate just
@@ -149,19 +154,67 @@ public sealed class LocalApiServer : IAsyncDisposable
         {
             if (_services.MovementCoordinator.History is not { Count: > 0 } h) return;
             GateTransitionEntry t = h[^1];
-            Events.Send("gate", new
+            // Read here, on the thread that changed the gates; only the masking
+            // waits for the pump.
+            string[] assertedNow = _services.MovementCoordinator.AssertedGates.ToArray();
+            masked.Post("gate", scrubber => new
             {
                 at = t.Timestamp,
                 gate = t.Gate,
                 action = t.Asserted ? "assert" : "clear",
                 asserter = t.Asserter,
-                reason = t.Reason,
-                assertedNow = _services.MovementCoordinator.AssertedGates.ToArray(),
+                reason = t.Reason is { } reason ? scrubber.Apply(reason) : null,
+                assertedNow,
             });
         };
     }
 
     private bool _eventsAttached;
+    private LocalApiMaskedEvents? _maskedEvents;
+
+    // How long the masks wait for the UI thread before they are built without it.
+    private static readonly TimeSpan ScrubberUiWait = TimeSpan.FromMilliseconds(500);
+
+    // The masks for one response (or one run of events), built from the saved
+    // account details as they stand now and dropped by the caller after it: the
+    // scrubber holds the values in clear, so none is kept between requests.
+    //
+    // The saved values belong to the UI thread, so that is where they are read.
+    // But the log is the one thing still readable while that thread is wedged,
+    // which is what this API is for, and it must be masked then too: after a
+    // short wait the values are read from here instead. A thread that isn't
+    // running isn't changing them.
+    private async Task<BugReportScrub.Scrubber> BuildScrubberAsync()
+    {
+        BugReportScrub.Scrubber Build() => BugReportBuilder.BuildScrubber(_services, compiled: false);
+        if (Dispatcher.UIThread.CheckAccess()) return Build();
+        DispatcherOperation<BugReportScrub.Scrubber> queued = Dispatcher.UIThread.InvokeAsync(Build);
+        Task<BugReportScrub.Scrubber> onUi = queued.GetTask();
+        if (await Task.WhenAny(onUi, Task.Delay(ScrubberUiWait)).ConfigureAwait(false) == onUi)
+            return await onUi.ConfigureAwait(false);
+        // No longer waited for, so taken off the dispatcher's queue: left there,
+        // every request made while the UI thread was wedged would run, for
+        // nobody, the moment it came back. One that has already started can't be
+        // taken off; what it then throws has no reader, so it is read here.
+        queued.Abort();
+        _ = onUi.ContinueWith(static late => _ = late.Exception,
+            CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+        return Build();
+    }
+
+    // The masks for a response, or null after answering 503: what can't be masked
+    // is not sent (the rule a bug report follows).
+    private async Task<BugReportScrub.Scrubber?> ScrubberOrRefuseAsync(HttpListenerResponse res, string what)
+    {
+        try { return await BuildScrubberAsync().ConfigureAwait(false); }
+        catch (Exception ex)
+        {
+            _log.Warn(LogCategory, $"{what} was not sent: the saved account details could not be read, so it could not be masked ({ex.GetType().Name}).");
+            WriteJson(res, 503, new { error = $"the saved account details could not be read, so {what} could not be masked" });
+            return null;
+        }
+    }
 
     private async Task AcceptLoopAsync(HttpListener listener, CancellationToken token)
     {
@@ -272,8 +325,12 @@ public sealed class LocalApiServer : IAsyncDisposable
             }
 
             case "/gates":
-                WriteJson(res, 200, await OnUiAsync(() => LocalApiState.Gates(_services)).ConfigureAwait(false));
+            {
+                if (await ScrubberOrRefuseAsync(res, "the gate history").ConfigureAwait(false) is not { } scrubber) return;
+                WriteJson(res, 200, await OnUiAsync(() =>
+                    LocalApiState.Gates(_services.MovementCoordinator, scrubber)).ConfigureAwait(false));
                 return;
+            }
 
             case "/commands":
                 // Self-describing surface: what can be dispatched, and which
@@ -301,9 +358,10 @@ public sealed class LocalApiServer : IAsyncDisposable
                 int limit = Math.Clamp(ParseInt(req.QueryString["limit"], 500), 1, 5000);
                 IReadOnlySet<LogSeverity> severities = ParseSeverities(req.QueryString["severity"]);
                 string? source = req.QueryString["source"];
-                // The ring is lock-guarded and LogEntry is immutable, so this one
-                // needs no dispatcher hop.
-                WriteJson(res, 200, LocalApiState.Log(_services, since, limit, severities, source));
+                if (await ScrubberOrRefuseAsync(res, "the log").ConfigureAwait(false) is not { } scrubber) return;
+                // The ring is lock-guarded and LogEntry is immutable, so the read
+                // itself needs no dispatcher hop.
+                WriteJson(res, 200, LocalApiState.Log(_log, scrubber, since, limit, severities, source));
                 return;
             }
 
@@ -315,7 +373,9 @@ public sealed class LocalApiServer : IAsyncDisposable
                     return;
                 }
                 int lines = Math.Clamp(ParseInt(req.QueryString["lines"], 750), 1, 5000);
-                WriteJson(res, 200, await OnUiAsync(() => LocalApiState.Scrollback(_services, emu, lines)).ConfigureAwait(false));
+                if (await ScrubberOrRefuseAsync(res, "the scrollback").ConfigureAwait(false) is not { } scrubber) return;
+                WriteJson(res, 200, await OnUiAsync(() =>
+                    LocalApiState.Scrollback(emu, _services.InGameCapture.Window, scrubber, lines)).ConfigureAwait(false));
                 return;
             }
 
@@ -575,6 +635,7 @@ public sealed class LocalApiServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Stop();
+        _maskedEvents?.Dispose();
         Events.Dispose();
         if (_acceptLoop is { } loop)
         {

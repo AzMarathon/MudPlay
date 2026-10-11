@@ -23,21 +23,85 @@ namespace MudPlay.Services;
 public static class BugReportBuilder
 {
     // How many trailing transcript lines (scrollback + live screen) to include.
-    private const int ScrollbackLines = 750;
+    // Sized from the 1 MB budget: at the ~48 bytes a row averages, 3,000 rows are
+    // ~145 KB, four times the reach of the 750 this used to be.
+    private const int ScrollbackLines = 3000;
 
-    // How many trailing program-log entries to include.
-    private const int LogLines = 750;
+    // How many trailing lines of each wire section to include.
+    private const int WireLines = 750;
+
+    // Masks offensive words in the chat lines a report copies; nothing else in the
+    // client is censored.
+    private static BugReportChatCensor Censor => BugReportChatCensor.Default;
 
     // One captured section of the report — a heading and its pre-rendered Markdown body.
-    public readonly record struct Section(string Heading, string Body);
+    // A history section also carries Entries: its lines, oldest first, printed in a
+    // fenced block under Body. They are what BugReportBudget trims, oldest first,
+    // when a report would pass its size budget; BudgetWeight says how much larger
+    // than the others the section may stay before it is the one trimmed.
+    // InBudget is false only for the wire sections, which the user opts into and
+    // which are not counted. TrimmedEntries is how many the budget left out.
+    public readonly record struct Section(
+        string Heading,
+        string Body,
+        IReadOnlyList<string>? Entries = null,
+        bool InBudget = true,
+        int BudgetWeight = 1,
+        int TrimmedEntries = 0);
 
     // Frozen point-in-time capture produced by Capture. Holds the realm +
     // timestamp used for the file name and every pre-rendered section. The
     // user's issue description is folded in later by Render.
+    // Scrubber masks the account's login name and passwords in everything Render
+    // writes (BugReportScrub); a capture built without one masks nothing.
     public sealed record BugReportCapture(
         DateTimeOffset CapturedAt,
         RealmType Realm,
-        IReadOnlyList<Section> Sections);
+        IReadOnlyList<Section> Sections,
+        BugReportScrub.Scrubber? Scrubber = null);
+
+    // The login name, login password and suicide password stored for the loaded
+    // character, decrypted for the comparison only: they are held by the scrubber
+    // and never written or logged. Every board's stored login is taken, not only
+    // the active one's, since a profile moved between boards keeps the others.
+    // compiled: see BugReportScrub.Build.
+    public static BugReportScrub.Scrubber BuildScrubber(AppServices svc, bool compiled = true)
+    {
+        ArgumentNullException.ThrowIfNull(svc);
+        List<BugReportScrub.Secret> secrets = new();
+        int unreadable = 0;
+        // Not guarded: a profile that can't be read means nothing can be masked,
+        // and the caller must then not write a report at all.
+        Models.Profile.CharacterProfile? profile = svc.Profile.Current;
+        if (profile is not null)
+        {
+            string? Open(string? blob)
+            {
+                if (string.IsNullOrEmpty(blob)) return null;
+                string? value = Guard<string?>(() => svc.Passwords.Unprotect(blob), null);
+                // Saved, but its key no longer opens it: it can't be compared
+                // with anything, so it can't be masked. The report says so.
+                if (string.IsNullOrEmpty(value)) unreadable++;
+                return value;
+            }
+            if (profile.BbsCredentials is { } logins)
+            {
+                foreach (Models.Profile.BbsCredentials login in logins.Values)
+                {
+                    secrets.Add(new(BugReportScrub.LoginNameLabel, Open(login.EncryptedUsername)));
+                    secrets.Add(new(BugReportScrub.LoginPasswordLabel, Open(login.EncryptedPassword)));
+                }
+            }
+            secrets.Add(new(BugReportScrub.SuicidePasswordLabel, Open(profile.EncryptedSuicidePassword)));
+        }
+        // Only the name the game itself shows is exempt: a profile can be called
+        // anything, the login name included.
+        return BugReportScrub.Build(secrets, [Guard<string?>(() => svc.PlayerStats.Name, null)], unreadable, compiled);
+    }
+
+    // A report that could not be made safe to post. Thrown instead of writing one.
+    public sealed class PrivacyException(string message, Exception? inner = null)
+        : InvalidOperationException(message, inner);
 
     // Freeze the current client state into a BugReportCapture. Every section is
     // built defensively — a failure reading one subsystem is surfaced inline in
@@ -50,61 +114,110 @@ public static class BugReportBuilder
 
         DateTimeOffset now = DateTimeOffset.Now;
         RealmType realm = Guard(() => svc.GameData.ActiveRealm, RealmType.Stock);
+        // Fails closed: with no scrubber there is no report, since nothing in it
+        // could be trusted to be masked.
+        BugReportScrub.Scrubber scrubber;
+        try { scrubber = BuildScrubber(svc); }
+        catch (Exception ex)
+        {
+            throw new PrivacyException(
+                "No bug report was written: the saved account details could not be read, so they could not be masked "
+                + $"({ex.GetType().Name}: {ex.Message}).", ex);
+        }
 
         List<Section> sections =
         [
-            new("Session", SafeSection(() => BuildSession(svc, realm, now))),
+            new("Session", SafeSection(() => BuildSession(svc, realm, now) + AccountDetailNote(scrubber))),
+            new(BugReportContext.Heading, SafeSection(() => BugReportContext.Build(svc, emulator, now))),
+            new(BugReportHoldsAndWaits.Heading, SafeSection(() => BugReportHoldsAndWaits.Build(svc, now))),
+            new(BugReportAutomationSections.PendingHeading, SafeSection(() => BugReportAutomationSections.PendingWork(svc))),
             new("Player state", SafeSection(() => BuildPlayerState(svc))),
             new("Statline", SafeSection(() => BuildStatline(svc))),
             new("Party", SafeSection(() => BuildParty(svc))),
             new("Inventory", SafeSection(() => BuildInventory(svc))),
-            new("Player Workshop", SafeSection(() => BuildWorkshop(svc))),
             new("Movement engine", SafeSection(() => BuildMovement(svc))),
             new("Navigation engines", SafeSection(() => BuildNavigationEngines(svc))),
-            new("Exp/Hr estimator", SafeSection(() => BuildExpEstimator(svc))),
-            new("Loop simulator", SafeSection(() => BuildSimulator(svc))),
-            new("Special room markers", SafeSection(() => BuildRoomMarkers(svc))),
             new("Auto-mode", SafeSection(() => BuildAutoMode(svc))),
-            new("Keybindings", SafeSection(() => BuildKeybindings(svc))),
             new("Live engine state", SafeSection(() => BuildEngineState(svc))),
             new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
-            new("Combat rounds (last 10)", SafeSection(() => BuildCombatRounds(svc))),
-            new("Tick timing (last 400 events)", SafeSection(() =>
-                $"HP regen expected per gain: {svc.HpRegenExpected.Current?.ToString() ?? "(no `stat` read yet — gains judged on timing alone)"}"
-                + (svc.HpRegenExpected.Current is { } expected ? $"; a gain above +{expected.Largest} is a heal." : string.Empty)
-                // The length projected rounds step by, and whether the last one could
-                // be placed: a cast refused as "already cast this round" out of a
-                // fight is a projection running ahead of the game's round.
-                + $"\n\nRound length: {svc.Tick.RoundLength.TotalSeconds:F3} s"
-                + (svc.Tick.RoundLengthMeasured ? " (measured)" : " (nominal: no regen pass has measured it yet)")
-                + $"; last round tick {(svc.Tick.LastCombatTickWasDamageDriven ? "seen on the wire" : svc.Tick.LastCombatTickWasPlaced ? "projected from a recent sighting" : "projected with nothing seen lately: it freed no cast slot")}."
-                + "\n\n" + svc.TickTiming.Render())),
+            new($"Combat rounds (last {Game.Combat.RoundDamageTracker.RingCapacity}, oldest first)", SafeSection(() => BuildCombatRounds(svc))),
             new("Session combat stats", SafeSection(() => BuildSessionCombat(svc))),
             new("Session activity", SafeSection(() => BuildSessionActivity(svc))),
             new("Monster HP estimates", SafeSection(() => BuildMonsterHpEstimates(svc))),
             new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
+            new("Exp/Hr estimator", SafeSection(() => BuildExpEstimator(svc))),
+            new("Loop simulator", SafeSection(() => BuildSimulator(svc))),
+
+            // The bulky, mostly static sections: what is configured, not what is
+            // happening.
             new("Combat profiles", SafeSection(() => BuildCombatProfiles(svc))),
+            new("Special room markers", SafeSection(() => BuildRoomMarkers(svc))),
+            new("Player Workshop", SafeSection(() => BuildWorkshop(svc))),
+            new(BugReportAutomationSections.AutomationHeading, SafeSection(() =>
+                BugReportAutomationSections.UserAutomation(
+                    svc.Triggers.Triggers.ToList(), svc.Aliases.Aliases.ToList(), svc.Macros.Macros.ToList(),
+                    scrubber, Censor))),
+            new(BugReportAutomationSections.PermissionsHeading, SafeSection(() => BugReportAutomationSections.RemotePermissions(svc))),
+            new(BugReportAutomationSections.DeathsHeading, SafeSection(() => BugReportAutomationSections.DeathHistory(svc.DeathRecovery.Records))),
+            new("Keybindings (changed from the default)", SafeSection(() => BuildKeybindings(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
-            new("Monster observations (this character)", SafeSection(() => BuildMonsterObservations(svc))),
+            new("Monster observations (this character, newest first)", SafeSection(() => BuildMonsterObservations(svc))),
             new("Item overrides", SafeSection(() => BuildItemOverrides(svc))),
             new("Effective settings (resolved)", SafeSection(() => BuildEffectiveSettings(svc))),
             new("Settings overrides (deltas, excluding BBS + Display)", SafeSection(() => BuildSettings(svc))),
-            new("Program log", SafeSection(() => BuildLog(svc))),
-            new("Scrollback", SafeSection(() => BuildScrollback(emulator, svc.InGameCapture))),
+            new($"Tick timing (last {Game.TickTimingLog.Capacity} events, oldest first)", SafeSection(() => BuildTickTiming(svc))),
         ];
 
-        // Wire Inspector capture — only when the user has those panes up (they're
-        // large; irrelevant to most reports). The raw ANSI + the recognizer's read
-        // of each combat line are exactly what a combat-recognition bug needs.
+        // The histories come last, each oldest first, so the incident is at the
+        // end of the section and the end of the file.
+        sections.Add(SafeSection("Warnings and errors (oldest first)",
+            () => BugReportLogSections.Problems(svc.Log, Censor)));
+        sections.Add(SafeSection(BugReportSentCommands.Heading,
+            () => BugReportSentCommands.Build(svc.SentCommands, Censor)));
+        sections.Add(SafeSection("Program log (oldest first)",
+            () => BugReportLogSections.ProgramLog(svc.Log, Censor)));
+        sections.Add(SafeSection("Scrollback (oldest first)",
+            () => BuildScrollback(emulator, svc.InGameCapture)));
+
+        // The wire sections follow the Wire Inspector's tick boxes and nothing
+        // else: they are large and most reports don't need them. They are never
+        // forced in and never counted against the size budget.
         WireInspectorVisibility wire = Guard(() => svc.WireInspectorVisibility, new());
         if (wire.RawVisible)
-            sections.Add(new("Wire — raw (last 750 lines)",
-                SafeSection(() => BuildRawWire(svc))));
+            sections.Add(new("Wire — raw (oldest first; the last 64 KB read from the game, at most 750 lines)",
+                SafeSection(() => BuildRawWire(svc)), InBudget: false));
         if (wire.ClassifiedVisible)
-            sections.Add(new("Wire — classified combat (last 750 lines)",
-                SafeSection(() => BuildClassifiedWire(svc))));
+            sections.Add(new($"Wire — classified combat (oldest first; at most {WireLines} combat-window lines)",
+                SafeSection(() => BuildClassifiedWire(svc)), InBudget: false));
 
-        return new BugReportCapture(now, realm, sections);
+        return new BugReportCapture(now, realm, sections, scrubber);
+    }
+
+    private static string BuildTickTiming(AppServices svc) =>
+        $"HP regen expected per gain: {svc.HpRegenExpected.Current?.ToString() ?? "(no `stat` read yet — gains judged on timing alone)"}"
+        + (svc.HpRegenExpected.Current is { } expected ? $"; a gain above +{expected.Largest} is a heal." : string.Empty)
+        // The length projected rounds step by, and whether the last one could
+        // be placed: a cast refused as "already cast this round" out of a
+        // fight is a projection running ahead of the game's round.
+        + $"\n\nRound length: {svc.Tick.RoundLength.TotalSeconds:F3} s"
+        + (svc.Tick.RoundLengthMeasured ? " (measured)" : " (nominal: no regen pass has measured it yet)")
+        + $"; last round tick {(svc.Tick.LastCombatTickWasDamageDriven ? "seen on the wire" : svc.Tick.LastCombatTickWasPlaced ? "projected from a recent sighting" : "projected with nothing seen lately: it freed no cast slot")}."
+        + "\n\n" + svc.TickTiming.Render();
+
+    // What the report says about the masking, and about a value it could not mask.
+    private static string AccountDetailNote(BugReportScrub.Scrubber scrubber)
+    {
+        StringBuilder sb = new();
+        Kv(sb, "Account details", scrubber.MaskedValues > 0
+            ? $"the account details saved in MudPlay ({scrubber.MaskedValues} value(s): login name, login password, suicide password) "
+              + $"are written as `{BugReportScrub.Mask}` wherever they appear in this report"
+            : "none are saved in MudPlay for this character, so none could be masked: a login typed by hand is not known to the client");
+        if (scrubber.UnreadableValues > 0)
+            Kv(sb, "Account details, not masked", $"{scrubber.UnreadableValues} saved value(s) could not be read back "
+                + "(the key that protects them no longer opens them) and so could not be looked for");
+        foreach (string note in scrubber.Notes)
+            Kv(sb, "Account details, not masked", note);
+        return sb.ToString();
     }
 
     // Compose the final Markdown document from a capture and the user's
@@ -123,9 +236,16 @@ public static class BugReportBuilder
         sb.Append(string.IsNullOrWhiteSpace(issueDescription) ? "_(none provided)_" : issueDescription.Trim());
         sb.Append("\n\n");
 
-        AppendSections(sb, capture);
-        return sb.ToString();
+        AppendSections(sb, capture, overheadBytes: Encoding.UTF8.GetByteCount(sb.ToString()));
+        return Scrubbed(capture, sb.ToString());
     }
+
+    // The last step of every render: the scrub sees the whole document, the
+    // user's own description included. The sections were masked before the
+    // budget fitted them (MaskedSections); a second masking changes nothing in
+    // them.
+    private static string Scrubbed(BugReportCapture capture, string document) =>
+        capture.Scrubber is { } scrubber ? scrubber.Apply(document) : document;
 
     // State-only variant for the crash reporter: the section dump with no
     // bug-report title and no user-description block, so a crash document can
@@ -135,16 +255,79 @@ public static class BugReportBuilder
         ArgumentNullException.ThrowIfNull(capture);
 
         StringBuilder sb = new(capacity: 16 * 1024);
-        AppendSections(sb, capture);
-        return sb.ToString();
+        AppendSections(sb, capture, overheadBytes: 0);
+        return Scrubbed(capture, sb.ToString());
     }
 
-    private static void AppendSections(StringBuilder sb, BugReportCapture capture)
+    // The capture with every section masked now and its scrubber dropped, for a
+    // holder that keeps a capture around. A value never spans two sections, so
+    // masking them one at a time loses nothing.
+    public static BugReportCapture Prescrubbed(BugReportCapture capture)
     {
-        foreach (Section section in capture.Sections)
+        ArgumentNullException.ThrowIfNull(capture);
+        return capture.Scrubber is null ? capture : capture with { Sections = MaskedSections(capture), Scrubber = null };
+    }
+
+    // The capture's sections with the account details masked. The size budget is
+    // fitted to these, not to the sections as captured: a mask is longer than a
+    // short value, and a password that is also a common word could otherwise grow
+    // a report half as large again after the budget had fitted it.
+    private static IReadOnlyList<Section> MaskedSections(BugReportCapture capture)
+    {
+        if (capture.Scrubber is not { } scrubber) return capture.Sections;
+        List<Section> sections = new(capture.Sections.Count);
+        foreach (Section s in capture.Sections)
         {
-            sb.Append("## ").Append(section.Heading).Append("\n\n");
-            sb.Append(section.Body.TrimEnd()).Append("\n\n");
+            if (s.Entries is not { } entries) { sections.Add(s with { Body = scrubber.Apply(s.Body) }); continue; }
+            // The entries are masked as one text, so a value a wrapped row split
+            // across two of them is still found.
+            string[] masked = scrubber.Apply(string.Join('\n', entries)).Split('\n');
+            sections.Add(s with { Body = scrubber.Apply(s.Body), Entries = masked });
+        }
+        return sections;
+    }
+
+    // Each section's whole text by heading, for a caller that wants the sections
+    // apart (the local API's JSON form). Masked like a rendered report: this is
+    // the same content leaving the client by another door.
+    public static IReadOnlyDictionary<string, string> SectionTexts(BugReportCapture capture)
+    {
+        ArgumentNullException.ThrowIfNull(capture);
+        Dictionary<string, string> texts = new(StringComparer.Ordinal);
+        foreach (Section section in BugReportBudget.Fit(MaskedSections(capture)).Sections)
+        {
+            string text = section.Body.TrimEnd();
+            if (section.Entries is { } entries)
+                text += (text.Length > 0 ? "\n\n" : string.Empty) + "```\n" + string.Join('\n', entries) + "\n```";
+            texts[section.Heading + BugReportBudget.TrimNote(section.TrimmedEntries)] = Scrubbed(capture, text);
+        }
+        return texts;
+    }
+
+    // Every section, after the size budget has had its say over the history
+    // sections (BugReportBudget).
+    private static void AppendSections(StringBuilder sb, BugReportCapture capture, int overheadBytes)
+    {
+        BugReportBudget.Result fitted = BugReportBudget.Fit(MaskedSections(capture), BugReportBudget.MaxBytes, overheadBytes);
+        if (fitted.OverBudget)
+            sb.Append("_This report is over its ").Append(BugReportBudget.MaxBytes / 1000)
+              .Append(" KB budget: the sections that can't be shortened are that large on their own._\n\n");
+        foreach (Section section in fitted.Sections)
+        {
+            sb.Append("## ").Append(section.Heading)
+              .Append(BugReportBudget.TrimNote(section.TrimmedEntries)).Append("\n\n");
+            string body = section.Body.TrimEnd();
+            if (body.Length > 0) sb.Append(body).Append("\n\n");
+            if (section.Entries is not { } entries) continue;
+            // What the body says of its count and span was written before the
+            // budget cut: say what is actually below.
+            if (section.TrimmedEntries > 0)
+                sb.Append("_Shown: the newest ").Append(entries.Count).Append(" of ")
+                  .Append(entries.Count + section.TrimmedEntries)
+                  .Append("; the first line below is the oldest kept, so the span starts there, not where the text above says._\n\n");
+            sb.Append("```\n");
+            foreach (string entry in entries) sb.Append(entry).Append('\n');
+            sb.Append("```\n\n");
         }
     }
 
@@ -306,10 +489,9 @@ public static class BugReportBuilder
             itemCharges.Count == 0
                 ? "(no limited-use items carried)"
                 : string.Join(", ", itemCharges.Select(c => $"{c.Name}={(c.Remaining is { } n ? n.ToString() : "?")}")));
-        // Diagnostic-channel state gates whether the Program-log tail carries any
-        // decision trail: both flags default off, and every _log?.Debug/Combat
-        // site is skipped at generation time when off, so a report captured with
-        // them off has Info-only logs. Surface the state so a triager knows why.
+        // Whether the program log carries the decision trail: both channels are on
+        // unless the user turned them off, and one that is off was never
+        // generated, so its lines are absent rather than quiet.
         Kv(sb, "Debug diagnostics", (svc.Log.Diagnostics?.DebugDiagnostics ?? false) ? "on" : "off");
         Kv(sb, "Combat diagnostics", (svc.Log.Diagnostics?.CombatDiagnostics ?? false) ? "on" : "off");
         // Whether a session-statistics file exists to ask for alongside the report.
@@ -1018,7 +1200,7 @@ public static class BugReportBuilder
         IReadOnlyList<Game.Combat.RoundSummary> recent = svc.RoundDamage.Recent;
         if (recent.Count == 0) return "_(no combat rounds this session)_";
         StringBuilder sb = new();
-        foreach (Game.Combat.RoundSummary r in recent.Skip(Math.Max(0, recent.Count - 10)))
+        foreach (Game.Combat.RoundSummary r in recent)
         {
             (string dealt, string taken) = Game.Combat.RoundTotalsFormatter.Format(r);
             sb.Append("- ").Append(r.EndedAt.ToString("HH:mm:ss")).Append(' ')
@@ -1772,7 +1954,7 @@ public static class BugReportBuilder
         Kv(sb, "Auto-deposit reroute", svc.AutoDeposit.RerouteStatus);
         Kv(sb, "Sell detour", svc.SellDetour.Status);
         Kv(sb, "Default-gear pool baseline", svc.PoolBaseline.Current is { } pb
-            ? $"HP {pb.MaxHp}, pool {pb.MaxMa} at level {pb.Level} (gear +{pb.DefaultGearHp}/+{pb.DefaultGearMa}, {pb.RecordedAt:u})"
+            ? $"HP {pb.MaxHp}, pool {pb.MaxMa} at level {pb.Level} (gear +{pb.DefaultGearHp}/+{pb.DefaultGearMa}, {pb.RecordedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss})"
               + (svc.PoolBaseline.IsStale ? " — stale, re-reading `stat` in Default gear" : "")
             : "none yet — using the gear estimate");
         Kv(sb, "Party @ok held for gear", svc.Health.IsPartyOkHeldForGear.ToString());
@@ -1888,7 +2070,7 @@ public static class BugReportBuilder
         {
             Kv(sb, "Dark reveal",
                 dark.LastRevealName is { Length: > 0 } rn
-                    ? $"{rn} at {dark.LastRevealAt:HH:mm:ss} from '{dark.LastRevealLine}'"
+                    ? $"{rn} at {dark.LastRevealAt?.ToLocalTime():HH:mm:ss} from '{dark.LastRevealLine}'"
                     : "(none this session)");
             Kv(sb, "Dark held off", dark.LastHeldOffReason ?? "(none)");
         }
@@ -1970,7 +2152,7 @@ public static class BugReportBuilder
         IReadOnlyList<Game.Map.RoomKey> history = svc.RoomTracker.GetHistory();
         if (history.Count > 0)
         {
-            sb.Append("\nRecent confirmed positions (newest first): ");
+            sb.Append("\nRecent confirmed positions (newest first; when each was entered is under Holds and waits, Room): ");
             sb.Append(string.Join(", ", history.Take(10).Select(k => $"{k.Map}/{k.Room}")));
             sb.Append('\n');
         }
@@ -2546,12 +2728,14 @@ public static class BugReportBuilder
             Models.Profile.KeyChord def =
                 KeybindingStore.DefaultBindings.TryGetValue(action, out Models.Profile.KeyChord d)
                     ? d : Models.Profile.KeyChord.Empty;
+            // A binding left at its default is the same on every client and says
+            // nothing about this one.
+            if (chord.Equals(def)) continue;
             string bound = chord.IsEmpty ? "(unbound)" : chord.Label;
-            string suffix = chord.Equals(def)
-                ? string.Empty
-                : $"  — changed (default: {(def.IsEmpty ? "(unbound)" : def.Label)})";
-            Kv(sb, KeybindingStore.ActionLabel(action), bound + suffix);
+            Kv(sb, KeybindingStore.ActionLabel(action),
+                $"{bound}  (default: {(def.IsEmpty ? "(unbound)" : def.Label)})");
         }
+        if (sb.Length == 0) sb.Append("_(none: every built-in action is on its default key)_");
         return sb.ToString();
     }
 
@@ -2670,67 +2854,76 @@ public static class BugReportBuilder
         else sb.Append(Json(filtered)).Append('\n');
     }
 
-    private static string BuildLog(AppServices svc)
-    {
-        LogEntry[] entries = svc.Log.Snapshot();
-        int take = Math.Min(LogLines, entries.Length);
-        if (take == 0) return "_(log empty)_";
-
-        StringBuilder sb = new();
-        // Both diagnostic channels off ⇒ the tail below is Info-only; the
-        // engines' Debug/Combat decision traces were never generated. Flag it so
-        // a triager doesn't read the absence of a trail as the engine going quiet.
-        bool debugOn = svc.Log.Diagnostics?.DebugDiagnostics ?? false;
-        bool combatOn = svc.Log.Diagnostics?.CombatDiagnostics ?? false;
-        if (!debugOn && !combatOn)
-            sb.Append("> Debug + Combat diagnostics were off — no decision-trail entries below. ")
-              .Append("Enable them in the Log pane and reproduce for a fuller capture.\n\n");
-        sb.Append("Last ").Append(take).Append(" of ").Append(entries.Length).Append(" entries.\n\n```\n");
-        for (int i = entries.Length - take; i < entries.Length; i++)
-        {
-            LogEntry e = entries[i];
-            sb.Append(e.Timestamp.ToString("HH:mm:ss")).Append("  [").Append(e.Severity).Append("]  ")
-              .Append(e.Source).Append(": ").Append(e.Message).Append('\n');
-        }
-        sb.Append("```");
-        return sb.ToString();
-    }
-
-    // The raw ANSI wire, last ScrollbackLines lines (non-printables shown as the
-    // Wire Inspector renders them). Only emitted when the Raw pane is visible.
+    // The raw ANSI wire, last WireLines lines of what the 64 KB buffer still holds
+    // (non-printables shown as the Wire Inspector renders them). Only emitted when
+    // the Wire Inspector's Raw box is ticked.
     // Only the wire read since the game was entered: what came before it is the
     // board's login, which a report must not carry (InGameCapture).
     private static string BuildRawWire(AppServices svc)
     {
         if (svc.InGameCapture.WireMark is not { } enteredAt) return NotInGame;
-        // The total first: bytes read between the two calls then only shorten what
-        // is kept, never reach back past the mark.
-        long sinceEntry = svc.Wire.TotalBytes - enteredAt;
-        byte[] bytes = svc.Wire.Snapshot();
-        if (sinceEntry < bytes.Length) bytes = bytes[^(int)Math.Max(0, sinceEntry)..];
-        string raw = WireFormatter.RenderRaw(bytes);
-        string tail = LastLines(raw, ScrollbackLines);
-        if (tail.Length == 0) return "_(no wire captured)_";
-        return "```\n" + tail + "\n```";
+        byte[] bytes = svc.Wire.Snapshot(out long start, out WireBuffer.ArrivalMark[] marks);
+        // Nothing from before the game was entered, whatever the buffer holds.
+        if (enteredAt > start)
+        {
+            int skip = (int)Math.Min(bytes.Length, enteredAt - start);
+            bytes = bytes[skip..];
+            start += skip;
+        }
+        return RenderRawWire(bytes, start, marks, svc.Wire.LastClearedAt, Censor);
     }
 
-    // The classified combat trace, last ScrollbackLines combat-window lines each
-    // tagged with how the recognizer read it. Only emitted when the Classified pane
-    // is visible.
+    // The raw wire as lines, the last WireLines of them, with the time a read
+    // arrived written before the line it landed in: the wire has no clock of its
+    // own, and without one nothing in it can be matched to the log.
+    internal static string RenderRawWire(byte[] bytes, long start, IReadOnlyList<WireBuffer.ArrivalMark> marks,
+        DateTimeOffset? clearedAt, BugReportChatCensor censor)
+    {
+        List<(long Offset, int From, int Length)> lines = new();
+        int lineStart = 0;
+        for (int i = 0; i <= bytes.Length; i++)
+        {
+            if (i < bytes.Length && bytes[i] != 0x0A) continue;
+            if (i > lineStart || i < bytes.Length) lines.Add((start + lineStart, lineStart, i - lineStart));
+            lineStart = i + 1;
+        }
+        if (lines.Count == 0) return "_(no wire captured)_";
+
+        StringBuilder sb = new();
+        sb.Append("A `--- HH:mm:ss.fff ---` row is the time the bytes after it arrived (one at most every 250 ms).");
+        if (clearedAt is { } cleared)
+            sb.Append(" The Wire Inspector was cleared at ").Append(cleared.ToString("HH:mm:ss")).Append(": nothing before that survives.");
+        sb.Append("\n\n```\n");
+        int first = Math.Max(0, lines.Count - WireLines);
+        int mark = 0;
+        while (mark < marks.Count && marks[mark].Offset < lines[first].Offset) mark++;
+        // The first line shown starts mid-read as often as not: it takes the time
+        // of the read it belongs to.
+        if (mark > 0) mark--;
+        for (int l = first; l < lines.Count; l++)
+        {
+            (long offset, int from, int length) = lines[l];
+            DateTimeOffset? arrived = null;
+            while (mark < marks.Count && marks[mark].Offset < offset + length + 1)
+            {
+                arrived = marks[mark].At;
+                mark++;
+            }
+            if (arrived is { } at) sb.Append("--- ").Append(at.ToString("HH:mm:ss.fff")).Append(" ---\n");
+            sb.Append(censor.CensorRawWireLine(WireFormatter.RenderRaw(bytes.AsSpan(from, length)))).Append('\n');
+        }
+        sb.Append("```");
+        return sb.ToString();
+    }
+
+    // The classified combat trace, last WireLines combat-window lines each tagged
+    // with how the recognizer read it. Only emitted when the Wire Inspector's
+    // Classified box is ticked.
     private static string BuildClassifiedWire(AppServices svc)
     {
-        string log = svc.CombatClassifier.RenderLog(ScrollbackLines).TrimEnd('\n');
+        string log = svc.CombatClassifier.RenderLog(WireLines).TrimEnd('\n');
         if (log.Length == 0) return "_(no combat lines classified yet)_";
-        return "```\n" + log + "\n```";
-    }
-
-    // The last n newline-delimited lines of s (trailing blank line ignored).
-    private static string LastLines(string s, int n)
-    {
-        if (string.IsNullOrEmpty(s)) return string.Empty;
-        string[] lines = s.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
-        int skip = Math.Max(0, lines.Length - n);
-        return string.Join('\n', lines.Skip(skip));
+        return "```\n" + string.Join('\n', log.Split('\n').Select(Censor.CensorIfChat)) + "\n```";
     }
 
     private const string NotInGame =
@@ -2739,8 +2932,9 @@ public static class BugReportBuilder
     // Only rows written while in the game (InGameCapture): the backscroll and the
     // terminal still show the board's login, and a report made at login would
     // otherwise carry the account name with it.
-    private static string BuildScrollback(TerminalEmulator emulator, Game.InGameCapture inGame)
+    private static Section BuildScrollback(TerminalEmulator emulator, Game.InGameCapture inGame)
     {
+        const string heading = "Scrollback (oldest first)";
         // Every content row carries the instant its content was written — the same
         // per-row write stamp whether it has scrolled off into the ring or is still
         // on screen, so the timestamps stay in order and line up against the program
@@ -2749,20 +2943,25 @@ public static class BugReportBuilder
         // spacing rows have no time.
         IReadOnlyList<TranscriptSnapshot.Line> lines =
             TranscriptSnapshot.Tail(emulator, ScrollbackLines, only: inGame.Window);
-        if (lines.Count == 0) return NotInGame;
+        if (lines.Count == 0) return new(heading, NotInGame);
 
-        StringBuilder sb = new();
-        sb.Append("Last ").Append(lines.Count)
-          .Append(" line(s) written while in the game, each prefixed with its write time (blank spacing rows have none). ")
-          .Append(inGame.InGame ? "In the game now." : "Not in the game now.")
-          .Append("\n\n```\n");
-        foreach (TranscriptSnapshot.Line line in lines)
-        {
-            sb.Append(line.Timestamp is { } t ? t.ToLocalTime().ToString("HH:mm:ss") : "        ")
-              .Append(' ').Append(line.Text).Append('\n');
-        }
-        sb.Append("```");
-        return sb.ToString();
+        string body = $"Last {lines.Count} line(s) written while in the game (at most {ScrollbackLines}), "
+            + "each prefixed with its write time (blank spacing rows have none). "
+            + (inGame.InGame ? "In the game now." : "Not in the game now.");
+        List<string> texts = lines.Select(l => l.Text).ToList();
+        List<bool> wrapped = lines.Select(l => l.SoftWrapped).ToList();
+        // A password's echo a narrow terminal wrapped is only recognisable with
+        // the rows read as the one line they are; the masking of the whole
+        // document, later, sees rows.
+        BugReportScrub.MaskWrappedPasswordEchoes(texts, wrapped, emulator.Screen.Cols);
+        // A wrapped chat line is followed onto its next row by the terminal's own
+        // record of the wrap, never by how full the row is: the row after a chat
+        // line that merely reached the margin is the game's and stays as it is.
+        Censor.CensorRows(texts, wrapped);
+        List<string> entries = new(lines.Count);
+        for (int i = 0; i < lines.Count; i++)
+            entries.Add((lines[i].Timestamp is { } t ? t.ToLocalTime().ToString("HH:mm:ss") : "        ") + " " + texts[i]);
+        return new(heading, body, entries);
     }
 
     // ----- Helpers -------------------------------------------------------
@@ -2854,10 +3053,28 @@ public static class BugReportBuilder
     }
 
     // Run a section builder, converting any throw into an inline note.
-    private static string SafeSection(Func<string> build)
+    internal static string SafeSection(Func<string> build)
     {
         try { return build(); }
-        catch (Exception ex) { return $"_(capture failed: {ex.Message})_"; }
+        catch (Exception ex) { return CaptureFailure(ex); }
+    }
+
+    // The same for a builder that returns a whole section.
+    private static Section SafeSection(string heading, Func<Section> build)
+    {
+        try { return build(); }
+        catch (Exception ex) { return new(heading, CaptureFailure(ex)); }
+    }
+
+    // A section that could not be read is itself evidence: the type and the top
+    // of the stack say where, which the message alone ("Object reference not
+    // set…") never does.
+    private static string CaptureFailure(Exception ex)
+    {
+        string[] frames = (ex.StackTrace ?? string.Empty)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return $"_(capture failed: {ex.GetType().FullName}: {ex.Message})_"
+            + (frames.Length == 0 ? string.Empty : "\n\n```\n" + string.Join('\n', frames.Take(6)) + "\n```");
     }
 
     private static T Guard<T>(Func<T> read, T fallback)

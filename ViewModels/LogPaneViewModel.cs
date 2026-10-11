@@ -358,14 +358,13 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
         try
         {
             Rows.Clear();
-            int added = 0;
+            // The ring holds more than the pane shows (it is sized for the bug
+            // report): the newest MaxRows that pass the filter are the ones kept.
+            List<LogEntry> passing = new();
             foreach (LogEntry entry in _log.Snapshot())
-            {
-                if (!Passes(entry)) continue;
-                if (added >= MaxRows) break;  // safety — Snapshot should already be capped
-                Rows.Add(MakeRow(entry));
-                added++;
-            }
+                if (Passes(entry)) passing.Add(entry);
+            for (int i = Math.Max(0, passing.Count - MaxRows); i < passing.Count; i++)
+                Rows.Add(MakeRow(passing[i]));
             MatchCount = Rows.Count;
             LogTotalCount = _log.Count;
         }

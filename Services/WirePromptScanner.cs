@@ -115,6 +115,12 @@ public sealed partial class WirePromptScanner
     // Restore the permissive class-default pattern (on profile close).
     public void ResetRegexToDefault() => _statusLine = StatlinePromptRegexBuilder.Default;
 
+    // Whether a terminal row starts with the prompt the active pattern reads, and
+    // what follows it on the row. For code that has a screen row rather than the
+    // wire: it asks the pattern Settings -> Statline built, never a shape of its own.
+    public bool TrySplitPromptRow(string? row, out string rest) =>
+        StatlinePromptRegexBuilder.TrySplitPromptRow(_statusLine, row, out rest);
+
     // Append data from the live Telnet stream. Strips CSI escapes inline, runs
     // the status-line regex, and fires PromptObserved for each match.
     public void Append(ReadOnlySpan<byte> data)

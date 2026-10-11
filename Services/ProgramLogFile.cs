@@ -44,6 +44,12 @@ public sealed class ProgramLogFile : IAsyncDisposable
         get { lock (_gate) { return _writer is not null; } }
     }
 
+    // The file being written, or null while Auto-collect logs is off.
+    public string? CurrentPath
+    {
+        get { lock (_gate) { return _writer?.Path; } }
+    }
+
     // Open or close the writer to match AutoCollectLogs. Once _broken (an IO
     // failure surfaced mid-session) we stay closed for the rest of the session
     // rather than thrash a failing handle.

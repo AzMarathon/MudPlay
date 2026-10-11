@@ -85,6 +85,20 @@ public sealed class SuicidePasswordTracker : IDisposable
     // Current state of the flow — exposed for tests + diagnostics.
     public FlowState State => _state;
 
+    // Counts down the lines of the user's own a bare `suicide` of theirs covers:
+    // itself and the password that answers it. A line an engine sends in between
+    // doesn't use the cover up: the game takes that line for the password, and
+    // the user's, typed next, then lands at the ordinary prompt, where nothing
+    // else would keep it out of a record of what was sent.
+    private int _useFlowLines;
+
+    // True while an outbound line may be a suicide password: from `set suicide` or
+    // a bare `suicide` going out, until the flow ends. The prompts reach us as
+    // lines only after they are answered, so State alone flips too late to keep a
+    // typed password out of anything that records what was sent. Read after
+    // ObserveOutbound has seen the line in question.
+    public bool PasswordEntryLikely => _captureArmed || _state != FlowState.Idle || _useFlowLines > 0;
+
     public SuicidePasswordTracker(
         MessageRouter router,
         EngineSendGate gate,
@@ -133,7 +147,11 @@ public sealed class SuicidePasswordTracker : IDisposable
     //   Line-mode (LocalInputBuffer flushes the entire line + CR in one call).
     // Backspace bytes (0x08 / 0x7F) shrink the in-flight line so a typo +
     // correct produces the right captured value.
-    public void ObserveOutbound(ReadOnlySpan<byte> bytes)
+    //
+    // usersOwn: the bytes are the user's own (typed, or sent as their line from
+    // an alias, a window or the local API), not an engine's. Only those count
+    // toward the cover a bare `suicide` gives the password that follows it.
+    public void ObserveOutbound(ReadOnlySpan<byte> bytes, bool usersOwn = true)
     {
         if (bytes.IsEmpty) return;
 
@@ -143,7 +161,7 @@ public sealed class SuicidePasswordTracker : IDisposable
             {
                 case 0x0D: // CR
                 case 0x0A: // LF
-                    FinalizeOutboundLine();
+                    FinalizeOutboundLine(usersOwn);
                     break;
                 case 0x08: // backspace
                 case 0x7F: // delete
@@ -164,18 +182,29 @@ public sealed class SuicidePasswordTracker : IDisposable
     // 1-deep buffer preserves the LATEST candidate so the old-password line
     // (which the user typed first) is overwritten by the new-password line
     // (which they typed second), and OnPasswordChanged commits the right value.
-    private void FinalizeOutboundLine()
+    private void FinalizeOutboundLine(bool usersOwn)
     {
         string completed = _currentOutLine.ToString();
         _currentOutLine.Clear();
         if (completed.Length == 0) return;
+
+        // `suicide` and `reroll` are one command in the game and both are answered
+        // with the password as the very next line, typed before the game's prompt
+        // for it has reached us as a line.
+        string trimmed = completed.Trim();
+        if (usersOwn)
+        {
+            if (trimmed.Equals("suicide", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("reroll", StringComparison.OrdinalIgnoreCase)) _useFlowLines = 2;
+            else if (_useFlowLines > 0) _useFlowLines--;
+        }
 
         if (!_captureArmed)
         {
             // Arm on outbound `set suicide`. Case-insensitive because
             // MUDs accept any casing. The bare `suicide` (use-pw form)
             // does NOT change the password, so it doesn't arm.
-            if (completed.Trim().Equals("set suicide", StringComparison.OrdinalIgnoreCase))
+            if (IsSetSuicide(trimmed))
             {
                 _captureArmed = true;
                 _log?.Log(LogSeverity.Info, "Suicide",
@@ -190,6 +219,17 @@ public sealed class SuicidePasswordTracker : IDisposable
         _latestArmedLine = completed;
         _log?.Log(LogSeverity.Debug, "Suicide",
             $"Captured outbound line while armed ({completed.Length} char).");
+    }
+
+    // `set` followed by any prefix of `suicide`, however spaced or cased: the
+    // game takes every one of them
+    // (GAME_MECHANICS "Character settings — `set` and the `pro` sheet").
+    internal static bool IsSetSuicide(string line)
+    {
+        string[] words = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return words.Length == 2
+            && words[0].Equals("set", StringComparison.OrdinalIgnoreCase)
+            && "suicide".StartsWith(words[1], StringComparison.OrdinalIgnoreCase);
     }
 
     // ----- Server-line handlers ------------------------------------------
@@ -311,6 +351,7 @@ public sealed class SuicidePasswordTracker : IDisposable
         // "Invalid", etc.).
         _captureArmed = false;
         _latestArmedLine = null;
+        _useFlowLines = 0;
         _currentOutLine.Clear();
         _log?.Log(LogSeverity.Info, "Suicide", $"Engine gate UNLOCKED — {reason}");
     }
