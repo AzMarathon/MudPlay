@@ -1999,7 +1999,16 @@ public sealed class RoomTracker
             // exits decide exactly as they do for a room with no name. Only here,
             // with a move in flight that predicts the room: the rooms of one house
             // can share a name and exits, and nothing else tells them apart.
-            if (expected is not null && ArrivesInRoomTheDataLeavesUnnamed(expected, observation))
+            //
+            // One thing more for a room that bears a name: the room being left,
+            // redisplayed before the game has echoed the move (someone walking
+            // in, a re-look), is not the arrival. Its exits can all be exits of
+            // the room ahead, which would then take its name, and with every room
+            // of a house named that could happen on any step, where a nameless
+            // room meets it once. The same test Strategy 1 makes above, so an
+            // echoed arrival in a room that looks like the one left still counts.
+            if (expected is not null && ArrivesInRoomTheDataLeavesUnnamed(expected, observation)
+                && (expected.HasUnknownName || !LooksLikeSourceRelook(source, head, observation, when)))
             {
                 bool renamed = !expected.HasUnknownName;
                 string bore = expected.Name;

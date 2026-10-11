@@ -382,6 +382,34 @@ public sealed class RoomRenameRelearnTests : IDisposable
         Assert.Equal(OwnName(Landing), graph.GetRoom(Landing)!.Name);
     }
 
+    // ----- the room being left, redisplayed ---------------------------------
+
+    // The store room (15/880, exits south and east) redisplays, someone having
+    // walked in, while the step east into the hall (15/879) is still unanswered.
+    // Both its exits are exits of the hall too, and the hall must not take its
+    // name. The arrival, when it comes under the hall's new name, is taken.
+    [Fact]
+    public void ARedisplayOfTheRoomBeingLeft_BeforeTheMoveIsEchoed_IsNotTakenForTheRoomAhead()
+    {
+        RoomKey storeRoom = new(15, 880), hall = new(15, 879);
+        RoomGraphManager graph = Map(stored: OwnName);
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, storeRoom);
+        tracker.NoteRoomObserved(new RoomObservation(OwnName(storeRoom), X(Direction.S, Direction.E)));
+
+        tracker.NoteMoveSent(Direction.E);
+        tracker.NoteRoomObserved(new RoomObservation(OwnName(storeRoom), X(Direction.S, Direction.E)));
+
+        Assert.Empty(learned);
+        Assert.Equal(OwnName(hall), graph.GetRoom(hall)!.Name);
+        Assert.Equal((RoomConfidence.Pending, storeRoom), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
+
+        tracker.NoteInboundMoveEcho("e");
+        tracker.NoteRoomObserved(new RoomObservation("The Great Hall", Shown(graph.GetRoom(hall)!)));
+
+        Assert.Equal((RoomConfidence.Confirmed, hall), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
+        Assert.Equal(new[] { new NameLearnedEvent(hall, "The Great Hall") }, learned);
+    }
+
     // ----- a look typed right after the move --------------------------------
 
     // `n` then `l e` at once: the first display is the arrival, in a room that
