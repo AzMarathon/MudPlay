@@ -1111,6 +1111,10 @@ How the game's talk modes and chat channels behave: say forms, the gang channel'
 - **Bare `'` or `br` lists the channel:** `The following users are on channel %d:` and the names.
 - **Not on a channel, the command isn't a command** (@0x454627), so `'hello` falls through to speech: said aloud in talk fast, `Your command had no effect.` in talk slow.
 
+**Client use:**
+- `RemoteCommandManager` reads `Broadcast from <name> "<msg>"` as a channel a remote command can arrive by, for the client-to-client transfers alone (`TransferChannels`: only `@timer sync` is allowed there), and answers on it with `br <msg>` (`SendLine`). Paradigm's `br` and its echo to the sender are in *Self-echo on public / broadcast channels*; the echo is skipped by the own-name guard there.
+- `BossTimerSyncViewModel` sends `br @timer sync` for its Broadcast choice. On Stock the sender sees no echo, so `MainWindowViewModel.OnChatForTransfers` cannot see a hand-typed one go out.
+
 ### `forget`
 *Status: [OBSERVED] 2026-10-09 (Stock 1.11p `wccmmud.dll` `_cmd_forget` @0x4762d4, `_is_user_forgotten` @0x47638f) · Realm: Stock*
 
