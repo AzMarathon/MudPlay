@@ -1,13 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.179.3**
-> - Simulator: an area ranking belongs to the game data and character it was made on; a switch lists that pairing's own ranking or none, and switching back lists the first again
-> - Nothing ranked on one game data can be picked, drawn on the map or saved as a loop under another; a game-data switch also clears the estimator's sketch
-> - Rankings are kept while the client runs (the last eight), through closing the Navigation window and a rename of the character; a set imported again, deleted, re-picked or changed in Manage Sets loses the ones made on it
-> - A ranking listed again says when it was made and at what level, and is marked once the character has levelled since
-> - A loop being built is dropped, with a notice, when the game data changes to another set; the Edit Loop window won't save or take a room until its own game data is active again
-> - Bug report: the Simulator section names the game data and character its results are for
+> **Version 3.180.0**
+> - Simulator: area rankings are kept between sessions, one file for each character on each game data, read back when that character and game data are next on show
+> - A saved ranking is dropped, not listed, when the game data's tables, the monster seed or the Simulator itself has changed since, or after 180 days
+> - A kept ranking says what has changed in the character since (stats or gear, spells, settings, game-data edits, reach), or that the character hasn't been read yet, and is shown muted
+> - A renamed or moved character keeps its saved rankings; a deleted one's are deleted; a copy of a character or of a set's edits gets none
+> - Bug report: where the listed ranking came from, its age and what it is marked for
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
