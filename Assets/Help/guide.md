@@ -207,11 +207,34 @@ Each combat round the engine picks one main action — **cast an attack spell** 
 
 Two things always sit above that choice: a **backstab opener** fires first when eligible, and **debuff spells** are a separate extra action that can land the same round.
 
-**Taking a round yourself.** If you hand-type an attack mid-fight — a **combat spell** (any spell that costs round energy, as opposed to a 0-energy heal/buff) or a **physical attack** (`a`/`at`/`att`, `aa`/`bash`, `sma`/`smash`, `bs`) — the engine treats it as a **user override** and holds its own auto-attack for that round, so it won't fight you by re-sending its action on top of yours. Control returns automatically on the next combat round: if one of the engine's own heals or buffs stopped the fight during the round you took, it re-attacks then. `bash` or `aa` followed by a direction (`bash n`) is a door, not an attack, and doesn't count. `sm` isn't a command the game knows (smash starts at `sma`), so it doesn't count either.
+**Taking a round yourself.** If you hand-type an attack mid-fight — a **combat spell** (any spell that costs round energy, as opposed to a 0-energy heal/buff) or a **physical attack** (`a`…`attack`, `aa`/`bash`, `sma`/`smash`, `bs`/`backstab`, `pu`/`punch`, `kic`/`kick`, `ju`/`jumpkick`: every spelling the game takes) — the engine treats it as a **user override** and holds its own auto-attack for that round, so it won't fight you by re-sending its action on top of yours. Control returns automatically on the next combat round: if one of the engine's own heals or buffs stopped the fight during the round you took, it re-attacks then. `bash` or `aa` followed by a direction (`bash n`) is a door, not an attack, and doesn't count. `sm` isn't a command the game knows (smash starts at `sma`), so it doesn't count either. Nor does a line that is a text exit of the room you are standing in: `jump pool`, where the room has that exit, is a move, though `jump` is otherwise a jumpkick.
 
 A hand-cast **heal/buff/cure** (0 energy) is *not* an override — after it lands the engine resumes attacking right away, same as before.
 
 **Changing gear by hand mid-fight.** Putting a piece on or taking one off (`eq`, `wear`, `wield`, `rem`) makes the game stop your attack, the same as a cast does. Type one during a fight and the engine attacks again as soon as the game says the fight has stopped, as it does after a gear swap of its own. Several in a row get one re-attack, and the fight is picked up again with the next round if the last of them stopped it. It is the same for a gear command of yours that the client sends for you: one in a macro, an alias, a trigger's response or an event's Command action. All of it needs Auto-Combat on; with it off nothing is re-attacked. (The Action menu's Equip entries swap a whole gear set through the Equipment Manager, which re-attacks after its own swap.)
+
+**Stopping the fight yourself: `break`.** Type `break` (or `bre`, `brea`: the game takes it from three letters; `br` is broadcast) while Auto-Combat is fighting and the engine **holds its attack** on the monster it was fighting. The terminal says so: `[Attack on <monster> held by your break: attack to carry on]`. While the hold is up the engine sends no attack at all, at that monster or any other in the room: no swing, no attack spell, no room spell, no backstab. Heals, buffs and cures carry on. A monster hitting you does not end it; you chose to stand.
+
+A loop or walk **waits in the room** while the hold is up, as it does for any fight. A **flee still runs**: the low-HP or low-mana run, the run from a monster set to Flee, and the run from a player all move you as usual, and leaving the room ends the hold. (A party follower never flees, hold or no hold.)
+
+The hold ends, and the terminal says why, when:
+
+- **You attack.** Any attack command (`a`, `aa`/`bash`, `sma`, `bs`, `pu`, `kic`, `ju`, …) or an attack spell, at that monster or another. The engine carries on with what you attacked. An attack in a macro, an alias, a trigger's response or an event's Command action counts as yours. A text exit of the room (`jump pool`) is a move and does not.
+- **The monster dies or leaves,** whoever killed it. The engine then picks its next target as usual. The game tells the client nothing when a monster it isn't attacking dies, so it goes by three things:
+  - **One fewer monster of that name in the room.** The client only knows monsters by name, so with several of the same name, the death (or the leaving) of any one of them ends the hold.
+  - **Experience from a kill of your own** in the round you typed `break`.
+  - **A full round with no attack from it.** A hostile monster attacks every round, so a whole round with no attack from it (a hit or a miss, on you or on anyone else in the room) may mean it is dead. **Silence for a round makes the client look; the look decides.** It looks at the room once (a bare Enter), one to two rounds after the monster's last attack:
+    - the room no longer lists it (or lists fewer of its name): the hold ends and the next target is picked;
+    - the room still lists it: it is alive, and **the hold stays**. That is a neutral that never fought back, a monster that is stunned or held, or one whose attack printed nothing the client reads. While it stays silent and listed the client looks again no more often than every 30 seconds.
+    - **In a dark room, silence alone decides:** a look lists nobody there, so after the silent round the hold simply ends.
+    - With Auto-Combat or Auto-All off the client sends no look, and the hold just stays until the engine is back on.
+- **You leave the room,** the connection drops, another profile is loaded, or you press **Reset States**. The map correcting where it thinks you are (in a grid of rooms with the same name, say) is not leaving, and the hold stays.
+
+Turning **Auto-Combat** off and on again does not end the hold, and neither does the **Auto-All** master switch: with the engine off there is nothing to hold back, and the hold is still there when it comes back on.
+
+**A neutral you attacked and then broke from** is left alone for good: even when the hold ends some other way (another monster of its name dies, say), Auto-Combat doesn't go back to it until you attack it again. If it attacks you, self-defense fights back as usual.
+
+**Whose `break` counts.** Yours, and one a party member sends you with **`@do break`** or, said aloud, **`@party break`**: either holds the attack exactly as yours does, and the terminal names who asked (`[Attack on <monster> held by <name>'s @do break: attack to carry on]`). An attack they send the same way lifts it again. Each needs what it always needs (the Execute commands grant for `@do`, being in your party for `@party`), and with **Auto-All** off no remote command is followed, so nothing is held. A `break` the client sends for itself (before fleeing, for hit and run, before a rest, from the Sys Goto menu) holds nothing. With Auto-Combat off, a `break` after an attack you typed yourself is remembered the same way, without the terminal line.
 
 ## Fighting back (self-defense)
 
@@ -1477,6 +1500,7 @@ Two rewrites are made before sending. `@party meditate` sends `medi`. `@party go
 
 - **Always refused, without an answer:** `@party set suicide`, and any `@party` line with `reroll` in it. Everything else is relayed, a plain `suicide` included.
 - **Master switch off:** ignored, no answer.
+- **`.@party break` holds your attack.** A `break` relayed this way puts the attack hold on your character exactly as a `break` you type does: Auto-Combat stops attacking the monster it was fighting and attacks nothing else in the room. An attack relayed the same way (`.@party a orc`) lifts the hold, as an attack of your own would. Your terminal shows `[Attack on <monster> held by Leader's @party break: attack to carry on]` when the hold goes on and `[Attack hold on <monster> ended: …]` when it ends, and the program log and a bug report name Leader as the one who asked. What the hold does and how it ends is under *Combat → The round loop*, **Stopping the fight yourself**.
 - **The sending side:** a MudPlay leader says `.@party <command>` by itself to bring the party through a gate or a teleport that only takes the one who uses it. See *Navigation & Looping*.
 
 #### @invite and @join
@@ -2445,6 +2469,7 @@ Sends a command to the game as if you had typed it. This is the highest-trust co
 
 - **The two refusals come before the permission check,** so they apply to anyone, with or without the box.
 - **Master switch off:** ignored, no answer.
+- **`@do break` holds your attack.** A `break` sent this way puts the attack hold on your character exactly as a `break` you type does: Auto-Combat stops attacking the monster it was fighting and attacks nothing else in the room. An attack sent the same way (`@do a orc`) lifts the hold, as an attack of your own would. Your terminal shows `[Attack on <monster> held by Leader's @do break: attack to carry on]` when the hold goes on and `[Attack hold on <monster> ended: …]` when it ends, and the program log and a bug report name Leader as the one who asked. What the hold does and how it ends is under *Combat → The round loop*, **Stopping the fight yourself**.
 - **On your own screen:** each `@do` is written to the program log with the sender's name and the command.
 
 #### @suicide
@@ -3206,6 +3231,8 @@ Each engine — Auto-Combat, Auto-Nuke, Auto-Heal, Auto-Rest, Auto-Bless, Auto-L
 
 An engine only acts while it's on, and each has a matching Settings tab for its behavior. Some gate others: Auto-Combat, for example, gates the combat/spell tuning. But **Auto-Bless stands alone** — self and party buffing is controlled by the Auto-Bless toggle and nothing else, so turning off Auto-Combat or Auto-Rest/Heal never stops your blessing.
 
+**Auto-Combat and a `break` you type.** Typing `break` mid-fight doesn't switch Auto-Combat off: it holds the attack on that monster until you attack something yourself, or the monster dies or leaves. See **Combat → The round loop**, *Stopping the fight yourself*.
+
 **Sneak cooldown.** Right after a fight the game won't let you sneak for a few seconds (`You may not sneak right now!`). With **Auto-Sneak on**, your loop or walk waits instead of stepping on unsneaked: it retries the sneak every two seconds and moves once it takes, or after 15 seconds goes on unsneaked. **Being followed is different:** when a monster comes into the room right behind you, a sneak can't take while it's with you, so MudPlay stops sending `sn` and walks on unsneaked — no waiting, no stopping to cast — until you leave a room that nothing followed you into, or you kill what followed you. Then it sneaks again. The status bar reads *Waiting — sneak on cooldown* meanwhile. The route also waits for the game's answer before taking a step while you're not sneaking — each time you arrive in a room, and before the first step of a loop or walk — retrying a refused sneak until it takes (up to 15 seconds), so you don't walk into the next room seen (*Waiting — sneaking*). Entering a room without the game's `Sneaking...` line means the sneak silently broke: MudPlay treats that like `You make a sound as you enter the room!` and won't open with a backstab.
 
 **Something in your pack that kills your Stealth.** A few items cut your Stealth just by being carried: a **log raft** (-125), a wooden skiff, a silverbark canoe, a river punt, a wooden ladder, the large black gem. With one of them in your pack a sneak can be refused every time. When your Stealth less that penalty (and less the penalty for a heavy load) leaves under a **15%** chance to sneak, **Auto-Sneak stands down**: it says so once on the terminal, naming the item, sends no `sn`, and your walk or loop carries on unsneaked. It checks again whenever your inventory changes and starts sneaking again, with another line on the terminal, once the item is gone. A smaller penalty that still leaves a real chance changes nothing, and a character with Perfect Stealth is never stood down. The 15% is yours to set: **Settings → Other → Stop auto-sneaking while a carried item leaves under … % chance to sneak**.
@@ -3669,7 +3696,7 @@ The compare window lists each message on the left with its kind and a choice, an
 
 A command you typed yourself is never auto-repeated, and a fumbled move self-recovers through the walker rather than a blind re-send. No separate **Last action failed** checkbox is needed for a confusion fumble, since a fumble line already means "the command was eaten." It's seeded with the generic *"You fumble in confusion!"*; enter a spell's own wording (e.g. convulsions' *"You convulse violently"*) here rather than the client hardcoding it.
 
-**Cast response.** Every message also has a **Cast response** box — an engine-driven response sent to the server when that record's spell is detected cast (`^M` = a carriage return, like a Trigger). Its one use is the silent *…temp* death-spells, which emit no line but stall the game engine: a monster whose **DeathSpell** is a temp spell fires this on death, seeded `^M^M` to nudge the engine past the stall.
+**Cast response.** Every message also has a **Cast response** box — an engine-driven response sent to the server when that record's spell is detected cast (`^M` = a carriage return, like a Trigger). Its one use is the silent *…temp* death-spells, which emit no line but stall the game engine: a monster whose **DeathSpell** is a temp spell fires this on death, seeded `^M^M` to nudge the engine past the stall. When a room spell of yours kills several monsters in one round it is sent once for the room, not once per kill: a room holds only one such monster at a time.
 
 **Effects checkboxes** tag what condition a matched line *means*:
 

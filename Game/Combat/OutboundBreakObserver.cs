@@ -1,0 +1,78 @@
+using System.Text;
+
+namespace MudPlay.Game.Combat;
+
+// Sniffs the user's own commands for a `break`, which holds the combat engine's
+// attack on the monster it was fighting, and for the attack that lets it go again
+// (CombatManager.NoteUserBreak / NoteUserAttack; user, 2026-10-10: "a manual break
+// should hold attacking that target until the user types something to attack it").
+//
+// An attack is any attack word the game takes (AttackCommandWords) or the cast code
+// of an attack spell, aimed at that monster or another. A direction after the bash
+// command is a door, as in OutboundAttackObserver.
+//
+// Hooked into the wire-send pipeline by MainWindowViewModel.SendUserInput, which
+// hands it the user's own lines: typed, or sent by a macro, trigger or event they
+// set up (EngineSendGate.SendingUsersOwnCommand). A command a party member
+// relayed with `@do` or `@party` is handed over too, with that member's name
+// (user, 2026-10-10: asked which breaks sent on someone's behalf hold the attack,
+// "only the @do break"; asked then whether a `@party break` should, "yes"). An
+// engine's `break` (a flee, a room attack broken off for a bystander, the combat
+// toggle going off, `sys goto`) and an engine's attack never reach it. The line is
+// read as it is sent, so a `break` typed ahead of the round that the game answers
+// after it is the user's all the same. Short payloads only: anything past ~64
+// bytes is no bare command.
+public sealed class OutboundBreakObserver
+{
+    private const int MaxBytes = 64;
+
+    private readonly Func<string, bool> _isAttackSpell;
+    private readonly Action<string, string?> _onBreak;
+    private readonly Action<string, string?, string?> _onAttack;
+    private readonly Func<string, bool>? _isExitCommandHere;
+
+    // onBreak(word, askedBy) and onAttack(word, target, askedBy): askedBy says whose
+    // relay sent the line ("<name>'s @do", "<name>'s @party"), null for the user's own.
+    public OutboundBreakObserver(
+        Func<string, bool> isAttackSpell,
+        Action<string, string?> onBreak,
+        Action<string, string?, string?> onAttack,
+        Func<string, bool>? isExitCommandHere = null)
+    {
+        ArgumentNullException.ThrowIfNull(isAttackSpell);
+        ArgumentNullException.ThrowIfNull(onBreak);
+        ArgumentNullException.ThrowIfNull(onAttack);
+        _isAttackSpell = isAttackSpell;
+        _onBreak = onBreak;
+        _onAttack = onAttack;
+        _isExitCommandHere = isExitCommandHere;
+    }
+
+    public void ObserveOutbound(ReadOnlySpan<byte> bytes, string? askedBy = null)
+    {
+        if (bytes.IsEmpty || bytes.Length > MaxBytes) return;
+        string cmd = Encoding.Latin1.GetString(bytes)
+            .TrimEnd('\r', '\n', '\0')
+            .Trim();
+        if (cmd.Length == 0) return;
+
+        int space = cmd.IndexOf(' ');
+        string word = space >= 0 ? cmd[..space] : cmd;
+        string? target = space >= 0 ? cmd[(space + 1)..].Trim() : null;
+        if (string.IsNullOrEmpty(target)) target = null;
+
+        // A text exit of the room we stand in is a move, whatever its first word
+        // (`jump pool` where `jump` is otherwise a jumpkick).
+        if (_isExitCommandHere?.Invoke(cmd) == true) return;
+
+        if (AttackCommandWords.IsBreak(word))
+        {
+            _onBreak(word, askedBy);
+            return;
+        }
+
+        bool attackWord = AttackCommandWords.IsAttack(word)
+            && !AttackCommandWords.IsDoorBash(word, target);
+        if (attackWord || _isAttackSpell(word)) _onAttack(word, target, askedBy);
+    }
+}

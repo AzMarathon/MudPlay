@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.169.2**
+> **Version 3.171.0**
 > - Hazard buff (desert waterskin) tracked: drinks again only shortly before it runs out
 > - Auto-Sneak on: from 60 s before, with a hazard room here or within 5 steps, the drink waits for a room with no NPCs, then re-sneaks before stepping on
 > - Auto-Sneak off, or the last 15 s: it drinks where you stand; a sneak spent that way counts as lost there

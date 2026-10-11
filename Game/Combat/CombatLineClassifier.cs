@@ -153,6 +153,15 @@ public sealed class CombatLineClassifier : IDisposable
         return CombatLineKind.None;
     }
 
+    // The same reading of one line taken on its own, as if a fight of ours were on.
+    // For a reader that has to tell a monster's swing while we are not attacking
+    // (our own combat window is shut then, though the room is still fighting).
+    public static CombatLineKind ClassifyAsCombat(EmittedLine line)
+    {
+        (TerminalColor fg, bool bold) = DominantForeground(line);
+        return Classify(line.Text, fg, bold, inWindow: true);
+    }
+
     // "You are smashed to the ground!"
     private static readonly Regex SmashedYouLine =
         new(@"^You are smashed to the ground!", RegexOptions.Compiled);
