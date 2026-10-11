@@ -1029,12 +1029,57 @@ public sealed class LoopRunner : IRecoverableEngine
     public string? RefusalFor(Loop loop)
     {
         ArgumentNullException.ThrowIfNull(loop);
+        return ClosedRoomRefusalFor(loop) ?? UnpaidRefusalFor(loop);
+    }
+
+    private string? ClosedRoomRefusalFor(Loop loop)
+    {
         if (_filter is null) return null;
         List<RoomKey> closed = loop.Waypoints.Select(w => w.Key).Where(_filter.IsClosedToRoutes).Distinct().ToList();
         if (closed.Count == 0) return null;
         string first = _graph?.GetRoom(closed[0])?.Name is { Length: > 0 } name ? $"{closed[0]} ({name})" : closed[0].ToString();
         return $"loop '{loop.Name}' has {closed.Count} waypoint(s) in rooms that teleport at random and that nothing "
             + $"protects from, {first} the first: no loop or automatic walk enters them";
+    }
+
+    // A loop one of whose legs has no way but through a toll or fare the purse
+    // can't pay is not run (user, 2026-10-10): it would walk to the gate and be
+    // turned away every lap. Asked at every start, a recovery's re-plan included,
+    // so a loop refused at a toll mid-lap re-expands round it where a way round
+    // exists and stops here, naming the crossing, where none does. The words for
+    // the crossing are the walk-to's (PaidCrossingDescriber).
+    private string? UnpaidRefusalFor(Loop loop)
+    {
+        if (_filter is null || _bfs is null || _graph is null || loop.Waypoints.Count < 2) return null;
+        (_, IReadOnlyList<(RoomKey From, RoomKey To)> unreachable) = LoopExpander.Expand(loop.Waypoints, _bfs, _filter);
+        foreach ((RoomKey from, RoomKey to) in unreachable)
+        {
+            // A leg something obtainable opens is not blocked by coin.
+            IReadOnlyList<Direction>? probe;
+            using (_filter.SuspendAcquirableGatesButUnprotectableHazards())
+                probe = _bfs.FindPath(from, to, _filter);
+            if (probe is { Count: > 0 }) continue;
+            probe = _bfs.FindPath(from, to, _filter, ignoreExitGates: true);
+            if (probe is null
+                || PaidCrossingDescriber.FirstUnpaidOn(_graph, from, probe, _filter) is not { } gate)
+                continue;
+            RoomExit exit = gate.Exit;
+            string crossing = PaidCrossingDescriber.DescribeUnpaid(gate.From, gate.Dir, in exit, _filter, RoomNameOf)
+                ?? PaidCrossingDescriber.Describe(gate.From, gate.Dir, in exit, RoomNameOf) + " you can't pay";
+            return $"loop '{loop.Name}': no way from {from} to {to} without {crossing}";
+        }
+        return null;
+    }
+
+    private string? RoomNameOf(RoomKey key) => _graph?.GetRoom(key)?.Name;
+
+    // Told when a loop is refused or stopped for want of a toll or fare, with the
+    // reason it failed with: the terminal notice a walk-to gives for the same thing.
+    private Action<string>? _unpaidCrossingHandler;
+    public void SetUnpaidCrossingHandler(Action<string> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        _unpaidCrossingHandler = handler;
     }
 
     // The walk to the loop is the user's: set by a user Start and dropped the moment
@@ -1180,9 +1225,11 @@ public sealed class LoopRunner : IRecoverableEngine
         // rooms) can't be walked to, and a loop that stood in one would be thrown
         // off it on most entries. Refused here, by name, rather than started with
         // a leg missing.
-        if (RefusalFor(loop) is { } refusal)
+        string? unpaid = null;
+        if ((ClosedRoomRefusalFor(loop) ?? (unpaid = UnpaidRefusalFor(loop))) is { } refusal)
         {
             _log?.Warn("LoopRunner", $"Start refused: {refusal}");
+            if (unpaid is not null) _unpaidCrossingHandler?.Invoke(refusal);
             RaiseAfterReset(new LoopEvent(LoopEventKind.Failed, refusal));
             return false;
         }
@@ -1214,6 +1261,9 @@ public sealed class LoopRunner : IRecoverableEngine
                 $"Start branch=at-waypoint: player already at {here}; no approach needed");
             _circleStartRoom = here;
             ExpandSteps();
+            // Ahead of Started: a loop with nothing to walk never started, and the
+            // caller is told so.
+            if (FailIfNothingToWalk()) return false;
             Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
             BeginCircle();
             return true;
@@ -1228,6 +1278,7 @@ public sealed class LoopRunner : IRecoverableEngine
             _log?.Info("LoopRunner",
                 $"Start branch=no-walker: walker={_walker is not null} bfs={_bfs is not null} currentKey={currentKey?.ToString() ?? "(null)"}; expanding from waypoint 0");
             ExpandSteps();
+            if (FailIfNothingToWalk()) return false;
             Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
             BeginCircle();
             return true;
@@ -1272,6 +1323,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _circleStartRoom = closest;
         _approachTarget  = closest;
         ExpandSteps();
+        if (FailIfNothingToWalk()) return false;
         State = LoopState.Approaching;
         Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
         _log?.Info("LoopRunner",
@@ -1420,6 +1472,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // avoid-list change. Never mutates the authored waypoint list.
     private void ExpandSteps()
     {
+        _unreachableLeg = null;
         if (_loop is null || _bfs is null)
         {
             _expandedSteps = new List<LoopStep>();
@@ -1444,9 +1497,26 @@ public sealed class LoopRunner : IRecoverableEngine
             $"expand: loop='{_loop.Name}' waypoints={wps.Count} → {steps.Count} step(s), {unreachable.Count} unreachable segment(s)");
         if (unreachable.Count > 0)
         {
+            _unreachableLeg = unreachable[0];
             foreach ((RoomKey from, RoomKey to) in unreachable)
                 _log?.Warn("LoopRunner", $"expand unreachable: {from} → {to} (BFS found no path)");
         }
+    }
+
+    // The first leg the last expansion found no route for, to name when it left
+    // the loop with nothing to walk.
+    private (RoomKey From, RoomKey To)? _unreachableLeg;
+
+    // An expansion with no step in it (every leg unreachable: behind an avoided
+    // room, a gate, a toll) can't be run, and indexing into it took the client
+    // down from inside the line pump. The loop fails with the leg named instead.
+    private bool FailIfNothingToWalk()
+    {
+        if (_loop is null || _expandedSteps.Count > 0) return false;
+        string why = _unreachableLeg is { } leg ? $": no route from {leg.From} to {leg.To}" : string.Empty;
+        _log?.Warn("LoopRunner", $"loop '{_loop.Name}' expanded to no steps{why}; failing it");
+        RaiseAfterReset(new LoopEvent(LoopEventKind.Failed, $"loop '{_loop.Name}' has no leg that can be walked{why}"));
+        return true;
     }
 
     // Reconcile the live per-room edits the running-loop rail allows (command / delay)
@@ -1501,6 +1571,8 @@ public sealed class LoopRunner : IRecoverableEngine
     private void BeginCircle()
     {
         if (_loop is null) return;
+        // Before the first-waypoint event, which resets the session and the party.
+        if (FailIfNothingToWalk()) return;
         _returningFromDetour = false;
         // The loop is reached: from here on the run's walks are its own.
         _userApproach = false;
@@ -1743,6 +1815,8 @@ public sealed class LoopRunner : IRecoverableEngine
         // Tier-3 gate may have escalated; if so don't queue a new step.
         if (_recovery is not null && !_recovery.MayProceedWithPlannedStep()) return;
 
+        if (FailIfNothingToWalk()) return;
+
         // All loops are circular by definition — every lap wraps back
         // to step 0. The runner has no "Finished" end-condition; it
         // runs until the user Stops or the recovery gate aborts it.
@@ -1763,6 +1837,8 @@ public sealed class LoopRunner : IRecoverableEngine
             // room a reactor just started dispatching commands for, so
             // those commands resolve against the wrong room entirely.
             if (_loop is null || State != LoopState.Running || _stepInFlight) return;
+            // The wrap can re-expand (a live edit), and that can come back empty.
+            if (FailIfNothingToWalk()) return;
         }
 
         LoopStep step = _expandedSteps[_index];
@@ -3131,7 +3207,34 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         if (_loop is null) return;
         if (State != LoopState.Recovering) return;
+        // A refused toll has just asked for the inventory, and what the loop can
+        // be re-planned over depends on the answer: ahead of it every toll is
+        // closed, and a loop the purse could pay for would stop at its next one.
+        // The walker holds its re-plan the same way (AutoWalkManager.TryReplanOrFail).
+        if (_purseReadWait?.Invoke(RerouteOnceThePurseIsRead) == true)
+        {
+            _log?.Info("LoopRunner", "recovery: reroute waits for the inventory read the refused toll asked for");
+            return;
+        }
         StartInternal(_loop, isRecovery: true);
+    }
+
+    // The read answered, or its bound passed. Still the same recovery, or nothing:
+    // a stop, or a reroute another road took meanwhile, has left that state.
+    private void RerouteOnceThePurseIsRead()
+    {
+        if (_loop is null || State != LoopState.Recovering) return;
+        StartInternal(_loop, isRecovery: true);
+    }
+
+    // Asked before a recovery's reroute: if an inventory read a refused toll asked
+    // for is still unanswered, takes the reroute to run when it answers and returns
+    // true (OwedPurseRead.WaitForAnswer). Unset, nothing waits.
+    private Func<Action, bool>? _purseReadWait;
+    public void SetPurseReadWait(Func<Action, bool> wait)
+    {
+        ArgumentNullException.ThrowIfNull(wait);
+        _purseReadWait = wait;
     }
 
     // Tracker transitions arriving while State == Recovering: once it firmly

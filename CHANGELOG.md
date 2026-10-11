@@ -2,21 +2,26 @@
 
 ## 3.168.0
 
-- A follower left behind sends `@comeback`: a follow that failed at an exit, or the leader seen leaving without it
-- On Stock also when its own `par` shows the leader `[Invited]`
+- A follower left behind sends `@comeback`: a follow that failed at an exit, the leader seen leaving without it, or (Stock) its own `par` showing the leader `[Invited]`
 - No `@comeback` after an uninvite, a typed `leave`, a move of your own, a death or a teleport split
 - One request per split; it waits out Auto-All off or a party train trip, then goes out
 - The leader asked back is rejoined on its invite, whatever Join party if invited says
 - A party follower never flees: low HP or mana, Hit and Run, a failed backstab, PvP, a Flee monster
 - `[Invited]` rows in `par` no longer make a follower's client think it leads
 - Leader: followers left behind together are fetched one after the other
-- Leader on a loop refuses `@comeback` only for an exit of its own circuit that turned that member away; a walk-to goes back
-- Leader: a re-invited follower who never answers is waited on 90 s when the wait is set to 0
-- Party train: nothing stops the trip; the leader fetches everyone it left once the training is done
-- Party train: members are told when a trip sets out and ends, and hold their request until then
-- A dark or blind arrival counts as following; `le` is read as `leave`
-- `@forget` takes a queued member off the leader's pickup list
-- The bug report shows the last left-behind incident and who a train trip left
+- At an exit that turns a member away: a loop refuses, Auto-Lair invites on its next pass, a walk-to goes back once then ends; a Stock follower whose leader refuses or never comes stops following
+- Party train: nothing stops the trip, members hold their request, and the leader fetches everyone it left when the training is done (not after a trip you ended yourself)
+
+## 3.167.21
+
+- After a death, walks and loops avoid tolls, fares and sailings until the inventory is re-read; an arena death takes nothing
+- A toll or fare the game refuses isn't sent twice; it reopens once you carry the price
+- A walk with no way round an unpayable toll says so on the terminal
+- A loop over an unpayable toll isn't started, and stops if refused mid-lap (it could crash the client)
+- A sailing you can't pay for isn't walked to
+- The purse re-read after a refusal or a death stays owed until it goes out
+- Program log and bug report show the purse a toll was judged on
+- bug reports addressed: paradigm-20261010-145529
 
 ## 3.167.17
 

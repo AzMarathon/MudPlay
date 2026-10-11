@@ -1,6 +1,9 @@
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
+using MudPlay.Game.Cash;
 using MudPlay.Game.Map;
+using MudPlay.Game.Recovery;
 using MudPlay.Models.Profile;
 
 namespace MudPlay.Services;
@@ -661,7 +664,7 @@ public sealed class MovementFilter : IRoomFilter
         // A toll is phrased in gold crowns but any coin mix totalling N*100
         // copper passes — so the fold-to-copper conversion is here, not in the
         // shared wallet check.
-        return CannotAfford((long)exit.TollGold * 100);
+        return IsRefusedCrossing(in exit) || CannotAfford((long)exit.TollGold * 100);
     }
 
     // An NPC ask-transport charges its fare to every person who asks, so it gates on
@@ -671,7 +674,7 @@ public sealed class MovementFilter : IRoomFilter
     private bool IsFareGateBlocked(in RoomExit exit)
     {
         if (exit.FareCopper <= 0 || (_tollGateSuspended && !_tollGateForcedClosed)) return false;
-        return CannotAfford(exit.FareCopper);
+        return IsRefusedCrossing(in exit) || CannotAfford(exit.FareCopper);
     }
 
     // Party-or-self affordability: true when the crosser can't cover `cost`
@@ -680,16 +683,245 @@ public sealed class MovementFilter : IRoomFilter
     // at the gate; a member who hasn't reported fresh wealth counts as
     // unaffordable. Returns false (don't gate) when solo / not leading / own
     // wallet unknown — same "don't refuse on what we can't evaluate" rule as an
-    // unknown level. Demand-driven: invoked only for a toll exit, an NPC transport
-    // fare, or a boat fare, so nothing polls unless one is actually in play. Shared
-    // by the toll, transport-fare, and boat-fare gates.
+    // unknown level — except while the record is known to be wrong (PurseDoubt),
+    // when nothing is affordable. Demand-driven: invoked only for a toll exit, an
+    // NPC transport fare, or a boat fare, so nothing polls unless one is actually
+    // in play. Shared by the toll, transport-fare, and boat-fare gates.
     private bool CannotAfford(long cost)
     {
         if (cost <= 0) return false;
         if (_tollGateForcedClosed) return true;
+        // Ahead of the party's purse: it is our own record that isn't believed.
+        if (_purseDoubt != PurseDoubt.None) return true;
         if (PartyWealthProvider?.Invoke() is { } partyMin) return partyMin < cost;
         if (WealthProvider?.Invoke() is not { } wealth) return false;
         return wealth - Math.Max(0, ReservedCopper) < cost;
+    }
+
+    // ----- The purse on record, when it is known to be wrong ----------------
+    // The inventory record is only rebuilt by a full `i`. Until one is read, two
+    // events prove what it says about coin is out of date, and an unknown purse
+    // must not then fall back on "never refuses a walk": that rule is for a purse
+    // nobody has read, not for one known to be short.
+    private enum PurseDoubt
+    {
+        None,
+        // A death takes the coin carried along with the pile, on both realms
+        // (GAME_MECHANICS "Coins in the deathpile"), so the purse is empty.
+        Death,
+        // The game turned us away at a toll the record covered.
+        Refused,
+    }
+
+    private PurseDoubt _purseDoubt;
+
+    // RoomTracker.PlayerDeathObserved, with the room died in. An arena death takes
+    // nothing (ArenaDeathRooms.DeathTookNothing), so the coin is still carried; any
+    // other empties the purse.
+    public void NoteDeath(RoomKey? diedIn, bool tookNothing)
+    {
+        if (!tookNothing)
+        {
+            NotePurseLostAtDeath();
+            return;
+        }
+        // The inventory record is marked stale at every death all the same, so
+        // until its re-read answers the purse reads as unknown, not as kept.
+        _log?.Info("Tolls",
+            $"An arena death ({diedIn?.ToString() ?? "room unknown"}) takes nothing: tolls and fares aren't closed for it. "
+            + "The inventory is still read again, and until it answers the purse is unknown and no toll is refused on it.");
+    }
+
+    // A walk started from the graveyard on the coin carried before the death went
+    // through the first toll on its way and stood at the gate (report
+    // paradigm-20261010-145529).
+    public void NotePurseLostAtDeath()
+    {
+        _purseDoubt = PurseDoubt.Death;
+        _log?.Info("Tolls",
+            "The coin carried went with the deathpile: no toll or fare is taken until the inventory is read again.");
+    }
+
+    // ----- Crossings the game refused ----------------------------------------
+    // A refusal at a toll or fare is the game's word, whatever the record and the
+    // data said: the data's price can be wrong as well as the purse. The price the
+    // game named is the exit's price from then on, and the exit is judged on the
+    // record against it, pickups included, as soon as the record can be believed:
+    // at once when the record already said we were short, and otherwise once one
+    // full inventory read has landed since the refusal. A gate check is handed the
+    // exit alone, so one is known by the room it leads to and what the data charges
+    // for it.
+    private readonly record struct CrossingKey(RoomKey Target, int TollGold, long FareCopper)
+    {
+        public long DataCopper => TollGold > 0 ? (long)TollGold * 100 : FareCopper;
+    }
+
+    // Named: the price the refusal named, in copper; null when its wording gave
+    // none we can value. RecordRead: the record can be judged against it (above);
+    // for a crossing with no price, that a full read has come since. Immutable and
+    // swapped whole: a route can be planned off the UI thread while a refusal lands
+    // on it.
+    private volatile ImmutableDictionary<CrossingKey, (long? Named, bool RecordRead)> _refusedCrossings =
+        ImmutableDictionary<CrossingKey, (long? Named, bool RecordRead)>.Empty;
+
+    private static CrossingKey KeyOf(in RoomExit exit) => new(exit.Target, exit.TollGold, exit.FareCopper);
+
+    private static long CostOf(in RoomExit exit) =>
+        exit.Hint == RoomExitHint.Toll && exit.TollGold > 0 ? (long)exit.TollGold * 100 : exit.FareCopper;
+
+    // Our own coin free for a toll or fare: the record less what a trip has set
+    // aside. Null while the record isn't known.
+    private long? SparePurse() => WealthProvider?.Invoke() is { } wealth ? wealth - Math.Max(0, ReservedCopper) : null;
+
+    // Whether a refusal keeps this exit closed as things stand.
+    private bool IsRefusedCrossing(in RoomExit exit)
+    {
+        if (_refusedCrossings is not { Count: > 0 } all
+            || !all.TryGetValue(KeyOf(in exit), out (long? Named, bool RecordRead) refused))
+            return false;
+        if (refused.Named is not { } price || !refused.RecordRead) return true;
+        return SparePurse() is not { } spare || spare < price;
+    }
+
+    // Whether a walk, loop or Auto-Lair run is under way. A crossing refused in a
+    // wording with no price can only be judged on the data again, and the data is
+    // what sent this trip into it: it stays closed until the trip is over.
+    public Func<bool>? TripUnderWayProbe { get; set; }
+
+    // The game refused a paid crossing. crossing is the exit, null when the move
+    // refused couldn't be tied to one; namedCopper is the price its line named,
+    // null when the wording gives none we can value. Returns true when that
+    // contradicts the purse on record, so the caller reads the inventory again;
+    // false when the record already said we were short (a toll walked into by hand
+    // with an empty purse, or a price the data has too low).
+    public bool NoteCrossingRefused(RoomExit? crossing, long? namedCopper)
+    {
+        bool recordAgreed = _purseDoubt == PurseDoubt.None
+            && namedCopper is { } cost && WealthProvider?.Invoke() is { } wealth && wealth < cost;
+        if (crossing is { } exit && CostOf(in exit) > 0)
+        {
+            _refusedCrossings = _refusedCrossings.SetItem(KeyOf(in exit), (namedCopper, RecordRead: recordAgreed));
+            _log?.Info("Tolls",
+                $"The game refused the crossing into {exit.Target}"
+                + (namedCopper is { } named
+                    ? $", naming {CurrencyFormat.Full(named)}: closed to routes until the purse on record covers that"
+                      + (recordAgreed ? "." : ", once the inventory has been read again.")
+                    : ", in a wording that names no price the client can value: closed to routes until a full "
+                      + "inventory read and the end of this trip."));
+        }
+        if (_purseDoubt != PurseDoubt.None || recordAgreed) return false;
+        _purseDoubt = PurseDoubt.Refused;
+        _log?.Info("Tolls",
+            "The game refused a toll or fare the client took the purse to cover: none is taken until the inventory is read again.");
+        return true;
+    }
+
+    // InventoryManager.FullInventoryParsed: the record is the game's own again.
+    public void NotePurseRead()
+    {
+        if (_purseDoubt != PurseDoubt.None)
+        {
+            _purseDoubt = PurseDoubt.None;
+            _log?.Info("Tolls", "Inventory read: tolls and fares go by the purse on record again.");
+        }
+        if (_refusedCrossings.Count == 0) return;
+        bool trip = TripUnderWayProbe?.Invoke() == true;
+        foreach ((CrossingKey key, (long? named, _)) in _refusedCrossings)
+        {
+            // A price no higher than the data's adds nothing to the data's own gate
+            // once the record is believed; a higher one is kept as the exit's price.
+            bool spent = named is { } price ? price <= key.DataCopper : !trip;
+            if (spent) Reopen(key, "the inventory was read, and it is judged on the purse on record again");
+            else _refusedCrossings = _refusedCrossings.SetItem(key, (named, RecordRead: true));
+        }
+    }
+
+    // MovementController going idle: the trip a crossing was refused on is over.
+    public void NoteTripEnded()
+    {
+        foreach ((CrossingKey key, (long? Named, bool RecordRead) refused) in _refusedCrossings)
+            if (refused is (null, true)) Reopen(key, "the trip it was refused on ended");
+    }
+
+    // GameDataCache.ActiveSetChanged: the rooms and prices these were keyed on are
+    // another set's.
+    public void ForgetRefusedCrossings() => _refusedCrossings = _refusedCrossings.Clear();
+
+    private void Reopen(CrossingKey key, string why)
+    {
+        _refusedCrossings = _refusedCrossings.Remove(key);
+        _log?.Info("Tolls", $"The refused crossing into {key.Target} is no longer held closed: {why}.");
+    }
+
+    // Whether what this exit charges is beyond OUR purse, as against a party
+    // member's: the purse in doubt, a refusal standing, or the record short. A
+    // crossing only a follower can't pay is left to the party rules, which walk on
+    // with a warning.
+    public bool IsOwnPurseShort(in RoomExit exit)
+    {
+        long cost = CostOf(in exit);
+        if (cost <= 0) return false;
+        if (_purseDoubt != PurseDoubt.None || IsRefusedCrossing(in exit)) return true;
+        return SparePurse() is { } spare && spare < cost;
+    }
+
+    // How the purse stands against what this exit charges, for a walk's log line
+    // and for the line a walk with no route gives. Null for an exit that charges
+    // nothing.
+    public string? DescribePurseFor(in RoomExit exit)
+    {
+        long cost = CostOf(in exit);
+        if (cost <= 0) return null;
+        if (_purseDoubt == PurseDoubt.None && IsRefusedCrossing(in exit)
+            && _refusedCrossings.TryGetValue(KeyOf(in exit), out (long? Named, bool RecordRead) refused))
+        {
+            if (refused.Named is not { } named)
+                return "the game refused it in a wording that names no price the client can value, so it isn't tried again on this trip";
+            return WealthProvider?.Invoke() is { } carried
+                ? $"the game refused it, naming {CurrencyFormat.Full(named)}: {DescribeOwnPurse(named, carried)}"
+                : $"the game refused it, naming {CurrencyFormat.Full(named)}, and the purse isn't known (inventory not read)";
+        }
+        return DescribePurse(cost);
+    }
+
+    // The same with nothing to pay, for the bug report, with the crossings a
+    // refusal has put a price on.
+    public string DescribePurse()
+    {
+        string purse = DescribePurse(cost: 0);
+        if (_refusedCrossings.Count == 0) return purse;
+        return purse + "; refused crossings: " + string.Join(", ", _refusedCrossings.Select(r =>
+            $"into {r.Key.Target} ("
+            + (r.Value.Named is { } named ? "the game named " + CurrencyFormat.Full(named) : "no price named")
+            + (r.Value.RecordRead ? string.Empty : ", inventory not read since")
+            + ")"));
+    }
+
+    private string DescribePurse(long cost)
+    {
+        switch (_purseDoubt)
+        {
+            case PurseDoubt.Death:
+                return "your coin went with the deathpile and the inventory hasn't been read since (type i)";
+            case PurseDoubt.Refused:
+                return "the game refused a toll or fare the client took the purse to cover, so none is taken until the inventory is read again (type i)";
+        }
+        if (PartyWealthProvider?.Invoke() is { } partyMin)
+            return $"the party's poorest known purse holds {CurrencyFormat.Full(partyMin)}{Short(cost - partyMin)}";
+        if (WealthProvider?.Invoke() is not { } wealth)
+            return "the purse isn't known (inventory not read), so tolls and fares aren't refused on it";
+        return DescribeOwnPurse(cost, wealth);
+    }
+
+    private static string Short(long by) => by > 0 ? $", {CurrencyFormat.Full(by)} short" : string.Empty;
+
+    private string DescribeOwnPurse(long cost, long wealth)
+    {
+        long reserved = Math.Max(0, ReservedCopper);
+        string carried = reserved > 0
+            ? $"you carry {CurrencyFormat.Full(wealth)}, {CurrencyFormat.Full(reserved)} of it set aside for fees ahead"
+            : $"you carry {CurrencyFormat.Full(wealth)}";
+        return carried + Short(cost - (wealth - reserved));
     }
 
     // Copper set aside from our own wallet for something the walk is heading to pay,
@@ -902,6 +1134,9 @@ public sealed class MovementFilter : IRoomFilter
     {
         _avoided.Clear();
         _stash.Clear();
+        // Another character's purse: its own first inventory read settles it.
+        _purseDoubt = PurseDoubt.None;
+        _refusedCrossings = _refusedCrossings.Clear();
 
         if (profile.AvoidedRooms is { } a)
             foreach (RoomRef r in a) _avoided.Add(new RoomKey(r.Map, r.Room));
@@ -918,6 +1153,8 @@ public sealed class MovementFilter : IRoomFilter
         bool hadStash   = _stash.Count > 0;
         _avoided.Clear();
         _stash.Clear();
+        _purseDoubt = PurseDoubt.None;
+        _refusedCrossings = _refusedCrossings.Clear();
         if (hadAvoided) AvoidedChanged?.Invoke();
         if (hadStash)   StashChanged?.Invoke();
     }

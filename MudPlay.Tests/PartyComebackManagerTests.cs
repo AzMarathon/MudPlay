@@ -1814,6 +1814,32 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
     }
 
+    // The leader's own train run with the party in tow keeps no roll: nobody is
+    // gone back for in the middle of it, and whom the game said it dropped is
+    // fetched when the run is over.
+    [Fact]
+    public void OwnTrainRun_WithNoRoll_KeepsWhomItLeft_AndFetchesAtItsEnd()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        bool runOn = true;
+        h.Comeback.TrainTripRunning = () => runOn;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));       // the run's walk to its trainer
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        h.Walker.Stop("the run's walk is done");
+        runOn = false;
+
+        h.Comeback.TrainTripEnded(byItself: true, setOut: []);
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+    }
+
     // Probe3_T4. The user ended the trip (a second Stop, a run started over it).
     // The player has taken over, so nothing walks back on its own: who was left
     // is named once, and their own request is still a member's, answered by what
