@@ -80,6 +80,27 @@ public sealed partial class PartyManager : IDisposable
     // Our link dropped. Leaving the game takes a player off every member list.
     public void NoteLinkDropped() => SetListedWith(null, "the link dropped");
 
+    // Leader side: the members who have followed us in this party and whose row
+    // has not been taken off the roster since. One of them reading [Invited] is
+    // not somebody we invited who never came: they joined and stopped following.
+    private readonly HashSet<string> _followedUs = new(StringComparer.OrdinalIgnoreCase);
+
+    // Stock, leader side: that member followed us, stopped, and is still on our
+    // list (their row reads [Invited]). That is how the game leaves a follower an
+    // exit turned away, and such a member rejoins with a `join` and no invite, so
+    // an `uninvite` would cost them that. On Paradigm a member left behind has no
+    // row at all, and this is never true.
+    public bool IsLeftBehindOnOurList(string name)
+    {
+        if (OnStock?.Invoke() != true) return false;
+        string given = GivenNameOf(name);
+        if (!_followedUs.Contains(given)) return false;
+        foreach (PartyMember m in State.Members)
+            if (!m.IsSelf && m.IsInvited && GivenNameOf(m.Name).Equals(given, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
     // ----- par-block state machine -----
     private enum ParState { Idle, ReadingRows }
     private ParState _parState = ParState.Idle;
@@ -606,6 +627,7 @@ public sealed partial class PartyManager : IDisposable
         // PropertyChanged on this row so flipping IsInvited triggers
         // the round-trip without us needing a re-Add.
         joiner.IsInvited = false;
+        _followedUs.Add(GivenNameOf(name));
         AddSelfIfKnown(isLeader: true);
         // No rank-preference command on the leader path — MajorMUD
         // forces leaders to frontrank, and the server rejects the
@@ -810,6 +832,7 @@ public sealed partial class PartyManager : IDisposable
     // snapshot before invoking this.
     private void ResetPartyMembership()
     {
+        _followedUs.Clear();
         State.Members.Clear();
         State.LeaderName   = null;
         State.SelfIsLeader = false;
@@ -1255,6 +1278,7 @@ public sealed partial class PartyManager : IDisposable
                 if (!string.IsNullOrEmpty(given))
                     _recentlyDisconnected[given] = now;
             }
+            _followedUs.Remove(GivenNameOf(m.Name));
             State.Members.Remove(m);
         }
         State.IsInParty = State.Members.Count > 0;
@@ -1551,6 +1575,8 @@ public sealed partial class PartyManager : IDisposable
         // Idempotent: SetProperty no-ops when already false, so the on-join @health
         // round-trip (subscribed to this PropertyChanged) fires once, on the real edge.
         member.IsInvited = false;
+        // A full row on a leader's `par` is a member following them.
+        if (!isSelf && State.SelfIsLeader) _followedUs.Add(GivenNameOf(name));
 
         State.IsInParty = State.Members.Count > 0;
     }
@@ -1805,6 +1831,7 @@ public sealed partial class PartyManager : IDisposable
     private void RemoveMember(string name)
     {
         string given = GivenNameOf(name);
+        _followedUs.Remove(given);
         bool removedSelf = false;
         for (int i = State.Members.Count - 1; i >= 0; i--)
         {

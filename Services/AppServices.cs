@@ -3199,6 +3199,9 @@ public sealed class AppServices
         // followers sitting in the room, so re-invite each once AutoParty observes them
         // present (they never "re-enter the Realm" to trip the grace-window auto-invite).
         Party.LeaderReconnectReformInvites += AutoParty.NoteLeaderReconnectReform;
+        // A Stock member an exit left behind is on our list because they joined:
+        // an invite wait that runs out for them doesn't end in an uninvite.
+        AutoParty.LeftBehindOnOurList = Party.IsLeftBehindOnOurList;
         // Suicide-password observer + engine-gate consumer. Drives
         // EngineGate.IsLocked during password-entry prompts so
         // MainWindowViewModel's wrapped engine wire-senders silently

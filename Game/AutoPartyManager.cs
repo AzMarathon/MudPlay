@@ -74,6 +74,12 @@ public sealed class AutoPartyManager : IDisposable
     // override (plain per-player rules apply).
     public Func<string, bool>? ForceAcceptFrom { get; set; }
 
+    // Whether that member is on our list because they followed us and an exit left
+    // them behind, as Stock leaves them (PartyManager.IsLeftBehindOnOurList), and
+    // not because we invited someone who never joined. Null, or false on Paradigm:
+    // every invited row is an invite.
+    public Func<string, bool>? LeftBehindOnOurList { get; set; }
+
     // Test seam — most recent bytes the engine asked to write to the wire.
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
@@ -1264,6 +1270,13 @@ public sealed class AutoPartyManager : IDisposable
     // your followers" echo then suppresses re-invite and cancels their nag via
     // OnFollowerRemoved; here we just drop the wait so the gate can release and
     // the loop resume.
+    //
+    // Not a Stock member an exit left behind (LeftBehindOnOurList). They are on
+    // our list because they joined, and a `join` of theirs still needs no invite;
+    // an uninvite takes them off it for good. The wait ends without one, and what
+    // the echo would have done here is done by hand: the nag stops and they aren't
+    // auto-invited again for UninviteSuppression, so a loop that passes them every
+    // lap isn't held for them every lap.
     private void ExpireInviteWaits(DateTime now)
     {
         if (_inviteWaits.Count == 0) return;
@@ -1271,6 +1284,15 @@ public sealed class AutoPartyManager : IDisposable
         {
             if (!_inviteWaits.TryGetValue(given, out DateTime invitedAt)) continue;
             if (now - invitedAt < InviteWaitWindow) continue;
+            if (LeftBehindOnOurList?.Invoke(given) == true)
+            {
+                _log?.Log(LogSeverity.Info, "AutoParty",
+                    $"{given} didn't follow within {InviteWaitWindow.TotalSeconds:0}s — resuming the loop without an uninvite: they were left behind at an exit and are still on our list (Stock), where a `join` of theirs needs no invite.");
+                _recentlyUninvited[given] = now;
+                CancelNag(given, reason: "left on our list, no longer waited for");
+                EndInviteWait(given, reason: "wait window expired, left on our list");
+                continue;
+            }
             if (_wire.IsBound) _wire.Send($"uninvite {given}");
             _log?.Log(LogSeverity.Info, "AutoParty",
                 $"{given} didn't join within {InviteWaitWindow.TotalSeconds:0}s — uninviting, resuming loop.");

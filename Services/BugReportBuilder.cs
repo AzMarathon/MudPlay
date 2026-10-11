@@ -750,7 +750,10 @@ public static class BugReportBuilder
             List<string> tags = new();
             if (m.IsSelf) tags.Add("self");
             if (m.IsLeader) tags.Add("leader");
-            if (m.IsInvited) tags.Add("invited");
+            // Stock: a member who followed us and now reads [Invited] was left
+            // behind and is still on our list, which is not a pending invite.
+            if (m.IsInvited)
+                tags.Add(svc.Party.IsLeftBehindOnOurList(m.Name) ? "listed, not following (followed us before)" : "invited");
             tags.Add(m.Rank.ToString().ToLowerInvariant() + "rank");
             tags.Add(m.Position.ToString());
             if (m.IsWaiting) tags.Add("WAIT");

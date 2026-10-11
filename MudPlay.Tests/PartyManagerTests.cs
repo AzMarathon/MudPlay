@@ -1997,6 +1997,59 @@ public sealed class PartyManagerTests
         Assert.False(p.State.IsInParty);
     }
 
+    // Leader side. A member who followed us and now reads [Invited] on Stock was
+    // left behind at an exit and is still on our list; one we only invited is not.
+    [Fact]
+    public void Stock_AMemberWhoFollowedUs_ThenReadsInvited_IsLeftBehindOnOurList()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("Tank started to follow you."));
+        router.Dispatch(Line("You have invited Newcomer to follow you."));
+        Assert.False(p.IsLeftBehindOnOurList("Tank"));            // following
+
+        router.Dispatch(Line("The following people are in your travel party:"));
+        p.FeedTestLines(new[]
+        {
+            "  Tank Smith                     (Warrior)    [Invited]",
+            "  Newcomer Jones                 (Mage)       [Invited]",
+            "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Frontrank",
+        });
+        p.FeedTestPromptLine();
+
+        Assert.True(p.IsLeftBehindOnOurList("Tank"));
+        Assert.True(p.IsLeftBehindOnOurList("Tank Smith"));
+        Assert.False(p.IsLeftBehindOnOurList("Newcomer"));        // invited, never joined
+
+        router.Dispatch(Line("Tank started to follow you."));
+        Assert.False(p.IsLeftBehindOnOurList("Tank"));            // back with us
+    }
+
+    [Fact]
+    public void Stock_LeftBehindOnOurList_EndsWhenTheRowGoes()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        p.OnStock = () => true;
+        router.Dispatch(Line("Tank started to follow you."));
+        router.Dispatch(Line("You have invited Tank to follow you."));   // row reads invited
+        Assert.True(p.IsLeftBehindOnOurList("Tank"));
+
+        router.Dispatch(Line("Tank has been removed from your followers."));
+        router.Dispatch(Line("You have invited Tank to follow you."));   // a fresh invite
+
+        Assert.False(p.IsLeftBehindOnOurList("Tank"));
+    }
+
+    [Fact]
+    public void Paradigm_NobodyIsEverLeftBehindOnOurList()
+    {
+        var (router, p) = Setup(localCharacterName: "Me");
+        router.Dispatch(Line("Tank started to follow you."));
+        router.Dispatch(Line("You have invited Tank to follow you."));
+
+        Assert.False(p.IsLeftBehindOnOurList("Tank"));
+    }
+
     // The game's own "You are following X." outranks the belief: an ordinary
     // follower's reply, read as one.
     [Fact]
