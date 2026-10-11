@@ -2,7 +2,7 @@
 
 ## 3.180.7
 
-- Sync Timers asked on gang, say or broadcast: nothing is written as timers arrive; you pick which to take, one pick per responder, and Apply Selected writes them. A telepath to one player still adopts on arrival
+- Sync Timers asked on gang, say or broadcast: nothing is written as timers arrive; you pick which to take, one pick per responder, and Apply Selected writes them. A telepath to one player still adopts that player's timer on arrival
 - Remote commands are read on the broadcast channel when "Disallow @commands from broadcast" is unticked, under each player's permissions, answered on the channel once a minute per player
 - Picking the active game-data set again, or importing it over itself, no longer deletes its saved Simulator rankings; one is dropped only if its tables changed
 - Saved Simulator rankings older than 180 days are deleted once each start, for every character

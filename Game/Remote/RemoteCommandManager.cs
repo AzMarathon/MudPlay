@@ -22,15 +22,16 @@ namespace MudPlay.Game.Remote;
 //   c. Our own echo, and anything that doesn't start with `@` (or `&@`).
 //   d. Reserved words other subsystems own (ailment announces, @panic, sync
 //      data) — swallowed.
-//   d2. On the broadcast channel only, for a command and for a relay-back: a
-//      speaker already answered there this minute, or a channel that has had
-//      its answers for the minute — passed over before anything runs
-//      (BroadcastAnswerBudget).
 //   e. The master switch: off, only @auto-all is followed; no answer.
 //   f. Hard-blocks (1 below) — no answer, whatever the Warn setting says.
 //   g. A word that is no command — no answer.
 //   h. A path-only command (@dupe) said aloud or on the broadcast channel — no
 //      answer.
+//   h2. On the broadcast channel only, for a command and for a relay-back: a
+//      speaker already answered there this minute, or a channel that has had
+//      its answers for the minute, is passed over before anything is said or
+//      run. Counted apart for speakers who hold the permission and for those
+//      who do not (BroadcastAnswerBudget).
 //   i. The permission (2 and 3 below). A sender without it gets the generic
 //      failure message and nothing else: every check that answers with a reason
 //      of its own comes after this one, so it can tell a stranger nothing.
@@ -492,11 +493,9 @@ public sealed class RemoteCommandManager : IDisposable
             // A relay-back goes out on the channel it was asked on, the broadcast
             // channel included (user, 2026-10-11: "if a remote command was issued on
             // a channel, it should respond on that channel except for the sneak/say
-            // case"). The echo is a line said there, so it is held to the channel's
-            // bound like any answer, and one the bound would hold back is not
-            // looked at.
-            if (!OpenBroadcastAnswer(channel.Value, entry.Speaker, entry.Message, out BroadcastAnswer? echo)) return;
-            HandleRelayBack(entry.Speaker, entry.Message, channel.Value, echo);
+            // case"). The echo is a line said there, so HandleRelayBack holds it to
+            // the channel's bound like any answer.
+            HandleRelayBack(entry.Speaker, entry.Message, channel.Value);
             return;
         }
 
@@ -519,11 +518,8 @@ public sealed class RemoteCommandManager : IDisposable
         // The transfers keep to their own channels there as anywhere: one of the
         // three may go by it, and the other two are answered with where they do work.
         //
-        // What differs is how much is said there. A speaker already answered this
-        // minute, or a channel that has had its answers for the minute, is passed
-        // over before anything runs for the line (BroadcastAnswerBudget): a command
-        // that would get no answer is not carried out either.
-        if (!OpenBroadcastAnswer(channel.Value, entry.Speaker, command, out BroadcastAnswer? answer)) return;
+        // What differs is how much is said there (BroadcastAnswerBudget), which is
+        // settled below, once it is known whether the speaker holds the permission.
 
         // Ahead of every block and denial below, so nothing here answers while
         // the switch is off. Only a command this client knows: ordinary chat that
@@ -598,7 +594,17 @@ public sealed class RemoteCommandManager : IDisposable
         }
 
         // Authorisation: party-whitelist OR per-player flag.
-        if (!IsAuthorised(entry.Speaker, registration.RequiredCategory, command))
+        bool authorised = IsAuthorised(entry.Speaker, registration.RequiredCategory, command);
+
+        // On the broadcast channel a speaker already answered this minute, or a
+        // channel that has had its answers for the minute, is passed over here,
+        // before anything is said or run for the line: a command whose answer would
+        // be held back is not carried out. Refusals to players without the
+        // permission and answers to players with it are counted apart, so players
+        // nobody granted anything cannot use up a granted player's turn.
+        if (!OpenBroadcastAnswer(channel.Value, entry.Speaker, command, authorised, out BroadcastAnswer? answer)) return;
+
+        if (!authorised)
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
                 $"Denied {command} from {entry.Speaker} on {TransferChannels.NameOf(channel.Value)} (lacks {registration.RequiredCategory}).");
@@ -675,7 +681,7 @@ public sealed class RemoteCommandManager : IDisposable
     // put the same line on the wire. Only a command this client knows is relayed — the
     // echo is never arbitrary text — and a nested `&@&@…` isn't a known command, so it
     // can't ping-pong. The reroll / set-suicide hard-blocks apply to the payload too.
-    private void HandleRelayBack(string sender, string message, RemoteChannel channel, BroadcastAnswer? answer)
+    private void HandleRelayBack(string sender, string message, RemoteChannel channel)
     {
         string payload = message[1..].Trim();
         string[] tokens = payload.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -696,10 +702,34 @@ public sealed class RemoteCommandManager : IDisposable
                 $"Ignoring relay-back of unknown command {command} from {sender} (no reply).");
             return;
         }
+        // A command taken on telepath and gangpath only (@dupe) is not put on a
+        // channel by us either: relayed, it would go out as our own command on
+        // whatever channel the asker chose. Dropped without a word, like the
+        // command itself where it is not taken.
+        if (RemoteCommandCatalog.IsPathChannelOnly(command))
+        {
+            _log?.Log(LogSeverity.Debug, "RemoteCmd",
+                $"Ignoring relay-back of {command} from {sender}: it is taken by telepath / gangpath only and is not relayed (no reply).");
+            return;
+        }
+        // The broadcast channel shows us our own line on some boards, under our own
+        // name. Until that name is known the echo of what we relayed can't be told
+        // from a stranger's command, so nothing is relayed there yet.
+        if (channel == RemoteChannel.Broadcast && string.IsNullOrEmpty(SelfNameProvider?.Invoke()))
+        {
+            _log?.Log(LogSeverity.Debug, "RemoteCmd",
+                $"Ignoring relay-back of {command} from {sender} on the broadcast channel: our own name is not known yet, so our own echo there could not be told apart (no reply).");
+            return;
+        }
         // A relay-back makes us send, so it is a remote command like any other:
         // `&@auto-all` included, which asks us to switch the SENDER, not ourselves.
         if (SkippedForMasterSwitch(sender, "&" + command)) return;
-        if (!IsAuthorised(sender, RelayBackCategory, RelayBackPrefix))
+        bool granted = IsAuthorised(sender, RelayBackCategory, RelayBackPrefix);
+        // The echo, or the denial, is a line said on the channel: on the broadcast
+        // channel it is one of the minute's answers, and a relay whose line would be
+        // held back sends nothing.
+        if (!OpenBroadcastAnswer(channel, sender, "&" + command, granted, out BroadcastAnswer? answer)) return;
+        if (!granted)
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
                 $"Denied relay-back of {command} for {sender} (lacks {RelayBackCategory}).");
@@ -713,22 +743,31 @@ public sealed class RemoteCommandManager : IDisposable
     }
 
     // On the broadcast channel: whether a line from speaker may be answered now,
-    // asked before anything is done for it. False, with the reason logged, when
-    // the speaker was answered there this minute or the channel has had its
-    // answers for the minute (BroadcastAnswerBudget); the line is then passed
-    // over whole. answer is what the replies to the line are counted as. On any
-    // other channel there is no bound: true, and no answer to count.
-    private bool OpenBroadcastAnswer(RemoteChannel channel, string speaker, string what, out BroadcastAnswer? answer)
+    // asked before anything is said or done for it. False, with the reason logged,
+    // when the speaker was answered there this minute or the channel has had its
+    // answers for the minute; the line is then passed over whole. answer is what
+    // the replies to the line are counted as. On any other channel there is no
+    // bound: true, and no answer to count.
+    //
+    // granted: the speaker holds the permission for what they sent. The two kinds
+    // are bounded apart, each to one line of theirs a minute for a speaker and
+    // BroadcastAnswerBudget.AnswersPerWindow speakers a minute: what is said to a
+    // granted speaker (their command's answer, a refusal with a reason included),
+    // and the Failure message to one who is not. A channel full of players nobody
+    // granted anything draws its few refusals and costs a granted player nothing.
+    private bool OpenBroadcastAnswer(
+        RemoteChannel channel, string speaker, string what, bool granted, out BroadcastAnswer? answer)
     {
         answer = null;
         if (channel != RemoteChannel.Broadcast) return true;
-        if (_broadcastAnswers.WhyNot(speaker, Now()) is { } spent)
+        BroadcastAnswerBudget budget = granted ? _broadcastAnswers : _broadcastRefusals;
+        if (budget.WhyNot(speaker, Now()) is { } spent)
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
                 $"Passing over {what} from {speaker} on the broadcast channel: {spent}.");
             return false;
         }
-        answer = new BroadcastAnswer();
+        answer = new BroadcastAnswer(budget);
         return true;
     }
 
@@ -1225,15 +1264,20 @@ public sealed class RemoteCommandManager : IDisposable
         _wireSender?.Invoke(bytes);
     }
 
+    // What is said on the broadcast channel to speakers who hold the permission for
+    // what they sent, and the refusals to those who do not: two bounds of the same
+    // size, kept apart (OpenBroadcastAnswer).
     private readonly BroadcastAnswerBudget _broadcastAnswers = new();
+    private readonly BroadcastAnswerBudget _broadcastRefusals = new();
 
     // Everything this client says for one line of a speaker's on the broadcast
-    // channel. The reply callbacks made for that line hold it, so what a handler
-    // says after the dispatch has returned (a disarm's result after its
-    // acceptance, a trip's arrival) is the same answer and not a second one, which
-    // the minute would swallow.
-    private sealed class BroadcastAnswer
+    // channel, and the bound it is counted against. The reply callbacks made for
+    // that line hold it, so what a handler says after the dispatch has returned (a
+    // disarm's result after its acceptance, a trip's arrival) is the same answer
+    // and not a second one, which the minute would swallow.
+    private sealed class BroadcastAnswer(BroadcastAnswerBudget budget)
     {
+        public BroadcastAnswerBudget Budget { get; } = budget;
         public bool Begun;
     }
 
@@ -1241,24 +1285,26 @@ public sealed class RemoteCommandManager : IDisposable
     // bound on them (BroadcastAnswerBudget) has one gate. The first line said for
     // a line of a speaker's begins an answer and is counted; the lines that follow
     // for the same line of theirs are that answer, so a timer sync's data goes out
-    // whole. A line said for nothing of theirs is an answer of its own.
+    // whole. A line said for nothing of theirs is an answer of its own, counted
+    // with the refusals: nobody was granted it.
     private bool MayAnswerOnBroadcast(string recipient, BroadcastAnswer? answer)
     {
         if (answer is { Begun: true }) return true;
+        BroadcastAnswerBudget budget = answer?.Budget ?? _broadcastRefusals;
         DateTimeOffset now = Now();
-        if (_broadcastAnswers.WhyNot(recipient, now) is { } spent)
+        if (budget.WhyNot(recipient, now) is { } spent)
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
                 $"Not said to {recipient} on the broadcast channel: {spent}.");
             return false;
         }
-        _broadcastAnswers.Note(recipient, now);
+        budget.Note(recipient, now);
         if (answer is not null) answer.Begun = true;
         return true;
     }
 
-    // For tests: how many speakers the broadcast bound is holding a time for.
-    internal int BroadcastSpeakersRememberedForTests => _broadcastAnswers.Remembered;
+    // For tests: how many speakers the two broadcast bounds are holding a time for.
+    internal int BroadcastSpeakersRememberedForTests => _broadcastAnswers.Remembered + _broadcastRefusals.Remembered;
 
     // True when speaker is the local character (a public-channel self-echo). The gang
     // echo carries a single-word given name, while our own name may be "Given Family", so

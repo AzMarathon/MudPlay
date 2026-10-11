@@ -146,11 +146,10 @@ public sealed class TransferChannelsTests
         {
             MessageRouter router = new();
             DefaultPatterns.Seed(router);
-            PlayerDatabase players = new();
-            players.RecordObservation("Friend", null, null, null, null, null, null, Now);
-            players.EditCustomization("Friend", new PlayerCustomization(RemoteControls: (PlayerRemoteControls)~0));
+            PlayerDatabase players = _players;
+            Grant("Friend");
             players.RecordObservation("Stranger", null, null, null, null, null, null, Now);
-            Commands = new RemoteCommandManager(new ChatRouter(router), new PartyState(), players, Log)
+            Commands = new RemoteCommandManager(new ChatRouter(router), Party, players, Log)
             {
                 WarnOnDenial = warn,
                 BlockedByMasterSwitch = _ => masterSwitchOff,
@@ -193,6 +192,18 @@ public sealed class TransferChannelsTests
             });
 
         public string[] Wire => Commands.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToArray();
+
+        // The party we are in: empty unless a test adds a member.
+        public PartyState Party { get; } = new();
+
+        private readonly PlayerDatabase _players = new();
+
+        // Give a player every permission.
+        public void Grant(string name)
+        {
+            _players.RecordObservation(name, null, null, null, null, null, null, Now);
+            _players.EditCustomization(name, new PlayerCustomization(RemoteControls: (PlayerRemoteControls)~0));
+        }
     }
 
     private static ChatLogEntry Broadcast(string sender, string msg) =>
@@ -334,12 +345,129 @@ public sealed class TransferChannelsTests
         Assert.Contains(DebugLines(e), l => l ==
             "Passing over &@timer from Friend on the broadcast channel: they were answered there less than a minute ago.");
 
+        // Players without the grant draw the channel's few refusals and no more, and
+        // do not cost a player who holds it their relay.
+        const int cap = BroadcastAnswerBudget.AnswersPerWindow;
         Engine full = new();
-        for (int i = 0; i < BroadcastAnswerBudget.AnswersPerWindow; i++)
+        for (int i = 0; i < cap + 2; i++)
             full.Commands.DispatchForTests(Broadcast($"Passerby{i}", "&@health"));
+        Assert.Equal(cap, full.Wire.Length);
+        Assert.All(full.Wire, line => Assert.Equal("br {command invalid or not allowed}\r", line));
         full.Commands.DispatchForTests(Broadcast("Friend", "&@health"));
-        Assert.Equal(BroadcastAnswerBudget.AnswersPerWindow, full.Wire.Length);
-        Assert.DoesNotContain("br @health\r", full.Wire);
+        Assert.Equal("br @health\r", full.Wire.Last());
+
+        // The players who hold it have the same few between them.
+        Engine granted = new();
+        for (int i = 0; i <= cap; i++) granted.Grant($"Granted{i}");
+        for (int i = 0; i <= cap; i++)
+            granted.Commands.DispatchForTests(Broadcast($"Granted{i}", "&@health"));
+        Assert.Equal(cap, granted.Wire.Length);
+    }
+
+    // A command that is taken on telepath and gangpath only is not put on any
+    // channel by a relay: `&@dupe` would go out as our own @dupe wherever the asker
+    // chose. Dropped without a word on every channel, from anyone.
+    [Theory]
+    [InlineData(RemoteChannel.Telepath)]
+    [InlineData(RemoteChannel.Gangpath)]
+    [InlineData(RemoteChannel.Local)]
+    [InlineData(RemoteChannel.Broadcast)]
+    public void ARelayBackOfACommandForThePathChannelsOnly_IsNeverRelayed(RemoteChannel channel)
+    {
+        Engine e = new(everyCommand: true);
+
+        e.Commands.DispatchForTests(On(channel, "Friend", "&@dupe Stranger"));
+        e.Commands.DispatchForTests(On(channel, "Stranger", "&@dupe Friend"));
+
+        Assert.Empty(e.Wire);
+        Assert.Empty(e.Ran);
+        Assert.Contains(DebugLines(e), l => l.StartsWith("Ignoring relay-back of @dupe from Friend:"));
+
+        // Another command is relayed there as ever.
+        e.Commands.DispatchForTests(On(channel, "Friend", "&@health"));
+        Assert.EndsWith("@health\r", e.Wire.Single());
+    }
+
+    // Until the client knows its own name it cannot tell its own line on the
+    // broadcast channel from a stranger's, so it relays nothing there: the echo of
+    // what it relayed would be read as a command. The other channels are as ever.
+    [Fact]
+    public void WithOurOwnNameNotYetKnown_NothingIsRelayedOnTheBroadcastChannel()
+    {
+        Engine e = new();
+        e.Commands.SelfNameProvider = () => null;
+
+        e.Commands.DispatchForTests(Broadcast("Friend", "&@health"));
+        e.Commands.DispatchForTests(Broadcast("Stranger", "&@health"));
+        Assert.Empty(e.Wire);
+        Assert.Contains(DebugLines(e), l => l.Contains("our own name is not known yet"));
+
+        e.Commands.DispatchForTests(On(RemoteChannel.Gangpath, "Friend", "&@health"));
+        Assert.Equal("bg @health\r", e.Wire.Single());
+
+        // A command there is still read: only the relay waits for the name.
+        e.Commands.DispatchForTests(Broadcast("Friend", "@health"));
+        Assert.Equal("br {HP=1/1}\r", e.Wire.Last());
+    }
+
+    // ----- a party member's commands on the broadcast channel ----------------
+
+    // The commands a party member may send whatever they were granted (@wait,
+    // @comeback, @ptrain and the rest of that list) are read on the broadcast
+    // channel as they are on gangpath: carried out for a member of our party, and
+    // not for anyone else, who gets the Failure message by the Warn setting.
+    [Theory]
+    [InlineData("@wait")]
+    [InlineData("@ok")]
+    [InlineData("@comeback")]
+    [InlineData("@ptrain ask")]
+    [InlineData("@share")]
+    public void APartyMembersCommand_OnTheBroadcastChannel_IsAsOnGangpath(string line)
+    {
+        string command = line.Split(' ')[0];
+        (string[] Ran, string[] Wire) Heard(RemoteChannel channel, string sender, bool warn)
+        {
+            Engine e = new(warn: warn, everyCommand: true);
+            e.Party.Members.Add(new PartyMember { Name = "Buddy" });
+            e.Commands.DispatchForTests(On(channel, sender, line));
+            // Without the channel's own speak verb, to compare the two.
+            return (e.Ran.ToArray(), e.Wire.Select(w => w[(w.IndexOf(' ') + 1)..]).ToArray());
+        }
+
+        foreach (bool warn in new[] { true, false })
+        {
+            (string[] ran, string[] wire) = Heard(RemoteChannel.Broadcast, "Buddy", warn);
+            (string[] ranOnGang, string[] wireOnGang) = Heard(RemoteChannel.Gangpath, "Buddy", warn);
+            Assert.Equal(new[] { command }, ran);
+            Assert.Equal(ranOnGang, ran);
+            Assert.Equal(wireOnGang, wire);
+
+            // Neither a stranger nor a player granted everything is in the party.
+            foreach (string outsider in new[] { "Stranger", "Friend" })
+            {
+                (string[] notRun, string[] refusal) = Heard(RemoteChannel.Broadcast, outsider, warn);
+                (string[] notRunOnGang, string[] refusalOnGang) = Heard(RemoteChannel.Gangpath, outsider, warn);
+                Assert.Empty(notRun);
+                Assert.Equal(warn ? new[] { "{command invalid or not allowed}\r" } : Array.Empty<string>(), refusal);
+                Assert.Equal(notRunOnGang, notRun);
+                Assert.Equal(refusalOnGang, refusal);
+            }
+        }
+    }
+
+    // With the master switch off a party member's command on the channel is not
+    // followed or answered, like any other.
+    [Fact]
+    public void APartyMembersCommand_OnTheBroadcastChannel_IsNotFollowedWithTheMasterSwitchOff()
+    {
+        Engine e = new(masterSwitchOff: true, everyCommand: true);
+        e.Party.Members.Add(new PartyMember { Name = "Buddy" });
+
+        e.Commands.DispatchForTests(Broadcast("Buddy", "@comeback"));
+        e.Commands.DispatchForTests(Broadcast("Buddy", "@ptrain ask"));
+
+        Assert.Empty(e.Ran);
+        Assert.Empty(e.Wire);
     }
 
     // On Paradigm the channel shows us our own line. The command we relayed comes
@@ -586,6 +714,8 @@ public sealed class TransferChannelsTests
         if (relay)
         {
             if (args.Any(a => a.Contains("reroll"))) return (none, false);
+            // A command for telepath and gangpath only is put on no channel by us.
+            if (RemoteCommandCatalog.IsPathChannelOnly(command)) return (none, false);
             return (sender == "Stranger" ? failure : new[] { $"br {line[1..]}\r" }, false);
         }
         // A blocked word anywhere in the line is never answered, on any channel.
@@ -722,21 +852,66 @@ public sealed class TransferChannelsTests
         Assert.Equal(new[] { "br {HP=1/1}\r", "br {an answer}\r", "br {a refusal}\r" }, e.Wire);
     }
 
-    // The channel's few answers a minute are for everyone together, whatever the
-    // command: once they are given, a granted player's command waits like the rest.
+    // Players nobody granted anything draw the channel's few refusals a minute and
+    // no more, and cannot use up a granted player's turn: the two are counted apart.
     [Fact]
-    public void OnTheBroadcastChannel_OnceTheMinutesAnswersAreGiven_NoCommandRuns()
+    public void OnTheBroadcastChannel_RefusalsToStrangers_CostAGrantedPlayerNothing()
     {
+        const int cap = BroadcastAnswerBudget.AnswersPerWindow;
         Engine e = new();
-        for (int i = 0; i < BroadcastAnswerBudget.AnswersPerWindow; i++)
+        for (int i = 0; i < cap + 3; i++)
             e.Commands.DispatchForTests(Broadcast($"Passerby{i}", "@health"));
-        Assert.Equal(BroadcastAnswerBudget.AnswersPerWindow, e.Wire.Length);
+        Assert.Equal(cap, e.Wire.Length);
         Assert.All(e.Wire, line => Assert.Equal("br {command invalid or not allowed}\r", line));
 
         e.Commands.DispatchForTests(Broadcast("Friend", "@health"));
 
-        Assert.Empty(e.Ran);
-        Assert.Equal(BroadcastAnswerBudget.AnswersPerWindow, e.Wire.Length);
+        Assert.Equal(new[] { "@health" }, e.Ran);
+        Assert.Equal("br {HP=1/1}\r", e.Wire.Last());
+    }
+
+    // The granted players have the same few answers a minute between them: once
+    // those are given, the next granted player's command is neither run nor
+    // answered, and a stranger is still told no.
+    [Fact]
+    public void OnTheBroadcastChannel_OnceTheGrantedPlayersHaveHadTheMinutesAnswers_NoCommandRuns()
+    {
+        const int cap = BroadcastAnswerBudget.AnswersPerWindow;
+        Engine e = new();
+        for (int i = 0; i <= cap; i++) e.Grant($"Granted{i}");
+
+        for (int i = 0; i < cap; i++)
+            e.Commands.DispatchForTests(Broadcast($"Granted{i}", "@health"));
+        Assert.Equal(cap, e.Ran.Count);
+
+        e.Commands.DispatchForTests(Broadcast($"Granted{cap}", "@health"));
+        Assert.Equal(cap, e.Ran.Count);
+        Assert.Equal(cap, e.Wire.Length);
+        Assert.Contains(DebugLines(e), l => l ==
+            $"Passing over @health from Granted{cap} on the broadcast channel: {cap} answers were given there in the last minute.");
+
+        e.Commands.DispatchForTests(Broadcast("Stranger", "@health"));
+        Assert.Equal("br {command invalid or not allowed}\r", e.Wire.Last());
+        Assert.Equal(cap, e.Ran.Count);
+    }
+
+    // A refusal a handler gives a granted player (a transfer on a channel it does
+    // not use) is part of that player's answer, not one of the strangers' refusals.
+    [Fact]
+    public void OnTheBroadcastChannel_AGrantedPlayersRefusal_IsCountedWithTheAnswers()
+    {
+        const int cap = BroadcastAnswerBudget.AnswersPerWindow;
+        Engine e = new();
+        for (int i = 0; i < cap; i++) e.Grant($"Granted{i}");
+
+        for (int i = 0; i < cap; i++)
+            e.Commands.DispatchForTests(Broadcast($"Granted{i}", "@roomba sync"));
+        Assert.Equal(cap, e.Wire.Length);
+
+        // The strangers' refusals are all still to be had.
+        for (int i = 0; i < cap; i++)
+            e.Commands.DispatchForTests(Broadcast($"Passerby{i}", "@roomba sync"));
+        Assert.Equal(2 * cap, e.Wire.Length);
     }
 
     // What a handler says after the dispatch has returned (a result that follows
@@ -815,16 +990,19 @@ public sealed class TransferChannelsTests
         Assert.Equal(cap, e.Commands.BroadcastSpeakersRememberedForTests);
         Assert.Contains(DebugLines(e), l => l.Contains($"{cap} answers were given there in the last minute"));
 
-        // A granted player's timers wait their turn like anything else said there.
-        e.Commands.DispatchForTests(Broadcast("Friend", "@timer sync"));
-        Assert.Empty(e.Ran);
-
-        // A minute after the first of those answers, there is room for one more.
-        e.Clock += TimeSpan.FromSeconds(10);
+        // Those were refusals, to players nobody granted anything. They are counted
+        // apart from what is said to a player who holds the permission, so a
+        // granted player's timers do not wait behind them.
         e.Commands.DispatchForTests(Broadcast("Friend", "@timer sync"));
         Assert.Equal(new[] { "@timer sync" }, e.Ran);
         Assert.Equal("br {data}\r", e.Wire.Last());
-        Assert.Equal(cap, e.Commands.BroadcastSpeakersRememberedForTests);
+
+        // The granted player's own minute still holds for them.
+        e.Clock += TimeSpan.FromSeconds(10);
+        e.Commands.DispatchForTests(Broadcast("Friend", "@timer sync"));
+        Assert.Single(e.Ran);
+        Assert.Equal(cap + 1, e.Wire.Length);
+        Assert.Equal(cap + 1, e.Commands.BroadcastSpeakersRememberedForTests);
     }
 
     // The bookkeeping holds a speaker for a minute and no longer, and never more of

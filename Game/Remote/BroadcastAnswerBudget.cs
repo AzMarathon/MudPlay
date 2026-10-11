@@ -12,8 +12,13 @@ namespace MudPlay.Game.Remote;
 //     speakers cannot make the client flood either.
 // An answer is everything said for one line of theirs. A timer sync's data is
 // several lines to one asker and counts once, so it is never cut in the middle.
-// A line of theirs that would get no answer is not acted on either: the engine
-// asks WhyNot before it runs anything for it.
+// A line of theirs whose answer would be held back is not acted on either: the
+// engine asks WhyNot before it runs anything for it.
+//
+// The engine keeps two of these (RemoteCommandManager.OpenBroadcastAnswer): one for
+// what is said to speakers who hold the permission for what they sent, one for the
+// refusals to speakers who do not. Each has the limits above; a refusal is never
+// counted against the answers.
 internal sealed class BroadcastAnswerBudget
 {
     public static readonly TimeSpan Window = TimeSpan.FromMinutes(1);

@@ -604,9 +604,11 @@ public sealed class BossTimerTests : IDisposable
         engine.DispatchForTests(Asks("Bob"));
         Assert.Empty(Sent());
 
-        // The several lines were one answer: the others on the channel still have
-        // theirs this minute, up to the channel's few.
-        for (int i = 1; i < BroadcastAnswerBudget.AnswersPerWindow; i++)
+        // The several lines were one answer, and an answer to a player who holds the
+        // permission: the refusals to those who don't are counted apart, so the
+        // others on the channel still have all of theirs this minute, the channel's
+        // few, and no more.
+        for (int i = 1; i <= BroadcastAnswerBudget.AnswersPerWindow; i++)
         {
             engine.DispatchForTests(Asks($"Passerby{i}"));
             Assert.Equal("br {command invalid or not allowed}\r", Sent().Single());

@@ -994,8 +994,9 @@ To learn how one command works, open its own topic in the groups below this one.
 
 ### Sending a command
 
-Type the command as the whole message, with `@` as its first character. Three channels carry remote commands:
+Type the command as the whole message, with `@` as its first character. **The channels remote commands are read on** are telepath, gangpath and say, and the broadcast channel once its box is unticked (below). Wherever a command's topic says "on any channel remote commands are read on", it means these: three while **Disallow @commands from broadcast** is ticked, as it is by default, and four when you have unticked it. Each of the first three also has its own off switch on Settings → Talk.
 
+- **Broadcast** (only with its box unticked): `br @health`. Every MudPlay client on the numbered channel that has its own box unticked and grants you the command answers, on the channel, where everyone on it reads the answer. Each client answers you there once a minute at most.
 - **Telepath:** `/Healer @health`. Only that player's client reads it, and the answer comes back to you by telepath. Use this unless you mean to ask several players at once.
 - **Gangpath:** `bg @timer dragon`. Every MudPlay client in the gang that grants you the command answers, on gangpath, where the whole gang reads it.
 - **Say:** `.@party rest`. Every MudPlay client in the room that grants you the command acts on it. An answer comes back as a say directed at you (`>Leader {reply}`), so in a full room you can tell it is yours.
@@ -1120,7 +1121,7 @@ No other command is touched for having `suicide` among its words: `@have suicide
 Put `&` in front of a remote command (`&@invite`, `&@where`, `&@wealth`) and the player you send it to **sends that command back to you**, on the channel it arrived on: a telepath, a gangpath line, a say directed at you, or a line on the broadcast channel (once **Disallow @commands from broadcast** is unticked on their client). Your own client then takes it as a command from them, under the permissions *you* grant *them*. It is the way to make another player ask something of you: telling a party member `&@invite` makes them send you `@invite`, and your client invites them.
 
 - **Who may ask:** the player relaying it must grant you **Execute commands**, the box `@do` needs. A `@do` could already put the same line on the wire.
-- **What is relayed:** only a command their client knows, with whatever follows it, sent bare (no braces). Anything else, or a bare `&@`, is ignored without an answer. `reroll` and `@party set suicide` are dropped here too. A relay asked for on say goes back by telepath when the relaying character is sneaking or hidden, as a reply would. A relay asked for on the broadcast channel goes back on the broadcast channel, sneaking or not (see *Sharing data between clients* for what that means there).
+- **What is relayed:** only a command their client knows, with whatever follows it, sent bare (no braces). Anything else, or a bare `&@`, is ignored without an answer. `reroll` and `@party set suicide` are dropped here too, and so is `@dupe` on every channel: it is taken by telepath and gangpath only, and a relay would put it wherever the asker chose. A relay asked for on say goes back by telepath when the relaying character is sneaking or hidden, as a reply would. A relay asked for on the broadcast channel goes back on the broadcast channel, sneaking or not (see *Sharing data between clients* for what that means there).
 - **Replies:** none when it works: the relayed command is the answer, and your client's reply to it goes to them. Without the grant: the Failure message (a **Refusal**). With their master switch off: nothing, `&@auto-all` included, since it asks their client to send something.
 - **On gangpath or say** everyone there sees both lines: every MudPlay client that grants you Execute commands relays the command, and any client that grants the relaying player that command runs it too. Use telepath when you want one player to relay it, and only to you.
 - A bare `@help` lists `&@<command>` when you hold that grant, and `@help &@` describes it.
@@ -1198,7 +1199,7 @@ One row per command. **Needs** is the box the sender must have ticked on your Pl
 
 ### Movement and position
 
-The six movement commands (`@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@rego`) need **Move player**. The three position queries (`@where`, `@path`, `@who`) need **Query location**. `@trap` needs **Execute commands**. All are taken on telepath, gangpath and say.
+The six movement commands (`@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@rego`) need **Move player**. The three position queries (`@where`, `@path`, `@who`) need **Query location**. `@trap` needs **Execute commands**. All are taken on any channel remote commands are read on, except `@loop send`, which goes by telepath only.
 
 Three rules hold for `@goto`, `@loop` and `@lair` alike:
 
@@ -1227,7 +1228,7 @@ Walks you to a place: one of your GOTO favourites, a room, or a boss.
 
 Words are split at spaces and at `, / - ' . ; : ( ) [ ]`. A word matches as part of a longer one (`squ` finds *Square*), in any order, ignoring case.
 
-**Who may send it:** a player with **Move player**, on any of the three channels.
+**Who may send it:** a player with **Move player**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -1297,7 +1298,7 @@ Worked examples, with these loops saved: *Bank of Godfrey Loop*, *Godfrey Sewers
 
 Only the loops in your own Loops list (for the game data set you have loaded) are searched. A loop named exactly `last`, or one whose name begins with the word `send`, can't be started by that name, because those words are read first.
 
-**Who may send it:** a player with **Move player**, on any of the three channels. On gangpath or say, every client there that grants you Move player and has a matching loop starts it.
+**Who may send it:** a player with **Move player**, on any channel remote commands are read on. On gangpath or say, every client there that grants you Move player and has a matching loop starts it.
 
 | Reply | When |
 |---|---|
@@ -1435,7 +1436,7 @@ Starts Auto-Lair on one of your saved lair setups, or on a list of rooms.
 - `@lair mud men`: a saved lair setup. The name must be the setup's **whole name** (ignoring case). There is no partial match here.
 - `@lair 5/10, 5/11, 5/12`: two or more rooms as map/room, separated by commas or semicolons, read the way `@loop` reads a room list.
 
-**Who may send it:** a player with **Move player**, on any of the three channels.
+**Who may send it:** a player with **Move player**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -1462,7 +1463,7 @@ Starts Auto-Lair on one of your saved lair setups, or on a list of rooms.
 
 Pauses your movement, exactly as the toolbar's Pause button does. Fighting, healing and the other engines go on.
 
-**Who may send it:** a player with **Move player**, on any of the three channels.
+**Who may send it:** a player with **Move player**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -1483,7 +1484,7 @@ Pauses your movement, exactly as the toolbar's Pause button does. Fighting, heal
 
 Lifts the pause that `@stop` or the Pause button set, and carries on with what was paused.
 
-**Who may send it:** a player with **Move player**, on any of the three channels.
+**Who may send it:** a player with **Move player**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -1507,7 +1508,7 @@ Lifts the pause that `@stop` or the Pause button set, and carries on with what w
 
 Reports the room you are in.
 
-**Who may send it:** a player with **Query location**, on any of the three channels.
+**Who may send it:** a player with **Query location**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -1527,7 +1528,7 @@ Reports the room you are in.
 
 Reports what is moving you, where you are, and how far along you are.
 
-**Who may send it:** a player with **Query location**, on any of the three channels.
+**Who may send it:** a player with **Query location**, on any channel remote commands are read on.
 
 The reply has up to three parts, separated by semicolons: what is moving you, your room, and the step count.
 
@@ -1556,7 +1557,7 @@ The reply has up to three parts, separated by semicolons: what is moving you, yo
 
 Lists the other players and monsters in your room, from the room's last *Also here* line.
 
-**Who may send it:** a player with **Query location**, on any of the three channels.
+**Who may send it:** a player with **Query location**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -1573,7 +1574,7 @@ Has you disarm a trap in one direction, for the sender.
 - `@trap n`: disarm the trap to the north. The directions are `n`, `s`, `e`, `w`, `ne`, `nw`, `se`, `sw`, `u` and `d`, or the full words (`north`, `northeast`, `up`).
 - `@trap stop`: drop the disarm in hand and every request waiting behind it.
 
-**Who may send it:** a player with **Execute commands**, on any of the three channels. Anyone with that permission may send `stop`, not only the player who asked for the disarm.
+**Who may send it:** a player with **Execute commands**, on any channel remote commands are read on. Anyone with that permission may send `stop`, not only the player who asked for the disarm.
 
 | Reply | When |
 |---|---|
@@ -1617,7 +1618,7 @@ Two rewrites are made before sending. `@party meditate` sends `medi`. `@party go
 
 **Who may send it:**
 
-- **The bare form:** anyone on your party roster, or a player with **Query health/status**. On any of the three channels.
+- **The bare form:** anyone on your party roster, or a player with **Query health/status**. On any channel remote commands are read on.
 - **With a command:** only on say, and only from someone on your party roster. Sent by telepath or gangpath, the words after `@party` are ignored and you get the bare form's answer.
 - **Disallow @party commands** (Settings → Talk) stops the relay for everyone, with no answer. It also takes away the party member's free pass to the bare form: a member then needs Query health/status to get an answer.
 
@@ -1643,7 +1644,7 @@ Two rewrites are made before sending. `@party meditate` sends `medi`. `@party go
 
 `@invite` asks you to invite the sender into your party. `@join` asks you to join theirs. When it works there is no reply: your client sends `invite <sender>` or `join <sender>` to the game, and that is the answer.
 
-**Who may send it:** a player with **Request invite**, on any of the three channels.
+**Who may send it:** a player with **Request invite**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -1674,7 +1675,7 @@ The hold signals. A member who can't move sends `@wait`; `@ok` says they can aga
 - `@ok`: I can move again.
 - `@waiting`: sent by a leader that went back for a follower and is now holding for their `@ok`.
 
-**Who may send it:** anyone on your party roster, on any of the three channels. `@waiting` is acted on only when it comes from the leader you follow.
+**Who may send it:** anyone on your party roster, on any channel remote commands are read on. `@waiting` is acted on only when it comes from the leader you follow.
 
 **What each one does:**
 
@@ -1708,7 +1709,7 @@ The hold signals. A member who can't move sends `@wait`; `@ok` says they can aga
 - **`@comeback`:** anyone on your party roster, and a member who dropped out of your party within the time in **If leading, accept @comeback for (min)** (Settings → Party) and whom you did not uninvite.
 - **`@forget`:** the same, and also the leader you were following when you dropped.
 
-Both are taken on any of the three channels.
+Both are taken on any channel remote commands are read on.
 
 | Reply to `@comeback` | When |
 |---|---|
@@ -1770,7 +1771,7 @@ Has you attack a named target now, for the sender.
 - **A player who is in your room:** on a realm with PvP switched on, a fight with that player starts, by your Settings → PvP rules. It doesn't start when PvP is off, when that player is in your party, or when you are already in a fight with another player. Then nothing is attacked at all: the name is not passed on to your combat engine, and the sender is told why.
 - **Anything else** goes to your combat engine. If a monster in your room has exactly that name (ignoring case), it becomes your target and this round is fought the way your combat settings would fight any single target (weapon, attack spell or backstab). If no monster in the room, as your client last read it, has that full name (a shortened name counts as no match), your normal attack command is sent with the text as typed, and the game decides what it means.
 
-**Who may send it:** a player with **Execute commands**, on any of the three channels. Party membership alone is not enough.
+**Who may send it:** a player with **Execute commands**, on any channel remote commands are read on. Party membership alone is not enough.
 
 | Reply | When |
 |---|---|
@@ -1800,7 +1801,7 @@ Report or set the two targeting dropdowns of Settings → Combat: **Target Prior
 
 The number must be one of the options. Options `@atkprio 3` and `@atkorder 4` need exactly one more word, a player's name; the others take none. The name is saved as typed and is not checked against anything.
 
-**Who may send it:** a player with **Alter settings**, on any of the three channels.
+**Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -1828,7 +1829,7 @@ Reports your combat profiles, or switches to one. See **Combat profiles (quick-s
 
 **How a name finds a profile.** A number from 1 to the number of profiles is always the profile in that position. Anything else is matched against the profile names, and the closest one wins: a name that equals what you typed, then a name that starts with it, then a name that contains it, then a name that holds every typed word. Between equally good matches the shorter name wins. There is never an "ambiguous" answer: if any name fits at all, one profile is picked.
 
-**Who may send it:** a player with **Alter settings**, on any of the three channels.
+**Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -1845,7 +1846,7 @@ Reports your combat profiles, or switches to one. See **Combat profiles (quick-s
 
 ### Health, rest and escape
 
-`@health`, `@status` and `@lives` are open to anyone on your party roster with no box ticked, and to any other player with **Query health/status**. All three are taken on telepath, gangpath and say.
+`@health`, `@status` and `@lives` are open to anyone on your party roster with no box ticked, and to any other player with **Query health/status**. All three are taken on any channel remote commands are read on.
 
 #### @health
 
@@ -1903,7 +1904,7 @@ Asks a party healer to look at the party's health now and heal whoever is low.
 
 **What it does.** A character with a party heal spell set up sends `par` at once and answers `healing`. The fresh `par` gives your healing engine everyone's current HP, and it then heals by your own thresholds, as it would have at the next poll. The command brings that poll forward; it does not force a cast, and it does not pick the sender as the target.
 
-**Who may send it:** a player with **Execute commands**, on any of the three channels. Being in the party is not enough: a healer has to tick that box for the members who should be able to ask.
+**Who may send it:** a player with **Execute commands**, on any channel remote commands are read on. Being in the party is not enough: a healer has to tick that box for the members who should be able to ask.
 
 | Reply | When |
 |---|---|
@@ -1925,7 +1926,7 @@ Both log your character off by sending your **Game exit command** (Settings → 
 - **`@hangup`:** you stay off. MudPlay does not reconnect, and when you connect again by hand it does not enter the game for you, so you can read the screen first.
 - **`@relog`:** MudPlay dials straight back in and logs the character in again, whatever your reconnect settings say.
 
-**Who may send it:** a player with **Hangup/disconnect**, on any of the three channels.
+**Who may send it:** a player with **Hangup/disconnect**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -1950,7 +1951,7 @@ The party-wide bail-out (MegaMUD parity). It is not one of the remote commands: 
 
 ### Inventory, gear and money
 
-The seven queries (`@inv`, `@have`, `@what`, `@wealth`, `@enc`, `@uses`, `@token`) need **Query inventory**. The actions (`@get-all`, `@drop-all`, `@hide-all`, `@deposit-all`, `@get-stash`, `@equip`) need **Execute commands**. `@share` is for party members. All are taken on telepath, gangpath and say.
+The seven queries (`@inv`, `@have`, `@what`, `@wealth`, `@enc`, `@uses`, `@token`) need **Query inventory**. The actions (`@get-all`, `@drop-all`, `@hide-all`, `@deposit-all`, `@get-stash`, `@equip`) need **Execute commands**. `@share` is for party members. All are taken on any channel remote commands are read on.
 
 Most of them read your client's last copy of your inventory. Until your inventory has been listed once this session (an `i`), they answer that it has not been read.
 
@@ -2173,7 +2174,7 @@ Wears one of your saved gear sets, or saves what you are wearing into one. Gear 
 
 **How a set is found.** The set is named by **one word**, tried in this order: a set whose **keyword** equals it, then a set whose **name** equals it, then the short names `default`, `backstab`, `resthp`, `restma`, `moving` and `bossing`, each standing for the set tied to that trigger. Case is ignored. There is no partial match, and a set whose name is two words can only be reached by its keyword or short name.
 
-**Who may send it:** a player with **Execute commands**, on any of the three channels.
+**Who may send it:** a player with **Execute commands**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2202,7 +2203,7 @@ Splits the coins you carry evenly across your party.
 
 **What it does.** For each kind of coin, the share is your count divided by the number of party members, you included, rounded down. Your client sends `give <n> <coin> to <member>` to every other member on your roster. You keep your own share and whatever doesn't divide.
 
-**Who may send it:** anyone on your party roster, on any of the three channels. No box grants it to anyone else.
+**Who may send it:** anyone on your party roster, on any channel remote commands are read on. No box grants it to anyone else.
 
 | Reply | When |
 |---|---|
@@ -2226,7 +2227,7 @@ Has you train where you stand. It never walks: it takes for granted that you are
 - **Auto-train ticked:** it trains level after level until the trainer turns you away, the money runs out or you have no banked level left.
 - **Auto-train stats ticked:** your saved CP plan is applied for the level reached, with or without the box above.
 
-**Who may send it:** a player with **Execute commands**, on any of the three channels.
+**Who may send it:** a player with **Execute commands**, on any channel remote commands are read on.
 
 The reply is sent when the run has finished, not when it starts.
 
@@ -2264,7 +2265,7 @@ The **Auto-train party** handshake between MudPlay clients. You never type it. A
 - `@ptrain done <levels>`: a member reports it has trained and is back.
 - `@ptrain trip on` and `@ptrain trip off`: the leader says a party train trip has set out, or is over.
 
-**Who may send it:** anyone on your party roster, and the leader whose train trip you set out on, even after an exit on the way dropped you from that party. Taken on any of the three channels.
+**Who may send it:** anyone on your party roster, and the leader whose train trip you set out on, even after an exit on the way dropped you from that party. Taken on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2281,7 +2282,7 @@ The **Auto-train party** handshake between MudPlay clients. You never type it. A
 
 Reports the client's name and version.
 
-**Who may send it:** a player with **Query version**, on any of the three channels.
+**Who may send it:** a player with **Query version**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2304,7 +2305,7 @@ Lists the commands the sender may use on you, or describes one command.
 
 The `@` on `@help` itself is needed, like on every remote command: a plain `help` in chat does nothing.
 
-**Who may send it:** a player with **Query version**, on any of the three channels.
+**Who may send it:** a player with **Query version**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2325,7 +2326,7 @@ The `@` on `@help` itself is needed, like on every remote command: a plain `help
 
 Reports how the session is going: exp made, exp needed, the rate, and the time to the next level at that rate.
 
-**Who may send it:** a player with **Query experience**, on any of the three channels.
+**Who may send it:** a player with **Query experience**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2345,7 +2346,7 @@ The rate is written exactly below 100,000 an hour, in thousands up to a million 
 
 Reports your level and experience.
 
-**Who may send it:** a player with **Query experience**, on any of the three channels.
+**Who may send it:** a player with **Query experience**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2367,7 +2368,7 @@ Reports your deaths that are not fully recovered, so a party member can help you
 - `@death`: the most recent one.
 - `@death all`: every one, newest first, up to five lines.
 
-**Who may send it:** a player with **Query deaths**, on any of the three channels.
+**Who may send it:** a player with **Query deaths**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2388,7 +2389,7 @@ Reports quest progress: which quests are marked complete on your Quests tab and,
 
 **How a name finds a quest.** Tried in this order: a number is taken as the flag number; then the built-in names for the three alignment quests (`good`, `good align`, `good alignment`, `good quest`, `goodquest`, and the same for `neutral` and `evil`); then a quest whose name equals the text; then the first quest whose name contains the text, or is contained in it. Case and extra spaces are ignored.
 
-**Who may send it:** a player with **Query quests**, on any of the three channels.
+**Who may send it:** a player with **Query quests**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2418,7 +2419,7 @@ Reports quest progress: which quests are marked complete on your Quests tab and,
 
 Reports your eleven auto toggles in one line. It changes nothing.
 
-**Who may send it:** a player with **Alter settings**, on any of the three channels.
+**Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2456,8 +2457,14 @@ Both ends keep to the table. The client asked refuses a request that comes by an
 - `@timer sync` is followed there, and answered on the channel.
 - `@roomba sync` and `@loop send` are refused there with where they do work.
 - **Every other rule still holds there:** the master switch (off, nothing is followed or answered), **Disallow all remote control commands**, the **Warn** setting for refusals, and the blocks that never answer (`reroll`, `@party set suicide`). `@dupe` is not taken on the channel, as it is not taken on say: it stays telepath and gangpath only. `@party` with a directive acts only when said in the room; on the channel it reports its status, as it does by telepath and gangpath.
-- **A relay-back (`&@command`) is read there too, and the command is sent back on the channel** (`br @command`), under the same rules as anywhere: only a command the client knows, only for a player it grants **Execute commands**, never `reroll` or `@party set suicide`, and nothing while the master switch is off. **The command is spoken on the channel, so every MudPlay client there with its box unticked hears it as a command from the client that relayed it**, each subject to what that player grants the relaying character, the same as a relay on gangpath. It is not only your client that hears it. The relayed line counts as that minute's answer to you.
-- **Your client says little there.** Each player gets one answer a minute on that channel (a command's reply, a set of timers, a refusal or the Failure message), and all players together get four a minute. An answer is everything said for one command, however many lines, including a result that follows later (a `@trap` attempt, then its outcome). **A command that would get no answer is not carried out either:** anything past the limit is passed over without a word and without effect, so nobody on the channel can make your client flood it, or use up the lines the game lets you send. Ask again a minute later.
+- **A relay-back (`&@command`) is read there too, and the command is sent back on the channel** (`br @command`), under the same rules as anywhere: only a command the client knows, only for a player it grants **Execute commands**, never `reroll` or `@party set suicide`, and nothing while the master switch is off. **The command is spoken on the channel, so every MudPlay client there with its box unticked hears it as a command from the client that relayed it**, each subject to what that player grants the relaying character, the same as a relay on gangpath. It is not only your client that hears it. The relayed line counts as that minute's answer to you. Until a client has read its own character's name (the first moments after logging in) it relays nothing on the channel, since it could not yet tell its own line there from someone else's.
+- **Your client says little there.** Each player gets one answer a minute on that channel, and it answers four players a minute. An answer is everything said for one command, however many lines, including a result that follows later (a `@trap` attempt, then its outcome). Two counts are kept, each with those limits:
+  - **players who hold the permission** for what they sent: the command's reply, a set of timers, a relayed command, or a refusal with a reason (`@roomba sync works by … only`);
+  - **players who don't:** the Failure message.
+
+  So a channel full of players you granted nothing draws four Failure messages a minute at most and does not cost a player you did grant their turn.
+- **A command sent while its sender is over the limit is passed over whole:** it is not answered, and it is **not carried out**. That is a player your client already answered on the channel within the last minute, or a fifth player in a minute in which four of their kind were answered. Ask again a minute later. This keeps anyone on the channel from making your client flood it, or use up the lines the game lets you send.
+- **A command that says nothing is not counted.** Some commands give no reply when they work (`@wait`, `@ok`, `@hangup`, `@relog`, and others that only act). From a player who holds the permission they are carried out every time, as on any channel: the limit is on what your client says, and it starts counting for a player only once something has been said to them.
 
 #### @timer
 
@@ -2469,7 +2476,7 @@ Reports the boss respawn timers you are tracking, or hands them to the sender's 
 - `@timer dragon`: the timers of bosses whose name contains the text, ignoring case.
 - `@timer sync`: send the timers as data, for another MudPlay client to merge.
 
-**Who may send it:** a player with **Query boss timers**, by telepath, gangpath or say. `@timer sync` may also be asked on the **broadcast channel** (the numbered channel spoken on with `br`), and is answered there, once you have unticked **Disallow @commands from broadcast** on Settings → Talk; the readable `@timer` report is then read there too, like any remote command.
+**Who may send it:** a player with **Query boss timers**, on any channel remote commands are read on. That includes the **broadcast channel** (the numbered channel spoken on with `br`) once you have unticked **Disallow @commands from broadcast** on Settings → Talk: both the readable `@timer` report and `@timer sync` are then read and answered there.
 
 | Reply | When |
 |---|---|
@@ -2489,7 +2496,7 @@ Times read `2h14m`, or `45m` under an hour.
 
 - **The asking side of `@timer sync`:** sending it, by hand or with **Request Timers** on the Bosses tab, opens the merge window that collects the answers. See **Bosses** under *Quests, Bosses, and Deaths*.
 - **On gangpath, say or the broadcast channel** every client that grants you the permission answers, each with its own set, and everyone on the channel sees the lines. The merge window keeps one set per player and folds them together, so several answers are what you want; each is a handful of lines (sixty timers at most).
-- **On the broadcast channel each client answers a player once a minute, and four players a minute in all.** A whole set of timers is one answer, however many lines it takes. Asked again sooner, or once the minute's four answers are given, the client says nothing; ask again a minute later. The other channels have no such limit.
+- **On the broadcast channel each client answers a player once a minute, and four players a minute.** A whole set of timers is one answer, however many lines it takes. Asked again sooner, or once four players who hold the permission have been answered in the minute, the client says nothing; ask again a minute later. Refusals to players without the permission are counted apart and do not use up those four. The other channels have no such limit.
 - **Answers are taken on the channel you asked on, and on no other.** Asked on gangpath, only gangpath answers are read; by telepath, only telepaths; on broadcast, only broadcast (and only while **Disallow @commands from broadcast** is unticked). The one exception: after a request you **said**, a telepathed answer is read too, because a client that is sneaking answers a said request by telepath rather than speak aloud. A second request on another channel while the window is open adds that channel, whether you make it with **Request Timers** or type it by hand; answers to the first are still read.
 - **Asked on gangpath, say or the broadcast channel, no timer is adopted without a pick.** Several players may answer there, each with a different timer for the same boss, so every timer that differs from yours becomes a row to choose from, one pick per responder, and nothing is written until **Apply Selected**. For a boss you hold no timer for the default reads **Take none**. A telepathed answer to a said request counts as the say's. Rows heard on the broadcast channel are marked `heard on broadcast` under the sender's name. A timer you had none for is adopted as it arrives only when it comes by telepath from a player you asked by telepath, and only while nothing has been asked on gangpath, say or the broadcast channel in that window, in either order. A telepathed timer from anyone else is a pick.
 - **Your own data is never read back as an answer.** A shared channel echoes your lines to you; if your client answered someone else's `@timer sync` while your own merge window was open, that echo is passed over.
@@ -2508,7 +2515,7 @@ Reports where an item was last seen in your gang house, from the Roomba item log
 
 **How the item is matched.** First the text is looked up as an item name in the game data, so any wording the game data knows finds that one item. Failing that, an item logged under exactly that name. Failing that, **every** logged item whose name contains the text, so a loose word such as `head` can bring back several items.
 
-**Who may send it:** a player with **Query Roomba**, on any of the three channels for `@roomba <item>`. **`@roomba sync` works by telepath or gangpath only**: the gang house's whole log goes to one player or to the gang, and is not said aloud in a room.
+**Who may send it:** a player with **Query Roomba**, on any channel remote commands are read on for `@roomba <item>`. **`@roomba sync` works by telepath or gangpath only**: the gang house's whole log goes to one player or to the gang, and is not said aloud in a room.
 
 | Reply | When |
 |---|---|
@@ -2538,7 +2545,7 @@ Works the master switch: the same switch as the **All auto-responses** toggle in
 - `@auto-all on`: switch it on, giving back the toggles that were ticked when it went off.
 - `@auto-all`: flip it.
 
-**Who may send it:** a player with **Alter settings**, on any of the three channels.
+**Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2564,7 +2571,7 @@ Eleven commands, one for each auto toggle on your toolbar and in Settings → Ge
 - `@auto-combat on`: tick it.
 - `@auto-combat off`: untick it.
 
-**Who may send it:** a player with **Alter settings**, on any of the three channels.
+**Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2606,7 +2613,7 @@ A name longer than 40 characters is shown cut short, as its first 37 characters 
 
 The last word is read as the switch (`on`, `off`, `enable`, `disable`), unless everything after `@event` is itself an event's whole name. So an event called *Lights on* is asked about with `@event lights on` and switched with `@event lights on on`. With both a *Lights* and a *Lights on* defined, `@event lights on` asks about *Lights on*; switch *Lights* on with `@event lights enable`.
 
-**Who may send it:** a player with **Alter settings**, on any of the three channels. It is the permission `@settings`, `@profile` and the `@auto-…` toggles need: seeing how your client is set up needs the same grant as changing it. A player without it gets the Failure message whatever they typed, and so can't learn whether an event of some name exists.
+**Who may send it:** a player with **Alter settings**, on any channel remote commands are read on. It is the permission `@settings`, `@profile` and the `@auto-…` toggles need: seeing how your client is set up needs the same grant as changing it. A player without it gets the Failure message whatever they typed, and so can't learn whether an event of some name exists.
 
 **What granting it allows here.** A player who holds Alter settings can switch your events on and off, and an event switched on does whatever you defined it to do: walk somewhere, run a loop or Auto-Lair, make a bank trip, send a command. They can't define an event or change what one does.
 
@@ -2658,7 +2665,7 @@ What the one-event answer describes an event by:
 
 Zeroes your session statistics: the same wipe as **Reset session** in the Session Stats window. Your transaction history is left alone.
 
-**Who may send it:** anyone on your party roster, or a player with **Alter settings**. On any of the three channels.
+**Who may send it:** anyone on your party roster, or a player with **Alter settings**. On any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2679,7 +2686,7 @@ Forwards your incoming telepaths to another player, so someone else can read you
 - `@divert Healer`: start forwarding to Healer. Only the first word is used.
 - `@divert`: stop.
 
-**Who may send it:** a player with **Divert conversations**, on any of the three channels.
+**Who may send it:** a player with **Divert conversations**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2707,7 +2714,7 @@ Sends a command to the game as if you had typed it. This is the highest-trust co
 
 - `@do rest`: your client sends `rest`. Everything after `@do` is sent, with single spaces between the words.
 
-**Who may send it:** a player with **Execute commands**, on any of the three channels.
+**Who may send it:** a player with **Execute commands**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
@@ -2729,7 +2736,7 @@ Sends a command to the game as if you had typed it. This is the highest-trust co
 
 Kills your character, using the suicide password MudPlay captured from your own `set suicide` (Settings → BBS + Display shows it under **Suicide password**).
 
-**Who may send it:** a player with **Elevated Commands**, on any of the three channels.
+**Who may send it:** a player with **Elevated Commands**, on any channel remote commands are read on.
 
 **The permission comes first, then the lives rule.** A sender without Elevated Commands gets the Failure message and nothing else. For a sender who holds it, Settings → Other → **Block @suicide commands when lives ≤** (default 5) is checked next:
 
@@ -6097,7 +6104,7 @@ Settings → Talk.
 **Default:** On (ticked). A profile saved before this setting existed also reads as ticked.
 **What it does:** Drops everything arriving on the **broadcast channel**: the game's numbered channel, the one you `join <n>` and speak on with `br`. It is ticked by default because that channel is public: anyone can join one. While it is ticked your client reads nothing there, neither another player's request nor the answers to a request of your own.
 **Unticked:** remote commands are read on that channel as they are on telepath, gangpath and say, and answered on it. **Anyone who has joined the channel can send your client a command there. Each one is still subject to that player's permissions** (Players tab), so a player you have granted nothing gets the Failure message and nothing more. The transfers keep to their own channels: `@timer sync` is followed and answered there; `@roomba sync` and `@loop send` are refused there with where they do work. `@dupe` is not taken there. A relay-back (`&@command`) is read there and the command goes back on the channel, where every MudPlay client with this box unticked hears it as a command from the client that relayed it. See *Sharing data between clients* under Remote @-commands.
-**Important notes:** For a timer sync on broadcast the box must be unticked on both clients. Refusals there follow **Warn sender on invalid / denied remote command** like any other, and are seen by everyone on the channel, as every answer is. Your client answers each player there once a minute at most, and four players a minute in all (everything said for one command counts as one answer); a command past that is passed over in silence and is not carried out. The master switch, **Disallow all remote control commands** and the blocks that never answer apply there as everywhere. Timers that arrive on this channel are never adopted without your pick.
+**Important notes:** For a timer sync on broadcast the box must be unticked on both clients. Refusals there follow **Warn sender on invalid / denied remote command** like any other, and are seen by everyone on the channel, as every answer is. Your client answers each player there once a minute at most, and four players a minute (everything said for one command counts as one answer; the players who hold the permission and the ones refused are counted apart, four each). A command from a player who is over that limit is passed over in silence and is not carried out. A command that says nothing when it works is not counted, and is carried out each time for a player who holds its permission. The master switch, **Disallow all remote control commands** and the blocks that never answer apply there as everywhere. Timers that arrive on this channel are never adopted without your pick.
 
 ### Warn sender on invalid / denied remote command
 
