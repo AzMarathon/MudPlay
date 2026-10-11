@@ -4,8 +4,8 @@ namespace MudPlay.Game.Combat;
 
 // Whether a line is an attack by one named monster: a hit or a miss, on us or on
 // anyone else in the room. Asked while the user's break hold stands, where a
-// monster that goes a round without attacking is taken for dead (CombatManager;
-// user, 2026-10-10).
+// monster that goes a round without attacking may be dead: the client looks at
+// the room, or in the dark takes it for dead (CombatManager; user, 2026-10-10).
 //
 // It has no wording of its own. A hit is a damage line the round ledger's reader
 // (DamageLineAttributor) credits to that monster. A miss, a dodge or a blow that
