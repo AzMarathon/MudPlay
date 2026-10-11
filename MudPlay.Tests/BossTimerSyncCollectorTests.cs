@@ -143,6 +143,24 @@ public sealed class BossTimerSyncCollectorTests
         Assert.Empty(got);
     }
 
+    // A shared channel echoes our own lines back under our name (the gang channel,
+    // and the broadcast channel on Paradigm). Data we sent in answer to someone
+    // else's request while our own window is open is not a response from ourselves.
+    [Theory]
+    [InlineData(ChatChannel.Gangpath, RemoteChannel.Gangpath)]
+    [InlineData(ChatChannel.Broadcast, RemoteChannel.Broadcast)]
+    public void OurOwnEchoedData_IsNotAResponse(ChatChannel echoedOn, RemoteChannel askedOn)
+    {
+        BossTimerSyncCollector c = NewCollector(out var got);
+        c.Begin(askedOn);
+
+        FeedResponse(c, Us, OneTimer, 6, echoedOn);
+        Assert.Empty(got);
+
+        FeedResponse(c, "Bob", OneTimer, 6, echoedOn);
+        Assert.Equal("Bob", Assert.Single(got).Sender);
+    }
+
     // With the broadcast channel switched off on the Talk tab it is not listened
     // to at all: answers heard there are passed over even after a request on it.
     // The other channels are read as ever.

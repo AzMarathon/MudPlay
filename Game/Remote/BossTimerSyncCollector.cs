@@ -100,6 +100,8 @@ public sealed class BossTimerSyncCollector : IDisposable
         if (TransferChannels.Of(e.Channel) is not { } heardOn || !AnswersAreTakenOn(heardOn)) return;
         if (heardOn == RemoteChannel.Broadcast && _broadcastOff()) return;
         if (e.Speaker is not { Length: > 0 } sender) return;
+        // Our own data, echoed back to us by the channel, is no one's answer.
+        if (_isOurName(sender)) return;
         if (!TryParse(e.Message, out int index, out int count, out string blob)) return;
 
         if (!_partial.TryGetValue(sender, out Partial? p) || p.N != count)
