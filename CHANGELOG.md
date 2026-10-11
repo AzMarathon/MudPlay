@@ -1,5 +1,9 @@
 # Version history
 
+## 3.174.3
+
+- Used on also lists the rooms where a command needs the item held to work an exit (lever, rubbed orb, titanium fork), naming the exit it opens
+
 ## 3.174.2
 
 - No fight is opened from a room you are stepping out of (a swing at you, a hit line, a room re-run); the attack used to land in the next room
