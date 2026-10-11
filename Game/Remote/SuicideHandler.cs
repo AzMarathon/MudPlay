@@ -263,7 +263,8 @@ public sealed class SuicideHandler : IDisposable
                 text, Array.Empty<Terminal.CellAttributes>(), DateTimeOffset.UnixEpoch, IsPromptLine: false),
             out _);
 
-    // The game's prompt for the password (GAME_MECHANICS "Suicide and reroll").
+    // The game's prompt for the password
+    // (GAME_MECHANICS "Character settings — `set` and the `pro` sheet").
     // Checked against the message catalogue's own pattern at construction, so
     // the two can't drift apart.
     internal const string PasswordPromptText = "Enter your suicide password:";

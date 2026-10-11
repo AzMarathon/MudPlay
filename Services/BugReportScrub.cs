@@ -85,8 +85,8 @@ public static class BugReportScrub
     }
 
     // The game's echo of a suicide password as it is typed: `*` after one of its
-    // three password prompts (GAME_MECHANICS "Wire, prompt & command output":
-    // `set suicide`). A run of any length is the echo: Paradigm prints one for
+    // three password prompts (GAME_MECHANICS "Character settings — `set` and the
+    // `pro` sheet", under `set suicide`). A run of any length is the echo: Paradigm prints one for
     // each character sent, and nothing here counts on Stock printing fewer. The
     // run is masked whole, so a report doesn't give the password's length away.
     // Between the stars the raw wire may carry a colour change or the erase of a
@@ -179,8 +179,6 @@ public static class BugReportScrub
         // What was left unmasked and why, for the Session section. Never holds a
         // value.
         public IReadOnlyList<string> Notes { get; }
-
-        public bool HasTerms => _patterns.Length > 0;
 
         // How many saved values are masked, and how many saved values could not
         // be read back (and so could not be masked). Counts only.

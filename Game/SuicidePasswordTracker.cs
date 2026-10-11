@@ -222,7 +222,8 @@ public sealed class SuicidePasswordTracker : IDisposable
     }
 
     // `set` followed by any prefix of `suicide`, however spaced or cased: the
-    // game takes every one of them (GAME_MECHANICS "Suicide and reroll").
+    // game takes every one of them
+    // (GAME_MECHANICS "Character settings — `set` and the `pro` sheet").
     internal static bool IsSetSuicide(string line)
     {
         string[] words = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);

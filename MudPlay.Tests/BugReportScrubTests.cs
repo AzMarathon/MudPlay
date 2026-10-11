@@ -406,7 +406,7 @@ public sealed class BugReportScrubTests
     public void NoSecrets_ChangesNothing()
     {
         BugReportScrub.Scrubber scrubber = BugReportScrub.Build([new(BugReportScrub.LoginNameLabel, null)], []);
-        Assert.False(scrubber.HasTerms);
+        Assert.Equal(0, scrubber.MaskedValues);
         Assert.Equal("anything at all", scrubber.Apply("anything at all"));
     }
 
