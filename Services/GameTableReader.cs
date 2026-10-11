@@ -4,6 +4,7 @@ using System.Buffers.Text;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.Unicode;
 
 namespace MudPlay.Services;
 
@@ -52,7 +53,7 @@ internal static class GameTableReader
                     // A name or an escaped text that is not valid Unicode (half a
                     // surrogate pair, a broken UTF-8 sequence): the file is as
                     // unreadable as one with broken syntax.
-                    throw new JsonException("The table holds text that is not valid Unicode.", ex);
+                    throw NotUnicode(ex);
                 }
                 if (final) break;
 
@@ -78,6 +79,9 @@ internal static class GameTableReader
         }
         return builder.Build(stream);
     }
+
+    private static JsonException NotUnicode(Exception? inner) =>
+        new("The table holds text that is not valid Unicode.", inner);
 
     // An append-only list kept in fixed pieces. A table's size is not known until its
     // last row, and an array regrown as it fills throws away several times the final
@@ -409,7 +413,13 @@ internal static class GameTableReader
 
         private ReadOnlySpan<byte> Unescaped(ref Utf8JsonReader reader)
         {
-            if (!reader.ValueIsEscaped) return reader.ValueSpan;
+            if (!reader.ValueIsEscaped)
+            {
+                // The JSON reader passes a string's bytes through unexamined, and a
+                // bad one would later decode to U+FFFD without a word.
+                if (!Utf8.IsValid(reader.ValueSpan)) throw NotUnicode(null);
+                return reader.ValueSpan;
+            }
             // Unescaping never lengthens the text.
             if (_scratch.Length < reader.ValueSpan.Length) _scratch = new byte[reader.ValueSpan.Length * 2];
             int written = reader.CopyString(_scratch);
@@ -423,6 +433,7 @@ internal static class GameTableReader
                 byte[] raw = new byte[length];
                 stream.Position = start;
                 stream.ReadExactly(raw);
+                if (!Utf8.IsValid(raw)) throw NotUnicode(null);
                 _values[cell] = _texts.IdOf(raw);
             }
 

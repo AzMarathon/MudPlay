@@ -164,6 +164,41 @@ public sealed class GameTableTests
         Assert.ThrowsAny<JsonException>(() => TestRows.Table(json));
     }
 
+    // A byte that is not UTF-8 is refused wherever it sits. The JSON reader itself
+    // lets one through inside a string, and decoding it later would quietly give
+    // U+FFFD in its place.
+    [Theory]
+    [InlineData(new byte[] { 0xFF })]
+    [InlineData(new byte[] { 0x80 })]                // a continuation byte on its own
+    [InlineData(new byte[] { 0xC3 })]                // a sequence cut short
+    [InlineData(new byte[] { 0xC0, 0x80 })]          // an overlong form
+    [InlineData(new byte[] { 0xED, 0xA0, 0x80 })]    // half a surrogate pair written as UTF-8
+    public void Bytes_that_are_not_utf8_are_refused_wherever_they_sit(byte[] bad)
+    {
+        static GameTable Read(string before, byte[] middle, string after)
+        {
+            using MemoryStream stream = new([.. Encoding.ASCII.GetBytes(before), .. middle, .. Encoding.ASCII.GetBytes(after)]);
+            return GameTableReader.Read(stream);
+        }
+
+        (string Before, string After)[] places =
+        {
+            ("[{\"Name\":\"a", "b\"}]"),                    // a plain string
+            ("[{\"Name\":\"a\\n", "b\"}]"),                 // a string with an escape
+            ("[{\"Na", "me\":1}]"),                         // a field name
+            ("[{\"N\\u0061", "me\":1}]"),                   // a field name with an escape
+            ("[{\"Name\":1},{\"Na", "me\":1}]"),            // a name where the last row's was expected
+            ("[{\"Name\":1},{\"N\\u0061", "me\":1}]"),
+            ("[{\"Nested\":[\"a", "b\"]}]"),                // a string inside a nested value
+        };
+        foreach ((string before, string after) in places)
+        {
+            Assert.ThrowsAny<JsonException>(() => Read(before, bad, after));
+            // The same place holding real UTF-8 reads.
+            Assert.NotEmpty(Read(before, "é"u8.ToArray(), after).Rows);
+        }
+    }
+
     // The reader works a block of the file at a time: rows, texts and numbers that
     // straddle a block, and one text longer than a block.
     [Fact]
