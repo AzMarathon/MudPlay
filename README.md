@@ -1,8 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.174.3**
-> - Used on also lists the rooms where a command needs the item held to work an exit (lever, rubbed orb, titanium fork), naming the exit it opens
+> **Version 3.174.6**
+> - Hang-up death check reads the room you come back in: where that room's dead arrive agrees with a death; back where you left rules one out, and so does any other room on unmodified Stock data and the zones Paradigm shares with Stock
+> - Lives not read before the hang-up: back stripped where the dead arrive is now recorded as a death; owning nothing a death takes, the room alone is enough
+> - Paradigm: back in the Burial Vault (14/1077) after hanging up in Albion (any room you can walk to from it without a boat) counts as where the dead arrive
+> - The death record and notice name the room you came back in
+> - A hang-up while dropped in an arena room is recorded as an arena death (nothing lost, no pile), on any realm, with or without a lives count from before
+> - Sysop god lives asks no life back after an arena death, on either realm
+> - Bug report shows where the stored list's dead arrive, how far that is trusted, and the room come back in
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
