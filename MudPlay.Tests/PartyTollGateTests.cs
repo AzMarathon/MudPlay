@@ -1387,6 +1387,31 @@ public sealed class PartyTollGateTests : IDisposable
             Assert.Single(rig.Notices));
     }
 
+    // Two hand-overs still out at the bound, and the game's line for nobody here
+    // seen once: one of the two is hidden and the other may only be slow, so
+    // neither is said to be hidden. Both count as unconfirmed, and the slow one's
+    // line, when it comes, is still credited.
+    [Fact]
+    public void WithTwoHandOversUnconfirmed_TheBoundSaysNoConfirmation_NotThatEitherIsHidden()
+    {
+        Rig rig = FundingPartyAtTheToll(TollPurseDoubtTests.TollTheOnlyWayJson, OnlyBailey);
+        rig.Gold = 40;
+        Assert.True(rig.Walker.WalkTo(OnlyRoad));
+        rig.Says("Bob", 200);
+        rig.Says("Cal", 0);
+
+        rig.Gate.OnCoinGiveMisaimed();
+        rig.GiveWindow!();
+
+        string notice = Assert.Single(rig.Notices);
+        Assert.Contains("Bob gave no answer to the hand-over: no line from the game inside 4 s", notice);
+        Assert.Contains("Cal gave no answer to the hand-over: no line from the game inside 4 s", notice);
+        Assert.DoesNotContain("hidden", notice);
+
+        rig.Confirms("Bob", 3);                                   // his line was only late
+        Assert.Equal(500, rig.Wealth.LastReading("Bob"));
+    }
+
     // ----- rides ----------------------------------------------------------------------------
 
     private static readonly RoomExit Transport = new(new RoomKey(16, 637), RoomExitHint.Teleport,

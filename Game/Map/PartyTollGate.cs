@@ -824,8 +824,9 @@ public sealed class PartyTollGate
     // InventoryManager.CoinGiveMisaimed: the engine's answer to a coin give at
     // something that isn't a player, or at a player hidden from us (a hidden
     // member can't be handed coin; a sneaking one can: user, 2026-10-10). It names
-    // nobody, so it fails the hand-over in hand when there is just one, and with
-    // several is kept for the words of whoever then goes unconfirmed.
+    // nobody, so it fails the hand-over in hand when there is just one. With
+    // several out it is only noted: it is tied to a member when, at the bound,
+    // that member alone is unconfirmed (OnGiveWindowElapsed).
     public void OnCoinGiveMisaimed()
     {
         if (_funding is not { } funding) return;
@@ -851,7 +852,10 @@ public sealed class PartyTollGate
     {
         if (_funding is not { } funding) return;
         DateTime now = _clock();
-        string failure = funding.Misaimed
+        // The line for a target the game can't find names nobody. With one member
+        // left unconfirmed it can only have been theirs; with more, one of them
+        // may merely be slow, and nobody is said to be hidden on a guess.
+        string failure = funding.Misaimed && funding.Pending.Count == 1
             ? $"could not be given coin: no line named them inside {GiveConfirmWindow.TotalSeconds:0} s, and the game answered "
               + "a give with its line for nobody of that name here (not here, or hidden from us)"
             : $"gave no answer to the hand-over: no line from the game inside {GiveConfirmWindow.TotalSeconds:0} s";
