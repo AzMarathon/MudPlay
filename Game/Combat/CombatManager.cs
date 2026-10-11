@@ -1746,7 +1746,8 @@ public sealed partial class CombatManager : IDisposable
         }
         // Only a room read anew says we've landed: the old roster is dispatched again
         // by several paths while the move is still in flight.
-        if (freshRead || obs.Source == RoomObservationSource.RoomChange) DropMoveHold();
+        bool landed = freshRead || obs.Source == RoomObservationSource.RoomChange;
+        if (landed) DropMoveHold();
 
         // The roster says whether the monster a break holds the attack on has died
         // or gone. When the hold ends here the rest of this pass engages whatever
@@ -1937,6 +1938,23 @@ public sealed partial class CombatManager : IDisposable
             // fire a spurious CR into an empty room).
             _awaitingEngageSince = null;
             OnRoomCleared(settings);
+            return;
+        }
+
+        // A roster we already had, handed back while our move is in flight, is the
+        // room we're leaving: opening a fight on it sends the attack into the room we
+        // land in. Whatever hands it back (a switch re-running the room, a rest that
+        // wants the room cleared, a recovery resuming) waits as a swing does. An
+        // arrival has its own hold, behind the settle below; the dispatch that ends a
+        // hold (the settle bypass) is the room we stayed in and goes through.
+        if (_currentTarget is null && !landed && !_arrivalSettleBypass
+            && obs.Source != RoomObservationSource.Arrival && MoveInFlight())
+        {
+            if (!_arrivalHeldForMove)
+                _log?.Combat(LogCategory,
+                    $"our move is in flight and this roster is the room we're leaving ({obs.Source}, read before) — "
+                    + "no fight opened on it; the room we land in decides");
+            HoldForOurMove();
             return;
         }
 

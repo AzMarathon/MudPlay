@@ -871,6 +871,62 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(new[] { "aslt brute zombie" }, h.AllSent);
     }
 
+    // Three callers hand the roster we already had back to the engine with no line from
+    // the game behind them: a switch re-running the room, a rest that wants the room
+    // cleared, a ShadowRest ending. With the step in flight that roster is the room
+    // being left, and the fight waits as it does for a swing; a refusal or the bound
+    // then opens it where we stand.
+    [Theory]
+    [InlineData("reemit", true)]
+    [InlineData("reemit", false)]
+    [InlineData("rest-clear", true)]
+    [InlineData("rest-clear", false)]
+    [InlineData("shadowrest", true)]
+    [InlineData("shadowrest", false)]
+    public void OldRosterHandedBackWhileOurMoveIsInFlight_OpensNoFightUntilTheHoldEnds(string caller, bool refused)
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out Action land);
+        h.Combat.SetRestClearGate(() => caller == "rest-clear");
+
+        switch (caller)
+        {
+            case "reemit": h.Classifier.ReemitCurrent(); break;
+            case "rest-clear": h.Combat.RequestRestClearEngage(); break;
+            default: h.Combat.ResumeAfterShadowRest(); break;
+        }
+        h.DrainPosted();
+        Assert.Empty(h.Sent);
+        Assert.Null(h.Combat.CurrentTarget);
+
+        if (refused)
+        {
+            land();
+            h.Combat.NoteMoveRefused();
+        }
+        else
+        {
+            h.AdvanceClock(TimeSpan.FromSeconds(4));
+            h.FireSettle();
+        }
+        h.DrainPosted();
+
+        Assert.Equal(new[] { "aslt brute zombie" }, h.AllSent);
+    }
+
+    // The lair's own display is a room read anew, and is engaged with the step still
+    // unconfirmed: the tracker confirms a move only on the exits line that follows.
+    [Fact]
+    public void RoomReadAnewWhileOurMoveIsInFlight_IsEngagedAtOnce()
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out _);
+        h.Classifier.ReemitCurrent();
+
+        h.Feed("Also here: brute zombie, brute zombie.");
+        h.DrainPosted();
+
+        Assert.Equal(new[] { "isto", "hsto" }, h.AllSent);
+    }
+
     // A Friend is engaged only on the mark its attack earns, so the bound has to hand
     // that mark over, not just stop holding.
     [Fact]
