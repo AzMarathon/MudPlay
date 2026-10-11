@@ -27,8 +27,9 @@ public sealed class AreaRankingFiles
 {
     public const int FormatVersion = 1;
 
-    // A ranking older than this is dropped when it is read: the character it was
-    // made for is long gone.
+    // A ranking older than this is dropped when it is read, and its file deleted by
+    // the sweep each client start (SweepOld): the character it was made for is long
+    // gone.
     public static readonly TimeSpan MaxAge = TimeSpan.FromDays(180);
 
     private static readonly JsonSerializerOptions Form = new()
@@ -323,6 +324,103 @@ public sealed class AreaRankingFiles
             try { PathGuard.DeleteTree(folder, simulator, operation); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* its files say whose they were, and are dropped if ever read as another's */ }
         }
+    }
+
+    // Delete every ranking file older than MaxAge, on every set and for every BBS
+    // and profile: the ones a read would drop, without waiting for a character that
+    // may never be loaded again. A BBS folder this leaves empty goes too. Returns
+    // how many files went.
+    //
+    // Age is the read's own: the made-at stamp inside the file against this
+    // client's clock, never the file's time (a copied or restored data folder has
+    // new file times and old rankings). A file that can't be read, or that carries
+    // no stamp, is left for the read to judge; skipped is told why, for the log.
+    //
+    // held are the files of rankings the client has in memory and are left alone.
+    //
+    // Other clients share the folder and may sweep, or save a ranking, at the same
+    // moment. A file another sweep took first is simply gone. One replaced between
+    // the look at its stamp and the delete has another write time by then, and is
+    // left: it is a new ranking.
+    public int SweepOld(IReadOnlyCollection<string> held, Action<string>? skipped = null)
+    {
+        ArgumentNullException.ThrowIfNull(held);
+        int deleted = 0;
+        foreach (string set in Sets())
+        {
+            // Null for a Simulator folder that is a link: it is not looked into.
+            if (SimulatorFolder(set) is not { } simulator) continue;
+            string[] folders;
+            try
+            {
+                if (!Directory.Exists(simulator)) continue;
+                folders = Directory.GetDirectories(simulator);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                skipped?.Invoke($"game data '{set}': {ex.Message}");
+                continue;
+            }
+            foreach (string listed in folders)
+            {
+                // Through the same gate every other path here takes: a BBS folder
+                // directly inside the Simulator folder, and not a link.
+                if (BbsFolder(set, Path.GetFileName(listed)) is not { } bbs) continue;
+                int went = SweepFolder(bbs, held, skipped);
+                deleted += went;
+                // Only a folder this pass took a file from. One found empty may have
+                // been made a moment ago by a client about to move a file into it.
+                if (went > 0) RemoveIfEmpty(bbs);
+            }
+        }
+        return deleted;
+    }
+
+    private int SweepFolder(string bbs, IReadOnlyCollection<string> held, Action<string>? skipped)
+    {
+        string[] files;
+        try { files = Directory.GetFiles(bbs, "*" + Suffix); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            skipped?.Invoke($"{bbs}: {ex.Message}");
+            return 0;
+        }
+        int deleted = 0;
+        foreach (string file in files)
+        {
+            try
+            {
+                if (!file.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase) || !PathGuard.IsInside(file, bbs)) continue;
+                // Without regard to capitals: a file system that ignores them lists a
+                // held file under whatever spelling it was first written with.
+                if (held.Contains(file, StringComparer.OrdinalIgnoreCase)) continue;
+                var info = new FileInfo(file);
+                // A link is somebody else's file under one of our names.
+                if (!info.Exists || info.LinkTarget is not null) continue;
+                DateTime writtenAt = info.LastWriteTimeUtc;
+                if (JsonStore.LoadStream<StampOnly>(file, Form)?.MadeAt is not { } madeAt)
+                {
+                    skipped?.Invoke($"{file}: it carries no made-at stamp");
+                    continue;
+                }
+                if (_now() - madeAt <= MaxAge) continue;
+                if (File.GetLastWriteTimeUtc(file) != writtenAt) continue;
+                File.Delete(file);
+                deleted++;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
+                                           or JsonException or NotSupportedException)
+            {
+                skipped?.Invoke($"{file}: {ex.Message}");
+            }
+        }
+        return deleted;
+    }
+
+    // The one field of a ranking file the sweep reads; the rows are skipped over.
+    private sealed class StampOnly
+    {
+        public DateTimeOffset? MadeAt { get; set; }
     }
 
     private const string Suffix = ".ranking.json";

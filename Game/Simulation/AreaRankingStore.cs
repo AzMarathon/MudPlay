@@ -338,6 +338,28 @@ public sealed class AreaRankingStore
         return _kept.RemoveAll(k => string.Equals(k.Owner.Set, set, StringComparison.OrdinalIgnoreCase));
     }
 
+    // Once each client start: delete the ranking files too old to be read back, for
+    // every set, BBS and profile, loaded or not. It runs on the file queue like
+    // every other piece of file work, so it can't fall between a write and the
+    // delete or move asked after it. The files of the rankings held in memory are
+    // left: one on show is not taken from under the list.
+    public void SweepOld()
+    {
+        if (_files is not { } files) return;
+        string[] held = _kept.Select(k => AreaRankingFiles.FileFor(k.Owner)).OfType<string>().ToArray();
+        Enqueue(() =>
+        {
+            var skipped = new List<string>();
+            int deleted = files.SweepOld(held, skipped.Add);
+            _post(() =>
+            {
+                foreach (string why in skipped) _log?.Debug("Simulator", $"saved area ranking left by the sweep: {why}");
+                if (deleted > 0)
+                    Note($"deleted {deleted} saved area ranking(s) made more than {AreaRankingFiles.MaxAge.Days} days ago");
+            });
+        });
+    }
+
     // Done when every piece of file work asked for so far has run.
     internal Task Idle
     {

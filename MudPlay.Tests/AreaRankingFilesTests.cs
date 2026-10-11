@@ -522,6 +522,152 @@ public sealed class AreaRankingFilesTests : IDisposable
         Assert.NotNull(client.Store.Get(owner, World));
     }
 
+    // ----- The sweep of old files ---------
+    //
+    // The sweep walks every set under the data root, other test classes' included,
+    // so it is run here on a clock decades back: only the files these tests date
+    // before it are old to it.
+
+    private static readonly DateTimeOffset SweepNow = new(1995, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset OldThen = SweepNow - AreaRankingFiles.MaxAge - TimeSpan.FromDays(1);
+    private static readonly DateTimeOffset FreshThen = SweepNow - AreaRankingFiles.MaxAge + TimeSpan.FromDays(1);
+
+    private static string Save(SimulatorOwner owner, DateTimeOffset madeAt)
+    {
+        Files().Write(owner, Ranking(madeAt: madeAt));
+        string file = AreaRankingFiles.FileFor(owner)!;
+        Assert.True(File.Exists(file));
+        return file;
+    }
+
+    // Every set, every BBS, every profile: a file made more than MaxAge ago by its
+    // own stamp goes, whoever it belongs to, and a BBS folder that leaves empty
+    // goes with it. One day inside the limit stays, and so does its folder.
+    [Fact]
+    public void TheSweep_DeletesFilesOlderThanTheLimitOnEverySetAndBbs_AndTheFoldersItEmpties()
+    {
+        string a = NewSet("a"), b = NewSet("b");
+        string oldOne = Save(new SimulatorOwner(a, One), OldThen);
+        string freshTwo = Save(new SimulatorOwner(a, Two), FreshThen);
+        string oldElsewhere = Save(new SimulatorOwner(a, ElsewhereOne), OldThen);
+        string oldOnB = Save(new SimulatorOwner(b, OtherRenamed), OldThen);
+        var skipped = new List<string>();
+
+        int deleted = Files(SweepNow).SweepOld(Array.Empty<string>(), skipped.Add);
+
+        Assert.Equal(3, deleted);
+        Assert.False(File.Exists(oldOne));
+        Assert.False(File.Exists(oldElsewhere));
+        Assert.False(File.Exists(oldOnB));
+        Assert.True(File.Exists(freshTwo));
+        Assert.False(Directory.Exists(Path.GetDirectoryName(oldElsewhere)));
+        Assert.False(Directory.Exists(Path.GetDirectoryName(oldOnB)));
+        Assert.True(Directory.Exists(Path.GetDirectoryName(freshTwo)));
+        Assert.DoesNotContain(skipped, s => s.Contains(_tag));
+
+        // A second sweep, as another client starting would make, finds nothing.
+        Assert.Equal(0, Files(SweepNow).SweepOld(Array.Empty<string>()));
+        Assert.True(File.Exists(freshTwo));
+    }
+
+    // Age is the stamp inside the file, as the read judges it, never the file's
+    // time: an old ranking in a file written a moment ago goes, and a new ranking
+    // in a file dated long ago stays.
+    [Fact]
+    public void TheSweep_GoesByTheStampInsideTheFile_NotTheFilesTime()
+    {
+        string set = NewSet("a");
+        string old = Save(new SimulatorOwner(set, One), OldThen);
+        string fresh = Save(new SimulatorOwner(set, Two), FreshThen);
+        File.SetLastWriteTimeUtc(fresh, new DateTime(1980, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(1, Files(SweepNow).SweepOld(Array.Empty<string>()));
+
+        Assert.False(File.Exists(old));
+        Assert.True(File.Exists(fresh));
+    }
+
+    // What is not a ranking is not the sweep's: another file beside the rankings, a
+    // ranking file that can't be parsed or that carries no stamp (the read judges
+    // those), and a file of a ranking the client holds in memory.
+    [Fact]
+    public void TheSweep_LeavesWhatIsNotAnOldRanking_AndWhatIsHeld()
+    {
+        string set = NewSet("a");
+        string held = Save(new SimulatorOwner(set, One), OldThen);
+        string folder = Path.GetDirectoryName(held)!;
+        string notes = Path.Combine(folder, "notes.txt");
+        string damaged = Path.Combine(folder, "damaged.ranking.json");
+        string unstamped = Path.Combine(folder, "unstamped.ranking.json");
+        File.WriteAllText(notes, "MadeAt 1900");
+        File.WriteAllText(damaged, "{ not json");
+        File.WriteAllText(unstamped, "{\"Format\":1}");
+        var skipped = new List<string>();
+
+        Assert.Equal(0, Files(SweepNow).SweepOld(new[] { held.ToUpperInvariant() }, skipped.Add));
+
+        Assert.All(new[] { held, notes, damaged, unstamped }, f => Assert.True(File.Exists(f), f));
+        Assert.Contains(skipped, s => s.StartsWith(damaged, StringComparison.Ordinal));
+        Assert.Contains(skipped, s => s.StartsWith(unstamped, StringComparison.Ordinal) && s.EndsWith("it carries no made-at stamp"));
+
+        // Not held, the old one goes; the folder keeps what is left in it.
+        Assert.Equal(1, Files(SweepNow).SweepOld(Array.Empty<string>()));
+        Assert.False(File.Exists(held));
+        Assert.True(File.Exists(notes));
+    }
+
+    // A Simulator folder or a BBS folder that is a link leads wherever it likes:
+    // the sweep does not look through it, however old what lies behind it.
+    [Fact]
+    public void TheSweep_DoesNotLookThroughALinkedFolder()
+    {
+        if (OperatingSystem.IsWindows()) return;   // making a link needs a privilege there
+        string source = NewSet("src"), viaBbs = NewSet("bbs"), viaSimulator = NewSet("sim");
+        // Old rankings in a real folder that is no set's Simulator folder.
+        string victim = Path.Combine(AppPaths.GameDataSetDir(source), "elsewhere");
+        Directory.CreateDirectory(Path.Combine(victim, "inner"));
+        string direct = Path.Combine(victim, "one.ranking.json"), inner = Path.Combine(victim, "inner", "one.ranking.json");
+        string real = Save(new SimulatorOwner(source, One), OldThen);
+        File.Copy(real, direct);
+        File.Copy(real, inner);
+        File.Delete(real);
+
+        Directory.CreateDirectory(AppPaths.SimulatorRankingsFolder(viaBbs));
+        Directory.CreateSymbolicLink(Path.Combine(AppPaths.SimulatorRankingsFolder(viaBbs), $"linked-{_tag}"), victim);
+        Directory.CreateSymbolicLink(AppPaths.SimulatorRankingsFolder(viaSimulator), victim);
+
+        Files(SweepNow).SweepOld(Array.Empty<string>());
+
+        Assert.True(File.Exists(direct));
+        Assert.True(File.Exists(inner));
+    }
+
+    // Through the store it is one piece of file work in the queue: a ranking saved
+    // just before is on disk when the sweep looks, and one held in memory keeps its
+    // file whatever its age. Only the count is logged, and only when something went.
+    [Fact]
+    public void TheStoresSweep_RunsInTheQueue_KeepsWhatIsHeld_AndLogsTheCountOnce()
+    {
+        string set = NewSet("a");
+        string gone = Save(new SimulatorOwner(set, Two), OldThen);
+        var held = new SimulatorOwner(set, One);
+        var client = new Client(Files(SweepNow));
+        client.Store.Keep(held, Ranking(madeAt: OldThen));
+
+        client.Store.SweepOld();
+        client.Settle();
+
+        Assert.False(File.Exists(gone));
+        Assert.True(File.Exists(AreaRankingFiles.FileFor(held)));
+        LogEntry line = Assert.Single(client.Log.Snapshot(), l => l.Message.Contains("made more than 180 days ago"));
+        Assert.Equal(LogSeverity.Info, line.Severity);
+        Assert.Contains("deleted 1 saved area ranking(s)", line.Message);
+
+        client.Store.SweepOld();
+        client.Settle();
+        Assert.Single(client.Log.Snapshot(), l => l.Message.Contains("made more than 180 days ago"));
+    }
+
     [Fact]
     public void ARankingWhoseSetIsReplacedWhileItIsBeingRead_IsNotPutBack()
     {

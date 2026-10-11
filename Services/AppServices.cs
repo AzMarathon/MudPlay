@@ -8463,6 +8463,10 @@ public sealed class AppServices
         SimulatorRankings = new Game.Simulation.AreaRankingStore(
             new AreaRankingFiles(), act => Avalonia.Threading.Dispatcher.UIThread.Post(act), Log);
         SimulatorRankings.NoteActiveSet(GameData.ActiveSet);
+        // Once the launch has nothing left to do: old ranking files go, off this
+        // thread, for characters that may never be loaded again.
+        Avalonia.Threading.Dispatcher.UIThread.Post(
+            SimulatorRankings.SweepOld, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
         GameData.ActiveSetChanged += setName =>
             LogStaleSimulatorRankings(setName, "was read in again", SimulatorRankings.NoteActiveSet(setName));
         // A saved ranking is stamped with the table files this client read, and the
