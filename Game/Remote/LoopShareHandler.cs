@@ -81,6 +81,17 @@ public sealed class LoopShareHandler
     // we're running.
     public void OnSend(RemoteCommandContext ctx, string rest)
     {
+        // A loop goes to the one player who asked, by telepath (TransferChannels).
+        // Every form is turned away elsewhere, the yes and the no with it: an offer
+        // made by telepath is not confirmed on a channel others answer on.
+        if (!TransferChannels.Allows(Transfer.LoopSend, ctx.Channel))
+        {
+            _log?.Info("LoopShare",
+                $"refused @loop send from {ctx.Sender} on {ctx.Channel}: {TransferChannels.Refusal(Transfer.LoopSend)}.");
+            ctx.Refuse(TransferChannels.Refusal(Transfer.LoopSend));
+            return;
+        }
+
         Loop? loop;
         if (rest.Length == 0)
         {
@@ -185,8 +196,8 @@ public sealed class LoopShareHandler
         }
 
         IReadOnlyList<string> chunks = LoopShareCodec.Encode(loop);
-        // A short id keeps two transfers to the same player (or two senders on a
-        // shared channel) from mixing chunks on the receiving end.
+        // A short id keeps two transfers to the same player from mixing chunks on
+        // the receiving end.
         string id = Random.Shared.Next(0x1000, 0x10000).ToString("x4");
         List<string> lines = new(chunks.Count);
         for (int i = 0; i < chunks.Count; i++)
@@ -232,30 +243,24 @@ public sealed class LoopShareHandler
     // same code at both ends is the same loop at both ends. Nothing is sent back,
     // so two clients can never answer each other in a circle.
     //
-    // The answer comes on the channel the loop went by (the reply policy), so on
-    // gangpath or say every client there sees it. One that sent that same player
-    // another loop would show it as a mismatch of its own. So on a shared channel an
-    // answer is ours only when its code is the code we sent that player; any other
-    // is somebody else's transfer and is passed over without a word, our own send
-    // still waiting for its answer. By telepath it can only be about ours, and a
-    // code that differs is shown as the mismatch it is (decided 2026-10-11).
+    // A loop goes by telepath only, and so does its answer: by telepath from the
+    // player we sent to it can only be about our loop, and a code that differs is
+    // shown as the mismatch it is. A line of that shape heard on a shared channel
+    // is some older client's, about a transfer of its own, and is passed over.
     public void NoteChat(ChatLogEntry e)
     {
-        if (e.Channel is not (ChatChannel.TelepathIncoming or ChatChannel.Gangpath or ChatChannel.Local)) return;
+        if (!TransferChannels.Allows(Transfer.LoopSend, e.Channel)) return;
         if (e.Speaker is not { Length: > 0 } asker) return;
         if (!TryParseResult(e.Message, out string? theirCode, out string outcome)) return;
 
         string given = Given(asker);
-        if (!_sent.TryGetValue(given, out (string Name, string Signature, DateTimeOffset At) sent)
+        if (!_sent.Remove(given, out (string Name, string Signature, DateTimeOffset At) sent)
             || _now() - sent.At > ResultAwaited)
         {
-            _sent.Remove(given);
             _log?.Debug("LoopShare", $"ignoring {ResultToken} from {asker} — no loop was sent to them lately");
             return;
         }
         bool sameCode = theirCode is not null && sent.Signature.StartsWith(theirCode, StringComparison.Ordinal);
-        if (e.Channel != ChatChannel.TelepathIncoming && !sameCode) return;
-        _sent.Remove(given);
 
         string ourCode = LoopSignature.Short(sent.Signature);
         string codes = theirCode is null ? string.Empty

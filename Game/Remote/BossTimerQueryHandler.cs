@@ -122,6 +122,10 @@ public sealed class BossTimerQueryHandler : IDisposable
     // yields one set per responder. Reply routes back on the channel the request arrived on.
     private void OnSyncRequest(RemoteCommandContext ctx)
     {
+        // No channel check here: a timer sync may go by every channel a remote
+        // command can arrive by (TransferChannels), so there is none to refuse.
+        // How often one is answered on the broadcast channel is the engine's to
+        // bound, with everything else said there (BroadcastAnswerBudget).
         RealmType realm = _gameData.ActiveRealm;
 
         List<BossTimerSyncRecord> records = new();

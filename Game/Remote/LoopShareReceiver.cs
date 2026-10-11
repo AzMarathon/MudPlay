@@ -10,11 +10,12 @@ namespace MudPlay.Game.Remote;
 // them (LoopShareCodec — a loop is only useful whole), and saves the loop to our
 // catalogue.
 //
-// Lines are adopted only inside a window our OWN outbound `@loop send yes` opens
-// (NoteSendConfirmed, from the outbound-chat watcher), and only on the channel that
-// yes went by: from the player we said it to when it was a telepath, and on gangpath
-// or say from a player whose offer we heard there. The permission gate is on the
-// sender, who only offered because they grant us @loop; we just confirm we asked.
+// A loop goes by telepath only (TransferChannels): the offer, the data and our
+// answer. Lines are adopted only inside a window our OWN telepathed `@loop send yes`
+// opens (NoteSendConfirmed, from the outbound-chat watcher), and only from the
+// player we said it to. A loop-send line heard on any other channel is an older
+// client's and is passed over. The permission gate is on the sender, who only
+// offered because they grant us @loop; we just confirm we asked.
 //
 // A received loop never overwrites one of ours, nor changes how we run one (user,
 // 2026-10-11). It is compared by signature (LoopSignature: the route, every room's
@@ -44,14 +45,14 @@ public sealed class LoopShareReceiver : IDisposable
     private readonly LogService? _log;
     private readonly Dictionary<(string Sender, string Id), string?[]> _partial = new();
 
-    // One offer line heard from a player: its code (null: it had none, as an older
-    // client's has), when, and the channel it came by.
-    private readonly record struct Offer(string? Code, DateTimeOffset At, RemoteChannel Channel);
+    // One offer a player telepathed us: its code (null: it had none, as an older
+    // client's has) and when.
+    private readonly record struct Offer(string? Code, DateTimeOffset At);
 
-    // Every offer each player made lately, by given name, oldest first. All of
-    // them, not the last: a player offers to others too, by telepath or where we
-    // hear it, and the offer made to us must not be lost under one made to someone
-    // else, or the loop we said yes to is turned away as not the one offered.
+    // Every offer each player made us lately, by given name, oldest first. All of
+    // them, not the last: a second ask while the first loop is still arriving
+    // brings a second offer, and the loop on its way must not be turned away as not
+    // the one offered.
     private readonly Dictionary<string, List<Offer>> _offered = new(StringComparer.OrdinalIgnoreCase);
 
     // An offer lapses on the sender's side after two minutes and a transfer has
@@ -64,17 +65,16 @@ public sealed class LoopShareReceiver : IDisposable
 
     private DateTimeOffset _acceptUntil = DateTimeOffset.MinValue;
     private string? _expectedSender;
-    private RemoteChannel _confirmedOn = RemoteChannel.Telepath;
     private bool _disposed;
 
-    // Sends the sender our one answer when a transfer is over: channel, their name,
-    // the text, and whether it is a failure. False when it was held back (the master
+    // Telepaths the sender our one answer when a transfer is over: their name, the
+    // text, and whether it is a failure. False when it was held back (the master
     // switch, or the Warn setting for a failure): RemoteCommandManager.SendOutcome.
-    private readonly Func<RemoteChannel, string, string, bool, bool>? _tell;
+    private readonly Func<string, string, bool, bool>? _tell;
 
     public LoopShareReceiver(ChatRouter chat, LoopManager loops, Action<string> notice,
         LogService? log = null, Func<DateTimeOffset>? clock = null,
-        Func<RemoteChannel, string, string, bool, bool>? tell = null)
+        Func<string, string, bool, bool>? tell = null)
     {
         ArgumentNullException.ThrowIfNull(chat);
         ArgumentNullException.ThrowIfNull(loops);
@@ -88,7 +88,7 @@ public sealed class LoopShareReceiver : IDisposable
         _chat.EntryClassified += Ingest;
     }
 
-    // Tell the sender what became of the loop, on the channel it came by, once. A
+    // Tell the sender what became of the loop, by telepath as it came, once. A
     // sender on this version shows it beside its own code for the loop, so both
     // players see the two ends hold the same loop, or that it has to be sent again
     // (user, 2026-10-11). An older sender's client shows the line and does nothing
@@ -99,50 +99,34 @@ public sealed class LoopShareReceiver : IDisposable
     // nowhere to save (decided 2026-10-11). With the master switch off the loop is
     // still taken, the user having typed the yes, and the sender is not told: with
     // that switch off nothing goes out by itself (decided 2026-10-11).
-    private void Tell(RemoteChannel channel, string sender, string? code, string outcome, bool failed = false)
+    private void Tell(string sender, string? code, string outcome, bool failed = false)
     {
         if (_tell is null) return;
-        bool told = _tell(channel, sender, LoopShareHandler.ResultLine(code, outcome), failed);
+        bool told = _tell(sender, LoopShareHandler.ResultLine(code, outcome), failed);
         _log?.Info("LoopShare", told
             ? $"told {sender}: {outcome}"
             : $"{sender} was not told ({outcome}): the master switch is off"
               + (failed ? ", or answers about a failed command are switched off in Settings → Talk" : string.Empty) + ".");
     }
 
-    private static RemoteChannel ChannelOf(ChatChannel channel) => channel switch
+    // We just telepathed `@loop send yes` to sender: their loop is taken, from them
+    // alone, for the next two minutes. A yes on any other channel opens nothing
+    // (the caller tells the user to use telepath): a loop goes by telepath only.
+    public void NoteSendConfirmed(string sender)
     {
-        ChatChannel.Gangpath => RemoteChannel.Gangpath,
-        ChatChannel.Local => RemoteChannel.Local,
-        _ => RemoteChannel.Telepath,
-    };
-
-    // We just sent `@loop send yes` on channel. sender is the telepath recipient, or
-    // null when we confirmed on gangpath / say, where the yes names nobody.
-    //
-    // The loop is then taken only on that channel. And when the yes named nobody,
-    // only from a player whose offer we heard on it (MadeAnOffer): without that,
-    // anyone could answer a yes said to the gang or the room with a loop of their
-    // own by telepath, have it saved, and be told so by our client, while the loop
-    // we asked for found the window shut (decided 2026-10-11).
-    //
-    // One honest case is lost to that: a sender who is sneaking answers a say by
-    // telepath (it will not speak aloud), so its loop does not come on the channel
-    // of a yes that was said. Asked by telepath it arrives as ever.
-    public void NoteSendConfirmed(string? sender, RemoteChannel channel = RemoteChannel.Telepath)
-    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sender);
         _acceptUntil = _now() + AcceptWindow;
-        _expectedSender = string.IsNullOrWhiteSpace(sender) ? null : sender;
-        _confirmedOn = channel;
+        _expectedSender = sender;
         _partial.Clear();
     }
 
-    private void RememberOffer(string sender, string? code, RemoteChannel channel)
+    private void RememberOffer(string sender, string? code)
     {
         DateTimeOffset now = _now();
         string given = Given(sender);
         if (!_offered.TryGetValue(given, out List<Offer>? offers)) _offered[given] = offers = new List<Offer>();
         offers.RemoveAll(o => now - o.At > OfferKept);
-        offers.Add(new Offer(code, now, channel));
+        offers.Add(new Offer(code, now));
         if (offers.Count > MaxOffersPerPlayer) offers.RemoveAt(0);
 
         if (_offered.Count <= MaxPlayersWithOffers) return;
@@ -158,8 +142,6 @@ public sealed class LoopShareReceiver : IDisposable
         offers.RemoveAll(o => now - o.At > OfferKept);
         return offers;
     }
-
-    private bool MadeAnOffer(string sender, RemoteChannel on) => LiveOffers(sender).Any(o => o.Channel == on);
 
     // The code among that player's offers that the loop in hand answers to, taken
     // off the list: an offer answers one transfer. matched is false with offered
@@ -196,15 +178,15 @@ public sealed class LoopShareReceiver : IDisposable
 
     internal void Ingest(ChatLogEntry e)
     {
-        if (e.Channel is not (ChatChannel.TelepathIncoming or ChatChannel.Gangpath or ChatChannel.Local))
-            return;
+        // By telepath or not at all: an offer or a data line on a shared channel is
+        // an older client's, and neither is taken.
+        if (!TransferChannels.Allows(Transfer.LoopSend, e.Channel)) return;
         if (e.Speaker is not { Length: > 0 } sender) return;
-        RemoteChannel channel = ChannelOf(e.Channel);
         if (LoopShareHandler.TryParseOffer(e.Message, out string? offeredCode))
         {
             // Kept whether or not we go on to say yes: the code is what the loop
             // that arrives is checked against.
-            RememberOffer(sender, offeredCode, channel);
+            RememberOffer(sender, offeredCode);
             return;
         }
         if (!TryParse(e.Message, out string id, out int index, out int count, out string chunk)) return;
@@ -213,24 +195,11 @@ public sealed class LoopShareReceiver : IDisposable
             _log?.Debug("LoopShare", $"ignoring @loopdata from {sender} — no @loop send yes sent recently");
             return;
         }
-        // None of the three below closes the window: the loop we said yes to may
-        // still be on its way.
-        if (channel != _confirmedOn)
+        // Lines from anyone else do not close the window: the loop we said yes to
+        // may still be on its way.
+        if (_expectedSender is not { } expected || !SameGiven(expected, sender))
         {
-            _log?.Debug("LoopShare", $"ignoring @loopdata from {sender} on {channel} — our yes went out on {_confirmedOn}");
-            return;
-        }
-        if (_expectedSender is { } expected)
-        {
-            if (!SameGiven(expected, sender))
-            {
-                _log?.Debug("LoopShare", $"ignoring @loopdata from {sender} — we confirmed with {expected}");
-                return;
-            }
-        }
-        else if (!MadeAnOffer(sender, channel))
-        {
-            _log?.Debug("LoopShare", $"ignoring @loopdata from {sender} — they offered us no loop on {channel}");
+            _log?.Debug("LoopShare", $"ignoring @loopdata from {sender} — we confirmed with {_expectedSender}");
             return;
         }
 
@@ -258,13 +227,13 @@ public sealed class LoopShareReceiver : IDisposable
         {
             _log?.Warn("LoopShare", $"loop from {sender} couldn't be read: {ex.Message}");
             _notice($"[Loop from {sender} arrived damaged, not saved]");
-            Tell(channel, sender, code: null, "not saved: it arrived damaged - send it again", failed: true);
+            Tell(sender, code: null, "not saved: it arrived damaged - send it again", failed: true);
             return;
         }
-        Save(loop, sender, channel, lairWaitUnknown);
+        Save(loop, sender, lairWaitUnknown);
     }
 
-    private void Save(Loop loop, string sender, RemoteChannel channel, bool lairWaitUnknown)
+    private void Save(Loop loop, string sender, bool lairWaitUnknown)
     {
         // The sender's loop as the sender runs it: its route with the two settings it
         // sent. Ours, further down, is a loop here as this character runs it.
@@ -301,7 +270,7 @@ public sealed class LoopShareReceiver : IDisposable
                 $"loop '{loop.Name}' from {sender} is not the loop offered [received {theirCode}, offered {offered}] — not saved.");
             _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender} does not match the loop offered "
                 + $"(received {theirCode}, offered {offered}), not saved]");
-            Tell(channel, sender, theirCode, $"not saved: it is not the loop offered ({offered}) - send it again", failed: true);
+            Tell(sender, theirCode, $"not saved: it is not the loop offered ({offered}) - send it again", failed: true);
             return;
         }
         string checkedAs = $"({theirCode}, {verification})";
@@ -310,7 +279,7 @@ public sealed class LoopShareReceiver : IDisposable
         {
             _log?.Warn("LoopShare", $"loop '{loop.Name}' from {sender} not saved — no game-data set is active");
             _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender}, not saved: no game data set is loaded]");
-            Tell(channel, sender, theirCode, "not saved: no game data set is loaded here", failed: true);
+            Tell(sender, theirCode, "not saved: no game data set is loaded here", failed: true);
             return;
         }
 
@@ -328,7 +297,7 @@ public sealed class LoopShareReceiver : IDisposable
             _log?.Info("LoopShare",
                 $"loop '{loop.Name}' {checkedAs} from {sender} is the loop we have as '{same.Name}' — nothing saved, nothing changed.");
             _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender} {checkedAs}, already have it as '{same.Name}']");
-            Tell(channel, sender, theirCode, $"already have it as '{same.Name}'");
+            Tell(sender, theirCode, $"already have it as '{same.Name}'");
             return;
         }
 
@@ -339,7 +308,7 @@ public sealed class LoopShareReceiver : IDisposable
             _loops.Save(loop);
             _log?.Info("LoopShare", $"saved loop '{loop.Name}' {checkedAs} ({rooms} rooms) received from {sender}.");
             _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender} {checkedAs}]");
-            Tell(channel, sender, theirCode, $"saved as '{loop.Name}'");
+            Tell(sender, theirCode, $"saved as '{loop.Name}'");
             return;
         }
 
@@ -356,7 +325,7 @@ public sealed class LoopShareReceiver : IDisposable
             + $"'{existing.Name}' here is a different loop [{ourCode}] and is left as it is.");
         _notice($"[Received loop '{original}' {rooms} rooms from {sender} {checkedAs}, saved as '{loop.Name}': "
             + $"your '{existing.Name}' is a different loop ({ourCode})]");
-        Tell(channel, sender, theirCode, $"saved as '{loop.Name}'");
+        Tell(sender, theirCode, $"saved as '{loop.Name}'");
     }
 
     // Parse "@loopdata <id> <i>/<n> <chunk>", tolerating the {} a remote reply is

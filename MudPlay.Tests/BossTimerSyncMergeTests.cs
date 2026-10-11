@@ -36,6 +36,25 @@ public sealed class BossTimerSyncMergeTests
         => Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
             BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3)));
 
+    // The broadcast channel is public, so the one outcome that writes without a pick
+    // is a pick there. The outcomes that write nothing are the same on every channel.
+    [Theory]
+    [InlineData(MudPlay.Game.Remote.RemoteChannel.Broadcast, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
+    [InlineData(MudPlay.Game.Remote.RemoteChannel.Gangpath, BossTimerSyncViewModel.TimerMergeKind.AutoMerge)]
+    [InlineData(MudPlay.Game.Remote.RemoteChannel.Local, BossTimerSyncViewModel.TimerMergeKind.AutoMerge)]
+    [InlineData(MudPlay.Game.Remote.RemoteChannel.Telepath, BossTimerSyncViewModel.TimerMergeKind.AutoMerge)]
+    internal void A_timer_we_would_adopt_outright_is_a_pick_when_heard_on_broadcast(
+        MudPlay.Game.Remote.RemoteChannel heardOn, BossTimerSyncViewModel.TimerMergeKind expected)
+    {
+        Assert.Equal(expected, BossTimerSyncViewModel.Classify(ours: null, tracked: true, offer: T, heardOn));
+        Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.InSync,
+            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddSeconds(20), heardOn));
+        Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
+            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3), heardOn));
+        Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
+            BossTimerSyncViewModel.Classify(ours: null, tracked: false, offer: T, heardOn));
+    }
+
     [Theory]
     [InlineData(0, true)]
     [InlineData(30, true)]

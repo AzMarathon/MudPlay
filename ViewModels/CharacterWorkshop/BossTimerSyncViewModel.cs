@@ -26,6 +26,13 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     private readonly Action<string> _send;
     private readonly BossTimerSyncCollector _collector;
     private readonly RealmType _realm;
+    private readonly LogService _log;
+    // The Talk tab's "Disallow @commands from broadcast".
+    private readonly Func<bool> _broadcastOff;
+    // Tells the app a merge window is open, so a hand-typed request opens no second.
+    private readonly Action<bool> _windowActive;
+    // True once a timer heard on the broadcast channel was offered as a pick.
+    private bool _offeredFromBroadcast;
     private readonly Dictionary<string, BossTimerSyncRowViewModel> _rowsByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _responders = new(StringComparer.OrdinalIgnoreCase);
     // True once an offer has been written to a timer store — via an auto-merge as it
@@ -38,9 +45,13 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
 
     public ObservableCollection<BossTimerSyncRowViewModel> Rows { get; } = new();
 
-    // Channel to broadcast the request on. Gang is the common case (whole gang syncs
-    // at once); Telepath targets one player; Local hits everyone in the room.
-    public IReadOnlyList<string> Channels { get; } = new[] { "Gang", "Telepath (to…)", "Local (say)" };
+    // Channel to send the request on: the four a timer sync may go by
+    // (TransferChannels). Gang is the common case (whole gang syncs at once);
+    // Telepath targets one player; Local hits everyone in the room; Broadcast the
+    // players on the numbered channel you have joined.
+    public IReadOnlyList<string> Channels { get; } =
+        new[] { "Gang", "Telepath (to…)", "Local (say)", "Broadcast (br)" };
+    private const int BroadcastChoice = 3;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TelepathTargetEnabled))]
     private int _channelIndex;
@@ -50,12 +61,27 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     [ObservableProperty] private string _status = "Pick a channel and request timers.";
     [ObservableProperty] private bool _requested;
 
-    // preArmed is set when the window is auto-opened because the user just sent `@timer
-    // sync` from the terminal (rather than clicking Request here) — we begin collecting
-    // immediately without re-sending the request.
+    // preArmedOn is set when the window is auto-opened because the user just sent
+    // `@timer sync` from the terminal (rather than clicking Request here), and is the
+    // channel that request went out on: we begin collecting its answers immediately
+    // without re-sending it.
     public BossTimerSyncViewModel(
         BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send,
-        bool preArmed = false)
+        RemoteChannel? preArmedOn = null)
+        : this(bosses, timers, gameData, chat, send, preArmedOn,
+            AppServices.Current.Log,
+            () => AppServices.Current.RemoteCommands.DisableBroadcastChannel,
+            AppServices.Current.RemoteCommands.IsSelfEcho,
+            active => AppServices.Current.TimerSyncWindowActive = active)
+    {
+    }
+
+    // The same, with what the window takes from the running app handed in, so the
+    // fold can be exercised without one.
+    internal BossTimerSyncViewModel(
+        BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send,
+        RemoteChannel? preArmedOn, LogService log, Func<bool> broadcastOff, Func<string, bool> isOurName,
+        Action<bool> windowActive)
     {
         ArgumentNullException.ThrowIfNull(bosses);
         ArgumentNullException.ThrowIfNull(timers);
@@ -67,17 +93,20 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         _gameData = gameData;
         _send = send;
         _realm = gameData.ActiveRealm;
+        _log = log;
+        _broadcastOff = broadcastOff;
+        _windowActive = windowActive;
 
-        _collector = new BossTimerSyncCollector(chat, AppServices.Current.Log);
+        _collector = new BossTimerSyncCollector(chat, log, broadcastOff, isOurName);
         _collector.ResponseReceived += OnResponse;
-        AppServices.Current.TimerSyncWindowActive = true;   // suppress a duplicate auto-open
+        _windowActive(true);   // suppress a duplicate auto-open
 
         // Rows are created on demand as responders offer a timer — a boss nobody sent a
         // timer for has nothing to merge, so it never clutters the table.
 
-        if (preArmed)
+        if (preArmedOn is { } askedOn)
         {
-            _collector.Begin();
+            _collector.Begin(askedOn);
             Requested = true;
             Status = "Collecting responses to your @timer sync — new timers fold in automatically; you only pick on a conflict…";
         }
@@ -86,16 +115,25 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     [RelayCommand]
     private void SendRequest()
     {
-        _collector.Begin();
-        Requested = true;
+        // With the broadcast channel switched off on the Talk tab the answers would
+        // not be read, so nothing is asked there. The choice stays in the list and
+        // says what to do, as the telepath choice does with no name entered.
+        if (ChannelIndex == BroadcastChoice && _broadcastOff())
+        {
+            Status = "Broadcast is switched off: untick \"Disallow @commands from broadcast\" on Settings → Talk, then request again.";
+            return;
+        }
 
         const string request = "@timer sync";
-        string wire = ChannelIndex switch
+        (RemoteChannel channel, string wire) = ChannelIndex switch
         {
-            1 => $"/{TelepathTarget.Trim()} {request}",   // telepath to a named player
-            2 => $".{request}",                            // local say
-            _ => $"bg {request}",                          // gang (default)
+            1 => (RemoteChannel.Telepath, $"/{TelepathTarget.Trim()} {request}"),   // telepath to a named player
+            2 => (RemoteChannel.Local, $".{request}"),                              // local say
+            BroadcastChoice => (RemoteChannel.Broadcast, $"br {request}"),          // the numbered channel's speak verb
+            _ => (RemoteChannel.Gangpath, $"bg {request}"),                         // gang (default)
         };
+        _collector.Begin(channel);
+        Requested = true;
         _send(wire);
         Status = ChannelIndex == 1 && TelepathTarget.Trim().Length == 0
             ? "Enter a player name to telepath, then request again."
@@ -106,34 +144,37 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     {
         // ChatRouter events are already on the UI thread, but marshal defensively —
         // this touches the observable Rows collection.
-        if (Dispatcher.UIThread.CheckAccess()) Handle(response);
-        else Dispatcher.UIThread.Post(() => Handle(response));
+        if (Dispatcher.UIThread.CheckAccess()) Fold(response);
+        else Dispatcher.UIThread.Post(() => Fold(response));
+    }
 
-        void Handle(BossTimerSyncResponse r)
-        {
-            _responders.Add(r.Sender);
-            int adopted = 0, inSync = 0, conflict = 0;
-            foreach (BossTimerSyncRecord rec in r.Records)
-                switch (IngestOffer(EnsureRow(rec.MonsterNumber, rec.Name), r.Sender, rec.KilledAt))
-                {
-                    case TimerMergeKind.AutoMerge: adopted++; break;
-                    case TimerMergeKind.InSync:    inSync++;  break;
-                    default:                       conflict++; break;
-                }
-            AppServices.Current.Log.Info("BossTimerSync",
-                $"folded {r.Sender}'s {r.Records.Count} timer(s): {adopted} adopted, {inSync} already in sync, {conflict} to resolve");
-            UpdateStatus();
-        }
+    // Take one responder's set into the table.
+    internal void Fold(BossTimerSyncResponse r)
+    {
+        _responders.Add(r.Sender);
+        int adopted = 0, inSync = 0, conflict = 0;
+        foreach (BossTimerSyncRecord rec in r.Records)
+            switch (IngestOffer(EnsureRow(rec.MonsterNumber, rec.Name), r.Sender, rec.KilledAt, r.Channel))
+            {
+                case TimerMergeKind.AutoMerge: adopted++; break;
+                case TimerMergeKind.InSync:    inSync++;  break;
+                default:                       conflict++; break;
+            }
+        _log.Info("BossTimerSync",
+            $"folded {r.Sender}'s {r.Records.Count} timer(s) heard on {r.Channel}: {adopted} adopted, {inSync} already in sync, {conflict} to resolve");
+        UpdateStatus();
     }
 
     // Route one responder's timer for a boss row, returning what we did with it. A timer
     // for a boss we track but hold no timer for is adopted outright (nothing of ours to
     // overwrite); one that matches what we hold is a no-op; only a genuine disagreement —
     // or a boss we don't track yet, whose adoption adds it to our list — becomes a pickable
-    // conflict the user resolves manually.
-    private TimerMergeKind IngestOffer(BossTimerSyncRowViewModel row, string sender, DateTimeOffset offer)
+    // conflict the user resolves manually. A timer heard on the broadcast channel is
+    // never adopted outright: it becomes a pick, marked as such.
+    private TimerMergeKind IngestOffer(
+        BossTimerSyncRowViewModel row, string sender, DateTimeOffset offer, RemoteChannel heardOn)
     {
-        TimerMergeKind kind = Classify(row.OursKilledAt, row.Tracked, offer);
+        TimerMergeKind kind = Classify(row.OursKilledAt, row.Tracked, offer, heardOn);
         switch (kind)
         {
             case TimerMergeKind.AutoMerge:
@@ -145,7 +186,10 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
                 row.MarkInSync(sender);
                 break;
             default:
-                row.AddConflict(sender, offer, FormatKilled(offer));
+                bool fromBroadcast = heardOn == RemoteChannel.Broadcast;
+                if (fromBroadcast) _offeredFromBroadcast = true;
+                row.AddConflict(sender, offer,
+                    fromBroadcast ? $"{FormatKilled(offer)} · heard on broadcast" : FormatKilled(offer));
                 break;
         }
         return kind;
@@ -164,6 +208,19 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         return SameTimer(ours.Value, offer) ? TimerMergeKind.InSync : TimerMergeKind.Conflict;
     }
 
+    // The same, for the channel the offer was heard on. The broadcast channel is
+    // public: anyone can join it, and our request there tells every listener that a
+    // collection is open. So nothing heard on it is written without a pick, and what
+    // would be adopted outright from the gang or the room is offered as a choice.
+    internal static TimerMergeKind Classify(
+        DateTimeOffset? ours, bool tracked, DateTimeOffset offer, RemoteChannel heardOn)
+    {
+        TimerMergeKind kind = Classify(ours, tracked, offer);
+        return kind == TimerMergeKind.AutoMerge && heardOn == RemoteChannel.Broadcast
+            ? TimerMergeKind.Conflict
+            : kind;
+    }
+
     // A different kill of the same boss is at least a respawn interval (hours) away, so a
     // one-minute window never conflates two respawns — it only absorbs the few-second
     // spread between party members who marked the same kill and the codec's second rounding.
@@ -176,7 +233,10 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         int conflicts = Rows.Count(r => r.HasConflict);
         int adopted = Rows.Count(r => !r.HasConflict && r.WasAutoMerged);
         int inSync = Rows.Count(r => !r.HasConflict && !r.WasAutoMerged && r.ResolvedStatus.Length > 0);
-        Status = $"{_responders.Count} responder(s): {conflicts} to resolve, {adopted} adopted, {inSync} already in sync.";
+        Status = $"{_responders.Count} responder(s): {conflicts} to resolve, {adopted} adopted, {inSync} already in sync."
+            + (_offeredFromBroadcast
+                ? " Timers heard on broadcast are never adopted without a pick: anyone can join that channel."
+                : string.Empty);
     }
 
     // Find our boss for an incoming identity (by MDB number first, else name) so the
@@ -278,6 +338,6 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         _disposed = true;
         _collector.ResponseReceived -= OnResponse;
         _collector.Dispose();
-        AppServices.Current.TimerSyncWindowActive = false;
+        _windowActive(false);
     }
 }
