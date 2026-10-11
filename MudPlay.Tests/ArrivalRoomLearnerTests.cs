@@ -82,6 +82,7 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
     private static readonly RoomObservation LandingShown = new("Terra Ista, Landing", new HashSet<Direction> { Direction.N });
 
     private readonly string _root;
+    private readonly RoomGraphManager _graph;
     private readonly RoomTracker _tracker;
     private readonly LearnedArrivalRoomStore _store;
     private readonly LearnedArrivalLookup _lookup;
@@ -107,7 +108,7 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Rooms);
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
-        RoomGraphManager graph = new(cache);
+        RoomGraphManager graph = _graph = new(cache);
         graph.OnActiveSetChanged("alpha");
         _tracker = new RoomTracker(graph);
 
@@ -287,6 +288,47 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         Type(line);
 
         _tracker.NoteRoomObserved(ShrineShown);
+
+        Assert.Equal(learned ? 1 : 0, _store.Count);
+    }
+
+    // A display that settles a move the map knew of is where that move led, not
+    // where the death put the character: the room died in was drawn (the death
+    // hadn't moved it yet, or never did), the party leader dragged it one room
+    // north, and the path is drawn. Nothing is learned, then or from what follows.
+    [Fact]
+    public void ADisplayThatSettlesADrag_TeachesNothing()
+    {
+        DieIn(Landing);
+        _tracker.NoteRoomObserved(LandingShown);
+        _tracker.NoteFollowMove(Direction.N);
+        Assert.Equal(RoomConfidence.Pending, _tracker.State.Confidence);
+
+        _tracker.NoteRoomObserved(new RoomObservation("Terra Ista, Path", new HashSet<Direction> { Direction.S }));
+
+        Assert.Equal(new RoomKey(14, 1814), _tracker.State.CurrentRoom?.Key);
+        Assert.Equal(RoomConfidence.Confirmed, _tracker.State.Confidence);
+        Assert.Equal(0, _store.Count);
+        _tracker.NoteRoomObserved(ShrineShown);
+        Assert.Equal(0, _store.Count);
+    }
+
+    // The same told by the transition alone: from Pending nothing is learned,
+    // from PendingRespawn or from the room died in it is.
+    [Theory]
+    [InlineData(RoomConfidence.Pending, true, false)]
+    [InlineData(RoomConfidence.Suspect, true, false)]
+    [InlineData(RoomConfidence.Confirmed, false, false)]   // sure of some other room
+    [InlineData(RoomConfidence.Confirmed, true, true)]
+    [InlineData(RoomConfidence.PendingRespawn, false, true)]
+    public void OnlyADisplayTheMapWasWaitingOnTheDeathFor_Teaches(RoomConfidence before, bool inTheRoomDiedIn, bool learned)
+    {
+        DieIn(Landing);
+        Room? previous = before == RoomConfidence.PendingRespawn ? null
+            : _graph.GetRoom(inTheRoomDiedIn ? Landing : Kingsport);
+
+        _learner.OnRoomStateChanged(new RoomTransition(
+            before, RoomConfidence.Confirmed, previous, _graph.GetRoom(Shrine), _now, Displayed: true));
 
         Assert.Equal(learned ? 1 : 0, _store.Count);
     }

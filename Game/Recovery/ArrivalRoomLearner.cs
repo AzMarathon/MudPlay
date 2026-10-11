@@ -17,10 +17,12 @@ namespace MudPlay.Game.Recovery;
 //   - it was not an arena death. That one is the arena's own rule, and where it
 //     puts the character says nothing of a death that costs a life;
 //   - the room the character arrived in is one a room display showed after the
-//     death, with nothing sent in between that could have moved the character,
-//     and the map is sure of it.
+//     death, while the map was still waiting for the death to place it, with
+//     nothing sent in between that could have moved the character, and the map
+//     is sure of it.
 // A graveyard too dark to show, a display the map can't place, a move or a room
-// command sent before the room was drawn: nothing is learned.
+// command sent before the room was drawn, a drag the map followed: nothing is
+// learned.
 //
 // The death lines print no room themselves, so the first display afterwards is
 // whatever was asked for, and one asked for while the death was still being
@@ -138,6 +140,19 @@ public sealed class ArrivalRoomLearner
     {
         if (_diedIn is not { } diedIn || !transition.Displayed) return;
         if (_now() - _diedAt > Window)
+        {
+            Forget();
+            return;
+        }
+        // Only a display the map was still waiting on the death for: nothing placed
+        // since the death (PendingRespawn), or the room died in drawn once more.
+        // One that settles a move the map knew of (a drag by the party leader, the
+        // character's own step) comes from Pending and shows where that move led.
+        // A summon in that moment can't be told from the death's own relocation:
+        // the map hears of neither, and the room it shows is learned. A known limit.
+        bool awaited = transition.PreviousConfidence == RoomConfidence.PendingRespawn
+            || (transition.PreviousConfidence == RoomConfidence.Confirmed && transition.PreviousRoom?.Key == diedIn);
+        if (!awaited)
         {
             Forget();
             return;
