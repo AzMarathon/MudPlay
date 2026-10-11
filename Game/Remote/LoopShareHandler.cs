@@ -122,6 +122,24 @@ public sealed class LoopShareHandler
 
     private const string OfferOpening = "preparing to send: ";
     private const string OfferClosing = ", yes to confirm, no to deny";
+    private const string SendingOpening = "sending loop '";
+    private const string StoppedOpening = "loop send of '";
+
+    // Whether the text inside a braced reply is one of `@loop send`'s own lines,
+    // from either end: the offer, "sending loop", a data line, "loop send of …
+    // cancelled / stopped", or the asker's answer. Each but the data line carries a
+    // loop's name, which a player chose and which can say anything. The readers of
+    // other replies (a @comeback's answer, a @status's) skip these, so a loop named
+    // "I can't come" or "no ailments" is never read as an answer of theirs.
+    public static bool IsLoopSendLine(string inner)
+    {
+        ArgumentNullException.ThrowIfNull(inner);
+        return OpensWith(inner, ResultToken + " ") || OpensWith(inner, DataToken + " ")
+            || OpensWith(inner, OfferOpening) || OpensWith(inner, SendingOpening) || OpensWith(inner, StoppedOpening);
+    }
+
+    private static bool OpensWith(string text, string opening) =>
+        text.StartsWith(opening, StringComparison.OrdinalIgnoreCase);
 
     // Whether message is a `@loop send` offer, and the code it carries: null when it
     // has none, as from a client older than the code.
@@ -155,12 +173,13 @@ public sealed class LoopShareHandler
             return;
         }
         // The asker said yes to the loop as it was when offered, and checks what
-        // arrives against that code. A loop edited since would be turned away there.
+        // arrives against that code. A loop edited since would be turned away there,
+        // so it is not sent and the asker is told to ask again (decided 2026-10-11).
         if (LoopSignature.Of(loop) != offered)
         {
             _log?.Info("LoopShare",
                 $"loop '{loop.Name}' changed since it was offered to {ctx.Sender} [{LoopSignature.Short(offered)} then, {LoopSignature.ShortOf(loop)} now] — not sent.");
-            ctx.Refuse($"loop '{loop.Name}' changed since it was offered - ask for it again");
+            ctx.Refuse($"{StoppedOpening}{loop.Name}' stopped: it changed since it was offered - ask for it again");
             return;
         }
 
@@ -174,7 +193,7 @@ public sealed class LoopShareHandler
 
         _log?.Info("LoopShare",
             $"sending loop '{loop.Name}' [{LoopSignature.ShortOf(loop)}] ({loop.Waypoints.Count} rooms) to {ctx.Sender} in {lines.Count} line(s).");
-        ctx.Reply($"sending loop '{loop.Name}' ({loop.Waypoints.Count} rooms, {lines.Count} line{(lines.Count == 1 ? "" : "s")})");
+        ctx.Reply($"{SendingOpening}{loop.Name}' ({loop.Waypoints.Count} rooms, {lines.Count} line{(lines.Count == 1 ? "" : "s")})");
         _sender.Enqueue(ctx.Reply, lines);
         _sent[Given(ctx.Sender)] = (loop.Name, offered, _now());
     }
@@ -247,7 +266,7 @@ public sealed class LoopShareHandler
             return;
         }
         _log?.Info("LoopShare", $"{ctx.Sender} declined loop '{loop.Name}'.");
-        ctx.Reply($"loop send of '{loop.Name}' cancelled");
+        ctx.Reply($"{StoppedOpening}{loop.Name}' cancelled");
     }
 
     // Remove and return the requester's live offer; an expired one counts as none.

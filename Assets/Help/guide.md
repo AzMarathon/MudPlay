@@ -1325,7 +1325,7 @@ Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clien
 | Reply from the client asked | When |
 |---|---|
 | `preparing to send: <loop name>, yes to confirm, no to deny (code <code>)` | A loop was found by name, or you are running one and the bare form was sent. |
-| `loop '<name>' changed since it was offered - ask for it again` | **Refusal:** `yes`, but the loop was edited, or its two loop settings changed, after the offer. The asker said yes to the loop as it was. |
+| `loop send of '<name>' stopped: it changed since it was offered - ask for it again` | **Refusal:** `yes`, but the loop was edited, or its two loop settings changed, after the offer. The asker said yes to the loop as it was. |
 | `not running a loop - @loop send <name> for a saved one` | **Refusal:** the bare form, and no loop is running. |
 | `no saved loop named '<text>'` | **Refusal:** the name matched nothing. |
 | `'<text>' matches <n> loops: '<name>', '<name>'` | **Refusal:** the name matched several loops. |

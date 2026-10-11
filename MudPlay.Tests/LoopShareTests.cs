@@ -464,7 +464,7 @@ public sealed class LoopShareTests : IDisposable
         replies.Clear();
         share.OnSend(Ctx("Raijin", replies), "yes");
 
-        Assert.Equal("loop 'King's Road' changed since it was offered - ask for it again", replies.Single());
+        Assert.Equal("loop send of 'King's Road' stopped: it changed since it was offered - ask for it again", replies.Single());
     }
 
     // ----- the asker's client answers the sender ---------------------------
@@ -635,6 +635,43 @@ public sealed class LoopShareTests : IDisposable
         Assert.Empty(engine.LastSentForTests);
         Assert.False(PartyProbeManager.TryParseVersion(line, out _));
     }
+
+    // Every line `@loop send` puts on the wire, from either end, is known as one,
+    // whatever the loop is called: the readers of other replies skip them.
+    [Theory]
+    [InlineData("I can't come")]
+    [InlineData("no ailments")]
+    [InlineData("ailments: blind")]
+    [InlineData("path failed, going idle")]
+    public void EveryLineOfALoopSend_IsKnownAsOne_WhateverTheLoopIsNamed(string name)
+    {
+        LoopManager loops = NewLoops();
+        Loop loop = SampleLoop(name);
+        loops.Save(loop);
+        LoopShareHandler share = new(loops, clock: () => _now);
+        List<string> wire = new();
+        share.OnSend(Ctx("Raijin", wire), name);                 // the offer
+        share.OnSend(Ctx("Raijin", wire), "no");                 // cancelled
+        share.OnSend(Ctx("Raijin", wire), name);
+        loop.Waypoints[0].DelayMs += 1;
+        share.OnSend(Ctx("Raijin", wire), "yes");                // stopped: it changed
+        share.OnSend(Ctx("Raijin", wire), name);
+        share.OnSend(Ctx("Raijin", wire), "yes");                // sending, and the data
+        wire.Add(LoopShareHandler.ResultLine("9da659db", $"saved as '{name}'"));
+        wire.Add(LoopShareHandler.ResultLine("9da659db", $"already have it as '{name}'"));
+        wire.Add(LoopShareHandler.ResultLine(null, "not saved: it arrived damaged - send it again"));
+
+        Assert.True(wire.Count >= 9);
+        Assert.All(wire, line => Assert.True(LoopShareHandler.IsLoopSendLine(line), line));
+    }
+
+    [Theory]
+    [InlineData("I can't come, forget me")]
+    [InlineData("Standing; not moving; no ailments")]
+    [InlineData("loop 'King's Road' not started: it has fewer than two rooms")]
+    [InlineData("coming to your location for pickup")]
+    public void OtherReplies_AreNotLoopSendLines(string inner) =>
+        Assert.False(LoopShareHandler.IsLoopSendLine(inner));
 
     // The offer line is longer than a client version can be, code and all, so a
     // client waiting on a @version answer never takes it for one.
