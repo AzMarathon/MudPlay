@@ -99,7 +99,7 @@ public sealed class LairManager
 
         if (string.IsNullOrWhiteSpace(setName))
         {
-            _stamp.Accept(new SharedFolderStamp.Snapshot());
+            _stamp.Accept(new Dictionary<string, SharedFolderStamp.FileMark>());
             SetupsChanged?.Invoke();
             return;
         }
@@ -115,14 +115,16 @@ public sealed class LairManager
 
         if (!Directory.Exists(folder))
         {
-            _stamp.Accept(new SharedFolderStamp.Snapshot());
+            _stamp.Accept(new Dictionary<string, SharedFolderStamp.FileMark>());
             _log?.Info("Lairs", $"no loops folder for set '{setName}'; empty lair catalogue.");
             SetupsChanged?.Invoke();
             return;
         }
         // Marked before the files are read, so a file another client writes meanwhile
         // shows on the next poll instead of being taken as already read.
-        _stamp.Rebase(folder, LairFileSuffix);
+        IReadOnlyDictionary<string, SharedFolderStamp.FileMark> seen =
+            NavTreeScan.Walk(folder, LairFileSuffix).FilesWith(LairFileSuffix);
+        _stamp.Accept(seen);
 
         int loaded = 0;
         int failed = 0;
@@ -137,7 +139,12 @@ public sealed class LairManager
                 // hand that doesn't match the LairSetup shape (or
                 // can't be deserialised) is silently skipped — no-op
                 // per user direction.
-                if (setup is null || string.IsNullOrWhiteSpace(setup.Name)) { failed++; continue; }
+                if (setup is null || string.IsNullOrWhiteSpace(setup.Name))
+                {
+                    failed++;
+                    NavCatalogueReread.NoteSkipped(_unreadable, seen, path);
+                    continue;
+                }
                 setup.Folder = NavFolders.RelativeFolder(folder, path);
                 Stamp(setup);
                 _setups[setup.Name] = setup;
@@ -147,6 +154,7 @@ public sealed class LairManager
             {
                 _log?.Warn("Lairs", $"failed to load '{path}': {ex.Message}");
                 failed++;
+                NavCatalogueReread.NoteSkipped(_unreadable, seen, path);
             }
         }
         _log?.Info("Lairs",
@@ -155,49 +163,75 @@ public sealed class LairManager
         SetupsChanged?.Invoke();
     }
 
-    // Follow what another client running on this set did to the Loops folder: a setup
-    // saved, edited, renamed, moved or deleted. Same rules as LoopManager's: read only
-    // once the folder has looked the same on two polls (or at once with settleNow), a
-    // file that can't be read leaves the copy held in memory where it is, and nothing
-    // already held is mutated.
-    public bool TakeInOutsideChanges(bool settleNow = false)
+    // Bumped by every read or write of the folder this client makes (see LoopManager).
+    internal long Generation => _stamp.Generation;
+
+    // True when the folder now holds lair files other than the ones this client holds.
+    internal bool DiffersFrom(NavTreeScan scan) =>
+        _setName is not null && _stamp.Differs(scan.FilesWith(LairFileSuffix));
+
+    // Take in at once what another client did to the Loops folder, with no waiting
+    // for it to settle (see LoopManager.TakeInOutsideChanges).
+    public bool TakeInOutsideChanges()
     {
         if (_setName is null) return false;
-        string root = AppPaths.GameDataSetLoopsFolder(_setName);
-        if (_stamp.TakeSettledChange(root, LairFileSuffix, settleNow) is not { } now) return false;
-
-        NavReread<LairSetup> found = NavCatalogueReread.Run(_stamp.Known, now, _setups,
-            s => s.Name,
-            s => Path.GetFullPath(Path.Combine(NavFolders.ToDirectory(root, s.Folder), SafeFileName(s.Name))),
-            (a, b) => NavCatalogueReread.SameRecord(a, a.Folder, b, b.Folder),
-            path => ReadOutsideFile(root, path),
-            _unreadable,
-            (path, why) => _log?.Warn("Lairs", $"setup file '{path}' changed outside but can't be read ({why}); keeping the copy held."));
-        _stamp.Accept(now);
-        if (!found.AnyItemChanged && !found.FoldersChanged) return false;
-
-        _setups.Clear();
-        foreach ((string name, LairSetup setup) in found.Fresh) _setups[name] = setup;
-        LastOutsideReadAt = DateTimeOffset.UtcNow;
-        if (found.AnyItemChanged) _log?.Info("Lairs", NavCatalogueReread.Summary("lair setups", found));
-        SetupsChanged?.Invoke();
+        NavTreeScan scan = NavTreeScan.Walk(AppPaths.GameDataSetLoopsFolder(_setName), LairFileSuffix);
+        if (!scan.Complete || PlanOutside(scan) is not { } plan) return false;
+        plan()();
         return true;
     }
 
-    private LairSetup? ReadOutsideFile(string root, string path)
+    // Plan the re-read of the lair files in scan, or null when they are the ones held;
+    // two steps, as LoopManager.PlanOutside: read off any thread, swap on the UI thread.
+    internal Func<Action>? PlanOutside(NavTreeScan scan)
+    {
+        if (_setName is null || !DiffersFrom(scan)) return null;
+        string root = AppPaths.GameDataSetLoopsFolder(_setName);
+        IReadOnlyDictionary<string, SharedFolderStamp.FileMark> files = scan.FilesWith(LairFileSuffix);
+        Dictionary<string, SharedFolderStamp.FileMark> known = new(_stamp.Known);
+        Dictionary<string, LairSetup> heldByPath = new(StringComparer.Ordinal);
+        foreach (LairSetup s in _setups.Values) heldByPath[PathOf(root, s)] = s;
+        HashSet<string> heldPaths = new(heldByPath.Keys, StringComparer.Ordinal);
+        HashSet<string> reported = new(_unreadable);
+        return () =>
+        {
+            Dictionary<string, NavCatalogueReread.Outcome<LairSetup>> outcomes =
+                NavCatalogueReread.Preread(files, known, heldPaths, reported, path => ReadOutsideFile(root, path));
+            return () => ApplyOutside(root, files, heldByPath, outcomes);
+        };
+    }
+
+    private void ApplyOutside(string root, IReadOnlyDictionary<string, SharedFolderStamp.FileMark> files,
+        IReadOnlyDictionary<string, LairSetup> heldByPath, IReadOnlyDictionary<string, NavCatalogueReread.Outcome<LairSetup>> outcomes)
+    {
+        NavReread<LairSetup> found = NavCatalogueReread.Run(_stamp.Known, files, _setups, heldByPath,
+            s => s.Name,
+            (a, b) => NavCatalogueReread.SameRecord(a, a.Folder, b, b.Folder),
+            outcomes,
+            path => ReadOutsideFile(root, path),
+            _unreadable,
+            (path, why) => _log?.Warn("Lairs", $"setup file '{path}' changed on disk but can't be read ({why}); keeping the copy held."));
+        _stamp.Accept(files);
+        if (!found.AnyItemChanged) return;
+
+        foreach (string name in found.Added.Concat(found.Changed)) Stamp(found.Fresh[name]);
+        _setups.Clear();
+        foreach ((string name, LairSetup setup) in found.Fresh) _setups[name] = setup;
+        LastOutsideReadAt = DateTimeOffset.UtcNow;
+        _log?.Info("Lairs", NavCatalogueReread.Summary("lair setups", found));
+        SetupsChanged?.Invoke();
+    }
+
+    private static string PathOf(string root, LairSetup setup) =>
+        Path.GetFullPath(Path.Combine(NavFolders.ToDirectory(root, setup.Folder), SafeFileName(setup.Name)));
+
+    // Runs on a worker thread: it touches nothing of the catalogue.
+    private static LairSetup? ReadOutsideFile(string root, string path)
     {
         LairSetup? setup = JsonStore.Load<LairSetup>(path);
         if (setup is null || string.IsNullOrWhiteSpace(setup.Name)) return null;
         setup.Folder = NavFolders.RelativeFolder(root, path);
-        Stamp(setup);
         return setup;
-    }
-
-    // A folder was made here with nothing filed in it: take it as already seen.
-    public void AcceptFolderTree()
-    {
-        if (_setName is null) return;
-        _stamp.NoteFolders(AppPaths.GameDataSetLoopsFolder(_setName), LairFileSuffix);
     }
 
     // Persist setup under GameDataSetLoopsFolder with the LairFileSuffix
@@ -219,7 +253,7 @@ public sealed class LairManager
         // file for this name (in any folder) goes after the write, so another client
         // reading the folder between the two sees the setup twice, never not at all.
         JsonStore.Save(path, setup);
-        _stamp.NoteWritten(root, path);
+        _stamp.NoteWritten(path);
         DeleteFileForName(root, setup.Name, keep: path);
         Stamp(setup);
         _setups[setup.Name] = setup;

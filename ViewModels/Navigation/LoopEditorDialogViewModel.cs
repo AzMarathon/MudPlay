@@ -374,7 +374,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         // overwrite case and is allowed. A loop of that name another client saved a
         // moment ago counts, so the folder is read first, without waiting for it to
         // settle.
-        _loops.TakeInOutsideChanges(settleNow: true);
+        _loops.TakeInOutsideChanges();
         bool wouldOverwriteAnother = _loops.Loops.Any(l =>
             string.Equals(l.Name, newName, StringComparison.OrdinalIgnoreCase)
             && (_isNew || !string.Equals(l.Name, _original.Name, StringComparison.OrdinalIgnoreCase)));
