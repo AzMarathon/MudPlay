@@ -172,4 +172,38 @@ public sealed class ItemMdbViewBuilderTests : IDisposable
         Assert.Equal("Tomb - 17/287", Assert.Single(pry.ShownRooms).Location);
         Assert.Equal("Vault - 17/501", Assert.Single(view.PlacedIn!).Location);
     }
+
+    private IReadOnlyList<string> ExitUsesLines(int item, Func<int, int, bool>? isRoomBlacklisted = null)
+    {
+        string dir = Path.Combine(_root, "exits");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"), ExitKeyIndexTests.Rooms);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("exits");
+        IReadOnlyList<PlacedInRow> rows =
+            new ItemMdbViewBuilder(cache, playerCharm: 50, isRoomBlacklisted).ExitUsesOf(item);
+        Assert.All(rows, r => Assert.True(r.CanOpen));
+        return rows.Select(r => r.Location).ToArray();
+    }
+
+    // A key some exit names gets a Used on line for each exit, both sides of a door
+    // as two lines; an item no exit names gets none.
+    [Fact]
+    public void ExitUses_ListEveryExitNamingTheItem_AndNothingForAnItemNoExitNames()
+    {
+        Assert.Equal(new[] { "Cell - 1/10 - south (Key)", "Hall - 1/11 - north (Key)" }, ExitUsesLines(100));
+
+        // An item to carry reads the same way, a room with no name by its locator.
+        Assert.Equal("Room 4/1 - up (Item)", Assert.Single(ExitUsesLines(400)));
+
+        Assert.Empty(ExitUsesLines(700));
+    }
+
+    // A room the user blacklisted is left out of Used on, like the other room lines.
+    [Fact]
+    public void ExitUses_LeaveOutABlacklistedRoom()
+    {
+        Assert.Equal("Cell - 1/10 - south (Key)",
+            Assert.Single(ExitUsesLines(100, (map, room) => map == 1 && room == 11)));
+    }
 }

@@ -1,17 +1,46 @@
 # Version history
 
-## 3.172.10
+## 3.174.14
 
-- Remote commands: a sender without the permission gets only the Failure message; `@suicide`'s lives rule and `@do suicide` answer only a sender who holds it, and match the exact word
-- Every refusal (bad or missing word, can't be done, state not read yet) follows the Warn setting; answers another client waits on are always sent
+- Remote commands: a sender without the permission gets only the Failure message; `@suicide`'s lives rule and `@do suicide` answer only a sender who holds it
+- Every refusal (bad or missing word, can't be done, state not read yet, mortally wounded) follows the Warn setting; answers another client waits on are still sent
 - A `&@` relay asked for on say goes by telepath while sneaking
-- `@loop`, `@goto` and `@lair` say they started only when they did, and why not otherwise
-- `@deposit-all` outside a bank answers `not in a bank - nothing deposited` and sends nothing
+- `@loop` and `@goto` say they started only when they did, and why not otherwise
+- `@lair` on a running Auto-Lair keeps the run: `already running` for the same lairs, `updated` for others
+- `@deposit-all` in a room surely not a bank answers `not in a bank - nothing deposited` and sends nothing
+- `@kill` naming a player you won't fight (PvP off, your party, another fight) attacks nothing and says why
+- A follower waits longer on a leader's `@comeback` answer only when it says the leader is coming
 - Replies are plain ASCII: a hyphen where a long dash was
 - Reply wording: `can't be hidden`, bare `@profile` without doubled braces, `My party is full: …`
 - A trailing `!` on any command (`@stop!`) is ignored on every path
-- `@help` texts corrected
-- Talk tab tooltips corrected
+- `@help` texts and Talk tab tooltips corrected
+
+## 3.174.1
+
+- Item records show a Used on section listing every exit that names the item as the one needed to pass (a key on a locked door, an item to carry, a ticket): room, map/room and direction, one line per exit
+
+## 3.174.0
+
+- Timers of the buffs on you stop while you are out of the game (dropped link, relog, the board's menu) and run on with the time they had left
+- None of yours is recast for time spent away; a buff on a party member keeps its real end, as before
+- A whole-party buff stands still on you only: in a party it is recast when it would have run out had you not left
+- Your own buffs' time left is saved with the character and put back after MudPlay is closed
+- A client killed while in the game saves none, and buffs afresh
+- Changing profile with a character in the game tosses its buff timers
+- A buff's wear-off line is read after a reconnect or a restart; a hang-up death found late drops the buffs carried over
+- Bug report says whether the timers are running or standing still, and what a load put back
+
+## 3.173.0
+
+- Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held
+- Held buffs are let through once the debuff has gone out in the lair, two rounds into its fight at the latest, and held again at the next lair's door
+- A buff held at one lair with no cast since gets one cast at the next door first
+- Every lair wait also holds while mana is under what the debuff needs: its Min mana per cast, never less than the spell's cost, the higher of the two debuffs' (nav chip: Waiting for Mana to Debuff); mana-regen buffs still go out
+- A fight at the doorstep holds no buff
+- At a lair's door a buff you can't pay for is passed over for the next due one
+- A lair wait ends at once when the loop is stopped or paused, or Auto-Combat or the master switch goes off
+- Entire Loop Settings offers the lair wait while a loop walks to its first room
+- Program log and bug report say what a lair wait is for, what it holds back and why it ended
 
 ## 3.172.0
 
@@ -110,7 +139,7 @@
 - A room spell's kills count one each as they happen (session kills, lair timer, drop re-look, summon re-scan)
 - A command's `*Combat Off*` is recognised with a prompt or other lines between it and the echo
 - Program log notes a `*Combat Off*` that answers a command
-- bug reports addressed: paradigm-20261010-145330
+- bug reports addressed: paradigm-20261010-145330, paradigm-20261010-215619
 
 ## 3.167.12
 

@@ -78,6 +78,45 @@ public sealed class LoopShareTests : IDisposable
     }
 
     [Fact]
+    public void Codec_RoundTripsThePriorityBuffWait_AsTheNumberThree()
+    {
+        Loop loop = SampleLoop();
+        loop.LairEntryDebuff = LairEntryDebuffMode.WaitForPriorityBuffs;
+
+        IReadOnlyList<string> chunks = LoopShareCodec.Encode(loop);
+
+        Assert.Contains("\"ld\":3", Unpack(string.Concat(chunks)));
+        Assert.Equal(LairEntryDebuffMode.WaitForPriorityBuffs, LoopShareCodec.Decode(chunks).LairEntryDebuff);
+    }
+
+    // A way of waiting this client doesn't know (one a newer client added) arrives as
+    // off: the loop is still received and runs, without the wait. A client from before
+    // the priority-buff wait reads the 3 the same way.
+    [Fact]
+    public void Codec_UnknownLairEntryDebuffValue_DecodesAsOff_AndKeepsTheLoop()
+    {
+        string blob = Pack("{\"n\":\"x\",\"w\":[{\"r\":\"1/1\"},{\"r\":\"1/2\"}],\"ld\":99}");
+
+        Loop decoded = LoopShareCodec.Decode(new[] { blob });
+
+        Assert.Equal(LairEntryDebuffMode.Off, decoded.LairEntryDebuff);
+        Assert.Equal(2, decoded.Waypoints.Count);
+    }
+
+    [Fact]
+    public void Receive_PriorityBuffWaitLoop_IsSavedWithItsMode()
+    {
+        var (receiver, loops, _) = NewReceiver();
+        Loop sent = SampleLoop();
+        sent.LairEntryDebuff = LairEntryDebuffMode.WaitForPriorityBuffs;
+
+        receiver.NoteSendConfirmed("Raijin");
+        foreach (string line in DataLines(sent)) receiver.Ingest(Tele("Raijin", line));
+
+        Assert.Equal(LairEntryDebuffMode.WaitForPriorityBuffs, loops.Get("King's Road")!.LairEntryDebuff);
+    }
+
+    [Fact]
     public void Codec_BigLoop_SplitsIntoChatSizedChunks_AndReassembles()
     {
         Loop big = new("Grand tour", Enumerable.Range(1, 400)
@@ -118,6 +157,14 @@ public sealed class LoopShareTests : IDisposable
         using (DeflateStream d = new(packed, CompressionLevel.SmallestSize, leaveOpen: true))
             d.Write(Encoding.UTF8.GetBytes(json));
         return System.Buffers.Text.Base64Url.EncodeToString(packed.ToArray());
+    }
+
+    private static string Unpack(string blob)
+    {
+        using DeflateStream inflate = new(
+            new MemoryStream(System.Buffers.Text.Base64Url.DecodeFromChars(blob)), CompressionMode.Decompress);
+        using StreamReader reader = new(inflate, Encoding.UTF8);
+        return reader.ReadToEnd();
     }
 
     // ----- Sender (LoopShareHandler) ---------------------------------

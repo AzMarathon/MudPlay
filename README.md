@@ -1,17 +1,19 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.172.10**
-> - Remote commands: a sender without the permission gets only the Failure message; `@suicide`'s lives rule and `@do suicide` answer only a sender who holds it, and match the exact word
-> - Every refusal (bad or missing word, can't be done, state not read yet) follows the Warn setting; answers another client waits on are always sent
+> **Version 3.174.14**
+> - Remote commands: a sender without the permission gets only the Failure message; `@suicide`'s lives rule and `@do suicide` answer only a sender who holds it
+> - Every refusal (bad or missing word, can't be done, state not read yet, mortally wounded) follows the Warn setting; answers another client waits on are still sent
 > - A `&@` relay asked for on say goes by telepath while sneaking
-> - `@loop`, `@goto` and `@lair` say they started only when they did, and why not otherwise
-> - `@deposit-all` outside a bank answers `not in a bank - nothing deposited` and sends nothing
+> - `@loop` and `@goto` say they started only when they did, and why not otherwise
+> - `@lair` on a running Auto-Lair keeps the run: `already running` for the same lairs, `updated` for others
+> - `@deposit-all` in a room surely not a bank answers `not in a bank - nothing deposited` and sends nothing
+> - `@kill` naming a player you won't fight (PvP off, your party, another fight) attacks nothing and says why
+> - A follower waits longer on a leader's `@comeback` answer only when it says the leader is coming
 > - Replies are plain ASCII: a hyphen where a long dash was
 > - Reply wording: `can't be hidden`, bare `@profile` without doubled braces, `My party is full: …`
 > - A trailing `!` on any command (`@stop!`) is ignored on every path
-> - `@help` texts corrected
-> - Talk tab tooltips corrected
+> - `@help` texts and Talk tab tooltips corrected
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
