@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 
@@ -8,7 +9,7 @@ namespace MudPlay.Game.Remote;
 // our saved loops. It's a two-step handshake so a typo can't ship the wrong loop:
 //
 //   @loop send <name>   → we best-match the name and offer it:
-//                         {preparing to send: <loop>, yes to confirm, no to deny}
+//                         {preparing to send: <loop>, yes to confirm, no to deny (code <8 hex>)}
 //   @loop send          → the same offer, for the loop we're running right now
 //   @loop send yes      → we send the offered loop as `@loopdata` lines (see
 //                         LoopShareCodec), paced like an @roomba sync reply
@@ -30,7 +31,7 @@ public sealed class LoopShareHandler
     private readonly Func<DateTimeOffset> _now;
     private readonly Func<Loop?> _runningLoop;
     private readonly LogService? _log;
-    private readonly Dictionary<string, (Loop Loop, DateTimeOffset Expires)> _offers =
+    private readonly Dictionary<string, (Loop Loop, string Signature, DateTimeOffset Expires)> _offers =
         new(StringComparer.OrdinalIgnoreCase);
 
     public LoopShareHandler(LoopManager loops, LogService? log = null,
@@ -70,20 +71,68 @@ public sealed class LoopShareHandler
             if (loop is null) return;
         }
 
-        _offers[ctx.Sender] = (loop, _now() + OfferLifetime);
-        // The short code is the loop's signature as this character runs it, the one
-        // the asker's client shows when the loop arrives. In the log only: the offer
-        // and the lines that follow keep the wording older clients read.
+        string signature = LoopSignature.Of(loop);
+        _offers[ctx.Sender] = (loop, signature, _now() + OfferLifetime);
         _log?.Info("LoopShare",
-            $"{ctx.Sender} asked for loop '{loop.Name}' [{LoopSignature.ShortOf(loop)}] — awaiting their yes/no.");
-        ctx.Reply($"preparing to send: {loop.Name}, yes to confirm, no to deny");
+            $"{ctx.Sender} asked for loop '{loop.Name}' [{LoopSignature.Short(signature)}] — awaiting their yes/no.");
+        ctx.Reply(OfferLine(loop.Name, LoopSignature.Short(signature)));
+    }
+
+    // The offer, with the short code of the loop as this character runs it. The
+    // asker's client keeps the code and checks the loop that arrives against it
+    // (LoopShareReceiver), so both ends know the loop saved is the loop offered. A
+    // client from before the code just shows the line: nothing reads it there.
+    //
+    // The code is LoopSignature.ShortLength hex characters, 32 bits. That is ample
+    // for what it guards: one transfer arriving damaged in a way the packing did not
+    // catch, or two offers getting mixed up. A wrong loop passing by chance is one
+    // in four thousand million. It is not proof against someone forging a loop to
+    // match a code, and is not meant to be: whether two loops are the same loop is
+    // always decided on the whole signature.
+    internal static string OfferLine(string loopName, string code) =>
+        $"{OfferOpening}{loopName}{OfferClosing} (code {code})";
+
+    private const string OfferOpening = "preparing to send: ";
+    private const string OfferClosing = ", yes to confirm, no to deny";
+
+    // Whether message is a `@loop send` offer, and the code it carries: null when it
+    // has none, as from a client older than the code.
+    internal static bool TryParseOffer(string message, out string? code)
+    {
+        code = null;
+        string body = message.Trim();
+        if (body.Length >= 2 && body[0] == '{' && body[^1] == '}') body = body[1..^1].Trim();
+        if (!body.StartsWith(OfferOpening, StringComparison.OrdinalIgnoreCase)) return false;
+        int closing = body.LastIndexOf(OfferClosing, StringComparison.OrdinalIgnoreCase);
+        if (closing < 0) return false;
+
+        // What follows the closing words is the code, whole, or it is not one: a
+        // line the game cut short must not leave half a code to compare with.
+        string tail = body[(closing + OfferClosing.Length)..].Trim();
+        const string open = "(code ";
+        if (tail.Length > open.Length + 1 && tail.StartsWith(open, StringComparison.OrdinalIgnoreCase) && tail[^1] == ')')
+        {
+            string candidate = tail[open.Length..^1];
+            if (candidate.Length >= LoopSignature.ShortLength && candidate.All(Uri.IsHexDigit))
+                code = candidate.ToLowerInvariant();
+        }
+        return true;
     }
 
     private void Confirm(RemoteCommandContext ctx)
     {
-        if (!TakeOffer(ctx.Sender, out Loop? loop))
+        if (!TakeOffer(ctx.Sender, out Loop? loop, out string? offered))
         {
             ctx.Refuse("no loop send pending - use @loop send <name> first");
+            return;
+        }
+        // The asker said yes to the loop as it was when offered, and checks what
+        // arrives against that code. A loop edited since would be turned away there.
+        if (LoopSignature.Of(loop) != offered)
+        {
+            _log?.Info("LoopShare",
+                $"loop '{loop.Name}' changed since it was offered to {ctx.Sender} [{LoopSignature.Short(offered)} then, {LoopSignature.ShortOf(loop)} now] — not sent.");
+            ctx.Refuse($"loop '{loop.Name}' changed since it was offered - ask for it again");
             return;
         }
 
@@ -103,7 +152,7 @@ public sealed class LoopShareHandler
 
     private void Deny(RemoteCommandContext ctx)
     {
-        if (!TakeOffer(ctx.Sender, out Loop? loop))
+        if (!TakeOffer(ctx.Sender, out Loop? loop, out _))
         {
             ctx.Refuse("no loop send pending");
             return;
@@ -113,12 +162,17 @@ public sealed class LoopShareHandler
     }
 
     // Remove and return the requester's live offer; an expired one counts as none.
-    private bool TakeOffer(string requester, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Loop? loop)
+    // signature is the loop's when it was offered.
+    private bool TakeOffer(string requester,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Loop? loop,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? signature)
     {
         loop = null;
-        if (!_offers.Remove(requester, out (Loop Loop, DateTimeOffset Expires) offer)) return false;
+        signature = null;
+        if (!_offers.Remove(requester, out (Loop Loop, string Signature, DateTimeOffset Expires) offer)) return false;
         if (_now() > offer.Expires) return false;
         loop = offer.Loop;
+        signature = offer.Signature;
         return true;
     }
 

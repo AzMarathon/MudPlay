@@ -88,9 +88,15 @@ public static class LoopShareCodec
         return chunks;
     }
 
-    public static Loop Decode(IEnumerable<string> chunks)
+    public static Loop Decode(IEnumerable<string> chunks) => Decode(chunks, out _);
+
+    // lairWaitUnknown: the loop named a way of waiting this client does not know (a
+    // later version's) and was given none. It then is not the loop the sender
+    // offered, in that one setting, and cannot be checked against the sender's code.
+    public static Loop Decode(IEnumerable<string> chunks, out bool lairWaitUnknown)
     {
         ArgumentNullException.ThrowIfNull(chunks);
+        lairWaitUnknown = false;
         byte[] packed;
         try { packed = Base64Url.DecodeFromChars(string.Concat(chunks)); }
         catch (FormatException ex) { throw new FormatException("not base64url", ex); }
@@ -121,13 +127,12 @@ public static class LoopShareCodec
             });
         }
 
+        lairWaitUnknown = !Enum.IsDefined(typeof(LairEntryDebuffMode), payload.LairEntryDebuff);
         return new Loop(name, waypoints)
         {
             Notes = payload.Notes ?? string.Empty,
             OnlyAttackInLairRooms = payload.OnlyAttackInLairRooms,
-            LairEntryDebuff = Enum.IsDefined(typeof(LairEntryDebuffMode), payload.LairEntryDebuff)
-                ? (LairEntryDebuffMode)payload.LairEntryDebuff
-                : LairEntryDebuffMode.Off,
+            LairEntryDebuff = lairWaitUnknown ? LairEntryDebuffMode.Off : (LairEntryDebuffMode)payload.LairEntryDebuff,
         };
     }
 

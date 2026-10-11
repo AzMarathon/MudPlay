@@ -39,6 +39,16 @@ public sealed class LoopShareReceiver : IDisposable
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
     private readonly Dictionary<(string Sender, string Id), string?[]> _partial = new();
+
+    // The code on the last offer each player made us (null: the offer had none),
+    // by given name. The loop that player then sends is checked against it.
+    private readonly Dictionary<string, (string? Code, DateTimeOffset At)> _offered =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // An offer lapses on the sender's side after two minutes and a transfer has
+    // AcceptWindow to arrive; an offer older than both was for some earlier ask.
+    private static readonly TimeSpan OfferKept = TimeSpan.FromMinutes(5);
+
     private DateTimeOffset _acceptUntil = DateTimeOffset.MinValue;
     private string? _expectedSender;
     private bool _disposed;
@@ -78,6 +88,13 @@ public sealed class LoopShareReceiver : IDisposable
         if (e.Channel is not (ChatChannel.TelepathIncoming or ChatChannel.Gangpath or ChatChannel.Local))
             return;
         if (e.Speaker is not { Length: > 0 } sender) return;
+        if (LoopShareHandler.TryParseOffer(e.Message, out string? offeredCode))
+        {
+            // Kept whether or not we go on to say yes: the code is what the loop
+            // that arrives is checked against.
+            _offered[Given(sender)] = (offeredCode, _now());
+            return;
+        }
         if (!TryParse(e.Message, out string id, out int index, out int count, out string chunk)) return;
         if (_now() > _acceptUntil)
         {
@@ -107,34 +124,69 @@ public sealed class LoopShareReceiver : IDisposable
 
         _partial.Remove(key);
         _acceptUntil = DateTimeOffset.MinValue;   // one transfer per yes
+        // The offer this transfer answers: one per transfer, as the yes is.
+        string? offered = _offered.Remove(Given(sender), out (string? Code, DateTimeOffset At) offer)
+            && _now() - offer.At <= OfferKept ? offer.Code : null;
         Loop loop;
-        try { loop = LoopShareCodec.Decode(parts!); }
+        bool lairWaitUnknown;
+        try { loop = LoopShareCodec.Decode(parts!, out lairWaitUnknown); }
         catch (FormatException ex)
         {
             _log?.Warn("LoopShare", $"loop from {sender} couldn't be read: {ex.Message}");
             _notice($"[Loop from {sender} arrived damaged, not saved]");
             return;
         }
-        Save(loop, sender);
+        Save(loop, sender, offered, lairWaitUnknown);
     }
 
-    private void Save(Loop loop, string sender)
+    private void Save(Loop loop, string sender, string? offered, bool lairWaitUnknown)
     {
+        // The sender's loop as the sender runs it: its route with the two settings it
+        // sent. Ours, further down, is a loop here as this character runs it.
+        string theirs = LoopSignature.Of(loop);
+        string theirCode = LoopSignature.Short(theirs);
+        int rooms = loop.Waypoints.Count;
+
+        // The loop that arrived against the code the sender put on its offer. They
+        // differ when the transfer was damaged past what the packing catches, or
+        // when lines of two transfers were mixed: what arrived is then not what we
+        // said yes to, and it is not saved.
+        string verification;
+        if (lairWaitUnknown)
+        {
+            // Its lair wait is a later version's and was read as off, so the loop in
+            // hand differs from the one offered in that setting, knowingly. Taken as
+            // it always was, unchecked.
+            verification = "not verified: its lair wait is one this client does not know and was taken as off";
+        }
+        else if (offered is null)
+        {
+            verification = "not verified: no code came with the offer";
+        }
+        else if (theirs.StartsWith(offered, StringComparison.Ordinal))
+        {
+            verification = "verified";
+        }
+        else
+        {
+            _log?.Warn("LoopShare",
+                $"loop '{loop.Name}' from {sender} is not the loop offered [received {theirCode}, offered {offered}] — not saved.");
+            _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender} does not match the loop offered "
+                + $"(received {theirCode}, offered {offered}), not saved]");
+            return;
+        }
+        string checkedAs = $"({theirCode}, {verification})";
+
         if (_loops.SetName is null)
         {
             _log?.Warn("LoopShare", $"loop '{loop.Name}' from {sender} not saved — no game-data set is active");
-            _notice($"[Received loop '{loop.Name}' {loop.Waypoints.Count} rooms from {sender}, not saved: no game data set is loaded]");
+            _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender}, not saved: no game data set is loaded]");
             return;
         }
 
         // A loop of that name another client saved a moment ago counts for the
         // clash checks below.
         _loops.TakeInOutsideChanges();
-        // The sender's loop as the sender runs it: its route with the two settings it
-        // sent. Ours, below, is the loop of that name as this character runs it.
-        string theirs = LoopSignature.Of(loop);
-        string theirCode = LoopSignature.Short(theirs);
-        int rooms = loop.Waypoints.Count;
 
         // Held already, under that name or under one of the numbered names an
         // earlier copy of it was saved as: rejected. Without the numbered ones, the
@@ -144,8 +196,8 @@ public sealed class LoopShareReceiver : IDisposable
         if (Family(loop.Name).FirstOrDefault(held => LoopSignature.Of(held) == theirs) is { } same)
         {
             _log?.Info("LoopShare",
-                $"loop '{loop.Name}' [{theirCode}] from {sender} is the loop we have as '{same.Name}' — nothing saved, nothing changed.");
-            _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender}, already have it as '{same.Name}' ({theirCode})]");
+                $"loop '{loop.Name}' {checkedAs} from {sender} is the loop we have as '{same.Name}' — nothing saved, nothing changed.");
+            _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender} {checkedAs}, already have it as '{same.Name}']");
             return;
         }
 
@@ -154,8 +206,8 @@ public sealed class LoopShareReceiver : IDisposable
             // Save keeps the two loop settings the sender offered as this character's
             // for the loop, and the rest in the loop file.
             _loops.Save(loop);
-            _log?.Info("LoopShare", $"saved loop '{loop.Name}' [{theirCode}] ({rooms} rooms) received from {sender}.");
-            _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender}]");
+            _log?.Info("LoopShare", $"saved loop '{loop.Name}' {checkedAs} ({rooms} rooms) received from {sender}.");
+            _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender} {checkedAs}]");
             return;
         }
 
@@ -168,9 +220,9 @@ public sealed class LoopShareReceiver : IDisposable
         _loops.Save(loop);
         string ourCode = LoopSignature.ShortOf(existing);
         _log?.Info("LoopShare",
-            $"saved loop '{loop.Name}' [{theirCode}] ({rooms} rooms) received from {sender}: "
+            $"saved loop '{loop.Name}' {checkedAs} ({rooms} rooms) received from {sender}: "
             + $"'{existing.Name}' here is a different loop [{ourCode}] and is left as it is.");
-        _notice($"[Received loop '{original}' {rooms} rooms from {sender}, saved as '{loop.Name}' ({theirCode}): "
+        _notice($"[Received loop '{original}' {rooms} rooms from {sender} {checkedAs}, saved as '{loop.Name}': "
             + $"your '{existing.Name}' is a different loop ({ourCode})]");
     }
 

@@ -205,7 +205,8 @@ public sealed class LoopShareTests : IDisposable
         List<string> replies = new();
 
         share.OnSend(Ctx("Raijin", replies), "kings road");
-        Assert.Equal("preparing to send: King's Road, yes to confirm, no to deny", replies.Single());
+        Assert.Equal($"preparing to send: King's Road, yes to confirm, no to deny (code {LoopSignature.ShortOf(SampleLoop())})",
+            replies.Single());
 
         replies.Clear();
         share.OnSend(Ctx("Raijin", replies), "yes");
@@ -290,7 +291,8 @@ public sealed class LoopShareTests : IDisposable
         List<string> replies = new();
 
         share.OnSend(Ctx("Raijin", replies), "");
-        Assert.Equal("preparing to send: Ad-hoc grind, yes to confirm, no to deny", replies.Single());
+        Assert.Equal($"preparing to send: Ad-hoc grind, yes to confirm, no to deny (code {LoopSignature.ShortOf(running)})",
+            replies.Single());
 
         replies.Clear();
         share.OnSend(Ctx("Raijin", replies), "yes");
@@ -317,6 +319,177 @@ public sealed class LoopShareTests : IDisposable
     private static ChatLogEntry Tele(string sender, string msg) =>
         new(DateTimeOffset.UnixEpoch, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
 
+    // What a notice says of a loop whose offer carried no code: none of these
+    // receiver tests sends an offer line unless it says so.
+    private const string NoCodeOffered = "not verified: no code came with the offer";
+
+    // The sender's offer as it reaches the asker, braces and all.
+    private static ChatLogEntry Offer(string sender, Loop loop, string? code = null) =>
+        Tele(sender, "{" + LoopShareHandler.OfferLine(loop.Name, code ?? LoopSignature.ShortOf(loop)) + "}");
+
+    // ----- the code on the offer, and the loop checked against it ----------
+
+    [Fact]
+    public void Offer_CarriesTheCode_AndReadsBack()
+    {
+        string line = LoopShareHandler.OfferLine("King's Road", "9da659db");
+
+        Assert.Equal("preparing to send: King's Road, yes to confirm, no to deny (code 9da659db)", line);
+        Assert.True(LoopShareHandler.TryParseOffer("{" + line + "}", out string? code));
+        Assert.Equal("9da659db", code);
+
+        // A loop named to look like the rest of the line changes nothing: the code
+        // is what stands at the very end.
+        string tricky = LoopShareHandler.OfferLine("x, yes to confirm, no to deny (code 00000000)", "9da659db");
+        Assert.True(LoopShareHandler.TryParseOffer(tricky, out code));
+        Assert.Equal("9da659db", code);
+    }
+
+    [Theory]
+    [InlineData("{preparing to send: King's Road, yes to confirm, no to deny}")]              // an older client
+    [InlineData("{preparing to send: King's Road, yes to confirm, no to deny (code 9da6}")]  // cut short
+    [InlineData("{preparing to send: King's Road, yes to confirm, no to deny (code 9da6)}")] // too short
+    [InlineData("{preparing to send: King's Road, yes to confirm, no to deny (code 9da659dz)}")]
+    public void Offer_WithNoWholeCode_IsAnOfferWithNone(string line)
+    {
+        Assert.True(LoopShareHandler.TryParseOffer(line, out string? code));
+        Assert.Null(code);
+    }
+
+    [Theory]
+    [InlineData("{sending loop 'King's Road' (3 rooms, 1 line)}")]
+    [InlineData("preparing to send a letter")]
+    [InlineData("{@loopdata a1b2 1/1 abc}")]
+    public void OtherLines_AreNotOffers(string line) =>
+        Assert.False(LoopShareHandler.TryParseOffer(line, out _));
+
+    // One telepath has to hold the offer whole, code included, or the asker's
+    // client sees no code. With the longest name a loop can be sent under, the
+    // line in its braces leaves room for the "/<name> " it is addressed with.
+    [Fact]
+    public void Offer_ForTheLongestLoopName_FitsOneTelepath()
+    {
+        string line = LoopShareHandler.OfferLine(new string('n', 120), "9da659db");
+
+        Assert.True(line.Length + 2 <= 225 - 25, $"the offer is {line.Length + 2} characters in its braces");
+    }
+
+    [Fact]
+    public void Receive_LoopThatMatchesTheOfferedCode_IsSavedAsVerified()
+    {
+        var (receiver, loops, notices) = NewReceiver();
+        Loop sent = SampleLoop();
+
+        receiver.Ingest(Offer("Raijin", sent));
+        receiver.NoteSendConfirmed("Raijin");
+        foreach (string line in DataLines(sent)) receiver.Ingest(Tele("Raijin", line));
+
+        Assert.NotNull(loops.Get("King's Road"));
+        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin ({LoopSignature.ShortOf(sent)}, verified)]",
+            notices.Single());
+    }
+
+    // What arrived is not what was offered: a damaged transfer, or the lines of
+    // another. It is not saved.
+    [Fact]
+    public void Receive_LoopThatDoesNotMatchTheOfferedCode_IsNotSaved()
+    {
+        var (receiver, loops, notices) = NewReceiver();
+        Loop offered = SampleLoop();
+        Loop arrived = SampleLoop();
+        arrived.Waypoints[0].DelayMs += 1;
+
+        receiver.Ingest(Offer("Raijin", offered));
+        receiver.NoteSendConfirmed("Raijin");
+        foreach (string line in DataLines(arrived)) receiver.Ingest(Tele("Raijin", line));
+
+        Assert.Empty(loops.Loops);
+        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin does not match the loop offered "
+            + $"(received {LoopSignature.ShortOf(arrived)}, offered {LoopSignature.ShortOf(offered)}), not saved]", notices.Single());
+    }
+
+    // Each player's loop is checked against that player's own offer, and an offer
+    // answers one transfer.
+    [Fact]
+    public void Receive_ChecksAgainstTheSendersOwnOffer_Once()
+    {
+        var (receiver, loops, notices) = NewReceiver();
+        Loop theirs = SampleLoop("Theirs"), others = SampleLoop("Others");
+        others.Waypoints[0].DelayMs += 1;
+
+        receiver.Ingest(Offer("Suijin", others));
+        receiver.Ingest(Offer("Raijin", theirs));
+        receiver.NoteSendConfirmed("Raijin");
+        foreach (string line in DataLines(theirs)) receiver.Ingest(Tele("Raijin", line));
+        Assert.EndsWith(", verified)]", notices.Single());
+
+        // The same player sends again with no new offer: nothing to check it by.
+        notices.Clear();
+        theirs.Name = "Theirs again";
+        receiver.NoteSendConfirmed("Raijin");
+        foreach (string line in DataLines(theirs, id: "c3d4")) receiver.Ingest(Tele("Raijin", line));
+        Assert.EndsWith($", {NoCodeOffered})]", notices.Single());
+        Assert.Equal(2, loops.Loops.Count);
+    }
+
+    // A loop from a later version with a way of waiting this client doesn't know is
+    // still taken, with the wait off, as it always was. It can't match the code, and
+    // isn't held to it.
+    [Fact]
+    public void Receive_LoopWithALairWaitThisClientDoesNotKnow_IsSavedUnverified()
+    {
+        var (receiver, loops, notices) = NewReceiver();
+        string blob = Pack("{\"n\":\"Later\",\"w\":[{\"r\":\"1/1\"},{\"r\":\"1/2\"}],\"ld\":99}");
+
+        receiver.Ingest(Tele("Raijin", "{" + LoopShareHandler.OfferLine("Later", "0123abcd") + "}"));
+        receiver.NoteSendConfirmed("Raijin");
+        receiver.Ingest(Tele("Raijin", $"{{{LoopShareHandler.DataToken} a1b2 1/1 {blob}}}"));
+
+        Assert.Equal(LairEntryDebuffMode.Off, loops.Get("Later")!.LairEntryDebuff);
+        Assert.Contains("not verified: its lair wait is one this client does not know", notices.Single());
+    }
+
+    // The asker said yes to the loop as it was offered. Changed since, it is not
+    // sent: the asker's client would turn it away as not the loop offered.
+    [Fact]
+    public void Send_LoopChangedSinceItWasOffered_IsNotSent()
+    {
+        LoopManager loops = NewLoops();
+        loops.Save(SampleLoop());
+        LoopShareHandler share = new(loops, clock: () => _now);
+        List<string> replies = new();
+
+        share.OnSend(Ctx("Raijin", replies), "kings road");
+        loops.Get("King's Road")!.Waypoints[0].DoNotAttack = true;
+        replies.Clear();
+        share.OnSend(Ctx("Raijin", replies), "yes");
+
+        Assert.Equal("loop 'King's Road' changed since it was offered - ask for it again", replies.Single());
+    }
+
+    // The two ends together: what the sender's client puts on the wire, read by the
+    // asker's.
+    [Fact]
+    public void SendThenReceive_TheLoopSavedIsTheLoopOffered()
+    {
+        LoopManager senders = NewLoops();
+        senders.Save(SampleLoop());
+        LoopShareHandler share = new(senders, clock: () => _now);
+        List<string> wire = new();
+        share.OnSend(Ctx("Raijin", wire), "kings road");
+        share.OnSend(Ctx("Raijin", wire), "yes");
+        senders.Delete("King's Road");   // one folder stands in for both clients' here
+        var (receiver, loops, notices) = NewReceiver();
+
+        receiver.Ingest(Tele("Scout", "{" + wire[0] + "}"));
+        receiver.NoteSendConfirmed("Scout");
+        foreach (string line in wire.Skip(1)) receiver.Ingest(Tele("Scout", "{" + line + "}"));
+
+        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Scout ({LoopSignature.ShortOf(SampleLoop())}, verified)]",
+            notices.Single());
+        Assert.Equal(LoopSignature.Of(SampleLoop()), LoopSignature.Of(loops.Get("King's Road")!));
+    }
+
     [Fact]
     public void Receive_AfterOurYes_ReassemblesOutOfOrder_AndSaves()
     {
@@ -330,7 +503,8 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in Enumerable.Reverse(lines)) receiver.Ingest(Tele("Raijin", line));
 
         Assert.Equal(200, loops.Get("Grand tour")!.Waypoints.Count);
-        Assert.Equal("[Received loop 'Grand tour' 200 rooms from Raijin]", notices.Single());
+        Assert.Equal($"[Received loop 'Grand tour' 200 rooms from Raijin ({LoopSignature.ShortOf(big)}, {NoCodeOffered})]",
+            notices.Single());
     }
 
     [Fact]
@@ -365,7 +539,7 @@ public sealed class LoopShareTests : IDisposable
         Assert.Equal("9/1", loops.Get("King's Road")!.Waypoints[0].Room);   // ours untouched
         Assert.Equal(3, loops.Get("King's Road 2")!.Waypoints.Count);
         string theirs = LoopSignature.ShortOf(SampleLoop()), ours = LoopSignature.ShortOf(loops.Get("King's Road")!);
-        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin, saved as 'King's Road 2' ({theirs}): "
+        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin ({theirs}, {NoCodeOffered}), saved as 'King's Road 2': "
             + $"your 'King's Road' is a different loop ({ours})]", notices.Single());
     }
 
@@ -379,8 +553,8 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in DataLines(SampleLoop())) receiver.Ingest(Tele("Raijin", line));
 
         Assert.Single(loops.Loops);
-        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin, already have it as 'King's Road' ({LoopSignature.ShortOf(SampleLoop())})]",
-            notices.Single());
+        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin ({LoopSignature.ShortOf(SampleLoop())}, {NoCodeOffered}), "
+            + "already have it as 'King's Road']", notices.Single());
     }
 
     [Fact]
