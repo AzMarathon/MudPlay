@@ -1,5 +1,27 @@
 # Version history
 
+## 3.168.0
+
+- Hazard buff (desert waterskin) tracked: drinks again 60 s before it runs out, not sooner
+- Only with a hazard room here or within 5 planned steps
+- Auto-Sneak: the drink waits for a room with no NPCs, then re-sneaks before stepping on
+- In the last 15 s it drinks where you stand; a sneak spent that way counts as lost there
+- The drink takes the round's in-between cast; a refused one is logged and retried or set aside
+- Forgotten on death, a dropped link and a new profile
+- The re-sneak behind a hazard drink is answered before the step
+- Bug report shows the tracked hazard buff
+
+## 3.167.21
+
+- After a death, walks and loops avoid tolls, fares and sailings until the inventory is re-read; an arena death takes nothing
+- A toll or fare the game refuses isn't sent twice; it reopens once you carry the price
+- A walk with no way round an unpayable toll says so on the terminal
+- A loop over an unpayable toll isn't started, and stops if refused mid-lap (it could crash the client)
+- A sailing you can't pay for isn't walked to
+- The purse re-read after a refusal or a death stays owed until it goes out
+- Program log and bug report show the purse a toll was judged on
+- bug reports addressed: paradigm-20261010-145529
+
 ## 3.167.17
 
 - An item whose use, eat or drink casts a spell ends the sneak; the next move re-sneaks

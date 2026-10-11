@@ -1,9 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.17**
-> - An item whose use, eat or drink casts a spell ends the sneak; the next move re-sneaks
-> - Sneak-ending commands and a sent direction drop a hide too
+> **Version 3.168.0**
+> - Hazard buff (desert waterskin) tracked: drinks again 60 s before it runs out, not sooner
+> - Only with a hazard room here or within 5 planned steps
+> - Auto-Sneak: the drink waits for a room with no NPCs, then re-sneaks before stepping on
+> - In the last 15 s it drinks where you stand; a sneak spent that way counts as lost there
+> - The drink takes the round's in-between cast; a refused one is logged and retried or set aside
+> - Forgotten on death, a dropped link and a new profile
+> - The re-sneak behind a hazard drink is answered before the step
+> - Bug report shows the tracked hazard buff
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

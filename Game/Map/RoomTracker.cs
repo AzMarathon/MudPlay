@@ -193,6 +193,21 @@ public sealed class RoomTracker
     // room confirms, so a loop-stop lands ahead of the graveyard's recovery-reroute.
     public event Action? PlayerDeathObserved;
 
+    // The room the last witnessed death happened in, for PlayerDeathObserved's
+    // listeners: by the time it is raised the tracker holds no room. Null when the
+    // room wasn't known.
+    public RoomKey? LastDeathRoom { get; private set; }
+
+    // The exit the one move in flight is crossing: what a refusal of that move is a
+    // refusal of. Null with no move in flight, with more than one queued (the one
+    // refused isn't then the one out of this room), or when it maps to no exit.
+    public (RoomKey From, RoomExit Exit)? ExitInFlight()
+    {
+        if (State.Confidence != RoomConfidence.Pending || State.CurrentRoom is not { } source) return null;
+        if (_pending.Count != 1 || !_pending.TryPeek(out PendingMove head)) return null;
+        return TryResolvePendingExit(source, head, out RoomExit exit) ? (source.Key, exit) : null;
+    }
+
     // Fired from NoteUnwitnessedDeath: a death found out on the way back into the
     // game, long after it happened. Its own event because most of what
     // PlayerDeathObserved sets off is about the moment of dying (the room just
@@ -1323,6 +1338,7 @@ public sealed class RoomTracker
     {
         DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
         Room? died = State.CurrentRoom;
+        LastDeathRoom = died?.Key;
 
         if (_profile is not null)
         {

@@ -572,12 +572,7 @@ public sealed class AutoHazardCounterProvisioner
             return;
         }
 
-        if (SendUse(counter, pick, _now()) is not { } name)
-        {
-            _log?.Debug(LogCategory,
-                $"buff spell {counter.BuffSpell}: item {pick} has no name — can't re-raise");
-            return;
-        }
+        if (SendUse(counter, pick, _now()) is not { } name) return;
         _log?.Info(LogCategory,
             $"re-raised buff {counter.BuffSpell} with `use {name}` on lapse prompt — it ran out sooner than its timer said");
     }
