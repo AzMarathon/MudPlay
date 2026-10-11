@@ -61,6 +61,12 @@ public sealed class ItemEquipFilterTests
     }
 
     [Fact]
+    public void CanEquip_NoRowAtAll_IsNotWearable()
+    {
+        Assert.False(ItemEquipFilter.CanEquip(default, level: 40, Cls(3), AlignmentBucket.Evil));
+    }
+
+    [Fact]
     public void CanEquip_MinLevel_BlocksBelowAllowsAtOrAbove()
     {
         GameRow doc = TestRows.Row("""{ "Abil-0": 135, "AbilVal-0": 10 }""");

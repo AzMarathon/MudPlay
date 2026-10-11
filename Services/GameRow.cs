@@ -16,6 +16,10 @@ public readonly struct GameRow
         _row = row;
     }
 
+    // False for the default value alone: a row no table produced. For the reader whose
+    // answer for "no row" is not its answer for a row with nothing set.
+    public bool Exists => _table is not null;
+
     // The field of this name, matched exactly (case included). False when the row
     // has no such field; a field written as null is present.
     public bool TryGetProperty(string name, out GameValue value)

@@ -281,6 +281,9 @@ public sealed class GameTableTests
         Assert.Throws<InvalidOperationException>(() => default(GameValue).GetString());
         Assert.False(default(GameRow).TryGetProperty("Number", out _));
         Assert.Empty(default(GameRow).Fields);
+        // Told apart from a real row that happens to have no fields.
+        Assert.False(default(GameRow).Exists);
+        Assert.True(TestRows.Row("{}").Exists);
     }
 
     [Fact]

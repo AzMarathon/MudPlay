@@ -125,6 +125,9 @@ public static class ItemEquipFilter
     public static bool CanEquip(GameRow itemRow, int level, ClassEquipProfile cls, AlignmentBucket? alignment,
         RealmType realm = RealmType.ParaMud, EvilPointRange? evilPoints = null)
     {
+        // No item at all is not wearable; an item with no restriction set is.
+        if (!itemRow.Exists) return false;
+
         int minLevel = 0, maxLevel = 0;
         bool goodOnly = false, evilOnly = false, neutralOnly = false;
         int evilOnlyValue = 0;
