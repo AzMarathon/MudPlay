@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using MudPlay.Game.Map;
 using MudPlay.Services;
@@ -16,12 +17,13 @@ namespace MudPlay.Game.Remote;
 // sender, who only offered because they grant us @loop; we just confirm we asked.
 //
 // A received loop never overwrites one of ours, nor changes how we run one (user,
-// 2026-10-11). When we hold a loop of that name the two are compared by signature
-// (LoopSignature: the route, every room's settings, and the two loop-wide settings,
-// the sender's against this character's). The same: rejected, nothing saved or
-// changed. Different: saved as new under "<name> 2" (the next free number), and the
-// sender's two loop settings become this character's for that new loop alone. With
-// no loop of that name it is saved under it, the sender's two settings with it.
+// 2026-10-11). It is compared by signature (LoopSignature: the route, every room's
+// settings, and the two loop-wide settings, the sender's against this character's)
+// with the loop we hold of that name and with the numbered copies saved beside it.
+// The same as any of them: rejected, nothing saved or changed. Different from all:
+// saved under the name when it is free, else as new under "<name> 2" (the next free
+// number), and the sender's two loop settings become this character's for the loop
+// saved alone.
 public sealed class LoopShareReceiver : IDisposable
 {
     // Long enough for a big loop's paced lines (~800ms apart) and a slow sender.
@@ -133,6 +135,20 @@ public sealed class LoopShareReceiver : IDisposable
         string theirs = LoopSignature.Of(loop);
         string theirCode = LoopSignature.Short(theirs);
         int rooms = loop.Waypoints.Count;
+
+        // Held already, under that name or under one of the numbered names an
+        // earlier copy of it was saved as: rejected. Without the numbered ones, the
+        // same loop sent twice to someone whose own loop of that name differs piled
+        // up as "<name> 2", "<name> 3" (user, 2026-10-11). Each is compared as this
+        // character runs it, with its own two settings for that loop.
+        if (Family(loop.Name).FirstOrDefault(held => LoopSignature.Of(held) == theirs) is { } same)
+        {
+            _log?.Info("LoopShare",
+                $"loop '{loop.Name}' [{theirCode}] from {sender} is the loop we have as '{same.Name}' — nothing saved, nothing changed.");
+            _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender}, already have it as '{same.Name}' ({theirCode})]");
+            return;
+        }
+
         if (_loops.Get(loop.Name) is not { } existing)
         {
             // Save keeps the two loop settings the sender offered as this character's
@@ -143,15 +159,6 @@ public sealed class LoopShareReceiver : IDisposable
             return;
         }
 
-        string ours = LoopSignature.Of(existing);
-        if (ours == theirs)
-        {
-            _log?.Info("LoopShare",
-                $"loop '{loop.Name}' [{theirCode}] from {sender} is the loop we have under that name — nothing saved, nothing changed.");
-            _notice($"[Received loop '{loop.Name}' {rooms} rooms from {sender}, already have it ({theirCode})]");
-            return;
-        }
-
         // The name is taken by a different loop: other rooms, other room settings or
         // other loop settings. Ours stays as it is, with this character's settings
         // for it, and theirs is saved beside it under a numbered name. Taking their
@@ -159,7 +166,7 @@ public sealed class LoopShareReceiver : IDisposable
         string original = loop.Name;
         loop.Name = NumberedName(original);
         _loops.Save(loop);
-        string ourCode = LoopSignature.Short(ours);
+        string ourCode = LoopSignature.ShortOf(existing);
         _log?.Info("LoopShare",
             $"saved loop '{loop.Name}' [{theirCode}] ({rooms} rooms) received from {sender}: "
             + $"'{existing.Name}' here is a different loop [{ourCode}] and is left as it is.");
@@ -176,6 +183,34 @@ public sealed class LoopShareReceiver : IDisposable
             string candidate = $"{name} {n}";
             if (_loops.Get(candidate) is null) return candidate;
         }
+    }
+
+    // The loop named name, then the loops NumberedName has saved beside it, lowest
+    // number first.
+    private IEnumerable<Loop> Family(string name)
+    {
+        if (_loops.Get(name) is { } named) yield return named;
+        foreach ((Loop Loop, int Number) sibling in _loops.Loops
+                     .Select(l => (Loop: l, Number: SiblingNumber(l.Name, name)))
+                     .Where(p => p.Number > 0)
+                     .OrderBy(p => p.Number))
+            yield return sibling.Loop;
+    }
+
+    // The number in "<name> <n>" exactly as NumberedName writes it: one space, then
+    // digits only, 2 or more, no leading zero. 0 for any other name, so a loop the
+    // user named "<name> 2a", "<name>2" or "<name> (old)" is not taken for a copy.
+    internal static int SiblingNumber(string candidate, string name)
+    {
+        if (candidate.Length <= name.Length + 1
+            || !candidate.StartsWith(name, StringComparison.OrdinalIgnoreCase)
+            || candidate[name.Length] != ' ')
+            return 0;
+        ReadOnlySpan<char> digits = candidate.AsSpan(name.Length + 1);
+        if (digits[0] == '0') return 0;
+        foreach (char c in digits)
+            if (c is < '0' or > '9') return 0;
+        return int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out int n) && n >= 2 ? n : 0;
     }
 
     // Parse "@loopdata <id> <i>/<n> <chunk>", tolerating the {} a remote reply is

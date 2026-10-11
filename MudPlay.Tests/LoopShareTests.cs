@@ -379,7 +379,7 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in DataLines(SampleLoop())) receiver.Ingest(Tele("Raijin", line));
 
         Assert.Single(loops.Loops);
-        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin, already have it ({LoopSignature.ShortOf(SampleLoop())})]",
+        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin, already have it as 'King's Road' ({LoopSignature.ShortOf(SampleLoop())})]",
             notices.Single());
     }
 

@@ -505,7 +505,7 @@ public sealed class LoopSettingsStoreTests : IDisposable
         List<string> notices = Receive(receiver, spelledOtherwise);
 
         string code = LoopSignature.ShortOf(sent);
-        Assert.Equal($"[Received loop 'DRAGONS' 2 rooms from Sender, already have it ({code})]", notices.Single());
+        Assert.Equal($"[Received loop 'DRAGONS' 2 rooms from Sender, already have it as 'Dragons' ({code})]", notices.Single());
         Assert.Equal(before, OnDisk("Beta"));
         Assert.Single(receiver.Loops.Loops);
         Assert.Empty(changed);
@@ -598,10 +598,75 @@ public sealed class LoopSettingsStoreTests : IDisposable
         Assert.Contains("saved as 'Dragons 3'", notices.Single());
         Assert.Contains("your 'dragons' is a different loop", notices.Single());
         Assert.Equal(new[] { "dragons", "DRAGONS 2", "Dragons 3" }, receiver.Loops.Loops.Select(l => l.Name));
-
-        // Sent once more, it is a different loop from 'dragons' still, and 2 and 3 are taken.
-        Assert.Contains("saved as 'Dragons 4'", Receive(receiver, sender.Loops.Get("Dragons")!).Single());
     }
+
+    // The same loop sent a second time is the numbered copy the first one made, and
+    // is turned away as that copy. Before this each send piled up another number.
+    [Fact]
+    public void LoopSend_SameLoopAcceptedTwice_TheSecondIsRejectedAsTheNumberedCopy()
+    {
+        WriteSharedLoop("Dragons", onlyLair: false, wait: "Off", secondRoom: 3);
+        WriteSharedLoop("Dragons", onlyLair: false, wait: "Off", set: _awaySet);
+        WriteOlderCharacter("Alpha");
+        WriteOlderCharacter("Beta");
+        Client sender = Open("Alpha");
+        sender.Loops.SetSettings("Dragons", LairOnlyAndBlock);
+        Client receiver = Open("Beta", _awaySet);
+        string code = LoopSignature.ShortOf(sender.Loops.Get("Dragons")!);
+
+        Assert.Contains("saved as 'Dragons 2'", Receive(receiver, sender.Loops.Get("Dragons")!).Single());
+        Dictionary<string, string> before = OnDisk("Beta");
+
+        // Asked for again under another spelling: the copy is found all the same.
+        Loop sent = sender.Loops.Get("Dragons")!;
+        List<string> again = Receive(receiver, new Loop("DRAGONS", sent.Waypoints) { OwnSettings = sent.OwnSettings });
+
+        Assert.Equal($"[Received loop 'DRAGONS' 2 rooms from Sender, already have it as 'Dragons 2' ({code})]", again.Single());
+        Assert.Equal(before, OnDisk("Beta"));
+        Assert.Equal(new[] { "Dragons", "Dragons 2" }, receiver.Loops.Loops.Select(l => l.Name));
+
+        // The copy is compared as this character runs it. Run another way, it is no
+        // longer the loop being sent, and that one is saved under the next number.
+        receiver.Loops.SetSettings("Dragons 2", Neither);
+        Assert.Contains("saved as 'Dragons 3'", Receive(receiver, sent).Single());
+    }
+
+    // Only the names a numbered save writes count as copies. A loop the user named
+    // themselves is theirs, however alike the name, even when it is the same loop.
+    [Fact]
+    public void LoopSend_LoopsTheUserNamed_AreNotTakenForNumberedCopies()
+    {
+        WriteSharedLoop("Dragons", onlyLair: false, wait: "Off", secondRoom: 3);
+        WriteSharedLoop("Dragons", onlyLair: false, wait: "Off", set: _awaySet);
+        foreach (string handNamed in new[] { "Dragons 2a", "Dragons2", "Dragons (old)", "Dragons 02", "Dragons 1", "Dragons  2" })
+            WriteSharedLoop(handNamed, onlyLair: false, wait: "Off", set: _awaySet, secondRoom: 3);
+        WriteOlderCharacter("Alpha");
+        WriteOlderCharacter("Beta");
+        Client sender = Open("Alpha");
+        Client receiver = Open("Beta", _awaySet);
+
+        List<string> notices = Receive(receiver, sender.Loops.Get("Dragons")!);
+
+        Assert.Contains("saved as 'Dragons 2'", notices.Single());
+    }
+
+    [Theory]
+    [InlineData("Dragons 2", 2)]
+    [InlineData("dragons 17", 17)]
+    [InlineData("Dragons", 0)]
+    [InlineData("Dragons 1", 0)]
+    [InlineData("Dragons 0", 0)]
+    [InlineData("Dragons 02", 0)]
+    [InlineData("Dragons 2a", 0)]
+    [InlineData("Dragons2", 0)]
+    [InlineData("Dragons  2", 0)]
+    [InlineData("Dragons 2 ", 0)]
+    [InlineData("Dragons -2", 0)]
+    [InlineData("Dragons (old)", 0)]
+    [InlineData("Dragons 99999999999999999999", 0)]
+    [InlineData("Wyrms 2", 0)]
+    public void SiblingNumber_IsTheNumberANumberedSaveWrote_OrNone(string candidate, int expected) =>
+        Assert.Equal(expected, LoopShareReceiver.SiblingNumber(candidate, "Dragons"));
 
     // The rule goes by name. The same loop under a name we don't have is saved under
     // it; the two carry the same code, which is how they can be told to be the same.
