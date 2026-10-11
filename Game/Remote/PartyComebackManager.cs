@@ -690,6 +690,14 @@ public sealed class PartyComebackManager : IDisposable
         if (e.Kind != LoopEventKind.Failed && !(e.Kind == LoopEventKind.Stopped && !e.WillResume)) return;
         _gatedOnLoop.Clear();
         _gateFetches.RemoveAll(f => f.Engine == ResumeKind.Loop);
+        ForgetGateSteps();
+    }
+
+    // The steps an engine made through gated exits are that run's.
+    private void ForgetGateSteps()
+    {
+        _gateCrossed.Clear();
+        _lastStepGate = null;
     }
 
     // Auto-Lair stopped for good: the next pass they were promised isn't coming.
@@ -700,6 +708,7 @@ public sealed class PartyComebackManager : IDisposable
         _invitedOnSightAt.Clear();
         _lairAnswered.Clear();
         _gateFetches.RemoveAll(f => f.Engine == ResumeKind.Lair);
+        ForgetGateSteps();
     }
 
     // What the engine in charge does about a member dropped behind this gated step
@@ -1436,9 +1445,14 @@ public sealed class PartyComebackManager : IDisposable
         {
             // A walk that is over (arrived, failed, or stopped for good): the one
             // pickup it made from an exit was that walk's.
-            if (e.Kind is WalkEventKind.Finished or WalkEventKind.Failed
-                || (e.Kind == WalkEventKind.Stopped && !e.WillResume))
+            // A leg a loop or Auto-Lair walked is not a walk of its own.
+            bool walkOver = e.Kind is WalkEventKind.Finished or WalkEventKind.Failed
+                || (e.Kind == WalkEventKind.Stopped && !e.WillResume);
+            if (walkOver && !_autoLair.IsActive && _loopRunner.State is LoopState.Idle)
+            {
                 _gateFetches.RemoveAll(f => f.Engine == ResumeKind.Walker);
+                ForgetGateSteps();
+            }
             return;
         }
         // Our own recovery walks are only ever started on an idle walker, so a
