@@ -600,6 +600,15 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     private void SaveRunningLoop()
     {
         if (_runner?.CurrentLoop is not { } running) return;
+        // A switch of game data doesn't stop a run: the loop is still the rooms of
+        // the set it was started on, and isn't saved into another's.
+        if (OpenedOnGameData.Refusal("loop", _runner.LastRunLoopGameData ?? _loops.SetName, _loops.SetName) is { } refusal)
+        {
+            ImportStatus = refusal;
+            _log?.Info("Navigation",
+                $"running loop '{running.Name}' not saved: {OpenedOnGameData.LogReason(_runner.LastRunLoopGameData, _loops.SetName)}");
+            return;
+        }
         string saveName = (RunningLoopName ?? string.Empty).Trim();
         if (saveName.Length == 0) saveName = running.Name;
 
@@ -620,7 +629,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     // ----- .mp importer ----------------------------------------------
 
     // One-line status / error surfaced in the Manage dialog after an import
-    // attempt. Empty until the user clicks "Import .mp" the first time.
+    // attempt, and the reason a running loop's Save was refused. Empty until the
+    // user clicks "Import .mp" the first time or such a Save is refused.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasImportStatus))]
     private string _importStatus = string.Empty;

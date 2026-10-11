@@ -264,9 +264,38 @@ public sealed class AutoLairManager : IDisposable
 
     public bool IsMarked(RoomKey key) => _markers.ContainsKey(key);
 
+    // The game-data set the marks are rooms of: the one active when the first of
+    // them was placed. They are kept through a switch of game data only under a run
+    // (DropMarksOfOtherGameData), so whoever would save them as a setup can tell
+    // they are another set's.
+    public string? MarksGameData { get; private set; }
+
+    // The active game data changed. Under another set the marked rooms are other
+    // rooms, and saved as a setup they would land in that set's Loops folder, a file
+    // every character and running client on that set reads: the marks are dropped.
+    // The same set read in again keeps them, and so does a run under way, which is
+    // left to carry on as it would have. True when marks were dropped; markedOn is
+    // then the set they belonged to.
+    public bool DropMarksOfOtherGameData(string? active, out string? markedOn)
+    {
+        markedOn = MarksGameData;
+        if (_markers.Count == 0) return false;
+        if (string.Equals(MarksGameData, active, StringComparison.OrdinalIgnoreCase)) return false;
+        string sets = $"game data '{markedOn ?? "(none)"}''s and '{active ?? "(none)"}' is active now";
+        if (IsActive)
+        {
+            _log?.Info("AutoLair", $"{_markers.Count} lair mark(s) kept for the run under way: their rooms are {sets}");
+            return false;
+        }
+        _log?.Info("AutoLair", $"{_markers.Count} lair mark(s) dropped: their rooms were {sets}");
+        Clear();
+        return true;
+    }
+
     public void Mark(RoomKey key, int? overrideRespawnSeconds = null)
     {
         if (_markers.TryGetValue(key, out int? current) && current == overrideRespawnSeconds) return;
+        if (_markers.Count == 0) MarksGameData = _graph.ActiveSet;
         _markers[key] = overrideRespawnSeconds;
         _noRoute.Clear();
         _log?.Info("AutoLair",

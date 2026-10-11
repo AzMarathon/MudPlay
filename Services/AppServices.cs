@@ -8822,6 +8822,16 @@ public sealed class AppServices
         // at a wait-room one hop short, then steps in on the tick.
         AutoLair = new Game.Map.AutoLairManager(
             Walker, RoomTracker, RoomGraph, Bfs, LairTimers, Log, MovementCoordinator);
+        // Nothing made of one game data's room numbers is saved under another: lair
+        // marks on the map are dropped, with a notice, when the set changes to another,
+        // as a loop being built is. Posted: a set change can come from inside the line
+        // pump, where writing to the terminal re-enters it.
+        GameData.ActiveSetChanged += set =>
+        {
+            if (!AutoLair.DropMarksOfOtherGameData(set, out string? markedOn)) return;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(
+                $"[Lair marks were dropped: their rooms belonged to game data '{markedOn ?? "(none)"}', and '{set ?? "(none)"}' is active now]"));
+        };
 
         // Auto-Lair beginning a run is a loop-start for gear purposes — swap to the
         // Default set, same as LoopRunner's ReachedFirstWaypoint above.

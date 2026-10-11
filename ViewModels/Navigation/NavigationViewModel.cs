@@ -2164,7 +2164,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // Loop running: snapshot from the runner.
+        // Loop running: snapshot from the runner. A switch of game data doesn't stop
+        // a run, so the editor is told the set the loop was started on: its rooms
+        // are that set's, and under another it refuses to save them.
         if (_services.LoopRunner.CurrentLoop is { } running)
         {
             Loop draft = new(running.Name, running.Waypoints)
@@ -2173,7 +2175,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             };
             LoopEditorDialogViewModel vm = new(
                 draft, _services.Loops, _services.RoomGraph,
-                _services.LoopRunner, _services.Confirm, isNew: true);
+                _services.LoopRunner, _services.Confirm, isNew: true,
+                roomsOf: _services.LoopRunner.LastRunLoopGameData);
             await _services.Dialogs
                 .OpenWindowAsync<LoopEditorDialogViewModel, Loop?>(vm);
         }
@@ -2202,9 +2205,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             name: $"Lairs {DateTime.Now:HH-mm-ss}",
             markers: markers);
 
+        // Marks a run is on are kept through a switch of game data: the editor is
+        // told the set they were placed on, and under another it refuses to save them.
         LairEditorDialogViewModel vm = new(
             draft, _services.Lairs, _services.RoomGraph,
-            _services.LairTimers, _services.Confirm, isNew: true, log: _services.Log);
+            _services.LairTimers, _services.Confirm, isNew: true, log: _services.Log,
+            roomsOf: _services.AutoLair.MarksGameData);
         await _services.Dialogs
             .OpenWindowAsync<LairEditorDialogViewModel, Models.Profile.LairSetup?>(vm);
     }
@@ -5683,7 +5689,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         wp.RestHereMana = result.RestHereMana;
 
         _services.LoopRunner.ReconcileExpandedSteps();
-        if (_services.Loops.Get(loop.Name) is not null)
+        // A switch of game data doesn't stop a run, and a loop of this name on the
+        // set active now is another loop: the change stays with the run and isn't
+        // written over that one.
+        string? startedOn = _services.LoopRunner.LastRunLoopGameData ?? _services.Loops.SetName;
+        if (OpenedOnGameData.Refusal("loop", startedOn, _services.Loops.SetName) is not null)
+            _services.Log?.Info("Navigation",
+                $"loop live-edit not saved to the loop file: {OpenedOnGameData.LogReason(startedOn, _services.Loops.SetName)}");
+        else if (_services.Loops.Get(loop.Name) is not null)
             _services.Loops.Save(loop);
 
         _services.Log?.Info("Navigation",

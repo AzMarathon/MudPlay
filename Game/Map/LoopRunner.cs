@@ -1243,7 +1243,9 @@ public sealed class LoopRunner : IRecoverableEngine
             Notes = loop.Notes,
             OwnSettings = loop.OwnSettings,
         };
-        LastRunLoopGameData = _graph?.ActiveSet;
+        // A recovery reroute is the same run re-planned: the loop is still the set's
+        // it was started on, though a switch of game data may be what lost the room.
+        if (!isRecovery) LastRunLoopGameData = _graph?.ActiveSet;
         _index = 0;
         _stepInFlight = false;
         _awaitingCommandReplies = false;
