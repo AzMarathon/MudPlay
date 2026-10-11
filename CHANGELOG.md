@@ -1,5 +1,11 @@
 # Version history
 
+## 3.179.12
+
+- A BBS, realm, profile or game-data set name that can't be a folder's name is refused wherever a path is made from it; a name like `..` could delete a BBS with its characters, or the whole data folder
+- The naming boxes refuse the same names and say why as you type; the Settings BBS Name box is checked too
+- Profiles, realms and BBSes already under such a name still load and can be renamed
+
 ## 3.179.11
 
 - Game data imported again over the active set: monster spawns, item sources, room floor items, quest flags and the spell-ailment and cure lists now rebuild from the new data, not only after a set switch or a restart

@@ -33,8 +33,8 @@ public sealed class RealmCatalog
     public static string? NameProblem(string name, IEnumerable<string> taken)
     {
         if (name.Length == 0) return "A realm needs a name.";
-        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name is "." or "..")
-            return $"“{name}” can't be used as a realm name.";
+        // A realm's name is its data folder's.
+        if (PathGuard.WhyNotPlain(name, "realm name") is { } notPlain) return notPlain;
         if (taken.Any(t => string.Equals(t, name, StringComparison.OrdinalIgnoreCase)))
             return $"This BBS already has a realm named “{name}”.";
         return null;
@@ -100,9 +100,27 @@ public sealed class RealmCatalog
         _log?.Info("BBS", $"Realm '{realm.Name}' on '{bbsName}' now uses game data '{set ?? "global default"}'.");
     }
 
+    // A realm's name is its data folder's, under the BBS's Realms folder, and a
+    // bbs.json can hold any text for one. A realm that is there may have no folder
+    // yet (nothing collected) and a name from before names were checked, so it only
+    // has to name a folder directly inside Realms; a name being given to one has to
+    // be usable (PathGuard.Usable). Otherwise the refusal is logged and nothing is
+    // touched.
+    private static bool RealmNamed(string operation, string bbsName, string? name, bool given = false)
+    {
+        string realms = AppPaths.RealmsDir(bbsName);
+        if (PathGuard.Usable(AppPaths.BbsDir, bbsName)
+            && (given ? PathGuard.Usable(realms, name) : PathGuard.Child(realms, name) is not null))
+            return true;
+        PathGuard.Refuse(operation, "realm name", name);
+        return false;
+    }
+
     // A realm's name changed: move its data folder and re-point its characters.
     public void MoveData(string bbsName, string oldName, string newName)
     {
+        const string operation = "Renaming a realm";
+        if (!RealmNamed(operation, bbsName, oldName) || !RealmNamed(operation, bbsName, newName, given: true)) return;
         string from = AppPaths.RealmFolder(bbsName, oldName);
         string to = AppPaths.RealmFolder(bbsName, newName);
         if (Directory.Exists(from) && !Directory.Exists(to)) Directory.Move(from, to);
@@ -114,10 +132,12 @@ public sealed class RealmCatalog
     // went, since a character with no realm plays the first) and its data folder.
     public void DeleteContents(string bbsName, string name, IReadOnlyList<ProfileRef> characters)
     {
+        const string operation = "Removing a realm";
+        if (!RealmNamed(operation, bbsName, name)) return;
         foreach (ProfileRef character in characters)
             _profiles.DeleteProfile(character.Bbs, character.Name);
-        string folder = AppPaths.RealmFolder(bbsName, name);
-        if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        // Only ever a folder inside this BBS's Realms folder.
+        PathGuard.DeleteTree(AppPaths.RealmFolder(bbsName, name), AppPaths.RealmsDir(bbsName), operation);
         _log?.Info("BBS", $"Removed realm '{name}' from '{bbsName}' with its {characters.Count} character(s) "
             + (characters.Count > 0 ? $"({string.Join(", ", characters.Select(c => c.Name))}) " : "")
             + "and its collected data.");

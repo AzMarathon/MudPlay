@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.179.11**
-> - Game data imported again over the active set: monster spawns, item sources, room floor items, quest flags and the spell-ailment and cure lists now rebuild from the new data, not only after a set switch or a restart
-> - Loading a game-data set reads each table file once; Rooms was read twice
-> - A lookup caught mid-switch can no longer be answered from the other set's table, and nothing worked out mid-switch from the last set's textblocks, rooms or shop stock is kept for the new set
+> **Version 3.179.12**
+> - A BBS, realm, profile or game-data set name that can't be a folder's name is refused wherever a path is made from it; a name like `..` could delete a BBS with its characters, or the whole data folder
+> - The naming boxes refuse the same names and say why as you type; the Settings BBS Name box is checked too
+> - Profiles, realms and BBSes already under such a name still load and can be renamed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

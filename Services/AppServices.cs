@@ -2889,6 +2889,10 @@ public sealed class AppServices
         // now that logging is up — AppPaths ran it at static-init.
         if (AppPaths.MigrationNote is { } migrationNote)
             Log.Info("Migration", migrationNote);
+        // A BBS, realm, profile or set name that can't be used as a folder's is
+        // refused wherever a path is made from one (PathGuard); each refusal is
+        // said once, here, before any store that might meet one is built.
+        PathGuard.Refused += line => Log.Warn("Paths", line);
         // Same gating for the memory-footprint sampler: the timer runs for the
         // whole process, but samples land on disk only while AutoCollectLogs is on.
         MemoryLog = new MemoryUsageLog(LogDiagnostics);

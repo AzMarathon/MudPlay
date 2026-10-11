@@ -95,7 +95,15 @@ public sealed class LairManager
     {
         _setups.Clear();
         _unreadable.Clear();
-        _setName = setName;
+        // A name that can't be a set's folder is no set: nothing is read for it, and
+        // nothing saved while it stands goes anywhere.
+        if (!string.IsNullOrWhiteSpace(setName) && !PathGuard.Usable(AppPaths.GameDataRoot, setName))
+        {
+            PathGuard.Refuse("Loading a set's lair setups", "game-data set name", setName);
+            setName = null;
+        }
+        // Blank is no set either; held as such, a save went to a folder of no name.
+        _setName = string.IsNullOrWhiteSpace(setName) ? null : setName;
 
         if (string.IsNullOrWhiteSpace(setName))
         {
