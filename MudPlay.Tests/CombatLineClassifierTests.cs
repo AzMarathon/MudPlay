@@ -117,6 +117,104 @@ public sealed class CombatLineClassifierTests
     public void EngineOutcomeWordings(string line, CombatLineKind kind)
         => Assert.Equal(kind, Classify(line, White));
 
+    // Bright cyan is the room title's colour, not a miss's: misses and dodges print
+    // dark cyan (user, 2026-10-10). A room shown while a fight is on (a re-read, or a
+    // step taken with combat still engaged) put its title inside the combat window,
+    // where it was tagged a monster's miss (report paradigm-20261010-215619). The
+    // titles are real ones; three of them lead with a monster's name.
+    [Theory]
+    [InlineData("Smoldering Fields")]
+    [InlineData("Dire Wolf Lair")]
+    [InlineData("Brigand Camp, Perimeter")]
+    [InlineData("Colin's Maces")]
+    public void RoomTitle_BrightCyan_InsideCombatWindow_IsNone(string title)
+    {
+        Assert.Equal(CombatLineKind.None, Classify(title, Cyan, bold: true));                    // SGR 1;36
+        Assert.Equal(CombatLineKind.None, Classify(title, TerminalColor.Indexed(14)));          // SGR 96
+    }
+
+    // Our own prayer and buff lines print bright cyan and start with "You": no miss.
+    [Theory]
+    [InlineData("You raise a hand to the heavens!")]
+    [InlineData("You close your eyes and recite a prayer.")]
+    public void OwnBrightCyanLine_IsNotOurMiss(string line)
+        => Assert.Equal(CombatLineKind.None, Classify(line, Cyan, bold: true));
+
+    // Our room spell's damage line leads with the spell, not "You", and its "your
+    // foes" read as a monster hitting us. The line credits the damage to us.
+    [Theory]
+    [InlineData("A hellish storm of fire and brimstone scorches your foes for 516 damage!")]
+    [InlineData("Your sword strikes the orc for 9 damage!")]
+    public void DamageTheLineCreditsToUs_WithoutLeadingYou_IsOurHit(string line)
+        => Assert.Equal(CombatLineKind.PlayerHit, Classify(line, Red, bold: true));
+
+    private static LineExtractor.EmittedLine Coloured(string text, TerminalColor fg, bool bold)
+    {
+        CellAttributes cell = CellAttributes.Default with
+        {
+            Foreground = fg,
+            Flags = bold ? CellFlags.Bold : CellFlags.None,
+        };
+        return new LineExtractor.EmittedLine(
+            text, Enumerable.Repeat(cell, text.Length).ToArray(), DateTimeOffset.UtcNow, IsPromptLine: false);
+    }
+
+    private static Dictionary<string, string> Names(string monster)
+        => new(StringComparer.OrdinalIgnoreCase) { [monster] = monster };
+
+    // Under a break hold a monster's attack line says it still stands. A room title
+    // that leads with its name is not one; its dark-cyan miss still is.
+    [Theory]
+    [InlineData("Dire Wolf Lair", "dire wolf")]
+    [InlineData("Brigand Camp, Perimeter", "brigand")]
+    [InlineData("Colin's Maces", "colin")]
+    public void MonsterAttackLine_RoomTitleLeadingWithTheMonstersName_IsNotItsAttack(string title, string monster)
+        => Assert.False(MonsterAttackLine.IsBy(Coloured(title, Cyan, bold: true), monster, Names(monster)));
+
+    [Fact]
+    public void MonsterAttackLine_DarkCyanMiss_IsItsAttack()
+        => Assert.True(MonsterAttackLine.IsBy(
+            Coloured("The brute zombie swings at you with its arm!", Cyan, bold: false),
+            "brute zombie", Names("brute zombie")));
+
+    // The bytes of report paradigm-20261010-215619 through the emulator, the line
+    // extractor, the router and the classifier: a fight under way, our room spell
+    // landing, a miss, then the room read again. What the classifier judges is the
+    // SGR the game sent (colour index and bold flag) as the extractor hands it on.
+    [Fact]
+    public void CapturedBytes_MissStaysAMiss_RoomTitleIsUntagged_OwnRoomSpellIsOurHit()
+    {
+        const string esc = "\u001b";
+        TerminalEmulator emulator = new(80, 25);
+        LineExtractor extractor = new(emulator);
+        var router = new MudPlay.Services.MessageRouter();
+        using var classifier = new CombatLineClassifier(router);
+        Dictionary<string, CombatLineKind> kinds = new();
+        extractor.LineEmitted += line =>
+        {
+            router.Dispatch(line);
+            kinds[line.Text.Trim()] = classifier.LastKind;
+        };
+
+        void Feed(string text) => emulator.Feed(System.Text.Encoding.Latin1.GetBytes(text));
+        Feed($"{esc}[0;37m*Combat Engaged*\r\n");
+        Feed($"{esc}[0m{esc}[79D{esc}[K{esc}[1;31mA hellish storm of fire and brimstone scorches your foes for 773 damage!\r\n");
+        Feed($"{esc}[0m{esc}[79D{esc}[K{esc}[0;36mThe brute zombie swings at you with its arm!\r\n");
+        Feed($"{esc}[0m{esc}[79D{esc}[K{esc}[1;36mSmoldering Fields\r\n");
+        Feed($"{esc}[0;32mObvious exits: south, east, west\r\n");
+        Feed($"{esc}[0;37m[HP=724/MA=518]:");
+
+        Assert.Equal(CombatLineKind.PlayerHit,
+            kinds["A hellish storm of fire and brimstone scorches your foes for 773 damage!"]);
+        Assert.Equal(CombatLineKind.MonsterMissYou, kinds["The brute zombie swings at you with its arm!"]);
+        Assert.Equal(CombatLineKind.None, kinds["Smoldering Fields"]);
+
+        string log = classifier.RenderLog();
+        Assert.Contains("The brute zombie swings at you with its arm!    [Combat: Monster Miss (you)]\n", log);
+        Assert.Contains("\nSmoldering Fields\n", log);
+        Assert.Contains("for 773 damage!    [Combat: You Hit]\n", log);
+    }
+
     [Fact]
     public void NonCombatWhiteLine_IsNone()
         => Assert.Equal(CombatLineKind.None,

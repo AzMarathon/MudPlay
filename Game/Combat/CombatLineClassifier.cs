@@ -11,11 +11,21 @@ namespace MudPlay.Game.Combat;
 // target — with no per-monster message data, so it works for any monster including
 // the 15-20k a custom game can add.
 //
-// Colour signals (indexed SGR foreground): cyan (6, or bright 14) = a swing that
-// missed or was dodged; dark-red (1, NON-bold) = a swing your armor deflected. The
-// player's own hits render bright-red (1 + bold) and always carry a "for N damage"
-// tail, so they classify by wording, not colour. Target is split us-vs-others by
-// whether the line addresses "you".
+// Colour signals, read from the SGR the game sent (the stored foreground index and
+// bold flag), never from the palette the terminal paints with, so a colour scheme
+// can't shift them: dark cyan (6, NON-bold) = a swing that missed or was dodged;
+// dark-red (1, NON-bold) = a swing your armor deflected. The player's own hits
+// render bright-red (1 + bold) and always carry a "for N damage" tail, so they
+// classify by wording, not colour. Target is split us-vs-others by whether the
+// line addresses "you".
+//
+// Bright cyan (6 + bold, or 14) is no miss: the game prints misses and dodges in
+// dark cyan (user, 2026-10-10: always, as far as they know), and bright cyan is
+// the room title's colour (GAME_MECHANICS "Room display parsing — the room title
+// is positional, not just bright cyan"). Read as a miss, every room title shown
+// while a fight was on was tagged a monster's miss, and one that leads with a
+// monster's name ("Dire Wolf Lair") passed for that monster's attack (report
+// paradigm-20261010-215619).
 //
 // This PR only SURFACES the classification (event + LastKind) for the Wire
 // Inspector's classified view and future recognition consumers; the per-monster
@@ -106,11 +116,16 @@ public sealed class CombatLineClassifier : IDisposable
         if (SmashedYouLine.IsMatch(text)) return CombatLineKind.SmashedYou;
         if (SmashedOtherLine.IsMatch(text)) return CombatLineKind.SmashedOther;
 
+        // Damage the line itself credits to us without leading with "You": our room
+        // spell on "your foes", or "Your <weapon> ...". Its "your" would otherwise
+        // read as a monster hitting us (report paradigm-20261010-215619).
+        if (hit && a.Source == DamageLineAttributor.Self) return CombatLineKind.PlayerHit;
+
         // The local player's own swing ("You hurl … for N damage!" / "You miss …!").
         if (text.StartsWith("You ", StringComparison.Ordinal))
         {
             if (hit) return CombatLineKind.PlayerHit;
-            if (IsCyan(fg)) return CombatLineKind.PlayerMiss;
+            if (IsDarkCyan(fg, bold)) return CombatLineKind.PlayerMiss;
             return CombatLineKind.None;
         }
 
@@ -140,7 +155,7 @@ public sealed class CombatLineClassifier : IDisposable
             return IsAttackRed(fg) ? CombatLineKind.MonsterHitOther : CombatLineKind.Reflect;
         }
 
-        if (IsCyan(fg))
+        if (IsDarkCyan(fg, bold))
         {
             bool dodge = text.Contains("dodge", StringComparison.OrdinalIgnoreCase);
             if (dodge) return vsYou ? CombatLineKind.DodgeYou : CombatLineKind.DodgeOther;
@@ -173,9 +188,10 @@ public sealed class CombatLineClassifier : IDisposable
     private static readonly Regex You =
         new(@"\byou(?:r)?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    // cyan = indexed 6 (standard) or 14 (bright).
-    private static bool IsCyan(TerminalColor fg) =>
-        fg.Kind == ColorKind.Indexed && (fg.Value == 6 || fg.Value == 14);
+    // dark cyan = indexed 6 without bold. Bright cyan (indexed 6 + bold, or 14) is
+    // the room title's colour, NOT a miss — so bold disqualifies.
+    private static bool IsDarkCyan(TerminalColor fg, bool bold) =>
+        fg.Kind == ColorKind.Indexed && fg.Value == 6 && !bold;
 
     // dark red = indexed 1 without bold. Bright red (indexed 1 + bold) is the
     // player's own hit colour, NOT an armor block — so bold disqualifies.

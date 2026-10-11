@@ -10,6 +10,12 @@
 - A bank stop already being made (training trip, item purchase, a stash room set as the Bank) also draws what the party is short of the tolls ahead
 - A hidden member can't be given coin and counts as not funded; coin give refusals are read on every realm
 
+## 3.175.2
+
+- A room title or prayer line shown mid-fight is no longer read as a miss (Wire Inspector's Classified tags; a monster's attack under a `break` hold); only dark cyan is one
+- Classified: your room spell's damage line is tagged `You Hit`, not `Monster Hit (you)`
+- bug reports addressed: paradigm-20261010-215619
+
 ## 3.175.0
 
 - Bug report: your login name, login password and suicide password are masked everywhere in it, and in a crash report
