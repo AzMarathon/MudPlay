@@ -2938,6 +2938,144 @@ public sealed class CombatManagerSpellsTests
         Assert.Null(Assert.Single(h.DeathEvents).RoomSpellRoster);
     }
 
+    // The room spell kills whatever is in the room, a neutral we would never attack
+    // included, so the count of kills it may claim is every monster the room listed.
+    // Held to the ones we would attack, three kills among one hostile and two
+    // neutrals were two deaths.
+    [Fact]
+    public void RoomSpellKillsNeutralsToo_EveryListedMonsterCanBeAKill()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 1 };
+        h.AddMonster(1, "brute zombie");
+        h.AddMonster(2, "village guard");
+        h.SetOverlay(2, relationship: MonsterRelationship.Neutral);
+        KnowTheRoomSpellsLandingLine(h);
+
+        h.Feed("Also here: brute zombie, village guard, village guard.");
+        h.Feed("*Combat Engaged*");
+        h.Feed(HstoLanding);
+        h.Feed("You gain 100 experience.");
+        h.Feed("You gain 100 experience.");
+        h.Feed("You gain 100 experience.");
+
+        Assert.Equal(3, h.DeathEvents.Count);
+        Assert.All(h.DeathEvents, d => Assert.NotNull(d.RoomSpellRoster));
+    }
+
+    // With a room spell announced, a line that starts "You " and names the monster
+    // the round is anchored to is not the spell landing: a monster's own hit on us
+    // reads that way. An exp line behind one is not counted as the spell's kill.
+    [Theory]
+    [InlineData("You are burned by the brute zombie for 12 damage!")]
+    [InlineData("You dodge the brute zombie's swing!")]
+    public void LineNamingTheAnchorMonster_IsNotTheRoomSpellLanding(string line)
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.AddMonster(1, "brute zombie");
+        KnowTheRoomSpellsLandingLine(h);
+
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie.");
+        h.Feed("*Combat Engaged*");
+        h.Feed(HstoLanding);          // round 1 lands and kills nothing
+        h.Tick();                     // five seconds on: that line is stale
+
+        h.Feed(line);
+        h.Feed("You gain 16250 experience.");
+
+        Assert.Empty(h.DeathEvents);
+        Assert.Contains("left to its *Combat Off*", h.Combat.RoomSpellKillSummary);
+    }
+
+    // An exp line with no roster of the room on record is left to its *Combat Off*,
+    // and the bug report says so.
+    [Fact]
+    public void ExpLineWithNoRosterRead_IsLeftToItsCombatOff_AndSaysWhy()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.AddMonster(1, "brute zombie");
+        KnowTheRoomSpellsLandingLine(h);
+
+        h.Feed("Also here: brute zombie, brute zombie.");
+        h.Feed("*Combat Engaged*");
+        h.Feed(HstoLanding);
+        h.Classifier.NoteGameLeft();
+        h.Feed("You gain 16250 experience.");
+
+        Assert.Empty(h.DeathEvents);
+        Assert.Contains("no roster of the room read", h.Combat.RoomSpellKillSummary);
+    }
+
+    // ----- Stock: the *Combat Off* after a room spell's kill ------------------
+
+    // Stock prints *Combat Off* after every kill, a room spell's included, and
+    // queues the spell's next round all the same. Read as the spell ending, that
+    // Off had the next combat line or round tick cast it again, breaking the one
+    // still running. On Stock it is left alone; elsewhere it is read as before.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CombatOffAfterARoomSpellsKill_OnStockTheSpellIsLeftRunning(bool stock)
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Combat.SetStockRealmProbe(() => stock);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.AddMonster(1, "brute zombie");
+        KnowTheRoomSpellsLandingLine(h);
+
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie, brute zombie.");
+        Assert.Equal("hsto", h.LastSent);
+        h.Feed("*Combat Engaged*");
+        h.Tick();
+        h.Feed(HstoLanding);
+        h.Feed("The brute zombie keels over like a hewn tree!");
+        h.Feed("You gain 16250 experience.");
+        h.Feed("*Combat Off*");
+
+        Assert.Single(h.DeathEvents);
+        Assert.Equal(!stock, h.Combat.CombatOff);
+
+        // Three are left and the room is read again: the spell still covers them.
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie.");
+        // The re-attack after a *Combat Off* stands behind two real-time guards (an
+        // attack sent in the last 1.5 s, a kill in the last 2 s), so the next round
+        // is let come in real time.
+        Thread.Sleep(2100);
+        h.Tick();
+        h.Feed("The brute zombie swings at you with its arm!");
+
+        Assert.Equal(stock ? 1 : 2, h.AllSent.Count(s => s == "hsto"));
+    }
+
+    // Only that Off. One a between-round cast draws on Stock, with no kill behind it,
+    // stops the spell there as anywhere, and the attack is brought back.
+    [Fact]
+    public void OnStock_ACombatOffWithNoRoomSpellKillBehindIt_IsStillAnInterrupt()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Combat.SetStockRealmProbe(() => true);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.AddMonster(1, "brute zombie");
+        KnowTheRoomSpellsLandingLine(h);
+
+        h.Feed("Also here: brute zombie, brute zombie, brute zombie.");
+        h.Feed("*Combat Engaged*");
+        h.Tick();
+        h.Feed(HstoLanding);
+        h.Feed("You gain 16250 experience.");
+        h.Feed("*Combat Off*");
+        Assert.False(h.Combat.CombatOff);
+
+        h.Feed("Also here: brute zombie, brute zombie.");
+        h.Cast.NotifyExternalCastSent();
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+
+        Assert.Equal(2, h.AllSent.Count(s => s == "hsto"));
+    }
+
     [Fact]
     public void PreAttackDebuff_DefersToHigherPrioritySurvivalCast()
     {

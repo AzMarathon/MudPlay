@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.169.0**
+> **Version 3.171.0**
 > - Bug report: your login name, login password and suicide password are masked everywhere in it, and in a crash report
 > - Bug report: racist and other offensive words on chat lines are masked, in the report only
 > - Bug report: a list of every command sent, held or dropped, with who sent it
@@ -12,8 +12,7 @@
 > - The wire sections follow the Wire Inspector's tick boxes and show when each read arrived
 > - The last 2 to 4 minutes of the program log are always on disk, for a hang or a forced kill (Logs folder, `…-recent-a.log` / `-b.log`)
 > - Program log: a startup block, a status line every 3 minutes, and how a walk ended even with the Navigation window closed
-> - `@suicide` sends the stored password only when the game asks for it
->
+> - `@suicide` sends the stored password only when the game asks for it>
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
 

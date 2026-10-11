@@ -636,8 +636,10 @@ public static class DefaultPatterns
         // own, apart from the visible floor's.
         yield return new RegexPattern(KnownPatterns.RoomHideRefused,
             @"^There is no room to hide (?<item>.*) here\.");
+        // Item names carry hyphens, apostrophes and full stops as well as letters
+        // (half-plate corselet, scroll of god's wrath, scroll of prot. from evil).
         yield return new RegexPattern(KnownPatterns.UserEquipped,
-            @"^(?:You are now wearing|You lit the) (?<item>[\w ]+)\.$");
+            @"^(?:You are now wearing|You lit the) (?<item>[\w' .-]+)\.$");
         yield return new RegexPattern(KnownPatterns.UserEquipFailed,
             @"^You may not wear that item!$");
         yield return new RegexPattern(KnownPatterns.UserWieldFailed,
@@ -647,9 +649,16 @@ public static class DefaultPatterns
         // are kept apart from UserEquipFailed, whose handler reads alignment into a
         // refusal. Group [0] is the item the first line names, empty for the second.
         yield return new RegexPattern(KnownPatterns.UserEquipCannotBeWorn,
-            @"^(?:(?<item>[\w' -]+) may not be worn!|You have no more room to wear that item!)$");
+            @"^(?:(?<item>[\w' .-]+) may not be worn!|You have no more room to wear that item!)$");
         yield return new RegexPattern(KnownPatterns.UserRemoved,
-            @"^You have removed (?<item>[\w ]+?)(?: and extinguished it)?\.$");
+            @"^You have removed (?<item>[\w' .-]+?)(?: and extinguished it)?\.$");
+        // Two more answers to a wear that put nothing on: no unworn copy of the item
+        // is in the pack (the game echoes the name typed), and the piece in its place
+        // is cursed (the game names that piece, not the one being put on).
+        yield return new RegexPattern(KnownPatterns.UserEquipNotInPack,
+            @"^You do not have (?<item>[\w' .-]+) left unequipped\.$");
+        yield return new RegexPattern(KnownPatterns.UserEquipOccupantStuck,
+            @"^You are already wearing (?<item>[\w' .-]+) and it may not be removed\.$");
         yield return new RegexPattern(KnownPatterns.HiddenItems,
             @"^You notice (?<items>.*)(?:\r\n| )");
         yield return new RegexPattern(KnownPatterns.ShopListHeader,
