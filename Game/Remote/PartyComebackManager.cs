@@ -1202,6 +1202,15 @@ public sealed class PartyComebackManager : IDisposable
 
     // Tell the returning member to stop waiting on us, and drop them from our own
     // roster + grace window so we don't keep auto-inviting them on re-entry.
+    //
+    // @forget (and @waiting, further down) go by telepath whatever channel the
+    // @comeback came in on. They are commands, not answers: a client acts on one
+    // from whoever it hears it from. On gangpath or say every member's client
+    // would hear it, a say directed at one player included, and each follower that
+    // heard its leader's @forget would drop that leader. Telepath is the one
+    // channel that reaches only the member it is meant for. (The answers in
+    // braces, which do nothing to a client that isn't waiting on them, go on the
+    // channel the request arrived on.)
     private void DeclineAndForget(string given)
     {
         _wire.Send($"/{given} @forget");
@@ -1632,6 +1641,7 @@ public sealed class PartyComebackManager : IDisposable
             }
             else
             {
+                // By telepath: see DeclineAndForget.
                 _wire.Send($"/{_senderGiven} @waiting");
                 _reply("got you — waiting for your @ok");
             }

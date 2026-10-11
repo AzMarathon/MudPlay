@@ -235,6 +235,26 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal("/Tank {I can't I'm idle}\r", h.LastReply);
     }
 
+    // The answer in braces goes on the channel the request came in on. @forget is
+    // a command, which every client that hears it acts on, so it goes by telepath
+    // to the one member it is for.
+    [Fact]
+    public void Declined_OnGangpath_AnswersOnGangpath_AndForgetsByTelepath()
+    {
+        using Harness h = NewHarness();
+        for (int i = 1; i <= 6; i++) SeatFollower(h, $"Member{i}");
+        h.Router.Dispatch(Line("Straggler started to follow you."));
+        h.Router.Dispatch(Line("Straggler stops following you."));
+        StartLair(h);
+
+        h.Engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Gangpath, "Straggler",
+            "@comeback 1/3", "Straggler gangpaths: @comeback 1/3"));
+
+        Assert.StartsWith("bg {my party is full", h.LastReply);
+        Assert.True(Sent(h, "/Straggler @forget"));
+        Assert.False(Sent(h, "bg @forget"));
+    }
+
     // "I can't yet" is the word the follower's client waits on, not a refusal.
     [Fact]
     public void TrainTrip_WithDenialsSilenced_StillSaysICantYet()

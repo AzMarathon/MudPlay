@@ -1074,16 +1074,20 @@ public sealed class RemoteCommandManager : IDisposable
     private void SendReply(RemoteChannel channel, string recipient, string text)
     {
         if (string.IsNullOrEmpty(text)) return;
-        if (channel == RemoteChannel.Local && StealthedProvider?.Invoke() == true)
-            channel = RemoteChannel.Telepath;
         SendLine(channel, recipient, $"{{{text}}}");
     }
 
     // Address a line to recipient on channel and put it on the wire. A reply wraps its
     // text in { } first; a relay-back sends its @-command bare so the recipient's
     // engine runs it.
+    //
+    // Sneaking or hidden, nothing is said aloud: a line for the say channel goes by
+    // telepath instead (StealthedProvider). That holds for a relay-back as for a
+    // reply — either would end the sneak.
     private void SendLine(RemoteChannel channel, string recipient, string payload)
     {
+        if (channel == RemoteChannel.Local && StealthedProvider?.Invoke() == true)
+            channel = RemoteChannel.Telepath;
         string given = GivenName(recipient);
         string wire = channel switch
         {

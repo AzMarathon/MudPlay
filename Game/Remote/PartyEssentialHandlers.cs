@@ -743,6 +743,10 @@ public sealed class PartyEssentialHandlers : IDisposable
     // there, so a hold that cleared while we were out never sent its @ok. Answer
     // @ok now when nothing still holds us; otherwise the @ok goes out when the last
     // hold clears (PartyRestSync.RequestOk), since we're back in the party.
+    //
+    // The @ok goes by telepath whatever channel the @waiting came in on, as every
+    // @ok we send does: it is a command for the leader alone, and said aloud or
+    // gangpathed it would reach every client that holds a wait of ours.
     private void OnWaiting(RemoteCommandContext ctx)
     {
         string senderGiven = GivenName(ctx.Sender);
