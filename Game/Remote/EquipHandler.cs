@@ -16,8 +16,8 @@ namespace MudPlay.Game.Remote;
 // same prefix.
 //
 // ExecuteCommands-gated per the catalog — a "do something on my behalf" action,
-// like @do / @train. Failure replies (unknown set, busy) obey WarnOnDenial; the
-// success acknowledgement is sent unconditionally.
+// like @do / @train. Failure replies (unknown set, busy) are refusals, which the
+// Warn setting silences; the success acknowledgement is sent unconditionally.
 public sealed class EquipHandler : IDisposable
 {
     private const string Command = "@equip";
@@ -52,7 +52,7 @@ public sealed class EquipHandler : IDisposable
     {
         if (ctx.Args.Count == 0)
         {
-            if (_engine.WarnOnDenial) ctx.Reply("usage: @equip <set> [update]");
+            ctx.Refuse("usage: @equip <set> [update]");
             return;
         }
 
@@ -75,8 +75,8 @@ public sealed class EquipHandler : IDisposable
             {
                 case EquipResult.Applied:  ctx.Reply("equipping all (default gear set)"); break;
                 case EquipResult.NoChange: ctx.Reply("default gear set already worn"); break;
-                case EquipResult.NotFound: if (_engine.WarnOnDenial) ctx.Reply("no default gear set configured"); break;
-                case EquipResult.Busy:     if (_engine.WarnOnDenial) ctx.Reply("busy equipping"); break;
+                case EquipResult.NotFound: ctx.Refuse("no default gear set configured"); break;
+                case EquipResult.Busy:     ctx.Refuse("busy equipping"); break;
             }
             return;
         }
@@ -90,10 +90,10 @@ public sealed class EquipHandler : IDisposable
                 ctx.Reply($"gear set '{keyword}' already worn");
                 break;
             case EquipResult.NotFound:
-                if (_engine.WarnOnDenial) ctx.Reply($"no gear set '{keyword}'");
+                ctx.Refuse($"no gear set '{keyword}'");
                 break;
             case EquipResult.Busy:
-                if (_engine.WarnOnDenial) ctx.Reply("busy equipping");
+                ctx.Refuse("busy equipping");
                 break;
         }
     }
@@ -107,13 +107,13 @@ public sealed class EquipHandler : IDisposable
                 ctx.Reply($"gear set '{r.SetName}' updated to what I'm wearing ({r.Slots} slot{(r.Slots == 1 ? "" : "s")})");
                 break;
             case EquipUpdateOutcome.NotFound:
-                if (_engine.WarnOnDenial) ctx.Reply($"no gear set '{keyword}'");
+                ctx.Refuse($"no gear set '{keyword}'");
                 break;
             case EquipUpdateOutcome.Busy:
-                if (_engine.WarnOnDenial) ctx.Reply("busy equipping — try again when the swap finishes");
+                ctx.Refuse("busy equipping — try again when the swap finishes");
                 break;
             case EquipUpdateOutcome.InventoryUnknown:
-                if (_engine.WarnOnDenial) ctx.Reply("haven't read my inventory yet — try again after an 'i'");
+                ctx.Refuse("haven't read my inventory yet — try again after an 'i'");
                 break;
         }
     }

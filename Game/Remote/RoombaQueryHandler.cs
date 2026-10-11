@@ -113,7 +113,7 @@ public sealed class RoombaQueryHandler : IDisposable
         }
 
         string query = string.Join(' ', ctx.Args).Trim();
-        if (query.Length == 0) { ctx.Reply("usage: @roomba <item name>"); return; }
+        if (query.Length == 0) { ctx.Refuse("usage: @roomba <item name>"); return; }
 
         IReadOnlyList<GhItemSighting> sightings = _locations.FindSightings(query);
         if (sightings.Count == 0)

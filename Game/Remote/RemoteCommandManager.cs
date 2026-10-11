@@ -375,10 +375,15 @@ public sealed class RemoteCommandManager : IDisposable
             Args:            argv,
             OriginalMessage: string.Join(' ', new[] { normalised }.Concat(argv)),
             Channel:         RemoteChannel.Telepath,
-            Reply:           reply);
+            Reply:           reply)
+        {
+            // The caller has the machine: it is told why, whatever the Warn
+            // setting says to other players.
+            Refusal = why => reply(string.IsNullOrEmpty(why) ? FailureMessage : why),
+        };
 
         _log?.Log(LogSeverity.Info, "RemoteCmd",
-            $"Local invocation: {normalised}{(argv.Length > 0 ? " " + string.Join(' ', argv) : "")}");
+            $"Local invocation:{normalised}{(argv.Length > 0 ? " " + string.Join(' ', argv) : "")}");
         try { registration.Handler(ctx); }
         catch (Exception ex)
         {
@@ -603,7 +608,10 @@ public sealed class RemoteCommandManager : IDisposable
             Args:            args,
             OriginalMessage: entry.Message,
             Channel:         channel.Value,
-            Reply:           text => SendReply(channel.Value, entry.Speaker, text));
+            Reply:           text => SendReply(channel.Value, entry.Speaker, text))
+        {
+            Refusal = why => SendDenialReply(channel.Value, entry.Speaker, specificReason: why),
+        };
         try { registration.Handler(ctx); }
         catch (Exception ex)
         {
@@ -775,11 +783,10 @@ public sealed class RemoteCommandManager : IDisposable
     // replies are suppressed regardless of whether the reason is specific or
     // generic.
     //
-    // Used by both the engine's own denial paths (unknown command, per-player
-    // flag denial, party-whitelist denial — all use the generic FailureMessage)
-    // and the suicide policy-block path (passes a specific reason). Handler-side
-    // failure replies (e.g. SuicideHandler's invalid-password telepath) must
-    // check WarnOnDenial themselves before invoking RemoteCommandContext.Reply.
+    // Used by the engine's own denial paths (per-player flag denial,
+    // party-whitelist denial — the generic FailureMessage), by the suicide rules
+    // (a specific reason), and by every handler: RemoteCommandContext.Refuse is
+    // bound to it, so a handler's failure answer is gated here and nowhere else.
     private void SendDenialReply(RemoteChannel channel, string sender, string? specificReason = null)
     {
         if (!WarnOnDenial) return;

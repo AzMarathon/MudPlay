@@ -58,7 +58,7 @@ public sealed class LoopShareHandler
             loop = _runningLoop();
             if (loop is null)
             {
-                ctx.Reply("not running a loop — @loop send <name> for a saved one");
+                ctx.Refuse("not running a loop — @loop send <name> for a saved one");
                 return;
             }
         }
@@ -79,7 +79,7 @@ public sealed class LoopShareHandler
     {
         if (!TakeOffer(ctx.Sender, out Loop? loop))
         {
-            ctx.Reply("no loop send pending — use @loop send <name> first");
+            ctx.Refuse("no loop send pending — use @loop send <name> first");
             return;
         }
 
@@ -101,7 +101,7 @@ public sealed class LoopShareHandler
     {
         if (!TakeOffer(ctx.Sender, out Loop? loop))
         {
-            ctx.Reply("no loop send pending");
+            ctx.Refuse("no loop send pending");
             return;
         }
         _log?.Info("LoopShare", $"{ctx.Sender} declined loop '{loop.Name}'.");

@@ -89,7 +89,10 @@ public sealed class GetStashHandler : IDisposable
     {
         if (_running || _collectionInUse())
         {
-            if (_engine.WarnOnDenial) ctx.Reply("busy with a coin errand of my own - try again shortly");
+            // Protocol, like the "ok - …" lines below: the leader's stash transfer
+            // (StashTransferRunner) takes "busy" as this member's answer and stops
+            // waiting on it, so it goes whatever the Warn setting says.
+            ctx.Reply("busy with a coin errand of my own - try again shortly");
             return;
         }
 

@@ -233,29 +233,27 @@ public sealed class InventoryActionHandler : IDisposable
     // EquippedItems) and currency tokens. The leading article is stripped so the
     // wire verb matches on the item's noun phrase ("a rusty dagger" → drop rusty
     // dagger).
-    private void OnDropAll(RemoteCommandContext ctx)
-    {
-        if (ctx.Args.Count == 0) { ctx.Reply(DropAll()); return; }
-        if (ctx.Args.Count == 1 && TryParseScope(ctx.Args[0], out DropScope scope))
-        {
-            ctx.Reply(DropAll(scope));
-            return;
-        }
-        ctx.Reply("usage: @drop-all [full|coins|keys] (bare = unworn items)");
-    }
+    private void OnDropAll(RemoteCommandContext ctx) => OnSweep(ctx, "@drop-all", DropAll);
 
     // @hide-all [full|coins|keys] — the @drop-all sweeps with `hide`, stashing
     // everything in the room instead of leaving it on the floor.
-    private void OnHideAll(RemoteCommandContext ctx)
+    private void OnHideAll(RemoteCommandContext ctx) => OnSweep(ctx, "@hide-all", HideAll);
+
+    // A sweep that can't be read or can't be run is refused; one that ran answers
+    // with what it sent, "nothing to drop" included.
+    private void OnSweep(RemoteCommandContext ctx, string command, Func<DropScope, string> sweep)
     {
-        if (ctx.Args.Count == 0) { ctx.Reply(HideAll()); return; }
-        if (ctx.Args.Count == 1 && TryParseScope(ctx.Args[0], out DropScope scope))
+        DropScope scope = DropScope.Unworn;
+        if (ctx.Args.Count > 1 || (ctx.Args.Count == 1 && !TryParseScope(ctx.Args[0], out scope)))
         {
-            ctx.Reply(HideAll(scope));
+            ctx.Refuse($"usage: {command} [full|coins|keys] (bare = unworn items)");
             return;
         }
-        ctx.Reply("usage: @hide-all [full|coins|keys] (bare = unworn items)");
+        if (!_inventory.IsLoaded) { ctx.Refuse(InventoryNotParsed); return; }
+        ctx.Reply(sweep(scope));
     }
+
+    private const string InventoryNotParsed = "inventory not parsed yet (type i)";
 
     private static bool TryParseScope(string word, out DropScope scope)
     {
@@ -278,7 +276,7 @@ public sealed class InventoryActionHandler : IDisposable
 
     private string Sweep(string verb, string doing, DropScope scope)
     {
-        if (!_inventory.IsLoaded) return "inventory not parsed yet (type i)";
+        if (!_inventory.IsLoaded) return InventoryNotParsed;
         InventorySnapshot snap = _inventory.Snapshot;
 
         List<string> commands = new();
@@ -354,6 +352,11 @@ public sealed class InventoryActionHandler : IDisposable
     // figure @wealth reports); the game re-consolidates held coin to the highest
     // denomination after the transaction, so we never have to name individual
     // coins.
+    //
+    // Protocol, not a courtesy: a leader's stash transfer (StashTransferRunner)
+    // waits at the bank for one answer from each member and reads it by its
+    // opening words, "wealth unknown" among them. So every answer goes whatever the
+    // Warn setting says.
     private void OnDepositAll(RemoteCommandContext ctx) => ctx.Reply(DepositAll());
 
     // Level held coin to the keep-on-hand floor and return the status line. Shared
@@ -390,7 +393,7 @@ public sealed class InventoryActionHandler : IDisposable
     // the engine only reaches here for an active party member.
     private void OnShare(RemoteCommandContext ctx)
     {
-        if (!_inventory.IsLoaded) { ctx.Reply("wealth unknown - parse inventory first (type i)"); return; }
+        if (!_inventory.IsLoaded) { ctx.Refuse("wealth unknown - parse inventory first (type i)"); return; }
 
         List<string> recipients = new();
         foreach (PartyMember m in _party.Members)
@@ -399,7 +402,7 @@ public sealed class InventoryActionHandler : IDisposable
             if (string.IsNullOrEmpty(m.Name)) continue;
             recipients.Add(GivenName(m.Name));
         }
-        if (recipients.Count == 0) { ctx.Reply("no party members to share with"); return; }
+        if (recipients.Count == 0) { ctx.Refuse("no party members to share with"); return; }
 
         // +1 for self: self is one of the sharers and keeps their own cut, so
         // the divisor is the full party size regardless of whether the par
@@ -427,9 +430,8 @@ public sealed class InventoryActionHandler : IDisposable
             anyShared = true;
         }
 
-        ctx.Reply(anyShared
-            ? $"sharing coins among {partySize} party members"
-            : "nothing to share (too few coins to split)");
+        if (anyShared) ctx.Reply($"sharing coins among {partySize} party members");
+        else ctx.Refuse("nothing to share (too few coins to split)");
     }
 
     private void Send(string text)

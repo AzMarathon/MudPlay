@@ -110,7 +110,7 @@ public sealed class MovePlayerHandler : IDisposable
     private void OnGoto(RemoteCommandContext ctx)
     {
         string query = string.Join(' ', ctx.Args).Trim();
-        if (query.Length == 0) { ctx.Reply("@goto requires a destination"); return; }
+        if (query.Length == 0) { ctx.Refuse("@goto requires a destination"); return; }
 
         // A FULL map/room coordinate (1/297, 1,297, 1 297 — TryParseCoordinate splits
         // on space / comma / slash) is an explicit destination: never let a favourite
@@ -119,7 +119,7 @@ public sealed class MovePlayerHandler : IDisposable
         (int? coordMap, int? coordRoom) = RoomSearchService.TryParseCoordinate(query);
         if (coordMap is null && coordRoom is int bareRoom)
         {
-            ctx.Reply($"room {bareRoom} needs a map — try e.g. 1/{bareRoom}");
+            ctx.Refuse($"room {bareRoom} needs a map — try e.g. 1/{bareRoom}");
             return;
         }
         bool isCoordQuery = coordMap is not null && coordRoom is not null;
@@ -144,7 +144,7 @@ public sealed class MovePlayerHandler : IDisposable
         // (one room short of it when the boss is flagged StopBefore).
         if (!isCoordQuery && TryGotoBoss(ctx, query)) return;
 
-        ctx.Reply($"no match for '{query}'");
+        ctx.Refuse($"no match for '{query}'");
     }
 
     // Resolve a saved GOTO favourite by its label: an exact (case-insensitive) label
@@ -167,7 +167,7 @@ public sealed class MovePlayerHandler : IDisposable
                 DispatchFavoriteGoto(ctx, fuzzy[0]);
                 return true;
             case > 1:
-                ctx.Reply($"'{query}' matches {fuzzy.Count} GOTO locations: "
+                ctx.Refuse($"'{query}' matches {fuzzy.Count} GOTO locations: "
                     + string.Join(", ", fuzzy.Take(4).Select(f => $"'{f.Label}'")));
                 return true;
             default:
@@ -182,9 +182,8 @@ public sealed class MovePlayerHandler : IDisposable
             ? (_graph.GetRoom(key)?.DisplayName ?? "?")
             : fav.Label!;
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
-        ctx.Reply(_walker.WalkTo(key)
-            ? $"walking to GOTO '{label}' ({key.Map}/{key.Room})"
-            : $"no path to GOTO '{label}'");
+        if (_walker.WalkTo(key)) ctx.Reply($"walking to GOTO '{label}' ({key.Map}/{key.Room})");
+        else ctx.Refuse($"no path to GOTO '{label}'");
     }
 
     // Resolve a boss name from the boss table and walk to its CLOSEST listed room
@@ -204,7 +203,7 @@ public sealed class MovePlayerHandler : IDisposable
             if (fuzzy.Count == 1) boss = fuzzy[0];
             else if (fuzzy.Count > 1)
             {
-                ctx.Reply($"'{query}' matches {fuzzy.Count} bosses: "
+                ctx.Refuse($"'{query}' matches {fuzzy.Count} bosses: "
                     + string.Join(", ", fuzzy.Take(4).Select(b => b.Name)));
                 return true;
             }
@@ -218,7 +217,7 @@ public sealed class MovePlayerHandler : IDisposable
             .Select(c => new RoomKey(c.Map!.Value, c.Room!.Value))
             .Where(k => _graph.GetRoom(k) is not null)
             .ToList();
-        if (rooms.Count == 0) { ctx.Reply($"{boss.Name} has no known room on this map"); return true; }
+        if (rooms.Count == 0) { ctx.Refuse($"{boss.Name} has no known room on this map"); return true; }
 
         // Closest by hop count from the current room; fall back to the first listed
         // when the tracker has no settled room to measure from.
@@ -231,7 +230,7 @@ public sealed class MovePlayerHandler : IDisposable
         // real route), so we just target the boss room and let the walker halt
         // adjacent — the reply is worded from the flag for the sender's benefit.
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
-        if (!_walker.WalkTo(target)) { ctx.Reply($"no path to {boss.Name}"); return true; }
+        if (!_walker.WalkTo(target)) { ctx.Refuse($"no path to {boss.Name}"); return true; }
         ctx.Reply(boss.StopBefore
             ? $"walking to boss {boss.Name}, stopping just outside ({target.Map}/{target.Room})"
             : $"walking to boss {boss.Name} ({target.Map}/{target.Room})");
@@ -246,11 +245,11 @@ public sealed class MovePlayerHandler : IDisposable
                 DispatchGoto(ctx, rooms[0]);
                 return;
             case <= 3:
-                ctx.Reply("did you mean: " + string.Join(", ",
+                ctx.Refuse("did you mean: " + string.Join(", ",
                     rooms.Select(m => $"{m.Name} ({m.Key.Map}/{m.Key.Room})")) + "?");
                 return;
             default:
-                ctx.Reply($"too many room matches ({rooms.Count}) for '{query}'");
+                ctx.Refuse($"too many room matches ({rooms.Count}) for '{query}'");
                 return;
         }
     }
@@ -258,15 +257,14 @@ public sealed class MovePlayerHandler : IDisposable
     private void DispatchGoto(RemoteCommandContext ctx, RoomSearchResult match)
     {
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
-        ctx.Reply(_walker.WalkTo(match.Key)
-            ? $"walking to {match.Name} ({match.Key.Map}/{match.Key.Room})"
-            : $"no path to {match.Name}");
+        if (_walker.WalkTo(match.Key)) ctx.Reply($"walking to {match.Name} ({match.Key.Map}/{match.Key.Room})");
+        else ctx.Refuse($"no path to {match.Name}");
     }
 
     private void OnLoop(RemoteCommandContext ctx)
     {
         string raw = string.Join(' ', ctx.Args).Trim();
-        if (raw.Length == 0) { ctx.Reply("@loop requires a name, coordinate list, or 'last'"); return; }
+        if (raw.Length == 0) { ctx.Refuse("@loop requires a name, coordinate list, or 'last'"); return; }
 
         // "@loop send [name]" hands the sender a copy of one of our saved loops (bare:
         // the one we're running), after we confirm with "@loop send yes" / "no" — see
@@ -285,7 +283,7 @@ public sealed class MovePlayerHandler : IDisposable
         {
             if (_loopRunner.LastRunLoop is not { } last)
             {
-                ctx.Reply("no loop has run yet this session");
+                ctx.Refuse("no loop has run yet this session");
                 return;
             }
             StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Loop);
@@ -319,7 +317,7 @@ public sealed class MovePlayerHandler : IDisposable
     {
         IReadOnlyList<Loop> found = loops.FindByName(query);
         if (found.Count == 1) return found[0];
-        ctx.Reply(found.Count == 0
+        ctx.Refuse(found.Count == 0
             ? $"no saved loop named '{query}'"
             : $"'{query}' matches {found.Count} loops: " + string.Join(", ", found.Take(4).Select(l => $"'{l.Name}'")));
         return null;
@@ -328,29 +326,27 @@ public sealed class MovePlayerHandler : IDisposable
     private void OnLair(RemoteCommandContext ctx)
     {
         string raw = string.Join(' ', ctx.Args).Trim();
-        if (raw.Length == 0) { ctx.Reply("@lair requires a name or coordinate list"); return; }
+        if (raw.Length == 0) { ctx.Refuse("@lair requires a name or coordinate list"); return; }
 
         if (RoomSearchService.TryParseCoordList(raw) is { Count: >= 2 } coords)
         {
             StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Lair);
             _autoLair.Clear();
             foreach (RoomKey k in coords) _autoLair.Mark(k);
-            ctx.Reply(_autoLair.Start($"{coords.Count} lairs")
-                ? $"auto-lair: {coords.Count} lairs"
-                : "auto-lair failed to start");
+            if (_autoLair.Start($"{coords.Count} lairs")) ctx.Reply($"auto-lair: {coords.Count} lairs");
+            else ctx.Refuse("auto-lair failed to start");
             return;
         }
 
         Models.Profile.LairSetup? setup = _lairs.Setups.FirstOrDefault(s =>
             string.Equals(s.Name, raw, StringComparison.OrdinalIgnoreCase));
-        if (setup is null) { ctx.Reply($"no saved lair setup named '{raw}'"); return; }
+        if (setup is null) { ctx.Refuse($"no saved lair setup named '{raw}'"); return; }
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Lair);
         _autoLair.Clear();
         foreach (Models.Profile.LairMarker m in setup.Markers)
             _autoLair.Mark(new RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
-        ctx.Reply(_autoLair.Start(setup.Name)
-            ? $"auto-lair '{setup.Name}': {setup.MarkerCount} lairs"
-            : "auto-lair failed to start");
+        if (_autoLair.Start(setup.Name)) ctx.Reply($"auto-lair '{setup.Name}': {setup.MarkerCount} lairs");
+        else ctx.Refuse("auto-lair failed to start");
     }
 
     // @stop mirrors the toolbar Pause button exactly (routes through the same
@@ -372,7 +368,7 @@ public sealed class MovePlayerHandler : IDisposable
     {
         if (_controller.IsUserPaused)
         {
-            ctx.Reply("already @stopped");
+            ctx.Refuse("already @stopped");
             return;
         }
         if (_controller.IsActive) _controller.Pause();
@@ -397,7 +393,10 @@ public sealed class MovePlayerHandler : IDisposable
     {
         if (!_controller.IsUserPaused)
         {
-            ctx.Reply(DescribeActivity() ?? "nothing to resume");
+            // What is already running is an answer; having nothing to carry on
+            // with is the command failing.
+            if (DescribeActivity() is { } running) ctx.Reply(running);
+            else ctx.Refuse("nothing to resume");
             return;
         }
         // Capture the "what's running" description BEFORE the resume

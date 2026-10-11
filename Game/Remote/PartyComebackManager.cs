@@ -338,12 +338,14 @@ public sealed class PartyComebackManager : IDisposable
         {
             // The trip's own walk is not stopped for anyone (user, 2026-10-10:
             // "train trips should be excluded"); they are fetched when the training
-            // is done, from the room they name. Said once, and only when denials are.
+            // is done, from the room they name. Said once. It is not a refusal but
+            // the word their client waits on (ComebackRequester reads "I can't yet"
+            // as "keep waiting"), so the Warn setting doesn't silence it.
             bool firstWord = _answeredOnTrip.Add(given);
             NoteLeftOnTrip(given, target, named: true);
             _log?.Info(LogCategory,
                 $"{given} asked to be fetched{(target is { } t ? $" from {t.Map}/{t.Room}" : "")} during the train trip — kept until the training is done");
-            if (firstWord && _engine.WarnOnDenial) ctx.Reply(TrainTripReply);
+            if (firstWord) ctx.Reply(TrainTripReply);
             return;
         }
         // Someone a train trip of ours came back without, saying where they are.
@@ -363,16 +365,19 @@ public sealed class PartyComebackManager : IDisposable
                 // Going back would only leave them at the same exit on the next lap
                 // (user, 2026-10-10: on a loop the leader "should not accept a comback
                 // for them, it should reject them"). A denial, so it is said only when
-                // denials are (the remote-command reply policy).
+                // denials are (the remote-command reply policy), and a test pins that.
+                // It is also an answer the follower's client reads to give the follow
+                // up at once (ComebackRequester), unlike the other refusals here,
+                // which go whatever the Warn setting says for that reason.
                 _log?.Info(LogCategory,
                     $"{given} asked to be fetched{(from is { } f ? $" from {f.Map}/{f.Room}" : "")}, where our loop goes through an exit they can't pass — refused, the loop carries on");
-                if (_engine.WarnOnDenial) ctx.Reply(LoopGateRefusal);
+                ctx.Refuse(LoopGateRefusal);
                 return;
             case GateVerdict.LairInvitesOnSight:
-                // Auto-Lair doesn't break off for them. Said once, and only when
-                // denials are.
+                // Auto-Lair doesn't break off for them. Said once: the word their
+                // client waits on, so the Warn setting doesn't silence it.
                 LeaveToTheNextPass(given, from);
-                if (_lairAnswered.Add(given) && _engine.WarnOnDenial) ctx.Reply(LairGateReply);
+                if (_lairAnswered.Add(given)) ctx.Reply(LairGateReply);
                 return;
             case GateVerdict.WalkEnds when step is { } gate:
                 // Stock: the request is the first we hear of the second drop. The
@@ -1056,6 +1061,15 @@ public sealed class PartyComebackManager : IDisposable
     // this one is for a member our own trip walked away from (user, 2026-10-10).
     // roomUnconfirmed: the room is our own guess (the one our step left when the
     // game dropped them), to be checked for them on arrival.
+    //
+    // Every answer given through `reply`, here and for the rest of the recovery,
+    // is protocol and goes whatever the Warn setting says: the follower's client
+    // (ComebackRequester) reads each one to decide whether to give the follow up
+    // at once ("I can't", "my party is full", "can't find a path", "can't come",
+    // "forget me", "going idle"), to give up after a pickup that failed ("can't
+    // reach", "path failed", "follow timed out"), or to keep waiting (anything
+    // else). Silenced, a follower would wait out its whole window for a leader
+    // who had already said no. The words it matches on are not to be reworded.
     private void BeginRecovery(string senderGiven, RoomKey? target, Action<string> reply,
         ResumeTarget? carried = null, bool tripFetch = false, bool roomUnconfirmed = false)
     {
@@ -1203,7 +1217,7 @@ public sealed class PartyComebackManager : IDisposable
         string given = GivenName(ctx.Sender);
         if (string.IsNullOrEmpty(given))
         {
-            ctx.Reply("nothing to forget");
+            ctx.Refuse("nothing to forget");
             return;
         }
 

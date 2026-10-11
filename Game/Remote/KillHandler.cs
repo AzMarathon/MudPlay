@@ -52,10 +52,9 @@ public sealed class KillHandler : IDisposable
     {
         if (ctx.Args.Count == 0)
         {
-            // No target named — generic syntax failure. Falls through to the
-            // configured FailureMessage, gated by WarnOnDenial.
-            if (_engine.WarnOnDenial)
-                ctx.Reply(_engine.FailureMessage);
+            // No target named — generic syntax failure: the configured
+            // FailureMessage, under the Warn setting.
+            ctx.Refuse();
             return;
         }
 

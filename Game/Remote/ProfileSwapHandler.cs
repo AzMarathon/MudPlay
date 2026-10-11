@@ -11,7 +11,7 @@ namespace MudPlay.Game.Remote;
 // The reply names the profile and lists its slots by cast code (the swap report).
 // AlterSettings-gated (like @auto-*): the receiver must have granted the sender
 // that control. A successful switch replies unconditionally; a no-match / no-
-// profiles failure obeys WarnOnDenial, per the remote-command reply policy.
+// profiles failure is a refusal, per the remote-command reply policy.
 public sealed class ProfileSwapHandler : IDisposable
 {
     private readonly RemoteCommandManager _engine;
@@ -45,12 +45,12 @@ public sealed class ProfileSwapHandler : IDisposable
         {
             string? roster = _profiles.RosterReport();
             if (roster is not null) ctx.Reply(roster);
-            else if (_engine.WarnOnDenial) ctx.Reply("no combat profiles configured");
+            else ctx.Refuse("no combat profiles configured");
             return;
         }
 
         string? report = _profiles.SwitchByArg(arg);
         if (report is not null) ctx.Reply(report);                      // success — always replies
-        else if (_engine.WarnOnDenial) ctx.Reply($"no combat profile matches '{arg}'");
+        else ctx.Refuse($"no combat profile matches '{arg}'");
     }
 }

@@ -59,7 +59,7 @@ public sealed class HelpHandler : IDisposable
             else if (RemoteCommandCatalog.TryGetHelp(requested, out RemoteCommandHelp help))
                 ctx.Reply($"{help.Syntax} — {help.Description}");
             else
-                ctx.Reply($"no such command '{requested}' — try @help for the list");
+                ctx.Refuse($"no such command '{requested}' — try @help for the list");
             return;
         }
 

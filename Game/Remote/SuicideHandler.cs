@@ -45,12 +45,13 @@ public sealed class SuicideHandler : IDisposable
     private Action<byte[]>? _wireSender;
     private bool _disposed;
 
-    // Reply callback for the last @suicide invocation that took the
+    // Refusal callback for the last @suicide invocation that took the
     // have-stored-password branch, captured at dispatch time and consumed by the
-    // invalid-password line if it fires.
+    // invalid-password line if it fires. Both callbacks here are the context's
+    // Refuse: the only thing this handler ever answers is a failure.
     private Action<string>? _pendingReply;
 
-    // Reply callback + window state for an in-flight no-stored-password pro
+    // Refusal callback + window state for an in-flight no-stored-password pro
     // pre-check. _seenNotSetInProWindow flips true when the canonical "not set"
     // line fires during the window; the next PromptObserved firing decides the
     // outcome based on that flag.
@@ -132,7 +133,7 @@ public sealed class SuicideHandler : IDisposable
             // Have-stored-password branch — send the command + the
             // password back-to-back. The realm's prompt is consumed
             // by the second line; Invalid → telepath sender.
-            _pendingReply = ctx.Reply;
+            _pendingReply = why => ctx.Refuse(why);
             _wireSender(Encoding.Latin1.GetBytes("suicide\r"));
             _wireSender(Encoding.Latin1.GetBytes(password + "\r"));
             return;
@@ -145,11 +146,10 @@ public sealed class SuicideHandler : IDisposable
         {
             // Another @suicide is already in the pre-check window —
             // refuse defensively rather than queueing.
-            if (_engine.WarnOnDenial)
-                ctx.Reply("@suicide already in-flight, try again shortly");
+            ctx.Refuse("@suicide already in-flight, try again shortly");
             return;
         }
-        _proPendingReply = ctx.Reply;
+        _proPendingReply = why => ctx.Refuse(why);
         _seenNotSetInProWindow = false;
         _wireSender(Encoding.Latin1.GetBytes("pro\r"));
         _log?.Log(LogSeverity.Info, "Suicide",
@@ -165,12 +165,7 @@ public sealed class SuicideHandler : IDisposable
         if (_pendingReply is null) return;
         Action<string> reply = _pendingReply;
         _pendingReply = null;
-        // Gate the failure reply on the engine's WarnOnDenial flag,
-        // same policy the engine's own denial paths obey: when the
-        // user has unchecked "warn sender on invalid / denied",
-        // failure responses are suppressed regardless of how
-        // specific the reason is.
-        if (!_engine.WarnOnDenial) return;
+        // A refusal: nothing is sent with "warn sender on invalid / denied" off.
         reply("invalid suicide password is stored, unable");
     }
 
@@ -210,7 +205,6 @@ public sealed class SuicideHandler : IDisposable
             + "'You do not have a suicide password set.' before the next statline — "
             + "the realm has a password set that we don't have. Run `set suicide` "
             + "to capture it.");
-        if (!_engine.WarnOnDenial) return;
         reply("Suicide failed, password set in game but not stored.");
     }
 }

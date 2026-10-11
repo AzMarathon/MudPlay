@@ -220,6 +220,40 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal(WalkState.Idle, h.Walker.State);
     }
 
+    // The follower's client reads this answer to give the follow up at once, so
+    // it is sent with denials silenced too: unanswered, the follower would wait
+    // out its whole window for a leader who had already said no.
+    [Fact]
+    public void Idle_WithDenialsSilenced_StillAnswers_BecauseTheFollowerReadsIt()
+    {
+        using Harness h = NewHarness();
+        h.Engine.WarnOnDenial = false;
+        SeatFollower(h, "Tank");
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback"));
+
+        Assert.Equal("/Tank {I can't I'm idle}\r", h.LastReply);
+    }
+
+    // "I can't yet" is the word the follower's client waits on, not a refusal.
+    [Fact]
+    public void TrainTrip_WithDenialsSilenced_StillSaysICantYet()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        h.Engine.WarnOnDenial = false;
+        h.Comeback.TrainTripRunning = () => true;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
+
+        Assert.Contains(PartyComebackManager.TrainTripReply, h.LastReply);
+    }
+
     [Fact]
     public void SecondComeback_WhileBusy_RepliesAlreadyInProgress()
     {

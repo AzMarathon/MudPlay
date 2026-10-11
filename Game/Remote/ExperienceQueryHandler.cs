@@ -70,6 +70,8 @@ public sealed class ExperienceQueryHandler : IDisposable
     // at exp.
     private void OnLevel(RemoteCommandContext ctx)
     {
+        // Protocol, not a refusal: a leader's PartyLevelProbe reads "level unknown"
+        // as this member having answered, so it goes whatever the Warn setting says.
         if (_stats.Level <= 0) { ctx.Reply("level unknown - parse a stat screen first (type stat)"); return; }
         string toNext = _stats.LevelExpSpan > 0
             ? $"{_stats.ExpToNext:N0} to next level"
