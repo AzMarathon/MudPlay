@@ -562,29 +562,16 @@ public sealed class LoopShareTests : IDisposable
         Assert.Equal(2, loops.Loops.Count);
     }
 
-    [Fact]
-    public void Receive_AnswersOnTheChannelTheLoopCameBy()
-    {
-        var (receiver, _, told) = NewAnsweringReceiver();
-        Loop sent = SampleLoop();
-
-        receiver.Ingest(Gang("Raijin", OfferText(sent)));
-        receiver.NoteSendConfirmed(null, RemoteChannel.Gangpath);
-        foreach (string line in DataLines(sent)) receiver.Ingest(Gang("Raijin", line));
-
-        Assert.Equal(RemoteChannel.Gangpath, told.Single().Channel);
-    }
-
-    private static ChatLogEntry Gang(string sender, string msg) =>
-        new(DateTimeOffset.UnixEpoch, ChatChannel.Gangpath, sender, msg, $"{sender} gangpaths: {msg}");
+    private static ChatLogEntry Heard(ChatChannel channel, string sender, string msg) =>
+        new(DateTimeOffset.UnixEpoch, channel, sender, msg, $"{sender}: {msg}");
 
     private static string OfferText(Loop loop) =>
         "{" + LoopShareHandler.OfferLine(loop.Name, LoopSignature.ShortOf(loop)) + "}";
 
     // ----- a player makes other offers in between -------------------------
 
-    // A player offers loops to others too. The offer made to us is not lost under
-    // a later one made to someone else, by whatever channel we hear that.
+    // A player offers loops to others too, where we hear it. The offer made to us is
+    // not lost under one made to someone else.
     [Fact]
     public void Receive_OfferedAnotherLoopElsewhereInBetween_OursIsStillVerified()
     {
@@ -593,7 +580,7 @@ public sealed class LoopShareTests : IDisposable
         someoneElses.Waypoints[0].DelayMs += 1;
 
         receiver.Ingest(Tele("Raijin", OfferText(ours)));
-        receiver.Ingest(Gang("Raijin", OfferText(someoneElses)));   // to another gang member
+        receiver.Ingest(Heard(ChatChannel.Gangpath, "Raijin", OfferText(someoneElses)));   // an older client, to another gang member
         receiver.NoteSendConfirmed("Raijin");
         foreach (string line in DataLines(ours)) receiver.Ingest(Tele("Raijin", line));
 
@@ -602,26 +589,28 @@ public sealed class LoopShareTests : IDisposable
             told.Single());
     }
 
+    // Asked for a second loop while the first is still arriving: the second offer
+    // must not make the first loop "not the one offered". Each offer answers the
+    // loop it was made for.
     [Fact]
-    public void Receive_OnGangpath_OfferedUsOneLoopThenAnotherMemberAnother_OursIsStillVerified()
+    public void Receive_AskedForASecondLoopWhileTheFirstArrives_BothAreVerified()
     {
         var (receiver, loops, told) = NewAnsweringReceiver();
-        Loop ours = SampleLoop("Ours"), someoneElses = SampleLoop("Someone else's");
-        someoneElses.Waypoints[0].DelayMs += 1;
+        Loop first = SampleLoop("First"), second = SampleLoop("Second");
+        second.Waypoints[0].DelayMs += 1;
 
-        receiver.Ingest(Gang("Raijin", OfferText(ours)));
-        receiver.Ingest(Gang("Raijin", OfferText(someoneElses)));
-        receiver.NoteSendConfirmed(null, RemoteChannel.Gangpath);
-        foreach (string line in DataLines(ours)) receiver.Ingest(Gang("Raijin", line));
+        receiver.Ingest(Tele("Raijin", OfferText(first)));
+        receiver.NoteSendConfirmed("Raijin");
+        receiver.Ingest(Tele("Raijin", OfferText(second)));        // the second ask's offer lands mid-transfer
+        foreach (string line in DataLines(first)) receiver.Ingest(Tele("Raijin", line));
 
-        Assert.NotNull(loops.Get("Ours"));
-        Assert.Equal($"@loopresult {LoopSignature.ShortOf(ours)} saved as 'Ours'", told.Single().Text);
+        Assert.Equal($"@loopresult {LoopSignature.ShortOf(first)} saved as 'First'", told.Single().Text);
 
-        // The offer that answered is used up; the other still stands for its loop.
         told.Clear();
-        receiver.NoteSendConfirmed(null, RemoteChannel.Gangpath);
-        foreach (string line in DataLines(someoneElses, id: "c3d4")) receiver.Ingest(Gang("Raijin", line));
-        Assert.Equal($"@loopresult {LoopSignature.ShortOf(someoneElses)} saved as 'Someone else's'", told.Single().Text);
+        receiver.NoteSendConfirmed("Raijin");
+        foreach (string line in DataLines(second, id: "c3d4")) receiver.Ingest(Tele("Raijin", line));
+        Assert.Equal($"@loopresult {LoopSignature.ShortOf(second)} saved as 'Second'", told.Single().Text);
+        Assert.Equal(2, loops.Loops.Count);
     }
 
     // A loop that is none of the loops that player offered is still turned away.
@@ -674,62 +663,100 @@ public sealed class LoopShareTests : IDisposable
         Assert.Contains("does not match the loop offered", notices.Single());
     }
 
-    // ----- a yes that names nobody ----------------------------------------
+    // ----- by telepath only ------------------------------------------------
 
-    // Said on gangpath or say, the yes names nobody. A player who offered nothing
-    // must not be able to answer it with a loop of their own: nothing of theirs is
-    // saved, they are sent nothing, and the loop asked for still gets in.
-    [Fact]
-    public void Receive_AfterAYesOnGangpath_ALoopFromAPlayerWhoOfferedNothing_IsIgnored()
-    {
-        var (receiver, loops, told) = NewAnsweringReceiver();
-        Loop asked = SampleLoop("Asked for"), planted = SampleLoop("Planted");
-        planted.Waypoints[0].DelayMs += 1;
-
-        receiver.Ingest(Gang("Raijin", OfferText(asked)));
-        receiver.NoteSendConfirmed(null, RemoteChannel.Gangpath);
-        foreach (string line in DataLines(planted, id: "bad1")) receiver.Ingest(Tele("Mallory", line));
-        foreach (string line in DataLines(planted, id: "bad2")) receiver.Ingest(Gang("Mallory", line));
-
-        Assert.Empty(loops.Loops);
-        Assert.Empty(told);
-
-        foreach (string line in DataLines(asked)) receiver.Ingest(Gang("Raijin", line));
-
-        Assert.Equal(new[] { "Asked for" }, loops.Loops.Select(l => l.Name));
-        Assert.Equal(new Told(RemoteChannel.Gangpath, "Raijin", $"@loopresult {LoopSignature.ShortOf(asked)} saved as 'Asked for'", false),
-            told.Single());
-    }
-
-    // The loop is taken on the channel the yes went by and no other, also from the
-    // player who did offer: an offer heard on gangpath is no leave to telepath one in.
-    [Fact]
-    public void Receive_AfterAYesOnGangpath_ALoopByTelepath_IsIgnored()
+    // A loop is taken by telepath and by nothing else. On a shared channel the lines
+    // are an older client's (this version sends none there): passed over, also from
+    // the very player we said yes to, with no answer, and the loop that then comes
+    // by telepath is still let in.
+    [Theory]
+    [InlineData(ChatChannel.Gangpath)]
+    [InlineData(ChatChannel.Local)]
+    [InlineData(ChatChannel.Broadcast)]
+    [InlineData(ChatChannel.Gossip)]
+    public void Receive_LoopLinesOnAnyChannelButTelepath_ArePassedOver(ChatChannel channel)
     {
         var (receiver, loops, told) = NewAnsweringReceiver();
         Loop asked = SampleLoop();
 
-        receiver.Ingest(Gang("Raijin", OfferText(asked)));
-        receiver.NoteSendConfirmed(null, RemoteChannel.Gangpath);
-        foreach (string line in DataLines(asked)) receiver.Ingest(Tele("Raijin", line));
+        receiver.Ingest(Tele("Raijin", OfferText(asked)));
+        receiver.NoteSendConfirmed("Raijin");
+        foreach (string line in DataLines(asked, id: "old1")) receiver.Ingest(Heard(channel, "Raijin", line));
+        foreach (string line in DataLines(asked, id: "old2")) receiver.Ingest(Heard(channel, "Mallory", line));
 
         Assert.Empty(loops.Loops);
         Assert.Empty(told);
+
+        foreach (string line in DataLines(asked)) receiver.Ingest(Tele("Raijin", line));
+
+        Assert.NotNull(loops.Get("King's Road"));
+        Assert.Equal(new Told(RemoteChannel.Telepath, "Raijin", $"@loopresult {LoopSignature.ShortOf(asked)} saved as 'King's Road'", false),
+            told.Single());
     }
 
-    // An older client's offer has no code, and is an offer all the same.
+    // An offer heard on a shared channel is no offer to us: the loop that player
+    // then telepaths is checked against nothing.
     [Fact]
-    public void Receive_AfterAYesOnGangpath_AnOlderSendersLoop_IsStillTaken()
+    public void Receive_OfferHeardOnASharedChannel_IsNotKept()
+    {
+        var (receiver, _, notices) = NewReceiver();
+        Loop sent = SampleLoop();
+
+        receiver.Ingest(Heard(ChatChannel.Gangpath, "Raijin", OfferText(sent)));
+        receiver.NoteSendConfirmed("Raijin");
+        foreach (string line in DataLines(sent)) receiver.Ingest(Tele("Raijin", line));
+
+        Assert.EndsWith($", {NoCodeOffered})]", notices.Single());
+    }
+
+    // An older client's telepathed offer has no code; its loop is taken unverified.
+    [Fact]
+    public void Receive_AnOlderSendersLoopByTelepath_IsStillTaken()
     {
         var (receiver, loops, notices) = NewReceiver();
         Loop sent = SampleLoop();
 
-        receiver.Ingest(Gang("Raijin", "{preparing to send: King's Road, yes to confirm, no to deny}"));
-        receiver.NoteSendConfirmed(null, RemoteChannel.Gangpath);
-        foreach (string line in DataLines(sent)) receiver.Ingest(Gang("Raijin", line));
+        receiver.Ingest(Tele("Raijin", "{preparing to send: King's Road, yes to confirm, no to deny}"));
+        receiver.NoteSendConfirmed("Raijin");
+        foreach (string line in DataLines(sent)) receiver.Ingest(Tele("Raijin", line));
 
         Assert.NotNull(loops.Get("King's Road"));
         Assert.EndsWith($", {NoCodeOffered})]", notices.Single());
+    }
+
+    // The client asked refuses every form of the command that comes by another
+    // channel, with where it does work, and offers or sends nothing.
+    [Theory]
+    [InlineData(RemoteChannel.Gangpath, "kings road")]
+    [InlineData(RemoteChannel.Local, "kings road")]
+    [InlineData(RemoteChannel.Broadcast, "kings road")]
+    [InlineData(RemoteChannel.Gangpath, "")]
+    [InlineData(RemoteChannel.Gangpath, "yes")]
+    [InlineData(RemoteChannel.Local, "no")]
+    public void Send_OnAnyChannelButTelepath_IsRefusedWithWhereItWorks(RemoteChannel channel, string rest)
+    {
+        LoopManager loops = NewLoops();
+        loops.Save(SampleLoop());
+        LogService log = new();
+        LoopShareHandler share = new(loops, log, clock: () => _now, runningLoop: () => loops.Get("King's Road"));
+        List<string> replies = new(), refusals = new();
+        RemoteCommandContext On(RemoteChannel via) =>
+            new("Raijin", "@loop", Array.Empty<string>(), "@loop send", via, replies.Add) { Refusal = why => refusals.Add(why ?? "") };
+
+        // An offer made by telepath is not confirmed, or cancelled, from elsewhere.
+        share.OnSend(On(RemoteChannel.Telepath), "kings road");
+        replies.Clear();
+
+        share.OnSend(On(channel), rest);
+
+        Assert.Empty(replies);
+        Assert.Equal("@loop send works by telepath only", refusals.Single());
+        Assert.Contains(log.Snapshot(), e => e.Severity == LogSeverity.Info
+            && e.Message.Contains($"refused @loop send from Raijin on {channel}"));
+
+        // The telepathed offer still stands.
+        share.OnSend(On(RemoteChannel.Telepath), "yes");
+        Assert.StartsWith("sending loop 'King's Road'", replies[0]);
     }
 
     // A loop that did not arrive as offered, or could not be read at all, is a
@@ -784,12 +811,14 @@ public sealed class LoopShareTests : IDisposable
         Assert.True(engine.SendOutcome(RemoteChannel.Telepath, "Raijin Surname", "@loopresult 9da659db saved as 'X'", failed: false));
         Assert.True(engine.SendOutcome(RemoteChannel.Gangpath, "Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
         Assert.True(engine.SendOutcome(RemoteChannel.Local, "Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
+        Assert.True(engine.SendOutcome(RemoteChannel.Broadcast, "Raijin", "@loopresult 9da659db saved as 'X'", failed: false));
 
         Assert.Equal(new[]
         {
             "/Raijin {@loopresult 9da659db saved as 'X'}\r",
             "bg {@loopresult 9da659db saved as 'X'}\r",
             ">Raijin {@loopresult 9da659db saved as 'X'}\r",
+            "br {@loopresult 9da659db saved as 'X'}\r",
         }, Wire(engine));
 
         RemoteCommandManager sneaking = Engine(stealthed: true);
@@ -959,23 +988,22 @@ public sealed class LoopShareTests : IDisposable
         Assert.Empty(notices);
     }
 
-    // On gangpath or say the answer is heard by every client there. One with another
-    // code is about somebody else's loop: passed over without a word, and the answer
-    // to ours is still taken when it comes.
+    // A loop goes by telepath and so does its answer. A line of that shape heard on
+    // a shared channel is an older client's, about a transfer of its own: passed
+    // over, even with our code in it, and the telepathed answer is still taken.
     [Theory]
     [InlineData(ChatChannel.Gangpath)]
     [InlineData(ChatChannel.Local)]
-    public void Sender_OnASharedChannel_TakesOnlyAnAnswerWithTheCodeItSent(ChatChannel channel)
+    [InlineData(ChatChannel.Broadcast)]
+    public void Sender_TakesAnAnswerByTelepathOnly(ChatChannel channel)
     {
         var (share, notices, code) = SenderThatSent(SampleLoop());
-        ChatLogEntry Heard(string msg) => new(DateTimeOffset.UnixEpoch, channel, "Raijin", msg, $"Raijin: {msg}");
 
-        share.NoteChat(Heard("{@loopresult 0123abcd saved as 'Some other loop'}"));
-        share.NoteChat(Heard("{@loopresult 0123abcd not saved: it is not the loop offered (4567cdef) - send it again}"));
-        share.NoteChat(Heard("{@loopresult - not saved: it arrived damaged - send it again}"));
+        share.NoteChat(Heard(channel, "Raijin", "{@loopresult 0123abcd saved as 'Some other loop'}"));
+        share.NoteChat(Heard(channel, "Raijin", $"{{@loopresult {code} saved as 'King's Road'}}"));
         Assert.Empty(notices);
 
-        share.NoteChat(Heard($"{{@loopresult {code} saved as 'King's Road'}}"));
+        share.NoteChat(Tele("Raijin", $"{{@loopresult {code} saved as 'King's Road'}}"));
         Assert.Equal($"[Raijin on loop 'King's Road': saved as 'King's Road' (code {code}, the same as sent)]", notices.Single());
     }
 
@@ -1100,12 +1128,8 @@ public sealed class LoopShareTests : IDisposable
         var (receiver, loops, notices) = NewReceiver();
         loops.Save(SampleLoop());
 
-        // Confirmed on gangpath, where the yes names nobody: the loop is taken from a
-        // player whose offer was heard there, on that channel. This sender's offer is
-        // an older client's, with no code.
-        receiver.Ingest(Gang("Raijin", "{preparing to send: King's Road, yes to confirm, no to deny}"));
-        receiver.NoteSendConfirmed(null, RemoteChannel.Gangpath);
-        foreach (string line in DataLines(SampleLoop())) receiver.Ingest(Gang("Raijin", line));
+        receiver.NoteSendConfirmed("Raijin");
+        foreach (string line in DataLines(SampleLoop())) receiver.Ingest(Tele("Raijin", line));
 
         Assert.Single(loops.Loops);
         Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin ({LoopSignature.ShortOf(SampleLoop())}, {NoCodeOffered}), "
