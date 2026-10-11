@@ -420,6 +420,14 @@ public static class AppPaths
     public static string QuestsFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "quests.json");
 
+    // Where the dead of a room were seen to arrive, learned from the deaths a
+    // client witnesses (LearnedArrivalRoomStore). The game keeps it per room and
+    // the imported tables don't carry it, so it is knowledge about the set: every
+    // board and character on the set shares it. A file of its own, beside the
+    // imported tables and never one of them.
+    public static string LearnedArrivalRoomsFile(string setName) =>
+        Path.Combine(GameDataSetDir(setName), "learned-arrival-rooms.json");
+
     // The realm folders whose old quest-guide file a set has already taken in.
     public static string QuestsAdoptedRealmsFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), ".quests-adopted.json");

@@ -282,6 +282,11 @@ public sealed class RoomGraphManager
     // active.
     public IEnumerable<Room> Rooms => _rooms.Values;
 
+    // Every room's key, for a pass that only sorts rooms by number: the keys
+    // lie side by side, where reading each Room to get its key is a jump apiece
+    // through tens of thousands of them.
+    public IEnumerable<RoomKey> RoomKeys => _rooms.Keys;
+
     // Per-monster lair-size aggregate: for each monster named in a room's lair
     // tag, how many such rooms name it (Count) and the sum / biggest of those
     // rooms' per-room "(Max N)" caps. Built once in BuildSecondaryIndexes (all
@@ -337,6 +342,24 @@ public sealed class RoomGraphManager
         foreach ((Direction direction, RoomExit exit) in room.Exits)
             if (PrintsOnExitsLine(exit)) printed |= 1u << (int)direction;
         return (printed & twin.ExitMask) == printed;
+    }
+
+    // Whether some room has an exit this line crosses: a text exit (`go path`), or
+    // a room command the graph made an edge of (`touch altar`). For a caller that
+    // doesn't know which room the character stands in and needs to know whether a
+    // line could have moved it. Built once per graph, on the first question.
+    public bool IsExitCommandSomewhere(string command) =>
+        !string.IsNullOrWhiteSpace(command)
+        && Derived("exit commands of every room", BuildExitCommands).Contains(command.Trim());
+
+    private HashSet<string> BuildExitCommands()
+    {
+        HashSet<string> commands = new(StringComparer.OrdinalIgnoreCase);
+        foreach (Room room in _rooms.Values)
+            foreach (RoomExit exit in room.Exits.Values)
+                if (exit.TextCommands is { } lines)
+                    foreach (string line in lines) commands.Add(line.Trim());
+        return commands;
     }
 
     // A hidden exit that a plain step crosses (`Hidden/Passable`) carries no hint

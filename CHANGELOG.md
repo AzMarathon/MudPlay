@@ -1,5 +1,14 @@
 # Version history
 
+## 3.178.0
+
+- The client learns where a room's dead arrive from a death it sees, keeps it with the game-data set for every client on it, and shows it in the bug report
+- One death stands for its land (the rooms walked to from it on its map); a room's own reading wins
+- Two readings of one room: neither is used until one is seen again, and a reading in use gives way to another seen as often
+- Hang-up death check: back in a learned room counts as where the dead arrive, never as "the wrong room"; with no lives count it also needs HP read at the first prompt
+- Stock: two deaths the standard list doesn't allow mark the board as having edited rooms; the list then only says yes there
+- Paradigm: map 1's dungeon rooms (1/2171 to 1/2188) send their dead to Newhaven's healer; Albion takes in rooms only a same-map room command reaches
+
 ## 3.177.5
 
 - `@loop send`: a loop you already hold as a numbered copy (`<name> 2`, `<name> 3`) is rejected too, and the notice names which one it matches
