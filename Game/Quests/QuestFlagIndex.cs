@@ -117,15 +117,14 @@ public sealed class QuestFlagIndex
     private Snapshot Rebuild(string? active)
     {
         Snapshot snapshot = Snapshot.Empty;
-        JsonDocument? doc = string.IsNullOrWhiteSpace(active) ? null : _cache.GetRawTable("TBInfo");
+        GameTable? doc = string.IsNullOrWhiteSpace(active) ? null : _cache.GetTable("TBInfo");
         if (doc is not null)
         {
             // Number → (Action, Called-From) so the provenance walk can hop between blocks.
             Dictionary<int, TbRow> tb = new();
-            foreach (JsonElement el in doc.RootElement.EnumerateArray())
+            foreach (GameRow el in doc.Rows)
             {
-                if (el.ValueKind != JsonValueKind.Object) continue;
-                if (!el.TryGetProperty("Number", out JsonElement numEl)
+                if (!el.TryGetProperty("Number", out GameValue numEl)
                     || numEl.ValueKind != JsonValueKind.Number || !numEl.TryGetInt32(out int num))
                     continue;
                 tb[num] = new TbRow(ReadString(el, "Action"), ReadString(el, "Called From"));
@@ -590,8 +589,8 @@ public sealed class QuestFlagIndex
         _                           => $"Textblock #{root.Number}",
     };
 
-    private static string? ReadString(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el) && el.ValueKind == JsonValueKind.String
+    private static string? ReadString(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el) && el.ValueKind == JsonValueKind.String
             ? el.GetString()
             : null;
 

@@ -48,12 +48,12 @@ public sealed class SpellTargetTypeIndex
         if (_byShort is { } cached) return cached;
 
         Dictionary<string, SpellTargetType> map = new(StringComparer.OrdinalIgnoreCase);
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Short", out JsonElement shortEl)) continue;
+                if (!row.TryGetProperty("Short", out GameValue shortEl)) continue;
                 if (shortEl.ValueKind != JsonValueKind.String) continue;
                 string? code = shortEl.GetString();
                 if (string.IsNullOrWhiteSpace(code)) continue;
@@ -61,7 +61,7 @@ public sealed class SpellTargetTypeIndex
                 SpellTargetType type = SpellTargetType.Any;
                 for (int i = 0; i < AbilitySlots; i++)
                 {
-                    if (!row.TryGetProperty($"Abil-{i}", out JsonElement abilEl)) continue;
+                    if (!row.TryGetProperty($"Abil-{i}", out GameValue abilEl)) continue;
                     if (abilEl.ValueKind != JsonValueKind.Number) continue;
                     if (!abilEl.TryGetInt32(out int c)) continue;
                     if (c == AffectsUndeadOnly)  { type = SpellTargetType.UndeadOnly;  break; }
@@ -75,7 +75,7 @@ public sealed class SpellTargetTypeIndex
             }
         }
 
-        // Folded into the map — release the pinned raw Spells JsonDocument.
+        // Folded into the map — the cache may drop the Spells table.
         _cache.EvictTable("Spells");
         _byShort = map;
         return map;

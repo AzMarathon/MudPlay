@@ -38,17 +38,17 @@ public sealed class CombatSpellIndex
         if (_combatByShort is { } cached) return cached;
 
         Dictionary<string, bool> map = new(StringComparer.OrdinalIgnoreCase);
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Short", out JsonElement shortEl)) continue;
+                if (!row.TryGetProperty("Short", out GameValue shortEl)) continue;
                 if (shortEl.ValueKind != JsonValueKind.String) continue;
                 string? code = shortEl.GetString();
                 if (string.IsNullOrWhiteSpace(code)) continue;
 
-                if (!row.TryGetProperty("EnergyCost", out JsonElement energyEl)) continue;
+                if (!row.TryGetProperty("EnergyCost", out GameValue energyEl)) continue;
                 if (energyEl.ValueKind != JsonValueKind.Number) continue;
                 if (!energyEl.TryGetInt32(out int energy)) continue;
 

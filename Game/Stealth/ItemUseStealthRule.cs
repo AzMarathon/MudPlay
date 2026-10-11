@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MudPlay.Game.GameData;
 using MudPlay.Game.Inventory;
+using MudPlay.Services;
 
 namespace MudPlay.Game.Stealth;
 
@@ -35,10 +36,10 @@ public sealed class ItemUseStealthRule
     {
         // A use walks the item's ability slots in order and stops at a proc marker,
         // so it casts only when the first cast slot is a plain on-use one.
-        public static Facts Read(JsonElement itemRow, Func<int, int?> spellTargets)
+        public static Facts Read(GameRow itemRow, Func<int, int?> spellTargets)
         {
             ArgumentNullException.ThrowIfNull(spellTargets);
-            int itemType = itemRow.TryGetProperty("ItemType", out JsonElement t)
+            int itemType = itemRow.TryGetProperty("ItemType", out GameValue t)
                 && t.ValueKind == JsonValueKind.Number && t.TryGetInt32(out int kind) ? kind : 0;
             IReadOnlyList<ItemCastSpells.CastEntry> casts = ItemCastSpells.ReadCasts(itemRow);
             bool castsOnUse = casts.Count > 0 && casts[0].Trigger == ItemCastSpells.CastTrigger.OnUse;

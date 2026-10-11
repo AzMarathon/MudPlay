@@ -58,12 +58,12 @@ public sealed class ItemMagicIndex
         if (_byName is { } cached) return cached;
 
         Dictionary<string, int> map = new(StringComparer.OrdinalIgnoreCase);
-        JsonDocument? doc = _cache.GetRawTable("Items");
+        GameTable? doc = _cache.GetTable("Items");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Name", out JsonElement nameEl)) continue;
+                if (!row.TryGetProperty("Name", out GameValue nameEl)) continue;
                 if (nameEl.ValueKind != JsonValueKind.String) continue;
                 string? name = nameEl.GetString();
                 if (string.IsNullOrWhiteSpace(name)) continue;
@@ -71,11 +71,11 @@ public sealed class ItemMagicIndex
                 int hitMagic = 0;
                 for (int i = 0; i < AbilitySlots; i++)
                 {
-                    if (!row.TryGetProperty($"Abil-{i}", out JsonElement abilEl)) continue;
+                    if (!row.TryGetProperty($"Abil-{i}", out GameValue abilEl)) continue;
                     if (abilEl.ValueKind != JsonValueKind.Number) continue;
                     if (!abilEl.TryGetInt32(out int code)) continue;
                     if (code != MagicalAbilityCode && code != HitMagicAbilityCode) continue;
-                    if (!row.TryGetProperty($"AbilVal-{i}", out JsonElement valEl)) continue;
+                    if (!row.TryGetProperty($"AbilVal-{i}", out GameValue valEl)) continue;
                     if (valEl.ValueKind != JsonValueKind.Number) continue;
                     // Sum both abilities (a weapon can carry either or both) — no
                     // early break, matching the char sheet's Hit Magic total.
@@ -88,7 +88,7 @@ public sealed class ItemMagicIndex
             }
         }
 
-        // Folded into the map — release the pinned raw Items JsonDocument.
+        // Folded into the map — the cache may drop the Items table.
         _cache.EvictTable("Items");
         _byName = map;
         return map;

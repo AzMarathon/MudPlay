@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using MudPlay.Game.GameData;
 using MudPlay.Game.Map;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -31,9 +32,9 @@ public sealed class StrayMonsterRuleTests
 
     private static bool Stray(string summonedBy, int number = 543, int inGame = 1)
     {
-        using JsonDocument doc = JsonDocument.Parse(
+        GameRow doc = TestRows.Row(
             $"{{\"Number\":{number},\"In Game\":{inGame},\"Summoned By\":{JsonSerializer.Serialize(summonedBy)}}}");
-        return StrayMonsterRule.IsOutOfPlay(doc.RootElement, Get);
+        return StrayMonsterRule.IsOutOfPlay(doc, Get);
     }
 
     [Fact]
@@ -59,15 +60,15 @@ public sealed class StrayMonsterRuleTests
     [Fact]
     public void FlaggedOutOfPlay_IsOutOfPlay_WithOrWithoutARoomGraph()
     {
-        using JsonDocument doc = JsonDocument.Parse("{\"Number\":7,\"In Game\":0,\"Summoned By\":\"Group: 6/590\"}");
-        Assert.True(StrayMonsterRule.IsOutOfPlay(doc.RootElement, Get));
-        Assert.True(StrayMonsterRule.IsOutOfPlay(doc.RootElement, null));
+        GameRow doc = TestRows.Row("{\"Number\":7,\"In Game\":0,\"Summoned By\":\"Group: 6/590\"}");
+        Assert.True(StrayMonsterRule.IsOutOfPlay(doc, Get));
+        Assert.True(StrayMonsterRule.IsOutOfPlay(doc, null));
     }
 
     [Fact]
     public void NoRoomGraph_OnlyTheFlagCounts()
     {
-        using JsonDocument doc = JsonDocument.Parse("{\"Number\":543,\"In Game\":1,\"Summoned By\":\"Group: 1/398\"}");
-        Assert.False(StrayMonsterRule.IsOutOfPlay(doc.RootElement, null));
+        GameRow doc = TestRows.Row("{\"Number\":543,\"In Game\":1,\"Summoned By\":\"Group: 1/398\"}");
+        Assert.False(StrayMonsterRule.IsOutOfPlay(doc, null));
     }
 }

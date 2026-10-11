@@ -1,6 +1,6 @@
-using System.Text.Json;
 using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -192,7 +192,7 @@ public sealed class HealLineReaderTests
     [Fact]
     public void InstantHeals_KeepsInstantPartyAndTargetedHeals_Only()
     {
-        using JsonDocument doc = JsonDocument.Parse("""
+        GameTable doc = TestRows.Table("""
             [
               { "Number": 13,   "Name": "minor healing",  "Targets": 2,  "Dur": 0,  "Abil-0": 18, "Abil-1": 108 },
               { "Number": 123,  "Name": "greater healing rain", "Targets": 13, "Dur": 0, "Abil-0": 18 },
@@ -203,7 +203,7 @@ public sealed class HealLineReaderTests
             ]
             """);
 
-        IReadOnlyList<HealSpell> heals = HealLineReader.InstantHeals(doc.RootElement);
+        IReadOnlyList<HealSpell> heals = HealLineReader.InstantHeals(doc);
 
         Assert.Equal(new[] { 13, 123 }, heals.Select(h => h.Number));
     }

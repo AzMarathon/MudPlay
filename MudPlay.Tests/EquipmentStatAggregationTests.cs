@@ -178,11 +178,11 @@ public sealed class EquipmentStatAggregationTests : IDisposable
     public void ApplyAbilityBonuses_FoldsRaceOrClassAbilities()
     {
         // Race/class records iterate Abil-0..9; 48 = +Agility.
-        using JsonDocument doc = JsonDocument.Parse(
+        GameRow doc = TestRows.Row(
             """{ "Name": "Halfling", "Abil-0": 48, "AbilVal-0": 4 }""");
 
         EquipmentStatBreakdown b = new();
-        CharacterCalculator.ApplyAbilityBonuses(b, doc.RootElement, "Halfling");
+        CharacterCalculator.ApplyAbilityBonuses(b, doc, "Halfling");
 
         Assert.Equal(4, b.Totals.PlusAgility);
         Assert.Equal("Halfling", b.PerStatSources["Agility"][0].ItemName);

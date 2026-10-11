@@ -38,8 +38,8 @@ public static class BuffClassifier
     // 110/111/113 gate it to NOT good/evil/neutral (KnownSpellCatalog.IsUsable
     // applies the same six codes against its own raw-row alignment check —
     // duplicated here rather than shared because that path reads straight off the
-    // pre-conversion JsonElement row, before a SpellFormulaInput exists to hand
-    // it). Unknown alignment (no `who` observation of ourselves yet) never
+    // Spells table's row, before a SpellFormulaInput exists to hand it). Unknown
+    // alignment (no `who` observation of ourselves yet) never
     // excludes — the caller doesn't get to guess wrong, it just doesn't filter.
     // evilPoints, when known, adds evil-only's value gate (Outlaw at least).
     public static bool IsAlignmentEligible(in SpellFormulaInput formula, AlignmentBucket? alignment,

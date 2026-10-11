@@ -1,5 +1,11 @@
 # Version history
 
+## 3.177.0
+
+- Imported game data is held in a compact form instead of parsed JSON: about 25 MB less memory through a Paradigm session (14 MB on Stock), and 80 MB less in the first minutes after a set loads
+- Loading a set's tables allocates a third of the memory it did
+- Program log shows what each game-data table holds when a set loads
+
 ## 3.176.10
 
 - Stock: a follower an exit left behind is still on the leader's list, and is now brought back with a `join`, not an invite it never sees

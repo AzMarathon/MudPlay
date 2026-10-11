@@ -44,10 +44,10 @@ public sealed class MonsterDeathSummonIndex
 
         // Spell Numbers that summon (carry any Abil-i == 12).
         HashSet<int> summonSpells = new();
-        JsonDocument? spells = _cache.GetRawTable("Spells");
+        GameTable? spells = _cache.GetTable("Spells");
         if (spells is not null)
         {
-            foreach (JsonElement row in spells.RootElement.EnumerateArray())
+            foreach (GameRow row in spells.Rows)
             {
                 if (!TryInt(row, "Number", out int spellNum)) continue;
                 for (int i = 0; i < AbilitySlots; i++)
@@ -65,10 +65,10 @@ public sealed class MonsterDeathSummonIndex
         HashSet<int> summoners = new();
         if (summonSpells.Count > 0)
         {
-            JsonDocument? monsters = _cache.GetRawTable("Monsters");
+            GameTable? monsters = _cache.GetTable("Monsters");
             if (monsters is not null)
             {
-                foreach (JsonElement row in monsters.RootElement.EnumerateArray())
+                foreach (GameRow row in monsters.Rows)
                 {
                     if (!TryInt(row, "Number", out int number)) continue;
                     if (TryInt(row, "DeathSpell", out int deathSpell)
@@ -80,16 +80,16 @@ public sealed class MonsterDeathSummonIndex
             _cache.EvictTable("Monsters");
         }
 
-        // Folded into the set — release the pinned raw JsonDocuments.
+        // Folded into the set — the cache may drop the tables.
         _cache.EvictTable("Spells");
         _summoners = summoners;
         return summoners;
     }
 
-    private static bool TryInt(JsonElement row, string prop, out int value)
+    private static bool TryInt(GameRow row, string prop, out int value)
     {
         value = 0;
-        return row.TryGetProperty(prop, out JsonElement el)
+        return row.TryGetProperty(prop, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out value);
     }

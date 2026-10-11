@@ -42,10 +42,10 @@ public static class TimeToLevelEstimator
         return new(banked, bankedFrac, target, eta, Math.Max(0, targetExp - exp));
     }
 
-    private static int GetInt(JsonElement? rowOpt, string property)
+    private static int GetInt(GameRow? rowOpt, string property)
     {
-        if (rowOpt is not JsonElement row || row.ValueKind != JsonValueKind.Object) return 0;
-        if (!row.TryGetProperty(property, out JsonElement v)) return 0;
+        if (rowOpt is not GameRow row) return 0;
+        if (!row.TryGetProperty(property, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 }

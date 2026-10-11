@@ -472,21 +472,21 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
         GameDataCache gameData, PlayerStats stats, InventoryManager inventory)
     {
         if (stats.Level <= 0) return null;
-        JsonElement? classRow = gameData.FindRowByName("Classes", stats.Class);
-        JsonElement? raceRow = gameData.FindRowByName("Races", stats.Race);
+        GameRow? classRow = gameData.FindRowByName("Classes", stats.Class);
+        GameRow? raceRow = gameData.FindRowByName("Races", stats.Race);
         int combatLevel = ReadInt(classRow, "CombatLVL");
         if (combatLevel <= 0) return null;
 
         IReadOnlyList<EquippedItem> worn = inventory.Snapshot.EquippedItems;
         EquipmentStatBreakdown rest = CharacterCalculator.AggregateEquipmentStats(
             worn.Where(static w => w.Slot != WeaponHandSlot).ToList(), gameData);
-        if (raceRow is JsonElement r) CharacterCalculator.ApplyAbilityBonuses(rest, r, stats.Race);
-        if (classRow is JsonElement c) CharacterCalculator.ApplyAbilityBonuses(rest, c, stats.Class);
+        if (raceRow is GameRow r) CharacterCalculator.ApplyAbilityBonuses(rest, r, stats.Race);
+        if (classRow is GameRow c) CharacterCalculator.ApplyAbilityBonuses(rest, c, stats.Class);
         EquipmentStatSummary o = rest.Totals;
 
         ItemDamageModel.WeaponInputs? current = null;
         if (worn.FirstOrDefault(static w => w.Slot == WeaponHandSlot) is { Name: not null } hand
-            && gameData.FindRowByName("Items", hand.Name) is JsonElement weaponRow)
+            && gameData.FindRowByName("Items", hand.Name) is GameRow weaponRow)
         {
             EquipmentStatSummary w = CharacterCalculator.AggregateItemRow(weaponRow, hand.Name, WeaponHandSlot).Totals;
             current = new ItemDamageModel.WeaponInputs(
@@ -509,10 +509,10 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
     // EquippedItem.Slot tag InventoryManager gives the wielded weapon.
     private const string WeaponHandSlot = "Weapon Hand";
 
-    private static int ReadInt(JsonElement? row, string property)
+    private static int ReadInt(GameRow? row, string property)
     {
-        if (row is not JsonElement el || el.ValueKind != JsonValueKind.Object) return 0;
-        if (!el.TryGetProperty(property, out JsonElement v)) return 0;
+        if (row is not GameRow el) return 0;
+        if (!el.TryGetProperty(property, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 
@@ -1263,12 +1263,11 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
 
     private static IEnumerable<string> ClassNames(GameDataCache cache)
     {
-        JsonDocument? doc = cache.GetRawTable("Classes");
+        GameTable? doc = cache.GetTable("Classes");
         if (doc is null) yield break;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
-            if (!row.TryGetProperty("Name", out JsonElement nameEl)) continue;
+            if (!row.TryGetProperty("Name", out GameValue nameEl)) continue;
             if (nameEl.ValueKind != JsonValueKind.String) continue;
             string? name = nameEl.GetString();
             if (!string.IsNullOrEmpty(name)) yield return name!;

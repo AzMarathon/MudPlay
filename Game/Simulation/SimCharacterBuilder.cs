@@ -113,7 +113,7 @@ public static class SimCharacterBuilder
         IReadOnlyList<QuestBonus>? questBonuses, RealmType realm)
     {
         int mageryType = 0, mageryLevel = 0;
-        if (gameData.FindRowByName("Classes", stats.Class) is JsonElement cls)
+        if (gameData.FindRowByName("Classes", stats.Class) is GameRow cls)
         {
             mageryType = ReadInt(cls, "MageryType");
             mageryLevel = ReadInt(cls, "MageryLVL");
@@ -192,6 +192,6 @@ public static class SimCharacterBuilder
         return (0, 0);
     }
 
-    private static int ReadInt(JsonElement row, string name) =>
-        row.TryGetProperty(name, out JsonElement v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int i) ? i : 0;
+    private static int ReadInt(GameRow row, string name) =>
+        row.TryGetProperty(name, out GameValue v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int i) ? i : 0;
 }

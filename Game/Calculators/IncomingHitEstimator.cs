@@ -54,13 +54,13 @@ public static class IncomingHitEstimator
         ArgumentNullException.ThrowIfNull(gameData);
 
         EquipmentStatBreakdown gear = CharacterCalculator.AggregateEquipmentStats(worn, gameData);
-        if (gameData.FindRowByName("Races", stats.Race) is JsonElement raceRow)
+        if (gameData.FindRowByName("Races", stats.Race) is GameRow raceRow)
             CharacterCalculator.ApplyAbilityBonuses(gear, raceRow, stats.Race);
         int armourType = 0;
-        if (gameData.FindRowByName("Classes", stats.Class) is JsonElement classRow)
+        if (gameData.FindRowByName("Classes", stats.Class) is GameRow classRow)
         {
             CharacterCalculator.ApplyAbilityBonuses(gear, classRow, stats.Class);
-            if (classRow.TryGetProperty("ArmourType", out JsonElement atEl)
+            if (classRow.TryGetProperty("ArmourType", out GameValue atEl)
                 && atEl.ValueKind == JsonValueKind.Number && atEl.TryGetInt32(out int at))
                 armourType = at;
         }

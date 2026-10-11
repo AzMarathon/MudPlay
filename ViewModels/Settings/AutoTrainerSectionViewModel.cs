@@ -415,7 +415,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         string className = _stats.Class;
         if (string.IsNullOrWhiteSpace(className)) return 0;
         if (_gameData.FindRowByName("Classes", className) is not { } row) return 0;
-        if (!row.TryGetProperty("Number", out JsonElement numEl)) return 0;
+        if (!row.TryGetProperty("Number", out GameValue numEl)) return 0;
         return numEl.ValueKind switch
         {
             JsonValueKind.Number => numEl.GetInt32(),

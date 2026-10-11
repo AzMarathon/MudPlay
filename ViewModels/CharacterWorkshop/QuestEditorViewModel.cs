@@ -82,12 +82,12 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
         Quests.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasQuests));
 
         // Enumerate the active set's classes once for every row's restriction checklist.
-        if (gameData.GetRawTable("Classes") is { } classDoc)
-            foreach (JsonElement row in classDoc.RootElement.EnumerateArray())
+        if (gameData.GetTable("Classes") is { } classDoc)
+            foreach (GameRow row in classDoc.Rows)
             {
-                if (!row.TryGetProperty("Name", out JsonElement n) || n.ValueKind != JsonValueKind.String) continue;
+                if (!row.TryGetProperty("Name", out GameValue n) || n.ValueKind != JsonValueKind.String) continue;
                 string? name = n.GetString();
-                int number = row.TryGetProperty("Number", out JsonElement num)
+                int number = row.TryGetProperty("Number", out GameValue num)
                     && num.ValueKind == JsonValueKind.Number && num.TryGetInt32(out int v) ? v : 0;
                 if (!string.IsNullOrEmpty(name) && number > 0) _allClasses.Add((number, name));
             }

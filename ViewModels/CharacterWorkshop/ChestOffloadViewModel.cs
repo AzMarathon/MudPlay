@@ -826,8 +826,8 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
             ? ShopPriceCalculator.ToCopper(ReadInt(el, "Price"), ReadInt(el, "Currency"))
             : 0;
 
-    private static int ReadInt(JsonElement el, string field)
-        => el.TryGetProperty(field, out JsonElement v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n)
+    private static int ReadInt(GameRow el, string field)
+        => el.TryGetProperty(field, out GameValue v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n)
             ? n : 0;
 
     public override void Dispose()

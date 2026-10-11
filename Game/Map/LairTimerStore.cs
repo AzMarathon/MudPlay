@@ -267,16 +267,16 @@ public sealed class LairTimerStore : IDisposable
         if (_groupDelaySecCache.TryGetValue(groupIndex, out int? cached)) return cached;
 
         int? seconds = null;
-        JsonDocument? doc = _cache.GetRawTable("Lairs");
+        GameTable? doc = _cache.GetTable("Lairs");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("GroupIndex", out JsonElement giEl)
+                if (!row.TryGetProperty("GroupIndex", out GameValue giEl)
                     || giEl.ValueKind != JsonValueKind.String) continue;
                 if (!string.Equals(giEl.GetString(), groupIndex, StringComparison.OrdinalIgnoreCase))
                     continue;
-                if (!row.TryGetProperty("AvgDelay", out JsonElement delayEl)) break;
+                if (!row.TryGetProperty("AvgDelay", out GameValue delayEl)) break;
                 int avgDelay = TryReadInt(delayEl);
                 if (avgDelay > 0) seconds = avgDelay * AvgDelayUnitSeconds;
                 break;
@@ -291,16 +291,16 @@ public sealed class LairTimerStore : IDisposable
         if (_monsterRegenSecCache.TryGetValue(monsterId, out int? cached)) return cached;
 
         int? seconds = null;
-        JsonDocument? doc = _cache.GetRawTable("Monsters");
+        GameTable? doc = _cache.GetTable("Monsters");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Number", out JsonElement numEl)
+                if (!row.TryGetProperty("Number", out GameValue numEl)
                     || numEl.ValueKind != JsonValueKind.Number
                     || !numEl.TryGetInt32(out int id)
                     || id != monsterId) continue;
-                if (row.TryGetProperty("RegenTime", out JsonElement regenEl))
+                if (row.TryGetProperty("RegenTime", out GameValue regenEl))
                 {
                     int v = TryReadInt(regenEl);
                     if (v > 0) seconds = v * AvgDelayUnitSeconds;
@@ -312,7 +312,7 @@ public sealed class LairTimerStore : IDisposable
         return seconds;
     }
 
-    private static int TryReadInt(JsonElement el)
+    private static int TryReadInt(GameValue el)
     {
         switch (el.ValueKind)
         {

@@ -48,11 +48,10 @@ public sealed class RoomLightSpellResolver
 
     private int Resolve(string spellName)
     {
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null) return 0;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!string.Equals(ReadString(row, "Name")?.Trim(), spellName, StringComparison.OrdinalIgnoreCase))
                 continue;
             return ResolveFromSpell(row);
@@ -60,7 +59,7 @@ public sealed class RoomLightSpellResolver
         return 0;
     }
 
-    private int ResolveFromSpell(JsonElement spell)
+    private int ResolveFromSpell(GameRow spell)
     {
         // Buff handler: an Illu / RoomIllu ability => the spell's MinBase magnitude.
         bool hasTextblock = false;
@@ -95,9 +94,9 @@ public sealed class RoomLightSpellResolver
     private IEnumerable<int> GiveItemsFromTextblock(int textblock)
     {
         if (textblock <= 0) yield break;
-        JsonDocument? doc = _cache.GetRawTable("TBInfo");
+        GameTable? doc = _cache.GetTable("TBInfo");
         if (doc is null) yield break;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             if (ReadInt(row, "Number") != textblock) continue;
             string? action = ReadString(row, "Action");
@@ -121,12 +120,12 @@ public sealed class RoomLightSpellResolver
         return null;
     }
 
-    private static int ReadInt(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el)
+    private static int ReadInt(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el)
            && el.ValueKind == JsonValueKind.Number
            && el.TryGetInt32(out int v) ? v : 0;
 
-    private static string? ReadString(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el) && el.ValueKind == JsonValueKind.String
+    private static string? ReadString(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el) && el.ValueKind == JsonValueKind.String
             ? el.GetString() : null;
 }

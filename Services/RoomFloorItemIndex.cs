@@ -118,15 +118,15 @@ public sealed class RoomFloorItemIndex
 
     // Index every room's static `Placed` column: a comma-separated list of item
     // ids the room drops on its floor (dupes = extra copies, collapsed here to the
-    // distinct set). Reads the raw Rooms table off the cache — the same JSON the
+    // distinct set). Reads the Rooms table off the cache — the same rows the
     // item view reads for its "Obtained From: Room" cross-reference — so the two
     // directions stay in sync. A malformed / empty column is skipped silently.
     private void IndexPlacedColumn()
     {
-        JsonDocument? rooms = _cache.GetRawTable("Rooms");
+        GameTable? rooms = _cache.GetTable("Rooms");
         if (rooms is null) return;
 
-        foreach (JsonElement el in rooms.RootElement.EnumerateArray())
+        foreach (GameRow el in rooms.Rows)
         {
             if (!TryInt(el, "Map Number", out int map) || !TryInt(el, "Room Number", out int room))
                 continue;
@@ -149,16 +149,16 @@ public sealed class RoomFloorItemIndex
         if (!list.Contains(itemId)) list.Add(itemId);
     }
 
-    private static bool TryInt(JsonElement el, string field, out int value)
+    private static bool TryInt(GameRow el, string field, out int value)
     {
         value = 0;
-        return el.TryGetProperty(field, out JsonElement v)
+        return el.TryGetProperty(field, out GameValue v)
             && v.ValueKind == JsonValueKind.Number
             && v.TryGetInt32(out value);
     }
 
-    private static string ReadString(JsonElement el, string field) =>
-        el.TryGetProperty(field, out JsonElement v) && v.ValueKind == JsonValueKind.String
+    private static string ReadString(GameRow el, string field) =>
+        el.TryGetProperty(field, out GameValue v) && v.ValueKind == JsonValueKind.String
             ? v.GetString() ?? string.Empty
             : string.Empty;
 

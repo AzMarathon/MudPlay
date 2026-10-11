@@ -45,7 +45,7 @@ public static class ChestContentsReader
         ArgumentNullException.ThrowIfNull(cache);
         if (itemNumber <= 0) return null;
 
-        JsonDocument? items = cache.GetRawTable("Items");
+        GameTable? items = cache.GetTable("Items");
         if (items is null) return null;
         if (FindByNumber(items, itemNumber) is not { } itemRow) return null;
         if (ReadInt(itemRow, "ItemType") != ContainerItemType) return null;
@@ -53,14 +53,14 @@ public static class ChestContentsReader
         int spellNumber = FirstAbilValue(itemRow, CastSpellAbil);
         if (spellNumber <= 0) return null;
 
-        JsonDocument? spells = cache.GetRawTable("Spells");
+        GameTable? spells = cache.GetTable("Spells");
         if (spells is null) return null;
         if (FindByNumber(spells, spellNumber) is not { } spellRow) return null;
 
         int topTextblock = ResolveLootTextblock(spellRow);
         if (topTextblock <= 0) return null;
 
-        JsonDocument? tbinfo = cache.GetRawTable("TBInfo");
+        GameTable? tbinfo = cache.GetTable("TBInfo");
         if (tbinfo is null) return null;
 
         var agg = new Aggregator(BuildTextblocks(tbinfo), BuildItemNames(items));
@@ -78,19 +78,18 @@ public static class ChestContentsReader
         ArgumentNullException.ThrowIfNull(cache);
         var result = new Dictionary<int, ChestContents>();
 
-        JsonDocument? items = cache.GetRawTable("Items");
+        GameTable? items = cache.GetTable("Items");
         if (items is null) return result;
-        JsonDocument? spells = cache.GetRawTable("Spells");
+        GameTable? spells = cache.GetTable("Spells");
         if (spells is null) return result;
-        JsonDocument? tbinfo = cache.GetRawTable("TBInfo");
+        GameTable? tbinfo = cache.GetTable("TBInfo");
         if (tbinfo is null) return result;
 
         // spellNumber → loot textblock (Abil 148 value), built once so the
         // per-container resolve is a dictionary hit rather than a Spells scan.
         var spellToTextblock = new Dictionary<int, int>();
-        foreach (JsonElement spell in spells.RootElement.EnumerateArray())
+        foreach (GameRow spell in spells.Rows)
         {
-            if (spell.ValueKind != JsonValueKind.Object) continue;
             int number = ReadInt(spell, "Number");
             if (number <= 0) continue;
             int tb = ResolveLootTextblock(spell);
@@ -99,9 +98,8 @@ public static class ChestContentsReader
 
         var agg = new Aggregator(BuildTextblocks(tbinfo), BuildItemNames(items));
 
-        foreach (JsonElement item in items.RootElement.EnumerateArray())
+        foreach (GameRow item in items.Rows)
         {
-            if (item.ValueKind != JsonValueKind.Object) continue;
             if (ReadInt(item, "ItemType") != ContainerItemType) continue;
             int itemNumber = ReadInt(item, "Number");
             if (itemNumber <= 0) continue;
@@ -357,12 +355,11 @@ public static class ChestContentsReader
             : 0;
     }
 
-    private static Dictionary<int, (string Action, int LinkTo)> BuildTextblocks(JsonDocument doc)
+    private static Dictionary<int, (string Action, int LinkTo)> BuildTextblocks(GameTable doc)
     {
         var map = new Dictionary<int, (string, int)>();
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             int number = ReadInt(row, "Number");
             if (number <= 0) continue;
             map[number] = (ReadString(row, "Action"), ReadInt(row, "LinkTo"));
@@ -370,12 +367,11 @@ public static class ChestContentsReader
         return map;
     }
 
-    private static Dictionary<int, string> BuildItemNames(JsonDocument doc)
+    private static Dictionary<int, string> BuildItemNames(GameTable doc)
     {
         var map = new Dictionary<int, string>();
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             int number = ReadInt(row, "Number");
             if (number > 0) map[number] = ReadString(row, "Name");
         }
@@ -389,7 +385,7 @@ public static class ChestContentsReader
     // Only treat MinBase as the textblock when the spell actually carries the
     // CastTextblock ability, so a non-textblock spell's MinBase is never misread.
     // 0 when the spell casts no textblock.
-    private static int ResolveLootTextblock(JsonElement spellRow)
+    private static int ResolveLootTextblock(GameRow spellRow)
     {
         for (int i = 0; i < AbilSlots; i++)
         {
@@ -402,7 +398,7 @@ public static class ChestContentsReader
 
     // First AbilVal-N whose Abil-N equals code, scanning the item/spell's ability
     // slots. 0 when the code isn't present.
-    private static int FirstAbilValue(JsonElement row, int code)
+    private static int FirstAbilValue(GameRow row, int code)
     {
         for (int i = 0; i < AbilSlots; i++)
         {
@@ -412,25 +408,24 @@ public static class ChestContentsReader
         return 0;
     }
 
-    private static JsonElement? FindByNumber(JsonDocument doc, int number)
+    private static GameRow? FindByNumber(GameTable doc, int number)
     {
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (ReadInt(row, "Number") == number) return row;
         }
         return null;
     }
 
-    private static int ReadInt(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el)
+    private static int ReadInt(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out int v)
             ? v
             : 0;
 
-    private static string ReadString(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el) && el.ValueKind == JsonValueKind.String
+    private static string ReadString(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el) && el.ValueKind == JsonValueKind.String
             ? el.GetString() ?? string.Empty
             : string.Empty;
 }
