@@ -4391,7 +4391,16 @@ public partial class MainWindowViewModel : ObservableObject
     {
         Services.AppServices svc = Services.AppServices.Current;
 
-        BugReportBuilder.BugReportCapture capture = BugReportBuilder.Capture(svc, Emulator);
+        BugReportBuilder.BugReportCapture capture;
+        try { capture = BugReportBuilder.Capture(svc, Emulator); }
+        catch (BugReportBuilder.PrivacyException ex)
+        {
+            // Nothing is written that couldn't be masked; the user is told why,
+            // on the terminal and in the log.
+            svc.Log.Error("BugReport", ex.Message);
+            Dispatcher.UIThread.Post(() => svc.WriteTerminalNotice(ex.Message));
+            return;
+        }
 
         string? description = await svc.Dialogs
             .OpenWindowAsync<BugReportDialogViewModel, string>(new BugReportDialogViewModel());

@@ -31,8 +31,8 @@ public static class BugReportBuilder
     private const int WireLines = 750;
 
     // Masks offensive words in the chat lines a report copies; nothing else in the
-    // client is censored. Replaced in tests with a table of stand-in words.
-    internal static BugReportChatCensor Censor { get; set; } = BugReportChatCensor.Default;
+    // client is censored.
+    private static BugReportChatCensor Censor => BugReportChatCensor.Default;
 
     // One captured section of the report — a heading and its pre-rendered Markdown body.
     // A history section also carries Entries: its lines, oldest first, printed in a
@@ -68,11 +68,21 @@ public static class BugReportBuilder
     {
         ArgumentNullException.ThrowIfNull(svc);
         List<BugReportScrub.Secret> secrets = new();
-        Models.Profile.CharacterProfile? profile = Guard<Models.Profile.CharacterProfile?>(() => svc.Profile.Current, null);
+        int unreadable = 0;
+        // Not guarded: a profile that can't be read means nothing can be masked,
+        // and the caller must then not write a report at all.
+        Models.Profile.CharacterProfile? profile = svc.Profile.Current;
         if (profile is not null)
         {
-            string? Open(string? blob) =>
-                string.IsNullOrEmpty(blob) ? null : Guard<string?>(() => svc.Passwords.Unprotect(blob), null);
+            string? Open(string? blob)
+            {
+                if (string.IsNullOrEmpty(blob)) return null;
+                string? value = Guard<string?>(() => svc.Passwords.Unprotect(blob), null);
+                // Saved, but its key no longer opens it: it can't be compared
+                // with anything, so it can't be masked. The report says so.
+                if (string.IsNullOrEmpty(value)) unreadable++;
+                return value;
+            }
             if (profile.BbsCredentials is { } logins)
             {
                 foreach (Models.Profile.BbsCredentials login in logins.Values)
@@ -83,13 +93,14 @@ public static class BugReportBuilder
             }
             secrets.Add(new(BugReportScrub.SuicidePasswordLabel, Open(profile.EncryptedSuicidePassword)));
         }
-        return BugReportScrub.Build(secrets,
-        [
-            Guard<string?>(() => svc.Profile.CurrentProfileName, null),
-            Guard<string?>(() => svc.PlayerStats.Name, null),
-            profile?.Name,
-        ]);
+        // Only the name the game itself shows is exempt: a profile can be called
+        // anything, the login name included.
+        return BugReportScrub.Build(secrets, [Guard<string?>(() => svc.PlayerStats.Name, null)], unreadable);
     }
+
+    // A report that could not be made safe to post. Thrown instead of writing one.
+    public sealed class PrivacyException(string message, Exception? inner = null)
+        : InvalidOperationException(message, inner);
 
     // Freeze the current client state into a BugReportCapture. Every section is
     // built defensively — a failure reading one subsystem is surfaced inline in
@@ -102,7 +113,16 @@ public static class BugReportBuilder
 
         DateTimeOffset now = DateTimeOffset.Now;
         RealmType realm = Guard(() => svc.GameData.ActiveRealm, RealmType.Stock);
-        BugReportScrub.Scrubber scrubber = Guard(() => BuildScrubber(svc), BugReportScrub.Scrubber.None);
+        // Fails closed: with no scrubber there is no report, since nothing in it
+        // could be trusted to be masked.
+        BugReportScrub.Scrubber scrubber;
+        try { scrubber = BuildScrubber(svc); }
+        catch (Exception ex)
+        {
+            throw new PrivacyException(
+                "No bug report was written: the saved account details could not be read, so they could not be masked "
+                + $"({ex.GetType().Name}: {ex.Message}).", ex);
+        }
 
         List<Section> sections =
         [
@@ -187,8 +207,13 @@ public static class BugReportBuilder
     private static string AccountDetailNote(BugReportScrub.Scrubber scrubber)
     {
         StringBuilder sb = new();
-        Kv(sb, "Account details", "the login name, login password and suicide password are written as "
-            + $"`{BugReportScrub.Mask}` wherever they appear in this report");
+        Kv(sb, "Account details", scrubber.MaskedValues > 0
+            ? $"the account details saved in MudPlay ({scrubber.MaskedValues} value(s): login name, login password, suicide password) "
+              + $"are written as `{BugReportScrub.Mask}` wherever they appear in this report"
+            : "none are saved in MudPlay for this character, so none could be masked: a login typed by hand is not known to the client");
+        if (scrubber.UnreadableValues > 0)
+            Kv(sb, "Account details, not masked", $"{scrubber.UnreadableValues} saved value(s) could not be read back "
+                + "(the key that protects them no longer opens them) and so could not be looked for");
         foreach (string note in scrubber.Notes)
             Kv(sb, "Account details, not masked", note);
         return sb.ToString();
@@ -229,6 +254,25 @@ public static class BugReportBuilder
         StringBuilder sb = new(capacity: 16 * 1024);
         AppendSections(sb, capture, overheadBytes: 0);
         return Scrubbed(capture, sb.ToString());
+    }
+
+    // The capture with every section masked now and its scrubber dropped, for a
+    // holder that keeps a capture around. A value never spans two sections, so
+    // masking them one at a time loses nothing.
+    public static BugReportCapture Prescrubbed(BugReportCapture capture)
+    {
+        ArgumentNullException.ThrowIfNull(capture);
+        if (capture.Scrubber is not { } scrubber) return capture;
+        List<Section> sections = new(capture.Sections.Count);
+        foreach (Section s in capture.Sections)
+        {
+            if (s.Entries is not { } entries) { sections.Add(s with { Body = scrubber.Apply(s.Body) }); continue; }
+            // The entries are masked as one text, so a value a wrapped row split
+            // across two of them is still found.
+            string[] masked = scrubber.Apply(string.Join('\n', entries)).Split('\n');
+            sections.Add(s with { Body = scrubber.Apply(s.Body), Entries = masked });
+        }
+        return capture with { Sections = sections, Scrubber = null };
     }
 
     // Each section's whole text by heading, for a caller that wants the sections

@@ -122,13 +122,45 @@ public sealed class RecentLogFileTests : IDisposable
             }
         }
 
-        int deleted = RecentLogFile.PruneOldProcesses(_dir, keep: 3);
+        int deleted = RecentLogFile.PruneOldProcesses(_dir, keep: 3, isLiveClient: _ => false,
+            nowUtc: new DateTime(2026, 10, 6, 0, 0, 0, DateTimeKind.Utc));
 
         Assert.Equal(4, deleted);
         string[] left = Directory.GetFiles(_dir, "*-recent-?.log").Select(Path.GetFileName).Order().ToArray()!;
         Assert.Equal(6, left.Length);
         Assert.All(left, name => Assert.DoesNotMatch("-p[12]-", name));
         Assert.True(File.Exists(other));
+    }
+
+    [Fact]
+    public void Prune_LeavesARunningClientsPair_AndOneWrittenInTheLastFewMinutes()
+    {
+        DateTime now = new(2026, 10, 10, 12, 0, 0, DateTimeKind.Utc);
+        void Pair(int pid, DateTime written)
+        {
+            foreach (string half in new[] { "a", "b" })
+            {
+                string path = Path.Combine(_dir, $"2026-10-01_00-00-00-p{pid}-recent-{half}.log");
+                File.WriteAllText(path, "x");
+                File.SetLastWriteTimeUtc(path, written);
+            }
+        }
+        Pair(101, now.AddDays(-3));        // old, its client gone: goes
+        Pair(202, now.AddDays(-2));        // old, but its client is still running: stays
+        Pair(303, now.AddMinutes(-2));     // the newest: the one pair within keep
+        Pair(404, now.AddDays(-1));        // old, its client gone: goes
+        Pair(505, now.AddMinutes(-5));     // written minutes ago: stays whatever its number
+
+        int deleted = RecentLogFile.PruneOldProcesses(_dir, keep: 1, isLiveClient: pid => pid == 202, nowUtc: now);
+
+        Assert.Equal(4, deleted);
+        string left = string.Join(" ", Directory.GetFiles(_dir, "*-recent-?.log").Select(Path.GetFileName).Order());
+        Assert.DoesNotContain("-p101-", left);
+        Assert.DoesNotContain("-p404-", left);
+        Assert.Contains("-p202-", left);
+        Assert.Contains("-p303-", left);
+        Assert.Contains("-p505-", left);
+        Assert.Equal(202, RecentLogFile.ProcessIdOf("2026-10-01_00-00-00-p202-recent"));
     }
 
     private sealed class ThreadRecordingWriter(ConcurrentBag<int> threads) : TextWriter

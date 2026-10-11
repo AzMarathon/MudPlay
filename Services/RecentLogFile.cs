@@ -220,9 +220,12 @@ public sealed class RecentLogFile : IAsyncDisposable
     // Delete the last-minutes files of all but the newest `keep` client processes
     // (a process's pair shares everything in its names but the a / b). Returns how
     // many files went. A file another running client still holds is left.
-    public static int PruneOldProcesses(string directory, int keep = ProcessesKept)
+    public static int PruneOldProcesses(string directory, int keep = ProcessesKept,
+        Func<int, bool>? isLiveClient = null, DateTime? nowUtc = null)
     {
         if (!Directory.Exists(directory)) return 0;
+        isLiveClient ??= IsLiveClient;
+        DateTime now = nowUtc ?? DateTime.UtcNow;
         List<IGrouping<string, FileInfo>> processes = new DirectoryInfo(directory)
             .EnumerateFiles("*-recent-?.log", SearchOption.TopDirectoryOnly)
             .GroupBy(f => f.Name[..^"-a.log".Length], StringComparer.Ordinal)
@@ -231,6 +234,13 @@ public sealed class RecentLogFile : IAsyncDisposable
         int deleted = 0;
         foreach (IGrouping<string, FileInfo> old in processes.Skip(Math.Max(0, keep)))
         {
+            // Another client that is still running owns its pair: on Linux a
+            // file being written can be deleted from under its writer, so the
+            // lock a delete would hit on Windows is no protection. A pair
+            // written in the last few minutes is left too, whatever its
+            // process number says (numbers are reused).
+            if (old.Max(f => f.LastWriteTimeUtc) > now - RecentlyWritten) continue;
+            if (ProcessIdOf(old.Key) is { } pid && isLiveClient(pid)) continue;
             foreach (FileInfo file in old)
             {
                 try { file.Delete(); deleted++; }
@@ -239,5 +249,33 @@ public sealed class RecentLogFile : IAsyncDisposable
             }
         }
         return deleted;
+    }
+
+    // Twice what a quiet client can go between writes (it logs a status line
+    // every three minutes).
+    private static readonly TimeSpan RecentlyWritten = TimeSpan.FromMinutes(10);
+
+    // "{timestamp}-p{pid}-recent" → pid.
+    internal static int? ProcessIdOf(string pairName)
+    {
+        int at = pairName.LastIndexOf("-p", pairName.Length - "-recent".Length, StringComparison.Ordinal);
+        if (at < 0) return null;
+        int end = pairName.IndexOf('-', at + 2);
+        return end > at && int.TryParse(pairName.AsSpan(at + 2, end - at - 2), out int pid) ? pid : null;
+    }
+
+    private static bool IsLiveClient(int pid)
+    {
+        try
+        {
+            using System.Diagnostics.Process process = System.Diagnostics.Process.GetProcessById(pid);
+            return !process.HasExited
+                && process.ProcessName.Contains("MudPlay", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // No such process, or one we may not look at: not a client of ours.
+            return false;
+        }
     }
 }

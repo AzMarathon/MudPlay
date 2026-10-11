@@ -117,7 +117,7 @@ public static class LocalApiState
         ArgumentNullException.ThrowIfNull(svc);
 
         // Deliberately UNLIMITED at the ring, then limited after filtering. The
-        // ring holds 2000 entries, so pulling the whole window is cheap — and
+        // ring holds a few thousand entries, so pulling the whole window is cheap — and
         // limiting first would apply the cap to raw entries, making a filtered
         // query return whatever happened to fall inside the first N. Asking for
         // `?source=LocalApi&limit=50` really would come back empty while the
@@ -204,7 +204,9 @@ public static class LocalApiState
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         if (_lastCapture is { } cached && now - _lastCaptureAt < CaptureReuseWindow) return cached;
-        _lastCapture = BugReportBuilder.Capture(svc, emulator);
+        // Kept already masked and without its scrubber: what is held between
+        // requests must not include the account details in clear.
+        _lastCapture = BugReportBuilder.Prescrubbed(BugReportBuilder.Capture(svc, emulator));
         _lastCaptureAt = now;
         return _lastCapture;
     }

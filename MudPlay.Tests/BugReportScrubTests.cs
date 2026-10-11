@@ -114,15 +114,78 @@ public sealed class BugReportScrubTests
     }
 
     [Fact]
-    public void ValueShorterThanThreeCharacters_IsLeftAndSaidSo()
+    public void ValueShorterThanThreeCharacters_IsMaskedAsAWholeWordOnly_AndNothingSaysHowLongItIs()
     {
         BugReportScrub.Scrubber scrubber = BugReportScrub.Build(
             [new(BugReportScrub.SuicidePasswordLabel, "ab"), new(BugReportScrub.LoginPasswordLabel, Password)],
             []);
 
         Assert.Equal("cabbage", scrubber.Apply("cabbage"));
-        Assert.Contains(scrubber.Notes, n => n.Contains("suicide password") && n.Contains("shorter than 3"));
-        Assert.DoesNotContain(scrubber.Notes, n => n.Contains("ab ") || n.EndsWith("ab", StringComparison.Ordinal));
+        Assert.Equal("[HP=1]:[redacted]", scrubber.Apply("[HP=1]:ab"));
+        Assert.Equal("typed  sent  [redacted]", scrubber.Apply("typed  sent  AB"));
+        Assert.Empty(scrubber.Notes);
+        Assert.Equal(2, scrubber.MaskedValues);
+    }
+
+    [Fact]
+    public void AValueIsAlwaysWrittenAsRedacted_NeverBlankedOrStarred()
+    {
+        // A password that is an ordinary word is masked inside other words too.
+        BugReportScrub.Scrubber scrubber = BugReportScrub.Build([new(BugReportScrub.LoginPasswordLabel, "sword")], []);
+
+        Assert.Equal("a bastard [redacted] and a [redacted]sman", scrubber.Apply("a bastard sword and a swordsman"));
+    }
+
+    [Fact]
+    public void AValueBrokenByAColourCodeOrACorrectionInTheRawWire_IsMasked()
+    {
+        BugReportScrub.Scrubber scrubber = MakeScrubber();
+
+        // A colour change in the middle of the word.
+        Assert.DoesNotContain("zed", scrubber.Apply($"^[[0;37m{Login[..5]}^[[1;33m{Login[5..]}^M"));
+        // Typed with a slip and a backspace: the game erases with ^H space ^H.
+        string corrected = $"User-ID: {Login[..4]}x^H ^H{Login[4..]}^M";
+        string masked = scrubber.Apply(corrected);
+        Assert.Contains(BugReportScrub.Mask, masked);
+        Assert.DoesNotContain(Login[4..], masked);
+        // A line with a backspace and no value in it is left exactly as it was.
+        const string overstrike = "Obvious exits: n^Hnorth^M";
+        Assert.Equal(overstrike, scrubber.Apply(overstrike));
+    }
+
+    [Fact]
+    public void ANonAsciiValue_IsMaskedAsTheTerminalShowsItToo()
+    {
+        const string secret = "pässwörd";
+        string shown = System.Text.CodePagesEncodingProvider.Instance.GetEncoding(437)!
+            .GetString(System.Text.Encoding.Latin1.GetBytes(secret));
+        BugReportScrub.Scrubber scrubber = BugReportScrub.Build([new(BugReportScrub.LoginPasswordLabel, secret)], []);
+
+        Assert.Equal(BugReportScrub.Mask, scrubber.Apply(secret));
+        Assert.Equal(BugReportScrub.Mask, scrubber.Apply(shown));
+    }
+
+    [Fact]
+    public void OnlyTheInGameNameExemptsALoginName_AndUnreadableValuesAreCounted()
+    {
+        // Built as the client builds it: the stat sheet's name is the only public one.
+        BugReportScrub.Scrubber scrubber = BugReportScrub.Build(
+            [new(BugReportScrub.LoginNameLabel, Login)], ["Someone Else"], unreadable: 2);
+
+        Assert.Equal(BugReportScrub.Mask, scrubber.Apply(Login));
+        Assert.Equal(2, scrubber.UnreadableValues);
+    }
+
+    [Fact]
+    public void Prescrubbed_MasksEverySectionAndDropsTheScrubber()
+    {
+        BugReportBuilder.BugReportCapture held = BugReportBuilder.Prescrubbed(CaptureWith(MakeScrubber()));
+
+        Assert.Null(held.Scrubber);
+        string md = BugReportBuilder.RenderStateOnly(held);
+        Assert.DoesNotContain(Login, md, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Password, md);
+        Assert.DoesNotContain(Suicide, md);
     }
 
     [Fact]
