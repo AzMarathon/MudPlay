@@ -1,11 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.171.1**
-> - Buff timers stop while you are out of the game (dropped link, relog, the board's menu) and run on with the time they had left
-> - Nothing is recast for time spent away; timers on party members stop with yours
+> **Version 3.172.0**
+> - Timers of the buffs on you stop while you are out of the game (dropped link, relog, the board's menu) and run on with the time they had left
+> - None of yours is recast for time spent away; a buff on a party member keeps its real end, as before
 > - Your own buffs' time left is saved with the character and put back after MudPlay is closed
 > - A client killed while in the game saves none, and buffs afresh
+> - A buff's wear-off line is read after a reconnect or a restart; a hang-up death found late drops the buffs carried over
 > - Bug report says whether the timers are running or standing still, and what a load put back
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
