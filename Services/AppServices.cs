@@ -7680,7 +7680,7 @@ public sealed class AppServices
         Walker.SetMoveReadyCheck(() =>
         {
             PreMoveGearOnce(ref _walkerPreMoveGearFor, Walker.PeekNextPlannedDirection());
-            HazardLastCallBeforeStep(Walker.PeekNextPlannedDirection());
+            if (!HazardLastCallBeforeStep(Walker.PeekNextPlannedDirection())) return false;
             return Stealth.ReadyToMoveSneaking();
         });
         Walker.SetRoomActionHook(cmd => Stealth.NoteSneakBroken($"room command '{cmd}'"));
@@ -7897,6 +7897,15 @@ public sealed class AppServices
             // The buff has no wear-off line, so a room that strips it is known by
             // its spell: the index the cast pass skips buffing by.
             roomStripsBuff: (roomSpell, buffSpell) => RoomBuffStrip.StripsBuff(roomSpell, buffSpell));
+        // The step into a hazard room waits for the answer to the `use` sent ahead
+        // of it, and through the round when that answer is that the round's cast was
+        // already made.
+        AutoHazardCounterProvisioner.SetStepHold(MovementCoordinator, (delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+        });
         // The refresh inside its window is sent by the between-round cast pass: one
         // cast a round, held while a sneak is being kept, then the fight's resume and
         // the re-sneak. Nothing is offered while the master switch is off. A `use`
@@ -8271,7 +8280,7 @@ public sealed class AppServices
             if (Health.HoldForRestHere()) return false;
             if (!LairDebuffHold.ReadyToEnter(LairEntryDebuffModeForNextStep())) return false;
             PreMoveGearOnce(ref _loopPreMoveGearFor, LoopRunner.PeekNextPlannedDirection());
-            HazardLastCallBeforeStep(LoopRunner.PeekNextPlannedDirection());
+            if (!HazardLastCallBeforeStep(LoopRunner.PeekNextPlannedDirection())) return false;
             return Stealth.ReadyToMoveSneaking();
         });
         LoopRunner.SetPreMoveHook(() =>
@@ -11259,10 +11268,14 @@ public sealed class AppServices
     // the sneak check. A `use` it sends ends the sneak, and sent here the `sn` that
     // follows is the held kind, answered before the step goes. Sent from the approach
     // hook, behind the check, its `sn` went out in one burst with the move.
-    private void HazardLastCallBeforeStep(Game.Map.Direction? direction)
+    // False while the step has to wait: for the answer to that `use`, or for the next
+    // round's cast when the game refused it for this round's. The provisioner holds
+    // its own movement gate meanwhile, and the gate's release re-drives the step.
+    private bool HazardLastCallBeforeStep(Game.Map.Direction? direction)
     {
         if (NextPlannedRoomForEquip(direction) is { } next)
             AutoHazardCounterProvisioner.OnApproachingRoom(next);
+        return !AutoHazardCounterProvisioner.HoldingStep;
     }
 
     // The room the character stands in, then the rooms the running walk or loop

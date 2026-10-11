@@ -265,6 +265,14 @@ public sealed class MovementCoordinator
     // debuff that cut the max wears off (GAME_MECHANICS "Too heavy to move (over max encumbrance)").
     public const string TooHeavyGate = "TooHeavy";
 
+    // Asserted by AutoHazardCounterProvisioner from a hazard counter's `use` sent
+    // ahead of a step into the room it protects in (the desert waterskin at its last
+    // call) until the game answers it, so the step goes in with the buff on. A `use`
+    // refused because the round's cast was already made keeps it for that round,
+    // until the next round's cast has sent it again. Capped both ways, so a `use` the
+    // game never answers can't strand the route. Engine-wait tier.
+    public const string HazardBuffGate = "HazardBuff";
+
     private const int HistoryCapacity = 200;
 
     private readonly LogService? _log;

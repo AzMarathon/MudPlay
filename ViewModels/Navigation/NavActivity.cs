@@ -88,6 +88,7 @@ public static class NavActivity
         (MovementCoordinator.SummonDeathSettleGate, "checking for a summon", NavActivityKind.Moving, false),
         (MovementCoordinator.DeathStallGate, "waiting to loot", NavActivityKind.Waiting, false),
         (MovementCoordinator.LairDebuffGate, "Waiting to Debuff", NavActivityKind.Waiting, true),
+        (MovementCoordinator.HazardBuffGate, "raising a hazard buff", NavActivityKind.Waiting, false),
     ];
 
     public static (string Text, NavActivityKind Kind) Describe(

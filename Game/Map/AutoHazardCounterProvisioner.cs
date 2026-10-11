@@ -149,7 +149,36 @@ public sealed class AutoHazardCounterProvisioner
 
     // Our last `use`, until its answer: what the buff's tracking was before it, to
     // put back if the game turns the `use` away.
-    private (int BuffSpell, int Item, DateTimeOffset SentAt, (DateTimeOffset OnSince, bool Confirmed)? Before)? _pending;
+    private SentUse? _pending;
+
+    //   Before       — the buff's tracking before the `use`, put back if it is refused.
+    //   CouldNotWait — it went out at the last call, not inside a window it could
+    //                  have waited in.
+    //   StepInto     — it went out ahead of a step into this room, held for its answer.
+    private readonly record struct SentUse(
+        int BuffSpell, int Item, DateTimeOffset SentAt, (DateTimeOffset OnSince, bool Confirmed)? Before,
+        bool CouldNotWait, Room? StepInto);
+
+    // A `use` that could not wait drew `You have already cast a spell this round!`.
+    // The game takes one such cast a round, so asking again before the round turns
+    // only draws the line again (and with Auto-Sneak on, a fresh `sn` each time).
+    // Until the cast pass has the next round's cast for it (FireDue), or the round
+    // has passed, no other road sends it.
+    private (RoomHazardIndex.BuffCounter Counter, Room? StepInto, DateTimeOffset Until)? _roundWait;
+
+    // Longer than the cast pass keeps its slot spent (5 s) by its 1 s heartbeat.
+    private static readonly TimeSpan RoundWait = TimeSpan.FromSeconds(6);
+
+    // How long a step waits for the answer to the `use` sent ahead of it: the wait a
+    // step gives a `sn`.
+    private static readonly TimeSpan StepAnswerCap = TimeSpan.FromSeconds(3);
+
+    // The step into a countered room waits on MovementCoordinator.HazardBuffGate for
+    // the answer to its `use`. Unbound (tests of the clock alone), nothing is held.
+    private MovementCoordinator? _coordinator;
+    private Action<TimeSpan, Action>? _schedule;
+    private bool _holdingStep;
+    private int _holdSeq;
 
     // Per source item: the game refused a `use` of it for a reason that holds (not
     // carried, no uses left, not usable), with the count carried at the time. Nothing
@@ -243,6 +272,53 @@ public sealed class AutoHazardCounterProvisioner
     // Test seam — bytes the engine asked to write to the wire.
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
+    // Bind the gate the step is held on, and the one-shot timer its caps run on.
+    public void SetStepHold(MovementCoordinator coordinator, Action<TimeSpan, Action> schedule)
+    {
+        ArgumentNullException.ThrowIfNull(coordinator);
+        ArgumentNullException.ThrowIfNull(schedule);
+        _coordinator = coordinator;
+        _schedule = schedule;
+    }
+
+    // The step ahead waits for a `use`'s answer, or for the round's cast. Asked by
+    // both engines' ready checks right after the step's last call.
+    public bool HoldingStep => _holdingStep;
+
+    private void HoldStep(TimeSpan cap, string why)
+    {
+        if (_coordinator is null) return;
+        if (!_holdingStep)
+        {
+            _holdingStep = true;
+            _coordinator.AssertGate(MovementCoordinator.HazardBuffGate, nameof(AutoHazardCounterProvisioner), why);
+        }
+        int seq = ++_holdSeq;
+        _schedule?.Invoke(cap, () =>
+        {
+            if (seq != _holdSeq) return;
+            _roundWait = null;
+            ReleaseStep("no answer in time — moving on");
+        });
+    }
+
+    private void ReleaseStep(string why)
+    {
+        if (!_holdingStep) return;
+        _holdingStep = false;
+        _holdSeq++;
+        _coordinator?.ClearGate(MovementCoordinator.HazardBuffGate, nameof(AutoHazardCounterProvisioner), why);
+    }
+
+    // True while a round refusal is being waited out.
+    private bool InRoundWait()
+    {
+        if (_roundWait is not { } wait) return false;
+        if (_now() < wait.Until) return true;
+        _roundWait = null;
+        return false;
+    }
+
     // ----- the buff's clock ------------------------------------------------
 
     // How long the buff lasts: the spell's Dur in spell rounds at 3 s each, taken at
@@ -281,6 +357,8 @@ public sealed class AutoHazardCounterProvisioner
         _pausedAt = _now();
         _pending = null;
         _awaitingSwig = false;
+        _roundWait = null;
+        ReleaseStep("the link dropped");
         if (_on.Count > 0)
             _log?.Info(LogCategory, $"buff clock paused (the link dropped) — {TimeLeftText()}, held until back in the game");
     }
@@ -313,6 +391,8 @@ public sealed class AutoHazardCounterProvisioner
         bool known = _on.Count > 0;
         _on.Clear();
         _pending = null;
+        _roundWait = null;
+        ReleaseStep(why);
         _refusedAtCount.Clear();
         _buffLines = null;
         _dueSaid = DueSaid.Nothing;
@@ -373,7 +453,7 @@ public sealed class AutoHazardCounterProvisioner
         foreach (RoomHazardIndex.BuffCounter counter in hazard.BuffCounters)
         {
             Arm(counter);
-            TryRaiseBuff(counter, room);
+            TryRaiseBuff(counter, room, aheadOfStep: true);
         }
     }
 
@@ -391,12 +471,15 @@ public sealed class AutoHazardCounterProvisioner
         foreach (RoomHazardIndex.BuffCounter counter in hazard.BuffCounters)
         {
             Arm(counter);
-            TryRaiseBuff(counter, r);
+            TryRaiseBuff(counter, r, aheadOfStep: false);
         }
     }
 
-    private void TryRaiseBuff(RoomHazardIndex.BuffCounter counter, Room room)
+    private void TryRaiseBuff(RoomHazardIndex.BuffCounter counter, Room room, bool aheadOfStep)
     {
+        // The round's cast is spent, by the game's own word: the cast pass sends this
+        // when it has the next one.
+        if (InRoundWait()) return;
         if (SourceToUse(counter) is not int pick) return;
 
         DateTimeOffset now = _now();
@@ -409,7 +492,7 @@ public sealed class AutoHazardCounterProvisioner
 
         // Read before the send: the `use` itself ends the sneak being kept.
         bool overSneak = _sneakKept?.Invoke() == true;
-        if (SendUse(counter, pick, now) is not { } name) return;
+        if (SendUse(counter, pick, now, couldNotWait: true, stepInto: aheadOfStep ? room : null) is not { } name) return;
         _log?.Info(LogCategory, overSneak
             ? $"forced: `use {name}` for buff {counter.BuffSpell} before {Describe(room)} — it could not wait for a room with no NPCs, and the sneak is spent here"
             : $"used `use {name}` for buff {counter.BuffSpell} before {Describe(room)} ({Lasts(counter)})");
@@ -516,7 +599,9 @@ public sealed class AutoHazardCounterProvisioner
         if (MasterSwitchOff?.Invoke() == true) return false;
         if (OutOfCharges(counter, pick)) return false;
         Arm(counter);
-        if (SendUse(counter, pick, _now()) is not { } name) return false;
+        // A step still waiting on this `use` waits on for its answer.
+        Room? stepInto = _holdingStep ? _roundWait?.StepInto : null;
+        if (SendUse(counter, pick, _now(), couldNotWait: mustGoNow, stepInto) is not { } name) return false;
         string place = where is null ? "" : $" {Describe(where)}";
         _log?.Info(LogCategory, sneakKept
             ? $"forced: `use {name}` for buff {counter.BuffSpell}{place} — no room with no NPCs turned up in time, and the sneak is spent here"
@@ -536,6 +621,24 @@ public sealed class AutoHazardCounterProvisioner
         left = null;
         where = null;
         if (_pausedAt is not null) return null;
+
+        // Owed from a round refusal: due wherever the character stands, and it can't
+        // wait, since it couldn't when it was first sent.
+        if (InRoundWait() && _roundWait is { } owed)
+        {
+            if (SourceToUse(owed.Counter) is int owedItem && _itemName(owedItem) is { Length: > 0 } owedName)
+            {
+                counter = owed.Counter;
+                pick = owedItem;
+                mustGoNow = true;
+                left = RemainingOf(owed.Counter, _now());
+                where = owed.StepInto;
+                return owedName;
+            }
+            _roundWait = null;
+            ReleaseStep("nothing left to use");
+        }
+
         // No walk has to be running: asked whether the refresh should also run for a
         // character standing in a countered room by hand, "if auto master toggle is
         // on, yes, if off, no" (user, 2026-10-10). The switch is asked by whoever
@@ -596,8 +699,10 @@ public sealed class AutoHazardCounterProvisioner
         {
             _on[buffSpell] = (_now(), true);
             _pending = null;
+            _roundWait = null;
             _refusedAtCount.Clear();
             if (_activeCounter is { } armed && armed.BuffSpell == buffSpell) _awaitingSwig = false;
+            ReleaseStep("the buff is on");
             return;
         }
         if (_pending is { } sent && TakeRefusal(line, sent)) return;
@@ -623,9 +728,10 @@ public sealed class AutoHazardCounterProvisioner
 
     // The Stock engine's answers to a `use` it won't carry out (GAME_MECHANICS
     // "Equip → use → restore swap for a readied buff item"), read only right behind
-    // a `use` of ours. The round refusal is tried again a round later; the others
-    // hold until the pack changes, since asking again would only draw the same line.
-    private bool TakeRefusal(string line, (int BuffSpell, int Item, DateTimeOffset SentAt, (DateTimeOffset OnSince, bool Confirmed)? Before) sent)
+    // a `use` of ours. The round refusal is tried again a round later, by whichever
+    // road sent it; the others hold until the pack changes, since asking again would
+    // only draw the same line.
+    private bool TakeRefusal(string line, SentUse sent)
     {
         if (_now() - sent.SentAt > AnswerWindow)
         {
@@ -653,6 +759,20 @@ public sealed class AutoHazardCounterProvisioner
         _log?.Info(LogCategory,
             $"refused: `use {_itemName(sent.Item) ?? sent.Item.ToString()}` for buff {sent.BuffSpell} — {why}"
             + (again ? "" : "; not sent again until the pack changes"));
+
+        // One that could wait is offered to the cast pass again as before, and the
+        // pass keeps to a cast a round. One that couldn't is owed to that pass now,
+        // and a step waiting on it waits out the round with it.
+        if (again && sent.CouldNotWait && CounterOf(sent.BuffSpell) is { } counter)
+        {
+            _roundWait = (counter, sent.StepInto, _now() + RoundWait);
+            if (sent.StepInto is not null) HoldStep(RoundWait, "waiting for the next round's cast to send the `use` again");
+            else ReleaseStep("the `use` was refused");
+        }
+        else
+        {
+            ReleaseStep("the `use` was refused");
+        }
         return true;
     }
 
@@ -707,10 +827,13 @@ public sealed class AutoHazardCounterProvisioner
             return;
         }
         if (_sendBlocked?.Invoke() == true) return;
+        // The game has just said the round's cast is spent: the cast pass sends the
+        // `use` with the next one.
+        if (InRoundWait()) return;
 
         // Read before the send: the `use` itself ends the sneak being kept.
         bool overSneak = _sneakKept?.Invoke() == true;
-        if (SendUse(counter, pick, _now()) is not { } name) return;
+        if (SendUse(counter, pick, _now(), couldNotWait: true, stepInto: null) is not { } name) return;
         _log?.Info(LogCategory,
             $"re-raised buff {counter.BuffSpell} with `use {name}` on lapse prompt — it ran out sooner than its timer said"
             + (overSneak ? "; the sneak is spent here" : ""));
@@ -733,8 +856,11 @@ public sealed class AutoHazardCounterProvisioner
     // `use` the carried source item: stamp the buff as on from now, remember what it
     // was before in case the game turns the `use` away, and latch _awaitingSwig for
     // the swig confirmation. Returns the item name used, or null when the item
-    // resolves to no name (nothing sent).
-    private string? SendUse(in RoomHazardIndex.BuffCounter counter, int itemId, DateTimeOffset now)
+    // resolves to no name (nothing sent). couldNotWait: it went out at the last call.
+    // stepInto: it went out ahead of a step into that room, which then waits on the
+    // answer, so it goes in with the buff on or not until the game has said why not.
+    private string? SendUse(
+        in RoomHazardIndex.BuffCounter counter, int itemId, DateTimeOffset now, bool couldNotWait, Room? stepInto)
     {
         string? name = _itemName(itemId);
         if (string.IsNullOrWhiteSpace(name))
@@ -743,13 +869,17 @@ public sealed class AutoHazardCounterProvisioner
             return null;
         }
         _wire.Send($"use {name}");
-        _pending = (counter.BuffSpell, itemId, now,
-            _on.TryGetValue(counter.BuffSpell, out (DateTimeOffset OnSince, bool Confirmed) before) ? before : null);
+        _pending = new SentUse(counter.BuffSpell, itemId, now,
+            _on.TryGetValue(counter.BuffSpell, out (DateTimeOffset OnSince, bool Confirmed) before) ? before : null,
+            couldNotWait, stepInto);
         _on[counter.BuffSpell] = (now, false);
         _awaitingSwig = true;
         _announcedOut = false;
         _dueSaid = DueSaid.Nothing;
         _waitLogged = false;
+        _roundWait = null;
+        if (stepInto is not null) HoldStep(StepAnswerCap, $"waiting for the answer to `use {name}` before the step");
+        else ReleaseStep("the `use` went out");
         UseSent?.Invoke();
         return name;
     }
@@ -837,6 +967,11 @@ public sealed class AutoHazardCounterProvisioner
         }
         foreach ((int item, int count) in _refusedAtCount)
             lines.Add($"{_itemName(item) ?? $"item {item}"}: a `use` was refused or it has no charges; nothing sent while {count} are carried");
+        if (InRoundWait())
+            lines.Add("a `use` was refused for the round's cast already made; the cast pass sends it with the next one"
+                + (_holdingStep ? ", and the step waits for it" : ""));
+        else if (_holdingStep)
+            lines.Add("the step waits for the answer to a `use`");
         if (_dueSaid != DueSaid.Nothing)
             lines.Add(_dueSaid == DueSaid.CannotWait ? "a `use` is due and can't wait"
                 : _waitLogged ? "a `use` is due, waiting for a room with no NPCs"

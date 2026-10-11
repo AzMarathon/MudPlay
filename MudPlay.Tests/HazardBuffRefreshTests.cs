@@ -84,6 +84,9 @@ public sealed class HazardBuffRefreshTests : IDisposable
         public bool AutoSneak = true;
         public List<RoomKey> RoomsAhead = new() { Dunes };
         public List<string> Wire { get; } = new();
+        // The gate a step is held on, and the one-shot timers its caps were given.
+        public MovementCoordinator Coordinator { get; } = new();
+        public List<(TimeSpan After, Action Run)> Timers { get; } = new();
         public int UsesSent;
         public int SneakSpent;
         public LogService Log { get; } = new();
@@ -120,6 +123,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
                 roomStripsBuff: (roomSpell, buffSpell) =>
                     roomSpell == NegateMagic || (roomSpell == StopDrowning && buffSpell is 512 or 513));
             Engine.SetWireSender(b => Wire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+            Engine.SetStepHold(Coordinator, (after, run) => Timers.Add((after, run)));
             Engine.UseSent += () => UsesSent++;
             Engine.SneakSpentHere += () => SneakSpent++;
             ProfileService profile = new();
@@ -305,7 +309,9 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Assert.Empty(f.Engine.DescribeTracking());
 
         f.Engine.OnApproachingRoom(Dunes);
-        string sent = Assert.Single(f.Engine.DescribeTracking());
+        IReadOnlyList<string> described = f.Engine.DescribeTracking();
+        string sent = described[0];
+        Assert.Equal("the step waits for the answer to a `use`", described[1]);
         Assert.Contains("buff 300: on since", sent);
         Assert.Contains("a `use` went out; its line not seen", sent);
         Assert.Contains("in 1800 s", sent);
@@ -525,6 +531,99 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Assert.Contains(f.LogLines, l => l.Contains("refused: `use waterskin` for buff 300 — already cast this round"));
         Assert.True(f.Engine.FireDue(sneakKept: false));
         Assert.Equal(2, f.Wire.Count);
+    }
+
+    // The same refusal answering a `use` that could not wait (the step's last call):
+    // the game takes one such cast a round, so asking again at once only draws the
+    // line again. Nothing more goes out by the step's road; the cast pass is owed it,
+    // wherever the character stands, and sends it when it has the next round's cast.
+    [Fact]
+    public void RoundRefusal_AtTheStep_IsNotAskedAgain_UntilThePassHasTheNextRoundsCast()
+    {
+        Field f = new() { AutoSneak = false, RoomsAhead = new() { Oasis, Dunes } };
+        for (int i = 0; i < 6; i++)
+        {
+            f.Engine.OnApproachingRoom(Dunes);
+            f.Engine.OnServerLine("You have already cast a spell this round!");
+        }
+        Assert.Equal(new[] { "use waterskin" }, f.Wire);
+        Assert.True(f.Engine.HoldingStep);
+        Assert.True(f.Coordinator.IsGateAsserted(MovementCoordinator.HazardBuffGate));
+        Assert.Contains(f.Engine.DescribeTracking(), l => l.Contains("the cast pass sends it with the next one, and the step waits for it"));
+
+        Assert.Equal(("use waterskin", true), f.Engine.DueNow());
+        Assert.True(f.Engine.FireDue(sneakKept: false));
+        Assert.Equal(2, f.Wire.Count);
+        Assert.True(f.Engine.HoldingStep);          // now for that one's answer
+
+        f.Engine.OnServerLine(SwigLine);
+        Assert.False(f.Engine.HoldingStep);
+        Assert.False(f.Coordinator.IsPaused);
+        f.Engine.OnApproachingRoom(Dunes);
+        Assert.Equal(2, f.Wire.Count);
+    }
+
+    // The round passes and the pass never had a cast for it (the switch went off, a
+    // menu had the keyboard): the step is let go, and asks its last call afresh.
+    [Fact]
+    public void RoundRefusal_AtTheStep_IsBoundedByTheRound()
+    {
+        Field f = new() { AutoSneak = false };
+        f.Engine.OnApproachingRoom(Dunes);
+        f.Engine.OnServerLine("You have already cast a spell this round!");
+        Assert.Equal(TimeSpan.FromSeconds(6), f.Timers[^1].After);
+
+        f.Advance(6);
+        f.Timers[^1].Run();
+
+        Assert.False(f.Engine.HoldingStep);
+        f.Engine.OnApproachingRoom(Dunes);
+        Assert.Equal(2, f.Wire.Count);
+    }
+
+    // The step waits for the answer to the `use` sent ahead of it, so it goes in with
+    // the buff on; an answer that never comes holds it three seconds and no longer.
+    [Fact]
+    public void TheStep_WaitsForTheUsesAnswer_AndNoLongerThanItsCap()
+    {
+        Field f = new();
+        f.Engine.OnApproachingRoom(Dunes);
+        Assert.True(f.Engine.HoldingStep);
+        Assert.Equal(TimeSpan.FromSeconds(3), f.Timers[^1].After);
+
+        f.Timers[^1].Run();
+        Assert.False(f.Engine.HoldingStep);
+        Assert.False(f.Coordinator.IsPaused);
+
+        // A refusal that holds lets the step go as well: there is nothing to wait for.
+        Field g = new();
+        g.Engine.OnApproachingRoom(Dunes);
+        g.Engine.OnServerLine("There are no more uses in waterskin.");
+        Assert.False(g.Engine.HoldingStep);
+
+        // A follower has no step of its own to hold.
+        Field h = new() { WalkActive = false, Following = true };
+        h.Engine.OnArrivedInRoom(Dunes);
+        Assert.Single(h.Wire);
+        Assert.False(h.Engine.HoldingStep);
+    }
+
+    // The thirst line's own `use` keeps to the round as well: refused for the round's
+    // cast, the next thirst line sends nothing, and the pass is owed it.
+    [Fact]
+    public void RoundRefusal_OfTheLapseLinesUse_IsLeftToThePass()
+    {
+        Field f = new();
+        f.Engine.OnApproachingRoom(Dunes);
+        f.Engine.OnServerLine(SwigLine);
+        f.Advance(100);
+
+        f.Engine.OnServerLine(ThirstLine);
+        f.Engine.OnServerLine("You have already cast a spell this round!");
+        f.Engine.OnServerLine(ThirstLine);
+
+        Assert.Equal(2, f.Wire.Count);
+        Assert.Equal(("use waterskin", true), f.Engine.DueNow());
     }
 
     // The game says the item isn't there, or is spent: asking again would only draw
@@ -982,58 +1081,142 @@ public sealed class HazardBuffRefreshTests : IDisposable
         ]
         """;
 
-    // The last call is asked ahead of the sneak check, so the `sn` behind the `use`
-    // is the held kind: the step waits for its answer and goes out sneaked.
-    [Fact]
-    public void Walker_LastCallAheadOfTheSneakCheck_UseThenSnAnswered_ThenTheStep()
+    // The walker at the oasis, one step from the desert, wired as the app wires it:
+    // the hazard counter's last call in the ready check ahead of the sneak check, its
+    // step hold on the walker's own coordinator, and a `use` followed by the re-sneak.
+    private sealed class Crossing : IDisposable
     {
-        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), RoomsJson);
-        GameDataCache cache = new(_root);
-        cache.SwitchSet("alpha");
-        RoomGraphManager graph = new(cache);
-        graph.OnActiveSetChanged("alpha");
-        RoomTracker tracker = new(graph);
-        tracker.SetLocated(Oasis);
-        MovementCoordinator coordinator = new();
-        AutoWalkManager walker = new(graph, new BfsMapper(graph), tracker, coordinator);
+        public Field Field { get; } = new();
+        public List<string> Wire { get; } = new();
+        public AutoWalkManager Walker { get; }
+        private readonly MessageRouter _router = new();
+        private readonly StealthManager _stealth;
 
-        MessageRouter router = new();
-        DefaultPatterns.Seed(router);
-        StealthManager stealth = new(router, new PlayerState(), new LogService());
-        stealth.SetAutoToggles(() => true, () => false);
-        stealth.SetEngineDrivingCheck(() => true);
-        stealth.SetMovementCoordinator(coordinator);
-        void Feed(string line) => router.Dispatch(new LineExtractor.EmittedLine(
-            line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+        public Crossing(string root, bool autoSneak)
+        {
+            Directory.CreateDirectory(Path.Combine(root, "alpha"));
+            File.WriteAllText(Path.Combine(root, "alpha", "Rooms.json"), RoomsJson);
+            GameDataCache cache = new(root);
+            cache.SwitchSet("alpha");
+            RoomGraphManager graph = new(cache);
+            graph.OnActiveSetChanged("alpha");
+            RoomTracker tracker = new(graph);
+            tracker.SetLocated(Oasis);
+            MovementCoordinator coordinator = new();
+            Walker = new AutoWalkManager(graph, new BfsMapper(graph), tracker, coordinator);
 
-        Field f = new();
-        List<string> wire = new();
-        void Send(byte[] bytes)
+            DefaultPatterns.Seed(_router);
+            _stealth = new StealthManager(_router, new PlayerState(), new LogService());
+            _stealth.SetAutoToggles(() => autoSneak, () => false);
+            _stealth.SetEngineDrivingCheck(() => true);
+            _stealth.SetMovementCoordinator(coordinator);
+
+            Field.AutoSneak = autoSneak;
+            Field.RoomsAhead = new() { Oasis, Dunes };
+            Field.Engine.SetWireSender(Send);
+            Field.Engine.SetStepHold(coordinator, (after, run) => Field.Timers.Add((after, run)));
+            Field.Engine.UseSent += _stealth.ReSneakAfterCast;   // what CastFired does in the app
+            _stealth.SetWireSender(Send);
+            Walker.SetWireSender(Send);
+            Walker.SetMoveReadyCheck(() =>
+            {
+                Field.Engine.OnApproachingRoom(Dunes);
+                return !Field.Engine.HoldingStep && _stealth.ReadyToMoveSneaking();
+            });
+            Walker.SetApproachRoomHook(Field.Engine.OnApproachingRoom);
+            Walker.SetPreMoveHook(_stealth.RequestPreMoveStealth);
+            if (autoSneak) Feed("Sneaking...");
+        }
+
+        private void Send(byte[] bytes)
         {
             string command = Encoding.Latin1.GetString(bytes).TrimEnd('\r');
-            wire.Add(command);
-            stealth.NoteCommandSent(command, () => false, items: null);
+            Wire.Add(command);
+            _stealth.NoteCommandSent(command, () => false, items: null);
         }
-        f.Engine.SetWireSender(Send);
-        f.Engine.UseSent += stealth.ReSneakAfterCast;   // what CastFired does in the app
-        stealth.SetWireSender(Send);
-        walker.SetWireSender(Send);
-        walker.SetMoveReadyCheck(() =>
+
+        // A line from the game, to the provisioner and to everything on the router.
+        public void Feed(string line)
         {
-            f.Engine.OnApproachingRoom(Dunes);
-            return stealth.ReadyToMoveSneaking();
-        });
-        walker.SetApproachRoomHook(f.Engine.OnApproachingRoom);
-        walker.SetPreMoveHook(stealth.RequestPreMoveStealth);
-        Feed("Sneaking...");
+            Field.Engine.OnServerLine(line);
+            _router.Dispatch(new LineExtractor.EmittedLine(
+                line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+        }
 
-        Assert.True(walker.WalkTo(Dunes));
-        Assert.Equal(new[] { "use waterskin", "sn" }, wire);   // the step waits on the `sn`
-        Assert.True(stealth.IsHoldingForSneakAnswer);
+        public void Dispose() => _stealth.Dispose();
+    }
 
-        Feed("Attempting to sneak...");
+    private const string RoundRefusal = "You have already cast a spell this round!";
 
-        Assert.Equal(new[] { "use waterskin", "sn", "n" }, wire);
+    // The last call is asked ahead of the sneak check, so the `sn` behind the `use`
+    // is the held kind. The step waits for both answers and goes out sneaked, with
+    // the buff on.
+    [Fact]
+    public void Walker_AutoSneakOn_UseThenSn_BothAnswered_ThenTheStep()
+    {
+        using Crossing c = new(_root, autoSneak: true);
+
+        Assert.True(c.Walker.WalkTo(Dunes));
+        Assert.Equal(new[] { "use waterskin", "sn" }, c.Wire);
+
+        c.Feed("Attempting to sneak...");
+        Assert.Equal(new[] { "use waterskin", "sn" }, c.Wire);   // the drink not yet answered
+        c.Feed(SwigLine);
+
+        Assert.Equal(new[] { "use waterskin", "sn", "n" }, c.Wire);
+    }
+
+    // The round's cast was already made, so the `use` is refused. It is not asked
+    // again at each answered `sn` (a `use` and a fresh sneak roll per refusal, as it
+    // was): the step waits out the round, the cast pass sends the `use` with the next
+    // round's cast, and the step follows its answers.
+    [Fact]
+    public void Walker_AutoSneakOn_RoundRefusal_WaitsOutTheRound_ThenOneUseAndTheStep()
+    {
+        using Crossing c = new(_root, autoSneak: true);
+        Assert.True(c.Walker.WalkTo(Dunes));
+
+        for (int i = 0; i < 5; i++)
+        {
+            c.Feed(RoundRefusal);
+            c.Feed("Attempting to sneak...");
+        }
+        Assert.Equal(new[] { "use waterskin", "sn" }, c.Wire);
+
+        Assert.True(c.Field.Engine.FireDue(sneakKept: false));   // the pass, with the next round's cast
+        c.Feed(SwigLine);
+        c.Feed("Attempting to sneak...");
+
+        Assert.Equal(new[] { "use waterskin", "sn", "use waterskin", "sn", "n" }, c.Wire);
+    }
+
+    // With Auto-Sneak off nothing else holds the step, and it went in on the heels of
+    // a `use` that might be refused. It waits for the drink's answer now.
+    [Fact]
+    public void Walker_AutoSneakOff_TheStepWaitsForTheDrink()
+    {
+        using Crossing c = new(_root, autoSneak: false);
+
+        Assert.True(c.Walker.WalkTo(Dunes));
+        Assert.Equal(new[] { "use waterskin" }, c.Wire);
+
+        c.Feed(SwigLine);
+        Assert.Equal(new[] { "use waterskin", "n" }, c.Wire);
+    }
+
+    [Fact]
+    public void Walker_AutoSneakOff_RoundRefusal_TheStepIsHeld_UntilTheNextRoundsUseIsAnswered()
+    {
+        using Crossing c = new(_root, autoSneak: false);
+        Assert.True(c.Walker.WalkTo(Dunes));
+
+        c.Feed(RoundRefusal);
+        Assert.Equal(new[] { "use waterskin" }, c.Wire);         // not walked in with the buff off
+
+        Assert.True(c.Field.Engine.FireDue(sneakKept: false));
+        Assert.Equal(new[] { "use waterskin", "use waterskin" }, c.Wire);
+        c.Feed(SwigLine);
+
+        Assert.Equal(new[] { "use waterskin", "use waterskin", "n" }, c.Wire);
     }
 }
