@@ -6486,7 +6486,8 @@ public sealed class AppServices
         Tick.HeartbeatElapsed += CounterWear.Poll;
         // What the game refused may be wearable on another level or alignment.
         Stats.ScreenParsed += _ => CounterWear.LiftRefusals("the stat screen was read");
-        Alignment.Refreshed += () => CounterWear.LiftRefusals("the alignment was read");
+        // The tracker raises Refreshed on every read; the counter lifts on a change.
+        Alignment.Refreshed += () => CounterWear.NoteAlignmentRead(Alignment.SelfAlignment);
         PlayerStats.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Game.PlayerStats.Level)) CounterWear.LiftRefusals("the level changed");

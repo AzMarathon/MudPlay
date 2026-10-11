@@ -551,6 +551,42 @@ public sealed class RoomSpellCounterWearTests
     }
 
     [Fact]
+    public void ARefusedWear_IsNotSentAgainByTheAlignmentReadItAsksFor_OnlyByAChangeOfAlignment()
+    {
+        // Every refusal has the client read the alignment (`pro`). Lifting the
+        // refusal on that read sent the wear again, to be refused again, for as
+        // long as the character stood in the lava.
+        World w = Volcano();
+        w.Pack.Remove("magma amulet");
+        w.Wear.NoteAlignmentRead("Neutral");           // known from before
+        w.Arrive(3);
+        for (int cycle = 0; cycle < 4; cycle++)
+        {
+            w.Gear.NoteWearRefused();                  // `You may not wear that item!`
+            w.Wear.NoteAlignmentRead("Neutral");       // the read the refusal asked for
+        }
+
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
+        Assert.False(w.Wear.WillWear(Feather));
+
+        w.Wear.NoteAlignmentRead("Good");              // it moved
+        Assert.Equal(new[] { "wear phoenix feather", "wear phoenix feather" }, w.Sent);
+    }
+
+    [Fact]
+    public void TheFirstAlignmentReading_IsNoChange()
+    {
+        World w = Volcano();
+        w.Pack.Remove("magma amulet");
+        w.Arrive(3);
+        w.Gear.NoteWearRefused();
+
+        w.Wear.NoteAlignmentRead("Neutral");           // never read before the refusal
+
+        Assert.Single(w.Sent);
+    }
+
+    [Fact]
     public void ARefusalOfAnotherWearSentFirst_IsNotTakenForOurs()
     {
         // A gear set's piece went out ahead of the counter's; the refusal that

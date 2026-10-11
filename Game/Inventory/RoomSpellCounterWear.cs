@@ -407,6 +407,21 @@ public sealed class RoomSpellCounterWear
         Recheck();
     }
 
+    // The alignment was read. Only a change of it lifts a refusal: a refused wear
+    // has the client read the alignment itself (it may be what moved), and lifting
+    // on that read sent the same wear again, to be refused again, for as long as
+    // the character stood by the hazard. The first reading is no change.
+    public void NoteAlignmentRead(string? alignment)
+    {
+        if (string.IsNullOrWhiteSpace(alignment)
+            || string.Equals(alignment, _alignment, StringComparison.OrdinalIgnoreCase)) return;
+        bool first = _alignment is null;
+        _alignment = alignment;
+        if (!first) LiftRefusals($"the alignment changed to {alignment}");
+    }
+
+    private string? _alignment;
+
     // The game said an item is on (`You are now wearing X.`). The equipment
     // manager's own pairing reports the wear it sent for us; this also takes the
     // line itself, for an answer that came after the wait was given up.
@@ -489,6 +504,7 @@ public sealed class RoomSpellCounterWear
         _late.Clear();
         _gaveUp.Clear();
         _takenOffHere = false;
+        _alignment = null;
         _lastArrived = null;
         _refused.Clear();
         _shelved.Clear();
