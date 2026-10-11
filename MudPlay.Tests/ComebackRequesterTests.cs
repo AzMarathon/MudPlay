@@ -1360,6 +1360,10 @@ public sealed class ComebackRequesterTests : IDisposable
     [InlineData("event 'my party is full' is on: fires on a timer, sends a command")]
     [InlineData("no event named 'path failed'")]
     [InlineData("event name 'come' matches 2: 'I can't come', 'I can't come 2'")]
+    [InlineData("events: 1 I can't come on, 2 Bank off")]
+    [InlineData("event 2 'I can't come' is already off")]
+    [InlineData("event 2 (unnamed) switched off; the run it has under way finishes")]
+    [InlineData("no event number 9: there are 4")]
     public void EventReplyNamingAnEvent_IsNoAnswerToTheComeback(string line)
     {
         using Harness h = NewFollower();

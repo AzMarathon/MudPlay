@@ -293,6 +293,10 @@ public sealed class PartyProbeManagerTests
     [InlineData("{event 'Farm 2' is already on}")]
     [InlineData("{no event named 'MudPlay 9.9.9'}")]
     [InlineData("{event name 'farm' matches 2: 'Farm 2', 'Farm 3'}")]
+    [InlineData("{events: 1 Farm on, 2 Bank off}")]
+    [InlineData("{event 2 'Farm' switched off}")]
+    [InlineData("{event 2 (unnamed) switched off}")]
+    [InlineData("{no event number 9: there are 4}")]
     public void EventReplyNamingAnEvent_IsNoVersion(string message) =>
         Assert.False(PartyProbeManager.TryParseVersion(message, out _));
 }

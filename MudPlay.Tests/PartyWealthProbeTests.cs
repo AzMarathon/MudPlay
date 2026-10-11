@@ -330,6 +330,8 @@ public sealed class PartyWealthProbeTests
     [InlineData("{event 'Sell run (= 5 copper)' is on: fires on a timer, sends a command}")]
     [InlineData("{no event named 'no coins on hand'}")]
     [InlineData("{event name '(= 5 copper)' matches 2: 'Sell run (= 5 copper)', 'Buy run (= 5 copper)'}")]
+    [InlineData("{events: 1 Sell run (= 5 copper) on, 2 Bank off}")]
+    [InlineData("{event 2 'Sell run (= 5 copper)' switched on}")]
     public void EventReplyNamingAnEventLikeAPurse_IsNoWealthReply(string line)
     {
         var h = new Harness();

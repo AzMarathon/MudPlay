@@ -45,6 +45,9 @@ public class WhereReplyParserTests
     [InlineData("{event 'Camp (map 1, room 5)' switched off}")]
     [InlineData("{no event named 'Camp (map 1, room 5)'}")]
     [InlineData("{event name 'camp (map 1, room 5)' matches 2: 'Camp (map 1, room 5)', 'Camp (map 1, room 5) b'}")]
+    [InlineData("{events: 1 Camp (map 1, room 5) on, 2 Bank off}")]
+    [InlineData("{event 3 'Camp (map 1, room 5)' switched off}")]
+    [InlineData("{event name 'camp' matches 2: 'Camp (map 1, room 5)' (numbers 1, 2); use a number in place of the name}")]
     public void EventReplyNamingAnEventAfterARoom_IsNoWhereReply(string message) =>
         Assert.False(WhereReplyParser.TryParseRoom(message, out _));
 

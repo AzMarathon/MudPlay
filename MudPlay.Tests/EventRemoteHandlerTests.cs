@@ -127,7 +127,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         r.Events.Add(BankTrip("Bank run"));
         r.Events.Add(Command("Sell junk", disabled: true));
 
-        Assert.Equal(new[] { Reply("events: Night stats on, Bank run on, Sell junk off") }, r.Ask("@events"));
+        Assert.Equal(new[] { Reply("events: 1 Night stats on, 2 Bank run on, 3 Sell junk off") }, r.Ask("@events"));
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         r.Events.Add(Command("Night stats"));
         r.Events.Add(LoopNobodySaved("Lair loop"));
 
-        Assert.Equal(new[] { Reply("events: Night stats on, Lair loop off (target missing)") }, r.Ask("@events"));
+        Assert.Equal(new[] { Reply("events: 1 Night stats on, 2 Lair loop off (target missing)") }, r.Ask("@events"));
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         r.Events.Add(Command("Night stats"));
         r.H.Profile.Current!.EventsGloballyDisabled = true;
 
-        Assert.Equal(new[] { Reply("events (all disabled): Night stats on") }, r.Ask("@events"));
+        Assert.Equal(new[] { Reply("events (all disabled): 1 Night stats on") }, r.Ask("@events"));
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         using Rig r = Build();
         r.Events.Add(Command(""));
 
-        Assert.Equal(new[] { Reply("events: (unnamed) on") }, r.Ask("@events"));
+        Assert.Equal(new[] { Reply("events: 1 (unnamed) on") }, r.Ask("@events"));
     }
 
     // More than one telepath holds: numbered parts, every event in one of them,
@@ -175,14 +175,18 @@ public sealed class EventRemoteHandlerTests : IDisposable
             Assert.StartsWith($"/{Friend} {{events ({i + 1}/{sent.Count}): ", sent[i]);
             Assert.True(sent[i].TrimEnd('\r').Length <= 225, sent[i]);
         }
+        // The numbering runs on through the parts: each event carries its place in
+        // the whole list, not in its part.
         string all = string.Concat(sent);
         int at = -1;
         for (int i = 1; i <= 30; i++)
         {
-            int found = all.IndexOf($"Scheduled event number {i:00} on", StringComparison.Ordinal);
+            int found = all.IndexOf($" {i} Scheduled event number {i:00} on", StringComparison.Ordinal);
             Assert.True(found > at, $"event {i} missing or out of order");
             at = found;
         }
+        Assert.Contains("): 1 Scheduled event number 01 on, 2 Scheduled", sent[0]);
+        Assert.DoesNotContain("): 1 ", sent[1]);
     }
 
     // What an event sends is the user's own: a password typed into a command, a
@@ -210,7 +214,8 @@ public sealed class EventRemoteHandlerTests : IDisposable
         ScheduledEvent e = Command("Night stats");
         r.Events.Add(e);
 
-        Assert.Equal(new[] { Reply("usage: @events lists them; @event <name> on|off switches one") }, r.Ask("@events off"));
+        Assert.Equal(
+            new[] { Reply("usage: @events lists them; @event <name or number> on|off switches one") }, r.Ask("@events off"));
         Assert.False(e.Disabled);
     }
 
@@ -320,7 +325,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         r.Events.Add(b);
 
         Assert.Equal(
-            new[] { Reply("event name 'bank run' matches 2: 'Morning bank run', 'Evening bank run'") },
+            new[] { Reply("event name 'bank run' matches 2: 'Morning bank run' (number 1), 'Evening bank run' (number 2)") },
             r.Ask("@event bank run off"));
         Assert.False(a.Disabled);
         Assert.False(b.Disabled);
@@ -345,7 +350,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         using Rig r = Build();
         r.Events.Add(BankTrip("Bank run"));
 
-        Assert.Equal(new[] { Reply("usage: @event <name> [on|off]") }, r.Ask(command));
+        Assert.Equal(new[] { Reply("usage: @event <name or number> [on|off]") }, r.Ask(command));
     }
 
     [Fact]
@@ -488,7 +493,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         ScheduledEvent e = BankTrip("Bank run");
         r.Events.Add(e);
 
-        Assert.Equal(new[] { Reply("events: Bank run on") }, r.Ask("@events!"));
+        Assert.Equal(new[] { Reply("events: 1 Bank run on") }, r.Ask("@events!"));
         Assert.Equal(new[] { Reply("event 'Bank run' switched off") }, r.Ask("@event! bank run off"));
         Assert.True(e.Disabled);
     }
@@ -502,7 +507,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         r.Engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Gangpath, Friend, "@events", $"{Friend} gangpaths: @events"));
         r.Engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Local, Friend, "@event bank run", $"{Friend} says: @event bank run"));
 
-        Assert.Equal("bg {events: Bank run on}\r", r.Sent[0]);
+        Assert.Equal("bg {events: 1 Bank run on}\r", r.Sent[0]);
         Assert.StartsWith($">{Friend} {{event 'Bank run' is on", r.Sent[1]);
     }
 
@@ -524,7 +529,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
             r.Engine.TryInvokeLocal("@event", new[] { "boss", "hunt", "on" }, replies.Add));
 
         Assert.Equal(
-            new[] { "events: Bank run on", "event 'Bank run' switched off", "no event named 'boss hunt'" }, replies);
+            new[] { "events: 1 Bank run on", "event 'Bank run' switched off", "no event named 'boss hunt'" }, replies);
         Assert.True(e.Disabled);
         Assert.Empty(r.Sent);               // nothing went out on a chat channel
         Assert.False(LocalApiActions_IsDestructive("@event"));
@@ -744,7 +749,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         r.Events.Add(Command("Bank run"));
 
         Assert.Equal(
-            new[] { Reply("event name 'bank run' matches 2 named 'Bank run': rename one to switch it") },
+            new[] { Reply("event name 'bank run' matches 2: 'Bank run' (numbers 1, 2); use a number in place of the name") },
             r.Ask("@event bank run off"));
     }
 
@@ -759,7 +764,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         r.Events.Add(Command("Sell run"));
 
         Assert.Equal(
-            new[] { Reply("event name 'run' matches 4: 'Bank run' (x3), 'Sell run'") },
+            new[] { Reply("event name 'run' matches 4: 'Bank run' (numbers 1, 2, 3), 'Sell run' (number 4); use a number in place of the name") },
             r.Ask("@event run"));
     }
 
@@ -773,9 +778,167 @@ public sealed class EventRemoteHandlerTests : IDisposable
             r.Events.Add(Command($"Patrol {place}"));
 
         Assert.Equal(
-            new[] { Reply("event name 'patrol' matches 7: 'Patrol north', 'Patrol south', 'Patrol east', 'Patrol west', +3 more") },
+            new[] { Reply("event name 'patrol' matches 7: 'Patrol north' (number 1), 'Patrol south' (number 2), 'Patrol east' (number 3), 'Patrol west' (number 4), +3 more") },
             r.Ask("@event patrol off"));
         Assert.All(r.Events.Events, e => Assert.False(e.Disabled));
+    }
+
+    // ----- by number -------------------------------------------------------------
+
+    // An event with no name can't be named: its number in the list reaches it.
+    // The answer says the number and that it has no name.
+    [Fact]
+    public void Event_ByNumber_AnUnnamedEvent_IsAskedAboutAndSwitched()
+    {
+        using Rig r = Build();
+        r.Events.Add(Command("Night stats"));
+        ScheduledEvent unnamed = Command("");
+        r.Events.Add(unnamed);
+        r.Events.Add(BankTrip("Bank run"));
+
+        Assert.Equal(new[] { Reply("events: 1 Night stats on, 2 (unnamed) on, 3 Bank run on") }, r.Ask("@events"));
+        Assert.Equal(
+            new[] { Reply("event 2 (unnamed) is on: fires on a timer, sends a command") }, r.Ask("@event 2"));
+        Assert.Equal(new[] { Reply("event 2 (unnamed) switched off") }, r.Ask("@event 2 off"));
+        Assert.True(unnamed.Disabled);
+        Assert.Equal(new[] { Reply("event 2 (unnamed) is already off") }, r.Ask("@event 2 disable"));
+        Assert.Equal(new[] { Reply("event 2 (unnamed) switched on") }, r.Ask("@event 2 enable"));
+        Assert.False(unnamed.Disabled);
+        Assert.All(new[] { r.Events.Events[0], r.Events.Events[2] }, e => Assert.False(e.Disabled));
+    }
+
+    // A named event by its number: the answer names it, so a sender whose list is
+    // out of date sees which event the number reached. "#3" is the same number.
+    [Fact]
+    public void Event_ByNumber_ANamedEvent_IsNamedInTheAnswer()
+    {
+        using Rig r = Build();
+        r.Events.Add(Command("Night stats"));
+        r.Events.Add(Command("Sell junk"));
+        ScheduledEvent bank = BankTrip("Bank run");
+        r.Events.Add(bank);
+
+        Assert.Equal(new[] { Reply("event 3 'Bank run' switched off") }, r.Ask("@event 3 off"));
+        Assert.True(bank.Disabled);
+        Assert.StartsWith("switched off by remote @event from Friend (by number 3) at ", r.Events.LastSwitch(bank));
+        Assert.Equal(new[] { Reply("event 3 'Bank run' switched on") }, r.Ask("@event #3 on"));
+        Assert.Equal(new[] { Reply("event 3 'Bank run' is already on") }, r.Ask("@event 3 on"));
+        Assert.StartsWith($"/{Friend} {{event 3 'Bank run' is on: fires ", Assert.Single(r.Ask("@event #3")));
+    }
+
+    [Fact]
+    public void Event_ByNumber_OneWhoseTargetIsMissing_IsRefusedByNumberAndName()
+    {
+        using Rig r = Build();
+        r.Events.Add(LoopNobodySaved("Lair loop"));
+
+        Assert.Equal(
+            new[] { Reply("event 1 'Lair loop' can't be switched on: its loop is missing") }, r.Ask("@event 1 on"));
+    }
+
+    // No such place in the list: refused with how many there are. Zero and a
+    // negative number are numbers too, and are not hunted for as names.
+    [Theory]
+    [InlineData("@event 4 off", "no event number 4: there are 3")]
+    [InlineData("@event 4", "no event number 4: there are 3")]
+    [InlineData("@event #9 on", "no event number 9: there are 3")]
+    [InlineData("@event 0", "no event number 0: there are 3")]
+    [InlineData("@event 0 off", "no event number 0: there are 3")]
+    [InlineData("@event -1 off", "no event number -1: there are 3")]
+    [InlineData("@event #-2", "no event number -2: there are 3")]
+    public void Event_ByANumberOutOfRange_IsRefusedWithHowManyThereAre(string command, string refusal)
+    {
+        using Rig r = Build();
+        r.Events.Add(Command("Night stats"));
+        r.Events.Add(Command("Sell junk"));
+        r.Events.Add(BankTrip("Bank run"));
+
+        Assert.Equal(new[] { Reply(refusal) }, r.Ask(command));
+        Assert.All(r.Events.Events, e => Assert.False(e.Disabled));
+    }
+
+    [Fact]
+    public void Event_ByANumberOutOfRange_WithOneEventOrNone_ReadsRight()
+    {
+        using Rig r = Build();
+        Assert.Equal(new[] { Reply("no event number 1: no events defined") }, r.Ask("@event 1 off"));
+
+        r.Events.Add(Command("Night stats"));
+        Assert.Equal(new[] { Reply("no event number 2: there is 1") }, r.Ask("@event 2 off"));
+    }
+
+    // An event whose whole name is a number: the name comes first, and the list
+    // shows both, so the sender can see which is which. "#1" is always the place.
+    [Fact]
+    public void Event_NamedWithANumber_TheNameWins_AndTheHashFormIsThePlace()
+    {
+        using Rig r = Build();
+        ScheduledEvent first = BankTrip("Bank run");
+        ScheduledEvent namedOne = Command("1");
+        r.Events.Add(first);
+        r.Events.Add(namedOne);
+        r.Events.Add(Command("Sell junk"));
+
+        Assert.Equal(new[] { Reply("event '1' switched off") }, r.Ask("@event 1 off"));
+        Assert.True(namedOne.Disabled);
+        Assert.False(first.Disabled);
+
+        Assert.Equal(new[] { Reply("event 1 'Bank run' switched off") }, r.Ask("@event #1 off"));
+        Assert.True(first.Disabled);
+        Assert.Equal(new[] { Reply("events: 1 Bank run off, 2 1 off, 3 Sell junk on") }, r.Ask("@events"));
+        Assert.Equal(new[] { Reply("event 2 '1' switched on") }, r.Ask("@event 2 on"));
+    }
+
+    // A number that is only part of a name is still a place: "3" is the third
+    // event, not the one called "Farm 3".
+    [Fact]
+    public void Event_ANumberThatIsOnlyPartOfAName_IsThePlace()
+    {
+        using Rig r = Build();
+        ScheduledEvent farm = Command("Farm 3");
+        ScheduledEvent third = Command("Sell junk");
+        r.Events.Add(farm);
+        r.Events.Add(BankTrip("Bank run"));
+        r.Events.Add(third);
+
+        Assert.Equal(new[] { Reply("event 3 'Sell junk' switched off") }, r.Ask("@event 3 off"));
+        Assert.True(third.Disabled);
+        Assert.False(farm.Disabled);
+        Assert.Equal(new[] { Reply("event 'Farm 3' switched off") }, r.Ask("@event farm 3 off"));
+    }
+
+    // Two events of one name can't be told apart by name. The refusal gives their
+    // numbers, and a number switches the one meant.
+    [Fact]
+    public void Event_TwoEventsOfOneName_AreSwitchedByNumber()
+    {
+        using Rig r = Build();
+        ScheduledEvent first = BankTrip("Bank run");
+        ScheduledEvent second = Command("Bank run");
+        r.Events.Add(Command("Night stats"));
+        r.Events.Add(first);
+        r.Events.Add(second);
+
+        Assert.Equal(
+            new[] { Reply("event name 'bank run' matches 2: 'Bank run' (numbers 2, 3); use a number in place of the name") },
+            r.Ask("@event bank run off"));
+        Assert.Equal(new[] { Reply("event 3 'Bank run' switched off") }, r.Ask("@event 3 off"));
+
+        Assert.True(second.Disabled);
+        Assert.False(first.Disabled);
+        Assert.Equal(new[] { Reply("events: 1 Night stats on, 2 Bank run on, 3 Bank run off") }, r.Ask("@events"));
+    }
+
+    // Many events of one name: the first four numbers, and how many more.
+    [Fact]
+    public void Event_ManyEventsOfOneName_TheRefusalGivesFourNumbers_AndHowManyMore()
+    {
+        using Rig r = Build();
+        for (int i = 0; i < 7; i++) r.Events.Add(Command("Bank run"));
+
+        Assert.Equal(
+            new[] { Reply("event name 'bank run' matches 7: 'Bank run' (numbers 1, 2, 3, 4 and 3 more); use a number in place of the name") },
+            r.Ask("@event bank run"));
     }
 
     // ----- long names ------------------------------------------------------------
@@ -804,7 +967,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
 
         List<string> sent = r.Ask("@events");
         all.AddRange(sent);
-        Assert.Equal(new[] { Reply($"events (all disabled): {LongNameShown} on") }, sent);
+        Assert.Equal(new[] { Reply($"events (all disabled): 1 {LongNameShown} on") }, sent);
 
         sent = r.Ask($"@event {LongName}");
         all.AddRange(sent);
@@ -846,7 +1009,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         List<string> ambiguous = r.Ask("@event scheduled tail off");
 
         Assert.True(list.Count > 3);
-        Assert.StartsWith($"/{Friend} {{events (all disabled) (1/{list.Count}): Scheduled aaa", list[0]);
+        Assert.StartsWith($"/{Friend} {{events (all disabled) (1/{list.Count}): 1 Scheduled aaa", list[0]);
         Assert.Equal(12, list.Sum(part => part.Split("off (target missing)").Length - 1));
         Assert.StartsWith($"/{Friend} {{event name 'scheduled tail' matches 24: 'Scheduled aaa", Assert.Single(ambiguous));
         Assert.EndsWith(" more}\r", ambiguous[0]);
@@ -863,7 +1026,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         using Rig r = Build();
         r.Events.Add(Command(new string('…', 40)));
 
-        Assert.Equal(new[] { Reply($"events: {new string('.', 37)}... on") }, r.Ask("@events"));
+        Assert.Equal(new[] { Reply($"events: 1 {new string('.', 37)}... on") }, r.Ask("@events"));
     }
 
     // ----- a condition event switched on -------------------------------------------
@@ -949,6 +1112,10 @@ public sealed class EventRemoteHandlerTests : IDisposable
         wire.AddRange(r.Ask($"@event {name} on"));
         wire.AddRange(r.Ask($"@event {name} on"));                // already on
         wire.AddRange(r.Ask($"@event {name} nowhere"));           // nothing of that name
+        wire.AddRange(r.Ask("@event 1"));                         // by number
+        wire.AddRange(r.Ask("@event 1 off"));
+        wire.AddRange(r.Ask("@event #1 on"));
+        wire.AddRange(r.Ask("@event 7 off"));                     // no such number
 
         r.Events.Add(Command(name));
         wire.AddRange(r.Ask($"@event {name}"));                   // fits two
@@ -957,8 +1124,15 @@ public sealed class EventRemoteHandlerTests : IDisposable
         ScheduledEvent lost = LoopNobodySaved(name + " loop");
         r.Events.Add(lost);
         wire.AddRange(r.Ask($"@event {name} loop on"));           // target missing
+        wire.AddRange(r.Ask("@event 2 on"));                      // and by number
         wire.AddRange(r.Ask("@events"));
         r.Events.Remove(lost);
+
+        ScheduledEvent unnamed = Command("");
+        r.Events.Add(unnamed);
+        wire.AddRange(r.Ask("@event 2"));                         // one with no name
+        wire.AddRange(r.Ask("@event 2 off"));
+        r.Events.Remove(unnamed);
 
         ScheduledEvent held = new()
         {
@@ -989,6 +1163,9 @@ public sealed class EventRemoteHandlerTests : IDisposable
     [InlineData("eventually coming to your location")]
     [InlineData("events are fun")]
     [InlineData("event horizon (map 1, room 5)")]
+    [InlineData("Event 3 (map 1, room 5)")]
+    [InlineData("event 3")]
+    [InlineData("event 12 hours from now")]
     [InlineData("1,200 gold (= 12,000 copper)")]
     [InlineData("MudPlay 3.179.0")]
     public void OtherReplies_AreNotEventReplies(string inner)

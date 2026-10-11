@@ -7,9 +7,13 @@ namespace MudPlay.Game.Remote;
 // @events and @event: a trusted player sees the character's Events (Settings →
 // Events) and switches one on or off.
 //
-//   @events                  every event's name and whether it is on.
+//   @events                  every event's number, name and whether it is on.
 //   @event <name>            that one event: on or off, and what kind it is.
 //   @event <name> on | off   switches it (enable / disable are taken too).
+//   @event <number> …        the same, for the event at that place in the list:
+//                            the way to one with no name, or to one of two that
+//                            share a name. "#3" is the number even when an event
+//                            is named "3".
 //
 // Both need AlterSettings, the grant the other commands that read or change how
 // the client is set up need (@settings, @profile, @auto-all). The engine checks
@@ -77,8 +81,11 @@ public sealed class EventRemoteHandler : IDisposable
             ctx.Reply(NoneDefined);
             return;
         }
+        // Each with its place in the list, the number @event takes for it: the only
+        // way to an event with no name, or to one of two with the same name.
         List<string> items = new(_events.Events.Count);
-        foreach (ScheduledEvent e in _events.Events) items.Add($"{Label(e)} {State(e)}");
+        for (int i = 0; i < _events.Events.Count; i++)
+            items.Add($"{i + 1} {Label(_events.Events[i])} {State(_events.Events[i])}");
         InventoryQueryHandler.ReplyChunked(ctx, _events.AllDisabled ? ListLabelAllDisabled : ListLabel, items);
     }
 
@@ -106,43 +113,86 @@ public sealed class EventRemoteHandler : IDisposable
             }
         }
 
-        IReadOnlyList<ScheduledEvent> found = _events.FindByName(name);
-        if (found.Count != 1)
+        // A number is a place in the list as @events numbers it. A name comes first:
+        // with an event whose whole name is "3", "@event 3" is that event. "#3" is
+        // always the place, so the third event can be reached even then.
+        ScheduledEvent e;
+        int? place = null;
+        if (TryPlace(name, out int number, out bool marked) && (marked || !IsAnEventsWholeName(name)))
         {
-            ctx.Refuse(found.Count == 0 ? $"{NoneNamedOpening}{Shown(name)}'" : Ambiguous(name, found));
-            return;
+            if (number < 1 || number > _events.Events.Count)
+            {
+                ctx.Refuse($"{NoNumberOpening}{number}: " + _events.Events.Count switch
+                {
+                    0 => NoneDefined,
+                    1 => "there is 1",
+                    int count => $"there are {count}",
+                });
+                return;
+            }
+            e = _events.Events[number - 1];
+            place = number;
         }
-        ScheduledEvent e = found[0];
+        else
+        {
+            IReadOnlyList<ScheduledEvent> found = _events.FindByName(name);
+            if (found.Count != 1)
+            {
+                ctx.Refuse(found.Count == 0 ? $"{NoneNamedOpening}{Shown(name)}'" : Ambiguous(name, found));
+                return;
+            }
+            e = found[0];
+        }
+
+        // Asked for by number, the answer says the number and the name both: the
+        // list may have changed since the sender read it, and the number then points
+        // at another event than the one they meant.
+        string subject = place is { } at
+            ? $"{NumberedOpening}{at} " + (IsNamed(e) ? $"'{Label(e)}'" : Label(e))
+            : $"{OneOpening}{Label(e)}'";
 
         if (switchOn is not { } on)
         {
             _log?.Debug(LogCategory, $"@event from {ctx.Sender}: asked about '{Label(e)}'");
-            ctx.Reply($"{OneOpening}{Label(e)}' is {State(e)}: {When(e)}, {Does(e)}"
+            ctx.Reply($"{subject} is {State(e)}: {When(e)}, {Does(e)}"
                 + (_events.AllDisabled ? "; all events are disabled" : ""));
             return;
         }
 
         bool wasRunning = _events.IsRunning(e);
-        switch (_events.SetEnabled(e, on, $"remote @event from {ctx.Sender}"))
+        string by = $"remote @event from {ctx.Sender}" + (place is { } n ? $" (by number {n})" : "");
+        switch (_events.SetEnabled(e, on, by))
         {
             case EventManager.SwitchResult.SwitchedOn:
-                ctx.Reply($"{OneOpening}{Label(e)}' switched on"
+                ctx.Reply($"{subject} switched on"
                     + (_events.AllDisabled ? "; all events are disabled, so it won't fire yet" : ""));
                 break;
             case EventManager.SwitchResult.SwitchedOff:
-                ctx.Reply($"{OneOpening}{Label(e)}' switched off"
+                ctx.Reply($"{subject} switched off"
                     + (wasRunning ? "; the run it has under way finishes" : ""));
                 break;
             case EventManager.SwitchResult.AlreadyOn:
-                ctx.Reply($"{OneOpening}{Label(e)}' is already on");
+                ctx.Reply($"{subject} is already on");
                 break;
             case EventManager.SwitchResult.AlreadyOff:
-                ctx.Reply($"{OneOpening}{Label(e)}' is already off");
+                ctx.Reply($"{subject} is already off");
                 break;
             case EventManager.SwitchResult.TargetMissing:
-                ctx.Refuse($"{OneOpening}{Label(e)}' can't be switched on: {MissingWhat(e)} is missing");
+                ctx.Refuse($"{subject} can't be switched on: {MissingWhat(e)} is missing");
                 break;
         }
+    }
+
+    // "3" or "#3": a place in the list. A signed number reads as one as well, so
+    // that "-1" is refused as a number out of range and not hunted for as a name.
+    private static bool TryPlace(string text, out int number, out bool marked)
+    {
+        marked = text.StartsWith('#');
+        string digits = marked ? text[1..] : text;
+        number = 0;
+        return digits.Length > 0 && digits[0] != '+'
+            && int.TryParse(digits, System.Globalization.NumberStyles.AllowLeadingSign,
+                System.Globalization.CultureInfo.InvariantCulture, out number);
     }
 
     // Every reply of the two commands opens with one of these: fixed words, ahead
@@ -151,11 +201,13 @@ public sealed class EventRemoteHandler : IDisposable
     private const string ListLabelAllDisabled = "events (all disabled)";
     private const string NoneDefined = "no events defined";
     private const string OneOpening = "event '";
+    private const string NumberedOpening = "event ";      // then the number, then the name
     private const string AmbiguousOpening = "event name '";
     private const string NoneNamedOpening = "no event named '";
+    private const string NoNumberOpening = "no event number ";
     private const string UsageOpening = "usage: @event";
-    private const string Usage = UsageOpening + " <name> [on|off]";
-    private const string ListUsage = UsageOpening + "s lists them; @event <name> on|off switches one";
+    private const string Usage = UsageOpening + " <name or number> [on|off]";
+    private const string ListUsage = UsageOpening + "s lists them; @event <name or number> on|off switches one";
 
     // Whether the text inside a braced reply is one of @events' or @event's own
     // lines. All but the fixed ones carry an event's name, or the name the sender
@@ -166,13 +218,29 @@ public sealed class EventRemoteHandler : IDisposable
     {
         ArgumentNullException.ThrowIfNull(inner);
         return OpensWith(inner, ListLabel + ": ") || OpensWith(inner, ListLabel + " (")
-            || OpensWith(inner, OneOpening) || OpensWith(inner, AmbiguousOpening)
-            || OpensWith(inner, NoneNamedOpening) || OpensWith(inner, NoneDefined)
-            || OpensWith(inner, UsageOpening);
+            || OpensWith(inner, OneOpening) || OpensNumbered(inner) || OpensWith(inner, AmbiguousOpening)
+            || OpensWith(inner, NoneNamedOpening) || OpensWith(inner, NoNumberOpening)
+            || OpensWith(inner, NoneDefined) || OpensWith(inner, UsageOpening);
     }
 
     private static bool OpensWith(string text, string opening) =>
         text.StartsWith(opening, StringComparison.OrdinalIgnoreCase);
+
+    // "event 3 'Bank run' …" or "event 3 (unnamed) …". The number and what follows
+    // it are checked, and not the word alone: a room can be called "Event Horizon",
+    // and a @where naming it is no reply of ours.
+    private static bool OpensNumbered(string inner)
+    {
+        if (!OpensWith(inner, NumberedOpening)) return false;
+        int i = NumberedOpening.Length;
+        while (i < inner.Length && char.IsAsciiDigit(inner[i])) i++;
+        if (i == NumberedOpening.Length || i + 1 >= inner.Length || inner[i] != ' ') return false;
+        return inner[i + 1] == '\'' || inner.AsSpan(i + 1).StartsWith(Unnamed, StringComparison.Ordinal);
+    }
+
+    private const string Unnamed = "(unnamed)";
+
+    private static bool IsNamed(ScheduledEvent e) => !string.IsNullOrWhiteSpace(e.Name);
 
     private bool IsAnEventsWholeName(string typed)
     {
@@ -189,38 +257,43 @@ public sealed class EventRemoteHandler : IDisposable
     };
 
     // The refusal for a name that fits several events. Each distinct name is said
-    // once, with how many events bear it: two events of one name can't be told
-    // apart by name, and saying the name twice tells the sender nothing. As many
-    // names as fit one telepath, four at most, and how many more there are.
-    private static string Ambiguous(string typed, IReadOnlyList<ScheduledEvent> found)
+    // once, with the numbers of the events that bear it: saying a name twice tells
+    // the sender nothing, and the number is what singles one out. Two events of
+    // one name can't be told apart by name at all, so a refusal that holds such a
+    // pair says to use a number. As many names as fit one telepath, four at most,
+    // and how many more there are.
+    private string Ambiguous(string typed, IReadOnlyList<ScheduledEvent> found)
     {
-        List<(string Name, int Count)> names = found
+        List<(string Name, List<int> Places)> names = found
             .GroupBy(e => e.Name.Trim(), StringComparer.OrdinalIgnoreCase)
-            .Select(g => (Label(g.First()), g.Count()))
+            .Select(g => (Label(g.First()), g.Select(e => _events.Events.IndexOf(e) + 1).ToList()))
             .ToList();
         string head = $"{AmbiguousOpening}{Shown(typed)}' matches {found.Count}";
-        if (names.Count == 1) return $"{head} named '{names[0].Name}': rename one to switch it";
 
         List<string> said = new();
         int length = head.Length;
-        foreach ((string name, int count) in names)
+        foreach ((string name, List<int> places) in names)
         {
-            string part = count > 1 ? $"'{name}' (x{count})" : $"'{name}'";
+            string numbers = string.Join(", ", places.Take(MaxNumbersForAName))
+                + (places.Count > MaxNumbersForAName ? $" and {places.Count - MaxNumbersForAName} more" : "");
+            string part = $"'{name}' ({(places.Count == 1 ? "number" : "numbers")} {numbers})";
             if (said.Count == MaxNamesInARefusal) break;
             if (said.Count > 0 && length + 2 + part.Length > RefusalBudget) break;
             said.Add(part);
             length += 2 + part.Length;
         }
         string more = said.Count < names.Count ? $", +{names.Count - said.Count} more" : "";
-        return $"{head}: {string.Join(", ", said)}{more}";
+        string useANumber = names.Any(n => n.Places.Count > 1) ? "; use a number in place of the name" : "";
+        return $"{head}: {string.Join(", ", said)}{more}{useANumber}";
     }
 
     private const int MaxNamesInARefusal = 4;
+    private const int MaxNumbersForAName = 4;
 
-    // Room for the names in an ambiguity refusal, short of the game's limit on one
-    // telepath by the braces, the "/<player> " it is addressed with and the count
-    // of the names left out.
-    private const int RefusalBudget = 180;
+    // Room for the opening and the names in an ambiguity refusal, short of the
+    // game's limit on one telepath by the braces, the "/<player> " it is addressed
+    // with, the count of the names left out and the advice to use a number.
+    private const int RefusalBudget = 155;
 
     // A name as a reply shows it: in the wire's plain characters, as the engine
     // would send it anyway, and cut short past NameCap so that no reply built round
@@ -236,7 +309,7 @@ public sealed class EventRemoteHandler : IDisposable
     }
 
     private static string Label(ScheduledEvent e) =>
-        string.IsNullOrWhiteSpace(e.Name) ? "(unnamed)" : Shown(e.Name);
+        IsNamed(e) ? Shown(e.Name) : Unnamed;
 
     // An event the client switched off for a missing target says so: switching it
     // on would be refused, and the sender should know why before trying.
