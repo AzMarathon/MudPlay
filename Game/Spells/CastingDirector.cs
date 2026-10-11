@@ -659,15 +659,20 @@ public sealed class CastingDirector : IDisposable
     // lair and the round's one between-round cast is being kept for the combat
     // profile's pre-attack debuff. Heals and cures still go out. Optional.
     // holdOrdinaryBuffs (LairEntryDebuffHold.BlockingOrdinaryBuffs) holds only the
-    // buffs not ticked "Priority buff": the loop is letting the priority ones go first.
-    public void SetLairEntryBuffHold(Func<bool> holdBuffs, Func<bool>? holdOrdinaryBuffs = null)
+    // buffs not ticked "Priority buff": the loop is letting the priority ones go first,
+    // and priorityBuffCast (LairEntryDebuffHold.NotePriorityBuffCast) tells it of each
+    // one sent, named as BuffsDue names it.
+    public void SetLairEntryBuffHold(Func<bool> holdBuffs, Func<bool>? holdOrdinaryBuffs = null,
+        Action<string>? priorityBuffCast = null)
     {
         ArgumentNullException.ThrowIfNull(holdBuffs);
         _lairEntryBuffHold = holdBuffs;
         _lairEntryOrdinaryBuffHold = holdOrdinaryBuffs;
+        _lairEntryPriorityBuffCast = priorityBuffCast;
     }
     private Func<bool>? _lairEntryBuffHold;
     private Func<bool>? _lairEntryOrdinaryBuffHold;
+    private Action<string>? _lairEntryPriorityBuffCast;
 
     // Connected, in the game and alive: the state every decision needs first.
     private bool CanDecide =>
@@ -711,11 +716,14 @@ public sealed class CastingDirector : IDisposable
         List<string> names = new();
         foreach (CastCandidate due in DueBuffs(_readHealth(), priority))
         {
-            string name = due.Target is null ? due.Spell : $"{due.Spell} on {due.Target}";
+            string name = BuffName(due);
             if (!names.Contains(name)) names.Add(name);   // a staged reroll and its own slot
         }
         return names;
     }
+
+    private static string BuffName(CastCandidate buff) =>
+        buff.Target is null ? buff.Spell : $"{buff.Spell} on {buff.Target}";
 
     // Wire the sneak-keeping gate (Game.Stealth.SneakGuard.Holds). While it returns
     // true every in-between category but debuffing is HELD rather than cast (see the
@@ -2078,7 +2086,7 @@ public sealed class CastingDirector : IDisposable
             {
                 if (TryFireItemCast(cand.Spell, cand.RecastMarginSec))
                 {
-                    NoteCastDuringLairWait(category, cand);
+                    NotePriorityBuffCast(category, cand);
                     return cand.Spell;
                 }
                 continue; // unresolved / non-buff item — let a later category try
@@ -2157,7 +2165,7 @@ public sealed class CastingDirector : IDisposable
                 // re-stages one if the fresh roll is still below threshold).
                 if (string.Equals(cand.Spell, _pendingManaRegenReroll, StringComparison.OrdinalIgnoreCase))
                     _pendingManaRegenReroll = null;
-                NoteCastDuringLairWait(category, cand);
+                NotePriorityBuffCast(category, cand);
             }
 
             _log?.Combat(LogCategory,
@@ -2172,14 +2180,11 @@ public sealed class CastingDirector : IDisposable
         return null;
     }
 
-    // A priority buff went out while a loop stands outside a lair letting those go
-    // first. The loop's wait is on the always-on log, so each cast it waited for is too.
-    private void NoteCastDuringLairWait(SpellCategory category, CastCandidate cast)
+    // A loop standing outside a lair for its priority buffs counts each one that goes
+    // out (and says so on the always-on log, where its wait is).
+    private void NotePriorityBuffCast(SpellCategory category, CastCandidate cast)
     {
-        if (category != SpellCategory.PriorityBuffing || _lairEntryOrdinaryBuffHold?.Invoke() != true) return;
-        string onWhom = cast.Target is { } target ? $" on {target}" : string.Empty;
-        _log?.Info(LogCategory,
-            $"priority buff {cast.Spell}{onWhom} cast while the loop waits outside the lair.");
+        if (category == SpellCategory.PriorityBuffing) _lairEntryPriorityBuffCast?.Invoke(BuffName(cast));
     }
 
     // Combat-diagnostics view of the between-round queue: every DUE candidate the

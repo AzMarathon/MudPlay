@@ -65,7 +65,7 @@
                               SelectedIndex="{Binding LairDebuffWaitChoice, Mode=TwoWay}">
                         <ComboBoxItem Content="Wait for spells" ToolTip.Tip="Cast the buffs, heals and cures that are due first (one a round, three rounds at most), then enter. Keeps buffs up; costs the wait."/>
                         <ComboBoxItem Content="Block spells" ToolTip.Tip="Hold buffs back and enter as soon as the cast is free (a round at most). Buffs go out after the fight. Heals and cures are never held."/>
-                        <ComboBoxItem Content="Wait for priority buff spells" ToolTip.Tip="Cast the buffs ticked 'Priority buff' that are due first (one a round, three rounds at most) and hold every other buff back, then enter. The held buffs go out after the fight. Heals and cures are never held."/>
+                        <ComboBoxItem Content="Wait for priority buff spells" ToolTip.Tip="Cast every buff ticked 'Priority buff' that is due first (one a round, however many) and hold every other buff back, then enter. The held buffs go out after the fight. Heals and cures are never held."/>
                     </ComboBox>
                 </StackPanel>
             </Grid>

@@ -8225,7 +8225,8 @@ public sealed class AppServices
             log: Log,
             buffsDue: priority => CastDirector.BuffsDue(priority));
         CastDirector.SetLairEntryBuffHold(
-            () => LairDebuffHold.BlockingBuffs, () => LairDebuffHold.BlockingOrdinaryBuffs);
+            () => LairDebuffHold.BlockingBuffs, () => LairDebuffHold.BlockingOrdinaryBuffs,
+            buff => LairDebuffHold.NotePriorityBuffCast(buff));
         LoopRunner.SetMoveReadyCheck(() =>
         {
             // A "rest up here" room holds the step until the rest is done.

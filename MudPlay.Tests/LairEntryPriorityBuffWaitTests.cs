@@ -4,6 +4,7 @@ using MudPlay.Game.Spells;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -66,7 +67,8 @@ public sealed class LairEntryPriorityBuffWaitTests
                 now: () => new DateTimeOffset(Now),
                 log: Log,
                 buffsDue: Director.BuffsDue);
-            Director.SetLairEntryBuffHold(() => Hold.BlockingBuffs, () => Hold.BlockingOrdinaryBuffs);
+            Director.SetLairEntryBuffHold(
+                () => Hold.BlockingBuffs, () => Hold.BlockingOrdinaryBuffs, Hold.NotePriorityBuffCast);
 
             // Healthy and full of mana, so only what a test sets up is due. The buffs
             // are added after this, so nothing is cast until a test runs a pass.
@@ -99,6 +101,13 @@ public sealed class LairEntryPriorityBuffWaitTests
             Cast.OnCombatTick();
             Director.NotifyRoundComplete();
         }
+
+        // The game refuses the cast just sent: the scheduler takes its timer back, so
+        // the buff is due again next round.
+        public void GameFizzlesTheCast(string spell) =>
+            Router.Dispatch(new LineExtractor.EmittedLine(
+                $"You attempt to cast {spell}, but fail.", Array.Empty<CellAttributes>(),
+                DateTimeOffset.UtcNow, IsPromptLine: false));
 
         public IEnumerable<string> InfoLog(string source) =>
             Log.Snapshot().Where(e => e.Severity == LogSeverity.Info && e.Source == source).Select(e => e.Message);
@@ -214,9 +223,10 @@ public sealed class LairEntryPriorityBuffWaitTests
     }
 
     // Too little mana for the spell itself, with mana above the buff's own floor: the
-    // scheduler counts it due and skips the cast each pass. The wait's time limit ends it.
+    // scheduler counts it due and skips the cast each pass. With no priority buff going
+    // out, 18 seconds end the wait.
     [Fact]
-    public void PriorityBuffThatCannotBePaidFor_EndsTheWaitAtItsTimeLimit_AndTheLogNamesIt()
+    public void PriorityBuffThatCannotBePaidFor_EndsTheWaitAfterEighteenSeconds_AndTheLogNamesIt()
     {
         using Harness h = new();
         h.AddBuff("star", priority: true);
@@ -235,12 +245,12 @@ public sealed class LairEntryPriorityBuffWaitTests
         Assert.False(h.Held);                               // 20 s in: past the 18 s limit
         Assert.Empty(h.CastsSent);
         Assert.Contains(h.InfoLog("Loop"),
-            m => m.StartsWith("waited the limit of 18 seconds with priority buffs still due (star)"));
+            m => m.StartsWith("no priority buff went out for 18 seconds (priority buffs still due: star)"));
     }
 
-    // Held to keep a sneak: due, never sent. The same limit ends the wait.
+    // Held to keep a sneak: due, never sent. The same 18 seconds end the wait.
     [Fact]
-    public void PriorityBuffHeldToKeepASneak_EndsTheWaitAtItsTimeLimit()
+    public void PriorityBuffHeldToKeepASneak_EndsTheWaitAfterEighteenSeconds()
     {
         using Harness h = new() { SneakKept = true };
         h.AddBuff("star", priority: true);
@@ -254,32 +264,112 @@ public sealed class LairEntryPriorityBuffWaitTests
         Assert.Empty(h.CastsSent);
     }
 
-    // More priority buffs than the wait allows rounds for: the limit of three rounds
-    // (the round spent on arrival counts) holds the rest back and the loop goes in.
+    // Every due priority buff is waited for, however many: five take five rounds (six
+    // here, the cast being spent on arrival), well past where Wait for spells stops.
     [Fact]
-    public void MorePriorityBuffsThanTheRoundLimit_CastsWhatFits_ThenHoldsTheRestAndEnters()
+    public void FivePriorityBuffsDue_AreAllCast_ThenTheLoopEnters()
+    {
+        using Harness h = new();
+        for (int i = 1; i <= 5; i++) h.AddBuff($"sta{i}", priority: true);
+        h.AddBuff("plai", priority: false);
+        h.Director.MarkBetweenRoundSlotUsed();              // spent before we got here
+
+        Assert.False(h.AskToEnter());
+        for (int i = 1; i <= 5; i++)
+        {
+            h.NextRound(); h.Poll();
+            Assert.True(h.Held);
+            Assert.Equal($"sta{i}", h.Director.Evaluate());
+            h.Poll();
+        }
+        h.NextRound();
+        Assert.Null(h.Director.Evaluate());                 // none left due; plai stays held
+        h.Poll();
+
+        Assert.False(h.Held);                               // 30 seconds after arriving
+        Assert.Equal(new[] { "sta1", "sta2", "sta3", "sta4", "sta5" }, h.CastsSent);
+        Assert.Equal("no priority buff is due and the between-round cast is free — entering the lair",
+            h.InfoLog("Loop").Last());
+    }
+
+    // One that can't be paid for among them: the ones that can go out do, and the wait
+    // ends 18 seconds after the last of those, not 18 seconds after it began.
+    [Fact]
+    public void OneUncastableAmongThem_TheOthersGoOut_ThenEntryEighteenSecondsAfterTheLast()
     {
         using Harness h = new();
         h.AddBuff("sta1", priority: true);
         h.AddBuff("sta2", priority: true);
-        h.AddBuff("sta3", priority: true);
-        h.Director.MarkBetweenRoundSlotUsed();              // round 1: spent before we got here
+        h.AddBuff("cost", priority: true);
+        h.ManaCosts["cost"] = 500;
 
         Assert.False(h.AskToEnter());
-        h.NextRound(); h.Poll();
-        Assert.Equal("sta1", h.Director.Evaluate());        // round 2
+        Assert.Equal("sta1", h.Director.Evaluate());        // at 0 s
         h.Poll();
         h.NextRound(); h.Poll();
-        Assert.Equal("sta2", h.Director.Evaluate());        // round 3
+        Assert.Equal("sta2", h.Director.Evaluate());        // at 5 s: the last to go out
         h.Poll();
         h.NextRound();
-        Assert.Null(h.Director.Evaluate());                 // the limit: sta3 is held now
+        Assert.Null(h.Director.Evaluate());                 // cost is due and can't be paid for
+        h.Poll();
+        h.NextRound(seconds: 12);                           // 22 s in, 17 s since sta2
+        Assert.Null(h.Director.Evaluate());
+        h.Poll();
+        Assert.True(h.Held);
+
+        h.NextRound(seconds: 2);                            // 19 s since sta2
         h.Poll();
 
         Assert.False(h.Held);
         Assert.Equal(new[] { "sta1", "sta2" }, h.CastsSent);
         Assert.Contains(h.InfoLog("Loop"),
-            m => m.StartsWith("waited the limit of 3 rounds of casts with priority buffs still due (sta3)"));
+            m => m.StartsWith("no priority buff went out for 18 seconds (priority buffs still due: cost)"));
+    }
+
+    // The game refuses the buff every time, so it is due again every round and each
+    // send restarts the 18 seconds. Its third send is the last the wait allows.
+    [Fact]
+    public void PriorityBuffRefusedEveryRound_EndsTheWaitAtItsThirdSend_AndTheLogSaysSo()
+    {
+        using Harness h = new();
+        h.AddBuff("star", priority: true);
+
+        Assert.False(h.AskToEnter());
+        for (int send = 1; send <= LairEntryDebuffHold.MaxSendsOfOnePriorityBuff; send++)
+        {
+            Assert.True(h.Held);
+            Assert.Equal("star", h.Director.Evaluate());
+            h.GameFizzlesTheCast("star");
+            h.Poll();
+            h.NextRound(); h.Poll();
+        }
+
+        Assert.False(h.Held);                               // a fourth send is not waited for
+        Assert.Null(h.Director.Evaluate());                 // nor made: buffs are held for the step in
+        Assert.Equal(new[] { "star", "star", "star" }, h.CastsSent);
+        Assert.Contains(h.InfoLog("Loop"), m => m.StartsWith(
+            "priority buff star went out 3 times in this wait, the most one may (priority buffs still due: star)"));
+    }
+
+    // The same five buffs under Wait for spells: its three rounds are what they were.
+    [Fact]
+    public void WaitForSpells_StillStopsAtThreeRounds_WithFivePriorityBuffsDue()
+    {
+        using Harness h = new();
+        for (int i = 1; i <= 5; i++) h.AddBuff($"sta{i}", priority: true);
+
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForSpells));
+        for (int i = 1; i <= LairEntryDebuffHold.MaxRoundsWaited; i++)
+        {
+            Assert.Equal($"sta{i}", h.Director.Evaluate());
+            h.Poll();
+            h.NextRound(); h.Poll();
+        }
+
+        Assert.False(h.Held);
+        Assert.Equal(new[] { "sta1", "sta2", "sta3" }, h.CastsSent);
+        Assert.Contains(h.InfoLog("Loop"),
+            m => m.StartsWith("waited the limit of 3 rounds of casts with buffs still due (sta4, sta5)"));
     }
 
     // What the scheduler isn't casting right now isn't "due", so it isn't waited for.
@@ -363,9 +453,9 @@ public sealed class LairEntryPriorityBuffWaitTests
         {
             "waiting outside the lair until the debuff can be cast — casting priority buffs first "
                 + "(due: star); other buffs held back (due: plai)",
+            "priority buff star cast while waiting outside the lair",
             "no priority buff is due and the between-round cast is free — entering the lair",
         }, h.InfoLog("Loop"));
-        Assert.Contains("priority buff star cast while the loop waits outside the lair.", h.InfoLog(CastingDirector.LogCategory));
     }
 
     // The same buffs under the two older modes, to pin that they are untouched: Wait
