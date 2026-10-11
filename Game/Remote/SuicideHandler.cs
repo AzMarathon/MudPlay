@@ -68,7 +68,10 @@ public sealed class SuicideHandler : IDisposable
     internal Func<DateTimeOffset> Clock { get; set; } = () => DateTimeOffset.UtcNow;
 
     // True from `suicide` going out until the password is sent or given up on.
-    public bool AwaitingPasswordPrompt => _promptAwaitedSince is not null;
+    // Read off the UI thread too (the sent-command trail asks from whichever
+    // thread sends), so it is a flag of its own beside the time.
+    public bool AwaitingPasswordPrompt => _awaitingPrompt;
+    private volatile bool _awaitingPrompt;
 
     // True only while the password line itself is being handed to the wire, so
     // nothing that records outbound commands takes it.
@@ -142,7 +145,8 @@ public sealed class SuicideHandler : IDisposable
         _notSetSub.Dispose();
         _promptScanner.PromptObserved -= _promptHandler;
         _router.LineDispatched -= OnLineDispatched;
-        SendGate?.Release(GateHold);
+        // A wait in progress goes with the handler: neither hold may outlive it.
+        EndWait();
     }
 
     private void OnSuicide(RemoteCommandContext ctx)
@@ -172,10 +176,14 @@ public sealed class SuicideHandler : IDisposable
             }
             _pendingReply = ctx.Reply;
             _promptAwaitedSince = Clock();
+            _awaitingPrompt = true;
             // Nothing an engine sends may reach the game between the command and
             // its password: the game would take that as the password, and the
-            // real one would then land at the ordinary prompt, in clear.
+            // real one would then land at the ordinary prompt, in clear. A
+            // telepath already queued is such a line too, and the pacer writes it
+            // from its own timer, past the gate.
             SendGate?.Hold(GateHold);
+            Telepaths?.Hold();
             SendOwn("suicide");
             _log?.Log(LogSeverity.Info, "Suicide",
                 "@suicide: sent `suicide`; the stored password goes out when the game asks for it.");
@@ -210,7 +218,6 @@ public sealed class SuicideHandler : IDisposable
         if (Clock() - since > PromptWait) { GiveUpOnPrompt(); return; }
         if (!ShowsPasswordPrompt(rowText)) return;
 
-        EndWait();
         string? password = _profile.Current is { EncryptedSuicidePassword: { Length: > 0 } blob }
             ? _protector.Unprotect(blob)
             : null;
@@ -218,13 +225,20 @@ public sealed class SuicideHandler : IDisposable
         {
             // The stored password went away between the command and the prompt
             // (a `pro` that reported none set wipes it).
+            EndWait();
             FailPending("the stored suicide password was gone when the game asked for it: nothing sent",
                 "suicide failed, no password stored");
             return;
         }
+        // The holds come down only once the password is on the wire: let go of
+        // first, a waiting telepath would go out ahead of it and be the answer.
         SendingPassword = true;
         try { SendOwn(password); }
-        finally { SendingPassword = false; }
+        finally
+        {
+            SendingPassword = false;
+            EndWait();
+        }
         _log?.Log(LogSeverity.Info, "Suicide", "@suicide: the game asked for the password; sent.");
     }
 
@@ -263,6 +277,10 @@ public sealed class SuicideHandler : IDisposable
     // tests that don't model it.
     public EngineSendGate? SendGate { get; set; }
 
+    // The telepath pacer, held over the same stretch (TelepathPacer.Hold). Null
+    // in tests that don't model it.
+    public TelepathPacer? Telepaths { get; set; }
+
     private bool _sendingOwn;
 
     private void SendOwn(string line)
@@ -272,10 +290,14 @@ public sealed class SuicideHandler : IDisposable
         finally { _sendingOwn = false; }
     }
 
+    // The one way a wait ends, however it ends: answered, refused, timed out or
+    // cancelled by another line. Both holds come down here.
     private void EndWait()
     {
         _promptAwaitedSince = null;
+        _awaitingPrompt = false;
         SendGate?.Release(GateHold);
+        Telepaths?.Release();
     }
 
     // Every line that reaches the wire, whoever sent it. The send gate keeps the

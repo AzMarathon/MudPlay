@@ -47,8 +47,9 @@ public static class BugReportAutomationSections
         Line("Party inventory probe", () => svc.PartyInventory.DescribePending());
         Line("Party level probe", () => svc.PartyLevelProbe.DescribePending());
         Line("Party wealth probe", () => svc.PartyWealthProbe.DescribePending());
-        Line("Telepaths", () => svc.Telepaths.Queued + svc.Telepaths.InFlight == 0 ? null
-            : $"{svc.Telepaths.Queued} queued, {svc.Telepaths.InFlight} awaiting the game's acknowledgement");
+        Line("Telepaths", () => svc.Telepaths.Queued + svc.Telepaths.InFlight == 0 && !svc.Telepaths.Held ? null
+            : $"{svc.Telepaths.Queued} queued, {svc.Telepaths.InFlight} awaiting the game's acknowledgement"
+              + (svc.Telepaths.Held ? "; held until an @suicide has had its password prompt answered" : string.Empty));
         Line("Relog", () => svc.RelogSignal.DescribePending());
         Line("Cleanup log-off", () => svc.CleanupLogout.DescribePending());
         Line("Game entry", () => svc.MainMenuEntry.DescribePending());

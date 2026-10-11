@@ -3538,6 +3538,7 @@ public sealed class AppServices
         Suicide = new Game.Remote.SuicideHandler(RemoteCommands, Router, Profile, Passwords, PromptScanner, Log)
         {
             SendGate = EngineGate,
+            Telepaths = Telepaths,
         };
         // Main-menu entry automation — armed by MainWindowVM when
         // LoginAutomator.LoggedIntoGame fires; observes the

@@ -184,6 +184,148 @@ public sealed class SuicideHandlerTests
         Assert.True(h.Handler.AwaitingPasswordPrompt);
     }
 
+    // The telepath pacer writes from its own timer, past the send gate. Wired as
+    // the client wires it: everything the handler and the remote-command engine
+    // send goes to the pacer, and the pacer writes to the socket.
+    private sealed class Paced : IDisposable
+    {
+        public Harness H { get; } = new();
+        public TelepathPacer Pacer { get; }
+        public List<string> Socket { get; } = new();
+        public DateTimeOffset Now = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        private readonly List<Action> _timers = new();
+
+        public Paced(string password = "hunter2")
+        {
+            Pacer = new TelepathPacer((_, action) => _timers.Add(action), () => Now);
+            Pacer.SetWriter(b => Socket.Add(Encoding.Latin1.GetString(b)));
+            H.Handler.SetWireSender(Pacer.Send);
+            H.Engine.SetWireSender(Pacer.Send);
+            H.Handler.Telepaths = Pacer;
+            H.Handler.Clock = () => Now;
+            GrantElevated(H.Players, "Trusted");
+            H.Profile.Current!.EncryptedSuicidePassword = H.Protector.Protect(password);
+        }
+
+        // Let time pass and every pacing timer that was waiting fire.
+        public void Advance(TimeSpan by)
+        {
+            Now += by;
+            Action[] due = _timers.ToArray();
+            _timers.Clear();
+            foreach (Action timer in due) timer();
+        }
+
+        // Two telepaths in a burst: the first goes now, the second waits its gap.
+        public void QueueATelepathBehindItsGap()
+        {
+            Pacer.Send(Encoding.Latin1.GetBytes("/Bob first\r/Bob queued\r"));
+            Assert.Equal(new[] { "/Bob first\r" }, Socket);
+        }
+
+        public void Dispose() => H.Dispose();
+    }
+
+    // A telepath that lands between `suicide` and the password is what the game
+    // takes for the password, and the stored one then goes to the statline in
+    // clear. One already queued stays queued until the password is on the wire.
+    [Fact]
+    public void StoredPassword_ATelepathQueuedBeforeTheCommand_IsNotWrittenUntilThePasswordIs()
+    {
+        using Paced p = new();
+        p.QueueATelepathBehindItsGap();
+
+        DispatchTelepath(p.H.Router, "Trusted", "@suicide");
+        Assert.True(p.Pacer.Held);
+        p.Advance(TimeSpan.FromSeconds(1));
+        p.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(new[] { "/Bob first\r", "suicide\r" }, p.Socket);
+
+        p.H.Handler.ObserveCursorRow("Enter your suicide password:");
+
+        Assert.Equal(new[] { "/Bob first\r", "suicide\r", "hunter2\r", "/Bob queued\r" }, p.Socket);
+        Assert.False(p.Pacer.Held);
+    }
+
+    // A refused telepath's resend is a write from the pacer too.
+    [Fact]
+    public void StoredPassword_AResendOwedDuringTheWait_IsHeldLikeTheRest()
+    {
+        using Paced p = new();
+        p.Pacer.Send(Encoding.Latin1.GetBytes("/Bob first\r"));
+
+        DispatchTelepath(p.H.Router, "Trusted", "@suicide");
+        p.Advance(TimeSpan.FromSeconds(1));
+        p.Pacer.OnAck("--- Telepath Not Sent ---");
+        p.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(new[] { "/Bob first\r", "suicide\r" }, p.Socket);
+
+        p.H.Handler.ObserveCursorRow("Enter your suicide password:");
+
+        Assert.Equal(new[] { "/Bob first\r", "suicide\r", "hunter2\r", "/Bob first\r" }, p.Socket);
+    }
+
+    // However the wait ends, the pacer is let go and the telepath goes out; the
+    // password goes out only when the prompt was answered.
+    [Theory]
+    [InlineData("refused")]
+    [InlineData("timed out")]
+    [InlineData("another line sent")]
+    [InlineData("password gone")]
+    [InlineData("handler disposed")]
+    public void StoredPassword_TheWaitEndingAnyWay_LetsTheQueuedTelepathGo(string ending)
+    {
+        using Paced p = new();
+        p.QueueATelepathBehindItsGap();
+        DispatchTelepath(p.H.Router, "Trusted", "@suicide");
+        p.Advance(TimeSpan.FromSeconds(1));
+        Assert.DoesNotContain("/Bob queued\r", p.Socket);
+
+        switch (ending)
+        {
+            case "refused":
+                DispatchLine(p.H.Router, "You may not suicide or reroll in this room!");
+                break;
+            case "timed out":
+                p.Now += SuicideHandler.PromptWait + TimeSpan.FromSeconds(1);
+                p.H.Handler.CheckTimeout();
+                break;
+            case "another line sent":
+                p.H.Handler.NoteLineSent("look\r"u8);
+                break;
+            case "password gone":
+                p.H.Profile.Current!.EncryptedSuicidePassword = null;
+                p.H.Handler.ObserveCursorRow("Enter your suicide password:");
+                break;
+            case "handler disposed":
+                p.H.Handler.Dispose();
+                break;
+        }
+        p.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.False(p.Pacer.Held);
+        Assert.False(p.H.Handler.AwaitingPasswordPrompt);
+        Assert.Contains("/Bob queued\r", p.Socket);
+        Assert.DoesNotContain("hunter2\r", p.Socket);
+    }
+
+    // A password that looks like a telepath is still the answer to the prompt:
+    // it is written at once, ahead of what is queued, never paced behind it.
+    [Fact]
+    public void StoredPassword_ThatBeginsWithASlash_IsWrittenAtOnce_AheadOfQueuedTelepaths()
+    {
+        using Paced p = new(password: "/placeholder pw");
+        p.QueueATelepathBehindItsGap();
+
+        DispatchTelepath(p.H.Router, "Trusted", "@suicide");
+        p.Advance(TimeSpan.FromSeconds(1));
+        p.H.Handler.ObserveCursorRow("Enter your suicide password:");
+
+        Assert.Equal(new[] { "/Bob first\r", "suicide\r", "/placeholder pw\r", "/Bob queued\r" }, p.Socket);
+        // The two telepaths await their acknowledgements; the password is no telepath.
+        Assert.Equal(2, p.Pacer.InFlight);
+    }
+
     // A stored password is sent whole, however long: nothing here counts on a
     // length. What the game echoes for it differs by realm (Paradigm one star a
     // character, Stock's echo call has a width of 8); either row is just the
