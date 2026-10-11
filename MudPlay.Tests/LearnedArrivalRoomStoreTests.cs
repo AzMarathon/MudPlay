@@ -6,7 +6,7 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// The pairs the client has learned of where the dead of a room arrive ("room died
+// The readings the client has made of where the dead of a room arrive ("room died
 // in → room arrived in"), kept in one file per game-data set and shared by every
 // client on that set.
 public sealed class LearnedArrivalRoomStoreTests : IDisposable
@@ -33,6 +33,8 @@ public sealed class LearnedArrivalRoomStoreTests : IDisposable
 
     private string FileFor(string set) => Path.Combine(_root, set, "learned-arrival-rooms.json");
 
+    private int Warnings => _log.Count(e => e.Severity == LogSeverity.Warn);
+
     // A client on a set: its own store over the shared folder.
     private LearnedArrivalRoomStore Client(string set = "paradigm")
     {
@@ -42,27 +44,29 @@ public sealed class LearnedArrivalRoomStoreTests : IDisposable
     }
 
     [Fact]
-    public void APair_IsLearned_SaidInTheLog_AndKeptWithTheSet()
+    public void AReading_IsLearned_SaidInTheLog_AndKeptWithTheSet()
     {
         LearnedArrivalRoomStore store = Client();
         Assert.Null(store.ArrivalsFor(TerraIsta));
 
-        Assert.Equal(LearnedArrivalRoomStore.Outcome.Learned, store.Learn(TerraIsta, IstaGraveyard));
+        Assert.Equal(LearnedArrivalOutcome.Learned, store.Learn(TerraIsta, IstaGraveyard));
 
         Assert.Equal(new[] { IstaGraveyard }, store.ArrivalsFor(TerraIsta));
         Assert.Equal((1, 0), (store.Count, store.DisputedCount));
+        Assert.Equal(new[] { (TerraIsta, IstaGraveyard) }, store.Known);
         Assert.Contains(_log, e => e.Severity == LogSeverity.Info
             && e.Message == "learned: the dead of 14/1813 arrive in 14/1900");
-        Assert.True(File.Exists(FileFor("paradigm")));
-        // Seen again: nothing new, and nothing written over.
-        Assert.Equal(LearnedArrivalRoomStore.Outcome.Known, store.Learn(TerraIsta, IstaGraveyard));
+        // The file carries its format, so a later one can be told from it.
+        Assert.Contains("\"Version\": 1", File.ReadAllText(FileFor("paradigm")));
+        // Seen again: nothing new.
+        Assert.Equal(LearnedArrivalOutcome.Known, store.Learn(TerraIsta, IstaGraveyard));
         Assert.Equal(1, store.Count);
     }
 
     // The file is the set's: a client started later reads what an earlier one
     // learned, and another set knows nothing of it.
     [Fact]
-    public void WhatWasLearned_IsReloadedForItsSet_AndASetSwitchUsesTheOtherSetsPairs()
+    public void WhatWasLearned_IsReloadedForItsSet_AndASetSwitchUsesTheOtherSetsReadings()
     {
         Client().Learn(TerraIsta, IstaGraveyard);
 
@@ -81,7 +85,7 @@ public sealed class LearnedArrivalRoomStoreTests : IDisposable
         // No set: nothing is held, and nothing can be kept.
         later.OnActiveSetChanged(null);
         Assert.Null(later.ArrivalsFor(TerraIsta));
-        Assert.Equal(LearnedArrivalRoomStore.Outcome.NotKept, later.Learn(TerraIsta, IstaGraveyard));
+        Assert.Equal(LearnedArrivalOutcome.NotKept, later.Learn(TerraIsta, IstaGraveyard));
     }
 
     // Two clients on one set: what one learns the other takes in on its next
@@ -109,15 +113,16 @@ public sealed class LearnedArrivalRoomStoreTests : IDisposable
         Assert.Equal(3, Client().Count);
     }
 
-    // A room seen to send its dead to two different rooms: both readings are kept
-    // and neither is used. Said once; nothing is overwritten.
+    // A room has one assigned room for its dead, so two readings mean one was
+    // misread. Both are kept and neither is used, until one is seen a second
+    // time: that one stands and the other is dropped. No hand edit is needed.
     [Fact]
-    public void AContradictingPair_MakesTheRoomDisputed_AndNeitherReadingIsUsed()
+    public void AContradictingReading_DisputesTheRoom_UntilOneIsSeenASecondTime()
     {
         LearnedArrivalRoomStore store = Client();
         store.Learn(TerraIsta, IstaGraveyard);
 
-        Assert.Equal(LearnedArrivalRoomStore.Outcome.Disputed, store.Learn(TerraIsta, Elsewhere));
+        Assert.Equal(LearnedArrivalOutcome.Disputed, store.Learn(TerraIsta, Elsewhere));
 
         Assert.Null(store.ArrivalsFor(TerraIsta));
         Assert.Equal((0, 1), (store.Count, store.DisputedCount));
@@ -127,13 +132,53 @@ public sealed class LearnedArrivalRoomStoreTests : IDisposable
         LogEntry warning = Assert.Single(_log, e => e.Severity == LogSeverity.Warn);
         Assert.Contains("14/1900", warning.Message);
         Assert.Contains("14/1950", warning.Message);
-
-        // Either reading again, or a third: still disputed, and not said again.
-        Assert.Equal(LearnedArrivalRoomStore.Outcome.Disputed, store.Learn(TerraIsta, IstaGraveyard));
-        Assert.Equal(LearnedArrivalRoomStore.Outcome.Disputed, store.Learn(TerraIsta, new RoomKey(14, 1960)));
-        Assert.Single(_log, e => e.Severity == LogSeverity.Warn);
-        // It stays disputed for a client that starts later.
+        Assert.DoesNotContain("Remove", warning.Message);
+        // It is disputed for a client that starts later too.
         Assert.Equal((0, 1), (Client().Count, Client().DisputedCount));
+
+        // The second reading is seen again: it stands, and the first is dropped.
+        Assert.Equal(LearnedArrivalOutcome.Settled, store.Learn(TerraIsta, Elsewhere));
+
+        Assert.Equal(new[] { Elsewhere }, store.ArrivalsFor(TerraIsta));
+        Assert.Equal((1, 0), (store.Count, store.DisputedCount));
+        Assert.Contains(_log, e => e.Severity == LogSeverity.Info && e.Message.StartsWith("settled: the dead of 14/1813 arrive in 14/1950"));
+        Assert.Equal(1, Warnings);
+        Assert.Equal(new[] { Elsewhere }, Client().ArrivalsFor(TerraIsta));
+    }
+
+    // A third reading while disputed is kept with the others, and said no more.
+    [Fact]
+    public void AThirdReadingWhileDisputed_IsKept_AndNotSaidAgain()
+    {
+        LearnedArrivalRoomStore store = Client();
+        store.Learn(TerraIsta, IstaGraveyard);
+        store.Learn(TerraIsta, Elsewhere);
+
+        Assert.Equal(LearnedArrivalOutcome.Disputed, store.Learn(TerraIsta, new RoomKey(14, 1960)));
+
+        Assert.Equal(3, Assert.Single(store.Disputed).Arrivals.Count);
+        Assert.Equal(1, Warnings);
+        // The first is seen again and stands; both others go.
+        Assert.Equal(LearnedArrivalOutcome.Settled, store.Learn(TerraIsta, IstaGraveyard));
+        Assert.Equal(new[] { IstaGraveyard }, store.ArrivalsFor(TerraIsta));
+    }
+
+    // A reading already seen twice stands against a single sighting of another
+    // room: that one is dropped, and said.
+    [Fact]
+    public void AReadingSeenTwice_StandsAgainstOneContradictingSighting()
+    {
+        LearnedArrivalRoomStore store = Client();
+        store.Learn(TerraIsta, IstaGraveyard);
+        store.Learn(TerraIsta, IstaGraveyard);
+
+        Assert.Equal(LearnedArrivalOutcome.Overruled, store.Learn(TerraIsta, Elsewhere));
+
+        Assert.Equal(new[] { IstaGraveyard }, store.ArrivalsFor(TerraIsta));
+        Assert.Equal((1, 0), (store.Count, store.DisputedCount));
+        LogEntry warning = Assert.Single(_log, e => e.Severity == LogSeverity.Warn);
+        Assert.Contains("14/1950", warning.Message);
+        Assert.Contains("2 times", warning.Message);
     }
 
     // Two clients that each saw it differently, neither having read the other's
@@ -144,43 +189,127 @@ public sealed class LearnedArrivalRoomStoreTests : IDisposable
         LearnedArrivalRoomStore one = Client(), two = Client();
         one.Learn(TerraIsta, IstaGraveyard);
 
-        Assert.Equal(LearnedArrivalRoomStore.Outcome.Disputed, two.Learn(TerraIsta, Elsewhere));
+        Assert.Equal(LearnedArrivalOutcome.Disputed, two.Learn(TerraIsta, Elsewhere));
 
         one.TakeInOutsideChanges();
         Assert.Null(one.ArrivalsFor(TerraIsta));
         Assert.Equal(1, one.DisputedCount);
+        // And each seeing its own again settles it for both, by the count on file.
+        Assert.Equal(LearnedArrivalOutcome.Settled, one.Learn(TerraIsta, IstaGraveyard));
+        two.TakeInOutsideChanges();
+        Assert.Equal(new[] { IstaGraveyard }, two.ArrivalsFor(TerraIsta));
     }
 
     // A room that names no graveyard sends its dead to one of the engine's two
     // default rooms, by the character's evil points. Seen in either, it stands for
-    // both; seen in each, it is no dispute.
+    // both; seen in each, it is one reading and no dispute.
     [Fact]
-    public void TheTwoDefaultRooms_StandForEachOther()
+    public void TheTwoDefaultRooms_AreOneReading()
     {
         LearnedArrivalRoomStore store = Client();
         RoomKey room = new(13, 4000);
 
-        store.Learn(room, HangupDeathArrivalRooms.Temple);
+        store.Learn(room, HangupDeathArrivalRooms.EvilTomb);
         Assert.Equal(new[] { HangupDeathArrivalRooms.Temple, HangupDeathArrivalRooms.EvilTomb }, store.ArrivalsFor(room));
 
-        Assert.Equal(LearnedArrivalRoomStore.Outcome.Learned, store.Learn(room, HangupDeathArrivalRooms.EvilTomb));
+        Assert.Equal(LearnedArrivalOutcome.Known, store.Learn(room, HangupDeathArrivalRooms.Temple));
         Assert.Equal((1, 0), (store.Count, store.DisputedCount));
-        Assert.DoesNotContain(_log, e => e.Severity == LogSeverity.Warn);
-        // A third room is a dispute like any other.
-        Assert.Equal(LearnedArrivalRoomStore.Outcome.Disputed, store.Learn(room, Elsewhere));
-        Assert.Null(store.ArrivalsFor(room));
+        Assert.Equal(0, Warnings);
+        // Seen twice by now: a single other room is dropped against it.
+        Assert.Equal(LearnedArrivalOutcome.Overruled, store.Learn(room, Elsewhere));
+        Assert.Equal(new[] { HangupDeathArrivalRooms.Temple, HangupDeathArrivalRooms.EvilTomb }, store.ArrivalsFor(room));
     }
 
-    // A file that can't be read is left alone and what is held is kept.
+    // ----- A file that can't be read or written ------------------------------
+
+    // A file that doesn't parse (one comma lost in a hand edit) may hold every
+    // room learned so far. It is never written over: said once, left as it is,
+    // and set aside under another name before anything new is written.
     [Fact]
-    public void AFileCaughtHalfWritten_IsLeftForTheNextLook()
+    public void AFileThatDoesNotParse_IsSetAside_NeverWrittenOver()
+    {
+        Client().Learn(TerraIsta, IstaGraveyard);
+        string good = File.ReadAllText(FileFor("paradigm"));
+        string broken = good.Replace("\"Version\": 1,", "\"Version\": 1");
+        File.WriteAllText(FileFor("paradigm"), broken);
+
+        LearnedArrivalRoomStore store = Client();
+        Assert.Equal(0, store.Count);
+        Assert.Equal(1, Warnings);
+        // Heartbeat after heartbeat: still unreadable, and said no more.
+        Assert.False(store.TakeInOutsideChanges());
+        Assert.False(store.TakeInOutsideChanges());
+        Assert.Equal(1, Warnings);
+        Assert.Equal(broken, File.ReadAllText(FileFor("paradigm")));
+
+        store.Learn(new RoomKey(14, 1812), new RoomKey(14, 1850));
+
+        // The broken file is beside the new one, whole.
+        Assert.Equal(broken, File.ReadAllText(FileFor("paradigm") + ".bad"));
+        Assert.Equal(1, Client().Count);
+        Assert.Equal(2, Warnings);
+        Assert.Contains(_log, e => e.Severity == LogSeverity.Warn && e.Message.Contains(".bad"));
+
+        // A second broken file doesn't take the first one's place.
+        File.WriteAllText(FileFor("paradigm"), "{ not json");
+        LearnedArrivalRoomStore again = Client();
+        again.Learn(TerraIsta, Elsewhere);
+        Assert.Equal(broken, File.ReadAllText(FileFor("paradigm") + ".bad"));
+        Assert.Equal(2, Directory.GetFiles(Path.Combine(_root, "paradigm"), "*.bad").Length);
+    }
+
+    // What is held is kept when the file goes bad under a running client.
+    [Fact]
+    public void AFileThatGoesBadUnderARunningClient_LeavesWhatIsHeld()
     {
         LearnedArrivalRoomStore store = Client();
         store.Learn(TerraIsta, IstaGraveyard);
 
-        File.WriteAllText(FileFor("paradigm"), "[ { \"DiedIn\": \"14/18");
+        File.WriteAllText(FileFor("paradigm"), "{ \"Version\": 1, \"Rooms\": [ { \"DiedIn\": \"14/18");
 
         Assert.False(store.TakeInOutsideChanges());
         Assert.Equal(new[] { IstaGraveyard }, store.ArrivalsFor(TerraIsta));
+    }
+
+    // A later client's format is neither read nor written over.
+    [Fact]
+    public void AFileOfALaterFormat_IsLeftAlone()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "paradigm"));
+        const string later = "{ \"Version\": 2, \"Rooms\": [], \"Lands\": [] }";
+        File.WriteAllText(FileFor("paradigm"), later);
+
+        LearnedArrivalRoomStore store = Client();
+        store.Learn(TerraIsta, IstaGraveyard);
+
+        Assert.Equal(later, File.ReadAllText(FileFor("paradigm")));
+        // Kept for the session all the same.
+        Assert.Equal(new[] { IstaGraveyard }, store.ArrivalsFor(TerraIsta));
+        Assert.Equal(1, Warnings);
+    }
+
+    // The set's folder can't be written: learning a room throws nothing, says so
+    // once, keeps the room for the session, and writes it when the folder can be
+    // written again.
+    [Fact]
+    public void AFolderThatCantBeWritten_ThrowsNothing_AndIsWrittenLater()
+    {
+        // A file standing where the set's folder should be: no file can be made in it.
+        string blocked = Path.Combine(_root, "blocked");
+        File.WriteAllText(blocked, "not a folder");
+        LearnedArrivalRoomStore store = Client("blocked");
+
+        Assert.Equal(LearnedArrivalOutcome.Learned, store.Learn(TerraIsta, IstaGraveyard));
+        Assert.Equal(LearnedArrivalOutcome.Learned, store.Learn(new RoomKey(14, 1812), new RoomKey(14, 1850)));
+
+        Assert.Equal(2, store.Count);
+        Assert.Equal(1, Warnings);
+        store.TakeInOutsideChanges();
+        Assert.Equal(1, Warnings);
+
+        // The obstacle goes: the next heartbeat writes both.
+        File.Delete(blocked);
+        store.TakeInOutsideChanges();
+        Assert.Equal(2, Client("blocked").Count);
     }
 }
