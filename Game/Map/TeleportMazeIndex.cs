@@ -122,22 +122,23 @@ public sealed class TeleportMazeIndex
         var processed = new HashSet<RoomKey>();          // pocket rooms already indexed
         var sigBuckets = new Dictionary<string, List<RoomKey>>();
 
-        foreach (Room room in _graph.Rooms)
+        // The graph lists its pocket entrances in the order a walk over every room
+        // and exit would meet them, so the first mouth into a pocket is still the
+        // one recorded as its entrance.
+        foreach ((RoomKey source, Direction dir) in _graph.CastPocketEntrances)
         {
-            foreach ((Direction dir, RoomExit exit) in room.Exits)
-            {
-                if (!exit.CastPocketEntrance) continue;
-                if (processed.Contains(exit.Target)) continue;   // pocket seen already
+            if (_graph.GetRoom(source) is not { } room) continue;
+            if (!room.Exits.TryGetValue(dir, out RoomExit exit) || !exit.CastPocketEntrance) continue;
+            if (processed.Contains(exit.Target)) continue;   // pocket seen already
 
-                HashSet<RoomKey>? pocket = CollectPocket(exit.Target);
-                if (pocket is null) continue;                    // too big — not a real pocket
-                foreach (RoomKey k in pocket) processed.Add(k);
+            HashSet<RoomKey>? pocket = CollectPocket(exit.Target);
+            if (pocket is null) continue;                    // too big — not a real pocket
+            foreach (RoomKey k in pocket) processed.Add(k);
 
-                if (!PocketHasRandomTeleport(pocket)) continue;  // deterministic pocket — BFS handles it
+            if (!PocketHasRandomTeleport(pocket)) continue;  // deterministic pocket — BFS handles it
 
-                IndexPocket(pocket, sigBuckets);
-                foreach (RoomKey k in pocket) _entranceByRoom[k] = (room.Key, dir);
-            }
+            IndexPocket(pocket, sigBuckets);
+            foreach (RoomKey k in pocket) _entranceByRoom[k] = (room.Key, dir);
         }
 
         // Keep only signatures unique within the indexed pockets — a colliding
@@ -167,8 +168,8 @@ public sealed class TeleportMazeIndex
         while (queue.Count > 0)
         {
             RoomKey cur = queue.Dequeue();
-            if (_graph.GetRoom(cur) is not { } room) continue;
-            foreach (RoomExit exit in room.Exits.Values)
+            if (_graph.ExitsAt(cur) is not { } exits) continue;
+            foreach (RoomExit exit in exits.Values)
             {
                 if (seen.Add(exit.Target))
                 {
@@ -183,8 +184,8 @@ public sealed class TeleportMazeIndex
     private bool PocketHasRandomTeleport(HashSet<RoomKey> pocket)
     {
         foreach (RoomKey k in pocket)
-            if (_graph.GetRoom(k) is { } room)
-                foreach (RoomExit exit in room.Exits.Values)
+            if (_graph.ExitsAt(k) is { } exits)
+                foreach (RoomExit exit in exits.Values)
                     if (exit.CastTeleportRandom)
                         return true;
         return false;
