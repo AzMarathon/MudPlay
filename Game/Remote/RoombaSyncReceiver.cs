@@ -65,8 +65,9 @@ public sealed class RoombaSyncReceiver : IDisposable
 
     internal void Ingest(ChatLogEntry e)
     {
-        if (e.Channel is not (ChatChannel.TelepathIncoming or ChatChannel.Gangpath or ChatChannel.Local))
-            return;
+        // By telepath or gangpath only (TransferChannels): the gang house's log is
+        // not said aloud in a room.
+        if (!TransferChannels.Allows(Transfer.RoombaSync, e.Channel)) return;
         if (e.Speaker is not { Length: > 0 } sender) return;
         if (!TryParse(e.Message, out string blob)) return;   // cheap: an @roombadata line at all?
         // Only adopt inside a window we opened by sending `@roomba sync`. Logged at

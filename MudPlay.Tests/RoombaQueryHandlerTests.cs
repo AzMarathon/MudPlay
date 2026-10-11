@@ -313,6 +313,87 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         Assert.Contains(RoombaQueryHandler.SyncCompleteMarker, last);
     }
 
+    // ----- the channels a sync may go by --------------------------------------
+
+    private static ChatLogEntry Heard(ChatChannel channel, string sender, string msg) =>
+        new(Now, channel, sender, msg, $"{sender}: {msg}");
+
+    // The gang house's log goes to one player or to the gang.
+    [Theory]
+    [InlineData(ChatChannel.TelepathIncoming, "/Friend {")]
+    [InlineData(ChatChannel.Gangpath, "bg {")]
+    public void RoombaSync_ByTelepathOrGangpath_IsAnsweredThere(ChatChannel channel, string opening)
+    {
+        var (engine, players, locations) = SetupWithItems();
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
+        locations.RecordRoom(new RoomKey(1, 100), new[] { "3 torch" });
+
+        engine.DispatchForTests(Heard(channel, "Friend", "@roomba sync"));
+
+        Assert.Single(DecodeSyncReplies(engine));
+        Assert.All(Replies(engine), r => Assert.StartsWith(opening + RoombaQueryHandler.SyncResponseToken, r));
+    }
+
+    // Said aloud or on the broadcast channel it is refused, with where it does work,
+    // and nothing of the log is sent.
+    [Theory]
+    [InlineData(ChatChannel.Local, ">Friend {@roomba sync works by telepath or gangpath only}\r")]
+    [InlineData(ChatChannel.Broadcast, "br {@roomba sync works by telepath or gangpath only}\r")]
+    public void RoombaSync_BySayOrBroadcast_IsRefusedWithWhereItWorks(ChatChannel channel, string expected)
+    {
+        var (engine, players, locations) = SetupWithItems();
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
+        locations.RecordRoom(new RoomKey(1, 100), new[] { "3 torch" });
+
+        engine.DispatchForTests(Heard(channel, "Friend", "@roomba sync"));
+
+        Assert.Equal(expected, Replies(engine).Single());
+    }
+
+    [Fact]
+    public void RoombaSync_RefusedForItsChannel_FollowsTheWarnSetting_AndGoesByTelepathWhileSneaking()
+    {
+        var (quiet, quietPlayers, _) = SetupWithItems();
+        SeedPlayer(quietPlayers, "Friend", PlayerRemoteControls.QueryItemLocation);
+        quiet.WarnOnDenial = false;
+        quiet.DispatchForTests(Heard(ChatChannel.Local, "Friend", "@roomba sync"));
+        Assert.Empty(Replies(quiet));
+
+        var (sneaking, sneakingPlayers, _) = SetupWithItems();
+        SeedPlayer(sneakingPlayers, "Friend", PlayerRemoteControls.QueryItemLocation);
+        sneaking.StealthedProvider = () => true;
+        sneaking.DispatchForTests(Heard(ChatChannel.Local, "Friend", "@roomba sync"));
+        Assert.Equal("/Friend {@roomba sync works by telepath or gangpath only}\r", Replies(sneaking).Single());
+    }
+
+    // Only the sync is held to those channels: asking where an item is still works
+    // when said.
+    [Fact]
+    public void RoombaItemQuery_BySay_StillAnswers()
+    {
+        var (engine, players, locations) = SetupWithItems();
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
+        locations.RecordRoom(new RoomKey(1, 100), new[] { "3 torch" });
+
+        engine.DispatchForTests(Heard(ChatChannel.Local, "Friend", "@roomba torch"));
+
+        Assert.Contains("total: 3x torch", Replies(engine).Single());
+    }
+
+    // A channel switched off on the Talk tab stays off though the sync may use it.
+    [Fact]
+    public void RoombaSync_OnGangpathSwitchedOffOnTheTalkTab_IsNotAnswered()
+    {
+        var (engine, players, locations) = SetupWithItems();
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
+        locations.RecordRoom(new RoomKey(1, 100), new[] { "3 torch" });
+        engine.DisableGangpathChannel = true;
+
+        engine.DispatchForTests(Gangpath("Friend", "@roomba sync"));
+
+        Assert.Empty(Replies(engine));
+    }
+
     [Fact]
     public void RoombaSync_WithoutGrant_StaysDenied()
     {
