@@ -430,15 +430,15 @@ public sealed class EquipmentManager
     // Idempotent: re-owning an already-owned slot with the same worn item is a
     // no-op, which is what the per-room re-fire inside a same-named area wants.
     //
-    // owner names who asked, for the log: a location rule, or the room-spell counter
-    // (RoomSpellCounterWear). urgent sends the wear through a sneak the guard is
-    // keeping: a counter left off costs the room's damage on every cast, which is
-    // worse than the sneak the wear ends.
-    public bool SetSlotOverride(string itemName, string owner = LocationOwner, bool urgent = false) =>
-        ClaimSlot(itemName, owner, urgent) is not (SlotClaimResult.NotClaimed or SlotClaimResult.NotSent);
+    public bool SetSlotOverride(string itemName, string owner = LocationOwner) =>
+        ClaimSlot(itemName, owner, urgent: false) is not (SlotClaimResult.NotClaimed or SlotClaimResult.NotSent);
 
     // The same claim, saying what became of the wear: a caller that holds a step
-    // for the game's answer must know whether a command went out at all.
+    // for the game's answer must know whether a command went out at all. owner
+    // names who asked, for the log: a location rule, or the room-spell counter
+    // (RoomSpellCounterWear). urgent sends the wear through a sneak the guard is
+    // keeping, and takes the slot from a claim that isn't: a counter left off costs
+    // the room's damage on every cast, which is worse than the sneak the wear ends.
     public SlotClaimResult ClaimSlot(string itemName, string owner, bool urgent)
     {
         string name = itemName?.Trim() ?? "";
@@ -533,11 +533,12 @@ public sealed class EquipmentManager
     // when given, goes on in its place: the piece the item displaced, for a
     // character whose slot no set dresses. No-op if the slot wasn't owned.
     //
-    // While a sneak is being kept the revert is queued to run when the hold lifts
-    // (Held: the claim still stands). throughSneak sends it regardless, for an
-    // owner that has picked its own moment (the room-spell counter).
+    // While a sneak is being kept nothing is sent and the claim stands (Held). The
+    // revert is queued to run as it is when the hold lifts, which is what a
+    // location rule wants; queueIfHeld false leaves it to an owner that decides
+    // again then (the room-spell counter, which may need the item after all).
     public SlotReleaseResult ClearSlotOverride(
-        string itemName, string owner = LocationOwner, string? otherwise = null, bool throughSneak = false)
+        string itemName, string owner = LocationOwner, string? otherwise = null, bool queueIfHeld = true)
     {
         string name = itemName?.Trim() ?? "";
         if (name.Length == 0) return SlotReleaseResult.NotOwned;
@@ -546,8 +547,9 @@ public sealed class EquipmentManager
         if (!_slotOwners.TryGetValue(slot, out List<SlotClaim>? claims) || !claims.Any(Mine))
             return SlotReleaseResult.NotOwned;
         // Checked before the slot is released, so the redo still finds it owned.
-        if (!throughSneak
-            && HoldGear($"override:{slot}:{owner}", () => ClearSlotOverride(name, owner, otherwise), $"{owner} revert of '{name}'"))
+        if (queueIfHeld
+                ? HoldGear($"override:{slot}:{owner}", () => ClearSlotOverride(name, owner, otherwise), $"{owner} revert of '{name}'")
+                : _gearHeld?.Invoke() == true)
             return SlotReleaseResult.Held;
         claims.RemoveAll(Mine);
 

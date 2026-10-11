@@ -47,8 +47,19 @@ namespace MudPlay.Game.Inventory;
 // EmptyRoomLookAhead steps on, and the counter goes on in a room with no NPC in it
 // when such a room comes up before the hazard; the `sn` before the next step takes
 // the sneak again. With no empty room on the way it goes on next to the hazard as
-// above, sneak or not. The slot is given back on the same terms: in an empty room
-// in that case, at once in any other.
+// above, sneak or not. That ruling is about the wear, which has the room's damage
+// at stake. Giving the slot back has nothing at stake, so it never goes out
+// through a sneak the guard is keeping, in any combination of the two settings: it
+// waits (in the sneaking-past case, for a room with no NPC), the item stays owned,
+// and it is decided again when the wait is over.
+//
+// One step of the plan keeps it on (user, 2026-10-10: "stay on while the next
+// planned step is again next to the hazard"): where it would come off, it stays
+// when the moving engine's next planned step lands in or next to a room it is for,
+// so a corridor with such a room off every second room is walked with one wear
+// and one restore. The look is one step deep and read off the plan: with the room
+// off every third room it still swaps, and with no plan (typed moves, a follower
+// being led) the rule is the plain one above.
 //
 // What is on is this class's own knowledge until the inventory agrees. The game's
 // wear line reaches it before the inventory's copy of the worn list is brought up
@@ -350,7 +361,17 @@ public sealed class RoomSpellCounterWear
                 }
             }
         }
-        ReleaseUnneeded(here, needed, empty);
+
+        // A counter that would come off here stays on when the plan's very next
+        // step lands in or next to a room it is for: one step deep, read off the
+        // plan and never searched for. It keeps a counter on and puts none on.
+        HashSet<int> nextStep = new();
+        if (_owned.Count > 0)
+            foreach (RoomKey key in _plannedAhead(1))
+                if (_roomOf(key) is { } next)
+                    foreach (Room near in WithNeighbours(next))
+                        if (near.Spell > 0) nextStep.Add(near.Spell);
+        ReleaseUnneeded(here, needed, nextStep, empty);
     }
 
     // The room and every room an exit of it leads into.
@@ -722,16 +743,22 @@ public sealed class RoomSpellCounterWear
     }
 
     // needed: the spells of the room stood in and the rooms next to it (and, sneaking
-    // past things, of the rooms the plan comes to next). empty: a gear command may
-    // go out here, which sneaking past things is only true of a room with no NPC.
-    private void ReleaseUnneeded(Room here, HashSet<int> needed, bool empty)
+    // past things, of the rooms the plan comes to next). nextStep: the spells in
+    // and next to the room the plan's next step lands in, which keep a counter on
+    // and put none on. empty: a gear command may go out here, which sneaking past
+    // things is only true of a room with no NPC.
+    private void ReleaseUnneeded(Room here, HashSet<int> needed, HashSet<int> nextStep, bool empty)
     {
-        if (_owned.Count == 0 || !_owned.Keys.Any(id => !needed.Any(spell => _negatorsOf(spell).Contains(id)))) return;
+        _keptForNextStep.Clear();
+        bool For(HashSet<int> spells, int id) => spells.Any(spell => _negatorsOf(spell).Contains(id));
+        foreach ((int id, Owned owned) in _owned)
+            if (!For(needed, id) && For(nextStep, id)) _keptForNextStep.Add(owned.Name);
+        if (!_owned.Keys.Any(id => !For(needed, id) && !For(nextStep, id))) return;
         if (MasterSwitchOff?.Invoke() == true) return;
         foreach ((int id, Owned owned) in _owned.ToList())
         {
             if (_pending?.Id == id || _late.ContainsKey(id)) continue;
-            if (needed.Any(spell => _negatorsOf(spell).Contains(id)))
+            if (For(needed, id) || For(nextStep, id))
             {
                 _saidRestoreHeld.Remove(id);
                 continue;
@@ -756,19 +783,33 @@ public sealed class RoomSpellCounterWear
                         + "its slot is given back in the next room with none");
                 continue;
             }
-            // At once, through a sneak the guard is keeping: only the sneaking-past
-            // case waits, and by here it has its empty room.
-            if (_equipment.ClearSlotOverride(owned.Name, Owner, owned.Displaced, throughSneak: true)
-                == SlotReleaseResult.ReleasedWithCommands)
+            // Never through a sneak the guard is keeping: the wear has the room's
+            // damage at stake and the restore has nothing, so it isn't worth a
+            // backstab opener. Held, the item stays owned, and this is asked again
+            // when the guard lets go (Recheck), by when it may be needed after all.
+            switch (_equipment.ClearSlotOverride(owned.Name, Owner, owned.Displaced, queueIfHeld: false))
             {
-                _log?.Info(LogCategory,
-                    $"{Owner}: no room with {_spellName(owned.Spell) ?? "that spell"} (#{owned.Spell}) or another spell '{owned.Name}' negates "
-                    + $"at or next to {here.Key} — its slot was given back");
-                _confirmedOn.Remove(id);
-                _gearCommandSent?.Invoke();
+                case SlotReleaseResult.Held:
+                    if (_saidRestoreHeld.Add(id))
+                        _log?.Info(LogCategory,
+                            $"{Owner}: '{owned.Name}' is no longer needed at {here.Key}, but a sneak is being kept — "
+                            + "its slot is given back when the sneak is let go");
+                    continue;
+                case SlotReleaseResult.ReleasedWithCommands:
+                    _log?.Info(LogCategory,
+                        $"{Owner}: no room with {_spellName(owned.Spell) ?? "that spell"} (#{owned.Spell}) or another spell '{owned.Name}' negates "
+                        + $"at or next to {here.Key} — its slot was given back");
+                    _confirmedOn.Remove(id);
+                    _gearCommandSent?.Invoke();
+                    break;
             }
             _owned.Remove(id);
             _saidRestoreHeld.Remove(id);
         }
     }
+
+    // The counters that are on only because the plan's next step is in or next to a
+    // room they are for. For the bug report.
+    public IReadOnlyCollection<string> KeptForNextStep => _keptForNextStep;
+    private readonly List<string> _keptForNextStep = new();
 }

@@ -98,8 +98,8 @@ public sealed class RoomSpellCounterWearTests
                 spellName: spell => spell == MagmaHeat ? "magma heat" : spell == FreezingCold ? "freezing cold" : null,
                 sneakingPast: () => SneakingPast,
                 roomEmpty: () => RoomEmpty,
-                plannedAhead: count => Here is { } here && Plan.IndexOf(here.Room) is >= 0 and var at
-                    ? Plan.Skip(at + 1).Take(count).Select(At).ToList()
+                plannedAhead: count => _planAt >= 0 && _planAt < Plan.Count
+                    ? Plan.Skip(_planAt + 1).Take(count).Select(At).ToList()
                     : new List<RoomKey>(),
                 schedule: (_, action) => Timers.Add(action),
                 gearCommandSent: () => GearNotes++,
@@ -126,8 +126,14 @@ public sealed class RoomSpellCounterWearTests
         public void Arrive(int room)
         {
             Here = At(room);
+            // The engine's place in its plan: the next step when this is it (a
+            // loop comes through the same room more than once), else wherever
+            // the room is on the plan.
+            _planAt = _planAt + 1 < Plan.Count && Plan[_planAt + 1] == room ? _planAt + 1 : Plan.IndexOf(room);
             Wear.OnArrived(At(room));
         }
+
+        private int _planAt = -1;
 
         // The game puts the piece on, in the order the client hears it. Each line
         // reaches the router's handlers first (the equipment manager, then the
@@ -918,7 +924,8 @@ public sealed class RoomSpellCounterWearTests
         Assert.True(w.Wear.WaitingForEmptyRoom);
         Assert.Single(w.Info, l => l.Contains("its slot is given back in the next room with none"));
 
-        w.RoomEmpty = true;                            // the NPC wanders off
+        w.RoomEmpty = true;                            // the NPC wanders off:
+        w.SneakKept = false;                           // nobody to sneak past, so the guard keeps nothing
         w.Wear.Poll();
         Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
         Assert.Empty(w.Wear.OwnedSnapshot());
@@ -963,7 +970,7 @@ public sealed class RoomSpellCounterWearTests
     }
 
     [Fact]
-    public void AutoSneakOnAutoCombatOn_ThereIsNoLookAhead_AndTheWearAndTheRestoreGoThroughAKeptSneak()
+    public void AutoSneakOnAutoCombatOn_ThereIsNoLookAhead_TheWearGoesThroughAKeptSneak_TheRestoreWaitsForIt()
     {
         World w = Volcano(6, 7);
         w.Plan.AddRange(Enumerable.Range(1, 12));
@@ -973,13 +980,165 @@ public sealed class RoomSpellCounterWearTests
         Assert.Empty(w.Sent);                          // empty rooms, lava ahead on the plan: not this case
 
         w.Arrive(5);
-        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);   // the room's damage is at stake
         w.Answer();
 
         w.RoomEmpty = false;
         foreach (int room in new[] { 6, 7, 8, 9 }) w.Arrive(room);
-        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);   // at once
+        // Clear of the lava with a monster to open on: the restore isn't worth the
+        // backstab, and the item stays owned until it has gone out.
+        Assert.Single(w.Sent);
+        Assert.Single(w.Wear.OwnedSnapshot());
+        Assert.Equal(1, w.GearNotes);
+        Assert.Single(w.Info, l => l.Contains("a sneak is being kept"));
+
+        w.SneakKept = false;
+        w.Gear.RunHeldGear();                          // the guard lets go: nothing was queued blind
+        Assert.Single(w.Sent);
+        w.Wear.Recheck();                              // and the counter decides again
+        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
         Assert.Empty(w.Wear.OwnedSnapshot());
+    }
+
+    [Fact]
+    public void ARestoreHeldForAKeptSneak_IsDropped_WhenTheItemIsNeededAgainByTheTimeTheSneakIsLetGo()
+    {
+        World w = Volcano();
+        w.Arrive(2);
+        w.Answer();
+        foreach (int room in new[] { 3, 4, 5 }) w.Arrive(room);
+        w.SneakKept = true;                            // a backstab owed in the room being entered
+        w.Arrive(6);
+        Assert.Single(w.Sent);
+
+        w.Arrive(5);                                   // back beside the lava, still sneaking
+        w.SneakKept = false;
+        w.Gear.RunHeldGear();
+        w.Wear.Recheck();
+
+        Assert.Single(w.Sent);
+        Assert.Single(w.Wear.OwnedSnapshot());
+    }
+
+    // ----- one step of the plan keeps it on --------------------------------------
+
+    // Thirteen rooms in a line, with a lava room to the south of every `every`th
+    // room from the second on.
+    private static World Corridor(int every)
+    {
+        World w = new();
+        w.Worn.Add(new EquippedItem("silver necklace", "Neck"));
+        w.Pack.Add("phoenix feather");
+        w.Line(13);
+        for (int n = 2; n <= 12; n += every)
+        {
+            RoomKey lava = new(16, 100 + n);
+            var exits = new Dictionary<Direction, RoomExit>(w.Rooms[At(n)].Exits)
+            {
+                [Direction.S] = new RoomExit(lava, RoomExitHint.None, RawHint: null),
+            };
+            w.Rooms[At(n)] = new Room { Key = At(n), Name = "Ledge", Spell = 0, Exits = exits };
+            w.Rooms[lava] = new Room
+            {
+                Key = lava, Name = "Lava Tube", Spell = MagmaHeat,
+                Exits = new Dictionary<Direction, RoomExit> { [Direction.N] = new RoomExit(At(n), RoomExitHint.None, RawHint: null) },
+            };
+        }
+        return w;
+    }
+
+    private static void Walk(World w, IEnumerable<int> rooms)
+    {
+        foreach (int room in rooms)
+        {
+            w.Arrive(room);
+            w.Answer();
+        }
+    }
+
+    [Fact]
+    public void APlannedWalk_PastAHazardOffEverySecondRoom_WearsOnceAndRestoresOnce()
+    {
+        World w = Corridor(every: 2);
+        w.Plan.AddRange(Enumerable.Range(1, 13));
+
+        Walk(w, Enumerable.Range(1, 12));
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);   // on at room 2, kept through the odd rooms
+
+        w.Arrive(3);                                   // (looked at part-way: the bug report can say why it is on)
+        Assert.Equal(new[] { "phoenix feather" }, w.Wear.KeptForNextStep);
+        w.Arrive(12);
+        Assert.Empty(w.Wear.KeptForNextStep);
+
+        Walk(w, new[] { 13 });                         // past the last one, nothing ahead
+        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
+    }
+
+    [Fact]
+    public void ALoop_PastAHazardOffEverySecondRoom_WearsOnce_AndRestoresWhenItStops()
+    {
+        World w = Corridor(every: 2);
+        List<int> lap = Enumerable.Range(1, 13).Concat(Enumerable.Range(2, 11).Reverse()).ToList();   // 1..13, 12..2
+        for (int laps = 0; laps < 3; laps++) w.Plan.AddRange(lap);
+        w.Plan.Add(1);
+
+        Walk(w, w.Plan.Take(w.Plan.Count - 1).ToList());
+        // Room 13 and room 1 are neither in nor next to the lava, and the lap's next
+        // step from each is: nothing is swapped at either end, lap after lap.
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
+
+        Walk(w, new[] { 1 });                          // the last step of the plan: nothing ahead
+        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
+    }
+
+    [Fact]
+    public void APlannedWalk_PastAHazardOffEveryThirdRoom_StillSwaps()
+    {
+        // The look is one step deep: from room 3 the next step is room 4, which
+        // is not next to the lava off room 5.
+        World w = Corridor(every: 3);
+        w.Plan.AddRange(Enumerable.Range(1, 13));
+
+        Walk(w, Enumerable.Range(1, 13));
+
+        Assert.Equal(8, w.Sent.Count);                 // on and off at each of rooms 2, 5, 8 and 11
+        Assert.Equal(4, w.Sent.Count(c => c == "wear phoenix feather"));
+        Assert.Equal(4, w.Sent.Count(c => c == "wear silver necklace"));
+    }
+
+    [Fact]
+    public void ATypedWalk_AlongTheSameCorridor_Swaps_ThereBeingNoPlan()
+    {
+        World w = Corridor(every: 2);
+
+        Walk(w, Enumerable.Range(1, 13));
+
+        Assert.Equal(12, w.Sent.Count);                // on at every even room, off at every odd one
+    }
+
+    [Fact]
+    public void ThePlanDroppedMidCorridor_ItComesOffByThePlainRule()
+    {
+        World w = Corridor(every: 2);
+        w.Plan.AddRange(Enumerable.Range(1, 13));
+        Walk(w, new[] { 1, 2, 3 });
+        Assert.Single(w.Sent);                         // kept at room 3 for the step to room 4
+
+        w.Plan.Clear();                                // the walk is stopped there
+        w.Wear.Recheck();
+
+        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
+    }
+
+    [Fact]
+    public void TheNextStep_KeepsACounterOn_AndPutsNoneOn()
+    {
+        World w = Corridor(every: 2);
+        w.Plan.AddRange(Enumerable.Range(1, 13));
+
+        w.Arrive(1);                                   // the next step, room 2, is next to the lava
+
+        Assert.Empty(w.Sent);
     }
 
     // ----- giving the slot back ------------------------------------------------

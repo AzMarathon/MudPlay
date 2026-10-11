@@ -2732,7 +2732,9 @@ public static class BugReportBuilder
     {
         List<string> parts = svc.CounterWear.OwnedSnapshot().Select(o =>
             $"{o.Item} for {svc.SpellCatalog.GetSpellNameByNumber(o.Spell) ?? "room spell"} (#{o.Spell})"
-            + (o.Displaced is null ? ", no piece taken off for it" : $", in place of {o.Displaced}")).ToList();
+            + (o.Displaced is null ? ", no piece taken off for it" : $", in place of {o.Displaced}")
+            // Not in or next to such a room: on because the plan's next step is.
+            + (svc.CounterWear.KeptForNextStep.Contains(o.Item) ? ", kept on for the next step" : string.Empty)).ToList();
         if (svc.CounterWear.PendingItem is { } pending) parts.Add($"wear of {pending} not answered yet");
         return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
     }
