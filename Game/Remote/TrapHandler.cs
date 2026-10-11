@@ -85,7 +85,7 @@ public sealed class TrapHandler : IDisposable
         if (!_manager.CanDisarm)
         {
             if (ctx.Channel == RemoteChannel.Local) return;
-            ctx.Refuse("can't disarm — no Traps skill");
+            ctx.Refuse("can't disarm - no Traps skill");
             return;
         }
 

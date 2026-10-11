@@ -54,12 +54,12 @@ public sealed class HelpHandler : IDisposable
             string requested = ctx.Args[0];
             // The relay-back marker isn't a catalog command, but it is listed.
             if (requested.StartsWith('&'))
-                ctx.Reply($"{RemoteCommandManager.RelayBackPrefix}<command> — sends @<command> back to you, "
+                ctx.Reply($"{RemoteCommandManager.RelayBackPrefix}<command> - sends @<command> back to you, "
                     + "so your client runs it as if I'd sent it (e.g. &@invite makes me ask you for a party invite)");
             else if (RemoteCommandCatalog.TryGetHelp(requested, out RemoteCommandHelp help))
-                ctx.Reply($"{help.Syntax} — {help.Description}");
+                ctx.Reply($"{help.Syntax} - {help.Description}");
             else
-                ctx.Refuse($"no such command '{requested}' — try @help for the list");
+                ctx.Refuse($"no such command '{requested}' - try @help for the list");
             return;
         }
 

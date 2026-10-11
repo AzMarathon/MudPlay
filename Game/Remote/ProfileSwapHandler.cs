@@ -50,7 +50,14 @@ public sealed class ProfileSwapHandler : IDisposable
         }
 
         string? report = _profiles.SwitchByArg(arg);
-        if (report is not null) ctx.Reply(report);                      // success — always replies
+        if (report is not null) ctx.Reply(ForTheWire(report));          // success — always replies
         else ctx.Refuse($"no combat profile matches '{arg}'");
     }
+
+    // The swap report is written for our own terminal and log, with a long dash
+    // after the profile and dots between the slots. Neither survives the wire
+    // (WireText), so the copy sent to the asker uses a hyphen and commas.
+    private static string ForTheWire(string report) =>
+        report.Replace(" — ", " - ", StringComparison.Ordinal)
+              .Replace(" · ", ", ", StringComparison.Ordinal);
 }

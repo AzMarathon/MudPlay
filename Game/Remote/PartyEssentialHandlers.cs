@@ -198,7 +198,7 @@ public sealed class PartyEssentialHandlers : IDisposable
 
     private void OnHealth(RemoteCommandContext ctx)
     {
-        if (!_player.HasPromptData) { ctx.Refuse("HP unknown — no prompt observed yet"); return; }
+        if (!_player.HasPromptData) { ctx.Refuse("HP unknown - no prompt observed yet"); return; }
         // Format mirrors the in-game prompt vocabulary so the recipient
         // can read it at a glance: HP=cur/max,MA=cur/max[, Resting|Meditating].
         // The engine wraps the whole payload in { } at SendReply time;
@@ -631,7 +631,7 @@ public sealed class PartyEssentialHandlers : IDisposable
         string drag = _readDraggedBy?.Invoke() is { Length: > 0 } who
             ? $"being dragged by {who}"
             : "nobody is dragging me";
-        ctx.Reply($"Can't {verb} — I'm mortally wounded; {drag}.");
+        ctx.Reply($"Can't {verb} - I'm mortally wounded; {drag}.");
         return true;
     }
 

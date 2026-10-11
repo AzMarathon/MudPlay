@@ -170,10 +170,10 @@ public sealed class QuestQueryHandler : IDisposable
             case QuestFlagSyncManager.UpdateOutcome.Done:
                 ctx.Reply($"{result.FlagsRead} flag(s) read, {result.Marked.Count} newly marked"
                     + (result.Progressed > 0 ? $", {result.Progressed} in progress advanced" : "")
-                    + " — " + QuestQueryReport.FormatAll(log, _quests));
+                    + " - " + QuestQueryReport.FormatAll(log, _quests));
                 break;
             case QuestFlagSyncManager.UpdateOutcome.NothingToCheck:
-                ctx.Reply("nothing to check — " + QuestQueryReport.FormatAll(log, _quests));
+                ctx.Reply("nothing to check - " + QuestQueryReport.FormatAll(log, _quests));
                 break;
             case QuestFlagSyncManager.UpdateOutcome.NoAccess:
                 ctx.Refuse("can't read quest flags here (stock needs sys-god access)");

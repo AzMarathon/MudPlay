@@ -131,7 +131,7 @@ public sealed class RoombaQueryHandler : IDisposable
             ctx.Reply(FormatTotal(group.ToList()));
 
         int extraItems = byItem.Count - MaxItemsShown;
-        if (extraItems > 0) ctx.Reply($"{extraItems} more matching item(s) — refine your search");
+        if (extraItems > 0) ctx.Reply($"{extraItems} more matching item(s) - refine your search");
     }
 
     // One line: total quantity across every matching room, the item's

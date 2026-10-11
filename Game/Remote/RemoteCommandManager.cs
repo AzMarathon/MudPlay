@@ -1088,6 +1088,8 @@ public sealed class RemoteCommandManager : IDisposable
     {
         if (channel == RemoteChannel.Local && StealthedProvider?.Invoke() == true)
             channel = RemoteChannel.Telepath;
+        // Nothing outside ASCII goes out: see WireText.
+        payload = WireText.Ascii(payload);
         string given = GivenName(recipient);
         string wire = channel switch
         {

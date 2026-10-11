@@ -1502,8 +1502,10 @@ public sealed class TrainerWalkManager : IDisposable
             if (trained > 0) return $"Trained to level {finalLevel}.";
             return stop switch
             {
-                StopReason.ProgressedTooFar => "Can't train — you've progressed too far for this trainer.",
-                StopReason.NoMoney => "Can't train — not enough money for training.",
+                // Plain hyphens: this line is also the @train answer, which rides
+                // the wire to another player (WireText).
+                StopReason.ProgressedTooFar => "Can't train - you've progressed too far for this trainer.",
+                StopReason.NoMoney => "Can't train - not enough money for training.",
                 _ => "Nothing to train.",
             };
         }

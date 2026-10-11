@@ -53,7 +53,7 @@ public sealed class TokenQueryHandler : IDisposable
             if (all.Count == 0)
                 ctx.Refuse("no token charges read yet (hold transport tokens and log in on Paradigm)");
             else
-                ctx.Reply("token charges — " + string.Join(", ", all.Select(c => $"{c.Place}: {c.Remaining}")));
+                ctx.Reply("token charges - " + string.Join(", ", all.Select(c => $"{c.Place}: {c.Remaining}")));
             return;
         }
 
@@ -61,6 +61,6 @@ public sealed class TokenQueryHandler : IDisposable
         if (_tokens.ChargesFor(query) is { } n)
             ctx.Reply($"token of {place}: {n} use(s) remaining");
         else
-            ctx.Refuse($"no charge count for a token of {place} — not held, or not read yet");
+            ctx.Refuse($"no charge count for a token of {place} - not held, or not read yet");
     }
 }

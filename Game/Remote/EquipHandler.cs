@@ -110,10 +110,10 @@ public sealed class EquipHandler : IDisposable
                 ctx.Refuse($"no gear set '{keyword}'");
                 break;
             case EquipUpdateOutcome.Busy:
-                ctx.Refuse("busy equipping — try again when the swap finishes");
+                ctx.Refuse("busy equipping - try again when the swap finishes");
                 break;
             case EquipUpdateOutcome.InventoryUnknown:
-                ctx.Refuse("haven't read my inventory yet — try again after an 'i'");
+                ctx.Refuse("haven't read my inventory yet - try again after an 'i'");
                 break;
         }
     }

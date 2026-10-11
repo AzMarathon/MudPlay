@@ -119,7 +119,7 @@ public sealed class MovePlayerHandler : IDisposable
         (int? coordMap, int? coordRoom) = RoomSearchService.TryParseCoordinate(query);
         if (coordMap is null && coordRoom is int bareRoom)
         {
-            ctx.Refuse($"room {bareRoom} needs a map — try e.g. 1/{bareRoom}");
+            ctx.Refuse($"room {bareRoom} needs a map - try e.g. 1/{bareRoom}");
             return;
         }
         bool isCoordQuery = coordMap is not null && coordRoom is not null;
