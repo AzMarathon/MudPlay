@@ -1,5 +1,9 @@
 # Version history
 
+## 3.177.9
+
+- A game-data set whose empty text blocks link round in a circle no longer freezes the client as it loads; the program log names the blocks
+
 ## 3.177.2
 
 - Simulator area ranking: **Save as loop** turns a ranked area's tour into a saved loop you can run, with how it was tested in the loop's notes

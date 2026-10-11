@@ -73,11 +73,12 @@ public sealed class BoatPassageResolverTests : IDisposable
         ]
         """;
 
-    private BoatPassage[] Resolve(string tb = DockTbInfo, string spells = DockSpells, int cmd = 100)
+    private BoatPassage[] Resolve(string tb = DockTbInfo, string spells = DockSpells, int cmd = 100,
+        ISet<int>? looped = null)
     {
         (TBInfoStore store, KnownSpellCatalog catalog) = NewSet(tb, spells);
         return BoatPassageResolver
-            .EnumerateBoatPassages(store, new RoomKey(14, 759), cmd, catalog)
+            .EnumerateBoatPassages(store, new RoomKey(14, 759), cmd, catalog, looped)
             .ToArray();
     }
 
@@ -235,5 +236,70 @@ public sealed class BoatPassageResolverTests : IDisposable
             ]
             """;
         Assert.Empty(Resolve(tb, spells));
+    }
+
+    // ----- blocks with no lines, chained by LinkTo ---------------------------
+
+    private const string HopSpells = """
+        [ { "Number": 600, "Name": "hop", "MinBase": 0, "MaxBase": 0, "Abil-0": 140, "AbilVal-0": 88 } ]
+        """;
+
+    private static string Block(int number, int linkTo, string action = "") =>
+        $"{{ \"Number\": {number}, \"LinkTo\": {linkTo}, \"Action\": \"{action}\", \"Called From\": \"\" }}";
+
+    private const string CoveLine = @"secure passage to cove:minlevel 1 0:price 500 0:random 200:text 0\n";
+
+    // A room command, or a sailing's roll table, that is an empty block continues
+    // at its LinkTo, however many empty blocks lie between.
+    [Fact]
+    public void EmptyBlocks_AreFollowedToTheBlockWithLines()
+    {
+        string tb = "[" + string.Join(",",
+            Block(100, 101), Block(101, 102), Block(102, 0, CoveLine),
+            Block(200, 201), Block(201, 0, @"100:cast 600\n")) + "]";
+
+        HashSet<int> looped = new();
+        BoatPassage p = Assert.Single(BoundedRun.Finish(() => Resolve(tb, HopSpells, looped: looped)));
+        Assert.Equal(new RoomKey(14, 88), p.ArrivalRoom);
+        Assert.Empty(looped);
+    }
+
+    // A damaged set can link an empty block to itself, or two of them to each
+    // other. Followed blindly the walk never ends, and it runs for every room
+    // command each time a set loads. The chain ends there with no sailing, and
+    // the block it came back to is handed to the caller to report.
+    [Theory]
+    [InlineData(100, 0, 0, 100)]       // the room command links to itself
+    [InlineData(101, 100, 0, 100)]     // it and another block link to each other
+    [InlineData(101, 102, 101, 101)]   // it leads into two blocks linked to each other
+    public void RoomCommandChainThatComesBackOnItself_EndsWithNoSailing(
+        int link100, int link101, int link102, int cameBackTo)
+    {
+        string tb = "[" + string.Join(",",
+            Block(100, link100), Block(101, link101), Block(102, link102)) + "]";
+
+        HashSet<int> looped = new();
+        Assert.Empty(BoundedRun.Finish(() => Resolve(tb, HopSpells, looped: looped)));
+        Assert.Equal(cameBackTo, Assert.Single(looped));
+
+        // A caller that doesn't ask which blocks looped is safe too.
+        Assert.Empty(BoundedRun.Finish(() => Resolve(tb, HopSpells)));
+    }
+
+    [Theory]
+    [InlineData(200, 0)]     // the roll table links to itself
+    [InlineData(201, 200)]   // it and another block link to each other
+    public void RollTableChainThatComesBackOnItself_DropsThatSailing(int link200, int link201)
+    {
+        // The second sailing's table (210) is whole, so it is still offered.
+        string tb = "[" + string.Join(",",
+            Block(100, 0, CoveLine + @"secure passage to isle:minlevel 1 0:price 1 0:random 210:text 0\n"),
+            Block(200, link200), Block(201, link201),
+            Block(210, 0, @"100:cast 600\n")) + "]";
+
+        HashSet<int> looped = new();
+        BoatPassage p = Assert.Single(BoundedRun.Finish(() => Resolve(tb, HopSpells, looped: looped)));
+        Assert.Equal("isle", p.Place);
+        Assert.Equal(200, Assert.Single(looped));
     }
 }
