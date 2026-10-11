@@ -2659,6 +2659,8 @@ public static class BugReportBuilder
         // A ranking is kept on disk between sessions: figures that look wrong may be
         // an earlier day's, listed marked, and an empty list may be a file dropped.
         Kv(sb, "Area ranking listed", snap.ListedRanking ?? "(none)");
+        // A kept ranking is checked against the character only once both are read.
+        Kv(sb, "Character read since connecting", svc.SimulatorCharacterReads);
         // The set's files were replaced under this client: nothing is saved or read
         // back until it is read in again, which reads as "my ranking is gone".
         svc.GameData.TableStampsInUse(Game.Simulation.RankingWorld.TableNames, out IReadOnlyList<string> mixed);

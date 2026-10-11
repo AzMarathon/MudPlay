@@ -706,18 +706,99 @@ public sealed class SimulatorViewModelTests : IDisposable
 
         // The stat screen arrives, the inventory not yet: still not known.
         h.Level = 30;
-        h.Simulator.CharacterRead();
+        h.Simulator.RecheckKept();
         Assert.True(h.Simulator.RankingNotCurrent);
 
         // Both read, and it is the character the ranking was made for.
         h.CharacterNow = SameCharacter;
-        h.Simulator.CharacterRead();
+        h.Simulator.RecheckKept();
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+    }
+
+    private static RankingCharacter With(string group, string hash = "other") => new(
+        SameCharacter.Groups.ToDictionary(g => g.Key, g => g.Key == group ? hash : g.Value));
+
+    [Fact]
+    public void TheMarkOnAKeptRankingFollowsTheCharacterWhileItIsOnShow_SetAndClearedInPlace()
+    {
+        AreaRanking made = Ranking("Hills");
+        string set = SetWithASavedRanking(made);
+        using Harness h = Build(set: set, onDisk: true);
+        h.Settle();
+        Assert.False(h.Simulator.RankingNotCurrent);
+
+        // Another weapon in hand at the next `stat`: marked where it stands, the
+        // rows left as they are and nothing picked.
+        h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
+        h.CharacterNow = With(RankingCharacter.StatsOrGear);
+        h.Simulator.RecheckKept();
+        AssertListedAsKept(made, h.Simulator.RankStatus, after: "; your stats or gear have changed since\\.");
+        Assert.True(h.Simulator.RankingNotCurrent);
+        Assert.Same(h.Simulator.Rankings[0], h.Simulator.SelectedRanking);
+        Assert.Contains(h.Said, m => m.Contains("now reads:") && m.Contains("your stats or gear have changed since"));
+        Assert.Contains("marked for stats or gear", h.Simulator.ToSnapshot().ListedRanking);
+
+        // A setting saved as well, then the weapon put back: each named while it holds.
+        h.CharacterNow = new RankingCharacter(With(RankingCharacter.StatsOrGear).Groups.ToDictionary(
+            g => g.Key, g => g.Key == RankingCharacter.Settings ? "other" : g.Value));
+        h.Simulator.RecheckKept();
+        Assert.Contains("; your stats or gear and settings have changed since.", h.Simulator.RankStatus);
+        h.CharacterNow = With(RankingCharacter.Settings);
+        h.Simulator.RecheckKept();
+        Assert.Contains("; your settings have changed since.", h.Simulator.RankStatus);
+
+        // And the setting put back: it is the character the ranking was made for again.
+        h.CharacterNow = SameCharacter;
+        h.Simulator.RecheckKept();
         AssertListedAsKept(made, h.Simulator.RankStatus);
         Assert.False(h.Simulator.RankingNotCurrent);
 
-        // Checked once, it says how it stood then; a later reading doesn't re-mark it.
-        h.CharacterNow = new RankingCharacter(new Dictionary<string, string>());
-        h.Simulator.CharacterRead();
+        // A level gained marks it; so does the character going unread (a reconnect).
+        h.Level = 31;
+        h.Simulator.RecheckKept();
+        Assert.Contains("; you are L31 now.", h.Simulator.RankStatus);
+        Assert.True(h.Simulator.RankingNotCurrent);
+        h.Level = 30;
+        h.CharacterNow = null;
+        h.Simulator.RecheckKept();
+        Assert.Contains("; not checked against the character yet.", h.Simulator.RankStatus);
+        Assert.True(h.Simulator.RankingNotCurrent);
+    }
+
+    [Fact]
+    public void ACheckThatFindsNothingNewLeavesTheStatusLineAndTheLogAlone()
+    {
+        string set = SetWithASavedRanking(Ranking("Hills"));
+        using Harness h = Build(set: set, onDisk: true);
+        h.Settle();
+        string listed = h.Simulator.RankStatus;
+        int said = h.Said.Length;
+
+        h.Simulator.RankStatus = "Saved as a loop.";
+        h.Simulator.RecheckKept();
+        h.Simulator.RecheckKept();
+
+        Assert.Equal("Saved as a loop.", h.Simulator.RankStatus);
+        Assert.Equal(said, h.Said.Length);
+        // What changes is said, and takes the line back.
+        h.CharacterNow = With(RankingCharacter.Reach);
+        h.Simulator.RecheckKept();
+        Assert.NotEqual(listed, h.Simulator.RankStatus);
+        Assert.Contains("; your reach has changed since.", h.Simulator.RankStatus);
+    }
+
+    [Fact]
+    public void ARankingJustMadeOrStillRunningIsNotReworded()
+    {
+        using Harness h = Build();
+        h.Finish(Ranking("Hills"));
+        string made = h.Simulator.RankStatus;
+
+        h.CharacterNow = With(RankingCharacter.Spells);
+        h.Simulator.RecheckKept();
+
+        Assert.Equal(made, h.Simulator.RankStatus);
         Assert.False(h.Simulator.RankingNotCurrent);
     }
 
@@ -731,7 +812,7 @@ public sealed class SimulatorViewModelTests : IDisposable
 
         h.CharacterNow = new RankingCharacter(SameCharacter.Groups.ToDictionary(
             g => g.Key, g => g.Key == RankingCharacter.Spells ? "other" : g.Value));
-        h.Simulator.CharacterRead();
+        h.Simulator.RecheckKept();
 
         Assert.Contains("; your spells have changed since.", h.Simulator.RankStatus);
         Assert.True(h.Simulator.RankingNotCurrent);

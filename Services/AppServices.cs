@@ -8477,6 +8477,13 @@ public sealed class AppServices
             Game.Simulation.SimulatorOwner.CharacterKey(gone.Bbs, gone.Name));
         Profile.BbsRenamed += SimulatorRankings.RenameBbs;
         Profile.BbsDeleted += SimulatorRankings.ForgetBbs;
+        // What a kept ranking is checked against is the character as the game last
+        // showed it, not as the profile remembers it from an earlier session
+        // (SimulatorCharacterAt). Subscribed here, ahead of any window, so the
+        // Simulator's own handlers for the same reads find these already set.
+        Stats.ScreenParsed += _ => _simulatorStatRead |= Stats.LastCaptureReadHits;
+        Inventory.FullInventoryParsed += () => _simulatorInventoryRead = true;
+        Profile.ProfileLoaded += _ => ForgetSimulatorCharacterReads();
 
         // Which loops and auto-lair setups are favourites is each character's own.
         // Built after the first LoadAll above so a profile already loaded finds its
@@ -11568,12 +11575,16 @@ public sealed class AppServices
     private string? _simulatorMixedTablesSaid;
 
     // The character as a ranking at `level` would simulate it now, as the groups a
-    // kept ranking is compared by (RankingCharacter). Null while it can't be read: no
-    // `stat` yet (BuildLoopSimulation), or no inventory, without which the worn gear
-    // and the gate items carried are unknown and every ranking would read as changed.
+    // kept ranking is compared by (RankingCharacter). Null until the game has shown
+    // both a `stat` screen and a full inventory on the latest connection. Before
+    // that the stats are the ones the profile remembers from an earlier session and
+    // the worn gear and gate items carried are unknown or as they were before the
+    // link dropped: a ranking checked against those would be told it is current, or
+    // changed, on figures nobody has read.
     private Game.Simulation.RankingCharacter? SimulatorCharacterAt(int level)
     {
-        if (!Inventory.IsLoaded || GameData.ActiveSet is not { } set || BuildLoopSimulation(level) is not { } built)
+        if (!_simulatorStatRead || !_simulatorInventoryRead || !Inventory.IsLoaded
+            || GameData.ActiveSet is not { } set || BuildLoopSimulation(level) is not { } built)
             return null;
         // The record overrides that apply to this character: Global, its realm's,
         // its own.
@@ -11592,6 +11603,19 @@ public sealed class AppServices
 
     // Every item an exit of the loaded map wants carried; rebuilt after the map is.
     private IReadOnlySet<int>? _simulatorGateItems;
+
+    // A `stat` screen (one that gave the hit points) and a full inventory have been
+    // read since the latest connection began, for the loaded profile. They stand
+    // after the link drops, since they are still the last the game said, and are
+    // forgotten when the next connection begins (MainWindowViewModel's Connected
+    // handler) or another profile loads: what is true by then has to be read again.
+    private bool _simulatorStatRead, _simulatorInventoryRead;
+
+    public void ForgetSimulatorCharacterReads() => _simulatorStatRead = _simulatorInventoryRead = false;
+
+    // For the bug report: why a kept ranking says "not checked against the character yet".
+    public string SimulatorCharacterReads =>
+        $"`stat` {(_simulatorStatRead ? "read" : "not read")}, inventory {(_simulatorInventoryRead && Inventory.IsLoaded ? "read" : "not read")}";
 
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the

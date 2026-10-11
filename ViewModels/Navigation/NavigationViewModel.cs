@@ -186,8 +186,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.GameData.ActiveSetChanged += OnSimulatorGameDataChanged;
         // A ranking kept from an earlier session is listed before the character has
         // been read, marked as not checked; the first `stat` and inventory check it.
+        // It is checked again on every one after, when the level changes, and when
+        // the profile (settings, avoided rooms) or a game-data edit is saved, so the
+        // mark follows the character for as long as the ranking is on show.
         _services.Stats.ScreenParsed += OnSimulatorStatRead;
-        _services.Inventory.FullInventoryParsed += Simulator.CharacterRead;
+        _services.Inventory.FullInventoryParsed += Simulator.RecheckKept;
+        _services.PlayerStats.PropertyChanged += OnSimulatorPlayerStatsChanged;
+        _services.Profile.ProfileSaving += OnSimulatorProfileSaving;
+        _services.Resolver.GameDataChanged += OnSimulatorGameDataEdited;
     }
 
     // The loaded character as the Simulator keys its results.
@@ -203,7 +209,27 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_services.Profile.LoadedIsACopyOf(oldBbs, oldName)) Simulator.CharacterChanged();
         else Simulator.CharacterRenamed();
     }
-    private void OnSimulatorStatRead(LastKnownStats _) => Simulator.CharacterRead();
+    private void OnSimulatorStatRead(LastKnownStats _) => Simulator.RecheckKept();
+    private void OnSimulatorPlayerStatsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(Game.PlayerStats.Level)) Simulator.RecheckKept();
+    }
+    private void OnSimulatorProfileSaving(Models.Profile.CharacterProfile _) => RecheckSimulatorSoon();
+    private void OnSimulatorGameDataEdited(GameDataChange _) => RecheckSimulatorSoon();
+
+    // A save is raised before the file is written, and a batch of edits raises one
+    // for each record: the check runs once, after whoever raised it has finished.
+    private void RecheckSimulatorSoon()
+    {
+        if (_simulatorRecheckPosted) return;
+        _simulatorRecheckPosted = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _simulatorRecheckPosted = false;
+            Simulator.RecheckKept();
+        });
+    }
+    private bool _simulatorRecheckPosted;
     private void OnSimulatorGameDataChanged(string? set)
     {
         Simulator.GameDataChanged(set);
@@ -357,7 +383,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Profile.ProfileRenamed -= OnSimulatorCharacterRenamed;
         _services.GameData.ActiveSetChanged -= OnSimulatorGameDataChanged;
         _services.Stats.ScreenParsed -= OnSimulatorStatRead;
-        _services.Inventory.FullInventoryParsed -= Simulator.CharacterRead;
+        _services.Inventory.FullInventoryParsed -= Simulator.RecheckKept;
+        _services.PlayerStats.PropertyChanged -= OnSimulatorPlayerStatsChanged;
+        _services.Profile.ProfileSaving -= OnSimulatorProfileSaving;
+        _services.Resolver.GameDataChanged -= OnSimulatorGameDataEdited;
     }
 
     // Loops + lairs share the on-disk folder tree; a folder add / rename /

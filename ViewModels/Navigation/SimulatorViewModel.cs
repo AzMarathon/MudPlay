@@ -192,18 +192,25 @@ public sealed partial class SimulatorViewModel : ObservableObject
             foreach (AreaRank r in ranking.Rows) Rankings.Add(r);
         OnPropertyChanged(nameof(HasRankings));
         _keptCheck = default;
+        _keptNote = null;
         RankingNotCurrent = false;
         RankStatus = ranking?.Summary ?? "";
         if (_shownKept) NoteKept(ranking!);
     }
 
     // Lead the status line of the kept ranking on show with how it stands now.
-    private void NoteKept(AreaRanking ranking)
+    // False, with the line left as it is, when that is what it last said of it.
+    private bool NoteKept(AreaRanking ranking)
     {
         int levelNow = _simulation?.Level() ?? 0;
-        _keptCheck = CheckKept(ranking);
-        RankingNotCurrent = !ranking.IsCurrentAt(levelNow, _keptCheck);
-        RankStatus = $"{ranking.KeptNote(levelNow, DateTimeOffset.Now, _keptCheck)} {ranking.Summary}";
+        RankingCheck check = CheckKept(ranking);
+        string note = ranking.KeptNote(levelNow, DateTimeOffset.Now, check);
+        if (string.Equals(note, _keptNote, StringComparison.Ordinal)) return false;
+        _keptCheck = check;
+        _keptNote = note;
+        RankingNotCurrent = !ranking.IsCurrentAt(levelNow, check);
+        RankStatus = $"{note} {ranking.Summary}";
+        return true;
     }
 
     // The character as it would be simulated now at the ranking's level, against
@@ -211,16 +218,27 @@ public sealed partial class SimulatorViewModel : ObservableObject
     private RankingCheck CheckKept(AreaRanking ranking) =>
         RankingCheck.Of(ranking.Character, _simulation?.CharacterAt(ranking.Level));
 
-    // A `stat` screen or a full inventory was read. A kept ranking listed before the
-    // character could be read says "not checked against the character yet"; it is
-    // checked now. One already checked is left: it says how it stood when listed.
-    public void CharacterRead()
+    // Something the mark is worked out from may have moved: a `stat` screen or a
+    // full inventory was read, the level changed, the profile or a game-data edit
+    // was saved. The kept ranking on show is checked again and its mark brought up
+    // to date where it stands, either way: marked when the character has moved away
+    // from the one it was made for, and cleared when it is that character again (the
+    // weapon put back, the buff cast again). A mark worked out once when the ranking
+    // was listed would go on saying how things stood then.
+    //
+    // The status line is rewritten only when what it says of the ranking changes, so
+    // a line put there since (a loop saved from a row) is not wiped by every `stat`.
+    public void RecheckKept()
     {
-        if (_shownKept && _shown is { } ranking && _keptCheck.Unchecked && !IsRanking) NoteKept(ranking);
+        if (!_shownKept || _shown is not { } ranking || IsRanking) return;
+        if (NoteKept(ranking))
+            _log?.Info("Simulator", $"the area ranking listed for {_owner.Label} now reads: {_keptNote}");
     }
 
     private bool _shownKept;
     private RankingCheck _keptCheck;
+    // What the status line last said of the kept ranking on show (null: none is).
+    private string? _keptNote;
 
     // The ranking listed is not known to be about the character as it is now: the
     // table is shown muted.
