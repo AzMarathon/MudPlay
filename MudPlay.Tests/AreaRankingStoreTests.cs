@@ -126,25 +126,64 @@ public sealed class AreaRankingStoreTests
         Assert.Equal(1, store.Count);
     }
 
-    // A ranking with no record of its tables can be compared with nothing. A switch
-    // leaves it; its set read in again drops it, as it dropped every ranking before.
-    [Fact]
-    public void ARankingWithNoRecordOfItsTablesGoesWhenItsSetIsReadInAgain()
+    // A ranking with no record of its tables can be compared with nothing, so it
+    // does not outlive the load of its set it was made in: it goes when the set is
+    // read in again, and it goes on a switch back to the set, whose files may have
+    // been replaced meanwhile. The other set's, made in a load still in hand, stays.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARankingWithNoRecordOfItsTablesGoesAtTheNextLoadOfItsSet(bool readAgain)
     {
         var store = new AreaRankingStore();
         store.NoteActiveSet("alpha");
-        store.Keep(new SimulatorOwner("alpha", "board/one"), Ranking("Hills"));
+        var one = new SimulatorOwner("alpha", "board/one");
+        store.Keep(one, Ranking("Hills"));
         store.Keep(new SimulatorOwner("alpha", "board/two"), Ranking("Marsh"));
-        store.Keep(new SimulatorOwner("beta", "board/one"), Ranking("Fen"));
 
+        if (readAgain)
+        {
+            Assert.Equal(2, store.NoteActiveSet("Alpha"));
+            Assert.Equal(0, store.Count);
+            return;
+        }
+        // Away to beta, where one is made, and back.
         Assert.Equal(0, store.NoteActiveSet("beta"));
-        Assert.Equal(0, store.NoteActiveSet("alpha"));
-        Assert.Equal(3, store.Count);
+        Assert.Equal(2, store.Count);
+        var onBeta = new SimulatorOwner("beta", "board/one");
+        store.Keep(onBeta, Ranking("Fen"));
 
-        Assert.Equal(2, store.NoteActiveSet("Alpha"));
+        Assert.Equal(2, store.NoteActiveSet("alpha"));
 
+        Assert.Null(store.Get(one));
+        Assert.Null(store.Get(one, Tables));
         Assert.Equal(1, store.Count);
-        Assert.NotNull(store.Get(new SimulatorOwner("beta", "board/one")));
+        Assert.NotNull(store.Get(onBeta));
+    }
+
+    // Route (a): the load of a set turned unfit under a ranking (another client
+    // imported the set and a table was read again from the new file), so it was
+    // made with no record of its tables; then a switch away and back. Route (b): the
+    // same kind of ranking, a switch away, an import over its set from there, and
+    // the switch to the set the import ends with. Either way the set's tables are
+    // not the ones it was made on and nothing says so: it is not listed again. The
+    // store is told the same in both, since an import tells it nothing: a switch
+    // away, and a switch back.
+    [Fact]
+    public void ARankingWithNoRecordOfItsTables_IsNotHandedBackUnderALaterLoadOfChangedTables()
+    {
+        var store = new AreaRankingStore();
+        store.NoteActiveSet("alpha");
+        var owner = new SimulatorOwner("alpha", "board/one");
+        store.Keep(owner, Ranking("Hills"));
+        Assert.NotNull(store.Get(owner, Tables));   // listed while its own load lasts
+
+        store.NoteActiveSet("beta");
+        store.NoteActiveSet("alpha");
+
+        Assert.Null(store.Get(owner, OtherTables));
+        Assert.Null(store.Get(owner));
+        Assert.Equal(0, store.Count);
     }
 
     [Fact]
@@ -154,10 +193,10 @@ public sealed class AreaRankingStoreTests
         store.NoteActiveSet("alpha");
         store.Keep(new SimulatorOwner("alpha", "board/one"), Ranking("Hills"));
         store.Keep(new SimulatorOwner("alpha", "board/two"), Ranking("Marsh"));
-        store.Keep(new SimulatorOwner("beta", "board/one"), Ranking("Fen"));
         store.NoteActiveSet("beta");
+        store.Keep(new SimulatorOwner("beta", "board/one"), Ranking("Fen"));
 
-        // alpha imported again, or deleted, from beta.
+        // alpha deleted, or its data replaced in Manage Sets, from beta.
         Assert.Equal(2, store.ForgetSet("ALPHA"));
 
         // Coming back to it is a plain switch, with nothing left to list.

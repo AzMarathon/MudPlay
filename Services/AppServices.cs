@@ -8454,10 +8454,11 @@ public sealed class AppServices
         }
 
         // The Simulator's rankings follow the set too, but nothing reloads: a switch
-        // leaves each set's where they are. The active set's name coming round again
-        // is that set read in afresh, with the same tables or other ones: the store
-        // is told, and compares each ranking's tables with the new load's when it is
-        // next listed. Only one that carries no record of its tables goes here.
+        // leaves each set's where they are. A set made active, by a switch to it or by
+        // its name coming round again, is a new load of it, with the same tables or
+        // other ones: the store is told, and compares each ranking's tables with the
+        // new load's when it is next listed. Only one that carries no record of its
+        // tables goes here, at any new load of its set.
         // Each ranking is also kept in a file in its set's folder, so it is there
         // after a restart; what a read finds is handed back on the UI thread.
         SimulatorRankings = new Game.Simulation.AreaRankingStore(
@@ -8468,7 +8469,12 @@ public sealed class AppServices
         Avalonia.Threading.Dispatcher.UIThread.Post(
             SimulatorRankings.SweepOld, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
         GameData.ActiveSetChanged += setName =>
-            LogStaleSimulatorRankings(setName, "was read in again", SimulatorRankings.NoteActiveSet(setName));
+        {
+            int dropped = SimulatorRankings.NoteActiveSet(setName);
+            if (dropped > 0)
+                Log.Info("Simulator",
+                    $"game data '{setName}' was loaded afresh: {dropped} area ranking(s) made on it with no record of its tables dropped, there being nothing to compare them by");
+        };
         // A saved ranking is stamped with the table files this client read, and the
         // watch has to see each table's first read of a load before the cache can
         // drop the table and read it again: once a second is far inside that.

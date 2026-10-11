@@ -339,8 +339,10 @@ public sealed class AreaRankingFiles
     // held are the files of rankings the client has in memory and are left alone.
     //
     // Other clients share the folder and may sweep, or save a ranking, at the same
-    // moment. A file another sweep took first is simply gone. One replaced between
-    // the look at its stamp and the delete has another write time by then, and is
+    // moment. A file is deleted, and counted, only by the pass that got it to
+    // itself: one another sweep holds or took first is left out of the count, so
+    // two clients' counts never add up to more than went. One replaced between the
+    // look at its stamp and the delete has another write time by then, and is
     // left: it is a new ranking.
     public int SweepOld(IReadOnlyCollection<string> held, Action<string>? skipped = null)
     {
@@ -405,9 +407,13 @@ public sealed class AreaRankingFiles
                 }
                 if (_now() - madeAt <= MaxAge) continue;
                 if (File.GetLastWriteTimeUtc(file) != writtenAt) continue;
-                File.Delete(file);
+                // Opened to ourselves alone and deleted as it closes: of two clients
+                // sweeping at once only one gets the file, so only one counts it.
+                // The other finds it held or gone and counts nothing.
+                using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None, bufferSize: 1, FileOptions.DeleteOnClose)) { }
                 deleted++;
             }
+            catch (FileNotFoundException) { /* another client's sweep took it first */ }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
                                            or JsonException or NotSupportedException)
             {

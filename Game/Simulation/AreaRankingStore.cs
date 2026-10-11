@@ -302,20 +302,19 @@ public sealed class AreaRankingStore
     //
     // The one kind that goes here is a ranking with no record of the tables it was
     // made on (it was made while the load could not be stamped, and was never
-    // written), when its set is read in afresh: there is nothing to compare it by,
-    // and the load it was of is gone. A switch away and back leaves it, as it
-    // leaves everything. Returns how many of those went from memory.
+    // written). There is nothing to compare it by, so it cannot outlive the load it
+    // was made in: it goes at every new load of its set, a switch back to the set
+    // as much as the same name again. The set's files may have been replaced while
+    // another set was active, and such a ranking would be listed over them. Returns
+    // how many of those went from memory.
     public int NoteActiveSet(string? set)
     {
-        bool readAgain = string.Equals(set, _activeSet, StringComparison.OrdinalIgnoreCase);
         _activeSet = set;
         if (set is not null) _loadsBegun[set] = LoadsBegun(set) + 1;
         foreach ((SimulatorOwner owner, AreaRanking ranking) in _kept)
             if (ranking.World is not null && string.Equals(owner.Set, set, StringComparison.OrdinalIgnoreCase))
                 _madeBeforeReload.AddOrUpdate(ranking, Marked);
-        return readAgain
-            ? _kept.RemoveAll(k => k.Ranking.World is null && string.Equals(k.Owner.Set, set, StringComparison.OrdinalIgnoreCase))
-            : 0;
+        return _kept.RemoveAll(k => k.Ranking.World is null && string.Equals(k.Owner.Set, set, StringComparison.OrdinalIgnoreCase));
     }
 
     // The data of set was replaced (its deletion, a copy or move of the user's

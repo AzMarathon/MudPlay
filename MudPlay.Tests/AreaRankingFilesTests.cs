@@ -616,6 +616,26 @@ public sealed class AreaRankingFilesTests : IDisposable
         Assert.True(File.Exists(notes));
     }
 
+    // Two clients sweeping at once: a file is counted by the one that got it. While
+    // another holds it open it is left and not counted; once gone, a pass that had
+    // listed it counts nothing for it. The two logs never add up to more than went.
+    [Fact]
+    public void TheSweep_CountsOnlyAFileItTookItself()
+    {
+        string set = NewSet("a");
+        string old = Save(new SimulatorOwner(set, One), OldThen);
+        var skipped = new List<string>();
+
+        using (new FileStream(old, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.Equal(0, Files(SweepNow).SweepOld(Array.Empty<string>(), skipped.Add));
+        Assert.True(File.Exists(old));
+        Assert.Contains(skipped, s => s.StartsWith(old, StringComparison.Ordinal));
+
+        Assert.Equal(1, Files(SweepNow).SweepOld(Array.Empty<string>()));
+        Assert.False(File.Exists(old));
+        Assert.Equal(0, Files(SweepNow).SweepOld(Array.Empty<string>()));
+    }
+
     // A Simulator folder or a BBS folder that is a link leads wherever it likes:
     // the sweep does not look through it, however old what lies behind it.
     [Fact]

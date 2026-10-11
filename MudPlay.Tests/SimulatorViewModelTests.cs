@@ -679,6 +679,30 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.Equal(0, h.Rankings.Count);
     }
 
+    // The same ranking does not come back after a switch away either. The set's
+    // files may have been replaced from the other set (another client's import, or
+    // an import made there, which ends with the switch back): with no record of its
+    // tables it would be listed over them, pickable and saveable as a loop. It is
+    // gone whether or not they changed, there being no telling.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARankingWithNoRecordOfItsTables_IsNotListedAfterASwitchAwayAndBack(bool tablesChanged)
+    {
+        using Harness h = Build(saveLoops: true);
+        h.Finish(Ranking("Hills") with { World = null });
+        Assert.Single(h.Simulator.Rankings);
+
+        h.Cache.SwitchSet("beta");
+        if (tablesChanged) h.World = WithAnotherMonstersTable;
+        h.Cache.SwitchSet("alpha");
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal("", h.Simulator.RankStatus);
+        Assert.False(h.Simulator.SaveRankingAsLoopCommand.CanExecute(null));
+        Assert.Null(h.Rankings.Get(new SimulatorOwner("alpha", One)));
+    }
+
     [Fact]
     public void ARankingOutlivesTheNavigationWindowItWasMadeIn()
     {
