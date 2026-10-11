@@ -123,6 +123,23 @@ public sealed class AreaRankingFilesTests : IDisposable
     }
 
     [Fact]
+    public void TheLoopsARankingRankedAreReadBackWithIt_LookedUpByNameWhateverItsCapitals()
+    {
+        string set = NewSet("loops");
+        var owner = new SimulatorOwner(set, One);
+        AreaRankingFiles files = Files();
+        files.Write(owner, Ranking() with { Loops = new Dictionary<string, string> { ["Crypt run"] = "abc", ["Marsh run"] = "def" } });
+
+        AreaRanking read = Assert.IsType<AreaRanking>(files.Read(owner, World).Ranking);
+        Assert.Equal(2, read.Loops!.Count);
+        Assert.Equal("abc", read.Loops["crypt RUN"]);
+
+        // One made before loops were recorded has none, which is not the same as no loops.
+        files.Write(owner, Ranking());
+        Assert.Null(files.Read(owner, World).Ranking!.Loops);
+    }
+
+    [Fact]
     public void TheFileSitsInItsSetsFolderUnderItsBbs_AndNoneIsKeptForNoCharacterOrNoSet()
     {
         string set = NewSet("a");

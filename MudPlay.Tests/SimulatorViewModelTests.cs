@@ -788,6 +788,106 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.Contains("; your reach has changed since.", h.Simulator.RankStatus);
     }
 
+    // ----- The user's own loops in a kept ranking ---------
+
+    private static readonly RoomKey[] Lap = { new(1, 1), new(1, 2) };
+    private static readonly RoomKey[] LapBack = { new(1, 2), new(1, 1) };
+
+    // A ranking of an area and two of the user's loops, as those loops are now,
+    // kept for the character and listed again from those kept.
+    private static AreaRanking ListKeptWithLoops(Harness h)
+    {
+        h.Loops.Save(new Loop("Crypt run", Lap));
+        h.Loops.Save(new Loop("Marsh run", LapBack));
+        static AreaRank Row(string name, bool loop) => new(name, 30, Lap, 2, new LoopSimSummary(new[] { Run }), IsLoop: loop);
+        AreaRanking ranking = Ranking("Hills") with
+        {
+            Rows = new[] { Row("Hills", false), Row("Crypt run", true), Row("Marsh run", true) },
+            Loops = h.Loops.Loops.ToDictionary(l => l.Name, LoopSignature.Of),
+        };
+        h.Finish(ranking);
+        h.Load(Two);
+        h.Load(One);
+        return ranking;
+    }
+
+    [Fact]
+    public void AKeptRankingIsMarkedWhenALoopItRankedHasChanged_NamingTheLoop_AndClearedWhenItIsPutBack()
+    {
+        using Harness h = Build(saveLoops: true);
+        AreaRanking made = ListKeptWithLoops(h);
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+        Assert.Contains("the loops ranked are as they were", h.Simulator.ToSnapshot().ListedRanking);
+
+        // One loop walked the other way round: its row is of a loop that has gone.
+        h.Loops.Save(new Loop("Crypt run", LapBack));
+        h.Simulator.RecheckKept();
+        AssertListedAsKept(made, h.Simulator.RankStatus, after: @"; your loops have changed since\. Loops changed: ★ Crypt run\.");
+        Assert.True(h.Simulator.RankingNotCurrent);
+        Assert.Contains("loops changed since: Crypt run", h.Simulator.ToSnapshot().ListedRanking);
+        Assert.Contains(h.Said, m => m.Contains("now reads:") && m.Contains("Loops changed: ★ Crypt run."));
+
+        // Its row says so when picked; the other loop's and the area's do not.
+        h.Simulator.SelectedRanking = h.Simulator.Rankings.First(r => r.Area == "Crypt run");
+        Assert.Contains(h.Simulator.RankStats, s => s.Label == "Loop now" && s.Value.StartsWith("changed since it was ranked"));
+        h.Simulator.SelectedRanking = h.Simulator.Rankings.First(r => r.Area == "Marsh run");
+        Assert.DoesNotContain(h.Simulator.RankStats, s => s.Label == "Loop now");
+        h.Simulator.SelectedRanking = h.Simulator.Rankings.First(r => r.Area == "Hills");
+        Assert.DoesNotContain(h.Simulator.RankStats, s => s.Label == "Loop now");
+
+        // Put back as it was, the ranking is of these loops again.
+        h.Loops.Save(new Loop("Crypt run", Lap));
+        h.Simulator.RecheckKept();
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+    }
+
+    [Fact]
+    public void HowALoopIsRunAndALoopDeleted_BothCount_AndALoopSavedSinceDoesNot()
+    {
+        using Harness h = Build(saveLoops: true);
+        AreaRanking made = ListKeptWithLoops(h);
+        h.Simulator.SelectedRanking = h.Simulator.Rankings.First(r => r.Area == "Marsh run");
+
+        // A loop the ranking never had is no change to it.
+        h.Loops.Save(new Loop("Hills (L30 sim)", Lap));
+        h.Simulator.RecheckKept();
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+
+        // Run with one of its two loop-wide settings the other way.
+        h.Loops.SetSettings("Marsh run", new LoopOwnSettings(OnlyAttackInLairRooms: true, default));
+        h.Simulator.RecheckKept();
+        Assert.Contains("; your loops have changed since. Loops changed: ★ Marsh run.", h.Simulator.RankStatus);
+        // The row picked all along is told there and then.
+        Assert.Contains(h.Simulator.RankStats, s => s.Label == "Loop now" && s.Value.StartsWith("changed since it was ranked"));
+
+        h.Loops.Delete("Marsh run");
+        h.Loops.Delete("Crypt run");
+        h.Simulator.RecheckKept();
+        Assert.Contains("Loops changed: ★ Crypt run, ★ Marsh run.", h.Simulator.RankStatus);
+        Assert.Contains(h.Simulator.RankStats, s => s.Label == "Loop now" && s.Value.StartsWith("no longer among your loops"));
+
+        // With something of the character changed too, the loops are named last.
+        h.CharacterNow = With(RankingCharacter.Settings);
+        h.Simulator.RecheckKept();
+        Assert.Contains("; your settings and loops have changed since. Loops changed:", h.Simulator.RankStatus);
+    }
+
+    [Fact]
+    public void ARankingWithNoRecordOfItsLoops_IsMarkedForThem_AndTheLoopsAreKnownBeforeTheCharacterIs()
+    {
+        using Harness h = Build(saveLoops: true);
+        AreaRanking made = ListKeptWithLoops(h) with { Loops = null };
+        h.Finish(made);
+        h.CharacterNow = null;
+        h.Load(Two);
+        h.Load(One);
+
+        Assert.Contains("; not checked against the character yet; your loops have changed since. Loops changed: ★ Crypt run, ★ Marsh run.",
+            h.Simulator.RankStatus);
+    }
+
     [Fact]
     public void ARankingJustMadeOrStillRunningIsNotReworded()
     {

@@ -214,13 +214,14 @@ public sealed partial class SimulatorViewModel : ObservableObject
     }
 
     // The character as it would be simulated now at the ranking's level, against
-    // the one it was made for.
-    private RankingCheck CheckKept(AreaRanking ranking) =>
-        RankingCheck.Of(ranking.Character, _simulation?.CharacterAt(ranking.Level));
+    // the one it was made for; and the loops it ranked, against those loops now.
+    private RankingCheck CheckKept(AreaRanking ranking) => RankingCheck.Of(
+        ranking.Character, _simulation?.CharacterAt(ranking.Level),
+        RankingLoops.ChangedSince(ranking.Rows, ranking.Loops, RankingLoops.Now(ranking.Rows, _loops.Loops)));
 
     // Something the mark is worked out from may have moved: a `stat` screen or a
-    // full inventory was read, the level changed, the profile or a game-data edit
-    // was saved. The kept ranking on show is checked again and its mark brought up
+    // full inventory was read, the level changed, the profile, a game-data edit or
+    // a loop was saved. The kept ranking on show is checked again and its mark brought up
     // to date where it stands, either way: marked when the character has moved away
     // from the one it was made for, and cleared when it is that character again (the
     // weapon put back, the buff cast again). A mark worked out once when the ranking
@@ -231,9 +232,27 @@ public sealed partial class SimulatorViewModel : ObservableObject
     public void RecheckKept()
     {
         if (!_shownKept || _shown is not { } ranking || IsRanking) return;
-        if (NoteKept(ranking))
-            _log?.Info("Simulator", $"the area ranking listed for {_owner.Label} now reads: {_keptNote}");
+        if (!NoteKept(ranking)) return;
+        _log?.Info("Simulator", $"the area ranking listed for {_owner.Label} now reads: {_keptNote}");
+        NoteLoopChanged(SelectedRanking);
     }
+
+    // The picked row's detail says so when it is one of the user's loops and that
+    // loop is not the one that was ranked: the mark on the whole ranking does not
+    // say which rows it is about, and for the loops it is only theirs.
+    private void NoteLoopChanged(AreaRank? picked)
+    {
+        if (RankStats.FirstOrDefault(s => s.Label == LoopNowLabel) is { } old) RankStats.Remove(old);
+        if (picked is not { IsLoop: true } || !_shownKept
+            || _keptCheck.ChangedLoops?.Contains(picked.Area, StringComparer.OrdinalIgnoreCase) != true)
+            return;
+        bool gone = !_loops.Loops.Any(l => string.Equals(l.Name, picked.Area, StringComparison.OrdinalIgnoreCase));
+        RankStats.Insert(0, new SimStat(LoopNowLabel, gone
+            ? "no longer among your loops (deleted or renamed); these figures are of the loop as it was"
+            : "changed since it was ranked (its rooms, or how you run it); these figures are of the loop as it was"));
+    }
+
+    private const string LoopNowLabel = "Loop now";
 
     private bool _shownKept;
     private RankingCheck _keptCheck;
@@ -689,6 +708,9 @@ public sealed partial class SimulatorViewModel : ObservableObject
             // The user's own saved loops rank beside the area tours — a loop tuned
             // inside a good area beats that area's whole tour — with what the logs
             // say the user actually made on each.
+            // What each loop was when it was mapped, for the ranking to be told from
+            // the loop as it is on a later day (RankingLoops).
+            var loopSignatures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (Loop loop in _loops.Loops)
             {
                 if (loop.Waypoints.Count < 2 || !reach.ContainsKey(loop.Waypoints[0].Key)) continue;
@@ -698,6 +720,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
                 if (lap.Count == 0) { skippedLoops++; continue; }
                 (SimCharacter ch, SimWorld world) = SimFreeze.For(setup.Character, setup.World, lap);
                 jobs.Add((new AreaTour(loop.Name, loop.Waypoints.Select(w => w.Key).ToList()), ch, world, lap, true));
+                loopSignatures.TryAdd(loop.Name, LoopSignature.Of(loop));
             }
             string? character = _simulation.Character();
             string logs = _simulation.LogsDir;
@@ -744,7 +767,8 @@ public sealed partial class SimulatorViewModel : ObservableObject
                 + (gatedAreas > 0 ? $"; {gatedAreas} area(s) you can't reach at L{level} left out" : "") + skipped
                 + ". Pick one to see its route and details, show it on the map, and save it as a loop to run.";
             ListFinishedRanking(owner, new AreaRanking(
-                ranked, level, step, hours, runs, here, RealmLabel, summary, DateTimeOffset.Now, ownLevel, madeIn, madeFor));
+                ranked, level, step, hours, runs, here, RealmLabel, summary, DateTimeOffset.Now, ownLevel, madeIn, madeFor,
+                Loops: loopSignatures));
             _log?.Info("Simulator", $"ranked {ranked.Count} options at L{level} for {owner.Label} ({gatedAreas} areas unreachable, " +
                 $"{skippedAreas} areas and {skippedLoops} loops skipped): " +
                 string.Join(" | ", ranked.Take(10).Select(r => r.Label)));
@@ -841,6 +865,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
             RankStats.Insert(0, new SimStat("Tested", $"L{value.Level} · {run.Runs} × {run.Hours:0.#} h · " +
                                                      $"{run.Step:0.00} s a room · {run.Realm} · from {run.From.Map}/{run.From.Room}"));
         RankStats.Insert(0, new SimStat("Route", RouteLine(value)));
+        NoteLoopChanged(value);
         OnPropertyChanged(nameof(HasRankDetail));
         if (_showOnMap(value.Tour, value.Area) is { } why)
         {
@@ -1032,7 +1057,10 @@ public sealed partial class SimulatorViewModel : ObservableObject
             : _keptCheck.NoRecord ? "it carries no record of the character it was made for"
             : _keptCheck.Changed is { Count: > 0 } changed ? $"marked for {string.Join(", ", changed)}"
             : "the character's stats, gear, spells, settings, game-data edits and reach are as they were";
-        return $"{from}; {made}; {stands}{(RankingNotCurrent ? "; shown as not current" : "")}";
+        string loops = _keptCheck.ChangedLoops is { Count: > 0 } names
+            ? $"; loops changed since: {string.Join(", ", names)}"
+            : ranking.Rows.Any(r => r.IsLoop) ? "; the loops ranked are as they were" : "";
+        return $"{from}; {made}; {stands}{loops}{(RankingNotCurrent ? "; shown as not current" : "")}";
     }
 }
 

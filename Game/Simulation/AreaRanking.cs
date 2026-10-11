@@ -15,17 +15,23 @@ namespace MudPlay.Game.Simulation;
 // RankingCharacter): a ranking is kept between sessions, and these are how one read
 // back from disk is known to be about this game data still, and whether about the
 // character as it is now. FromDisk: it was read back, not made since the client
-// started.
+// started. Loops is the signature of each of the user's own loops ranked, by name,
+// as it was when it was ranked (RankingLoops).
 public sealed record AreaRanking(
     IReadOnlyList<AreaRank> Rows, int Level, double Step, double Hours, int Runs, RoomKey From, string Realm,
     string Summary, DateTimeOffset MadeAt, int CharacterLevel,
-    RankingWorld? World = null, RankingCharacter? Character = null, bool FromDisk = false)
+    RankingWorld? World = null, RankingCharacter? Character = null, bool FromDisk = false,
+    IReadOnlyDictionary<string, string>? Loops = null)
 {
+    // How many changed loops the note names before it counts the rest.
+    private const int LoopsNamed = 4;
+
     // What leads the status line of a ranking listed from those kept, as against one
     // just made: when it was made and at what level; the character's level now when
     // that is known (0 is not: no `stat` read yet) and is no longer what it was; and
     // how it stands against the character otherwise (check), by the groups that have
-    // changed or as not checked.
+    // changed or as not checked. The loops that changed are named after it, since
+    // only their rows are affected.
     public string KeptNote(int levelNow, DateTimeOffset now, RankingCheck check = default)
     {
         DateTimeOffset made = MadeAt.ToLocalTime();
@@ -35,13 +41,18 @@ public sealed record AreaRanking(
             note += CharacterLevel == Level
                 ? $"; you are L{levelNow} now"
                 : $"; you were L{CharacterLevel} then and are L{levelNow} now";
+        bool loops = check.ChangedLoops is { Count: > 0 };
         if (check.Unchecked)
-            note += "; not checked against the character yet";
+            note += "; not checked against the character yet" + (loops ? "; your loops have changed since" : "");
         else if (check.NoRecord)
-            note += "; the character may have changed since";
-        else if (check.Changed is { Count: > 0 } changed)
+            note += "; the character may have changed since" + (loops ? "; your loops have changed since" : "");
+        else if (check.Groups is { Count: > 0 } changed)
             note += $"; your {Join(changed)} {(changed.Count == 1 && changed[0] is RankingCharacter.Reach ? "has" : "have")} changed since";
-        return note + ".";
+        note += ".";
+        if (check.ChangedLoops is { Count: > 0 } names)
+            note += $" Loops changed: {string.Join(", ", names.Take(LoopsNamed).Select(n => $"★ {n}"))}" +
+                    (names.Count > LoopsNamed ? $" and {names.Count - LoopsNamed} more." : ".");
+        return note;
     }
 
     // False when the character is known to have changed since this was made, by

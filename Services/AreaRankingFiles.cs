@@ -386,6 +386,7 @@ public sealed class AreaRankingFiles
         Tables = new Dictionary<string, string>(world.Tables),
         Seed = world.Seed,
         Groups = r.Character is { } c ? new Dictionary<string, string>(c.Groups) : null,
+        Loops = r.Loops is { } loops ? new Dictionary<string, string>(loops) : null,
         MadeAt = r.MadeAt,
         Level = r.Level,
         CharacterLevel = r.CharacterLevel,
@@ -446,7 +447,19 @@ public sealed class AreaRankingFiles
                 row.Live?.Select(l => new LiveLoopRecord(l.Loop ?? string.Empty, l.Level, l.Sessions, l.Hours, l.Exp, l.Kills, l.Deaths)).ToList()));
         }
         return new AreaRanking(rows, f.Level, f.Step, f.Hours, f.Runs, from, f.Realm ?? string.Empty, f.Summary ?? string.Empty,
-            f.MadeAt, f.CharacterLevel, made, f.Groups is null ? null : new RankingCharacter(f.Groups), FromDisk: true);
+            f.MadeAt, f.CharacterLevel, made, f.Groups is null ? null : new RankingCharacter(f.Groups), FromDisk: true,
+            Loops: LoopsOf(f.Loops));
+    }
+
+    // A loop is looked up by name, whatever capitals it has come to have. Two names
+    // in a file that differ only by those, or a signature that is null, are a file
+    // someone has been at: the first stands, and a missing signature matches none.
+    private static Dictionary<string, string>? LoopsOf(Dictionary<string, string>? file)
+    {
+        if (file is null) return null;
+        var loops = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach ((string name, string? signature) in file) loops.TryAdd(name, signature ?? string.Empty);
+        return loops;
     }
 
     private sealed class RankingFile
@@ -458,6 +471,7 @@ public sealed class AreaRankingFiles
         public Dictionary<string, string>? Tables { get; set; }
         public string? Seed { get; set; }
         public Dictionary<string, string>? Groups { get; set; }
+        public Dictionary<string, string>? Loops { get; set; }
         public DateTimeOffset MadeAt { get; set; }
         public int Level { get; set; }
         public int CharacterLevel { get; set; }

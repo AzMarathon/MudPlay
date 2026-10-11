@@ -214,13 +214,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void OnSimulatorStatRead(LastKnownStats _) => Simulator.RecheckKept();
     private void OnSimulatorPlayerStatsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(Game.PlayerStats.Level)) Simulator.RecheckKept();
+        if (e.PropertyName == nameof(Game.PlayerStats.Level)) RecheckSimulatorSoon();
     }
     private void OnSimulatorProfileSaving(Models.Profile.CharacterProfile _) => RecheckSimulatorSoon();
     private void OnSimulatorGameDataEdited(GameDataChange _) => RecheckSimulatorSoon();
 
     // A save is raised before the file is written, and a batch of edits raises one
     // for each record: the check runs once, after whoever raised it has finished.
+    // The same for what a profile load raises on its way (the level restored, every
+    // loop's settings): by then the list is the loaded character's, not the ranking
+    // of the one that was on show while the load was half done.
     private void RecheckSimulatorSoon()
     {
         if (_simulatorRecheckPosted) return;
@@ -1884,6 +1887,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshLoopsAndLairs();
         RebuildContextFavorites();   // a loop's favourite flag may have flipped — refresh the map flyout
         Simulator.RefreshRoutes();
+        // A loop in the kept ranking on show may be the one edited, deleted or renamed.
+        RecheckSimulatorSoon();
     }
 
     private void OnSetupsChanged()
@@ -5366,6 +5371,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void OnLoopSettingsChanged(string? name)
     {
         if (_services.LoopRunner.CurrentLoop is { } loop) HydrateLoopSettingToggles(loop);
+        // How a ranked loop is run is part of what was ranked.
+        RecheckSimulatorSoon();
     }
 
     // The CURRENT NAV header's "Details…" button opens the route the engine is
