@@ -1,5 +1,10 @@
 # Version history
 
+## 3.179.4
+
+- The room map holds its exits in a compact form: about 37 MB less memory with a Paradigm set loaded (16 MB on Stock)
+- Finding a route and laying out the map allocate half the memory they did
+
 ## 3.179.3
 
 - Simulator: an area ranking belongs to the game data and character it was made on; a switch lists that pairing's own ranking or none, and switching back lists the first again

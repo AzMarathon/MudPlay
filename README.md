@@ -1,13 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.179.3**
-> - Simulator: an area ranking belongs to the game data and character it was made on; a switch lists that pairing's own ranking or none, and switching back lists the first again
-> - Nothing ranked on one game data can be picked, drawn on the map or saved as a loop under another; a game-data switch also clears the estimator's sketch
-> - Rankings are kept while the client runs (the last eight), through closing the Navigation window and a rename of the character; a set imported again, deleted, re-picked or changed in Manage Sets loses the ones made on it
-> - A ranking listed again says when it was made and at what level, and is marked once the character has levelled since
-> - A loop being built is dropped, with a notice, when the game data changes to another set; the Edit Loop window won't save or take a room until its own game data is active again
-> - Bug report: the Simulator section names the game data and character its results are for
+> **Version 3.179.4**
+> - The room map holds its exits in a compact form: about 37 MB less memory with a Paradigm set loaded (16 MB on Stock)
+> - Finding a route and laying out the map allocate half the memory they did
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
