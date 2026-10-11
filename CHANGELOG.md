@@ -1,6 +1,6 @@
 # Version history
 
-## 3.179.7
+## 3.179.8
 
 - `@loop send` now works by telepath only; asked or confirmed on another channel it says so and sends nothing
 - `@roomba sync` now works by telepath or gangpath only, no longer by say
@@ -8,6 +8,11 @@
 - Settings → Talk: new "Disallow @commands from broadcast", ticked by default; untick it on both clients to sync timers there
 - Sync Timers reads answers only on the channel you asked on (after a say, telepathed answers too)
 - On the broadcast channel the client answers each player once a minute and four players a minute in all
+
+## 3.179.4
+
+- The room map holds its exits in a compact form: about 37 MB less memory with a Paradigm set loaded (16 MB on Stock)
+- Finding a route and laying out the map allocate half the memory they did
 
 ## 3.179.3
 

@@ -1996,6 +1996,42 @@ public sealed class RoomGraphManagerTests : IDisposable
             Assert.Equal(new RoomKey(1, 9), room.Exits[Direction.Teleport].Target);
     }
 
+    // A realm repeats a room name fifteen times over, and its lair tags and exit
+    // hints as often: the graph keeps one string for each, and a room's exits in
+    // the compact set, through the passes that replace an exit as well.
+    [Fact]
+    public void Rooms_KeepTheirExitsCompactly_AndShareTextThatReadsTheSame()
+    {
+        const string rooms = """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "Dark Cave", "Lair": "(Max 2): 503,[30-24-24-2]",
+                "N": "1/2 (Door)", "S": "0", "E": "1/3 (Cast: pre-0, post-5)", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 2, "Name": "Dark Cave", "Lair": "(Max 2): 503,[30-24-24-2]",
+                "N": "0", "S": "1/1 (Door)", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 3, "Name": "Dead End", "Lair": "",
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        SeedRooms("alpha", rooms);
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+
+        graph.OnActiveSetChanged("alpha");
+
+        Room first = graph.GetRoom(new RoomKey(1, 1))!, second = graph.GetRoom(new RoomKey(1, 2))!;
+        Assert.Same(first.Name, second.Name);
+        Assert.Same(first.RawLairTag, second.RawLairTag);
+        Assert.Same(first.Exits[Direction.N].RawHint, second.Exits[Direction.S].RawHint);
+        // 1 E is a one-way cast exit, so the pocket pass has swapped room 1's exits.
+        Assert.True(first.Exits[Direction.E].CastPocketEntrance);
+        Assert.All(graph.Rooms, room => Assert.IsType<RoomExitSet>(room.Exits));
+        Assert.Same(RoomExitSet.Empty, graph.GetRoom(new RoomKey(1, 3))!.Exits);
+    }
+
     // A damaged set: room commands that lead into empty text blocks linked round
     // in a circle (100 to itself, 300 and 301 to each other). The boat pass reads
     // every room command, and one that follows those links blindly never comes
