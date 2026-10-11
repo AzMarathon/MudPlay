@@ -3876,12 +3876,16 @@ public sealed class AppServices
         // and left purely lazy that lands on whichever walk first crosses a gate —
         // a stall exactly when the user is watching the character move. The warm
         // builds into locals and publishes by reference, and GameDataCache guards its
-        // own tables, so it's safe off-thread. Subscribed AFTER TBInfo above so the
-        // store has reloaded by the time the build reads it; a query that beats the
-        // warm simply builds it itself.
+        // own tables, so it's safe off-thread. A query that beats the warm simply
+        // builds it itself.
+        //
+        // The warm is queued where the room graph is built, further down, on its
+        // GraphReloaded: after TBInfo above has reloaded, and after the learned
+        // room names are on the map, since a giver in a room the data leaves
+        // unnamed is labelled with the name learned for it. Queued at the set
+        // switch itself, the build read the map before those names went on and was
+        // done a second time.
         ItemSources = new ItemSourceIndex(GameData, TBInfo, Log);
-        GameData.ActiveSetChanged += _ => Task.Run(ItemSources.Warm);
-        if (GameData.ActiveSet is not null) Task.Run(ItemSources.Warm);
 
         // RoomFloorItemIndex — the room→floor-item (`roomitem`) mapping for the
         // Navigation Room Info panel. Reads TBInfo's typed entries like ItemSources;
@@ -3925,6 +3929,9 @@ public sealed class AppServices
         };
         LearnedRoomNames = new Game.Map.LearnedRoomNameStore(RoomGraph, ActiveRealmFolder, Log);
         RoomGraph.GraphReloaded += LearnedRoomNames.OnGraphReloaded;
+        // After the store's, so the names are on the map: one build per set load.
+        // (A second warm queued by LearnedNamesChanged finds the first's result.)
+        RoomGraph.GraphReloaded += () => Task.Run(ItemSources.Warm);
         Profile.ProfileLoaded += _ => LearnedRoomNames.OnRealmChanged();
         Profile.BbsPinApplied += _ => LearnedRoomNames.OnRealmChanged();
         Profile.ProfileClosed += LearnedRoomNames.OnRealmChanged;

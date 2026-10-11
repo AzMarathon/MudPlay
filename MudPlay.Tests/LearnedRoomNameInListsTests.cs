@@ -159,13 +159,14 @@ public sealed class LearnedRoomNameInListsTests : IDisposable
     // ----- lists that keep the name ----------------------------------------
 
     // The trainer and bank lists are built once per set and keep each room's
-    // name. A name kept on a realm is in them from the next map load on, as it was
-    // when it sat in Rooms.json, and is gone from them on another realm.
+    // name. A name kept on a realm is in them from the moment it is kept, and
+    // from every map load after, and is gone from them on another realm.
     [Fact]
     public void TrainerAndBankLists_ShowAStoredName_AndNotAnotherRealms()
     {
         Assert.Equal((string.Empty, string.Empty), (TrainerRoom("House Trainer"), BankRoom("House Bank")));
         KeepHouseName();
+        Assert.Equal((HouseName, HouseName), (TrainerRoom("House Trainer"), BankRoom("House Bank")));
 
         // The next session, or a reload of the set.
         _cache.ReloadActiveSet();
@@ -198,6 +199,7 @@ public sealed class LearnedRoomNameInListsTests : IDisposable
         ItemSourceIndex sources = NewItemSources();
         Assert.Equal("Room 15/861", Assert.Single(sources.GiversOf(21)).Name);
         KeepHouseName();
+        Assert.Equal(HouseName, Assert.Single(sources.GiversOf(21)).Name);
         _cache.ReloadActiveSet();
 
         ItemGiver giver = Assert.Single(sources.GiversOf(21));
@@ -234,9 +236,10 @@ public sealed class LearnedRoomNameInListsTests : IDisposable
     // A name the tracker learns is on the map at once and in the lists that ask
     // each time. The kept lists are not told: none is rebuilt in the middle of a
     // walk for it, and one built earlier shows the name when it is next built.
-    // They are told when a realm's names go on or come off.
+    // They are told when the name is kept, and when a realm's names go on or
+    // come off.
     [Fact]
-    public void KeptListsAreTold_WhenARealmsNamesGoOnOrComeOff_NotWhenTheTrackerLearnsOne()
+    public void KeptListsAreTold_WhenANameIsKept_OrARealmsNamesGoOnOrComeOff_NotWhenTheTrackerLearnsOne()
     {
         IReadOnlyList<TrainerShop> before = TrainerCatalog.Enumerate(_cache);
         long version = _cache.LearnedRoomNamesVersion;
@@ -247,22 +250,60 @@ public sealed class LearnedRoomNameInListsTests : IDisposable
         Assert.Equal(version, _cache.LearnedRoomNamesVersion);
         Assert.Same(before, TrainerCatalog.Enumerate(_cache));
 
-        // Saved: the name is already on the map, so nothing moves.
+        // Saved: the name was on the map already, and every list now agrees on it.
         Assert.Equal(LearnedRoomNameStore.KeepResult.Stored, _store.Keep(House, HouseName, _realm, _graph.ActiveSet));
-        Assert.Equal(0, _keptListsTold);
-
-        // Another realm: it comes off.
-        GoToRealm(_realmB);
         Assert.Equal(1, _keptListsTold);
         Assert.True(_cache.LearnedRoomNamesVersion > version);
         Assert.NotSame(before, TrainerCatalog.Enumerate(_cache));
+        // Once: a heartbeat, or the same realm said again, tells nobody.
+        _store.TakeInOutsideChanges();
+        _store.OnRealmChanged();
+        Assert.Equal(1, _keptListsTold);
+
+        // Another realm: it comes off.
+        GoToRealm(_realmB);
+        Assert.Equal(2, _keptListsTold);
         Assert.Equal(string.Empty, RoomNameIndex.NameOf(_cache, House.Map, House.Room));
 
-        // Back: it goes on again. A realm with nothing to put on or take off tells nobody.
+        // Back: it goes on again.
         GoToRealm(_realmA);
-        Assert.Equal(2, _keptListsTold);
-        _store.OnRealmChanged();
-        Assert.Equal(2, _keptListsTold);
+        Assert.Equal(3, _keptListsTold);
+
+        // The game prints another name and the tracker takes it: nobody is told
+        // until that one is kept in its place.
+        Assert.NotNull(_graph.LearnRoomName(House, "Shop Red House Room"));
+        Assert.Equal(3, _keptListsTold);
+        Assert.Equal(LearnedRoomNameStore.KeepResult.Stored,
+            _store.Keep(House, "Shop Red House Room", _realm, _graph.ActiveSet));
+        Assert.Equal(4, _keptListsTold);
+        Assert.Equal("Shop Red House Room", TrainerRoom("House Trainer"));
+    }
+
+    // A set load with names on file builds the item givers once: warmed when the
+    // room graph is ready, after the names are on the map. (Warmed at the set
+    // switch, before the graph, the build read the map without them and was done
+    // again.)
+    [Fact]
+    public void ASetLoadWithStoredNames_BuildsTheItemGiversOnce()
+    {
+        KeepHouseName();
+        LogService log = new();
+        int builds = 0;
+        log.EntryAdded += e => { if (e.Source == "ItemSourceIndex" && e.Message.StartsWith("Indexed", StringComparison.Ordinal)) builds++; };
+        // The textblocks reload before the graph is rebuilt, as in AppServices.
+        TBInfoStore tb = new(_cache);
+        _cache.ActiveSetChanged -= _graph.OnActiveSetChanged;
+        _cache.ActiveSetChanged += tb.OnActiveSetChanged;
+        _cache.ActiveSetChanged += _graph.OnActiveSetChanged;
+        ItemSourceIndex sources = new(_cache, tb, log);
+        _graph.LearnedNamesChanged += sources.Warm;
+        _graph.GraphReloaded += sources.Warm;
+
+        _cache.ReloadActiveSet();
+
+        Assert.Equal(1, builds);
+        Assert.Equal(HouseName, Assert.Single(sources.GiversOf(21)).Name);
+        Assert.Equal(1, builds);
     }
 
     // A list being built while the names change is answered and not kept, so the

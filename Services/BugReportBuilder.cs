@@ -2138,7 +2138,11 @@ public static class BugReportBuilder
         Kv(sb, "Learned room names (this realm, for the active game-data set)",
             svc.LearnedRoomNames.RealmFolder is null
                 ? "none kept (no realm)"
-                : $"{svc.LearnedRoomNames.CountForActiveSet} held, {svc.LearnedRoomNames.OnRoomMap} on the room map");
+                : $"{svc.LearnedRoomNames.CountForActiveSet} held, {svc.LearnedRoomNames.OnRoomMap} on the room map"
+                    + (svc.LearnedRoomNames.ReplacedThisSession > 0
+                        ? $", {svc.LearnedRoomNames.ReplacedThisSession} replaced this session by a name the game "
+                            + "printed since (not saved)"
+                        : string.Empty));
         // A room whose cast-on-enter Spell strips buffs suppresses auto-bless —
         // a "buffs won't cast here" report needs this to explain the silence.
         Kv(sb, "Room strips buffs",

@@ -110,8 +110,27 @@ public sealed class LearnedRoomNameStore
     // How many names are held for the set the room map is built from.
     public int CountForActiveSet => HeldForActiveSet()?.Count ?? 0;
 
-    // How many of those are on the room map; the rest are for rooms it doesn't have.
+    // How many of those are on the room map. The rest are for rooms it doesn't
+    // have, or are counted in ReplacedThisSession.
     public int OnRoomMap { get; private set; }
+
+    // How many are left off the map because the game has printed another name for
+    // the room since and the tracker took it, the new one not having been saved.
+    public int ReplacedThisSession { get; private set; }
+
+    // Whether to ask the user about a name the tracker just learned for a room:
+    // once per name per room in a session, on the realm and set it was seen on. A
+    // room met under two names in turn is asked about once for each and not on
+    // every visit. False with no realm or set to keep a name under: there is
+    // nothing to ask, and the map has the name for the session.
+    public bool AskAbout(RoomKey room, string name)
+    {
+        if (FollowRealm()) Apply(announce: true);
+        if (_realmFolder is null || _graph.ActiveSet is not { Length: > 0 } set) return false;
+        return _asked.Add((_realmFolder, set.ToUpperInvariant(), room, name));
+    }
+
+    private readonly HashSet<(string Realm, string Set, RoomKey Room, string Name)> _asked = new();
 
     // The folder of the realm whose names are held, or null with no realm
     // (nothing is kept then).
@@ -237,6 +256,12 @@ public sealed class LearnedRoomNameStore
         if (string.IsNullOrWhiteSpace(folder)) folder = null;
         if (string.Equals(folder, _realmFolder, StringComparison.Ordinal)) return false;
 
+        if (folder is not null && _realmFolder is not null && IsTheSameRealmRenamed(_realmFolder, folder))
+        {
+            _realmFolder = folder;
+            return false;
+        }
+
         // What the realm being left is still owed, laid over its file as it is
         // now. Not when its folder is gone (removed, or renamed with no word of
         // it): writing would make the folder again under the old name.
@@ -255,6 +280,29 @@ public sealed class LearnedRoomNameStore
         return true;
     }
 
+    // A realm renamed arrives as a BBS pin with another folder and no word that
+    // it is the same realm. It is taken for one only when all of this holds: the
+    // new folder is beside the old (the same BBS), the old one is gone, and the
+    // new one holds a names file with the very write time of the one last read or
+    // written here, which a folder moved whole keeps and another realm's file
+    // would not have. Then what is held, what is still to be written and the
+    // session's names stay, as for a BBS rename. A realm with no names file yet
+    // can't be told from a realm removed, and is treated as a change.
+    private bool IsTheSameRealmRenamed(string old, string folder)
+    {
+        if (!string.Equals(Path.GetDirectoryName(old), Path.GetDirectoryName(folder), StringComparison.Ordinal))
+            return false;
+        string moved = AppPaths.RealmLearnedRoomNamesFile(folder);
+        try
+        {
+            return !Directory.Exists(old) && File.Exists(moved) && !_stamp.ChangedOutside(moved);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     // Put what is held for the map's set on the map, and drop what the data has
     // come to name itself.
     //   announce — say the count: the map was rebuilt or the realm changed.
@@ -265,6 +313,7 @@ public sealed class LearnedRoomNameStore
         Dictionary<RoomKey, string>? held = HeldForActiveSet();
         RoomGraphManager.StoredNames result = _graph.ApplyStoredNames(held ?? NoNames);
         OnRoomMap = result.Applied;
+        ReplacedThisSession = result.Replaced;
         if (held is null || set is null) return;
 
         if (result.NamedByData.Count > 0)
@@ -283,8 +332,11 @@ public sealed class LearnedRoomNameStore
         if (announce && held.Count > 0)
             _log?.Info(LogCategory,
                 $"{result.Applied} learned room name(s) put on the room map for '{set}'"
-                + (held.Count > result.Applied
-                    ? $"; {held.Count - result.Applied} more held for rooms the map doesn't have"
+                + (result.Replaced > 0
+                    ? $"; {result.Replaced} left off for a name the game has printed since"
+                    : "")
+                + (held.Count > result.Applied + result.Replaced
+                    ? $"; {held.Count - result.Applied - result.Replaced} more held for rooms the map doesn't have"
                     : ""));
     }
 

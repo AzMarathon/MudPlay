@@ -910,6 +910,10 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Assert.Equal(Renamed, client.NameOf(House));
         Assert.Equal(HouseName, client.Store.NameFor(House));
         Assert.Contains(HouseName, File.ReadAllText(NamesFile(_realmA)));
+        // What the bug report says of it: two held, the cellar's on the map, the
+        // house's left off for the name printed since.
+        Assert.Equal((2, 1, 1),
+            (client.Store.CountForActiveSet, client.Store.OnRoomMap, client.Store.ReplacedThisSession));
 
         // Another client keeps a name for the room: newer than the one replaced.
         Client other = Start(_realmA);
@@ -918,6 +922,109 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         File.SetLastWriteTimeUtc(NamesFile(_realmA), DateTime.UtcNow.AddSeconds(5));
         Assert.True(client.Store.TakeInOutsideChanges());
         Assert.Equal("Shop Blue House Room", client.NameOf(House));
+        Assert.Equal((2, 2, 0),
+            (client.Store.CountForActiveSet, client.Store.OnRoomMap, client.Store.ReplacedThisSession));
+    }
+
+    // A room met under two names in turn is asked about once for each, however
+    // often it changes back; and each realm is asked for itself.
+    [Fact]
+    public void AName_IsAskedAboutOncePerRoomInASession()
+    {
+        Client client = Start(_realmA);
+
+        Assert.True(client.Store.AskAbout(House, HouseName));
+        Assert.False(client.Store.AskAbout(House, HouseName));
+        Assert.True(client.Store.AskAbout(House, Renamed));
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.False(client.Store.AskAbout(House, HouseName));
+            Assert.False(client.Store.AskAbout(House, Renamed));
+        }
+        // Another room under the same name is another question.
+        Assert.True(client.Store.AskAbout(Cellar, HouseName));
+
+        client.Realm = _realmB;
+        Assert.True(client.Store.AskAbout(House, HouseName));
+        Assert.False(client.Store.AskAbout(House, HouseName));
+        Assert.Equal(_realmB, client.Store.RealmFolder);
+
+        // Nowhere to keep a name: nothing to ask.
+        client.Realm = null;
+        Assert.False(client.Store.AskAbout(House, "Somewhere"));
+        client.Realm = _realmA;
+        client.Cache.SwitchSet(null);
+        Assert.False(client.Store.AskAbout(House, "Somewhere"));
+    }
+
+    // ----- the realm renamed ------------------------------------------------
+
+    // A realm renamed reaches the store as a pin with another folder. The folder
+    // moved whole, so the names file in it is the one last written here: the
+    // store goes with it, and nothing comes off the map, an unsaved name included.
+    [Fact]
+    public void ARealmRenamed_IsFollowedToItsFolder_AndNothingComesOffTheMap()
+    {
+        Client client = Start(_realmA);
+        client.See(House, HouseName);
+        Assert.True(client.Keep(House, HouseName));
+        client.See(Cellar, CellarName);
+        _log.Clear();
+
+        string renamed = Path.Combine(Path.GetDirectoryName(_realmA)!, "one renamed");
+        Directory.Move(_realmA, renamed);
+        client.Realm = renamed;
+        client.Store.OnRealmChanged();
+
+        Assert.Equal(renamed, client.Store.RealmFolder);
+        Assert.Equal((HouseName, CellarName), (client.NameOf(House), client.NameOf(Cellar)));
+        Assert.Equal((1, 1), (client.Store.CountForActiveSet, client.Store.OnRoomMap));
+        Assert.True(client.Keep(Cellar, CellarName));
+        Assert.Contains("15/862", File.ReadAllText(NamesFile(renamed)));
+        Assert.False(Directory.Exists(_realmA));
+    }
+
+    // A realm removed looks the same from here, the folder gone and the
+    // character on another realm of the BBS, except that the other realm's file
+    // is not the one last written here. That is a change of realm.
+    [Fact]
+    public void ARealmRemoved_IsAChangeOfRealm_NotARename()
+    {
+        Client there = Start(_realmB);
+        there.See(House, "Their House");
+        Assert.True(there.Keep(House, "Their House"));
+        File.SetLastWriteTimeUtc(NamesFile(_realmB), DateTime.UtcNow.AddSeconds(-30));
+
+        Client client = Start(_realmA);
+        client.See(House, HouseName);
+        Assert.True(client.Keep(House, HouseName));
+        client.See(Cellar, CellarName);
+
+        Directory.Delete(_realmA, recursive: true);
+        client.Realm = _realmB;
+        client.Store.OnRealmChanged();
+
+        Assert.Equal("Their House", client.NameOf(House));
+        Assert.True(client.Unnamed(Cellar));
+        Assert.DoesNotContain(HouseName, File.ReadAllText(NamesFile(_realmB)));
+    }
+
+    // A realm that has no names file yet, renamed: it can't be told from a realm
+    // removed, so it is a change, and the unsaved name comes off.
+    [Fact]
+    public void ARealmWithNoNamesFileRenamed_IsTakenForAChange()
+    {
+        Client client = Start(_realmA);
+        Directory.CreateDirectory(_realmA);
+        client.See(Cellar, CellarName);
+
+        string renamed = Path.Combine(Path.GetDirectoryName(_realmA)!, "one renamed");
+        Directory.Move(_realmA, renamed);
+        client.Realm = renamed;
+        client.Store.OnRealmChanged();
+
+        Assert.Equal(renamed, client.Store.RealmFolder);
+        Assert.True(client.Unnamed(Cellar));
     }
 
     [Fact]

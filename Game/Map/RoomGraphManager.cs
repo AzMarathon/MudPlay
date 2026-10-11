@@ -160,8 +160,10 @@ public sealed class RoomGraphManager
     }
 
     // What ApplyStoredNames did: how many rooms now bear a name from the client's
-    // store, and the rooms it was handed a name for that the data names itself.
-    public readonly record struct StoredNames(int Applied, IReadOnlyList<RoomKey> NamedByData);
+    // store, how many stored names were left off because the tracker has learned
+    // another for the room since, and the rooms it was handed a name for that the
+    // data names itself.
+    public readonly record struct StoredNames(int Applied, int Replaced, IReadOnlyList<RoomKey> NamedByData);
 
     // Make the rooms the data gives no name bear exactly the names the client's own
     // store holds for this set (LearnedRoomNameStore), and no other name from it: a
@@ -195,7 +197,7 @@ public sealed class RoomGraphManager
             }
         }
 
-        int applied = 0;
+        int applied = 0, left = 0;
         List<RoomKey>? namedByData = null;
         foreach ((RoomKey key, string name) in names)
         {
@@ -211,19 +213,26 @@ public sealed class RoomGraphManager
             // now (the new name kept, or another client's) is newer and stands.
             if (_learnedOverStored.TryGetValue(key, out string? replaced))
             {
-                if (string.Equals(replaced, name, StringComparison.Ordinal)) continue;
+                if (string.Equals(replaced, name, StringComparison.Ordinal))
+                {
+                    left++;
+                    continue;
+                }
                 _learnedOverStored.Remove(key);
+                moved = true;
             }
             if (!string.Equals(room.Name, name, StringComparison.Ordinal))
             {
                 Rename(room, name);
                 moved = true;
             }
-            _namedFromStore.Add(key);
+            // A name the room already bore, now the store's: it was kept. The
+            // lists that keep room names are told, as when one goes on.
+            if (_namedFromStore.Add(key)) moved = true;
             applied++;
         }
         if (moved) LearnedNamesMoved(tellKeptLists: true);
-        return new StoredNames(applied, namedByData is null ? Array.Empty<RoomKey>() : namedByData);
+        return new StoredNames(applied, left, namedByData is null ? Array.Empty<RoomKey>() : namedByData);
     }
 
     // Take off every name the tracker learned this session for a room the data
@@ -255,11 +264,12 @@ public sealed class RoomGraphManager
     // without a lock.
     public IReadOnlyDictionary<RoomKey, string> LearnedNames => _learnedNames;
 
-    // A stored name went on a room or a learned one came off (the map was built,
-    // the realm changed, another client wrote): a list that kept names out of
-    // LearnedNames is out of date. Not raised for a name the tracker learns. A
-    // list built before shows that one when it is next built, as it always did,
-    // and none has to be rebuilt in the middle of a walk for it.
+    // A stored name went on a room, a learned one came off, or one the room bore
+    // was kept (the map was built, the realm changed, another client wrote, the
+    // user pressed Save): a list that kept names out of LearnedNames is out of
+    // date. Not raised for a name the tracker learns and nobody has kept. A list
+    // built before shows that one when it is next built, as it always did, and
+    // none has to be rebuilt in the middle of a walk for it.
     public event Action? LearnedNamesChanged;
 
     private static readonly IReadOnlyDictionary<RoomKey, string> NoLearnedNames = new Dictionary<RoomKey, string>();

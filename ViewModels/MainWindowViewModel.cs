@@ -2348,39 +2348,28 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Rooms we've already prompted about this session, each with the realm and
-    // the game-data set it was seen on, and the name last asked about: a name is
-    // kept per realm and filed under its set, so the same room number is asked
-    // about again on another of either, and again when the game prints another
-    // name for it (a board can rename such a room). Prevents asking the same
-    // yes/no twice when the player re-enters or the tracker re-observes the room.
-    private readonly Dictionary<(string Realm, string Set, Game.Map.RoomKey Room), string> _nameLearnedPrompted = new();
-
     private void OnRoomNameLearned(Game.Map.NameLearnedEvent e)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() => PromptForLearnedNameAsync(e));
 
     private async void PromptForLearnedNameAsync(Game.Map.NameLearnedEvent e)
     {
-        // A kept name goes in the realm's folder, under the set the map was built
-        // from. With neither there is nowhere to keep it and so nothing to ask:
-        // the map has the name for the session.
-        if (AppServices.Current.ActiveRealmFolder() is not { } realm) return;
-        if (AppServices.Current.RoomGraph.ActiveSet is not { Length: > 0 } set) return;
-        (string, string, Game.Map.RoomKey) asked = (realm, set.ToUpperInvariant(), e.Key);
-        if (_nameLearnedPrompted.TryGetValue(asked, out string? last)
-            && string.Equals(last, e.ObservedName, StringComparison.Ordinal))
-            return;
-        _nameLearnedPrompted[asked] = e.ObservedName;
+        // Asked once per name per room in a session, and not at all with no realm
+        // or set to keep the name under: the store decides, and remembers.
+        Game.Map.LearnedRoomNameStore names = AppServices.Current.LearnedRoomNames;
+        if (!names.AskAbout(e.Key, e.ObservedName)) return;
+        // Where it was seen, for a Save that comes after either has changed.
+        string? realm = names.RealmFolder;
+        string? set = AppServices.Current.RoomGraph.ActiveSet;
 
         // The name on file for the room, when the game has printed another since.
-        string? keptBefore = AppServices.Current.LearnedRoomNames.NameFor(e.Key);
+        string? keptBefore = names.NameFor(e.Key);
         var vm = new ViewModels.RoomNameLearnedDialogViewModel(e.Key, e.ObservedName, keptBefore);
         bool keep = await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.RoomNameLearnedDialogViewModel, bool>(vm);
         if (!keep) return;
 
         Game.Map.LearnedRoomNameStore.KeepResult result =
-            AppServices.Current.LearnedRoomNames.Keep(e.Key, e.ObservedName, seenOnRealm: realm, seenOnSet: set);
+            names.Keep(e.Key, e.ObservedName, seenOnRealm: realm, seenOnSet: set);
         // Save was pressed and nothing reached the file: say so where the user is
         // looking, the program log having the detail. Posted, as every status line
         // is that may be written while the emulator is being fed.
