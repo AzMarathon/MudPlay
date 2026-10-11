@@ -343,6 +343,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [InlineData("The room is pitch black - you can't see anything!")]
     [InlineData("The room is very dark - you can't see anything.")]
     [InlineData("You are blind.")]
+    [InlineData("You are blind!")]   // a room too bright to see in (Probe3_S2b)
     public void FollowedIntoARoomThatShowsNothing_ThenUninvited_SendsNothing(string arrival)
     {
         using Harness h = NewFollower();
@@ -1347,5 +1348,157 @@ public sealed class ComebackRequesterTests : IDisposable
         h.Requester.FireSettleForTests();
 
         Assert.Equal(new[] { "/Boss @wait (too heavy to move)", "/Boss @comeback 1/1" }, h.Wire);
+    }
+
+    // ----- the follow the game ended without a line (Stock) ------------------
+
+    // Stock: an exit turned us away and the game said nothing more, so we still
+    // count ourselves a follower. The request went out; what ends the follow on
+    // our side is recorded here as PartyManager.NoteFollowGivenUp would clear it.
+    private static List<string> AskedOnStock(Harness h)
+    {
+        List<string> givenUp = new();
+        h.Requester.FollowGivenUp = (leader, _) =>
+        {
+            givenUp.Add(leader);
+            h.Party.IsInParty = false;
+            h.Party.LeaderName = null;
+        };
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+        Assert.Empty(givenUp);
+        return givenUp;
+    }
+
+    // The leader refuses: nobody is coming, so we stop counting ourselves as
+    // following (user, 2026-10-10: "option A").
+    [Theory]
+    [InlineData("I can't I'm idle")]
+    [InlineData("I can't, my loop goes through an exit you can't pass")]
+    [InlineData("my party is full — can't take you back")]
+    [InlineData("you're 40 rooms off (limit 30) — can't come, forget me")]
+    public void Stock_TheLeaderRefuses_TheFollowIsGivenUp(string refusal)
+    {
+        using Harness h = NewFollower();
+        List<string> givenUp = AskedOnStock(h);
+
+        h.Feed($"Boss telepaths: {{{refusal}}}");
+
+        Assert.Equal(new[] { "Boss" }, givenUp);
+        Assert.False(h.Party.IsInParty);
+        Assert.Null(h.Requester.WaitingForTests);
+        Assert.Contains("follow given up", h.Requester.LastIncidentSummary);
+    }
+
+    // "I can't yet" is no refusal: a train trip comes when the training is done,
+    // and Auto-Lair invites on its next pass. The follow stands, and is waited on
+    // for longer than a request with no answer is.
+    [Theory]
+    [InlineData("I can't yet, I'm on a train trip. I'll come for you when the training is done")]
+    [InlineData("I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you")]
+    [InlineData("coming to your location for pickup")]
+    public void Stock_TheLeaderIsComingOrComingLater_TheFollowStands(string answer)
+    {
+        using Harness h = NewFollower();
+        List<string> givenUp = AskedOnStock(h);
+        Assert.Equal(h.Requester.RetryWindow, h.Requester.WaitingForTests);
+
+        h.Feed($"Boss telepaths: {{{answer}}}");
+
+        Assert.Empty(givenUp);
+        Assert.True(h.Party.IsInParty);
+        Assert.Equal(TimeSpan.FromMinutes(15), h.Requester.WaitingForTests);
+        Assert.True(h.Requester.IsLeaderWeAsked("Boss"));
+    }
+
+    // Nobody answers and nobody comes inside the time a leader takes the request.
+    [Fact]
+    public void Stock_NobodyComesWithinTheWindow_TheFollowIsGivenUp()
+    {
+        using Harness h = NewFollower();
+        List<string> givenUp = AskedOnStock(h);
+
+        h.Requester.FireWaitLapsedForTests();
+
+        Assert.Equal(new[] { "Boss" }, givenUp);
+        Assert.False(h.Party.IsInParty);
+        // The invite, should the leader come after all, is still one we asked for.
+        Assert.True(h.Requester.IsLeaderWeAsked("Boss"));
+    }
+
+    // The leader came, invited, and went back to its own business when we didn't
+    // follow in time: nobody is coming now, but its invite is still wanted.
+    [Fact]
+    public void Stock_TheLeaderCameAndGaveUp_TheFollowIsGivenUp_TheInviteStillWanted()
+    {
+        using Harness h = NewFollower();
+        List<string> givenUp = AskedOnStock(h);
+        h.Feed("Boss telepaths: {coming to your location for pickup}");
+
+        h.Feed("Boss telepaths: {follow timed out — resuming anyway}");
+
+        Assert.Equal(new[] { "Boss" }, givenUp);
+        Assert.True(h.Requester.IsLeaderWeAsked("Boss"));
+    }
+
+    // Following again ends the wait: nothing is given up afterwards.
+    [Fact]
+    public void Stock_FollowingAgain_EndsTheWait()
+    {
+        using Harness h = NewFollower();
+        List<string> givenUp = AskedOnStock(h);
+
+        h.Feed("You are now following Boss");
+        Assert.Null(h.Requester.WaitingForTests);
+        h.Requester.FireWaitLapsedForTests();
+
+        Assert.Empty(givenUp);
+        Assert.True(h.Party.IsInParty);
+    }
+
+    // A request that could never be sent is no pickup either: once it is dropped,
+    // so is the follow.
+    [Fact]
+    public void Stock_TheRequestCouldNeverBeSent_TheFollowIsGivenUp()
+    {
+        using Harness h = NewFollower();
+        List<string> givenUp = new();
+        h.Requester.FollowGivenUp = (leader, _) => givenUp.Add(leader);
+        h.MasterSwitchOn = false;
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+        Assert.Null(h.LastWire);
+
+        h.Advance(h.Requester.RetryWindow + TimeSpan.FromSeconds(1));
+        h.Requester.FireRetryForTests();
+
+        Assert.Equal(new[] { "Boss" }, givenUp);
+    }
+
+    // Paradigm ends the follow with its own line, and the party state goes with
+    // it. A refusal, or the window running out, then has nothing left to end.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Paradigm_TheGamesLineEndedTheFollow_NothingIsGivenUpTwice(bool refused)
+    {
+        using Harness h = NewFollower();
+        List<string> givenUp = new();
+        h.Requester.FollowGivenUp = (leader, _) => givenUp.Add(leader);
+        h.Feed("Boss just left to the east.");
+        h.Feed(" -- Following your Party leader east --");
+        h.Feed("You don't have a mine pass, so you can't enter the mines.");
+        h.Feed("You are no longer following Boss.");
+        h.Party.IsInParty = false;          // as PartyManager clears it on that line
+        h.Party.LeaderName = null;
+        h.Requester.FireSettleForTests();
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+
+        if (refused) h.Feed("Boss telepaths: {I can't, my loop goes through an exit you can't pass}");
+        else h.Requester.FireWaitLapsedForTests();
+
+        Assert.Empty(givenUp);
+        Assert.Equal(1, h.Sent);
     }
 }

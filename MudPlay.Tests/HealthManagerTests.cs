@@ -3417,6 +3417,27 @@ public sealed class HealthManagerTests
         Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
     }
 
+    // A follower never flees, but the wimpy jump is not a flee: it stands in for
+    // the hang-up, and is allowed a follower like one (user, 2026-10-10: "this is
+    // allowed, like a hangup").
+    [Fact]
+    public void Follower_WimpyJumpInPlaceOfAHangUp_IsStillMade()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => { },
+            requestPartyOk: () => { });
+        h.HealthSettings.SysGotoWimpyInsteadOfHanging = true;
+        h.HealthSettings.SysGotoWimpyLocation = "town";
+        string? jumpedTo = null;
+        h.Health.SetWimpyGoto(where => { jumpedTo = where; return true; });
+
+        Assert.Equal(EscapeOutcome.Jumped, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.Equal("town", jumpedTo);
+    }
+
     [Fact]
     public void FleeFromMonster_WhileAnotherFleeIsInFlight_SendsNoSecondMove()
     {
