@@ -177,9 +177,14 @@ public sealed class RankingStampTests : IDisposable
 
         Assert.Equal(new[] { RankingCharacter.Reach }, made.ChangedSince(partial));
         Assert.Equal(new[] { RankingCharacter.Reach }, partial.ChangedSince(made));
-        Assert.True(RankingCheck.Of(null, made).Unchecked);
+        // The character can't be read now: not known yet. The ranking has no record
+        // of it: never to be known. Neither is current.
         Assert.True(RankingCheck.Of(made, null).Unchecked);
-        Assert.False(RankingCheck.NotChecked.IsCurrent);
+        Assert.False(RankingCheck.Of(made, null).IsCurrent);
+        Assert.True(RankingCheck.Of(null, made).NoRecord);
+        Assert.False(RankingCheck.Of(null, made).Unchecked);
+        Assert.False(RankingCheck.Of(null, made).IsCurrent);
+        Assert.True(RankingCheck.Of(null, null).NoRecord);
     }
 
     // ----- Reach ---------

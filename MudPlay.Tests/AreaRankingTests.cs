@@ -95,4 +95,14 @@ public sealed class AreaRankingTests
         Assert.False(r.IsCurrentAt(0, RankingCheck.NotChecked));
         Assert.False(r.IsCurrentAt(42, RankingCheck.NotChecked));
     }
+
+    [Fact]
+    public void ARankingWithNoRecordOfItsCharacter_IsSaidToBePossiblyChanged_AndIsNotCurrent()
+    {
+        AreaRanking r = Made(Now.AddMinutes(-28), 42, 42);
+        RankingCheck noRecord = RankingCheck.Of(null, new RankingCharacter(new Dictionary<string, string>()));
+
+        Assert.Equal("Made 14:32 at L42; the character may have changed since.", r.KeptNote(42, Now, noRecord));
+        Assert.False(r.IsCurrentAt(42, noRecord));
+    }
 }

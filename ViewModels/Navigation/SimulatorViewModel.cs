@@ -1011,6 +1011,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
         if (!_shownKept) return $"just made this session; {made}";
         string from = ranking.FromDisk ? "read back from disk" : "kept in memory this session";
         string stands = _keptCheck.Unchecked ? "not checked against the character yet"
+            : _keptCheck.NoRecord ? "it carries no record of the character it was made for"
             : _keptCheck.Changed is { Count: > 0 } changed ? $"marked for {string.Join(", ", changed)}"
             : "the character's stats, gear, spells, settings, game-data edits and reach are as they were";
         return $"{from}; {made}; {stands}{(RankingNotCurrent ? "; shown as not current" : "")}";

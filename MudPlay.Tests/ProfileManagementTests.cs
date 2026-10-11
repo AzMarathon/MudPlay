@@ -259,6 +259,23 @@ public sealed class ProfileManagementTests : IDisposable
         Assert.Equal(0, told);
     }
 
+    // What tells a copy from a rename, for whoever keeps things under a profile's
+    // name: after Save As from a named profile the one it was is still there.
+    [Fact]
+    public void SaveAsFromANamedProfile_LeavesThatProfileInPlace_WhereARenameDoesNot()
+    {
+        var svc = new ProfileService();
+        svc.CreateProfile(_bbsA, "original");
+        svc.Load(_bbsA, "original");
+        var stillThere = new List<bool>();
+        svc.ProfileRenamed += (bbs, name) => stillThere.Add(svc.Exists(bbs!, name!));
+
+        svc.SaveAs(_bbsA, "copy");
+        svc.MoveProfile(_bbsA, "copy", _bbsA, "renamed");
+
+        Assert.Equal(new[] { true, false }, stillThere);
+    }
+
     // ----- Profiles that are not loaded, and ones that are gone ----------
 
     [Fact]

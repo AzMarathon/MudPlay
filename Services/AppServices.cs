@@ -8450,6 +8450,15 @@ public sealed class AppServices
         {
             string? was = Game.Simulation.SimulatorOwner.CharacterKey(oldBbs, oldName);
             string? now = Game.Simulation.SimulatorOwner.CharacterKey(Profile.CurrentBbsName, Profile.CurrentProfileName);
+            // Save As from a named profile leaves that profile where it was and
+            // carries on as a copy of it. A copy is another character: the rankings
+            // stay with the one they were made for, and what an earlier profile of
+            // the copy's name had kept is not the copy's either.
+            if (ProfileStillThere(oldBbs, oldName))
+            {
+                SimulatorRankings.ForgetCharacter(now);
+                return;
+            }
             int carried = SimulatorRankings.RenameCharacter(was, now);
             if (carried > 0)
                 Log.Info("Simulator", $"character '{was ?? "(none)"}' is now '{now ?? "(none)"}': {carried} area ranking(s) kept for it go with it");
@@ -11556,6 +11565,12 @@ public sealed class AppServices
 
     // Every item an exit of the loaded map wants carried; rebuilt after the map is.
     private IReadOnlySet<int>? _simulatorGateItems;
+
+    // After ProfileRenamed: whether the profile the loaded one was is still on disk,
+    // which makes the loaded one a copy of it (Save As from a named profile) and not
+    // the same character renamed or moved.
+    public bool ProfileStillThere(string? bbs, string? name) =>
+        bbs is not null && name is not null && Profile.Exists(bbs, name);
 
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the

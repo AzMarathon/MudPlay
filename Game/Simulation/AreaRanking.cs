@@ -37,6 +37,8 @@ public sealed record AreaRanking(
                 : $"; you were L{CharacterLevel} then and are L{levelNow} now";
         if (check.Unchecked)
             note += "; not checked against the character yet";
+        else if (check.NoRecord)
+            note += "; the character may have changed since";
         else if (check.Changed is { Count: > 0 } changed)
             note += $"; your {Join(changed)} {(changed.Count == 1 && changed[0] is RankingCharacter.Reach ? "has" : "have")} changed since";
         return note + ".";

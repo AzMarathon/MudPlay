@@ -196,7 +196,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     private void OnSimulatorCharacterLoaded(Models.Profile.CharacterProfile _) => Simulator.CharacterChanged();
     private void OnSimulatorCharacterClosed() => Simulator.CharacterChanged();
-    private void OnSimulatorCharacterRenamed(string? oldBbs, string? oldName) => Simulator.CharacterRenamed();
+    // A copy made by Save As is another character, to be shown its own results
+    // (none yet); a rename or move is the same one under another name.
+    private void OnSimulatorCharacterRenamed(string? oldBbs, string? oldName)
+    {
+        if (_services.ProfileStillThere(oldBbs, oldName)) Simulator.CharacterChanged();
+        else Simulator.CharacterRenamed();
+    }
     private void OnSimulatorStatRead(LastKnownStats _) => Simulator.CharacterRead();
     private void OnSimulatorGameDataChanged(string? set)
     {
