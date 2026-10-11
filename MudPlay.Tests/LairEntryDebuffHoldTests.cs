@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using MudPlay.Game.Map;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -19,12 +20,19 @@ public sealed class LairEntryDebuffHoldTests
         public DateTimeOffset Now = new(2026, 10, 7, 12, 0, 0, TimeSpan.Zero);
         public List<Action> Scheduled { get; } = new();
         public LairEntryDebuffHold Hold { get; }
+        // What the hold is told is due, by name: the buffs ticked priority, and the rest.
+        public List<string> PriorityDue { get; } = new();
+        public List<string> OrdinaryDue { get; } = new();
+        public LogService Log { get; } = new();
 
         public Harness() =>
             Hold = new LairEntryDebuffHold(Coordinator, () => SlotUsed, () => CastDue,
-                (_, action) => Scheduled.Add(action), () => Now);
+                (_, action) => Scheduled.Add(action), () => Now, Log,
+                priority => priority ? PriorityDue : OrdinaryDue);
 
         public bool Held => Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffGate);
+
+        public IEnumerable<string> LoopLog => Log.Snapshot().Where(e => e.Source == "Loop").Select(e => e.Message);
 
         // Let the hold's timer look again.
         public void Poll()
@@ -143,6 +151,147 @@ public sealed class LairEntryDebuffHoldTests
         Assert.False(h.Hold.BlockingBuffs);
         h.Poll();                                    // a late timer does nothing
         Assert.False(h.Held);
+    }
+
+    // ----- Wait for priority buff spells -----------------------------
+
+    // While it waits, only the buffs not ticked priority are kept back: the priority
+    // ones may take the cast. For the step in, every buff waits, as in the other modes.
+    [Fact]
+    public void WaitForPriorityBuffs_HoldsOnlyOrdinaryBuffsWhileItWaits_ThenEveryBuffForTheStep()
+    {
+        Harness h = new() { SlotUsed = true, CastDue = true };
+
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs));
+        Assert.True(h.Held);
+        Assert.False(h.Hold.BlockingBuffs);
+        Assert.True(h.Hold.BlockingOrdinaryBuffs);
+
+        h.SlotUsed = false;                         // free, a priority buff still due:
+        h.Poll();
+        Assert.True(h.Held);                        // it gets its turn
+
+        h.SlotUsed = true;                          // it cast
+        h.Poll();
+        h.SlotUsed = false;                         // round turned over, none left due
+        h.CastDue = false;
+        h.Poll();
+
+        Assert.False(h.Held);
+        Assert.True(h.Hold.BlockingBuffs);
+        Assert.True(h.Hold.BlockingOrdinaryBuffs);
+    }
+
+    [Fact]
+    public void WaitForPriorityBuffs_NothingDue_EntersOnAFreeCast()
+    {
+        Harness h = new();
+
+        Assert.True(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs));
+
+        Assert.False(h.Held);
+        Assert.True(h.Hold.BlockingBuffs);
+    }
+
+    // The same limit as Wait for spells: past it no buff is let through any more.
+    [Fact]
+    public void WaitForPriorityBuffs_AfterAFewRounds_BlocksEveryBuffAndEnters_NamingWhatIsLeft()
+    {
+        Harness h = new() { SlotUsed = true, CastDue = true };
+        h.PriorityDue.Add("star");
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs));
+
+        for (int round = 1; round < LairEntryDebuffHold.MaxRoundsWaited; round++)
+        {
+            h.SlotUsed = false; h.Poll();
+            h.SlotUsed = true; h.Poll();
+        }
+        Assert.True(h.Held);
+        Assert.True(h.Hold.BlockingBuffs);
+
+        h.SlotUsed = false;
+        h.Poll();
+
+        Assert.False(h.Held);
+        Assert.Contains(h.LoopLog, m => m.StartsWith("waited the limit of 3 rounds of casts with priority buffs still due (star)"));
+    }
+
+    // A priority buff that is due and never goes out can't park the loop either.
+    [Fact]
+    public void WaitForPriorityBuffs_ADueBuffThatNeverCasts_EntersOnceTheWaitRunsOut_AndSaysWhy()
+    {
+        Harness h = new() { CastDue = true };
+        h.PriorityDue.Add("star");
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs));
+
+        h.Now = h.Now.AddSeconds(17);
+        h.Poll();
+        Assert.True(h.Held);
+
+        h.Now = h.Now.AddSeconds(3);
+        h.Poll();
+
+        Assert.False(h.Held);
+        Assert.Contains(h.LoopLog, m => m.StartsWith("waited the limit of 18 seconds with priority buffs still due (star)"));
+    }
+
+    [Fact]
+    public void WaitForPriorityBuffs_LogsWhatItWaitsForAndHolds_AndWhyItWentIn()
+    {
+        Harness h = new() { CastDue = true };
+        h.PriorityDue.Add("star");
+        h.OrdinaryDue.Add("plai");
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs));
+
+        Assert.Contains("waiting outside the lair until the debuff can be cast — casting priority buffs first "
+            + "(due: star); other buffs held back (due: plai)", h.LoopLog);
+        Assert.StartsWith("waiting (Wait for priority buff spells; 0/3 rounds, 0/18s; buffs not ticked priority held; "
+            + "priority buffs due: star; other buffs due: plai)", h.Hold.Describe());
+
+        h.PriorityDue.Clear();
+        h.CastDue = false;
+        h.Poll();
+
+        Assert.Contains("no priority buff is due and the between-round cast is free — entering the lair", h.LoopLog);
+        Assert.StartsWith("stepping in, buffs held; last wait: 12:00:00 no priority buff is due", h.Hold.Describe());
+    }
+
+    // The other two modes keep what they held: nothing while Wait for spells lets
+    // casts through, every buff in Block spells.
+    [Fact]
+    public void OtherModes_HoldOrdinaryBuffsExactlyWhenTheyHoldEveryBuff()
+    {
+        Harness wait = new() { SlotUsed = true, CastDue = true };
+        Assert.False(wait.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForSpells));
+        Assert.False(wait.Hold.BlockingOrdinaryBuffs);
+
+        Harness block = new() { SlotUsed = true, CastDue = true };
+        Assert.False(block.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells));
+        Assert.True(block.Hold.BlockingOrdinaryBuffs);
+    }
+
+    [Fact]
+    public void TurningAway_FromAPriorityBuffWait_ReleasesTheOrdinaryBuffs()
+    {
+        Harness h = new() { SlotUsed = true, CastDue = true };
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs));
+
+        Assert.True(h.Hold.ReadyToEnter(LairEntryDebuffMode.Off));
+
+        Assert.False(h.Held);
+        Assert.False(h.Hold.BlockingOrdinaryBuffs);
+        Assert.Equal("not waiting; last wait: 12:00:00 no longer entering a lair", h.Hold.Describe());
+    }
+
+    [Fact]
+    public void PriorityBuffMode_MapsToTheThirdChoice_AndIsNamedAsTheListNamesIt()
+    {
+        Assert.Equal(LairEntryDebuffMode.WaitForPriorityBuffs, LairEntryDebuffModes.From(on: true, choice: 2));
+        Assert.Equal(LairEntryDebuffMode.Off, LairEntryDebuffModes.From(on: false, choice: 2));
+        Assert.Equal(2, LairEntryDebuffModes.ChoiceOf(LairEntryDebuffMode.WaitForPriorityBuffs));
+        Assert.True(LairEntryDebuffModes.IsOn(LairEntryDebuffMode.WaitForPriorityBuffs));
+        Assert.Equal("Wait for priority buff spells", LairEntryDebuffModes.Label(LairEntryDebuffMode.WaitForPriorityBuffs));
+        Assert.Equal(3, (int)LairEntryDebuffMode.WaitForPriorityBuffs);   // stored and shared: never renumbered
     }
 
     [Theory]

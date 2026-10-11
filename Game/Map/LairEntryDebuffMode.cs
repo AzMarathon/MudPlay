@@ -16,7 +16,7 @@ public enum LairEntryDebuffMode
     BlockSpells = 2,
     // Between the two: the buffs ticked "Priority buff" that are due are cast first,
     // under the same limit as WaitForSpells, and every other buff is held back as in
-    // BlockSpells. The numbers are stored in loop files and sent when a loop is
-    // shared, so a new member takes the next one.
+    // BlockSpells. Loop files store a member by name and a shared loop sends its
+    // number, so neither is ever changed and a new member takes the next number.
     WaitForPriorityBuffs = 3,
 }

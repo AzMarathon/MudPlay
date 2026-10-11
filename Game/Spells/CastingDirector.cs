@@ -2774,12 +2774,11 @@ public sealed class CastingDirector : IDisposable
 
     // Walk the ONE unified buff list (CharacterProfile.PartyBuffs) in priority order
     // and give each due buff in turn; the first is the one to cast. A slot can target
-    // ourselves (CastOnSelf),
-    // the whole party in one cast (Targets 10 / 13, WholePartyOn — lands on us too),
-    // and/or selected members (Targets 2). Every target obeys the slot's own
-    // conditions (the mana floor, the rest / combat switches, OnlyWhenHpFull /
-    // OnlyWhenMaFull); party / member targets also require actually being in a
-    // party.
+    // ourselves (CastOnSelf), the whole party in one cast (Targets 10 / 13,
+    // WholePartyOn — lands on us too), and/or selected members (Targets 2). Every
+    // target obeys the slot's own conditions (the mana floor, the rest / combat
+    // switches, OnlyWhenHpFull / OnlyWhenMaFull); party / member targets also require
+    // actually being in a party.
     //
     // A member is eligible only when in the party (MajorMUD parties are co-located, so
     // a roster name is in the room) — the one exception being a member who's HIDING:
