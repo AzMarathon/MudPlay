@@ -665,8 +665,9 @@ public sealed class ProfileService
         // start: with these left unset it would take the shared files' flags.
         fresh.FavoriteLoops ??= new List<string>();
         fresh.FavoriteLairSetups ??= new List<string>();
-        // What some other character held is no part of a template.
+        // What some other character held is no part of a template, nor are its buffs.
         fresh.HeldAtDisconnect = null;
+        fresh.BuffTimers = null;
         configure?.Invoke(fresh);
         Directory.CreateDirectory(AppPaths.ProfileFolder(bbsName, profileName));
         JsonStore.Save(AppPaths.CharacterProfileFile(bbsName, profileName), fresh);
@@ -714,6 +715,8 @@ public sealed class ProfileService
             copy.DefaultPoolBaseline = null;
             copy.LastKnownEncumbrance = null;
             copy.HeldAtDisconnect = null;
+            // The buffs are on the source's character, not on the copy's.
+            copy.BuffTimers = null;
             copy.LastKnownRoom = null;
             copy.RecentSteps = null;
             copy.PendingReconnectLeader = null;

@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.173.1**
+> **Version 3.174.1**
 > - Item records show a Used on section listing every exit that names the item as the one needed to pass (a key on a locked door, an item to carry, a ticket): room, map/room and direction, one line per exit
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
