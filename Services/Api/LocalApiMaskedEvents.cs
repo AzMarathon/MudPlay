@@ -10,7 +10,7 @@ namespace MudPlay.Services.Api;
 // producer only queues here, and one pump masks and hands on to the fan-out.
 //
 // The scrubber holds the values in clear, so none is kept: one is built for each
-// run of queued events and dropped with it. If it can't be built, that run is
+// run of queued events (what gathers in DefaultGather) and dropped with it. If it can't be built, that run is
 // not sent, and the stream says how many events it lost and why.
 public sealed class LocalApiMaskedEvents : IDisposable
 {
@@ -20,6 +20,14 @@ public sealed class LocalApiMaskedEvents : IDisposable
 
     // The stream's own event for what it could not send.
     public const string LostEvent = "lost";
+
+    // How long the pump lets events gather after the first of a run before it
+    // builds the masks for them. The build reads the saved values on the UI
+    // thread (a millisecond or two of it), and a steady log would otherwise ask
+    // for one with every entry: this way it is one a run, at most seven a
+    // second. Short enough that the stream still reads as live.
+    public static readonly TimeSpan DefaultGather = TimeSpan.FromMilliseconds(150);
+    private readonly TimeSpan _gather;
 
     private readonly record struct Pending(string Name, Func<BugReportScrub.Scrubber, object> Payload);
 
@@ -39,9 +47,10 @@ public sealed class LocalApiMaskedEvents : IDisposable
 
     // buildScrubber: the masks as the saved values stand now. anyoneListening:
     // false while no stream is open, when nothing is queued at all. send: the
-    // fan-out's Send.
+    // fan-out's Send. gather: see DefaultGather.
     public LocalApiMaskedEvents(
-        Func<Task<BugReportScrub.Scrubber>> buildScrubber, Func<bool> anyoneListening, Action<string, object> send)
+        Func<Task<BugReportScrub.Scrubber>> buildScrubber, Func<bool> anyoneListening, Action<string, object> send,
+        TimeSpan? gather = null)
     {
         ArgumentNullException.ThrowIfNull(buildScrubber);
         ArgumentNullException.ThrowIfNull(anyoneListening);
@@ -49,6 +58,7 @@ public sealed class LocalApiMaskedEvents : IDisposable
         _buildScrubber = buildScrubber;
         _anyoneListening = anyoneListening;
         _send = send;
+        _gather = gather ?? DefaultGather;
         _stopped = _cts.Token;
         _ = Task.Run(PumpAsync);
     }
@@ -70,6 +80,8 @@ public sealed class LocalApiMaskedEvents : IDisposable
         {
             while (await reader.WaitToReadAsync(_stopped).ConfigureAwait(false))
             {
+                // The run gathers in the queue, in order, while this waits.
+                if (_gather > TimeSpan.Zero) await Task.Delay(_gather, _stopped).ConfigureAwait(false);
                 BugReportScrub.Scrubber? scrubber = null;
                 string? unmaskable = null;
                 try { scrubber = await _buildScrubber().ConfigureAwait(false); }

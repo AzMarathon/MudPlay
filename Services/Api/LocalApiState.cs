@@ -90,19 +90,23 @@ public static class LocalApiState
     // Recent gate transitions, newest last, straight from the coordinator's own
     // 200-entry history. This is the answer to "who paused movement, and when" —
     // which no bug report could previously produce.
-    public static object Gates(AppServices svc)
+    // A transition's reason is free text from whoever raised the gate: masked
+    // with the scrubber the caller built for this response, as GET /events masks
+    // the same field.
+    public static object Gates(MovementCoordinator coordinator, BugReportScrub.Scrubber scrubber)
     {
-        ArgumentNullException.ThrowIfNull(svc);
+        ArgumentNullException.ThrowIfNull(coordinator);
+        ArgumentNullException.ThrowIfNull(scrubber);
         return new
         {
-            asserted = svc.MovementCoordinator.AssertedGates.ToArray(),
-            history = svc.MovementCoordinator.History.Select(h => new
+            asserted = coordinator.AssertedGates.ToArray(),
+            history = coordinator.History.Select(h => new
             {
                 at = h.Timestamp,
                 gate = h.Gate,
                 action = h.Asserted ? "assert" : "clear",
                 asserter = h.Asserter,
-                reason = h.Reason,
+                reason = h.Reason is { } reason ? scrubber.Apply(reason) : null,
             }).ToArray(),
         };
     }

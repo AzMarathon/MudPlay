@@ -188,9 +188,18 @@ public sealed class LocalApiServer : IAsyncDisposable
     {
         BugReportScrub.Scrubber Build() => BugReportBuilder.BuildScrubber(_services, compiled: false);
         if (Dispatcher.UIThread.CheckAccess()) return Build();
-        Task<BugReportScrub.Scrubber> onUi = Dispatcher.UIThread.InvokeAsync(Build).GetTask();
+        DispatcherOperation<BugReportScrub.Scrubber> queued = Dispatcher.UIThread.InvokeAsync(Build);
+        Task<BugReportScrub.Scrubber> onUi = queued.GetTask();
         if (await Task.WhenAny(onUi, Task.Delay(ScrubberUiWait)).ConfigureAwait(false) == onUi)
             return await onUi.ConfigureAwait(false);
+        // No longer waited for, so taken off the dispatcher's queue: left there,
+        // every request made while the UI thread was wedged would run, for
+        // nobody, the moment it came back. One that has already started can't be
+        // taken off; what it then throws has no reader, so it is read here.
+        queued.Abort();
+        _ = onUi.ContinueWith(static late => _ = late.Exception,
+            CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
         return Build();
     }
 
@@ -316,8 +325,12 @@ public sealed class LocalApiServer : IAsyncDisposable
             }
 
             case "/gates":
-                WriteJson(res, 200, await OnUiAsync(() => LocalApiState.Gates(_services)).ConfigureAwait(false));
+            {
+                if (await ScrubberOrRefuseAsync(res, "the gate history").ConfigureAwait(false) is not { } scrubber) return;
+                WriteJson(res, 200, await OnUiAsync(() =>
+                    LocalApiState.Gates(_services.MovementCoordinator, scrubber)).ConfigureAwait(false));
                 return;
+            }
 
             case "/commands":
                 // Self-describing surface: what can be dispatched, and which

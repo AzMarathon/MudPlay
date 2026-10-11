@@ -195,6 +195,46 @@ public sealed class LocalApiPrivacyTests
         Assert.InRange(built, 1, 2);
     }
 
+    // A steady log must not cost a build of the masks (a read on the UI thread)
+    // for every entry: the events of one gathering share a build, in order.
+    [Fact]
+    public async Task Events_ThatArriveTogether_ShareOneBuildOfTheMasks_AndKeepTheirOrder()
+    {
+        Sink sink = new();
+        int built = 0;
+        using LocalApiMaskedEvents events = new(
+            () => { Interlocked.Increment(ref built); return Task.FromResult(Scrubber()); },
+            anyoneListening: () => true, sink.Send, gather: TimeSpan.FromMilliseconds(200));
+
+        // Forty entries over about 80 ms: one gathering, or two if the clock is unkind.
+        for (int i = 0; i < 40; i++)
+        {
+            int n = i;
+            events.Post("log", s => new { message = s.Apply($"entry {n} {Password}") });
+            await Task.Delay(2);
+        }
+
+        (string Name, string Json)[] sent = await sink.WaitForAsync(40);
+
+        Assert.Equal(Enumerable.Range(0, 40).Select(i => $"{{\"message\":\"entry {i} [redacted]\"}}"), sent.Select(e => e.Json));
+        Assert.InRange(built, 1, 3);
+    }
+
+    [Fact]
+    public void Gates_MaskTheReasonOfATransition_AsEventsDo()
+    {
+        MudPlay.Game.Map.MovementCoordinator coordinator = new();
+        coordinator.AssertGate(MudPlay.Game.Map.MovementCoordinator.SearchGate, "AutoSearch", $"waiting on {Login}");
+        coordinator.ClearGate(MudPlay.Game.Map.MovementCoordinator.SearchGate, "AutoSearch", "done");
+
+        string json = Json(LocalApiState.Gates(coordinator, Scrubber()));
+
+        AssertNoAccountDetails(json);
+        Assert.Contains("\"reason\": \"waiting on [redacted]\"", json);
+        Assert.Contains("\"reason\": \"done\"", json);
+        Assert.Contains("\"asserter\": \"AutoSearch\"", json);
+    }
+
     [Fact]
     public async Task Events_WithNobodyListening_QueueNothingAndReadNoAccountDetails()
     {

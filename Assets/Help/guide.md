@@ -4244,7 +4244,7 @@ curl -H "Authorization: Bearer $(cat ~/.local/share/MudPlay/.apitoken)" \
 
 (On macOS the path is `~/Library/Application Support/MudPlay/.apitoken`.)
 
-**Account details are masked here too.** The login name, login password and suicide password saved in MudPlay are written as `[redacted]` in `/state/full`, `/log`, `/scrollback` and `/events`, exactly as in a bug report (see *Bug Report*). The masks are made fresh for each answer from what is saved at that moment and are not kept. If the saved details can't be read, `/log` and `/scrollback` answer *503* rather than send text they couldn't mask, and `/events` leaves those events out and says so. Chat is not censored here: that is for reports posted in public.
+**Account details are masked here too.** The login name, login password and suicide password saved in MudPlay are written as `[redacted]` in `/state/full`, `/gates`, `/log`, `/scrollback` and `/events`, exactly as in a bug report (see *Bug Report*). The masks are made fresh for each answer from what is saved at that moment and are not kept (`/events` makes them once for each batch of events, a fraction of a second apart). If the saved details can't be read, `/gates`, `/log` and `/scrollback` answer *503* rather than send text they couldn't mask, and `/events` leaves those events out and says so. Chat is not censored here: that is for reports posted in public.
 
 **Issuing commands.** Beyond reading, the API can act:
 
