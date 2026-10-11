@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.22**
-> - Loops: a third way to wait before a lair, Wait for priority buff spells: due Priority buffs are cast first, other buffs held until after the fight
+> **Version 3.168.1**
+> - Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held until after the fight
 > - Program log and bug report say what a lair wait is for, what it holds back and why it ended
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

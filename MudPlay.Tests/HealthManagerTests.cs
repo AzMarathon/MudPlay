@@ -1893,11 +1893,13 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
-    public void Follower_WithoutHealCallbackWired_FallsBackToFlee()
+    public void Follower_WithoutHealCallbackWired_LatchesTheDecisionAndSendsNothing()
     {
-        // isPartyFollower true but no requestPartyHeal callback wired: the
-        // null-guard falls through to the flee path rather than silently doing
-        // nothing at the run trigger.
+        // isPartyFollower true but no requestPartyHeal callback wired: there is no
+        // heal to ask for, and a follower never flees, so the run trigger is held
+        // with nothing sent. This harness has no walk or loop, so it shows only
+        // the decision latch and the empty wire; the follower tests further down,
+        // which have one, show that no run starts.
         using Harness h = new();
         h.Health.SetPartyRoleSync(
             isPartyFollower: () => true,
@@ -2822,6 +2824,107 @@ public sealed class HealthManagerTests
         Assert.False(h.Health.FleeFromPlayer("Bob attacked us", rooms: 5, stayAway: TimeSpan.FromSeconds(30)));
     }
 
+    // ----- a party follower never flees (user, 2026-10-10) --------------
+    //
+    // Whatever asks for the run. A walk or loop is up behind the follower hold, so
+    // each of these would have had somewhere to run.
+
+    private static FleeHarness FollowerWithAnEngine(Action? requestHeal = null)
+    {
+        FleeHarness h = HitAndRunFlee();
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => { },
+            requestPartyOk: () => { },
+            requestPartyHeal: requestHeal);
+        return h;
+    }
+
+    [Fact]
+    public void Follower_LowHp_WithNoHealToAskFor_StillDoesNotRun()
+    {
+        using FleeHarness h = FollowerWithAnEngine();
+        h.State.InCombat = true;
+
+        h.State.Hp = 30;                 // 15%, under the run trigger
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.False(h.Health.IsFleeInFlight);
+    }
+
+    [Fact]
+    public void Follower_LowHp_AsksForTheHeal_AndDoesNotRun()
+    {
+        int healRequested = 0;
+        using FleeHarness h = FollowerWithAnEngine(() => healRequested++);
+        h.State.InCombat = true;
+
+        h.State.Hp = 30;
+
+        Assert.Equal(1, healRequested);
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+    }
+
+    // The same low mana that runs a leader or a solo character.
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(true, 0)]
+    public void LowMana_RunsEveryoneButAFollower(bool follower, int moves)
+    {
+        using FleeHarness h = follower ? FollowerWithAnEngine() : HitAndRunFlee();
+        h.HealthSettings.RunIfBelowMa = 20;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = true;
+
+        h.State.Ma = 5;
+
+        Assert.Equal(moves, h.Engine!.SentBacktrackMoves.Count);
+    }
+
+    [Fact]
+    public void Follower_HitAndRun_StandsAndFights()
+    {
+        using FleeHarness h = FollowerWithAnEngine();
+
+        Assert.False(h.Health.RunInsteadOfFight("walk-in"));
+        h.Health.BackstabLanded(runNow: true);
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.Equal(0, h.Health.HitAndRunRuns);
+    }
+
+    [Fact]
+    public void Follower_FailedBackstab_DoesNotRun()
+    {
+        using FleeHarness h = FollowerWithAnEngine();
+
+        h.Health.RunFromBackstabFailure();
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.False(h.Health.IsFleeInFlight);
+    }
+
+    [Fact]
+    public void Follower_AttackedByAPlayer_DoesNotRun()
+    {
+        using FleeHarness h = FollowerWithAnEngine();
+
+        Assert.False(h.Health.FleeFromPlayer("Bob attacked us", rooms: 3, stayAway: TimeSpan.FromSeconds(30)));
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Follower_FleeMonsterInTheRoom_DoesNotRun()
+    {
+        using FleeHarness h = FollowerWithAnEngine();
+
+        Assert.Equal(FleeOutcome.Follower, h.Health.FleeFromMonster("ogre (#7) is here, relationship Flee", () => true));
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+    }
+
     // ----- a Flee-relationship monster in the room ----------------------
     //
     // FleeFromMonster is the run-if-below retreat started by a sight, not by HP: the
@@ -3312,6 +3415,27 @@ public sealed class HealthManagerTests
 
         h.Clock += TimeSpan.FromSeconds(3);
         Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+    }
+
+    // A follower never flees, but the wimpy jump is not a flee: it stands in for
+    // the hang-up, and is allowed a follower like one (user, 2026-10-10: "this is
+    // allowed, like a hangup").
+    [Fact]
+    public void Follower_WimpyJumpInPlaceOfAHangUp_IsStillMade()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => { },
+            requestPartyOk: () => { });
+        h.HealthSettings.SysGotoWimpyInsteadOfHanging = true;
+        h.HealthSettings.SysGotoWimpyLocation = "town";
+        string? jumpedTo = null;
+        h.Health.SetWimpyGoto(where => { jumpedTo = where; return true; });
+
+        Assert.Equal(EscapeOutcome.Jumped, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.Equal("town", jumpedTo);
     }
 
     [Fact]

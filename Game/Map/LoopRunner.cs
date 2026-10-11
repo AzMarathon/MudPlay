@@ -430,6 +430,24 @@ public sealed class LoopRunner : IRecoverableEngine
         return null;
     }
 
+    // Every exit the circuit itself takes, with the room it is taken from, in lap
+    // order; a room the lap passes twice is there twice. The walk to the circuit's
+    // first room is not part of it. Empty with no loop running, or where the map
+    // can't follow the lap.
+    public IReadOnlyList<(RoomKey From, RoomExit Exit)> CircuitExits()
+    {
+        var exits = new List<(RoomKey, RoomExit)>();
+        if (_graph is null || _circleStartRoom is not { } here) return exits;
+        foreach (LoopStep step in _expandedSteps)
+        {
+            if (step is not MoveLoopStep move) continue;
+            if (_graph.GetRoom(here) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)) break;
+            exits.Add((here, exit));
+            here = exit.Target;
+        }
+        return exits;
+    }
+
     public IReadOnlyList<Direction> PeekPlannedDirections(int count)
     {
         int n = _expandedSteps.Count;

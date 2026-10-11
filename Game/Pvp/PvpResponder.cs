@@ -39,6 +39,7 @@ public sealed class PvpResponder : IDisposable
     private readonly Action<TimeSpan, Action> _schedule;
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
+    private readonly Func<bool>? _isPartyFollower;
 
     private readonly Dictionary<string, DateTimeOffset> _answeredAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DateTimeOffset> _gangToldAt = new(StringComparer.OrdinalIgnoreCase);
@@ -66,8 +67,10 @@ public sealed class PvpResponder : IDisposable
         Func<string?> roomName,
         Action<TimeSpan, Action> schedule,
         LogService? log = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        Func<bool>? isPartyFollower = null)
     {
+        _isPartyFollower = isPartyFollower;
         _classifier = classifier;
         _attacks = attacks;
         _players = players;
@@ -202,7 +205,9 @@ public sealed class PvpResponder : IDisposable
                 // can be. At a flee room it is the delay.
                 if (!StartFlee(settings, why, comeBackAfter: null, stayAway: delay + PastHangup, HangUpOnce))
                 {
-                    Report($"{why}: nowhere to flee, hanging up now");
+                    Report(Following
+                        ? $"{why}: a party follower never flees, hanging up now"
+                        : $"{why}: nowhere to flee, hanging up now");
                     HangUp(settings, why);
                     break;
                 }
@@ -218,7 +223,9 @@ public sealed class PvpResponder : IDisposable
                 TimeSpan away = TimeSpan.FromSeconds(Math.Max(0, settings.ComeBackAfterSeconds));
                 Report(StartFlee(settings, why, comeBackAfter: away, stayAway: away, onRoomsLanded: null)
                     ? $"{why}: fleeing, back in {away.TotalSeconds:0}s"
-                    : $"{why}: nowhere to flee (no walk or loop is running and no Flee to room is set)");
+                    : Following
+                        ? $"{why}: not fleeing, a party follower never flees"
+                        : $"{why}: nowhere to flee (no walk or loop is running and no Flee to room is set)");
                 break;
             }
 
@@ -240,9 +247,15 @@ public sealed class PvpResponder : IDisposable
     private bool StartFlee(
         PvpSettings settings, string why, TimeSpan? comeBackAfter, TimeSpan stayAway, Action? onRoomsLanded)
     {
+        // A party follower never flees (user, 2026-10-10). The run back along a
+        // walk or loop is refused where every flee starts (HealthManager.TryFlee);
+        // a Flee to room is a walk of our own out of the party just the same.
+        if (Following) return false;
         if (settings.FleeTo is { } room && _fleeTo(room, comeBackAfter, why)) return true;
         return _fleeRooms(why, Math.Max(1, settings.RoomsToFlee), stayAway, onRoomsLanded);
     }
+
+    private bool Following => _isPartyFollower?.Invoke() == true;
 
     private bool HangUp(PvpSettings settings, string why, bool warn = true)
     {

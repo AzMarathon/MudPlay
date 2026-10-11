@@ -574,7 +574,13 @@ public sealed class PartyEssentialHandlers : IDisposable
         };
         byte[] bytes = Encoding.Latin1.GetBytes(local + "\r");
         _wireSender(bytes);
+        PartyDirectiveRelayed?.Invoke(GivenName(ctx.Sender), local);
     }
+
+    // A member's `@party <command>` was just put on our wire: who sent it and the
+    // command as sent. Most are no concern of the follow (a hand-over before an
+    // item gate, a rest); ComebackRequester picks out a leader's teleport keyword.
+    public event Action<string, string>? PartyDirectiveRelayed;
 
     // ----- Lives / invite / join -----------------------------------------
 
