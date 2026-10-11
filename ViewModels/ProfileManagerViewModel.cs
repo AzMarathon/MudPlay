@@ -404,6 +404,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
 
         if (deletingCurrent) _profile.Close();   // no save — else the outgoing save resurrects the folder
         _bbs.Delete(name);
+        _profile.NotifyBbsDeleted(name);
         _log?.Info("BBS", $"Removed BBS '{name}'.");
         if (deletingCurrent) _profile.LoadDefaultProfile();
         // A default draft sitting on the removed BBS moves off it too.

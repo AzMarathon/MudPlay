@@ -258,4 +258,114 @@ public sealed class ProfileManagementTests : IDisposable
 
         Assert.Equal(0, told);
     }
+
+    // What tells a copy from a rename, for whoever keeps things under a profile's
+    // name: after Save As from a named profile the one it was is still there.
+    [Fact]
+    public void SaveAsFromANamedProfile_LeavesThatProfileInPlace_WhereARenameDoesNot()
+    {
+        var svc = new ProfileService();
+        svc.CreateProfile(_bbsA, "original");
+        svc.Load(_bbsA, "original");
+        var copies = new List<bool>();
+        svc.ProfileRenamed += (bbs, name) => copies.Add(svc.LoadedIsACopyOf(bbs, name));
+
+        svc.SaveAs(_bbsA, "copy");
+        svc.MoveProfile(_bbsA, "copy", _bbsA, "renamed");
+
+        Assert.Equal(new[] { true, false }, copies);
+    }
+
+    // A rename that only changes capitals moves the folder wherever folders are told
+    // apart by them, so it is told like any other rename, and is not a copy.
+    [Fact]
+    public void ARenameThatOnlyChangesCapitals_IsToldAsARename()
+    {
+        // Where they aren't, the destination "already exists" and there is no such rename.
+        if (Directory.Exists(AppPaths.BbsFolder(_bbsA.ToUpperInvariant()))) return;
+        var svc = new ProfileService();
+        svc.CreateProfile(_bbsA, "walker");
+        svc.Load(_bbsA, "walker");
+        var told = new List<(string? Name, bool Copy)>();
+        svc.ProfileRenamed += (bbs, name) => told.Add((name, svc.LoadedIsACopyOf(bbs, name)));
+
+        svc.MoveProfile(_bbsA, "walker", _bbsA, "Walker");
+
+        Assert.Equal(new[] { ((string?)"walker", false) }, told);
+        Assert.Equal("Walker", svc.CurrentProfileName);
+    }
+
+    // ----- Profiles that are not loaded, and ones that are gone ----------
+
+    [Fact]
+    public void AStoredProfileMovedOrRenamed_TellsWhereItWasAndIs_AndTheLoadedOneOnlyThroughProfileRenamed()
+    {
+        var svc = new ProfileService();
+        svc.CreateProfile(_bbsA, "loaded");
+        svc.CreateProfile(_bbsA, "stored");
+        svc.Load(_bbsA, "loaded");
+        var moved = new List<(ProfileRef Was, ProfileRef Now)>();
+        svc.StoredProfileMoved += (was, now) => moved.Add((was, now));
+
+        svc.MoveProfile(_bbsA, "stored", _bbsA, "renamed");
+        svc.MoveProfile(_bbsA, "renamed", _bbsB, "renamed");
+        svc.MoveProfile(_bbsA, "loaded", _bbsB, "loaded");
+
+        Assert.Equal(new[]
+        {
+            (new ProfileRef(_bbsA, "stored"), new ProfileRef(_bbsA, "renamed")),
+            (new ProfileRef(_bbsA, "renamed"), new ProfileRef(_bbsB, "renamed")),
+        }, moved);
+    }
+
+    [Fact]
+    public void ADeletedProfile_LoadedOrNot_TellsWhichItWas_AndACopyTellsNothing()
+    {
+        var svc = new ProfileService();
+        svc.CreateProfile(_bbsA, "loaded");
+        svc.CreateProfile(_bbsA, "stored");
+        svc.Load(_bbsA, "loaded");
+        var deleted = new List<ProfileRef>();
+        int others = 0;
+        svc.ProfileDeleted += deleted.Add;
+        svc.StoredProfileMoved += (_, _) => others++;
+        svc.ProfileRenamed += (_, _) => others++;
+
+        svc.CopyProfile(_bbsA, "stored", "copy");
+        Assert.Empty(deleted);
+
+        svc.DeleteProfile(_bbsA, "stored");
+        svc.DeleteProfile(_bbsA, "loaded");
+
+        Assert.Equal(new[] { new ProfileRef(_bbsA, "stored"), new ProfileRef(_bbsA, "loaded") }, deleted);
+        Assert.Equal(0, others);
+    }
+
+    [Fact]
+    public void ARenamedBbs_TellsOfTheLoadedProfileFirst_ThenOfTheBbs_AndARemovedOneIsToldWhenNotified()
+    {
+        var store = new BbsProfileStore();
+        var svc = new ProfileService();
+        svc.CreateProfile(_bbsA, "loaded");
+        svc.CreateProfile(_bbsA, "stored");
+        svc.Load(_bbsA, "loaded");
+        string renamed = _bbsA + "-renamed";
+        var told = new List<string>();
+        svc.ProfileRenamed += (bbs, name) => told.Add($"profile {bbs}/{name} -> {svc.CurrentBbsName}/{svc.CurrentProfileName}");
+        svc.BbsRenamed += (was, now) => told.Add($"bbs {was} -> {now}");
+        svc.BbsDeleted += bbs => told.Add($"bbs {bbs} deleted");
+
+        store.Rename(_bbsA, renamed);
+        svc.RenameBbs(_bbsA, renamed);
+        svc.Close();
+        store.Delete(renamed);
+        svc.NotifyBbsDeleted(renamed);
+
+        Assert.Equal(new[]
+        {
+            $"profile {_bbsA}/loaded -> {renamed}/loaded",
+            $"bbs {_bbsA} -> {renamed}",
+            $"bbs {renamed} deleted",
+        }, told);
+    }
 }

@@ -428,6 +428,20 @@ public static class AppPaths
     public static string LearnedArrivalRoomsFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "learned-arrival-rooms.json");
 
+    // Where the Simulator's area rankings made on a set are kept between sessions
+    // (AreaRankingFiles): one file for each character that has ranked on it, under
+    // that character's BBS. A folder of its own inside the set's, so it goes when the
+    // set is deleted and nothing that lists, counts, imports, copies or moves the
+    // set's tables and edits sees it: those read the set's own folder, its Loops
+    // folder or named files, never its other sub-folders. A ranking is one
+    // character's results, so a copy of the set does not carry it.
+    //
+    // The files under it are named by BBS and profile. Only AreaRankingFiles builds
+    // those paths, each piece through PathGuard, so the result stays inside this
+    // folder.
+    public static string SimulatorRankingsFolder(string setName) =>
+        Path.Combine(GameDataSetDir(setName), "Simulator");
+
     // The realm folders whose old quest-guide file a set has already taken in.
     public static string QuestsAdoptedRealmsFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), ".quests-adopted.json");

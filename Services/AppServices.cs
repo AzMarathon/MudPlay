@@ -2739,7 +2739,11 @@ public sealed class AppServices
     // The Simulator's finished area rankings, by the game data and character each was
     // made on. Here and not on the Simulator's view-model, which goes with the
     // Navigation window: a ranking is the pairing's for as long as the client runs.
-    public Game.Simulation.AreaRankingStore SimulatorRankings { get; } = new();
+    public Game.Simulation.AreaRankingStore SimulatorRankings { get; private set; } = null!;
+
+    // Reads the file side of what a kept ranking is compared by (table stamps, the
+    // seed, the user's record overrides), remembering content hashes between asks.
+    private readonly RankingStampReader _rankingStamps = new();
 
     // The data of set was replaced (an import over it, a Manage Sets change): what the
     // Simulator ranked on the old data is stale, whichever set is active.
@@ -7761,6 +7765,7 @@ public sealed class AppServices
         // A refused automatic walk names the line to tick by its title on that tab.
         Walker.SetTeleportChoices(() => TeleportChoices);
         RoomGraph.GraphReloaded += () => _teleportChoices = null;
+        RoomGraph.GraphReloaded += () => _simulatorGateItems = null;
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo
         // (canDrive), pre-flighting the floor-1 timer against live encumbrance +
@@ -8449,9 +8454,18 @@ public sealed class AppServices
         // The Simulator's rankings follow the set too, but nothing reloads: a switch
         // leaves each set's where they are. The active set's name coming round again
         // is that set read in afresh, and what was ranked on its old tables is stale.
+        // Each ranking is also kept in a file in its set's folder, so it is there
+        // after a restart; what a read finds is handed back on the UI thread.
+        SimulatorRankings = new Game.Simulation.AreaRankingStore(
+            new AreaRankingFiles(), act => Avalonia.Threading.Dispatcher.UIThread.Post(act), Log);
         SimulatorRankings.NoteActiveSet(GameData.ActiveSet);
         GameData.ActiveSetChanged += setName =>
             LogStaleSimulatorRankings(setName, "was read in again", SimulatorRankings.NoteActiveSet(setName));
+        // A saved ranking is stamped with the table files this client read, and the
+        // watch has to see each table's first read of a load before the cache can
+        // drop the table and read it again: once a second is far inside that.
+        _simulatorWorld = Game.Simulation.RankingWorldWatch.Over(GameData);
+        Tick.HeartbeatElapsed += () => _simulatorWorld.Observe(GameData.ActiveLoad);
         // They are a character's as well. One that comes to go by another name is
         // the same character: its rankings go with it, and none stay under the name
         // it left for the next profile given that name.
@@ -8459,10 +8473,37 @@ public sealed class AppServices
         {
             string? was = Game.Simulation.SimulatorOwner.CharacterKey(oldBbs, oldName);
             string? now = Game.Simulation.SimulatorOwner.CharacterKey(Profile.CurrentBbsName, Profile.CurrentProfileName);
+            // Save As from a named profile leaves that profile where it was and
+            // carries on as a copy of it. A copy is another character: the rankings
+            // stay with the one they were made for, and what an earlier profile of
+            // the copy's name had kept is not the copy's either.
+            if (Profile.LoadedIsACopyOf(oldBbs, oldName))
+            {
+                SimulatorRankings.ForgetCharacter(now);
+                return;
+            }
             int carried = SimulatorRankings.RenameCharacter(was, now);
             if (carried > 0)
                 Log.Info("Simulator", $"character '{was ?? "(none)"}' is now '{now ?? "(none)"}': {carried} area ranking(s) kept for it go with it");
         };
+        // The files are named by BBS and profile, so the same holds for a profile
+        // that is not loaded, and a deleted profile's go with it: the name may be
+        // given to another character later. A copied profile is another character
+        // and takes none.
+        Profile.StoredProfileMoved += (was, now) => SimulatorRankings.RenameCharacter(
+            Game.Simulation.SimulatorOwner.CharacterKey(was.Bbs, was.Name),
+            Game.Simulation.SimulatorOwner.CharacterKey(now.Bbs, now.Name));
+        Profile.ProfileDeleted += gone => SimulatorRankings.ForgetCharacter(
+            Game.Simulation.SimulatorOwner.CharacterKey(gone.Bbs, gone.Name));
+        Profile.BbsRenamed += SimulatorRankings.RenameBbs;
+        Profile.BbsDeleted += SimulatorRankings.ForgetBbs;
+        // What a kept ranking is checked against is the character as the game last
+        // showed it, not as the profile remembers it from an earlier session
+        // (SimulatorCharacterAt). Subscribed here, ahead of any window, so the
+        // Simulator's own handlers for the same reads find these already set.
+        Stats.ScreenParsed += _ => _simulatorStatRead |= Stats.LastCaptureReadHits;
+        Inventory.FullInventoryParsed += () => _simulatorInventoryRead = true;
+        Profile.ProfileLoaded += _ => ForgetSimulatorCharacterReads();
 
         // Which loops and auto-lair setups are favourites is each character's own.
         // Built after the first LoadAll above so a profile already loaded finds its
@@ -11532,8 +11573,101 @@ public sealed class AppServices
 
     public Game.Simulation.SimulationSource LoopSimulationSource =>
         _loopSimulationSource ??= new(BuildLoopSimulation, () => PlayerStats.Name, () => PlayerStats.Level,
-            LoopSimulationWalkSeconds, () => RoomTracker.State.CurrentRoom?.Key, AppPaths.LogsDir);
+            LoopSimulationWalkSeconds, () => RoomTracker.State.CurrentRoom?.Key, AppPaths.LogsDir,
+            () => SimulatorWorld(forSaving: false), () => SimulatorWorld(forSaving: true), SimulatorCharacterAt, SimulatorLoad);
     private Game.Simulation.SimulationSource? _loopSimulationSource;
+
+    // The game data this client is running on, for a ranking kept between sessions
+    // (RankingWorld): the table files as they were when read (RankingWorldWatch) and
+    // the monster seed as loaded, not what is on disk now. Another client can import
+    // the set or an update replace the seed while this one runs; a ranking made here
+    // is still a ranking of the old data.
+    //
+    // forSaving: it is to stamp a ranking just made, so a table not read yet is
+    // read now and one that can't be read leaves no world (RankingWorldWatch);
+    // otherwise it is to compare a saved ranking with, and nothing is read for it.
+    //
+    // Null with no set active, and when the watch finds the tables in memory are not
+    // of one version of the set, or a table could not be read: then no ranking is
+    // saved or read back until the set is read in again, said once for each load and
+    // reason. A ranking is still made and listed for the session.
+    private Game.Simulation.RankingWorld? SimulatorWorld(bool forSaving)
+    {
+        if (GameData.ActiveSet is not { } set) return null;
+        GameDataCache.Load load = GameData.ActiveLoad;
+        string seed = MonsterOverlaySeed.ContentStamp;
+        string? why;
+        Game.Simulation.RankingWorld? world = forSaving
+            ? _simulatorWorld.NowForSaving(load, seed, out why)
+            : _simulatorWorld.Now(load, seed, out why);
+        if (world is not null) return world;
+        if (_simulatorWorldProblemSaid != (load, why))
+        {
+            _simulatorWorldProblemSaid = (load, why);
+            Log.Info("Simulator",
+                $"the tables of '{set}' in memory are not one version of it ({why}): area rankings are not saved or " +
+                "read back until the set is read in again (restart, or import it here)");
+        }
+        return null;
+    }
+
+    // The load and reason the line above was last logged for.
+    private (GameDataCache.Load Load, string? Why) _simulatorWorldProblemSaid = (GameDataCache.Load.None, null);
+
+    // Set where the Simulator's rankings are wired, before any window can ask.
+    private Game.Simulation.RankingWorldWatch _simulatorWorld = null!;
+
+    // Why no ranking is being saved for the active set as loaded, for the bug
+    // report; null when they are.
+    public string? SimulatorWorldUnfit => _simulatorWorld.WhyUnfit;
+
+    // Which load of the active set is in hand, for a ranking to tell whether the one
+    // it finishes in is the one it started in.
+    private object? SimulatorLoad() => GameData.ActiveLoad;
+
+    // The character as a ranking at `level` would simulate it now, as the groups a
+    // kept ranking is compared by (RankingCharacter). Null until the game has shown
+    // both a `stat` screen and a full inventory on the latest connection. Before
+    // that the stats are the ones the profile remembers from an earlier session and
+    // the worn gear and gate items carried are unknown or as they were before the
+    // link dropped: a ranking checked against those would be told it is current, or
+    // changed, on figures nobody has read.
+    private Game.Simulation.RankingCharacter? SimulatorCharacterAt(int level)
+    {
+        if (!_simulatorStatRead || !_simulatorInventoryRead || !Inventory.IsLoaded
+            || GameData.ActiveSet is not { } set || BuildLoopSimulation(level) is not { } built)
+            return null;
+        // The record overrides that apply to this character: Global, its realm's,
+        // its own.
+        var tiers = new List<string> { Path.Combine(AppPaths.DataRoot, "Global") };
+        if (ActiveRealmFolder() is { } realm) tiers.Add(realm);
+        if (Profile.CurrentProfileName is { } name && Profile.CurrentBbsName is { } bbs)
+            tiers.Add(AppPaths.ProfileFolder(bbs, name));
+        _simulatorGateItems ??= Game.Simulation.RankingReach.GateItems(RoomGraph.Rooms);
+        return Game.Simulation.RankingCharacter.Of(
+            built.Character,
+            _rankingStamps.GameDataEdits(tiers, set),
+            Game.Simulation.RankingReach.Hash(
+                Movement.Avoided, RoomBlacklist.Blacklisted,
+                Movement.ClassNumberProvider?.Invoke(), Movement.RaceNumberProvider?.Invoke(),
+                _simulatorGateItems.Where(IsItemCarried)));
+    }
+
+    // Every item an exit of the loaded map wants carried; rebuilt after the map is.
+    private IReadOnlySet<int>? _simulatorGateItems;
+
+    // A `stat` screen (one that gave the hit points) and a full inventory have been
+    // read since the latest connection began, for the loaded profile. They stand
+    // after the link drops, since they are still the last the game said, and are
+    // forgotten when the next connection begins (MainWindowViewModel's Connected
+    // handler) or another profile loads: what is true by then has to be read again.
+    private bool _simulatorStatRead, _simulatorInventoryRead;
+
+    public void ForgetSimulatorCharacterReads() => _simulatorStatRead = _simulatorInventoryRead = false;
+
+    // For the bug report: why a kept ranking says "not checked against the character yet".
+    public string SimulatorCharacterReads =>
+        $"`stat` {(_simulatorStatRead ? "read" : "not read")}, inventory {(_simulatorInventoryRead && Inventory.IsLoaded ? "read" : "not read")}";
 
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the

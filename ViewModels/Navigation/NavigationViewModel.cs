@@ -184,6 +184,18 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Profile.ProfileClosed += OnSimulatorCharacterClosed;
         _services.Profile.ProfileRenamed += OnSimulatorCharacterRenamed;
         _services.GameData.ActiveSetChanged += OnSimulatorGameDataChanged;
+        // A ranking kept from an earlier session is listed before the character has
+        // been read, marked as not checked; the first `stat` and inventory check it.
+        // It is checked again on every one after, when the level changes, and when
+        // the profile (settings, avoided rooms), a game-data edit or the realm's room
+        // blacklist is saved, so the mark follows the character for as long as the
+        // ranking is on show.
+        _services.Stats.ScreenParsed += OnSimulatorStatRead;
+        _services.Inventory.FullInventoryParsed += Simulator.RecheckKept;
+        _services.PlayerStats.PropertyChanged += OnSimulatorPlayerStatsChanged;
+        _services.Profile.ProfileSaving += OnSimulatorProfileSaving;
+        _services.Resolver.GameDataChanged += OnSimulatorGameDataEdited;
+        _services.RoomBlacklist.Changed += RecheckSimulatorSoon;
     }
 
     // The loaded character as the Simulator keys its results.
@@ -192,7 +204,37 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     private void OnSimulatorCharacterLoaded(Models.Profile.CharacterProfile _) => Simulator.CharacterChanged();
     private void OnSimulatorCharacterClosed() => Simulator.CharacterChanged();
-    private void OnSimulatorCharacterRenamed(string? oldBbs, string? oldName) => Simulator.CharacterRenamed();
+    // A copy made by Save As is another character, to be shown its own results
+    // (none yet); a rename or move is the same one under another name.
+    private void OnSimulatorCharacterRenamed(string? oldBbs, string? oldName)
+    {
+        if (_services.Profile.LoadedIsACopyOf(oldBbs, oldName)) Simulator.CharacterChanged();
+        else Simulator.CharacterRenamed();
+    }
+    private void OnSimulatorStatRead(LastKnownStats _) => Simulator.RecheckKept();
+    private void OnSimulatorPlayerStatsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(Game.PlayerStats.Level)) RecheckSimulatorSoon();
+    }
+    private void OnSimulatorProfileSaving(Models.Profile.CharacterProfile _) => RecheckSimulatorSoon();
+    private void OnSimulatorGameDataEdited(GameDataChange _) => RecheckSimulatorSoon();
+
+    // A save is raised before the file is written, and a batch of edits raises one
+    // for each record: the check runs once, after whoever raised it has finished.
+    // The same for what a profile load raises on its way (the level restored, every
+    // loop's settings): by then the list is the loaded character's, not the ranking
+    // of the one that was on show while the load was half done.
+    private void RecheckSimulatorSoon()
+    {
+        if (_simulatorRecheckPosted) return;
+        _simulatorRecheckPosted = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _simulatorRecheckPosted = false;
+            Simulator.RecheckKept();
+        });
+    }
+    private bool _simulatorRecheckPosted;
     private void OnSimulatorGameDataChanged(string? set)
     {
         Simulator.GameDataChanged(set);
@@ -345,6 +387,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Profile.ProfileClosed -= OnSimulatorCharacterClosed;
         _services.Profile.ProfileRenamed -= OnSimulatorCharacterRenamed;
         _services.GameData.ActiveSetChanged -= OnSimulatorGameDataChanged;
+        _services.Stats.ScreenParsed -= OnSimulatorStatRead;
+        _services.Inventory.FullInventoryParsed -= Simulator.RecheckKept;
+        _services.PlayerStats.PropertyChanged -= OnSimulatorPlayerStatsChanged;
+        _services.Profile.ProfileSaving -= OnSimulatorProfileSaving;
+        _services.Resolver.GameDataChanged -= OnSimulatorGameDataEdited;
+        _services.RoomBlacklist.Changed -= RecheckSimulatorSoon;
     }
 
     // Loops + lairs share the on-disk folder tree; a folder add / rename /
@@ -1839,6 +1887,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshLoopsAndLairs();
         RebuildContextFavorites();   // a loop's favourite flag may have flipped — refresh the map flyout
         Simulator.RefreshRoutes();
+        // A loop in the kept ranking on show may be the one edited, deleted or renamed.
+        RecheckSimulatorSoon();
     }
 
     private void OnSetupsChanged()
@@ -5321,6 +5371,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void OnLoopSettingsChanged(string? name)
     {
         if (_services.LoopRunner.CurrentLoop is { } loop) HydrateLoopSettingToggles(loop);
+        // How a ranked loop is run is part of what was ranked.
+        RecheckSimulatorSoon();
     }
 
     // The CURRENT NAV header's "Details…" button opens the route the engine is

@@ -41,10 +41,43 @@ internal static class JsonStore
         }
     }
 
+    // As Load, for a large file the program alone reads: in the form it was written
+    // in (compact, not laid out for a hand edit), and read from the file as a
+    // stream. Load holds the whole text as a string, which for a file of megabytes
+    // is that many characters twice over before a single object exists.
+    public static T? LoadStream<T>(string path, JsonSerializerOptions options) where T : class
+    {
+        const int attempts = 20;
+        for (int i = 1; ; i++)
+        {
+            if (!File.Exists(path)) return null;
+            try
+            {
+                using FileStream file = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                    bufferSize: 64 * 1024, FileOptions.SequentialScan);
+                return JsonSerializer.Deserialize<T>(file, options);
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidDataException(
+                    $"Failed to parse {typeof(T).Name} from '{path}': {ex.Message}", ex);
+            }
+            // The same brief wait for another client's replace of the file that
+            // ReadWithRetry gives.
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && i < attempts)
+            {
+                Thread.Sleep(Math.Min(i, 10) * 3);
+            }
+        }
+    }
+
     // Serialize value to JSON and write it to path, creating any missing
     // parent directories. Write is atomic via temp-file + rename so a crash
     // mid-write can't leave a half-written file on disk.
-    public static void Save<T>(string path, T value) where T : class
+    public static void Save<T>(string path, T value) where T : class => Save(path, value, Options);
+
+    // As Save, in another form than the shared one (see Load).
+    public static void Save<T>(string path, T value, JsonSerializerOptions options) where T : class
     {
         string? dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
@@ -57,7 +90,7 @@ internal static class JsonStore
         // File.Move renamed it away, and the second threw FileNotFoundException on the
         // now-gone temp. With distinct temps each rename just overwrites the target.
         string tmp = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
-        string json = JsonSerializer.Serialize(value, Options);
+        string json = JsonSerializer.Serialize(value, options);
         try
         {
             File.WriteAllText(tmp, json);

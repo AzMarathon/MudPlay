@@ -3439,6 +3439,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // A new link starts at the board's login: nothing from here is
                 // copied into a bug report until the game is entered.
                 AppServices.Current.InGameCapture.NotifyConnected();
+                // The Simulator checks a kept ranking against the character as this
+                // connection shows it: the last one's `stat` and inventory are history.
+                AppServices.Current.ForgetSimulatorCharacterReads();
                 // On a realm that drops items for a hang-up, holds movement from here
                 // until what was held before the link dropped has been checked for.
                 AppServices.Current.HangupItems.NoteConnected();

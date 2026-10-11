@@ -62,6 +62,7 @@ public sealed class MonsterOverlaySeedStore
     public void Load(string? setName)
     {
         _byNumber.Clear();
+        ContentStamp = NoSeed;
         LocationSuggestions = MonsterLocationSuggestions.Empty;
         ActiveSet = setName;
         ActiveRealm = null;
@@ -108,6 +109,7 @@ public sealed class MonsterOverlaySeedStore
                 DistinctSorted(_byNumber.Values.Select(o => o.Landmass)),
                 DistinctSorted(_byNumber.Values.Select(o => o.Region)),
                 DistinctSorted(_byNumber.Values.Select(o => o.Area)));
+            ContentStamp = StampOf(_byNumber);
             _log?.Log(LogSeverity.Info, "MonsterOverlaySeed",
                 $"Loaded {_byNumber.Count} records from '{path}' (realm '{realm}'); " +
                 $"{_byNumber.Values.Count(o => o.Region is not null)} with a location.");
@@ -119,6 +121,26 @@ public sealed class MonsterOverlaySeedStore
             _byNumber.Clear();
             LocationSuggestions = MonsterLocationSuggestions.Empty;
         }
+    }
+
+    // A short hash of the seed as it is held here, "none" with none loaded. For
+    // whoever keeps a result that depends on it beyond this session (the Simulator's
+    // rankings, grouped and filtered by these records): taken from what was loaded,
+    // not from the file, which an update or another client's launch can replace
+    // while this client goes on with the records it read.
+    public string ContentStamp { get; private set; } = NoSeed;
+
+    private const string NoSeed = "none";
+
+    internal static string StampOf(IEnumerable<KeyValuePair<int, MonsterOverlay>> records)
+    {
+        var text = new System.Text.StringBuilder();
+        foreach ((int number, MonsterOverlay o) in records.OrderBy(r => r.Key))
+            text.Append(number).Append('|').Append(o.Relationship?.ToString()).Append('|').Append(o.Priority?.ToString())
+                .Append('|').Append(o.DontBackstab?.ToString()).Append('|').Append(o.Landmass).Append('|').Append(o.Region)
+                .Append('|').Append(o.Area).Append('\n');
+        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(text.ToString())))[..16];
     }
 
     private static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

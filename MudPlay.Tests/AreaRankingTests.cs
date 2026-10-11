@@ -61,4 +61,48 @@ public sealed class AreaRankingTests
 
         Assert.Equal("Made 2026-06-16 14:32 at L42.", r.KeptNote(42, Now));
     }
+
+    private static RankingCheck Changed(params string[] groups) => new(false, groups);
+
+    [Fact]
+    public void WhatHasChangedInTheCharacterIsNamedByItsGroups()
+    {
+        AreaRanking r = Made(Now.AddMinutes(-28), 42, 42);
+
+        Assert.Equal("Made 14:32 at L42; your stats or gear have changed since.",
+            r.KeptNote(42, Now, Changed(RankingCharacter.StatsOrGear)));
+        Assert.Equal("Made 14:32 at L42; your stats or gear and settings have changed since.",
+            r.KeptNote(42, Now, Changed(RankingCharacter.StatsOrGear, RankingCharacter.Settings)));
+        Assert.Equal("Made 14:32 at L42; your spells, game-data edits and reach have changed since.",
+            r.KeptNote(42, Now, Changed(RankingCharacter.Spells, RankingCharacter.GameDataEdits, RankingCharacter.Reach)));
+        Assert.Equal("Made 14:32 at L42; your reach has changed since.",
+            r.KeptNote(42, Now, Changed(RankingCharacter.Reach)));
+        // With a change of level as well.
+        Assert.Equal("Made 14:32 at L42; you are L43 now; your settings have changed since.",
+            r.KeptNote(43, Now, Changed(RankingCharacter.Settings)));
+
+        Assert.False(r.IsCurrentAt(42, Changed(RankingCharacter.Settings)));
+        Assert.True(r.IsCurrentAt(42, Changed()));
+    }
+
+    [Fact]
+    public void ACharacterThatCantBeReadYet_IsSaidNotToHaveBeenChecked_AndTheRankingIsNotCurrent()
+    {
+        AreaRanking r = Made(Now.AddDays(-2).AddMinutes(-28), 42, 42);
+
+        Assert.Equal("Made 2026-06-16 14:32 at L42; not checked against the character yet.",
+            r.KeptNote(0, Now, RankingCheck.NotChecked));
+        Assert.False(r.IsCurrentAt(0, RankingCheck.NotChecked));
+        Assert.False(r.IsCurrentAt(42, RankingCheck.NotChecked));
+    }
+
+    [Fact]
+    public void ARankingWithNoRecordOfItsCharacter_IsSaidToBePossiblyChanged_AndIsNotCurrent()
+    {
+        AreaRanking r = Made(Now.AddMinutes(-28), 42, 42);
+        RankingCheck noRecord = RankingCheck.Of(null, new RankingCharacter(new Dictionary<string, string>()));
+
+        Assert.Equal("Made 14:32 at L42; the character may have changed since.", r.KeptNote(42, Now, noRecord));
+        Assert.False(r.IsCurrentAt(42, noRecord));
+    }
 }

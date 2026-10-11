@@ -32,6 +32,31 @@ namespace MudPlay.Game.Simulation;
 // attack choice.
 public static class LoopSimulator
 {
+    // Which simulation a saved result came from. Area rankings are kept on disk
+    // between sessions (AreaRankingFiles) and a kept one is only listed while this is
+    // the number it was made with: a ranking by an older simulation is not comparable
+    // with a new one and would be shown as current.
+    //
+    // BUMP THIS whenever a simulated result could change for the same character, lap
+    // and game data: a change here, in SimCharacterBuilder, SimLevelProjection,
+    // SimFreeze or SimProc, in RouteExpResolver.ResolveSimLap, or in the combat,
+    // healing and casting code a simulated round calls.
+    //
+    // SimulatorVersionPinTests fails when the result of either of two fixed runs
+    // moves, to say so. Those runs start from a character and a lap written out by
+    // hand, so they catch a change to what a simulated hour does and NOT a change to
+    // what it is given. Nothing fails, and this still has to be bumped by whoever
+    // makes the change, for:
+    //   - SimCharacterBuilder: how a stat screen, worn gear and the spellbook become
+    //     the character played;
+    //   - SimLevelProjection: that character moved to another level;
+    //   - RouteExpResolver.ResolveSimLap: how waypoints become the rooms of a lap,
+    //     with their lairs and the steps between them;
+    //   - AreaTours: which lairs make an area and the order its tour takes them in;
+    //   - the walk pace (AppServices.LoopSimulationWalkSeconds and the travel models
+    //     behind it), which sets how many laps fit in the hour.
+    public const int SimulatorVersion = 1;
+
     public static LoopSimSummary RunMany(
         SimCharacter character, IReadOnlyList<SimRoom> lap, SimWorld world,
         double secondsPerStep, double hours, int runs, CancellationToken cancel = default)

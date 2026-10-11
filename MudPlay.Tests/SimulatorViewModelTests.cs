@@ -19,17 +19,30 @@ public sealed class SimulatorViewModelTests : IDisposable
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "mudplay-simulator-" + Path.GetRandomFileName());
     private readonly string _loopSet = "test-set-" + Guid.NewGuid().ToString("N")[..12];
+    // Sets whose rankings are kept in files: throwaway folders under the data root.
+    private readonly List<string> _savedSets = new();
+
+    private string NewSavedSet(string name)
+    {
+        string set = $"test-sim-{name}-{Guid.NewGuid().ToString("N")[..10]}";
+        Directory.CreateDirectory(AppPaths.GameDataSetDir(set));
+        _savedSets.Add(set);
+        return set;
+    }
 
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); }
         catch { /* best-effort temp cleanup */ }
-        try
+        foreach (string set in _savedSets.Append(_loopSet))
         {
-            string loops = Path.Combine(AppPaths.GameDataRoot, _loopSet);
-            if (Directory.Exists(loops)) Directory.Delete(loops, recursive: true);
+            try
+            {
+                string folder = Path.Combine(AppPaths.GameDataRoot, set);
+                if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+            }
+            catch { /* best-effort temp cleanup */ }
         }
-        catch { /* best-effort temp cleanup */ }
     }
 
     //  1/1 ─N─ 1/2
@@ -59,6 +72,26 @@ public sealed class SimulatorViewModelTests : IDisposable
         public string? Character { get; set; } = One;
         // The character's level as the last `stat` gave it; 0 before any.
         public int Level { get; set; } = 30;
+        // The character as a ranking would simulate it now, by the groups a kept
+        // ranking is compared by; null while it can't be read (no stat, no inventory).
+        public RankingCharacter? CharacterNow { get; set; } = SameCharacter;
+        // The game data as it is now.
+        public RankingWorld World { get; set; } = SameWorld;
+        // What a file read handed back for the UI thread, to be run by Settle.
+        public required List<Action> Posted { get; init; }
+
+        // Let the file work asked for so far finish, and what it handed back run.
+        public void Settle()
+        {
+            for (int round = 0; round < 10; round++)
+            {
+                Rankings.Idle.GetAwaiter().GetResult();
+                Action[] batch;
+                lock (Posted) { batch = Posted.ToArray(); Posted.Clear(); }
+                if (batch.Length == 0) return;
+                foreach (Action act in batch) act();
+            }
+        }
 
         // A profile swap as the Simulator hears of it: the loaded character is
         // closed, then the next is loaded.
@@ -95,32 +128,46 @@ public sealed class SimulatorViewModelTests : IDisposable
     // names them to the Simulator.
     private const string One = "board/one", Two = "board/two";
 
-    private Harness Build(bool saveLoops = false, AreaRankingStore? rankings = null)
+    // The world and character a ranking of these tests is made in and for, and that
+    // the harness says are still so until a test says otherwise.
+    private static readonly RankingWorld SameWorld = new(
+        LoopSimulator.SimulatorVersion, RankingWorld.TableNames.ToDictionary(t => t, _ => "10:1"), "seed");
+    private static readonly RankingCharacter SameCharacter = new(
+        RankingCharacter.Order.ToDictionary(g => g, g => "as-made"));
+
+    // set: the game data the harness starts on. onDisk: its rankings are also kept
+    // in files, as the app keeps them, in that set's folder under the data root.
+    private Harness Build(bool saveLoops = false, AreaRankingStore? rankings = null, string set = "alpha", bool onDisk = false)
     {
-        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Json);
+        Directory.CreateDirectory(Path.Combine(_root, set));
+        File.WriteAllText(Path.Combine(_root, set, "Rooms.json"), Json);
         GameDataCache cache = new(_root);
-        cache.SwitchSet("alpha");
+        cache.SwitchSet(set);
         RoomGraphManager graph = new(cache);
-        graph.OnActiveSetChanged("alpha");
+        graph.OnActiveSetChanged(set);
         var timers = new LairTimerStore(cache, graph, new RoomTracker(graph));
         var resolver = new RouteExpResolver(graph, new BfsMapper(graph), timers, cache);
         var loops = new LoopManager(new BfsMapper(graph), graph);
         if (saveLoops) loops.LoadAll(_loopSet);
         Harness? harness = null;
+        var posted = new List<Action>();
+        var log = new LogService();
         var simulation = new SimulationSource(
-            _ => null, () => null, () => harness?.Level ?? 30, _ => 1.0, () => new RoomKey(1, 1), _root);
+            _ => null, () => null, () => harness?.Level ?? 30, _ => 1.0, () => new RoomKey(1, 1), _root,
+            () => harness?.World ?? SameWorld, () => harness?.World ?? SameWorld,
+            _ => harness is null ? SameCharacter : harness.CharacterNow, () => cache.ActiveLoad);
         var session = new ExpEstimatorSessionViewModel(resolver, loops, graph, cache);
         SimulatorViewModel? sim = null;
         AreaRankingStore? store = rankings;
         if (store is null)
         {
             // As the app wires the store it holds for as long as it runs.
-            AreaRankingStore made = store = new AreaRankingStore();
+            AreaRankingStore made = store = onDisk
+                ? new AreaRankingStore(new AreaRankingFiles(), act => { lock (posted) posted.Add(act); }, log)
+                : new AreaRankingStore();
             made.NoteActiveSet(cache.ActiveSet);
-            cache.ActiveSetChanged += set => made.NoteActiveSet(set);
+            cache.ActiveSetChanged += name => made.NoteActiveSet(name);
         }
-        var log = new LogService();
         sim = new SimulatorViewModel(resolver, loops, cache, null, simulation, log, () => session,
             (rooms, name) => { session.LoadRoute(rooms, name); return null; }, store,
             () => harness is null ? One : harness.Character);
@@ -130,14 +177,15 @@ public sealed class SimulatorViewModelTests : IDisposable
         return harness = new Harness
         {
             Timers = timers, Resolver = resolver, Session = session, Simulator = sim, Loops = loops,
-            Cache = cache, Rankings = store, Log = log,
+            Cache = cache, Rankings = store, Log = log, Posted = posted,
         };
     }
 
     // A finished ranking of one area, as RankAreas hands one over.
     private static AreaRanking Ranking(string area, int level = 30) => new(
         new[] { new AreaRank(area, level, new[] { new RoomKey(1, 1), new RoomKey(1, 2) }, 2, new LoopSimSummary(new[] { Run })) },
-        level, 1.25, 1.0, 3, new RoomKey(1, 1), "Stock", $"L{level}: {area} ranked", DateTimeOffset.Now, CharacterLevel: 30);
+        level, 1.25, 1.0, 3, new RoomKey(1, 1), "Stock", $"L{level}: {area} ranked", DateTimeOffset.Now, CharacterLevel: 30,
+        SameWorld, SameCharacter);
 
     // The status line of a ranking listed from those kept: when it was made and at
     // what level, then its own summary.
@@ -581,5 +629,415 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.Equal(Two, snap.ForCharacter);
         Assert.Equal(1, snap.RankingsKept);
         Assert.Null(snap.AreaRanking);
+    }
+
+    // ----- Rankings kept between sessions ---------
+
+    // A ranking made and saved by a client that has since closed.
+    private string SetWithASavedRanking(AreaRanking ranking, string character = One)
+    {
+        string set = NewSavedSet("made");
+        using Harness earlier = Build(set: set, onDisk: true);
+        earlier.Character = character;
+        earlier.Simulator.CharacterChanged();
+        earlier.Finish(ranking);
+        earlier.Settle();
+        Assert.True(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(set, character))));
+        return set;
+    }
+
+    [Fact]
+    public void ARankingMadeInAnEarlierSessionIsListedAgain_SayingWhenItWasMade()
+    {
+        AreaRanking made = Ranking("Hills");
+        string set = SetWithASavedRanking(made);
+
+        using Harness h = Build(set: set, onDisk: true);
+        // Read off the UI thread: nothing is listed until it arrives.
+        Assert.Empty(h.Simulator.Rankings);
+        h.Settle();
+
+        Assert.Equal(new[] { "Hills" }, h.Simulator.Rankings.Select(r => r.Area));
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+        Assert.Null(h.Simulator.SelectedRanking);
+        Assert.Contains(h.Said, m => m.StartsWith($"listing the area ranking kept for game data '{set}', character '{One}', read back from disk"));
+        SimulatorSnapshot snap = h.Simulator.ToSnapshot();
+        Assert.StartsWith("read back from disk; made ", snap.ListedRanking);
+        Assert.Contains(snap.RankingFiles, n => n.Contains("read the saved area ranking"));
+        // A row picked from it is quoted with the settings it ran with, and saves.
+        h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
+        Assert.Contains(h.Simulator.RankStats, s => s.Label == "Tested" && s.Value.StartsWith("L30 · 3 × 1 h · "));
+        Assert.True(h.Simulator.SaveRankingAsLoopCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void ASavedRankingIsListedMarked_NamingWhatHasChangedInTheCharacterSince()
+    {
+        AreaRanking made = Ranking("Hills");
+        string set = SetWithASavedRanking(made);
+
+        using Harness h = Build(set: set, onDisk: true);
+        h.CharacterNow = new RankingCharacter(SameCharacter.Groups.ToDictionary(
+            g => g.Key, g => g.Key is RankingCharacter.StatsOrGear or RankingCharacter.Settings ? "other" : g.Value));
+        h.Settle();
+
+        Assert.Equal(new[] { "Hills" }, h.Simulator.Rankings.Select(r => r.Area));
+        AssertListedAsKept(made, h.Simulator.RankStatus, after: "; your stats or gear and settings have changed since\\.");
+        Assert.True(h.Simulator.RankingNotCurrent);
+        Assert.Contains(h.Said, m => m.Contains("read back from disk") && m.Contains("your stats or gear and settings have changed since"));
+        Assert.Contains("marked for stats or gear, settings", h.Simulator.ToSnapshot().ListedRanking);
+    }
+
+    [Fact]
+    public void ASavedRankingListedBeforeTheCharacterIsRead_IsNotShownAsCurrent_AndIsCheckedWhenItIs()
+    {
+        AreaRanking made = Ranking("Hills");
+        string set = SetWithASavedRanking(made);
+
+        // Just logged in: no stat screen, no inventory.
+        using Harness h = Build(set: set, onDisk: true);
+        h.Level = 0;
+        h.CharacterNow = null;
+        h.Settle();
+
+        AssertListedAsKept(made, h.Simulator.RankStatus, after: "; not checked against the character yet\\.");
+        Assert.True(h.Simulator.RankingNotCurrent);
+        Assert.Contains("not checked against the character yet", h.Simulator.ToSnapshot().ListedRanking);
+
+        // The stat screen arrives, the inventory not yet: still not known.
+        h.Level = 30;
+        h.Simulator.RecheckKept();
+        Assert.True(h.Simulator.RankingNotCurrent);
+
+        // Both read, and it is the character the ranking was made for.
+        h.CharacterNow = SameCharacter;
+        h.Simulator.RecheckKept();
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+    }
+
+    private static RankingCharacter With(string group, string hash = "other") => new(
+        SameCharacter.Groups.ToDictionary(g => g.Key, g => g.Key == group ? hash : g.Value));
+
+    [Fact]
+    public void TheMarkOnAKeptRankingFollowsTheCharacterWhileItIsOnShow_SetAndClearedInPlace()
+    {
+        AreaRanking made = Ranking("Hills");
+        string set = SetWithASavedRanking(made);
+        using Harness h = Build(set: set, onDisk: true);
+        h.Settle();
+        Assert.False(h.Simulator.RankingNotCurrent);
+
+        // Another weapon in hand at the next `stat`: marked where it stands, the
+        // rows left as they are and nothing picked.
+        h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
+        h.CharacterNow = With(RankingCharacter.StatsOrGear);
+        h.Simulator.RecheckKept();
+        AssertListedAsKept(made, h.Simulator.RankStatus, after: "; your stats or gear have changed since\\.");
+        Assert.True(h.Simulator.RankingNotCurrent);
+        Assert.Same(h.Simulator.Rankings[0], h.Simulator.SelectedRanking);
+        Assert.Contains(h.Said, m => m.Contains("now reads:") && m.Contains("your stats or gear have changed since"));
+        Assert.Contains("marked for stats or gear", h.Simulator.ToSnapshot().ListedRanking);
+
+        // A setting saved as well, then the weapon put back: each named while it holds.
+        h.CharacterNow = new RankingCharacter(With(RankingCharacter.StatsOrGear).Groups.ToDictionary(
+            g => g.Key, g => g.Key == RankingCharacter.Settings ? "other" : g.Value));
+        h.Simulator.RecheckKept();
+        Assert.Contains("; your stats or gear and settings have changed since.", h.Simulator.RankStatus);
+        h.CharacterNow = With(RankingCharacter.Settings);
+        h.Simulator.RecheckKept();
+        Assert.Contains("; your settings have changed since.", h.Simulator.RankStatus);
+
+        // And the setting put back: it is the character the ranking was made for again.
+        h.CharacterNow = SameCharacter;
+        h.Simulator.RecheckKept();
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+
+        // A level gained marks it; so does the character going unread (a reconnect).
+        h.Level = 31;
+        h.Simulator.RecheckKept();
+        Assert.Contains("; you are L31 now.", h.Simulator.RankStatus);
+        Assert.True(h.Simulator.RankingNotCurrent);
+        h.Level = 30;
+        h.CharacterNow = null;
+        h.Simulator.RecheckKept();
+        Assert.Contains("; not checked against the character yet.", h.Simulator.RankStatus);
+        Assert.True(h.Simulator.RankingNotCurrent);
+    }
+
+    [Fact]
+    public void ACheckThatFindsNothingNewLeavesTheStatusLineAndTheLogAlone()
+    {
+        string set = SetWithASavedRanking(Ranking("Hills"));
+        using Harness h = Build(set: set, onDisk: true);
+        h.Settle();
+        string listed = h.Simulator.RankStatus;
+        int said = h.Said.Length;
+
+        h.Simulator.RankStatus = "Saved as a loop.";
+        h.Simulator.RecheckKept();
+        h.Simulator.RecheckKept();
+
+        Assert.Equal("Saved as a loop.", h.Simulator.RankStatus);
+        Assert.Equal(said, h.Said.Length);
+        // What changes is said, and takes the line back.
+        h.CharacterNow = With(RankingCharacter.Reach);
+        h.Simulator.RecheckKept();
+        Assert.NotEqual(listed, h.Simulator.RankStatus);
+        Assert.Contains("; your reach has changed since.", h.Simulator.RankStatus);
+    }
+
+    // ----- The user's own loops in a kept ranking ---------
+
+    private static readonly RoomKey[] Lap = { new(1, 1), new(1, 2) };
+    private static readonly RoomKey[] LapBack = { new(1, 2), new(1, 1) };
+
+    // A ranking of an area and two of the user's loops, as those loops are now,
+    // kept for the character and listed again from those kept.
+    private static AreaRanking ListKeptWithLoops(Harness h)
+    {
+        h.Loops.Save(new Loop("Crypt run", Lap));
+        h.Loops.Save(new Loop("Marsh run", LapBack));
+        static AreaRank Row(string name, bool loop) => new(name, 30, Lap, 2, new LoopSimSummary(new[] { Run }), IsLoop: loop);
+        AreaRanking ranking = Ranking("Hills") with
+        {
+            Rows = new[] { Row("Hills", false), Row("Crypt run", true), Row("Marsh run", true) },
+            Loops = h.Loops.Loops.ToDictionary(l => l.Name, LoopSignature.Of),
+        };
+        h.Finish(ranking);
+        h.Load(Two);
+        h.Load(One);
+        return ranking;
+    }
+
+    [Fact]
+    public void AKeptRankingIsMarkedWhenALoopItRankedHasChanged_NamingTheLoop_AndClearedWhenItIsPutBack()
+    {
+        using Harness h = Build(saveLoops: true);
+        AreaRanking made = ListKeptWithLoops(h);
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+        Assert.Contains("the loops ranked are as they were", h.Simulator.ToSnapshot().ListedRanking);
+
+        // One loop walked the other way round: its row is of a loop that has gone.
+        h.Loops.Save(new Loop("Crypt run", LapBack));
+        h.Simulator.RecheckKept();
+        AssertListedAsKept(made, h.Simulator.RankStatus, after: @"; your loops have changed since\. Loops changed: ★ Crypt run\.");
+        Assert.True(h.Simulator.RankingNotCurrent);
+        Assert.Contains("loops changed since: Crypt run", h.Simulator.ToSnapshot().ListedRanking);
+        Assert.Contains(h.Said, m => m.Contains("now reads:") && m.Contains("Loops changed: ★ Crypt run."));
+
+        // Its row says so when picked; the other loop's and the area's do not.
+        h.Simulator.SelectedRanking = h.Simulator.Rankings.First(r => r.Area == "Crypt run");
+        Assert.Contains(h.Simulator.RankStats, s => s.Label == "Loop now" && s.Value.StartsWith("changed since it was ranked"));
+        h.Simulator.SelectedRanking = h.Simulator.Rankings.First(r => r.Area == "Marsh run");
+        Assert.DoesNotContain(h.Simulator.RankStats, s => s.Label == "Loop now");
+        h.Simulator.SelectedRanking = h.Simulator.Rankings.First(r => r.Area == "Hills");
+        Assert.DoesNotContain(h.Simulator.RankStats, s => s.Label == "Loop now");
+
+        // Put back as it was, the ranking is of these loops again.
+        h.Loops.Save(new Loop("Crypt run", Lap));
+        h.Simulator.RecheckKept();
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+    }
+
+    [Fact]
+    public void HowALoopIsRunAndALoopDeleted_BothCount_AndALoopSavedSinceDoesNot()
+    {
+        using Harness h = Build(saveLoops: true);
+        AreaRanking made = ListKeptWithLoops(h);
+        h.Simulator.SelectedRanking = h.Simulator.Rankings.First(r => r.Area == "Marsh run");
+
+        // A loop the ranking never had is no change to it.
+        h.Loops.Save(new Loop("Hills (L30 sim)", Lap));
+        h.Simulator.RecheckKept();
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+
+        // Run with one of its two loop-wide settings the other way.
+        h.Loops.SetSettings("Marsh run", new LoopOwnSettings(OnlyAttackInLairRooms: true, default));
+        h.Simulator.RecheckKept();
+        Assert.Contains("; your loops have changed since. Loops changed: ★ Marsh run.", h.Simulator.RankStatus);
+        // The row picked all along is told there and then.
+        Assert.Contains(h.Simulator.RankStats, s => s.Label == "Loop now" && s.Value.StartsWith("changed since it was ranked"));
+
+        h.Loops.Delete("Marsh run");
+        h.Loops.Delete("Crypt run");
+        h.Simulator.RecheckKept();
+        Assert.Contains("Loops changed: ★ Crypt run, ★ Marsh run.", h.Simulator.RankStatus);
+        Assert.Contains(h.Simulator.RankStats, s => s.Label == "Loop now" && s.Value.StartsWith("no longer among your loops"));
+
+        // With something of the character changed too, the loops are named last.
+        h.CharacterNow = With(RankingCharacter.Settings);
+        h.Simulator.RecheckKept();
+        Assert.Contains("; your settings and loops have changed since. Loops changed:", h.Simulator.RankStatus);
+    }
+
+    [Fact]
+    public void ARankingWithNoRecordOfItsLoops_IsMarkedForThem_AndTheLoopsAreKnownBeforeTheCharacterIs()
+    {
+        using Harness h = Build(saveLoops: true);
+        AreaRanking made = ListKeptWithLoops(h) with { Loops = null };
+        h.Finish(made);
+        h.CharacterNow = null;
+        h.Load(Two);
+        h.Load(One);
+
+        Assert.Contains("; not checked against the character yet; your loops have changed since. Loops changed: ★ Crypt run, ★ Marsh run.",
+            h.Simulator.RankStatus);
+    }
+
+    [Fact]
+    public void ARankingJustMadeOrStillRunningIsNotReworded()
+    {
+        using Harness h = Build();
+        h.Finish(Ranking("Hills"));
+        string made = h.Simulator.RankStatus;
+
+        h.CharacterNow = With(RankingCharacter.Spells);
+        h.Simulator.RecheckKept();
+
+        Assert.Equal(made, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+    }
+
+    [Fact]
+    public void ASavedRankingReadForACharacterThatHasChanged_IsMarkedWhenTheCharacterIsRead()
+    {
+        string set = SetWithASavedRanking(Ranking("Hills"));
+        using Harness h = Build(set: set, onDisk: true);
+        h.CharacterNow = null;
+        h.Settle();
+
+        h.CharacterNow = new RankingCharacter(SameCharacter.Groups.ToDictionary(
+            g => g.Key, g => g.Key == RankingCharacter.Spells ? "other" : g.Value));
+        h.Simulator.RecheckKept();
+
+        Assert.Contains("; your spells have changed since.", h.Simulator.RankStatus);
+        Assert.True(h.Simulator.RankingNotCurrent);
+    }
+
+    [Fact]
+    public void ASavedRankingMadeOnOtherTablesIsDropped_NotListed()
+    {
+        string set = SetWithASavedRanking(Ranking("Hills"));
+        var owner = new SimulatorOwner(set, One);
+
+        // The client starts on another set; this one's Monsters were imported again
+        // while it was closed.
+        using Harness h = Build(set: NewSavedSet("other"), onDisk: true);
+        h.Settle();
+        h.World = SameWorld with { Tables = SameWorld.Tables.ToDictionary(t => t.Key, t => t.Key == "Monsters" ? "99:9" : t.Value) };
+        h.Cache.SwitchSet(set);
+        h.Settle();
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal("", h.Simulator.RankStatus);
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(owner)));
+        Assert.Contains(h.Said, m => m.Contains("was dropped: the game data's Monsters table has changed since"));
+        Assert.Contains(h.Simulator.ToSnapshot().RankingFiles, n => n.Contains("was dropped"));
+    }
+
+    [Fact]
+    public void ASavedRankingThatArrivesAfterThePairingHasChanged_IsNotListedThere()
+    {
+        AreaRanking made = Ranking("Hills");
+        string set = SetWithASavedRanking(made);
+
+        using Harness h = Build(set: set, onDisk: true);
+        h.Cache.SwitchSet(NewSavedSet("other"));
+        h.Settle();
+
+        Assert.Empty(h.Simulator.Rankings);
+        // It was read, and is listed when its own pairing is back.
+        h.Cache.SwitchSet(set);
+        Assert.Equal(new[] { "Hills" }, h.Simulator.Rankings.Select(r => r.Area));
+    }
+
+    // The read of a saved ranking is out when the set is read in again under the same
+    // name. The pairing is unchanged and the list is empty afterwards, which is the
+    // state a late arrival is listed in: it must not be, having been made on the
+    // tables that were just replaced.
+    [Fact]
+    public void ASavedRankingStillBeingReadWhenItsGameDataIsReadInAgain_IsNotListed()
+    {
+        string set = SetWithASavedRanking(Ranking("Hills"));
+
+        using Harness h = Build(set: set, onDisk: true);
+        h.Cache.ReloadActiveSet();
+        h.Settle();
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal("", h.Simulator.RankStatus);
+        Assert.Null(h.Rankings.Get(new SimulatorOwner(set, One)));
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(set, One))));
+    }
+
+    [Fact]
+    public void NothingIsReadForAPairingThatIsNeverShown()
+    {
+        string shown = NewSavedSet("shown");
+        string never = SetWithASavedRanking(Ranking("Hills"));
+        string other = SetWithASavedRanking(Ranking("Marsh"), character: Two);
+
+        using Harness h = Build(set: shown, onDisk: true);
+        h.Settle();
+
+        Assert.Equal(0, h.Rankings.Count);
+        Assert.Empty(h.Rankings.DiskNotes);
+        // Shown as the other character on its set: that one only.
+        h.Cache.SwitchSet(other);
+        h.Settle();
+        Assert.Empty(h.Simulator.Rankings);
+        h.Load(Two);
+        h.Settle();
+        Assert.Equal(new[] { "Marsh" }, h.Simulator.Rankings.Select(r => r.Area));
+        Assert.DoesNotContain(h.Rankings.DiskNotes, n => n.Contains(never));
+    }
+
+    [Fact]
+    public void ARankingLetGoFromMemoryIsReadBackWhenItsPairingIsShownAgain()
+    {
+        string set = NewSavedSet("first");
+        using Harness h = Build(set: set, onDisk: true);
+        h.Finish(Ranking("Hills"));
+        h.Settle();
+
+        for (int i = 0; i < AreaRankingStore.MaxKept; i++)
+        {
+            h.Cache.SwitchSet(NewSavedSet($"more{i}"));
+            h.Finish(Ranking($"Area {i}"));
+        }
+        h.Settle();
+        Assert.Null(h.Rankings.Get(new SimulatorOwner(set, One)));
+
+        h.Cache.SwitchSet(set);
+        h.Settle();
+
+        Assert.Equal(new[] { "Hills" }, h.Simulator.Rankings.Select(r => r.Area));
+    }
+
+    [Fact]
+    public void ARenamedCharactersSavedRankingsAreItsOwnInALaterSession_AndNotTheOldNames()
+    {
+        string set = NewSavedSet("first");
+        const string renamed = "board/renamed";
+        using (Harness h = Build(set: set, onDisk: true))
+        {
+            h.Finish(Ranking("Hills"));
+            h.Rename(renamed);
+            h.Settle();
+        }
+
+        using Harness later = Build(set: set, onDisk: true);
+        later.Settle();
+        Assert.Empty(later.Simulator.Rankings);
+        later.Load(renamed);
+        later.Settle();
+
+        Assert.Equal(new[] { "Hills" }, later.Simulator.Rankings.Select(r => r.Area));
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(set, One))));
     }
 }

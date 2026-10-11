@@ -130,11 +130,69 @@ public sealed class ProfileService
     private void RaiseRenamedFrom(string? oldBbs, string? oldName)
     {
         bool sameBbs = string.Equals(oldBbs, CurrentBbsName, StringComparison.OrdinalIgnoreCase);
-        bool sameName = string.Equals(oldName, CurrentProfileName, StringComparison.OrdinalIgnoreCase);
+        // By the letter: a profile renamed to the same name in other capitals has
+        // moved to another folder wherever folders are told apart by them, and what
+        // is kept under its name elsewhere has to follow.
+        bool sameName = string.Equals(oldName, CurrentProfileName, StringComparison.Ordinal);
         // The default profile has no name on any BBS: one it was started on is not
         // part of who it is.
         if (sameName && (sameBbs || oldName is null)) return;
         ProfileRenamed?.Invoke(oldBbs, oldName);
+    }
+
+    // After ProfileRenamed: whether the loaded profile is a copy of the one it was
+    // and not that profile renamed or moved. Save As from a named profile leaves
+    // the original on disk and carries on as the copy, which is another character.
+    //
+    // Told by the folders, to the letter: the old name and the new must each be
+    // there as a folder of its own. Where capitals don't tell folders apart, a Save
+    // As under the same name in other capitals writes into the one folder there is,
+    // and is the same profile.
+    public bool LoadedIsACopyOf(string? oldBbs, string? oldName)
+    {
+        if (oldBbs is null || oldName is null || CurrentBbsName is not { } bbs || CurrentProfileName is not { } name)
+            return false;
+        if (string.Equals(oldBbs, bbs, StringComparison.OrdinalIgnoreCase) && string.Equals(oldName, name, StringComparison.Ordinal))
+            return false;
+        return HasProfileFolder(oldBbs, oldName) && HasProfileFolder(bbs, name);
+    }
+
+    private static bool HasProfileFolder(string bbs, string name)
+    {
+        try
+        {
+            string profiles = AppPaths.BbsProfilesDir(bbs);
+            return Directory.Exists(profiles)
+                && Directory.EnumerateDirectories(profiles).Any(d => string.Equals(Path.GetFileName(d), name, StringComparison.Ordinal));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    // The same news for profiles that are not the loaded one, and for the ones that
+    // are gone: whatever is kept outside a profile under its BBS and name (files in a
+    // game-data set's folder, say) has to follow it or go with it, since the pair
+    // may be given to another character later.
+    //   StoredProfileMoved  a stored profile was renamed or moved to another BBS
+    //                       (the loaded one tells of itself through ProfileRenamed)
+    //   ProfileDeleted      a profile was deleted, loaded or not
+    //   BbsRenamed          a BBS was renamed: every profile under it, loaded or
+    //                       not, is now under the new name (raised after
+    //                       ProfileRenamed for the loaded one)
+    //   BbsDeleted          a BBS was removed, and every profile under it
+    // A copy of a profile raises nothing: the copy is another character.
+    public event Action<ProfileRef, ProfileRef>? StoredProfileMoved;
+    public event Action<ProfileRef>? ProfileDeleted;
+    public event Action<string, string>? BbsRenamed;
+    public event Action<string>? BbsDeleted;
+
+    // Raise BbsDeleted. The BBS folder is BbsProfileStore's to remove; whoever
+    // removes one says so here, as a rename is told through RenameBbs.
+    public void NotifyBbsDeleted(string bbsName)
+    {
+        if (!string.IsNullOrWhiteSpace(bbsName)) BbsDeleted?.Invoke(bbsName);
     }
 
     // ----- Names ---------
@@ -492,6 +550,7 @@ public sealed class ProfileService
             Save();
             RaiseRenamedFrom(oldBbs, CurrentProfileName);
         }
+        BbsRenamed?.Invoke(oldBbs, newBbs);
     }
 
     // The realm a saved character is assigned to (CharacterProfile.Realm; null =
@@ -844,13 +903,17 @@ public sealed class ProfileService
         {
             Close();
             if (PathGuard.DeleteTree(folder, profiles, operation))
+            {
                 Log?.Info(LogCategory, $"Deleted the loaded profile '{profileName}' on '{bbsName}'.");
+                ProfileDeleted?.Invoke(new ProfileRef(bbsName, profileName));
+            }
             LoadDefaultProfile();
             return;
         }
 
-        if (PathGuard.DeleteTree(folder, profiles, operation))
-            Log?.Info(LogCategory, $"Deleted profile '{profileName}' on '{bbsName}'.");
+        if (!PathGuard.DeleteTree(folder, profiles, operation)) return;
+        Log?.Info(LogCategory, $"Deleted profile '{profileName}' on '{bbsName}'.");
+        ProfileDeleted?.Invoke(new ProfileRef(bbsName, profileName));
     }
 
     // Move a profile's folder to a new BBS and/or name — unifies rename (same
@@ -897,6 +960,7 @@ public sealed class ProfileService
             JsonStore.Save(path, moved);
         }
         Log?.Info(LogCategory, $"Moved profile '{fromName}' ({fromBbs}) → '{toName}' ({toBbs}).");
+        StoredProfileMoved?.Invoke(new ProfileRef(fromBbs, fromName), new ProfileRef(toBbs, toName));
     }
 
     // Enumerate every profile across every BBS that has a primary profile.json
