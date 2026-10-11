@@ -548,6 +548,36 @@ public sealed class LairEntryPriorityBuffWaitTests
         Assert.Null(block.Director.Evaluate());
     }
 
+    // Asking what is due must change nothing. A reroll staged while Block spells holds
+    // every buff can't be paid for at the moment a bug report is captured (or a log
+    // line is built); the hold was keeping it for after the fight, and it is still cast.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DescribingAHold_OrAskingWhatIsDue_DropsNoStagedReroll(bool asked)
+    {
+        using Harness h = new();
+        h.AddBuff("flux", priority: false);
+        Assert.Equal("flux", h.Director.Evaluate());        // up, its timer running
+        h.NextRound();
+        h.Director.MarkBetweenRoundSlotUsed();
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells));
+        h.Director.RequestManaRegenReroll("flux");          // rolled low: a reroll is staged, and held
+        h.State.Ma = 40;                                    // under the buff's 50% floor for now
+
+        if (asked)
+        {
+            h.Hold.Describe();
+            h.Director.BuffsDue(priority: false);
+            h.Director.HasCastDue();
+        }
+
+        h.State.Ma = 100;                                   // mana back before the hold ends
+        h.NextRound(); h.Poll();
+        Assert.True(h.Hold.ReadyToEnter(LairEntryDebuffMode.Off));
+        Assert.Equal("flux", h.Director.Evaluate());
+    }
+
     [Fact]
     public void BuffsDue_ListsEachKindInCastOrder_WhetherOrNotTheHoldKeepsItBack()
     {

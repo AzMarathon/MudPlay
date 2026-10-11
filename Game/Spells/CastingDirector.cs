@@ -706,18 +706,20 @@ public sealed class CastingDirector : IDisposable
                 || PickCure(spells) is not null))
             return true;
         return blessEnabled
-            && (PickBuff(health, priority: true) is not null || PickBuff(health, priority: false) is not null);
+            && (PickBuff(health, priority: true, peek: true) is not null
+                || PickBuff(health, priority: false, peek: true) is not null);
     }
 
     // The buffs of one kind (ticked "Priority buff", or the rest) that are due now, in
     // cast order, by the rules the decision pass picks with; a buff aimed at a party
     // member reads "code on name". A lair-entry hold is not applied, so the caller can
-    // name what it is keeping back as well as what it is waiting for.
+    // name what it is keeping back as well as what it is waiting for. Like HasCastDue
+    // it only asks: log lines and the bug report read it, and reading changes nothing.
     public IReadOnlyList<string> BuffsDue(bool priority)
     {
         if (!CanDecide || _autoBlessEnabled?.Invoke() == false) return [];
         List<string> names = new();
-        foreach (CastCandidate due in DueBuffs(_readHealth(), priority))
+        foreach (CastCandidate due in DueBuffs(_readHealth(), priority, peek: true))
         {
             string name = BuffName(due);
             if (!names.Contains(name)) names.Add(name);   // a staged reroll and its own slot
@@ -1276,14 +1278,14 @@ public sealed class CastingDirector : IDisposable
     // True when a buff on targetKey ("" = self) is due to be (re)cast: either never
     // confirmed-active, or within the slot's recast lead of expiry. The lead is the
     // one stored with the timer when it was armed (0 ⇒ only once the buff has
-    // actually expired).
+    // actually expired). A read: a draw's wait that has run out is left in place (it
+    // no longer holds anything, and the next draw overwrites it), so asking what is
+    // due changes nothing.
     private bool IsRecastDue(string targetKey, string spellShort)
     {
-        if (targetKey.Length == 0 && _drawPendingUntil.TryGetValue(spellShort, out DateTime waitEnds))
-        {
-            if (_now() < waitEnds) return false;
-            _drawPendingUntil.Remove(spellShort);
-        }
+        if (targetKey.Length == 0 && _drawPendingUntil.TryGetValue(spellShort, out DateTime waitEnds)
+            && _now() < waitEnds)
+            return false;
         if (!_activeUntil.TryGetValue((targetKey, spellShort), out (DateTime Until, int MarginSec, int TotalSec) t))
             return true;
         return (t.Until - _now()).TotalSeconds <= EffectiveMargin(targetKey, spellShort, t.MarginSec);
@@ -2682,7 +2684,9 @@ public sealed class CastingDirector : IDisposable
     // priority: the buffs ticked "Priority buff" (BuffSlot.PriorityBuff) when true,
     // every other buff when false. The two are separate between-round categories with
     // their own rank; everything else about a buff is the same in either.
-    private CastCandidate? PickBuff(HealthSettings health, bool priority)
+    //
+    // peek: the caller only asks what is due and will cast nothing. See DueBuffs.
+    private CastCandidate? PickBuff(HealthSettings health, bool priority, bool peek = false)
     {
         // A loop is about to step into a lair and is keeping the round's cast for the
         // pre-attack debuff (LairEntryDebuffHold logs its own wait). While it lets the
@@ -2692,7 +2696,7 @@ public sealed class CastingDirector : IDisposable
 
         // A priority buff that loop has given up waiting for is held as well; the next
         // due one takes its place.
-        foreach (CastCandidate due in DueBuffs(health, priority))
+        foreach (CastCandidate due in DueBuffs(health, priority, peek))
             if (!(priority && _lairEntryPriorityBuffHeld?.Invoke(BuffName(due)) == true))
                 return due;
         return null;
@@ -2700,14 +2704,21 @@ public sealed class CastingDirector : IDisposable
 
     // Every due buff of one kind, in cast order: PickBuff casts the first. Lazy, so
     // taking only the first does no more work than picking it did.
-    private IEnumerable<CastCandidate> DueBuffs(HealthSettings health, bool priority)
+    //
+    // The decision pass tidies as it picks: it drops a staged reroll that can't be
+    // used, takes a member who is back in the room off the hidden list, and logs why
+    // a buff was passed over. With peek set none of that happens. A question about
+    // what is due (the lair-entry hold's, a log line's, the bug report's) must leave
+    // the next decision exactly as it would have been: a bug report captured during a
+    // lair hold once dropped the staged reroll the hold was keeping for later.
+    private IEnumerable<CastCandidate> DueBuffs(HealthSettings health, bool priority, bool peek)
     {
         // Buff-strip-room gate: the room casts a buff-removal spell on entry, so
         // any buff we put up is torn straight back off. Skip the whole category
         // here — heals / cures still run their own paths.
         if (_buffStripRoom?.Invoke() == true)
         {
-            _log?.Combat(LogCategory, "buff skipped — room strips buffs on entry.");
+            if (!peek) _log?.Combat(LogCategory, "buff skipped — room strips buffs on entry.");
             yield break;
         }
 
@@ -2716,7 +2727,7 @@ public sealed class CastingDirector : IDisposable
         // use fires or the pause times out.
         if (_tokenBuffPause?.Invoke() == true)
         {
-            _log?.Combat(LogCategory, "buff skipped — token use imminent (buffs about to be wiped).");
+            if (!peek) _log?.Combat(LogCategory, "buff skipped — token use imminent (buffs about to be wiped).");
             yield break;
         }
 
@@ -2724,8 +2735,8 @@ public sealed class CastingDirector : IDisposable
         // (front of the queue). Then the ONE unified buff list (self bless / regen /
         // when-full, whole-party, per-member). Mana-regen maintenance is just a
         // CastOnSelf slot in that list, so DueUnifiedBuffs handles it in place.
-        if (PickManaRegenReroll(health, priority) is { } rr) yield return rr;
-        foreach (CastCandidate due in DueUnifiedBuffs(health, priority)) yield return due;
+        if (PickManaRegenReroll(health, priority, peek) is { } rr) yield return rr;
+        foreach (CastCandidate due in DueUnifiedBuffs(health, priority, peek)) yield return due;
     }
 
     // Whether mana is at or above this buff's own floor (BuffSlot.BlessIfAboveMa,
@@ -2756,19 +2767,23 @@ public sealed class CastingDirector : IDisposable
     // now, drop it (the reroller re-stages on the next landing if still below
     // threshold) rather than stall the walk. The mana-regen buff's own MAINTENANCE
     // recast is a normal CastOnSelf slot in the unified list (DueUnifiedBuffs).
-    private CastCandidate? PickManaRegenReroll(HealthSettings health, bool priority)
+    private CastCandidate? PickManaRegenReroll(HealthSettings health, bool priority, bool peek)
     {
         if (_pendingManaRegenReroll is not { } reroll) return null;
         // The slot the reroll belongs to carries its conditions; a reroll whose slot
         // is gone has nothing to say when it may cast, and is dropped.
         Models.Profile.BuffSlot? slot = _readPartyBuffs?.Invoke()?.Slots.Find(
             s => string.Equals(s.Spell?.Trim(), reroll, StringComparison.OrdinalIgnoreCase));
-        if (slot is null) { _pendingManaRegenReroll = null; return null; }
+        if (slot is null)
+        {
+            if (!peek) _pendingManaRegenReroll = null;
+            return null;
+        }
         if (slot.PriorityBuff != priority) return null;   // the other buff category's to cast
         if (!BuffTimingAllowed(slot)) return null;
         if (IsBuffAffordable(slot, health))
             return new CastCandidate(reroll, Target: null, DefaultRecastMarginSec);
-        _pendingManaRegenReroll = null;
+        if (!peek) _pendingManaRegenReroll = null;
         return null;
     }
 
@@ -2796,7 +2811,7 @@ public sealed class CastingDirector : IDisposable
     // a roster name is in the room) — the one exception being a member who's HIDING:
     // the cast returns "You do not see <name> here!" and we back off (_hiddenTargets)
     // until we move or they reappear in "Also here:".
-    private IEnumerable<CastCandidate> DueUnifiedBuffs(HealthSettings health, bool priority)
+    private IEnumerable<CastCandidate> DueUnifiedBuffs(HealthSettings health, bool priority, bool peek)
     {
         if (_readPartyBuffs?.Invoke() is not { } buffs) yield break;
 
@@ -2912,7 +2927,7 @@ public sealed class CastingDirector : IDisposable
                     if (_hiddenTargets.Contains(key))
                     {
                         if (_isMemberInRoom?.Invoke(given) != true) continue;
-                        _hiddenTargets.Remove(key);
+                        if (!peek) _hiddenTargets.Remove(key);
                     }
                     if (!IsRecastDue(key, slot.Spell)) continue;
                     yield return new CastCandidate(slot.Spell, given, slot.RecastMarginSec);
