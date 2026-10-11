@@ -38,6 +38,9 @@ public static partial class BenignChatterMatcher
             || ProfileRowRx().IsMatch(text)
             || StatAllRowRx().IsMatch(text)
             || MonsterCastFailedRx().IsMatch(text)
+            // A cast the target negated or resisted, as each party to it is told.
+            // Like the line above it names the spell and is no spell's own message.
+            || Spells.NegatedCastLine.TryRead(text, out _)
             || ChannelRx().IsMatch(text)
             || GangRx().IsMatch(text)
             || DayCycleRx().IsMatch(text)

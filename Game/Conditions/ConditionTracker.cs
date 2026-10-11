@@ -54,6 +54,9 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // line matches is latched.
     private CastReach? _castReach;
 
+    // Record name → the records of that name, to say which spell a negated cast was.
+    private Dictionary<string, List<MessageRecord>> _recordsByName = new(StringComparer.OrdinalIgnoreCase);
+
     // Built from MessageStore on every CollectionChanged. Maps an ends-with
     // string to records — only records whose EndsWith is non-empty get indexed.
     private List<(string Pattern, MessageRecord Record)> _endsIndex = new();
@@ -283,12 +286,21 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         List<(string, MessageRecord)> ends = new();
         Dictionary<string, List<MessageRecord>> aliases = new(StringComparer.Ordinal);
         List<(string Norm, MessageRecord Record)> fumbles = new();
+        Dictionary<string, List<MessageRecord>> byName = new(StringComparer.OrdinalIgnoreCase);
         foreach (MessageRecord r in _messages.Messages)
         {
             // 'Disabled (don't use)' — ignore the record wholesale: it never indexes,
             // so it can't latch a condition, set a flag, contribute a fumble wording,
             // or fire ActionFailed. Any active copy is dropped in the prune below.
             if (r.Flags.HasFlag(MessageFlags.Disabled)) continue;
+
+            string name = r.Name.Trim();
+            if (name.Length > 0)
+            {
+                if (!byName.TryGetValue(name, out List<MessageRecord>? named))
+                    byName[name] = named = new List<MessageRecord>();
+                named.Add(r);
+            }
 
             // A slot holding a {null}/{void}/{empty} sentinel means "this spell has no such
             // line" — treat it as absent so it never compiles into a matcher (IsBlankOrAbsent),
@@ -331,6 +343,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         _longerApplied = BuildLongerApplied(aliases.Keys);
         _castLinesHolding = BuildCastLinesHolding(applied, _messages.Messages);
         _confuseFumbleIndex = fumbles;
+        _recordsByName = byName;
         _log?.Debug(LogCategory,
             $"index built — applied={applied.Count} endsWith={ends.Count} totalRecords={_messages.Messages.Count}");
 
@@ -431,6 +444,14 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         if (line.IsPromptLine) return;
         string text = line.Text;
         if (string.IsNullOrEmpty(text)) return;
+
+        // A cast the target threw off names its spell and brings none of its effect:
+        // nothing on such a line starts or ends a condition.
+        if (NegatedCastLine.TryRead(text, out NegatedCastLine.Cast negated))
+        {
+            LogNegatedCast(negated);
+            return;
+        }
 
         foreach ((Func<string, bool> matches, string recordId) in _castLineIndex)
             if (matches(text)) _castSeenAt[recordId] = line.Timestamp;
@@ -583,6 +604,28 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
 
         if (actionFailed is { } af)
             ActionFailed?.Invoke(af);
+    }
+
+    // Says in the log which spell a negated cast was, by the message records of the
+    // spell's name and the spells they are for; a name no record has is said so.
+    private void LogNegatedCast(NegatedCastLine.Cast cast)
+    {
+        if (_log is not { IsDebugEnabled: true }) return;
+        string records = _recordsByName.TryGetValue(cast.Spell.Trim(), out List<MessageRecord>? named)
+            ? "spell record " + string.Join(", ", named.Select(DescribeRecordSpells).Distinct())
+            : "no spell record of that name";
+        _log.Debug(LogCategory,
+            $"negated cast — {cast.Caster} cast '{cast.Spell}' at {cast.Target} and it did nothing "
+            + $"({records}); no condition applied");
+    }
+
+    private static string DescribeRecordSpells(MessageRecord record)
+    {
+        IEnumerable<string> spells = (record.Links ?? Array.Empty<GameDataLink>())
+            .Where(static link => link.Table.Equals("Spells", StringComparison.OrdinalIgnoreCase))
+            .Select(static link => $"#{link.Number}");
+        string numbers = string.Join(" ", spells);
+        return numbers.Length > 0 ? $"'{record.Name}' ({numbers})" : $"'{record.Name}'";
     }
 
     // The applied text matched, but only as part of a longer applied text the line

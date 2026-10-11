@@ -449,6 +449,98 @@ public sealed class ConditionTrackerTests
         Assert.False(h.Tracker.IsConfused);
     }
 
+    // ----- a cast the target negated ---------------------------------
+
+    // The three lines of one negated cast (report paradigm-20261011-165726: holding
+    // breath, stopped by a worn fish-helm; the names are stand-ins). Each is tied to
+    // the spell's record in the log, and none applies anything.
+    [Theory]
+    [InlineData("Aldric negates Aldric's cast of holding breath!", "Aldric cast 'holding breath' at Aldric")]
+    [InlineData("You negate Aldric's cast of holding breath!", "Aldric cast 'holding breath' at You")]
+    [InlineData("You attempt to cast holding breath at Aldric, but it's negated!", "You cast 'holding breath' at Aldric")]
+    public void ANegatedCast_IsTiedToItsSpellRecord_AndAppliesNothing(string line, string said)
+    {
+        using Harness h = new();
+        h.Log.Diagnostics = new LogDiagnosticState { DebugDiagnostics = true };
+        h.Messages.Messages.Add(Full("holding breath", MessageFlags.None,
+            "{null}", "{null}", "{null}", "{null}", "{null}", 512));
+
+        h.Feed(line);
+
+        Assert.Empty(h.Applied);
+        Assert.Contains(h.Log.Snapshot(), e =>
+            e.Message.Contains("negated cast", StringComparison.Ordinal)
+            && e.Message.Contains(said, StringComparison.Ordinal)
+            && e.Message.Contains("spell record 'holding breath' (#512)", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ANegatedCast_OfASpellWithNoRecord_IsSaidToHaveNone()
+    {
+        using Harness h = new();
+        h.Log.Diagnostics = new LogDiagnosticState { DebugDiagnostics = true };
+
+        h.Feed("You negate Aldric's cast of zzyzx ward!");
+
+        Assert.Contains(h.Log.Snapshot(), e =>
+            e.Message.Contains("Aldric cast 'zzyzx ward' at You", StringComparison.Ordinal)
+            && e.Message.Contains("no spell record of that name", StringComparison.Ordinal));
+    }
+
+    // The line names the spell, and a record's applied or wear-off text can be words
+    // of that name. The cast did nothing: neither is read off it.
+    [Fact]
+    public void ANegatedCast_NeitherStartsNorEndsACondition()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("sticky web", MessageFlags.MovementPrevented,
+            applied: "sticky web", endsWith: "You pull free of the sticky web"));
+        h.Messages.Messages.Add(MakeRecord("fear", MessageFlags.Fear,
+            applied: "You are afraid!", endsWith: "cast of courage"));
+
+        h.Feed("You negate giant spider's cast of sticky web!");
+        Assert.Empty(h.Applied);
+        Assert.False(h.Tracker.IsMovementPrevented);
+
+        h.Feed("You are afraid!");
+        h.Feed("Aldric negates Borin's cast of courage!");
+        Assert.True(h.Tracker.IsFeared);
+        Assert.Empty(h.Ended);
+
+        h.Feed("The giant spider covers you in a sticky web!");   // the spell's own line still applies it
+        Assert.True(h.Tracker.IsMovementPrevented);
+    }
+
+    [Theory]
+    [InlineData("paradigm")]
+    [InlineData("stock")]
+    public void ShippedSeed_ANegatedHoldingBreath_AppliesAndEndsNothing(string realm)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-seed-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            List<MessageRecord> seed = JsonStore.Load<List<MessageRecord>>(
+                Path.Combine(dir, $"Messages.{realm}.seed.json"))!;
+            using Harness h = new();
+            h.Log.Diagnostics = new LogDiagnosticState { DebugDiagnostics = true };
+            h.Messages.Messages.ReplaceAll(seed);
+
+            h.Feed("Aldric negates Aldric's cast of holding breath!");
+            h.Feed("You negate Aldric's cast of holding breath!");
+            h.Feed("You attempt to cast holding breath at Aldric, but it's negated!");
+
+            Assert.Empty(h.Applied);
+            Assert.Empty(h.Ended);
+            Assert.Equal(3, h.Log.Snapshot().Count(e =>
+                e.Message.Contains("spell record 'holding breath' (#512)", StringComparison.Ordinal)));
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
     // An applied line and the wear-off the game prints can sit on different records
     // that share a flag. The wear-off's own record was never latched, and its line
     // still has to release the flag: nothing else in the tracker ever would.
