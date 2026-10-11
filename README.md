@@ -1,11 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.4**
-> - Switching to another game data set, or reading the active one in again (an import, Manage Sets, or picking it again), stops a loop, Auto-Lair or walk in progress and anything held to restart one
-> - The Auto-Lair setup editor and the .mp import review won't save, verify or take a room until the game data they were opened on is active again; their add-room list, and Edit Loop's, lists no rooms meanwhile
-> - Lair marks on the map are dropped, with a notice, when the game data changes to another set, and a set of marks is never mixed across sets
-> - `@loop last` won't run a loop last run on other game data
+> **Version 3.180.6**
+> - A learned room name is kept per realm and put back on the map each session; `Rooms.json` is no longer written
+> - A room the game data leaves unnamed takes a new name when the board prints one as you walk in, and asks once whether to save it in place of the old
+> - A learned name shows in the trainer, bank, quest, item and spell lists
+> - Saving a learned name says in the terminal when it could not be kept, and why
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

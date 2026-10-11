@@ -191,8 +191,8 @@ public sealed class RoomTracker
 
     // Fired the first time we learn a real name for a room that shipped without
     // one (typical of map-15 ganghouse rooms in the 1.x MDB exports).
-    // Subscribers — the main window in particular — prompt the user to write the
-    // learned name back to the active game-data set's Rooms.json.
+    // Subscribers — the main window in particular — ask the user whether to keep
+    // the learned name for later sessions (LearnedRoomNameStore).
     public event Action<NameLearnedEvent>? NameLearned;
 
     // Fired from NoteDeath for BOTH death phrasings ("You now have N lives
@@ -1321,7 +1321,8 @@ public sealed class RoomTracker
     // Would this observation be handled by the pending-move reconcile as this move's
     // outcome rather than a stray display? True when it matches the head pending
     // move's predicted target (its forward confirmation, incl. the null-name-learned
-    // case) OR the source room (a passive re-look while the move is in flight). Used
+    // and name-re-learned cases) OR the source room (a passive re-look while the
+    // move is in flight). Used
     // by the peek-suppression path to avoid dropping a move's confirming display as if
     // it were a look-<dir> peek: only a display that is NEITHER — the peeked adjacent
     // room — is the actual peek. Mirrors ReconcileFromPending's Strategy 1 / 1a / 1b
@@ -1347,9 +1348,7 @@ public sealed class RoomTracker
         }
         if (_graph.GetRoom(exit.Target) is not { } expected) return false;
         return MatchesPredicted(expected, observation)
-            || (expected.HasUnknownName
-                && MatchesPredictedNameless(expected, observation)
-                && !string.IsNullOrWhiteSpace(observation.Name));
+            || ArrivesInRoomTheDataLeavesUnnamed(expected, observation);
     }
 
     // The death-message detector saw a post-death lives readout — either "You now
@@ -1992,23 +1991,41 @@ public sealed class RoomTracker
             // Without this branch a walk INTO a null-name ganghouse
             // room never resolves: MatchesPredicted fails on the null
             // name, candidate search returns 0, tracker bumps Suspect.
-            if (expected is not null
-                && expected.HasUnknownName
-                && MatchesPredictedNameless(expected, observation)
-                && !string.IsNullOrWhiteSpace(observation.Name))
+            //
+            // The same holds for a neighbour the data leaves unnamed that bears a
+            // name learned earlier, when the display has another (GAME_MECHANICS
+            // "Rooms the data leaves unnamed": a gang's house can be renamed). The
+            // name it bears is then no evidence against having arrived, and the
+            // exits decide exactly as they do for a room with no name. Only here,
+            // with a move in flight that predicts the room: the rooms of one house
+            // can share a name and exits, and nothing else tells them apart.
+            //
+            // One thing more for a room that bears a name: the room being left,
+            // redisplayed before the game has echoed the move (someone walking
+            // in, a re-look), is not the arrival. Its exits can all be exits of
+            // the room ahead, which would then take its name, and with every room
+            // of a house named that could happen on any step, where a nameless
+            // room meets it once. The same test Strategy 1 makes above, so an
+            // echoed arrival in a room that looks like the one left still counts.
+            if (expected is not null && ArrivesInRoomTheDataLeavesUnnamed(expected, observation)
+                && (expected.HasUnknownName || !LooksLikeSourceRelook(source, head, observation, when)))
             {
+                bool renamed = !expected.HasUnknownName;
+                string bore = expected.Name;
                 Room? learned = _graph.LearnRoomName(expected.Key, observation.Name);
                 if (learned is not null)
                 {
-                    _log?.Log(LogSeverity.Info, "RoomTracker",
-                        $"Learned name '{observation.Name}' for {expected.Key} (pending-target null-name match).");
+                    _log?.Log(LogSeverity.Info, "RoomTracker", renamed
+                        ? $"Learned name '{observation.Name}' for {expected.Key} (pending target; it bore '{bore}', and the data gives it no name)."
+                        : $"Learned name '{observation.Name}' for {expected.Key} (pending-target null-name match).");
                     NameLearned?.Invoke(new NameLearnedEvent(expected.Key, observation.Name));
                     _pending.TryDequeue(out _);
                     State.SuspectStrikes = 0;
                     RoomConfidence target = _pending.IsEmpty
                         ? RoomConfidence.Confirmed
                         : RoomConfidence.Pending;
-                    SetRoom(learned, target, when, $"move {moveLabel} confirmed (null-name learned)");
+                    SetRoom(learned, target, when,
+                        $"move {moveLabel} confirmed ({(renamed ? "name re-learned" : "null-name learned")})");
                     ArmCastDisplayWait();
                     MoveConfirmed?.Invoke();
                     return;
@@ -2641,10 +2658,45 @@ public sealed class RoomTracker
     private static bool MatchesPredictedNameless(Room target, RoomObservation observation)
     {
         if (!target.HasUnknownName) return false;
+        return ObservedExitsAreOf(target, observation);
+    }
+
+    private static bool ObservedExitsAreOf(Room target, RoomObservation observation)
+    {
         uint observedMask = 0;
         foreach (Direction d in observation.Exits) observedMask |= 1u << (int)d;
         return (observedMask & target.ExitMask) == observedMask;
     }
+
+    // The nameless match for a room the data leaves unnamed that bears a learned
+    // name: the display has another name, and its exits are the room's. Never
+    // true of a room the data names; the name the data gives is held to.
+    private bool MatchesPredictedRenamed(Room target, RoomObservation observation) =>
+        !target.HasUnknownName
+        && _graph.IsUnnamedInData(target.Key)
+        && !string.Equals(target.Name, observation.Name, StringComparison.OrdinalIgnoreCase)
+        && ObservedExitsAreOf(target, observation);
+
+    // Whether the display is the arrival in a room the data leaves unnamed, to be
+    // adopted and named from it: a room with no name, or one bearing a learned
+    // name the display doesn't have, whose exits cover the ones shown.
+    //
+    // A room with no name is matched as it always has been, on its exits alone:
+    // its name is the sysop's own text and is often one the data has elsewhere
+    // (a "Kitchen", a "Hallway"), so no name printed there counts against it.
+    //
+    // A room that bears a name is held to more. It is not re-learned when a room
+    // the data names bears the printed name and has those exits: that room's own
+    // display, with an exit of its own left out, fits no exact (name, exits)
+    // search and would otherwise be read here as this room under a new name;
+    // left alone, it is re-anchored by name further down. The cost is a room
+    // renamed to a name the data also has, which keeps its old name, as every
+    // renamed room did before there was a re-learn.
+    private bool ArrivesInRoomTheDataLeavesUnnamed(Room target, RoomObservation observation) =>
+        !string.IsNullOrWhiteSpace(observation.Name)
+        && (MatchesPredictedNameless(target, observation)
+            || (MatchesPredictedRenamed(target, observation)
+                && !_graph.DataNamesRoomShowing(observation.Name, observation.Exits)));
 
     // Search the source room's cardinal neighbours for a null-name room whose
     // ExitMask covers the observation. If exactly one neighbour qualifies, learn
@@ -2890,6 +2942,6 @@ public readonly record struct RoomTransition(
 
 // Payload of RoomTracker.NameLearned. Carries the room the tracker just adopted
 // by ExitMask + the verbatim observed name it learned. The main window's
-// prompt-handler decides whether to persist the new name back to the active
-// set's Rooms.json.
+// prompt-handler decides whether the new name is kept with the realm's data
+// (LearnedRoomNameStore); the game data files are never written.
 public readonly record struct NameLearnedEvent(RoomKey Key, string ObservedName);

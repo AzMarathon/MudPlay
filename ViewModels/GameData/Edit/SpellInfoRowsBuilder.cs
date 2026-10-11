@@ -354,8 +354,7 @@ public sealed class SpellInfoRowsBuilder
             int room = ReadInt(r, "Room Number");
             if (map <= 0 || room <= 0) continue;
             string mapRoom = $"{map.ToString(CultureInfo.InvariantCulture)}/{room.ToString(CultureInfo.InvariantCulture)}";
-            string label = r.TryGetProperty("Name", out GameValue e) && e.ValueKind == JsonValueKind.String
-                && CleanString(e.GetString()) is { } nm ? $"{nm} {mapRoom}" : mapRoom;
+            string label = ResolveRoomName(map, room) is { } nm ? $"{nm} {mapRoom}" : mapRoom;
             var key = new Game.Map.RoomKey(map, room);
             links.Add(new GameDataRecordLink(label, ", ", new RelayCommand(() => AppServices.Current.NavigateToRoom(key))));
             names.Add(label);
@@ -625,19 +624,10 @@ public sealed class SpellInfoRowsBuilder
         return vals;
     }
 
-    // Resolve a (map, room) pair to the room's Name in the Rooms table.
-    private string? ResolveRoomName(int map, int room)
-    {
-        if (map <= 0 || room <= 0) return null;
-        GameTable? doc = _cache.GetTable("Rooms");
-        if (doc is null) return null;
-        foreach (GameRow r in doc.Rows)
-            if (ReadInt(r, "Map Number") == map && ReadInt(r, "Room Number") == room)
-                return r.TryGetProperty("Name", out GameValue e) && e.ValueKind == JsonValueKind.String
-                    ? CleanString(e.GetString())
-                    : null;
-        return null;
-    }
+    // Resolve a (map, room) pair to the room's name: the Rooms table's, or the one
+    // learned for a room the table leaves unnamed.
+    private string? ResolveRoomName(int map, int room) =>
+        map <= 0 || room <= 0 ? null : CleanString(Game.GameData.RoomNameIndex.NameOf(_cache, map, room));
 
     // Render one scalar (non-ability) field: enum columns via the shared formatters, the
     // "Learned From" / "Casted By" source lists resolved to real names, blank / NUL text dropped.

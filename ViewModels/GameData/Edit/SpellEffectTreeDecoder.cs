@@ -41,11 +41,21 @@ public static class SpellEffectTreeDecoder
             int n = ReadInt(e, "Number");
             if (n > 0) tb.TryAdd(n, e);
         }
-        var ctx = new Ctx(cache, tb, BuildRoomNames(cache));
+        var ctx = new Ctx(cache, tb);
         return DecodeBlock(ctx, textblockNumber, 0, new HashSet<int>());
     }
 
-    private sealed record Ctx(GameDataCache Cache, Dictionary<int, GameRow> Tb, Dictionary<(int, int), string> RoomNames);
+    private sealed record Ctx(GameDataCache Cache, Dictionary<int, GameRow> Tb)
+    {
+        // The room's name, trimmed: the Rooms table's, or the one learned for a room
+        // the table leaves unnamed. False when it has neither.
+        public bool TryRoomName((int Map, int Room) key, out string name)
+        {
+            string found = Game.GameData.RoomNameIndex.NameOf(Cache, key.Map, key.Room);
+            name = found.Trim();
+            return name.Length > 0 && found[0] != '\0';
+        }
+    }
 
     private static IReadOnlyList<SpellEffectNode> DecodeBlock(Ctx ctx, int tbNum, int depth, HashSet<int> ancestors)
     {
@@ -280,9 +290,9 @@ public static class SpellEffectTreeDecoder
         }
         var rooms = new[] { new SpellEffectNode { Runs = linkRuns } };
 
-        string? common = ctx.RoomNames.TryGetValue(dests[0], out string? n0) ? n0 : null;
+        string? common = ctx.TryRoomName(dests[0], out string n0) ? n0 : null;
         foreach ((int m, int r) in dests)
-            if (!ctx.RoomNames.TryGetValue((m, r), out string? nm) || nm != common) { common = null; break; }
+            if (!ctx.TryRoomName((m, r), out string nm) || nm != common) { common = null; break; }
 
         string count = dests.Count.ToString(CultureInfo.InvariantCulture);
         var summary = common is { Length: > 0 }
@@ -295,7 +305,7 @@ public static class SpellEffectTreeDecoder
     private static string RoomLabel(Ctx ctx, int map, int room)
     {
         string mr = $"{map.ToString(CultureInfo.InvariantCulture)}/{room.ToString(CultureInfo.InvariantCulture)}";
-        return ctx.RoomNames.TryGetValue((map, room), out string? n) && n.Length > 0 ? $"{n} {mr}" : mr;
+        return ctx.TryRoomName((map, room), out string n) ? $"{n} {mr}" : mr;
     }
 
     // ----- link runs -----
@@ -318,7 +328,7 @@ public static class SpellEffectTreeDecoder
     private static MdbInline RoomLink(Ctx ctx, int map, int room, string? name = null)
     {
         string label = name
-            ?? (ctx.RoomNames.TryGetValue((map, room), out string? n) ? n
+            ?? (ctx.TryRoomName((map, room), out string n) ? n
                 : $"{map.ToString(CultureInfo.InvariantCulture)}/{room.ToString(CultureInfo.InvariantCulture)}");
         if (map <= 0 || room <= 0) return new MdbInline(label);
         var key = new Game.Map.RoomKey(map, room);
@@ -344,21 +354,6 @@ public static class SpellEffectTreeDecoder
 
     private static string Arg(string[] args, int i) => i < args.Length ? args[i] : string.Empty;
     private static int ArgInt(string[] args, int i) => i < args.Length && int.TryParse(args[i], out int v) ? v : 0;
-
-    private static Dictionary<(int, int), string> BuildRoomNames(GameDataCache cache)
-    {
-        var map = new Dictionary<(int, int), string>();
-        if (cache.GetTable("Rooms") is not { } doc) return map;
-        foreach (GameRow r in doc.Rows)
-        {
-            int m = ReadInt(r, "Map Number"), rm = ReadInt(r, "Room Number");
-            if (m <= 0 || rm <= 0) continue;
-            if (r.TryGetProperty("Name", out GameValue e) && e.ValueKind == JsonValueKind.String
-                && e.GetString() is { } nm && nm.Trim().Length > 0 && nm[0] != '\0')
-                map[(m, rm)] = nm.Trim();
-        }
-        return map;
-    }
 
     private static int ReadInt(GameRow row, string prop)
         => row.TryGetProperty(prop, out GameValue e) && e.ValueKind == JsonValueKind.Number

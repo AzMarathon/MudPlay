@@ -2494,11 +2494,10 @@ public sealed class AppServices
     // per-session by MainWindowViewModel after connect.
     public Game.Map.PyramidSolver PyramidSolver { get; private set; } = null!;
 
-    // Writer that persists tracker-learned room names back into the
-    // active set's Rooms.json. Consumed by the
-    // MainWindowViewModel name-learned prompt handler after the user
-    // confirms the rename.
-    public RoomNamePersistence RoomNamePersist { get; private set; } = null!;
+    // The names seen on the realm for rooms the game data gives none, kept in the
+    // realm's folder and put back on the room map each time it is built. The
+    // MainWindowViewModel name-learned prompt hands it a name the user keeps.
+    public Game.Map.LearnedRoomNameStore LearnedRoomNames { get; private set; } = null!;
 
     // Sniffs outbound user-typed commands and tells
     // RoomTracker about look <dir> peeks
@@ -3921,12 +3920,16 @@ public sealed class AppServices
         // and left purely lazy that lands on whichever walk first crosses a gate —
         // a stall exactly when the user is watching the character move. The warm
         // builds into locals and publishes by reference, and GameDataCache guards its
-        // own tables, so it's safe off-thread. Subscribed AFTER TBInfo above so the
-        // store has reloaded by the time the build reads it; a query that beats the
-        // warm simply builds it itself.
+        // own tables, so it's safe off-thread. A query that beats the warm simply
+        // builds it itself.
+        //
+        // The warm is queued where the room graph is built, further down, on its
+        // GraphReloaded: after TBInfo above has reloaded, and after the learned
+        // room names are on the map, since a giver in a room the data leaves
+        // unnamed is labelled with the name learned for it. Queued at the set
+        // switch itself, the build read the map before those names went on and was
+        // done a second time.
         ItemSources = new ItemSourceIndex(GameData, TBInfo, Log);
-        GameData.ActiveSetChanged += _ => Task.Run(ItemSources.Warm);
-        if (GameData.ActiveSet is not null) Task.Run(ItemSources.Warm);
 
         // RoomFloorItemIndex — the room→floor-item (`roomitem`) mapping for the
         // Navigation Room Info panel. Reads TBInfo's typed entries like ItemSources;
@@ -3946,6 +3949,42 @@ public sealed class AppServices
         // so the build can promote CMD-teleport-shadowed door exits to Teleport,
         // and SpellCatalog so a cast-based CMD teleport becomes a routable edge.
         RoomGraph = new Game.Map.RoomGraphManager(GameData, Log, TBInfo, SpellCatalog);
+        // The realm's learned room names go on the map before anything else hears
+        // of a rebuilt graph: this must stay the first GraphReloaded subscription,
+        // so every later listener (the list warm-up below, the tracker, the map
+        // layout, the maze index, room search) is handed rooms already named. The
+        // profile handlers sit here too, ahead of the tracker's, so a loaded
+        // character's last room is looked up under the name its realm has for it.
+        //
+        // The lists that label rooms from the Rooms table (item, spell and quest
+        // records, the trainer and bank lists, item givers) ask the map for a room
+        // the table leaves unnamed, and the ones that keep the answer are told when
+        // a realm's names go on or come off. Both are set before the store is
+        // built, so its first apply already reaches them; ItemSources exists above.
+        GameData.RoomNameWhenDataHasNone = (map, room) =>
+            RoomGraph.LearnedNames.GetValueOrDefault(new Game.Map.RoomKey(map, room));
+        RoomGraph.LearnedNamesChanged += () =>
+        {
+            GameData.LearnedRoomNamesChanged(
+                Game.GameData.TrainerCatalog.DerivedKey, Game.GameData.BankCatalog.DerivedKey);
+            // Rebuilt off the UI thread, as at a set switch, so the next walk that
+            // asks who gives an item doesn't pay for it.
+            Task.Run(ItemSources.Warm);
+        };
+        LearnedRoomNames = new Game.Map.LearnedRoomNameStore(RoomGraph, ActiveRealmFolder, Log);
+        RoomGraph.GraphReloaded += LearnedRoomNames.OnGraphReloaded;
+        // After the store's, so the names are on the map: one build per set load.
+        // (A second warm queued by LearnedNamesChanged finds the first's result.)
+        RoomGraph.GraphReloaded += () => Task.Run(ItemSources.Warm);
+        Profile.ProfileLoaded += _ => LearnedRoomNames.OnRealmChanged();
+        Profile.BbsPinApplied += _ => LearnedRoomNames.OnRealmChanged();
+        Profile.ProfileClosed += LearnedRoomNames.OnRealmChanged;
+        // A BBS renamed from Profile Management raises no pin: the realm's folder
+        // moved under the new name, and the store goes with it.
+        Profile.BbsRenamed += (from, to) =>
+            LearnedRoomNames.OnFolderRenamed(AppPaths.BbsFolder(from), AppPaths.BbsFolder(to));
+        LearnedRoomNames.OnRealmChanged();
+        Tick.HeartbeatElapsed += () => LearnedRoomNames.TakeInOutsideChanges();
         // Once a set's graph is loaded, build the lists Navigation, Settings and the
         // map's right-click menu show, off the UI thread, so the first open doesn't
         // pay for them (the trainer list alone re-read the 22 MB Rooms table).
@@ -4142,11 +4181,6 @@ public sealed class AppServices
         // at app scope like the tracker. The solver that consumes it is built
         // after the Walker below.
         MazeIndex = new Game.Map.TeleportMazeIndex(RoomGraph, Log);
-
-        // Writer that persists tracker-learned names back to
-        // Rooms.json. The MainWindowVM subscribes to NameLearned to
-        // prompt the user, then calls this on accept.
-        RoomNamePersist = new RoomNamePersistence(GameData, Log);
 
         // Hand the loaded profile to the tracker so it can hydrate
         // LastKnownRoom + RecentSteps (replay-from-last-Confirmed

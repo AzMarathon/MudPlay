@@ -63,11 +63,15 @@ public static class TrainerCatalog
     // MaxLVL sentinel marking a non-reachable / placeholder trainer to ignore.
     public const int IgnoredMaxLevel = 999;
 
+    // The list keeps each trainer's room name, a learned one included, so it is
+    // dropped when those change (GameDataCache.LearnedRoomNamesChanged).
+    public const string DerivedKey = "trainers";
+
     // Built once per game-data set (GameDataCache.Derived).
     public static IReadOnlyList<TrainerShop> Enumerate(GameDataCache gameData)
     {
         ArgumentNullException.ThrowIfNull(gameData);
-        return gameData.Derived("trainers", () => Build(gameData));
+        return gameData.Derived(DerivedKey, () => Build(gameData));
     }
 
     private static List<TrainerShop> Build(GameDataCache gameData)
@@ -76,8 +80,6 @@ public static class TrainerCatalog
 
         GameTable? doc = gameData.GetTable("Shops");
         if (doc is null) return trainers;
-
-        IReadOnlyDictionary<(int Map, int Room), string> roomNames = RoomNameIndex.For(gameData);
 
         foreach (GameRow el in doc.Rows)
         {
@@ -93,7 +95,7 @@ public static class TrainerCatalog
 
             foreach ((int map, int room) in ShopRoomParser.ParseRooms(GetString(el, "Assigned To")))
             {
-                string roomName = roomNames.TryGetValue((map, room), out string? rn) ? rn : string.Empty;
+                string roomName = RoomNameIndex.NameOf(gameData, map, room);
                 trainers.Add(new TrainerShop(number, name, map, room, roomName, minLevel, maxLevel, classRest, markup));
             }
         }
