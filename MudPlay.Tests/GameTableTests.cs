@@ -103,6 +103,20 @@ public sealed class GameTableTests
             """);
     }
 
+    // A one-byte text is found again without the pool's hash: the same byte must
+    // come back as the same text wherever it repeats, and no two bytes be confused.
+    [Fact]
+    public void One_byte_texts_read_back_as_themselves()
+    {
+        AssertSameAsDocument("""
+            [
+              { "N": "0", "S": "0", "E": "1", "W": "0" },
+              { "N": "1", "S": "0", "E": "", "W": "00" },
+              { "N": "0", "S": "é", "E": "0", "W": "\u0000", "U": "1" }
+            ]
+            """);
+    }
+
     [Fact]
     public void Rows_keep_their_own_fields_in_their_own_order()
     {

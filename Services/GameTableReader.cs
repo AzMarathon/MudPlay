@@ -146,11 +146,17 @@ internal static class GameTableReader
         private readonly Pieces<int> _hash = new();
         // Open-addressed table of ids (stored + 1; 0 is an empty slot).
         private int[] _slots = new int[512];
+        // The id (stored + 1) of each one-byte text met so far. Seven in ten of a
+        // Rooms table's strings are the "0" of an exit that leads nowhere, and this
+        // answers them without a hash or a probe.
+        private readonly int[] _oneByte = new int[256];
 
         private ReadOnlySpan<byte> Bytes(int id) => _pieces[_piece[id]].AsSpan(_offset[id], _length[id]);
 
         public int IdOf(ReadOnlySpan<byte> utf8)
         {
+            if (utf8.Length == 1 && _oneByte[utf8[0]] is not 0 and int known) return known - 1;
+
             int hash = Hash(utf8);
             int mask = _slots.Length - 1;
             int slot = hash & mask;
@@ -175,6 +181,7 @@ internal static class GameTableReader
             _lastUsed += utf8.Length;
             _totalBytes += utf8.Length;
             _slots[slot] = added + 1;
+            if (utf8.Length == 1) _oneByte[utf8[0]] = added + 1;
             if ((added + 1) * 2 > _slots.Length) GrowSlots();
             return added;
         }
