@@ -2343,6 +2343,21 @@ public sealed class AppServices
     // any cached room references.
     public Game.Map.RoomGraphManager RoomGraph { get; private set; } = null!;
 
+    // How far the Stock map file's list of where the dead arrive goes for the
+    // active game data: Paradigm by its Info row (Legit 2), an unmodified Stock
+    // set by Legit 1 with Custom "Default", and anything else (a board whose
+    // sysop may have edited its rooms, or no set) unverified.
+    public Game.Recovery.HangupArrivalListTrust HangupArrivalListTrust =>
+        GameData.ActiveRealm == Game.RealmType.ParaMud ? Game.Recovery.HangupArrivalListTrust.Paradigm
+        : GameData.ActiveSetIsVanillaStock ? Game.Recovery.HangupArrivalListTrust.VanillaStock
+        : Game.Recovery.HangupArrivalListTrust.Unverified;
+
+    // Paradigm's Albion: the rooms that can be walked to from the Burial Vault,
+    // where its dead arrive. The walk is made the first time a hang-up in one of
+    // Paradigm's own rooms is judged and kept with the graph (Map.WalkReach).
+    public bool InParadigmAlbion(Game.Map.RoomKey room) =>
+        Game.Map.WalkReach.From(RoomGraph, Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault).Contains(room);
+
     // The teleport spots in the loaded game data, for the
     // setting that says which of them automatic walks may use. Worked out from the
     // room graph on first use and again after the graph reloads.
@@ -5399,15 +5414,10 @@ public sealed class AppServices
             characterName: () => PlayerStats.Name,
             send: cmd => SendGameCommand(cmd),
             log: Log);
-        // Not for a death the Stock engine answered with its colliseum line: that
-        // one leaves the lives as they were (GAME_MECHANICS "Death threshold &
-        // consequences"), and the command would add a life that was never spent.
-        RoomTracker.PlayerDeathObserved += () =>
-        {
-            if (!Death.LastDeathSavedInColliseum) SysopGodLife.OnDeath();
-            else if (SysopGodLivesEnabledHere())
-                Log.Info("SysopGodLife", "A colliseum death spends no life: no life is asked back.");
-        };
+        // Not for an arena death, on either realm: it leaves the lives as they
+        // were (GAME_MECHANICS "Death threshold & consequences"), and the command
+        // would add a life that was never spent.
+        RoomTracker.PlayerDeathObserved += () => SysopGodLife.OnDeath(RoomTracker.LastDeathTookNothing);
 
         // "Sysop goto": gate `sys goto <name>` (per-BBS power + active-combat block +
         // table + level) and, on a fired jump, re-anchor position when the landing
@@ -7292,9 +7302,12 @@ public sealed class AppServices
         AutoModeController.KillSwitchToggled += _ => AutoOpen.Recheck();
         Profile.ProfileLoaded += _ => AutoOpen.Reset();
         RoomTracker.PlayerDeathObserved += AutoOpen.OnPlayerDied;
+        // Not for an arena death: it took nothing, so what the entry read found
+        // gone didn't go into a pile.
         RoomTracker.UnwitnessedDeathRecorded += () =>
         {
-            if (Profile.Current?.DeathHistory?.LastOrDefault() is { } record) AutoOpen.OnUnwitnessedDeath(record.At);
+            if (Profile.Current?.DeathHistory?.LastOrDefault() is { NothingLost: false } record)
+                AutoOpen.OnUnwitnessedDeath(record.At);
         };
         // Settings → Talk auto-greet. Self name resolves through the
         // PartyManager's LocalCharacterName first (set on connect), then
@@ -10123,7 +10136,14 @@ public sealed class AppServices
                 Game.Health.HangupPenaltyNotice.HpShareTop(ResolveActiveRealm()?.Realm, pvp, inFight),
             stockRealm: () => GameData.ActiveRealm == Game.RealmType.Stock,
             recordDeath: RoomTracker.NoteUnwitnessedDeath,
-            staysOnDeath: EveryItemOfThisNameStaysOnDeath);
+            staysOnDeath: EveryItemOfThisNameStaysOnDeath,
+            // Whether the room the character came back in is where the dead of the
+            // room it hung up in arrive. The list is the Stock map file's, and how
+            // far it goes depends on the game data (HangupArrivalListTrust). The
+            // graph says which rooms the map can't tell an arrival room from.
+            entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.Read(
+                hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion),
+            roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}");
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
         // The lives a `stat` on this connection gave: the count carried over a
@@ -10151,10 +10171,10 @@ public sealed class AppServices
         // life is as spent as in a death that was seen, whenever it is found out;
         // it is asked for under the master switch like everything else this check
         // sends: a `stat` the user types can bring the verdict, and with the switch
-        // off nothing automatic goes out.
+        // off nothing automatic goes out. An arena death spent none.
         RoomTracker.UnwitnessedDeathRecorded += () =>
         {
-            if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath();
+            if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath(RoomTracker.LastDeathTookNothing);
         };
         // The buff timers were only frozen when the link dropped. All of our own are
         // cleared for a death found at the login only: one found later would wipe the
