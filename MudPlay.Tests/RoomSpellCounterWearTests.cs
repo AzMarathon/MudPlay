@@ -10,11 +10,12 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // RoomSpellCounterWear over a real EquipmentManager and MovementCoordinator: which
-// carried item goes on for a room's spell, when (before an engine's step with the
-// step held, ahead of a typed step, on arrival), what a refusal or silence does, and
-// when the slot goes back (and to what). The items are the game data's, cut down to
-// what is weighed: phoenix feather and magma amulet both negate magma heat #526 from
-// the neck, 10 / 1 against 0 / 0.
+// carried item goes on for a room's spell, where (next to the room and in it), what
+// the backstop before a step does, what a refusal, a line that never comes or a wear
+// that was never sent does, how sneaking past things changes the moment, and when
+// the slot goes back (and to what). The items are the game data's, cut down to what
+// is weighed: phoenix feather and magma amulet both negate magma heat #526 from the
+// neck, 10 / 1 against 0 / 0.
 public sealed class RoomSpellCounterWearTests
 {
     private const int MagmaHeat = 526, FreezingCold = 5242;
@@ -34,10 +35,17 @@ public sealed class RoomSpellCounterWearTests
         public List<Action> Timers { get; } = new();
         public bool Enabled { get; set; } = true;
         public bool MasterOff { get; set; }
-        public bool Moving { get; set; } = true;
         public bool SneakKept { get; set; }
+        public bool SneakingPast { get; set; }
+        public bool RoomEmpty { get; set; } = true;
+        public bool SendGateLocked { get; set; }
         public int GearNotes { get; private set; }
+        public int UsabilityChanges { get; private set; }
         public HashSet<int> Unwearable { get; } = new();
+        public RoomKey? Here { get; private set; }
+
+        // The moving engine's plan, as room numbers on map 16, in the order entered.
+        public List<int> Plan { get; } = new();
 
         // name → (id, slot label as the game prints it, slot, armour class, damage resist)
         private readonly Dictionary<string, (int Id, string Label, EquipmentSlot Slot, int Ac, int Dr)> _items =
@@ -48,8 +56,12 @@ public sealed class RoomSpellCounterWearTests
                 ["silver necklace"] = (9001, "Neck", EquipmentSlot.Neck, 5, 0),
                 ["holy symbol"] = (9002, "Neck", EquipmentSlot.Neck, 8, 0),
                 ["sapphire ring"] = (SapphireRing, "Finger", EquipmentSlot.Finger1, 10, 0),
+                ["ruby ring"] = (9004, "Finger", EquipmentSlot.Finger1, 20, 0),
+                ["emerald ring"] = (9005, "Finger", EquipmentSlot.Finger1, 15, 0),
+                ["copper ring"] = (9006, "Finger", EquipmentSlot.Finger1, 1, 0),
                 ["winterhide tunic"] = (WinterhideTunic, "Torso", EquipmentSlot.Torso, 270, 27),
                 ["platemail"] = (9003, "Torso", EquipmentSlot.Torso, 400, 50),
+                ["leather jerkin"] = (9007, "Torso", EquipmentSlot.Torso, 5, 0),
             };
 
         private static readonly Dictionary<int, int[]> Negators = new()
@@ -69,23 +81,31 @@ public sealed class RoomSpellCounterWearTests
                 resolveItemSlot: name => _items.TryGetValue(name, out var item) ? item.Slot : null,
                 log: Log);
             Gear.SetGearHold(() => SneakKept);
+            Gear.SetSendGateProbe(() => SendGateLocked);
             Wear = new RoomSpellCounterWear(
                 Gear, Coordinator,
                 enabled: () => Enabled,
                 roomOf: key => Rooms.GetValueOrDefault(key),
+                currentRoom: () => Here,
                 negatorsOf: spell => Negators.TryGetValue(spell, out int[]? ids) ? ids : Array.Empty<int>(),
                 describe: id => Describe(_items.FirstOrDefault(i => i.Value.Id == id).Key),
                 isWorn: id => Worn.Any(w => _items[w.Name].Id == id),
                 isCarried: id => Worn.Any(w => _items[w.Name].Id == id) || Pack.Any(p => _items[p].Id == id),
-                wornIn: slot => Worn.Select(w => Describe(w.Name)).FirstOrDefault(d => d?.Slot == slot),
+                wornIn: slot => Worn.Where(w => EquipmentManager.SharePlaces(_items[w.Name].Slot, slot))
+                    .Select(w => Describe(w.Name)!.Value).ToList(),
                 spellName: spell => spell == MagmaHeat ? "magma heat" : spell == FreezingCold ? "freezing cold" : null,
-                beingMoved: () => Moving,
+                sneakingPast: () => SneakingPast,
+                roomEmpty: () => RoomEmpty,
+                plannedAhead: count => Here is { } here && Plan.IndexOf(here.Room) is >= 0 and var at
+                    ? Plan.Skip(at + 1).Take(count).Select(At).ToList()
+                    : new List<RoomKey>(),
                 schedule: (_, action) => Timers.Add(action),
                 gearCommandSent: () => GearNotes++,
                 log: Log)
             {
                 MasterSwitchOff = () => MasterOff,
             };
+            Wear.UsabilityChanged += () => UsabilityChanges++;
         }
 
         private RoomSpellCounterItem? Describe(string? name) =>
@@ -101,19 +121,57 @@ public sealed class RoomSpellCounterWearTests
 
         public bool Held => Coordinator.IsGateAsserted(MovementCoordinator.CounterWearGate);
 
-        // The game puts the piece on: what was in its slot goes back to the pack.
-        public void GameWears(string name)
+        public void Arrive(int room)
+        {
+            Here = At(room);
+            Wear.OnArrived(At(room));
+        }
+
+        // The game puts the piece on, in the order the client hears it. Each line
+        // reaches the router's handlers first (the equipment manager, then the
+        // counter) and the inventory's worn list only after, and a piece pushed out
+        // of the slot has its own `You have removed <old>.` line ahead of the wear
+        // line. A pair with a free place takes the piece and pushes nothing out;
+        // a full one gives up `evicts`, or its first-listed piece.
+        public void GameWears(string name, string? evicts = null)
         {
             var item = _items[name];
-            foreach (EquippedItem was in Worn.Where(w => _items[w.Name].Slot == item.Slot).ToList())
-            {
-                Worn.Remove(was);
-                Pack.Add(was.Name);
-            }
+            List<EquippedItem> inSlot = Worn.Where(w => EquipmentManager.SharePlaces(_items[w.Name].Slot, item.Slot)).ToList();
+            string? evicted = evicts ?? (inSlot.Count >= EquipmentManager.PlacesFor(item.Slot) ? inSlot[0].Name : null);
+            if (evicted is not null) GameRemoves(evicted);
+            Gear.NoteEquipSucceeded(name);
+            Wear.NoteWorn(name);
             Pack.Remove(name);
             Worn.Add(new EquippedItem(name, item.Label));
-            Wear.NoteWorn(name);
+            Wear.Recheck();   // the inventory's change notice
         }
+
+        public void GameRemoves(string name)
+        {
+            Gear.NoteWornPieceRemoved();
+            Wear.NoteRemoved(name);
+            Worn.RemoveAll(w => string.Equals(w.Name, name, StringComparison.OrdinalIgnoreCase));
+            Pack.Add(name);
+            Wear.Recheck();
+        }
+
+        // The game answers every command sent since the last call, in order.
+        public void Answer()
+        {
+            for (; _answered < Sent.Count; _answered++)
+            {
+                string[] command = Sent[_answered].Split(' ', 2);
+                if (command[0] is "wear" or "eq")
+                {
+                    if (Pack.Contains(command[1], StringComparer.OrdinalIgnoreCase)) GameWears(command[1]);
+                    else Gear.NoteNotLeftUnequipped(command[1]);
+                }
+                else if (command[0] == "rem" && Worn.Any(w => w.Name == command[1]))
+                    GameRemoves(command[1]);
+            }
+        }
+
+        private int _answered;
 
         // Rooms 1..count in a line on map 16, joined east and west; `lava` are the
         // room numbers that carry magma heat.
@@ -137,19 +195,129 @@ public sealed class RoomSpellCounterWearTests
 
     // The usual start: a necklace on, the feather and the amulet in the pack, lava
     // in rooms 3 and 4 of a line of twelve.
-    private static World Volcano()
+    private static World Volcano(params int[] lava)
     {
         World w = new();
         w.Worn.Add(new EquippedItem("silver necklace", "Neck"));
         w.Pack.AddRange(new[] { "phoenix feather", "magma amulet" });
-        w.Line(12, 3, 4);
+        w.Line(12, lava.Length == 0 ? new[] { 3, 4 } : lava);
         return w;
     }
 
-    // ----- putting it on ------------------------------------------------------
+    // ----- where it is on: in the room, and next to it ---------------------------
 
     [Fact]
-    public void BeforeAnEnginesStep_TheFeatherGoesOn_AndTheStepWaitsForTheGamesAnswer()
+    public void NextToTheRoom_ItGoesOn_InIt_ItStaysOn_SteppedOutButStillNextTo_ItStaysOn_OneRoomFurther_ItComesOff()
+    {
+        World w = Volcano();
+
+        w.Arrive(1);                                   // two rooms from the lava
+        Assert.Empty(w.Sent);
+
+        w.Arrive(2);                                   // next to it
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
+        Assert.False(w.Held);
+        Assert.Single(w.Info, l => l.Contains("wearing 'phoenix feather' for magma heat (#526) on arriving next to 16/3"));
+        w.Answer();
+        Assert.Equal(("phoenix feather", "silver necklace", MagmaHeat), w.Wear.OwnedSnapshot().Single());
+
+        w.Arrive(3);                                   // in it
+        w.Arrive(4);
+        w.Arrive(5);                                   // out, with the lava still one room off
+        Assert.Single(w.Sent);
+
+        w.Arrive(6);                                   // neither in it nor next to it
+        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
+        Assert.Empty(w.Wear.OwnedSnapshot());
+        Assert.Equal(2, w.GearNotes);                  // the wear, and the restore
+        Assert.Single(w.Info, l => l.Contains("at or next to 16/6 — its slot was given back"));
+    }
+
+    [Fact]
+    public void ALoopRunningAlongsideLava_KeepsItOn_WithoutSwapping()
+    {
+        // A corridor of six rooms, each with lava to its south.
+        World w = new();
+        w.Worn.Add(new EquippedItem("silver necklace", "Neck"));
+        w.Pack.Add("phoenix feather");
+        w.Line(6);
+        for (int n = 1; n <= 6; n++)
+        {
+            RoomKey lava = new(16, 100 + n);
+            var exits = new Dictionary<Direction, RoomExit>(w.Rooms[At(n)].Exits)
+            {
+                [Direction.S] = new RoomExit(lava, RoomExitHint.None, RawHint: null),
+            };
+            w.Rooms[At(n)] = new Room { Key = At(n), Name = "Ledge", Spell = 0, Exits = exits };
+            w.Rooms[lava] = new Room
+            {
+                Key = lava, Name = "Lava Tube", Spell = MagmaHeat,
+                Exits = new Dictionary<Direction, RoomExit> { [Direction.N] = new RoomExit(At(n), RoomExitHint.None, RawHint: null) },
+            };
+        }
+
+        for (int lap = 0; lap < 3; lap++)
+            foreach (int room in new[] { 1, 2, 3, 4, 5, 6, 5, 4, 3, 2 })
+            {
+                w.Arrive(room);
+                w.Answer();
+            }
+
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
+    }
+
+    [Fact]
+    public void AWalkThatLeavesTheLavaByTwoRoomsAndComesBack_SwapsOnce_EachWay()
+    {
+        World w = Volcano();
+
+        foreach (int room in new[] { 2, 3, 4, 5, 6, 5, 4 })
+        {
+            w.Arrive(room);
+            w.Answer();
+        }
+
+        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace", "wear phoenix feather" }, w.Sent);
+    }
+
+    [Fact]
+    public void StandingNextToTheRoom_ItGoesOnWhenItTurnsUpInThePack_OrTheSettingIsSwitchedOn()
+    {
+        World w = Volcano();
+        w.Pack.Clear();
+        w.Arrive(3);
+        Assert.Empty(w.Sent);
+
+        w.Pack.Add("phoenix feather");                 // picked up, or handed over
+        w.Wear.Recheck();
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
+        Assert.Single(w.Info, l => l.Contains("standing in 16/3"));
+
+        World off = Volcano();
+        off.Enabled = false;
+        off.Arrive(2);
+        Assert.Empty(off.Sent);
+        off.Enabled = true;                            // saved on the tab
+        off.Wear.Recheck();
+        Assert.Equal(new[] { "wear phoenix feather" }, off.Sent);
+    }
+
+    [Fact]
+    public void TheSameRoomConfirmedTwice_SendsNothingMore()
+    {
+        World w = Volcano();
+        w.Arrive(2);
+        w.Arrive(2);
+        w.Answer();
+        w.Arrive(2);
+
+        Assert.Single(w.Sent);
+    }
+
+    // ----- the backstop before a step ------------------------------------------
+
+    [Fact]
+    public void BeforeAnEnginesStep_WithNoArrivalNextToTheRoomFirst_TheFeatherGoesOn_AndTheStepWaitsForTheGamesAnswer()
     {
         World w = Volcano();
 
@@ -167,7 +335,62 @@ public sealed class RoomSpellCounterWearTests
         Assert.True(w.Wear.ReadyToEnter(At(3)));
         Assert.Single(w.Sent);
         Assert.Equal(("phoenix feather", "silver necklace", MagmaHeat), w.Wear.OwnedSnapshot().Single());
-        Assert.Single(w.Info, l => l.Contains("wearing 'phoenix feather' for magma heat (#526) before entering 16/3, in place of 'silver necklace'"));
+        Assert.Single(w.Info, l => l.Contains("wearing 'phoenix feather' for magma heat (#526) before entering 16/3"));
+        Assert.Single(w.Info, l => l.Contains("'phoenix feather' is on in place of 'silver necklace'"));
+    }
+
+    [Fact]
+    public void AWalkersResume_InsideTheWearLine_BeforeTheInventoryHasIt_SendsNoSecondWear()
+    {
+        // The walker resumes inside the gate's release, which is inside the wear
+        // line's handler: the inventory's worn list doesn't have the feather yet.
+        World w = Volcano();
+        bool stepSent = false;
+        w.Coordinator.PauseStateChanged += paused =>
+        {
+            if (!paused && !stepSent && w.Wear.ReadyToEnter(At(3))) stepSent = true;
+        };
+
+        Assert.False(w.Wear.ReadyToEnter(At(3)));
+        w.GameWears("phoenix feather");
+
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
+        Assert.False(w.Held);
+        Assert.True(stepSent);
+        Assert.Equal("silver necklace", w.Wear.OwnedSnapshot().Single().Displaced);
+
+        // And on the way out, with no set dressing the neck, the necklace goes back.
+        foreach (int room in new[] { 3, 4, 5, 6 }) w.Arrive(room);
+        Assert.Equal("wear silver necklace", w.Sent.Last());
+    }
+
+    [Fact]
+    public void ALoopsDeferredResume_SendsOneWear()
+    {
+        World w = Volcano();
+        Assert.False(w.Wear.ReadyToEnter(At(3)));
+        w.GameWears("phoenix feather");
+
+        Assert.True(w.Wear.ReadyToEnter(At(3)));
+        Assert.Single(w.Sent);
+    }
+
+    [Fact]
+    public void AnEnginesStepIntoTheRoom_WaitsForAWearSentOnArrival_AStepThatPassesItBy_DoesNot()
+    {
+        World w = Volcano();
+        w.Arrive(2);                                   // the wear goes out, unanswered
+
+        Assert.True(w.Wear.ReadyToEnter(At(1)));       // walking on past the lava
+        Assert.False(w.Held);
+
+        Assert.False(w.Wear.ReadyToEnter(At(3)));      // into it
+        Assert.True(w.Held);
+        Assert.Single(w.Sent);
+
+        w.GameWears("phoenix feather");
+        Assert.False(w.Held);
+        Assert.True(w.Wear.ReadyToEnter(At(3)));
     }
 
     [Fact]
@@ -175,9 +398,35 @@ public sealed class RoomSpellCounterWearTests
     {
         World w = Volcano();
 
-        Assert.True(w.Wear.ReadyToEnter(At(2)));
+        Assert.True(w.Wear.ReadyToEnter(At(12)));
         Assert.True(w.Wear.ReadyToEnter(null));
         Assert.Empty(w.Sent);
+    }
+
+    [Fact]
+    public void ATypedStep_GetsTheWearAheadOfIt_WithNoHold()
+    {
+        World w = Volcano();
+
+        w.Wear.BeforeTypedStep(At(3));
+
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
+        Assert.False(w.Held);
+    }
+
+    // ----- which item ----------------------------------------------------------
+
+    [Theory]
+    [InlineData(true)]    // a necklace in the slot
+    [InlineData(false)]   // the slot free
+    public void TheOwnersOrder_TheFeatherBeforeTheAmulet(bool neckTaken)
+    {
+        World w = Volcano();
+        if (!neckTaken) w.Worn.Clear();
+
+        w.Arrive(2);
+
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
     }
 
     [Fact]
@@ -186,7 +435,8 @@ public sealed class RoomSpellCounterWearTests
         World w = Volcano();
         w.Pack.Remove("phoenix feather");
 
-        Assert.False(w.Wear.ReadyToEnter(At(3)));
+        w.Arrive(2);
+
         Assert.Equal(new[] { "wear magma amulet" }, w.Sent);
     }
 
@@ -196,30 +446,47 @@ public sealed class RoomSpellCounterWearTests
         World w = Volcano();
         w.Unwearable.Add(Feather);
 
-        Assert.False(w.Wear.ReadyToEnter(At(3)));
+        w.Arrive(2);
         Assert.Equal(new[] { "wear magma amulet" }, w.Sent);
         Assert.False(w.Wear.WillWear(Feather));
         Assert.True(w.Wear.WillWear(Amulet));
 
-        w.GameWears("magma amulet");
-        w.Wear.OnArrived(At(3));
-        w.Wear.OnArrived(At(4));
+        w.Answer();
+        w.Arrive(3);
+        w.Arrive(4);
         Assert.Single(w.Info, l => l.Contains("'phoenix feather' negates magma heat (#526) but this character can't wear it"));
     }
 
     [Fact]
-    public void AcrossSlots_ThePieceThatCostsTheLeastArmourGoesOn()
+    public void APieceThatFillsAFreePlace_ComesBeforeOneThatPushesSomethingOut_WhateverTheArmour()
     {
-        // Freezing cold: a ring for an empty finger, or a tunic that would push
-        // platemail out of the torso slot.
+        // Freezing cold: a ring for an empty finger (+10), or a tunic that would
+        // push a leather jerkin out of the torso slot (+265).
         World w = new();
-        w.Worn.Add(new EquippedItem("platemail", "Torso"));
+        w.Worn.Add(new EquippedItem("leather jerkin", "Torso"));
         w.Pack.AddRange(new[] { "winterhide tunic", "sapphire ring" });
         w.Rooms[At(1)] = new Room { Key = At(1), Name = "Tundra", Spell = FreezingCold, Exits = new Dictionary<Direction, RoomExit>() };
 
-        Assert.False(w.Wear.ReadyToEnter(At(1)));
+        w.Arrive(1);
 
         Assert.Equal(new[] { "eq sapphire ring" }, w.Sent);
+    }
+
+    [Fact]
+    public void WithNoFreePlaceEitherWay_ThePieceThatCostsTheLeastArmourGoesOn()
+    {
+        World w = new();
+        w.Worn.AddRange(new[]
+        {
+            new EquippedItem("leather jerkin", "Torso"),
+            new EquippedItem("ruby ring", "Finger"), new EquippedItem("emerald ring", "Finger"),
+        });
+        w.Pack.AddRange(new[] { "winterhide tunic", "sapphire ring" });
+        w.Rooms[At(1)] = new Room { Key = At(1), Name = "Tundra", Spell = FreezingCold, Exits = new Dictionary<Direction, RoomExit>() };
+
+        w.Arrive(1);
+
+        Assert.Equal(new[] { "wear winterhide tunic" }, w.Sent);   // +265, against a ring swap that loses armour
     }
 
     [Fact]
@@ -231,29 +498,62 @@ public sealed class RoomSpellCounterWearTests
         w.Worn.Add(new EquippedItem("magma amulet", "Neck"));   // on by the user's own hand: not swapped for the feather
 
         Assert.True(w.Wear.ReadyToEnter(At(3)));
-        w.Wear.OnArrived(At(3));
+        w.Arrive(3);
 
         Assert.Empty(w.Sent);
         Assert.Empty(w.Wear.OwnedSnapshot());
     }
 
+    // ----- a wear that comes to nothing ------------------------------------------
+
     [Fact]
-    public void ARefusedWear_LetsTheStepGo_AndIsNotTriedAgain()
+    public void ARefusedWear_LetsTheStepGo_ClosesTheRoomToRoutes_AndIsTriedAgainAfterALevelUp()
     {
         World w = Volcano();
         w.Pack.Remove("magma amulet");
         Assert.False(w.Wear.ReadyToEnter(At(3)));
 
-        w.Wear.NoteWearRefused();
+        w.Gear.NoteWearRefused();                      // `You may not wear that item!`
 
         Assert.False(w.Held);
         Assert.True(w.Wear.ReadyToEnter(At(3)));
-        w.Wear.OnArrived(At(3));
-        w.Wear.OnArrived(At(4));
+        w.Arrive(3);
+        w.Arrive(4);
         Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);   // the one refused wear
         Assert.Empty(w.Wear.OwnedSnapshot());
-        Assert.False(w.Wear.WillWear(Feather));                   // and no route is planned on it any more
+        Assert.False(w.Wear.WillWear(Feather));                   // and no route is planned on it
         Assert.Single(w.Info, l => l.Contains("the game refused 'phoenix feather'"));
+        Assert.Contains(w.Wear.OutOfUseSnapshot(), o => o.Item == Feather && o.Why.Contains("Refused"));
+
+        w.Wear.LiftRefusals("the level changed");
+        Assert.True(w.Wear.WillWear(Feather));
+        Assert.Equal(new[] { "wear phoenix feather", "wear phoenix feather" }, w.Sent);   // standing in the lava: at once
+    }
+
+    [Fact]
+    public void ARefusalOfAnotherWearSentFirst_IsNotTakenForOurs()
+    {
+        // A gear set's piece went out ahead of the counter's; the refusal that
+        // names no item answers the older of the two.
+        World w = Volcano();
+        w.Pack.Add("platemail");
+        EquipmentSet set = new()
+        {
+            Trigger = EquipTriggerType.PreRestHp, Enabled = true, Name = "Rest",
+            Slots = { new EquipmentSlotEntry(EquipmentSlot.Torso, "platemail") },
+        };
+        w.Sets.Sets.Add(set);
+        w.Gear.ApplyBySetId(set.Id);
+        Assert.False(w.Wear.ReadyToEnter(At(3)));
+        Assert.Equal(new[] { "wear platemail", "wear phoenix feather" }, w.Sent);
+
+        w.Gear.NoteWearRefused();                      // the platemail's
+
+        Assert.True(w.Held);                           // ours is still waiting
+        Assert.True(w.Wear.WillWear(Feather));
+        w.GameWears("phoenix feather");
+        Assert.False(w.Held);
+        Assert.Single(w.Wear.OwnedSnapshot());         // worn and owned: given back later
     }
 
     [Fact]
@@ -261,25 +561,131 @@ public sealed class RoomSpellCounterWearTests
     {
         World w = Volcano();
 
-        w.Wear.NoteWearRefused();   // a gear set's piece was refused
+        w.Gear.NoteWearRefused();
 
         Assert.True(w.Wear.WillWear(Feather));
     }
 
     [Fact]
-    public void AWearTheGameNeverAnswers_HoldsTheStepNoLongerThanTheCap()
+    public void NoRoomToWearIt_IsOfTheMoment_AndItIsTriedAgainWhenAPieceComesOff()
     {
         World w = Volcano();
         w.Pack.Remove("magma amulet");
+        Assert.False(w.Wear.ReadyToEnter(At(3)));
+
+        w.Gear.NoteCannotBeWorn(null);                 // `You have no more room to wear that item!`
+
+        Assert.False(w.Held);
+        Assert.False(w.Wear.WillWear(Feather));
+        Assert.Empty(w.Wear.OwnedSnapshot());
+
+        w.Wear.NoteRemoved("leather jerkin");
+        Assert.True(w.Wear.WillWear(Feather));
+    }
+
+    [Theory]
+    [InlineData(false)]   // `You do not have phoenix feather left unequipped.`
+    [InlineData(true)]    // `You are already wearing silver necklace and it may not be removed.`
+    public void AnAnswerThatPutNothingOn_FreesTheStepAtOnce_AndTheItemWaitsForAFullInventoryRead(bool occupantStuck)
+    {
+        World w = Volcano();
+        w.Pack.Remove("magma amulet");
+        Assert.False(w.Wear.ReadyToEnter(At(3)));
+
+        if (occupantStuck) w.Gear.NoteOccupantNotRemovable("silver necklace");
+        else w.Gear.NoteNotLeftUnequipped("phoenix feather");
+
+        Assert.False(w.Held);
+        Assert.Empty(w.Timers.Skip(1));                // freed by the answer, not by the cap
+        Assert.True(w.Wear.ReadyToEnter(At(3)));
+        Assert.False(w.Wear.WillWear(Feather));
+        w.Arrive(3);
+        w.Arrive(4);
+        Assert.Single(w.Sent);                         // not tried again room after room
+
+        w.Wear.NoteInventoryRead();
+        Assert.True(w.Wear.WillWear(Feather));
+        Assert.Equal(2, w.Sent.Count);                 // and tried again, standing in the lava
+    }
+
+    [Fact]
+    public void AWearTheGameNeverAnswers_HoldsTheStepNoLongerThanTheCap_AndTheNextCandidateGoesOutWithNoHold()
+    {
+        World w = Volcano();
         Assert.False(w.Wear.ReadyToEnter(At(3)));
         Assert.True(w.Held);
 
         w.Timers.Single()();   // the cap runs out
 
         Assert.False(w.Held);
-        Assert.True(w.Wear.ReadyToEnter(At(3)));   // the step goes, and the wear isn't sent over and over
-        Assert.Single(w.Sent);
+        Assert.False(w.Wear.WillWear(Feather));
         Assert.Single(w.Info, l => l.Contains("no answer to the wear of 'phoenix feather' in 3s"));
+
+        // The same step asks again: the amulet is tried, ahead of the step, and
+        // the step is not held a second time.
+        Assert.True(w.Wear.ReadyToEnter(At(3)));
+        Assert.Equal(new[] { "wear phoenix feather", "wear magma amulet" }, w.Sent);
+        Assert.False(w.Held);
+    }
+
+    [Fact]
+    public void AnUnansweredItem_IsNotTriedAgainRoomAfterRoom_OnlyAfterAFullInventoryRead()
+    {
+        World w = Volcano();
+        w.Pack.Remove("magma amulet");
+        Assert.False(w.Wear.ReadyToEnter(At(3)));
+        w.Timers[0]();         // the cap
+        w.Timers[1]();         // and the time a late answer is listened for
+
+        w.Arrive(3);
+        Assert.True(w.Wear.ReadyToEnter(At(4)));
+        w.Arrive(4);
+        Assert.Single(w.Sent);
+        Assert.Contains(w.Wear.OutOfUseSnapshot(), o => o.Item == Feather && o.Why.Contains("no answer"));
+
+        w.Wear.NoteInventoryRead();
+        Assert.Equal(2, w.Sent.Count);
+    }
+
+    [Fact]
+    public void AnAnswerThatComesAfterTheCap_StillLeavesTheItemOwned_AndThePieceItPushedOutGoesBack()
+    {
+        World w = Volcano();
+        w.Pack.Remove("magma amulet");
+        Assert.False(w.Wear.ReadyToEnter(At(3)));
+        w.Timers[0]();
+
+        w.GameWears("phoenix feather");                // lag: the lines arrive now
+
+        Assert.Equal(("phoenix feather", "silver necklace", MagmaHeat), w.Wear.OwnedSnapshot().Single());
+        Assert.True(w.Wear.WillWear(Feather));
+        w.Timers[1]();                                 // the late window closing changes nothing
+        Assert.Single(w.Wear.OwnedSnapshot());
+
+        w.Arrive(6);
+        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
+    }
+
+    [Fact]
+    public void AWearWhoseAnswerWasLost_IsOwnedAgainOnceTheInventoryShowsItOn()
+    {
+        World w = Volcano();
+        w.Pack.Remove("magma amulet");
+        Assert.False(w.Wear.ReadyToEnter(At(3)));
+        w.Wear.NoteRemoved("silver necklace");         // this line came through; the wear line didn't
+        w.Timers[0]();
+        w.Timers[1]();
+        Assert.Empty(w.Wear.OwnedSnapshot());
+
+        w.Worn.Clear();
+        w.Worn.Add(new EquippedItem("phoenix feather", "Neck"));
+        w.Pack.Remove("phoenix feather");
+        w.Pack.Add("silver necklace");
+        w.Arrive(3);
+        w.Wear.NoteInventoryRead();
+
+        Assert.Equal(("phoenix feather", "silver necklace", MagmaHeat), w.Wear.OwnedSnapshot().Single());
+        Assert.Single(w.Sent);
     }
 
     [Fact]
@@ -296,131 +702,199 @@ public sealed class RoomSpellCounterWearTests
     }
 
     [Fact]
-    public void OnArrival_AMoveTheClientCouldNotGetAheadOf_IsCounteredThere()
+    public void AWearTheSendGateWouldDrop_IsNotClaimedSentOrWaitedFor_AndGoesOutWhenTheGateOpens()
     {
-        // Dragged in by a leader: no ready check ran, and nothing is held.
         World w = Volcano();
+        w.SendGateLocked = true;                       // a password prompt, the trainer form
 
-        w.Wear.OnArrived(At(3));
+        w.Arrive(2);
+        Assert.True(w.Wear.ReadyToEnter(At(3)));
+        w.Wear.Recheck();
 
+        Assert.Empty(w.Sent);
+        Assert.False(w.Held);
+        Assert.Equal(0, w.GearNotes);                  // combat isn't told of a command that never left
+        Assert.Empty(w.Wear.OwnedSnapshot());
+        Assert.Null(w.Wear.PendingItem);
+        Assert.True(w.Wear.WillWear(Feather));
+        Assert.Single(w.Info, l => l.Contains("commands are being held back just now"));
+
+        w.SendGateLocked = false;
+        w.Wear.Recheck();                              // the gate's release
         Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
-        Assert.False(w.Held);
-        Assert.Single(w.Info, l => l.Contains("on arriving in 16/3"));
     }
 
-    [Fact]
-    public void AnEnginesNextStep_WaitsForAWearSentOnArrival()
-    {
-        World w = Volcano();
-        w.Wear.OnArrived(At(3));
-
-        Assert.False(w.Wear.ReadyToEnter(At(4)));   // the arrival wear is still unanswered
-        Assert.True(w.Held);
-        Assert.Single(w.Sent);
-
-        w.GameWears("phoenix feather");
-        Assert.False(w.Held);
-        Assert.True(w.Wear.ReadyToEnter(At(4)));
-    }
+    // ----- a slot a Location rule holds --------------------------------------------
 
     [Fact]
-    public void ATypedStep_GetsTheWearAheadOfIt_WithNoHold()
+    public void ALocationRuleHoldingTheSlotWithAnotherPiece_GivesWayToTheCounter_AndHasItsPieceBackAfterwards()
     {
         World w = Volcano();
-
-        w.Wear.BeforeTypedStep(At(3));
-
-        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
-        Assert.False(w.Held);
-    }
-
-    [Fact]
-    public void AKeptSneak_DoesNotHoldTheWear_ButDoesHoldTheRestore()
-    {
-        // The room's damage on every cast is the worse loss; giving the slot back
-        // can wait for the sneak.
-        World w = Volcano();
-        w.SneakKept = true;
+        w.Worn.Clear();
+        w.Worn.Add(new EquippedItem("holy symbol", "Neck"));
+        Assert.True(w.Gear.SetSlotOverride("holy symbol"));   // the rule: already worn, slot held
 
         Assert.False(w.Wear.ReadyToEnter(At(3)));
-        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
-        w.GameWears("phoenix feather");
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);   // sent, so there is something to wait for
+        Assert.True(w.Held);
+        Assert.Equal(1, w.GearNotes);
 
-        w.Wear.OnArrived(At(10));
+        w.GameWears("phoenix feather");
+        Assert.False(w.Held);
+        Assert.Equal("holy symbol", w.Wear.OwnedSnapshot().Single().Displaced);
+
+        // The rule fires again in every room of its area: it waits its turn.
+        Assert.True(w.Gear.SetSlotOverride("holy symbol"));
+        w.Arrive(3);
+        w.Arrive(4);
         Assert.Single(w.Sent);
 
-        w.SneakKept = false;
-        w.Gear.RunHeldGear();
-        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
+        w.Arrive(6);
+        Assert.Equal(new[] { "wear phoenix feather", "wear holy symbol" }, w.Sent);
     }
 
-    // ----- giving the slot back -----------------------------------------------
+    [Fact]
+    public void ASlotALocationRuleHoldsWithTheSamePiece_IsWornOnce_AndRevertedOnlyWhenBothLetGo()
+    {
+        // A Location rule that wears the feather across the volcano, and the counter
+        // wear for the lava inside it: one slot, two reasons to hold it.
+        World w = Volcano();
+        Assert.False(w.Wear.ReadyToEnter(At(3)));                 // the counter's wear, before the step
+        Assert.True(w.Gear.SetSlotOverride("phoenix feather"));   // the rule's claim, on arrival
+        Assert.Single(w.Sent);                                    // not sent a second time
+        w.GameWears("phoenix feather");
+
+        w.Arrive(10);                                             // clear of the lava, still inside the rule's area
+        Assert.Single(w.Sent);
+        Assert.Empty(w.Wear.OwnedSnapshot());
+
+        w.Gear.ClearSlotOverride("phoenix feather");              // the rule's area ends
+        Assert.Equal(new[] { "wear phoenix feather", "rem phoenix feather" }, w.Sent);
+    }
+
+    [Fact]
+    public void TheRulesOwnWearOfTheSamePiece_IsWaitedFor_NotSentAgain()
+    {
+        World w = Volcano();
+        Assert.True(w.Gear.SetSlotOverride("phoenix feather"));   // the rule got there first
+        Assert.Single(w.Sent);
+
+        Assert.False(w.Wear.ReadyToEnter(At(3)));
+        Assert.Single(w.Sent);
+        Assert.True(w.Held);
+        Assert.Equal(0, w.GearNotes);                             // the counter sent nothing itself
+
+        w.GameWears("phoenix feather");
+        Assert.False(w.Held);
+    }
+
+    // ----- sneaking ------------------------------------------------------------
+
+    [Fact]
+    public void AutoSneakOnAutoCombatOff_ItGoesOnInAnEmptyRoomAheadOfTheHazard_AndComesOffInAnEmptyRoomAfterIt()
+    {
+        World w = Volcano(6, 7);
+        w.Plan.AddRange(Enumerable.Range(1, 12));
+        w.SneakingPast = true;
+        w.SneakKept = true;
+
+        w.Arrive(1);                                   // rooms 2 to 4 ahead: no lava next to any
+        Assert.Empty(w.Sent);
+
+        w.RoomEmpty = false;
+        w.Arrive(2);                                   // room 5 is ahead and next to the lava, but an NPC is here
+        Assert.Empty(w.Sent);
+        Assert.True(w.Wear.WaitingForEmptyRoom);
+
+        w.RoomEmpty = true;
+        w.Arrive(3);                                   // nobody here: on, three rooms short of the lava
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
+        Assert.Single(w.Info, l => l.Contains("in an empty room, ahead of 16/6"));
+        w.Answer();
+
+        foreach (int room in new[] { 4, 5, 6, 7, 8 }) w.Arrive(room);
+        Assert.Single(w.Sent);
+
+        w.RoomEmpty = false;
+        w.Arrive(9);                                   // clear of the lava, with an NPC to sneak past
+        Assert.Single(w.Sent);
+        Assert.Single(w.Wear.OwnedSnapshot());         // still owned until the restore goes out
+        Assert.True(w.Wear.WaitingForEmptyRoom);
+        Assert.Single(w.Info, l => l.Contains("its slot is given back in the next room with none"));
+
+        w.RoomEmpty = true;                            // the NPC wanders off
+        w.Wear.Poll();
+        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
+        Assert.Empty(w.Wear.OwnedSnapshot());
+        Assert.False(w.Wear.WaitingForEmptyRoom);
+    }
+
+    [Fact]
+    public void AutoSneakOnAutoCombatOff_WithNoEmptyRoomOnTheWay_ItGoesOnNextToTheHazardAnyway()
+    {
+        World w = Volcano(6, 7);
+        w.Plan.AddRange(Enumerable.Range(1, 12));
+        w.SneakingPast = true;
+        w.SneakKept = true;
+        w.RoomEmpty = false;
+
+        foreach (int room in new[] { 1, 2, 3, 4 }) w.Arrive(room);
+        Assert.Empty(w.Sent);
+
+        w.Arrive(5);
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
+    }
+
+    [Fact]
+    public void AutoSneakOnAutoCombatOff_ASlotWaitingToBeGivenBack_StaysHeldWhenTheItemIsNeededAgain()
+    {
+        World w = Volcano();
+        w.SneakingPast = true;
+        w.Arrive(2);
+        w.Answer();
+        foreach (int room in new[] { 3, 4, 5 }) w.Arrive(room);
+
+        w.RoomEmpty = false;
+        w.Arrive(6);                                   // not needed here, and somebody is here
+        Assert.Single(w.Sent);
+
+        w.Arrive(5);                                   // back beside the lava
+        w.RoomEmpty = true;
+        w.Wear.Poll();
+
+        Assert.Single(w.Sent);
+        Assert.Single(w.Wear.OwnedSnapshot());
+    }
+
+    [Fact]
+    public void AutoSneakOnAutoCombatOn_ThereIsNoLookAhead_AndTheWearAndTheRestoreGoThroughAKeptSneak()
+    {
+        World w = Volcano(6, 7);
+        w.Plan.AddRange(Enumerable.Range(1, 12));
+        w.SneakKept = true;                            // the guard is keeping a sneak for the backstab
+
+        foreach (int room in new[] { 1, 2, 3, 4 }) w.Arrive(room);
+        Assert.Empty(w.Sent);                          // empty rooms, lava ahead on the plan: not this case
+
+        w.Arrive(5);
+        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
+        w.Answer();
+
+        w.RoomEmpty = false;
+        foreach (int room in new[] { 6, 7, 8, 9 }) w.Arrive(room);
+        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);   // at once
+        Assert.Empty(w.Wear.OwnedSnapshot());
+    }
+
+    // ----- giving the slot back ------------------------------------------------
 
     private static World WearingTheFeatherIn(int room)
     {
         World w = Volcano();
-        Assert.False(w.Wear.ReadyToEnter(At(room)));
-        w.GameWears("phoenix feather");
-        w.Wear.OnArrived(At(room));
-        return w;
-    }
-
-    [Fact]
-    public void WhileMoving_ItStaysOnUntilNoSuchRoomIsWithinFiveSteps()
-    {
-        World w = WearingTheFeatherIn(3);
-
-        // Through the lava and out the far side: rooms 5 to 9 are one to five steps
-        // from room 4.
-        for (int room = 4; room <= 9; room++) w.Wear.OnArrived(At(room));
-        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
-
-        w.Wear.OnArrived(At(10));
-
-        // No gear set dresses the neck, so the piece it pushed out goes back.
-        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
-        Assert.Empty(w.Wear.OwnedSnapshot());
-        Assert.Equal(2, w.GearNotes);   // the wear, and the restore
-        Assert.Single(w.Info, l => l.Contains("within reach of 16/10 — giving its slot back"));
-    }
-
-    [Fact]
-    public void ARouteThatWeavesInAndOut_DoesNotSwapOnEveryStep()
-    {
-        World w = WearingTheFeatherIn(3);
-
-        foreach (int room in new[] { 4, 5, 6, 5, 4, 3, 2, 1, 2, 3 }) w.Wear.OnArrived(At(room));
-
-        Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);
-    }
-
-    [Fact]
-    public void WhenTheWalkEndsOutside_TheSlotGoesBackThen()
-    {
-        World w = WearingTheFeatherIn(3);
-        w.Wear.OnArrived(At(4));
-        w.Wear.OnArrived(At(5));
-        w.Wear.OnArrived(At(6));
-        Assert.Single(w.Sent);
-
-        w.Moving = false;
-        w.Wear.OnMovementEnded(At(6));   // two steps clear of the lava
-
-        Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
-    }
-
-    [Theory]
-    [InlineData(3)]   // standing in the lava
-    [InlineData(5)]   // and right beside it
-    public void StoppedInOrBesideSuchARoom_ItStaysOn(int room)
-    {
-        World w = WearingTheFeatherIn(3);
-        w.Moving = false;
-
-        w.Wear.OnMovementEnded(At(room));
-
-        Assert.Single(w.Sent);
+        w.Arrive(room);
+        w.Answer();
         Assert.Single(w.Wear.OwnedSnapshot());
+        return w;
     }
 
     [Fact]
@@ -439,27 +913,9 @@ public sealed class RoomSpellCounterWearTests
         w.Gear.ApplyBySetId(resting.Id);
         Assert.Equal(new[] { "wear phoenix feather" }, w.Sent);   // the set did not take the feather off
 
-        w.Wear.OnArrived(At(10));
+        w.Arrive(10);
 
         Assert.Equal(new[] { "wear phoenix feather", "wear holy symbol" }, w.Sent);
-    }
-
-    [Fact]
-    public void ASlotALocationRuleHoldsToo_IsWornOnce_AndRevertedOnlyWhenBothLetGo()
-    {
-        // A Location rule that wears the feather across the volcano, and the counter
-        // wear for the lava inside it: one slot, two reasons to hold it.
-        World w = Volcano();
-        Assert.False(w.Wear.ReadyToEnter(At(3)));                 // the counter's wear, before the step
-        Assert.True(w.Gear.SetSlotOverride("phoenix feather"));   // the rule's claim, on arrival
-        Assert.Single(w.Sent);                                    // not sent a second time
-        w.GameWears("phoenix feather");
-
-        w.Wear.OnArrived(At(10));                                 // clear of the lava, still inside the rule's area
-        Assert.Single(w.Sent);
-
-        w.Gear.ClearSlotOverride("phoenix feather");              // the rule's area ends
-        Assert.Equal(new[] { "wear phoenix feather", "rem phoenix feather" }, w.Sent);
     }
 
     [Fact]
@@ -467,10 +923,11 @@ public sealed class RoomSpellCounterWearTests
     {
         World w = Volcano();
         w.Worn.Clear();
-        Assert.False(w.Wear.ReadyToEnter(At(3)));
-        w.GameWears("phoenix feather");
+        w.Arrive(2);
+        w.Answer();
+        Assert.Null(w.Wear.OwnedSnapshot().Single().Displaced);
 
-        w.Wear.OnArrived(At(10));
+        w.Arrive(1);
 
         Assert.Equal(new[] { "wear phoenix feather", "rem phoenix feather" }, w.Sent);
     }
@@ -481,11 +938,98 @@ public sealed class RoomSpellCounterWearTests
         World w = WearingTheFeatherIn(3);
         w.Worn.Clear();
         w.Worn.Add(new EquippedItem("silver necklace", "Neck"));   // the user put the necklace back
+        w.Wear.NoteRemoved("phoenix feather");
 
-        w.Wear.OnArrived(At(10));
+        w.Arrive(10);
 
         Assert.Single(w.Sent);
         Assert.Empty(w.Wear.OwnedSnapshot());
+    }
+
+    // ----- fingers and wrists: two places ----------------------------------------
+
+    private static World Tundra(params string[] rings)
+    {
+        World w = new();
+        w.Worn.AddRange(rings.Select(r => new EquippedItem(r, "Finger")));
+        w.Pack.Add("sapphire ring");
+        w.Line(12);
+        w.Rooms[At(3)] = new Room { Key = At(3), Name = "Tundra", Spell = FreezingCold, Exits = w.Rooms[At(3)].Exits };
+        return w;
+    }
+
+    [Fact]
+    public void ARingIntoAFreeFinger_PushesNothingOut_AndComesOffAloneAfterwards()
+    {
+        World w = Tundra("ruby ring");
+
+        w.Arrive(2);
+        w.Answer();
+        Assert.Equal(new[] { "eq sapphire ring" }, w.Sent);
+        Assert.Null(w.Wear.OwnedSnapshot().Single().Displaced);
+
+        w.Arrive(1);
+        Assert.Equal(new[] { "eq sapphire ring", "rem sapphire ring" }, w.Sent);
+    }
+
+    [Theory]
+    [InlineData("ruby ring")]      // Paradigm pushes out the first of the pair
+    [InlineData("emerald ring")]   // Stock the second
+    public void ARingIntoAFullPair_RemembersThePieceTheGameTookOff_AndPutsThatOneBack(string evicted)
+    {
+        World w = Tundra("ruby ring", "emerald ring");
+
+        w.Arrive(2);
+        w.GameWears("sapphire ring", evicts: evicted);
+        Assert.Equal(evicted, w.Wear.OwnedSnapshot().Single().Displaced);
+
+        w.Arrive(1);
+        // Off first, then the other into the place it left: a bare `eq` into the
+        // full pair would push out whichever the realm picks.
+        Assert.Equal(new[] { "eq sapphire ring", "rem sapphire ring", $"eq {evicted}" }, w.Sent);
+    }
+
+    [Fact]
+    public void AGearSetsRingForTheOtherFinger_StillGoesOn_AndTheCountersRingIsNotTakenOff()
+    {
+        World w = Tundra();
+        w.Pack.AddRange(new[] { "ruby ring", "emerald ring" });
+        w.Arrive(2);
+        w.Answer();                                    // the sapphire ring is on, one finger free
+        EquipmentSet set = new()
+        {
+            Trigger = EquipTriggerType.PreRestHp, Enabled = true, Name = "Rest",
+            Slots =
+            {
+                new EquipmentSlotEntry(EquipmentSlot.Finger1, "ruby ring"),
+                new EquipmentSlotEntry(EquipmentSlot.Finger2, "emerald ring"),
+            },
+        };
+        w.Sets.Sets.Add(set);
+
+        w.Gear.ApplyBySetId(set.Id);
+
+        // One place is free: one of the set's two goes on, the other waits.
+        Assert.Equal(new[] { "eq sapphire ring", "eq ruby ring" }, w.Sent);
+    }
+
+    [Fact]
+    public void AGearSetsRing_TakesThePlaceOfAnOddPiece_NotOfTheCounter()
+    {
+        World w = Tundra("copper ring");
+        w.Pack.Add("ruby ring");
+        w.Arrive(2);
+        w.Answer();                                    // copper and sapphire on: the pair is full
+        EquipmentSet set = new()
+        {
+            Trigger = EquipTriggerType.PreRestHp, Enabled = true, Name = "Rest",
+            Slots = { new EquipmentSlotEntry(EquipmentSlot.Finger1, "ruby ring") },
+        };
+        w.Sets.Sets.Add(set);
+
+        w.Gear.ApplyBySetId(set.Id);
+
+        Assert.Equal(new[] { "eq sapphire ring", "rem copper ring", "eq ruby ring" }, w.Sent);
     }
 
     // ----- the setting and the master switch ------------------------------------
@@ -497,7 +1041,7 @@ public sealed class RoomSpellCounterWearTests
         w.Enabled = false;
 
         Assert.True(w.Wear.ReadyToEnter(At(3)));
-        w.Wear.OnArrived(At(3));
+        w.Arrive(3);
         w.Wear.BeforeTypedStep(At(4));
 
         Assert.Empty(w.Sent);
@@ -510,7 +1054,7 @@ public sealed class RoomSpellCounterWearTests
         World w = WearingTheFeatherIn(3);
         w.Enabled = false;
 
-        w.Wear.OnArrived(At(10));
+        w.Arrive(10);
 
         Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
     }
@@ -521,13 +1065,43 @@ public sealed class RoomSpellCounterWearTests
         World w = WearingTheFeatherIn(3);
         w.MasterOff = true;
 
-        w.Wear.OnArrived(At(10));          // walked out by hand: no gear is swapped
+        w.Arrive(10);                      // walked out by hand: no gear is swapped
         Assert.Single(w.Sent);
         Assert.False(w.Wear.WillWear(Amulet));
 
         w.MasterOff = false;
-        w.Wear.OnArrived(At(10));          // the switch-on settles the room stood in
+        w.Wear.Recheck();                  // the switch-on settles the room stood in
         Assert.Equal(new[] { "wear phoenix feather", "wear silver necklace" }, w.Sent);
+    }
+
+    [Fact]
+    public void ThePlannersQuestion_ReadsTheSwitchWithoutCountingASkip()
+    {
+        World w = Volcano();
+        int counted = 0, plain = 0;
+        w.Wear.MasterSwitchOff = () => { counted++; return true; };
+        w.Wear.MasterSwitchIsOff = () => { plain++; return true; };
+
+        for (int i = 0; i < 50; i++) Assert.False(w.Wear.WillWear(Feather));
+
+        Assert.Equal(0, counted);
+        Assert.Equal(50, plain);
+    }
+
+    [Fact]
+    public void WhatARouteMayCountOn_IsAnnouncedWhenItChanges()
+    {
+        World w = Volcano();
+        w.Pack.Remove("magma amulet");
+        Assert.False(w.Wear.ReadyToEnter(At(3)));
+        int before = w.UsabilityChanges;
+
+        w.Gear.NoteWearRefused();
+        Assert.True(w.UsabilityChanges > before);
+
+        before = w.UsabilityChanges;
+        w.Wear.LiftRefusals("the stat screen was read");
+        Assert.True(w.UsabilityChanges > before);
     }
 
     [Fact]

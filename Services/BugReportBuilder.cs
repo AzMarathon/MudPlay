@@ -737,6 +737,9 @@ public static class BugReportBuilder
             ViewModels.Settings.PeriodicDamageRoomSpellsSectionViewModel.ReadOrDefault(svc.Profile.Current)
                 .WearCounterBeforeEntering ? "on" : "off");
         Kv(sb, "Room-spell counters put on by the client", RoomSpellCountersWorn(svc));
+        Kv(sb, "Room-spell counters not in use", RoomSpellCountersOutOfUse(svc));
+        Kv(sb, "Room-spell counter waiting for an empty room (Auto-Sneak on, Auto-Combat off)",
+            svc.CounterWear.WaitingForEmptyRoom.ToString());
         Kv(sb, "Clearing a see-hidden room (combat off)", svc.CombatTracker.SeeHiddenClearActive.ToString());
         Kv(sb, "Sneak broken by a see-hidden monster, not sneaking again yet", svc.CombatTracker.SneakBrokenBySeeHidden.ToString());
         Kv(sb, "Clearing after a failed sneak (combat off)", svc.CombatTracker.SneakFailClearActive.ToString());
@@ -2702,8 +2705,18 @@ public static class BugReportBuilder
     {
         List<string> parts = svc.CounterWear.OwnedSnapshot().Select(o =>
             $"{o.Item} for {svc.SpellCatalog.GetSpellNameByNumber(o.Spell) ?? "room spell"} (#{o.Spell})"
-            + (o.Displaced is null ? ", slot was empty" : $", in place of {o.Displaced}")).ToList();
+            + (o.Displaced is null ? ", no piece taken off for it" : $", in place of {o.Displaced}")).ToList();
         if (svc.CounterWear.PendingItem is { } pending) parts.Add($"wear of {pending} not answered yet");
+        return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
+    }
+
+    // The counters RoomSpellCounterWear has set aside and why: the game refused
+    // them, or their wear came to nothing. A room they would open is closed to
+    // routes while they are listed here.
+    private static string RoomSpellCountersOutOfUse(AppServices svc)
+    {
+        List<string> parts = svc.CounterWear.OutOfUseSnapshot()
+            .Select(o => $"{svc.ItemNames.GetName(o.Item) ?? "item"} (#{o.Item}): {o.Why}").ToList();
         return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
     }
 

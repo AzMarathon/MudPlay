@@ -29,6 +29,9 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
     private readonly Func<int, string?> _itemName;
     private readonly Func<int, string?>? _spellName;
     private readonly LogService? _log;
+    // Run when a save changed the wear setting: the engine acts on it where the
+    // character stands, not at its next step.
+    private readonly Action? _wearSettingSaved;
     private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
@@ -117,7 +120,8 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
             AppServices.Current.ItemNames.GetName,
             AppServices.Current.GameData,
             AppServices.Current.Log,
-            AppServices.Current.SpellCatalog.GetSpellNameByNumber) { }
+            AppServices.Current.SpellCatalog.GetSpellNameByNumber,
+            AppServices.Current.NoteCounterWearSettingSaved) { }
 
     public PeriodicDamageRoomSpellsSectionViewModel(
         ProfileService profile,
@@ -126,8 +130,10 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
         Func<int, string?> itemName,
         GameDataCache? gameData = null,
         LogService? log = null,
-        Func<int, string?>? spellName = null)
+        Func<int, string?>? spellName = null,
+        Action? wearSettingSaved = null)
     {
+        _wearSettingSaved = wearSettingSaved;
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(spells);
         ArgumentNullException.ThrowIfNull(activeSet);
@@ -271,9 +277,12 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
             _log?.Info("Health",
                 $"Periodic Damage Room Spells: {string.Join("; ", changes)}. In effect from the next rest decision.");
         if (wearChanged)
+        {
             _log?.Info("Equipment", WearCounterBeforeEntering
-                ? "Periodic Damage Room Spells: a carried item that negates a room's spell is now put on before stepping in. In effect from the next step."
+                ? "Periodic Damage Room Spells: a carried item that negates a room's spell is now put on before stepping in, and at once in such a room."
                 : "Periodic Damage Room Spells: a carried item that negates a room's spell is no longer put on, and routes no longer count one that isn't worn. One already on is given back as usual.");
+            _wearSettingSaved?.Invoke();
+        }
     }
 
     public override void Discard() => Reload(keepPending: false, why: null);
