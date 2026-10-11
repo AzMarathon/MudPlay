@@ -26,6 +26,8 @@ public sealed class LairEntryPriorityBuffWaitTests
         public LairEntryDebuffHold Hold { get; }
         public List<string> CastsSent { get; } = new();
         public List<string> ItemsUsed { get; } = new();
+        // Item-cast buffs whose item can't be used: due for ever, never sent.
+        public HashSet<string> UnusableItems { get; } = new();
         public BuffSettings Buffs { get; } = new();
         public SpellsSettings Spells { get; } = new();
         public HealthSettings Health { get; } = new();
@@ -57,7 +59,12 @@ public sealed class LairEntryPriorityBuffWaitTests
             Director.SetPartyBuffSource(() => Buffs);
             Director.SetStealthMaintenanceDeferGate(() => SneakKept);
             Director.SetBuffDurationSources(_ => (string.Empty, 600), _ => null);
-            Director.SetItemCastSource(_ => 600, token => { ItemsUsed.Add(token); return true; });
+            Director.SetItemCastSource(_ => 600, token =>
+            {
+                if (UnusableItems.Contains(token)) return false;
+                ItemsUsed.Add(token);
+                return true;
+            });
             Director.SetCombatDebuffSource(
                 () => DebuffOwed is { } spell ? (spell, null) : null,
                 () => DebuffOwed = null);
@@ -227,30 +234,84 @@ public sealed class LairEntryPriorityBuffWaitTests
         Assert.Empty(h.CastsSent);
     }
 
-    // Too little mana for the spell itself, with mana above the buff's own floor: the
-    // scheduler counts it due and skips the cast each pass. With no priority buff going
-    // out, 18 seconds end the wait.
+    // Too little mana for the spell itself, with mana above the buff's own floor: it
+    // is skipped. It isn't waited for, and it doesn't stand in the way of the priority
+    // buffs behind it in cast order, which used to wait 18 seconds for nothing.
     [Fact]
-    public void PriorityBuffThatCannotBePaidFor_EndsTheWaitAfterEighteenSeconds_AndTheLogNamesIt()
+    public void PriorityBuffThatCannotBePaidFor_FirstInCastOrder_IsSkipped_TheOnesBehindItAreCast_ThenEntry()
     {
         using Harness h = new();
-        h.AddBuff("star", priority: true);
-        h.ManaCosts["star"] = 500;
+        h.AddBuff("cost", priority: true);
+        h.AddBuff("sta1", priority: true);
+        h.AddBuff("sta2", priority: true);
+        h.ManaCosts["cost"] = 500;
 
+        Assert.Equal(new[] { "sta1", "sta2" }, h.Director.BuffsDue(priority: true));   // cost isn't pending
         Assert.False(h.AskToEnter());
-        Assert.Null(h.Director.Evaluate());
-        h.NextRound(seconds: 10);
-        Assert.Null(h.Director.Evaluate());
+        Assert.Equal("sta1", h.Director.Evaluate());
         h.Poll();
-        Assert.True(h.Held);                                // 10 s in: still waiting on it
-
-        h.NextRound(seconds: 10);
+        h.NextRound(); h.Poll();
+        Assert.Equal("sta2", h.Director.Evaluate());
         h.Poll();
+        h.NextRound(); h.Poll();
 
-        Assert.False(h.Held);                               // 20 s in: past the 18 s limit
-        Assert.Empty(h.CastsSent);
-        Assert.Contains(h.InfoLog("Loop"),
-            m => m.StartsWith("no priority buff went out for 18 seconds (priority buffs still due: star)"));
+        Assert.False(h.Held);                               // 10 s in: no 18 s spent on cost
+        Assert.Equal(new[] { "sta1", "sta2" }, h.CastsSent);
+        Assert.Equal("no priority buff is due and the between-round cast is free — entering the lair",
+            h.InfoLog("Loop").Last());
+    }
+
+    [Fact]
+    public void OnlyPriorityBuffDueCannotBePaidFor_NothingIsWaitedFor()
+    {
+        using Harness h = new();
+        h.AddBuff("cost", priority: true);
+        h.ManaCosts["cost"] = 500;
+
+        Assert.False(h.Director.HasCastDue());
+        Assert.True(h.AskToEnter());
+    }
+
+    // The same outside any lair wait, for both kinds of buff: the next due buff that
+    // can be paid for goes out instead of nothing.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void OrdinaryBuffing_ABuffThatCannotBePaidFor_IsPassedOverForTheNextDueOne(bool priority)
+    {
+        using Harness h = new();
+        h.AddBuff("cost", priority);
+        h.AddBuff("chea", priority);
+        h.ManaCosts["cost"] = 500;
+        h.ManaCosts["chea"] = 10;
+
+        Assert.Equal("chea", h.Director.Evaluate());
+        h.NextRound();
+        Assert.Null(h.Director.Evaluate());                 // cost still can't be paid for
+
+        h.ManaCosts["cost"] = 50;                           // mana is enough now
+        h.NextRound();
+        Assert.Equal("cost", h.Director.Evaluate());
+    }
+
+    // A reroll staged for a buff over its floor but under its cost waits for the mana
+    // (it isn't dropped), and no longer stops the buffs behind it meanwhile.
+    [Fact]
+    public void StagedRerollThatCannotBePaidFor_StaysStaged_AndTheNextDueBuffGoesOut()
+    {
+        using Harness h = new();
+        h.AddBuff("flux", priority: false);
+        h.AddBuff("plai", priority: false);
+        Assert.Equal("flux", h.Director.Evaluate());
+        h.NextRound();
+        h.ManaCosts["flux"] = 500;
+        h.Director.RequestManaRegenReroll("flux");          // rolled low: staged; plai goes out in its place
+
+        Assert.Equal(new[] { "flux", "plai" }, h.CastsSent);
+
+        h.ManaCosts["flux"] = 50;
+        h.NextRound();
+        Assert.Equal("flux", h.Director.Evaluate());
     }
 
     // Held to keep a sneak: due, never sent. The same 18 seconds end the wait.
@@ -297,16 +358,17 @@ public sealed class LairEntryPriorityBuffWaitTests
             h.InfoLog("Loop").Last());
     }
 
-    // One that can't be paid for among them: the ones that can go out do, and the wait
-    // ends 18 seconds after the last of those, not 18 seconds after it began.
+    // One that is due and can't go out among them (an item-cast buff whose item can't
+    // be used): the ones that can go out do, and the wait ends 18 seconds after the
+    // last of those, not 18 seconds after it began.
     [Fact]
     public void OneUncastableAmongThem_TheOthersGoOut_ThenEntryEighteenSecondsAfterTheLast()
     {
         using Harness h = new();
         h.AddBuff("sta1", priority: true);
         h.AddBuff("sta2", priority: true);
-        h.AddBuff("cost", priority: true);
-        h.ManaCosts["cost"] = 500;
+        h.AddBuff("#spent wand", priority: true);
+        h.UnusableItems.Add("#spent wand");
 
         Assert.False(h.AskToEnter());
         Assert.Equal("sta1", h.Director.Evaluate());        // at 0 s
@@ -315,7 +377,7 @@ public sealed class LairEntryPriorityBuffWaitTests
         Assert.Equal("sta2", h.Director.Evaluate());        // at 5 s: the last to go out
         h.Poll();
         h.NextRound();
-        Assert.Null(h.Director.Evaluate());                 // cost is due and can't be paid for
+        Assert.Null(h.Director.Evaluate());                 // the wand is due and can't be used
         h.Poll();
         h.NextRound(seconds: 12);                           // 22 s in, 17 s since sta2
         Assert.Null(h.Director.Evaluate());
@@ -328,7 +390,7 @@ public sealed class LairEntryPriorityBuffWaitTests
         Assert.False(h.Held);
         Assert.Equal(new[] { "sta1", "sta2" }, h.CastsSent);
         Assert.Contains(h.InfoLog("Loop"),
-            m => m.StartsWith("no priority buff went out for 18 seconds (priority buffs still due: cost)"));
+            m => m.StartsWith("no priority buff went out for 18 seconds (priority buffs still due: #spent wand)"));
     }
 
     // The game refuses the buff every time, so it is due again every round and each

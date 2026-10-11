@@ -2083,7 +2083,7 @@ public sealed class CastingDirector : IDisposable
                 _log?.Combat(LogCategory,
                     $"sneak kept: {cand.Spell} ({category}) held — the backstab is still owed, our sneaked move is landing, or we're sneaking past hostiles.");
                 // Only one we could pay for stops the walk in the next clear room.
-                if (!(_manaCostLookup?.Invoke(cand.Spell) is { } heldCost && _state.Ma < heldCost))
+                if (UnpayableCost(cand.Spell) is null)
                 {
                     HasSneakHeldCast = true;
                     SneakHeldCategory ??= category;
@@ -2109,10 +2109,10 @@ public sealed class CastingDirector : IDisposable
             // debuff) casts are gated by the Combat tab's MinManaPerCast
             // threshold, so the game-data affordability check applies only to
             // the survival categories owned here; an unknown cost never blocks.
-            // Skip-and-continue so a cheaper lower-priority cast can still fire.
-            if (category != SpellCategory.Debuffing
-                && _manaCostLookup?.Invoke(cand.Spell) is { } cost
-                && _state.Ma < cost)
+            // Skip-and-continue so a cheaper lower-priority cast can still fire. (A
+            // buff never gets here unpayable: its picker has already passed over it
+            // for the next due one, see CanPayFor.)
+            if (category != SpellCategory.Debuffing && UnpayableCost(cand.Spell) is { } cost)
             {
                 _log?.Combat(LogCategory,
                     $"{category} skip spell={cand.Spell} cost={cost} ma={_state.Ma} " +
@@ -2756,7 +2756,7 @@ public sealed class CastingDirector : IDisposable
 
     // Per-slot buff affordability for the buff pickers. The mana floor applies to
     // *mana-drawing* buffs only: a regular spell buff is allowed only when mana
-    // clears its slot's floor (the cast's cost is re-checked at dispatch); an
+    // clears its slot's floor (the cast's cost is checked as it is offered, CanPayFor); an
     // item-cast token is allowed when its use-spell is free (cost 0 / unresolved —
     // recast regardless of mana) or, when it draws mana, only if we both clear the
     // floor and can pay the cost from the current pool.
@@ -2767,6 +2767,26 @@ public sealed class CastingDirector : IDisposable
         int? cost = _itemCastManaCost?.Invoke(code);
         if (cost is not > 0) return true; // free / unresolved item-cast: never mana-gated
         return ManaClearsFloor(slot, health) && _state.Ma >= cost.Value;
+    }
+
+    // What a spell costs when mana is under it, else null. An unknown cost never
+    // blocks. The one test of "can't be paid for" the dispatch and the buff pickers use.
+    private int? UnpayableCost(string spell) =>
+        _manaCostLookup?.Invoke(spell) is { } cost && _state.Ma < cost ? cost : null;
+
+    // A due buff is offered only when its spell can be paid for. One that can't is
+    // passed over for the next due buff (user, 2026-10-10: "in the event that a user
+    // cant cast a buff due to not enough mana, then it should skip it"). It used to be
+    // offered, refused at dispatch, and nothing behind it in the list was tried: one
+    // costly buff at the head of the list stopped all buffing until mana came back.
+    private bool CanPayFor(string spell, bool priority, bool peek)
+    {
+        if (ItemCastToken.IsToken(spell) || UnpayableCost(spell) is not { } cost) return true;
+        if (!peek)
+            _log?.Combat(LogCategory,
+                $"{(priority ? SpellCategory.PriorityBuffing : SpellCategory.Buffing)} skip spell={spell} "
+                + $"cost={cost} ma={_state.Ma} (insufficient mana) — the next due buff is offered instead");
+        return false;
     }
 
     // A staged mana-regen reroll — an immediate below-threshold recast that jumps the
@@ -2789,10 +2809,16 @@ public sealed class CastingDirector : IDisposable
         }
         if (slot.PriorityBuff != priority) return null;   // the other buff category's to cast
         if (!BuffTimingAllowed(slot)) return null;
-        if (IsBuffAffordable(slot, health))
-            return new CastCandidate(reroll, Target: null, DefaultRecastMarginSec);
-        if (!peek) _pendingManaRegenReroll = null;
-        return null;
+        if (!IsBuffAffordable(slot, health))
+        {
+            if (!peek) _pendingManaRegenReroll = null;
+            return null;
+        }
+        // Over its floor but under its cost: it stays staged for when mana is back,
+        // and the buffs behind it are offered meanwhile.
+        return CanPayFor(reroll, priority, peek)
+            ? new CastCandidate(reroll, Target: null, DefaultRecastMarginSec)
+            : null;
     }
 
     // A buff's own timing gate, for every cast of it — on ourselves, on a party
@@ -2916,7 +2942,7 @@ public sealed class CastingDirector : IDisposable
             bool wantSelfCast = partyWide
                 ? slot.WholePartyOn && (inParty ? partyAllowed : slot.CastSolo && selfEligible)
                 : slot.CastOnSelf && selfEligible && (covered is null || !covered.ContainsKey(slot.Spell));
-            if (wantSelfCast && IsRecastDue("", slot.Spell))
+            if (wantSelfCast && IsRecastDue("", slot.Spell) && CanPayFor(slot.Spell, priority, peek))
                 yield return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
 
             // Member targets (single-target spell) — party-gated, one per pass. Skipped for
@@ -2938,6 +2964,8 @@ public sealed class CastingDirector : IDisposable
                         if (!peek) _hiddenTargets.Remove(key);
                     }
                     if (!IsRecastDue(key, slot.Spell)) continue;
+                    // The same spell for every member: unpayable for one is for all.
+                    if (!CanPayFor(slot.Spell, priority, peek)) break;
                     yield return new CastCandidate(slot.Spell, given, slot.RecastMarginSec);
                 }
             }
