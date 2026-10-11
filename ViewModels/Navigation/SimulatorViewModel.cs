@@ -667,13 +667,28 @@ public sealed partial class SimulatorViewModel : ObservableObject
             RankStatus = "This ranking was made on other game data, so its rooms aren't these — rank again to save a loop.";
             return;
         }
-        // Saving under a taken name would overwrite that loop, so a second save of the
-        // same area gets a number. A loop of that name another client saved a moment
-        // ago counts, so the folder is read first.
+        // A loop another client saved a moment ago counts for both checks below, so
+        // the folder is read first.
         _loops.TakeInOutsideChanges();
         string wanted = $"{rank.Area.Replace('/', '-')} (L{rank.Level} sim)";
-        string name = _loops.Get(wanted) is null ? wanted : _loops.NumberedName(wanted);
-        var loop = new Loop(name, rank.Tour) { Notes = LoopNotes(rank, _rankRun) };
+        var loop = new Loop(wanted, rank.Tour) { Notes = LoopNotes(rank, _rankRun) };
+        // The same tour saved again would be one loop under two names. Loops are told
+        // apart as @loop send tells them (LoopSignature): this one is its rooms in
+        // order with nothing set on a room and both loop settings off, which is how
+        // the simulation played it.
+        string signature = LoopSignature.Of(loop);
+        if (_loops.Loops.FirstOrDefault(l => LoopSignature.Of(l) == signature) is { } same)
+        {
+            _log?.Info("Simulator", $"ranked tour '{rank.Area}' (L{rank.Level}) is already saved as loop '{same.Name}' " +
+                                    $"[{LoopSignature.Short(signature)}]; nothing saved");
+            PickRoute(same.Name);
+            RankStatus = $"Already saved as loop \"{same.Name}\" — nothing saved. It's picked as the Route above.";
+            return;
+        }
+        // Saving under a taken name would overwrite that loop, so a different tour
+        // of the same area and level gets a number.
+        if (_loops.Get(wanted) is not null) loop.Name = _loops.NumberedName(wanted);
+        string name = loop.Name;
         try
         {
             _loops.Save(loop);
@@ -691,14 +706,20 @@ public sealed partial class SimulatorViewModel : ObservableObject
         _log?.Info("Simulator", $"saved ranked tour '{rank.Area}' (L{rank.Level}, {rank.Tour.Count} waypoints, " +
                                 $"{rank.LapRooms} rooms a lap, {rank.Result.ExpPerHour:N0} exp/hr) as loop '{name}'" +
                                 (shut > 0 ? $"; {shut} of its legs can't be walked as the character is now" : ""));
-        RefreshRoutes();
-        if (Routes.FirstOrDefault(o => o.Loop is { } l && string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase)) is { } saved)
-            SelectedRoute = saved;
+        PickRoute(name);
         RankStatus = shut > 0
             ? $"Saved as loop \"{name}\", but {shut} of its {loop.Waypoints.Count} legs can't be walked as you are now " +
               $"(it was ranked at L{rank.Level}) — it won't run right until they open. Its notes say how it was tested."
             : $"Saved as loop \"{name}\" — it's in the Navigation window's Loops list to run, and picked as the Route above. " +
               "Its notes say how it was tested.";
+    }
+
+    // Make the saved loop of that name the Simulator's route.
+    private void PickRoute(string loopName)
+    {
+        RefreshRoutes();
+        if (Routes.FirstOrDefault(o => o.Loop is { } l && string.Equals(l.Name, loopName, StringComparison.OrdinalIgnoreCase)) is { } saved)
+            SelectedRoute = saved;
     }
 
     // A ★ row is already saved, so only an area row offers Save as loop.

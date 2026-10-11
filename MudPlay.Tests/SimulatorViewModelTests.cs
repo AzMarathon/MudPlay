@@ -119,7 +119,9 @@ public sealed class SimulatorViewModelTests : IDisposable
     {
         using Harness h = Build(saveLoops: true);
         RoomKey[] tour = { new(1, 2), new(1, 1) };
-        h.Loops.Save(new Loop("Hills / Caves (L40 sim)".Replace('/', '-'), tour));
+        // The name is held by a different loop: the same rooms the other way round.
+        RoomKey[] held = { new(1, 1), new(1, 2) };
+        h.Loops.Save(new Loop("Hills / Caves (L40 sim)".Replace('/', '-'), held));
         h.Simulator.SelectedRanking = new AreaRank("Hills / Caves", 40, tour, 2, new LoopSimSummary(new[] { Run }));
         Assert.True(h.Simulator.RankIsArea);
 
@@ -127,9 +129,32 @@ public sealed class SimulatorViewModelTests : IDisposable
 
         Loop saved = Assert.IsType<Loop>(h.Loops.Get("Hills - Caves (L40 sim) 2"));
         Assert.Equal(tour, saved.Waypoints.Select(w => w.Key));
+        Assert.Equal(held, h.Loops.Get("Hills - Caves (L40 sim)")?.Waypoints.Select(w => w.Key));
         Assert.Contains("L40", saved.Notes);
         Assert.Contains("1/2 → 1/1", saved.Notes);
         Assert.Equal("Hills - Caves (L40 sim) 2", h.Simulator.SelectedRoute?.Loop?.Name);
+    }
+
+    [Fact]
+    public void SavingATourThatIsAlreadyASavedLoopSavesNothingAndPicksThatLoop()
+    {
+        using Harness h = Build(saveLoops: true);
+        RoomKey[] tour = { new(1, 2), new(1, 1) };
+        h.Loops.Save(new Loop("My caves", tour) { Notes = "mine" });
+        h.Simulator.SelectedRanking = new AreaRank("Hills", 40, tour, 2, new LoopSimSummary(new[] { Run }));
+
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+
+        Assert.Equal(new[] { "My caves" }, h.Loops.Loops.Select(l => l.Name));
+        Assert.Equal("mine", h.Loops.Get("My caves")?.Notes);
+        Assert.Equal("My caves", h.Simulator.SelectedRoute?.Loop?.Name);
+        Assert.Contains("Already saved as loop \"My caves\"", h.Simulator.RankStatus);
+
+        // Run another way, it is another loop: the tour is saved beside it.
+        h.Loops.SetSettings("My caves", new LoopOwnSettings(OnlyAttackInLairRooms: true, LairEntryDebuffMode.Off));
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+        Assert.NotNull(h.Loops.Get("Hills (L40 sim)"));
     }
 
     [Fact]
