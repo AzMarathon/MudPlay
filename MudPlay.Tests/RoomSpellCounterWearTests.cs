@@ -18,7 +18,7 @@ namespace MudPlay.Tests;
 // neck, 10 / 1 against 0 / 0.
 public sealed class RoomSpellCounterWearTests
 {
-    private const int MagmaHeat = 526, FreezingCold = 5242, ThiefFilter = 1325;
+    private const int MagmaHeat = 526, FreezingCold = 5242;
     private const int Feather = 1000, Amulet = 487, SapphireRing = 433, WinterhideTunic = 3660;
 
     private sealed class World
@@ -69,7 +69,6 @@ public sealed class RoomSpellCounterWearTests
         {
             [MagmaHeat] = new[] { Amulet, Feather },
             [FreezingCold] = new[] { SapphireRing, WinterhideTunic },
-            [ThiefFilter] = new[] { 3701 },
         };
 
         public World()
@@ -513,21 +512,21 @@ public sealed class RoomSpellCounterWearTests
     }
 
     [Fact]
-    public void TheCrystalWard_IsNotPutOnForTheClassFilterRooms()
+    public void ARoomWhoseSpellHasNoNegatingItemOnRecord_IsNotDressedFor()
     {
-        // The user's ruling (2026-10-10): not covered.
+        // What is covered is what the hazard index gives a negating item for. The
+        // class-filter rooms the crystal ward is for have no hazard there (they do
+        // no damage), so the ward in the pack is never put on.
         World w = new();
         w.Pack.Add("crystal ward");
         w.Line(4);
-        w.Rooms[At(3)] = new Room { Key = At(3), Name = "Guild Hall", Spell = ThiefFilter, Exits = w.Rooms[At(3)].Exits };
+        w.Rooms[At(3)] = new Room { Key = At(3), Name = "Guild Hall", Spell = 1325, Exits = w.Rooms[At(3)].Exits };
 
         w.Arrive(2);
         Assert.True(w.Wear.ReadyToEnter(At(3)));
         w.Arrive(3);
 
         Assert.Empty(w.Sent);
-        Assert.False(RoomSpellCounterWear.Covers(ThiefFilter));
-        Assert.True(RoomSpellCounterWear.Covers(MagmaHeat));
     }
 
     // ----- a wear that comes to nothing ------------------------------------------

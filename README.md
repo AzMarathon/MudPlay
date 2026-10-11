@@ -3,8 +3,9 @@
 <!-- current-version:start -->
 > **Version 3.169.0**
 > - A carried item that negates a room's spell is worn for you (phoenix feather, else magma amulet, against magma heat)
-> - On when you come next to such a room, on inside it, off one room clear
-> - Sneaking past things (Auto-Sneak on, Auto-Combat off), it goes on and comes off in a room with no NPC
+> - On when you come next to such a room, on inside it, off one room clear; kept on when the route's next step is next to one again
+> - Sneaking past things (Auto-Sneak on, Auto-Combat off), it goes on in a room with no NPC
+> - Giving the slot back never breaks a sneak that is being kept
 > - A teleport, a drag or a typed step still gets the wear before or on arrival; a held step waits three seconds at most
 > - The piece the game took off for it, or the current set's, goes back on
 > - A wear the game refuses or never answers is set aside and tried again later, not every room

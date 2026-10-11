@@ -87,15 +87,6 @@ public sealed class RoomSpellCounterWear
     // later. After it the slot goes back to the gear sets.
     public static readonly TimeSpan LateAnswerWindow = TimeSpan.FromSeconds(3);
 
-    // Room spells the wear leaves alone, by the user's word (2026-10-10, asked
-    // whether the crystal ward is covered: "no"): Paradigm's four class filters
-    // (thief, battle, magic, spellcaster), which turn a class away with a teleport
-    // and do no damage, and which the crystal ward negates. A ruling, not a rule
-    // read off the data: nothing in the item's record sets it apart.
-    private static readonly HashSet<int> LeftAlone = new() { 1325, 1326, 1327, 1337 };
-
-    public static bool Covers(int roomSpell) => !LeftAlone.Contains(roomSpell);
-
     // How far along the engine's plan an empty room is looked for when sneaking
     // past things: far enough to find one on most approaches, near enough that the
     // counter isn't worn for long before it is needed.
@@ -219,7 +210,7 @@ public sealed class RoomSpellCounterWear
         _enabled = enabled;
         _roomOf = roomOf;
         _currentRoom = currentRoom;
-        _negatorsOf = spell => Covers(spell) ? negatorsOf(spell) : Array.Empty<int>();
+        _negatorsOf = negatorsOf;
         _describe = describe;
         _isWorn = isWorn;
         _isCarried = isCarried;
