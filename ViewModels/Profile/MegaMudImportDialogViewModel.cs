@@ -64,9 +64,9 @@ public sealed partial class MegaMudImportDialogViewModel : ObservableObject, IDi
         {
             string name = Trimmed;
             if (name.Length == 0) return "Give the character a name.";
-            foreach (char c in Path.GetInvalidFileNameChars())
-                if (name.Contains(c)) return $"The name can't contain '{c}'.";
-            if (name is "." or "..") return "That name is reserved by the filesystem.";
+            // The name becomes the character's folder: what the profile store
+            // would refuse is refused here.
+            if (PathGuard.WhyNotPlain(name) is { } notPlain) return notPlain;
             return _exists(name) ? "A character with that name already exists on this BBS." : string.Empty;
         }
     }
