@@ -356,6 +356,23 @@ public sealed class SimulatorViewModelTests : IDisposable
     }
 
     [Fact]
+    public void AGameDataSetImportedAgainFromAnotherSetListsNothingOnTheWayBack()
+    {
+        using Harness h = Build(saveLoops: true);
+        h.Simulator.ListFinishedRanking(Ranking("Hills"));
+        h.Cache.SwitchSet("beta");
+
+        // What an import of alpha does when it finishes, whichever set is active;
+        // it then switches to the imported set.
+        h.Rankings.ForgetSet("alpha");
+        h.Cache.SwitchSet("alpha");
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal("", h.Simulator.RankStatus);
+        Assert.False(h.Simulator.SaveRankingAsLoopCommand.CanExecute(null));
+    }
+
+    [Fact]
     public void GameDataReadInAgainDropsEveryRankingMadeOnItAndKeepsTheSketch()
     {
         using Harness h = Build();

@@ -2726,6 +2726,17 @@ public sealed class AppServices
     // Navigation window: a ranking is the pairing's for as long as the client runs.
     public Game.Simulation.AreaRankingStore SimulatorRankings { get; } = new();
 
+    // The data of set was replaced (an import over it, a Manage Sets change): what the
+    // Simulator ranked on the old data is stale, whichever set is active.
+    public void ForgetSimulatorRankings(string set, string why) =>
+        LogStaleSimulatorRankings(set, why, SimulatorRankings.ForgetSet(set));
+
+    private void LogStaleSimulatorRankings(string? set, string why, int dropped)
+    {
+        if (dropped > 0)
+            Log.Info("Simulator", $"game data '{set}' {why}: {dropped} area ranking(s) made on it dropped as stale");
+    }
+
     // The Navigation window's mode and loop-builder state, for the bug report. Set by
     // the window's view model while it is open; cleared when it closes.
     public Func<string>? NavigationModeProvider { get; set; }
@@ -8418,11 +8429,7 @@ public sealed class AppServices
         // is that set read in afresh, and what was ranked on its old tables is stale.
         SimulatorRankings.NoteActiveSet(GameData.ActiveSet);
         GameData.ActiveSetChanged += setName =>
-        {
-            int stale = SimulatorRankings.NoteActiveSet(setName);
-            if (stale > 0)
-                Log.Info("Simulator", $"game data '{setName}' was read in again: {stale} area ranking(s) made on it dropped as stale");
-        };
+            LogStaleSimulatorRankings(setName, "was read in again", SimulatorRankings.NoteActiveSet(setName));
 
         // Which loops and auto-lair setups are favourites is each character's own.
         // Built after the first LoadAll above so a profile already loaded finds its
@@ -8449,6 +8456,8 @@ public sealed class AppServices
         // only the library moved, otherwise the whole set, the way a re-import
         // does, since every per-set store reloads on that. The delete callback
         // clears any profile / global reference that still names a deleted set.
+        // The Simulator's rankings are held per set whether or not it is active, so
+        // they are told of every set whose data an op replaced.
         GameDataSetManager = new GameDataSetManager(
             GameData,
             reloadActive: changed =>
@@ -8463,7 +8472,8 @@ public sealed class AppServices
                 GameData.ReloadActiveSet();
             },
             onSetDeleted: ClearGameDataSetReferences,
-            Log);
+            Log,
+            onSetDataReplaced: set => ForgetSimulatorRankings(set, "was changed in Manage Sets"));
 
         // Encumbrance parser writes
         // PlayerState.Encumbrance from the `enc` line; HopTimingCalibrator

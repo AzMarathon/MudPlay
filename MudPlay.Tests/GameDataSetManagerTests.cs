@@ -67,8 +67,9 @@ public sealed class GameDataSetManagerTests : IDisposable
     }
 
     private static GameDataSetManager NewManager(
-        GameDataCache cache, Action? reload = null, Action<string>? onDeleted = null) =>
-        new(cache, _ => reload?.Invoke(), onDeleted ?? (_ => { }));
+        GameDataCache cache, Action? reload = null, Action<string>? onDeleted = null,
+        Action<string>? onReplaced = null) =>
+        new(cache, _ => reload?.Invoke(), onDeleted ?? (_ => { }), onSetDataReplaced: onReplaced);
 
     // ----- Copy ------------------------------------------------------
 
@@ -394,5 +395,68 @@ public sealed class GameDataSetManagerTests : IDisposable
 
         Assert.False(result.Ok);
         Assert.False(fired);
+    }
+
+    // ----- Naming the sets whose data an op replaced ------------------
+
+    [Fact]
+    public void Copy_OfEdits_NamesTheDestinationAsReplaced_ActiveOrNot()
+    {
+        GameDataCache cache = new();
+        string src = CreateSet();
+        string dst = CreateSet();
+        File.WriteAllText(AppPaths.MessagesFile(src), "m");
+        SeedOverride(GlobalFolder, "Monsters", src);
+        _createdFiles.Add(Path.Combine(GlobalFolder, $"Monsters_overrides.{dst}.json"));
+        var replaced = new List<string>();
+
+        NewManager(cache, onReplaced: replaced.Add)
+            .Copy(src, dst, GameDataSetPart.Messages | GameDataSetPart.RecordOverrides);
+
+        Assert.Equal(new[] { dst }, replaced);
+    }
+
+    [Fact]
+    public void Move_OfEdits_NamesBothSetsAsReplaced()
+    {
+        GameDataCache cache = new();
+        string src = CreateSet();
+        string dst = CreateSet();
+        File.WriteAllText(AppPaths.MessagesFile(src), "m");
+        var replaced = new List<string>();
+
+        NewManager(cache, onReplaced: replaced.Add).Move(src, dst, GameDataSetPart.Messages);
+
+        Assert.Equal(new[] { dst, src }, replaced);
+    }
+
+    [Fact]
+    public void CopyOrMove_OfTheLoopLibraryAlone_NamesNoSetAsReplaced()
+    {
+        GameDataCache cache = new();
+        string src = CreateSet();
+        string dst = CreateSet();
+        SeedLoop(src, "a.loop");
+        var replaced = new List<string>();
+        GameDataSetManager manager = NewManager(cache, onReplaced: replaced.Add);
+
+        Assert.True(manager.Copy(src, dst, GameDataSetPart.Loops).Ok);
+        Assert.True(manager.Move(src, dst, GameDataSetPart.Loops).Ok);
+
+        Assert.Empty(replaced);
+    }
+
+    [Fact]
+    public void DeleteSet_NamesItAsReplaced_SoALaterSetOfThatNameStartsClean()
+    {
+        GameDataCache cache = new();
+        string kept = CreateSet();
+        string doomed = CreateSet();
+        cache.SwitchSet(kept);
+        var replaced = new List<string>();
+
+        NewManager(cache, onReplaced: replaced.Add).DeleteSet(doomed);
+
+        Assert.Equal(new[] { doomed }, replaced);
     }
 }

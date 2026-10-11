@@ -74,6 +74,26 @@ public sealed class AreaRankingStoreTests
     }
 
     [Fact]
+    public void ASetWhoseDataIsReplacedWhileAnotherIsActiveLosesItsRankings()
+    {
+        var store = new AreaRankingStore();
+        store.NoteActiveSet("alpha");
+        store.Keep(new SimulatorOwner("alpha", "board/one"), Ranking("Hills"));
+        store.Keep(new SimulatorOwner("alpha", "board/two"), Ranking("Marsh"));
+        store.Keep(new SimulatorOwner("beta", "board/one"), Ranking("Fen"));
+        store.NoteActiveSet("beta");
+
+        // alpha imported again, or deleted, from beta.
+        Assert.Equal(2, store.ForgetSet("ALPHA"));
+
+        // Coming back to it is a plain switch, with nothing left to list.
+        Assert.Equal(0, store.NoteActiveSet("alpha"));
+        Assert.Null(store.Get(new SimulatorOwner("alpha", "board/one")));
+        Assert.Null(store.Get(new SimulatorOwner("alpha", "board/two")));
+        Assert.NotNull(store.Get(new SimulatorOwner("beta", "board/one")));
+    }
+
+    [Fact]
     public void OnlyTheLastFewMadeOrShownAreKept()
     {
         var store = new AreaRankingStore();
