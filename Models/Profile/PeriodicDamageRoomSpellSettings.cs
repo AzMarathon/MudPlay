@@ -15,4 +15,11 @@ public sealed class PeriodicDamageRoomSpellSettings
     // differently carries over to every character that never touched it. A number
     // the loaded game data doesn't list is kept as it is.
     public Dictionary<int, bool> BarsResting { get; set; } = new();
+
+    // Put on a carried item that negates a room's spell before stepping into the
+    // room (the phoenix feather ahead of magma heat), and give its slot back to
+    // the gear sets once no such room is near (RoomSpellCounterWear). On by
+    // default: such an item does nothing from the pack. Off, a route is not
+    // planned on a negating item that isn't already worn.
+    public bool WearCounterBeforeEntering { get; set; } = true;
 }

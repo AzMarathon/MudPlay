@@ -1,12 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.168.5**
+> **Version 3.170.0**
 > - A `break` you type holds Auto-Combat's attack until you attack, the monster dies or leaves, or you leave the room
-> - A party member's `@do break` holds it the same way
-> - The hold ends when any monster of that name dies, or after a round with no attack from it
+> - A party member's `@do break` or `@party break` holds it the same way; an attack they relay lifts it
+> - The hold ends when any monster of that name dies or leaves
+> - A round with no attack from it makes the client look at the room: gone ends the hold, still listed keeps it; in the dark the silence alone ends it
+> - A neutral you hit and then broke from isn't fought again until you attack it again
 > - A flee still runs under the hold; a loop or walk waits
-> - Typed `backstab`, `punch`, `kick` and `jumpkick` count as taking the round yourself
+> - Typed `backstab`, `punch`, `kick` and `jumpkick` count as taking the round yourself; a text exit such as `jump pool` doesn't
 > - Room-spell kills are counted against every monster the room listed, neutrals included
 > - Only the room spell's own damage line counts as the spell landing
 > - Stock: a room spell is left running through the `*Combat Off*` after its kill

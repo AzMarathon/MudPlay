@@ -1,16 +1,39 @@
 # Version history
 
-## 3.168.5
+## 3.170.0
 
 - A `break` you type holds Auto-Combat's attack until you attack, the monster dies or leaves, or you leave the room
-- A party member's `@do break` holds it the same way
-- The hold ends when any monster of that name dies, or after a round with no attack from it
+- A party member's `@do break` or `@party break` holds it the same way; an attack they relay lifts it
+- The hold ends when any monster of that name dies or leaves
+- A round with no attack from it makes the client look at the room: gone ends the hold, still listed keeps it; in the dark the silence alone ends it
+- A neutral you hit and then broke from isn't fought again until you attack it again
 - A flee still runs under the hold; a loop or walk waits
-- Typed `backstab`, `punch`, `kick` and `jumpkick` count as taking the round yourself
+- Typed `backstab`, `punch`, `kick` and `jumpkick` count as taking the round yourself; a text exit such as `jump pool` doesn't
 - Room-spell kills are counted against every monster the room listed, neutrals included
 - Only the room spell's own damage line counts as the spell landing
 - Stock: a room spell is left running through the `*Combat Off*` after its kill
 - Temp-death response goes out once for a room spell's kills, mixed rooms included
+
+## 3.169.0
+
+- A carried item that negates a room's spell is worn for you (phoenix feather, else magma amulet, against magma heat)
+- On when you come next to such a room, on inside it, off one room clear; kept on when the route's next step is next to one again
+- Sneaking past things (Auto-Sneak on, Auto-Combat off), it goes on in a room with no NPC
+- Giving the slot back never breaks a sneak that is being kept
+- A teleport, a drag or a typed step still gets the wear before or on arrival; a held step waits three seconds at most
+- The piece the game took off for it, or the current set's, goes back on
+- A wear the game refuses or never answers is set aside and tried again later, not every room
+- Wear and remove lines of hyphenated item names are read
+- Routes no longer count a negating item you carry but won't have on
+- Settings → Periodic Damage Room Spells: a tick box for it, on by default
+- Off with the master switch
+- Bug report lists what was put on this way and what was set aside
+- Periodic Damage Room Spells: Paradigm's desert rows show desert damage, 5–20, cast without the waterskin buff
+- Periodic Damage Room Spells: chaos storm and the drowning spells show their set damage, no "more with level"
+
+## 3.168.1
+
+- An arena death is recorded with nothing lost: no deathpile, no recovery, no re-wear
 
 ## 3.168.0
 
