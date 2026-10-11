@@ -15,6 +15,9 @@ namespace MudPlay.Game.Remote;
 //   give <copper> <name>    leader → member: cover <copper> of <name>'s fee
 //   with <copper>           leader → member: withdraw your fee at this bank
 //   done <levels>           member → leader: trained and back in the party
+//   trip <on|off>           leader → member: a party train trip has set out / is
+//                           over (a member left behind on the way asks the leader
+//                           back once it is over, not during it)
 //
 // Party-whitelist gated (catalog None). A malformed order is dropped silently:
 // the only sender is another MudPlay client, and a reply would just be chatter.
@@ -72,6 +75,9 @@ public sealed class PartyTrainHandler : IDisposable
                 break;
             case "done" when a.Count >= 2 && TryInt(a[1], out long levels):
                 _coordinator.ReceiveDone(ctx.Sender, (int)Math.Clamp(levels, 0, int.MaxValue));
+                break;
+            case "trip" when a.Count >= 2:
+                _coordinator.ReceiveTrip(ctx.Sender, on: a[1].Equals("on", StringComparison.OrdinalIgnoreCase));
                 break;
         }
     }

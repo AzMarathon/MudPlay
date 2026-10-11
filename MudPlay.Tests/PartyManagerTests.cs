@@ -1798,4 +1798,48 @@ public sealed class PartyManagerTests
         Assert.Equal(200, self.BaselineHp);
         Assert.Equal(25, self.HpPercent);   // 50 / 200
     }
+
+    // ===== a follow the game ended without a line (Stock) =====
+
+    // The leader refused our @comeback, or never came. The follow we still count
+    // is cleared as the game's own "no longer following" line clears it, and the
+    // follower's hold on our own movement goes with it.
+    [Fact]
+    public void NoteFollowGivenUp_ClearsTheFollow_AndFreesOurMovement()
+    {
+        var (router, p) = Setup("MudPlay WuzHere");
+        var coordinator = new MudPlay.Game.Map.MovementCoordinator();
+        using var gate = new PartyFollowerMovementGate(p.State, coordinator);
+        router.Dispatch(Line("You are now following Boss."));
+        Assert.True(p.State.IsInParty);
+        Assert.Contains(MudPlay.Game.Map.MovementCoordinator.FollowerGate, coordinator.AssertedGates);
+
+        p.NoteFollowGivenUp("Boss");
+
+        Assert.False(p.State.IsInParty);
+        Assert.False(p.State.SelfIsLeader);
+        Assert.Null(p.State.LeaderName);
+        Assert.DoesNotContain(MudPlay.Game.Map.MovementCoordinator.FollowerGate, coordinator.AssertedGates);
+    }
+
+    // Another leader's name, a party we lead and no party at all are left alone:
+    // where the game's own line has ended the follow (Paradigm) there is nothing
+    // to clear, and a leader who refused us long ago is not the one we follow now.
+    [Fact]
+    public void NoteFollowGivenUp_ForAnotherLeader_OrWhenNotFollowing_DoesNothing()
+    {
+        var (router, p) = Setup("MudPlay WuzHere");
+        p.NoteFollowGivenUp("Boss");
+        Assert.False(p.State.IsInParty);
+
+        router.Dispatch(Line("You are now following Boss."));
+        p.NoteFollowGivenUp("Other");
+        Assert.True(p.State.IsInParty);
+        Assert.Equal("Boss", p.State.LeaderName);
+
+        router.Dispatch(Line("You are no longer following Boss."));
+        Assert.False(p.State.IsInParty);
+        p.NoteFollowGivenUp("Boss");          // the game's line came first
+        Assert.False(p.State.IsInParty);
+    }
 }

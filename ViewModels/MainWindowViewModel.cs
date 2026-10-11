@@ -1479,8 +1479,8 @@ public partial class MainWindowViewModel : ObservableObject
         // @divert is active; rides the same gate-wrapped pipeline.
         AppServices.Current.Divert.SetWireSender(engineSend);
         // Follower-side @comeback. Telepaths @comeback to the leader
-        // when a movement-failure line strands us as the party walks
-        // off; rides the same gate-wrapped pipeline.
+        // when the party walks off without us; rides the same
+        // gate-wrapped pipeline.
         AppServices.Current.ComebackRequest.SetWireSender(engineSend);
         AppServices.Current.LeaderBossTravel.SetWireSender(engineSend);
         // Follower-side reconnect auto-rejoin — telepaths @comeback + @invite
@@ -3472,6 +3472,9 @@ public partial class MainWindowViewModel : ObservableObject
                 if (wasConnected) AppServices.Current.PartyReform.NoteDisconnected();
                 // The follower's reconnect @comeback is skipped after too long a drop.
                 if (wasConnected) AppServices.Current.PartyRejoin.NoteDisconnected();
+                // That reconnect request is the only one for this split: the
+                // left-behind watch stands down until we follow again.
+                if (wasConnected) AppServices.Current.ComebackRequest.NoteDisconnected();
                 // A member's @comeback kept for the master switch names a place
                 // from the stay that just ended.
                 AppServices.Current.RemoteCommands.DropHeldComebacks("disconnected");
@@ -3821,6 +3824,11 @@ public partial class MainWindowViewModel : ObservableObject
         // re-attack after the swap, and are left to it.
         if (typed && AppServices.Current.EngineGate.SendingUsersOwnCommand)
             AppServices.Current.OutboundGear.ObserveOutbound(data);
+        // Left-behind watch — a typed `leave` is the user leaving the party, and a
+        // typed room command can draw an exit's refusal; neither is a follower the
+        // leader walked off without. Typed lines only, as for gear.
+        if (typed && !AppServices.Current.EngineGate.SendingClientCommand)
+            AppServices.Current.ComebackRequest.ObserveOutbound(data);
         // Sneak — a typed command that ends a sneak (search, gear, a door…) marks it
         // broken, the same as an engine send through the gate. Short lines only: a
         // command, not a paste. A line a wrapped sender is putting out is the gate's

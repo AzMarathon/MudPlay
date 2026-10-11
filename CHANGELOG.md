@@ -1,15 +1,27 @@
 # Version history
 
+## 3.168.1
+
+- Hazard buff (desert waterskin) tracked: drinks again only shortly before it runs out
+- Auto-Sneak on: from 60 s before, with a hazard room here or within 5 steps, the drink waits for a room with no NPCs, then re-sneaks before stepping on
+- Auto-Sneak off, or the last 15 s: it drinks where you stand; a sneak spent that way counts as lost there
+- Kept up while you stand in a hazard room by hand too, with Auto-All on
+- The drink takes the round's in-between cast; a refused one is logged and retried or set aside
+- A dropped link pauses its clock; death, a buff-stripping room and a token end it
+- Paradigm: the desert's thirst line is read, and counts the buff as off
+- Bug report shows the tracked hazard buff
+
 ## 3.168.0
 
-- Hazard buff (desert waterskin) tracked: drinks again 60 s before it runs out, not sooner
-- Only with a hazard room here or within 5 planned steps
-- Auto-Sneak: the drink waits for a room with no NPCs, then re-sneaks before stepping on
-- In the last 15 s it drinks where you stand; a sneak spent that way counts as lost there
-- The drink takes the round's in-between cast; a refused one is logged and retried or set aside
-- Forgotten on death, a dropped link and a new profile
-- The re-sneak behind a hazard drink is answered before the step
-- Bug report shows the tracked hazard buff
+- A follower left behind sends `@comeback`: a follow that failed at an exit, the leader seen leaving without it, or (Stock) its own `par` showing the leader `[Invited]`
+- No `@comeback` after an uninvite, a typed `leave`, a move of your own, a death or a teleport split
+- One request per split; it waits out Auto-All off or a party train trip, then goes out
+- The leader asked back is rejoined on its invite, whatever Join party if invited says
+- A party follower never flees: low HP or mana, Hit and Run, a failed backstab, PvP, a Flee monster
+- `[Invited]` rows in `par` no longer make a follower's client think it leads
+- Leader: followers left behind together are fetched one after the other
+- At an exit that turns a member away: a loop refuses, Auto-Lair invites on its next pass, a walk-to goes back once then ends; a Stock follower whose leader refuses or never comes stops following
+- Party train: nothing stops the trip, members hold their request, and the leader fetches everyone it left when the training is done (not after a trip you ended yourself)
 
 ## 3.167.21
 
