@@ -1683,6 +1683,9 @@ public sealed class PartyComebackManager : IDisposable
     // invited after all.
     public TimeSpan JoinFirstWait { get; set; } = TimeSpan.FromSeconds(5);
 
+    // Mirrors PartySettings.SendJoinToInvited, as AutoPartyManager.JoinNagEnabled does.
+    public bool SendJoinToInvited { get; set; } = true;
+
     // How long a pickup that waits `followWait` for the follow gives the `join`
     // before the invite. The invite has to be out while the pickup still waits: a
     // member the game took off our list can only come back by it, and a pickup
@@ -1722,10 +1725,21 @@ public sealed class PartyComebackManager : IDisposable
     // must be invited first!", which only they see. So the invite is the
     // fallback: at once for a member who signalled a hold, and otherwise when
     // inviteAfter has passed with no follow.
+    //
+    // The @join is one of the nags Settings → Party "Send @join nags to invited
+    // members" governs. Switched off, none is sent here either: the member is
+    // invited as before, and on Stock comes back by their own client's join.
     private void AskBack(string given, bool removedByAHold, TimeSpan inviteAfter)
     {
         if (!StillOnOurList(given) || removedByAHold)
         {
+            _party.Invite(given);
+            return;
+        }
+        if (!SendJoinToInvited)
+        {
+            _log?.Info(LogCategory,
+                $"{given} is still on our list (Stock), and \"Send @join nags to invited members\" is off: no @join is sent, they are invited as before.");
             _party.Invite(given);
             return;
         }

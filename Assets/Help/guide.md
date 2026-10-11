@@ -5547,6 +5547,7 @@ These two boxes are gone from this tab. Each buff has its own **Cast while resti
 
 **Default:** On
 **What it does:** After inviting someone, MudPlay follows up with reminder nags if they haven't joined yet, on a repeating cadence, until they join, decline, or the attempt window runs out.
+**On each realm:** on Paradigm it governs only those nags after an invite. On Stock it also governs the `@join` a leader sends in an invite's place to a member an exit left behind (see **How they come back differs by realm** under *If leading, wait only (s)*): with this off no `@join` is sent there either, and the member is invited at once, as on Paradigm.
 **Important notes:** Only a typed reply counts as declining. Their client's automatic traffic doesn't: replies in `{…}` or `@`-commands such as the `@where` a follower sends when its party breaks. If someone flagged *Invite to party if seen* is left sitting in an `[Invited]` slot with no nag running (a follow that broke, a nag they cut off), seeing them again re-sends the invite and starts a fresh nag.
 
 ### First nag after (seconds) / Resend frequency (seconds) / Max attempt window (seconds)

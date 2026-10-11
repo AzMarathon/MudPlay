@@ -2409,6 +2409,22 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Empty(h.Comeback.AskedToJoin);
     }
 
+    // "Send @join nags to invited members" off: the pickup sends no @join on Stock
+    // either, and invites as it always did.
+    [Fact]
+    public void Stock_JoinNagsSwitchedOff_ThePickupSendsNoAtJoin_AndInvitesAtOnce()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        h.Comeback.SendJoinToInvited = false;
+
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+
+        Assert.False(Sent(h, "/Tank @join"));
+        Assert.Single(partyWire, w => w == "invite Tank");
+        Assert.Empty(h.Comeback.AskedToJoin);
+    }
+
     // A pickup the member calls off ends what it owed: nobody is invited
     // afterwards from wherever we have walked on to.
     [Fact]
@@ -2485,6 +2501,22 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Empty(h.Comeback.InviteOnSight);
         Assert.Empty(h.Comeback.AskedToJoin);
         Assert.Empty(partyWire);
+    }
+
+    // With the @join nags switched off the pass that finds them invites, as on
+    // Paradigm, and sends no @join.
+    [Fact]
+    public void Stock_AutoLairOnSight_JoinNagsSwitchedOff_Invites()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.OnStock = () => true;
+        h.Comeback.SendJoinToInvited = false;
+        List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
+
+        AlsoHere(h, "Tank");
+
+        Assert.Equal(0, JoinsAsked(h, "Tank"));
+        Assert.Single(partyWire, w => w == "invite Tank");
     }
 
     [Fact]
