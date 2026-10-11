@@ -193,4 +193,47 @@ public sealed class ItemEditDialogViewModelTests
 
         Assert.Equal(new[] { "Statue Room", "old hermit" }, rows.Select(r => r.Name));
     }
+
+    private static ItemEditDialogViewModel MakeVmWithExitUses(IReadOnlyList<PlacedInRow>? exitUses)
+        => new(
+            wccNoStr: "1", mdbName: "jail key", existing: null,
+            currentTier: SettingsTier.Character, mdbInfo: NoInfo, shops: NoShops,
+            exitUses: exitUses);
+
+    // An item no exit names shows no Used on section; a key shows one line per exit.
+    [Fact]
+    public void ExitUses_ShowOnlyWhenSomeExitNamesTheItem()
+    {
+        Assert.False(MakeVmWithExitUses(null).HasExitUses);
+        Assert.False(MakeVmWithExitUses(Array.Empty<PlacedInRow>()).HasExitUses);
+
+        ItemEditDialogViewModel key = MakeVmWithExitUses(new[]
+        {
+            new PlacedInRow("Cell - 1/10 - south (Key)", 1, 10),
+            new PlacedInRow("Hall - 1/11 - north (Key)", 1, 11),
+        });
+
+        Assert.True(key.HasExitUses);
+        Assert.Equal(new[] { "Cell - 1/10 - south (Key)", "Hall - 1/11 - north (Key)" },
+                     key.ExitUses!.ShownRooms.Select(r => r.Location));
+        Assert.False(key.ExitUses.CanExpand);
+    }
+
+    // A key with many uses opens on the first six, with a count to show the rest.
+    [Fact]
+    public void ExitUses_ALongList_IsCappedWithACount()
+    {
+        PlacedInRow[] many = Enumerable.Range(1, 8)
+            .Select(i => new PlacedInRow($"Room {i} - 1/{i} - north (Item)", 1, i)).ToArray();
+        ItemEditDialogViewModel vm = MakeVmWithExitUses(many);
+
+        Assert.Equal(6, vm.ExitUses!.ShownRooms.Count);
+        Assert.True(vm.ExitUses.CanExpand);
+        Assert.Equal("Show all 8 uses", vm.ExitUses.ToggleLabel);
+
+        vm.ExitUses.ToggleCommand.Execute(null);
+
+        Assert.Equal(8, vm.ExitUses.ShownRooms.Count);
+        Assert.Equal("Show fewer", vm.ExitUses.ToggleLabel);
+    }
 }

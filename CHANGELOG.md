@@ -1,5 +1,9 @@
 # Version history
 
+## 3.174.1
+
+- Item records show a Used on section listing every exit that names the item as the one needed to pass (a key on a locked door, an item to carry, a ticket): room, map/room and direction, one line per exit
+
 ## 3.174.0
 
 - Timers of the buffs on you stop while you are out of the game (dropped link, relog, the board's menu) and run on with the time they had left
