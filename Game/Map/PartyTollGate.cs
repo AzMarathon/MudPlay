@@ -173,6 +173,10 @@ public sealed class PartyTollGate
 
     internal const string FundingSettingName = "Fund party members' tolls / rides if short";
 
+    // Told what is handed to whom at a crossing, and how much over the shortfall
+    // it is, as the hand-over starts: for the terminal.
+    public Action<string>? Notice { get; set; }
+
     // Whether we have already gone back for this member from this exit on the run
     // under way (PartyComebackManager.WentBackFor): the crossing turned them away once.
     public Func<string, RoomKey, RoomKey, bool>? WentBackFor { get; set; }
@@ -618,9 +622,9 @@ public sealed class PartyTollGate
         Funding funding = new(crossing, described, _schedule(GiveConfirmWindow, OnGiveWindowElapsed));
         _funding = funding;
         _assertGate($"handing coin to the party at {described}");
-        Decide($"{described}: {judged.Summary}. Handing over "
-            + string.Join(", ", plans.Select(DescribeHandOver))
-            + ", then going through");
+        string handedOver = string.Join(", ", plans.Select(DescribeHandOver));
+        Decide($"{described}: {judged.Summary}. Handing over {handedOver}, then going through");
+        Notice?.Invoke($"{described}: handing over {handedOver}");
         // Everyone is on the list before the first command goes: a confirmation
         // that came back at once would otherwise find the list empty and end it.
         foreach (HandOver plan in plans)
@@ -635,12 +639,20 @@ public sealed class PartyTollGate
         return StepVerdict.Hold;
     }
 
+    // "3 gold to Bob", or when the coins don't make the shortfall exactly,
+    // "1 runic to Bob to cover 3 gold: 99 platinum 97 gold over".
     private static string DescribeHandOver(HandOver plan) =>
         $"{CurrencyFormat.Full(plan.Copper)} to {plan.Name}"
         + (plan.Over > 0
-            ? $" ({CurrencyFormat.Full(plan.Over)} more than the {CurrencyFormat.Full(plan.Need)} they lack: "
-              + "the coins carried make nothing nearer)"
+            ? $" to cover {CurrencyFormat.Full(plan.Need)}: {CurrencyFormat.Full(plan.Over)} over"
             : string.Empty);
+
+    // The most a hand-over may come to when the coins carried don't make the
+    // shortfall exactly. Nothing but the spare limits it (user, 2026-10-10:
+    // overpay "if it doesnt make the leader unable to cross, yes", and asked
+    // whether a whole runic for a gap of three gold wants a cap, "yes no cap is
+    // fine"). The one place to change if a ceiling is ever wanted.
+    internal static long OverpayCeiling(long need, long spare) => spare;
 
     private static readonly long[] CoinUnits = [1, 10, 100, 10_000, 1_000_000];
     private static readonly string[] CoinNames = ["copper", "silver", "gold", "platinum", "runic"];
@@ -681,7 +693,7 @@ public sealed class PartyTollGate
             taken[i] = fit;
             remaining -= fit * CoinUnits[i];
         }
-        if (remaining > 0 && over is not null && overCopper <= spare) taken = over;
+        if (remaining > 0 && over is not null && overCopper <= OverpayCeiling(need, spare)) taken = over;
 
         List<(string Currency, long Count)> coins = new();
         long copper = 0;

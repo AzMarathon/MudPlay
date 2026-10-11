@@ -8965,6 +8965,9 @@ public sealed class AppServices
             // Read when asked: the comeback manager is built further down.
             WentBackFor = (given, from, to) => PartyComeback.WentBackFor(given, from, to),
             KnownLeftBehind = () => PartyComeback.KnownLeftBehind(),
+            // Posted: the hand-over starts from inside the message pump.
+            Notice = text => Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => WriteTerminalNotice($"[Party toll: {text}]")),
         };
         Movement.PartyTollClosedProbe = exit => PartyToll.Closes(in exit);
         Movement.PartyTollClosedReason = exit => PartyToll.DescribeClosed(in exit);

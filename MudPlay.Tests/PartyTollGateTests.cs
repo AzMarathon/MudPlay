@@ -64,6 +64,8 @@ public sealed class PartyTollGateTests : IDisposable
         public List<WalkEvent> WalkEvents { get; } = new();
         public List<LoopEvent> LoopEvents { get; } = new();
         public List<string> Notices { get; } = new();
+        // What the check said it was handing over, for the terminal.
+        public List<string> HandOverNotices { get; } = new();
 
         public DateTime Now { get; set; } = new(2026, 10, 10, 12, 0, 0, DateTimeKind.Utc);
         public int? Gold { get; set; } = 10;
@@ -181,6 +183,7 @@ public sealed class PartyTollGateTests : IDisposable
             MasterSwitchOff = () => made!.MasterOff,
             FundsShortMembers = () => made!.Fund,
             KeepOnHandCopper = () => made!.KeepOnHand,
+            Notice = text => made!.HandOverNotices.Add(text),
             WentBackFor = (name, from, to) => made!.WentBack(name, from, to),
         };
 
@@ -670,9 +673,10 @@ public sealed class PartyTollGateTests : IDisposable
         platinum.Says("Bob", 200);
         platinum.Says("Cal", 500);
         Assert.Equal(new[] { "give 1 platinum to Bob" }, platinum.Gives);
-        Assert.Contains(
-            "Handing over 1 platinum to Bob (97 gold more than the 3 gold they lack: the coins carried make nothing nearer)",
-            platinum.Decided);
+        Assert.Contains("Handing over 1 platinum to Bob to cover 3 gold: 97 gold over, then going through", platinum.Decided);
+        Assert.Equal(
+            "a toll east from 1/1 (Bailey) (5 gold): handing over 1 platinum to Bob to cover 3 gold: 97 gold over",
+            Assert.Single(platinum.HandOverNotices));
         platinum.Gate.OnCoinsGivenAway("Bob", 10_000);
         Assert.Equal(new[] { "e" }, platinum.Moves);
 
@@ -682,6 +686,9 @@ public sealed class PartyTollGateTests : IDisposable
         runic.Says("Bob", 200);
         runic.Says("Cal", 500);
         Assert.Equal(new[] { "give 1 runic to Bob" }, runic.Gives);
+        // No ceiling but what we keep (user, 2026-10-10: "yes no cap is fine").
+        Assert.Contains("1 runic to Bob to cover 3 gold: 99 platinum 97 gold over", Assert.Single(runic.HandOverNotices));
+        Assert.Equal(3_000_000, PartyTollGate.OverpayCeiling(need: 300, spare: 3_000_000));
     }
 
     // The one coin that would cover Bob is the coin our own toll is in: handing it
@@ -1432,7 +1439,7 @@ public sealed class PartyTollGateTests : IDisposable
         rig.Says("Cal", 2_000_000);
         Assert.Equal(PartyTollGate.StepVerdict.Hold, rig.Gate.BeforeSailing(in sailing));
         Assert.Equal(new[] { "give 1 runic to Bob" }, rig.Gives);
-        Assert.Contains("1 runic to Bob (50 platinum more than the 50 platinum they lack", rig.Decided);
+        Assert.Contains("1 runic to Bob to cover 50 platinum: 50 platinum over", rig.Decided);
         rig.Gate.OnCoinsGivenAway("Bob", 1_000_000);
         Assert.Equal(PartyTollGate.StepVerdict.Go, rig.Gate.BeforeSailing(in sailing));
         Assert.Equal(ExitBlockReason.None, rig.Filter.DescribeBoatBlock(in sailing));
