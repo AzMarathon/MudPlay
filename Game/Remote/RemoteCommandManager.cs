@@ -16,7 +16,9 @@ namespace MudPlay.Game.Remote;
 // The order of checks on an inbound line (OnChatEntry). The first that stops a
 // command ends it:
 //   a. "Disallow all remote control commands" — nothing is read or answered.
-//   b. The channel: telepath, gangpath or say, each with its own off switch.
+//   b. The channel: telepath, gangpath or say, each with its own off switch. The
+//      numbered broadcast channel too, for the client-to-client transfers alone
+//      (TransferChannels): nothing else said on it is read as a command.
 //   c. Our own echo, and anything that doesn't start with `@` (or `&@`).
 //   d. Reserved words other subsystems own (ailment announces, @panic, sync
 //      data) — swallowed.
@@ -476,6 +478,8 @@ public sealed class RemoteCommandManager : IDisposable
 
         if (relayBack)
         {
+            // No relay on the broadcast channel: it carries the transfers only.
+            if (channel.Value == RemoteChannel.Broadcast) return;
             HandleRelayBack(entry.Speaker, entry.Message, channel.Value);
             return;
         }
@@ -492,6 +496,12 @@ public sealed class RemoteCommandManager : IDisposable
         // their owning subsystem — swallow silently so they never reach the
         // unknown-command denial path and bounce a reply at the sender.
         if (_ignored.Contains(command)) return;
+
+        // The broadcast channel carries no remote command but the three transfers:
+        // one of them is allowed there, and the other two are answered with where
+        // they do work. Anything else said on it is passed over without a word, as
+        // everything on it was before it carried any of them.
+        if (channel.Value == RemoteChannel.Broadcast && TransferChannels.Identify(command, args) is null) return;
 
         // Ahead of every block and denial below, so nothing here answers while
         // the switch is off. Only a command this client knows: ordinary chat that
@@ -832,13 +842,15 @@ public sealed class RemoteCommandManager : IDisposable
 
     // Remote commands are accepted from every inbound chat channel EXCEPT the
     // realm-wide noise channels — Gossip (also carries auctions), Yell
-    // (shout-style noise), system-level Broadcast / RealmEvent, and our own
-    // outbound echo (TelepathOutgoing).
+    // (shout-style noise), system-level RealmEvent, and our own outbound echo
+    // (TelepathOutgoing). The numbered broadcast channel is taken in only for the
+    // transfers (see OnChatEntry).
     private static RemoteChannel? MapChannel(ChatChannel c) => c switch
     {
         ChatChannel.TelepathIncoming => RemoteChannel.Telepath,
         ChatChannel.Gangpath         => RemoteChannel.Gangpath,
         ChatChannel.Local            => RemoteChannel.Local,
+        ChatChannel.Broadcast        => RemoteChannel.Broadcast,
         _                            => null,
     };
 
@@ -1150,6 +1162,8 @@ public sealed class RemoteCommandManager : IDisposable
             RemoteChannel.Telepath => $"/{given} {payload}",
             RemoteChannel.Gangpath => $"bg {payload}",   // gang-channel speak verb is `bg`, not `gang`
             RemoteChannel.Local    => $">{given} {payload}",   // directed say at the @-command's sender
+            // The numbered channel's speak verb (GAME_MECHANICS "Channel broadcast").
+            RemoteChannel.Broadcast => $"br {payload}",
             _                      => payload,
         };
         byte[] bytes = Encoding.Latin1.GetBytes(wire + "\r");
