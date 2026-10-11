@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.175.18**
+> **Version 3.176.3**
 > - A loop's Only attack in lair rooms and Wait to enter lairs settings are now each character's own; a loop a character hasn't set them for runs with what the loop file holds
 > - Ticking either no longer rewrites the shared loop file
 > - `@loop send`: a loop whose name you already have is rejected when it is the same loop, and saved as `<name> 2` when it differs; your own loop and its settings are never changed

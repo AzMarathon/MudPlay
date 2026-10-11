@@ -1226,6 +1226,21 @@ public static class RoomTooltipBuilder
     {
         max = 0;
         if (string.IsNullOrEmpty(lairTag)) return false;
+
+        // A lair cell opens with its "(Max N)", and the graph build asks this of
+        // every lair room: that form is read in place. It is the pattern's own
+        // first match when it fits; anything else is left to the pattern.
+        const string head = "(Max ";
+        if (lairTag.StartsWith(head, StringComparison.Ordinal))
+        {
+            int digits = head.Length;
+            while (digits < lairTag.Length && lairTag[digits] == ' ') digits++;
+            int end = digits;
+            while (end < lairTag.Length && char.IsAsciiDigit(lairTag[end])) end++;
+            if (end > digits && end < lairTag.Length && lairTag[end] == ')')
+                return int.TryParse(lairTag.AsSpan(digits, end - digits), out max);
+        }
+
         Match m = s_maxPattern.Match(lairTag);
         if (!m.Success) return false;
         return int.TryParse(m.Groups["n"].Value, out max);

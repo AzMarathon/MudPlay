@@ -1916,8 +1916,10 @@ public sealed class LoopRunner : IRecoverableEngine
     // is up and the resume re-drives the step. Closed: the party can't be taken
     // through, so the loop is planned again from here with that exit shut, round
     // it where a way exists and to a stop naming it where none does (UnpaidRefusalFor).
-    private Func<RoomKey, Direction, RoomExit, PartyTollGate.StepVerdict>? _tollStepCheck;
-    public void SetTollStepCheck(Func<RoomKey, Direction, RoomExit, PartyTollGate.StepVerdict> check)
+    // The last argument is what the rest of the lap will charge us ourselves
+    // (OwnChargesOnTheRestOfTheLap).
+    private Func<RoomKey, Direction, RoomExit, long, PartyTollGate.StepVerdict>? _tollStepCheck;
+    public void SetTollStepCheck(Func<RoomKey, Direction, RoomExit, long, PartyTollGate.StepVerdict> check)
     {
         ArgumentNullException.ThrowIfNull(check);
         _tollStepCheck = check;
@@ -1930,9 +1932,9 @@ public sealed class LoopRunner : IRecoverableEngine
         if (_tollStepCheck is not { } check || _loop is not { } loop) return false;
         if (_tracker.State.CurrentRoom is not { } room
             || !room.Exits.TryGetValue(step.Direction, out RoomExit exit)
-            || exit.Hint != RoomExitHint.Toll || exit.TollGold <= 0)
+            || !PaidCrossingDescriber.Charges(in exit))
             return false;
-        switch (check(room.Key, step.Direction, exit))
+        switch (check(room.Key, step.Direction, exit, OwnChargesOnTheRestOfTheLap(exit.Target)))
         {
             case PartyTollGate.StepVerdict.Go:
                 return false;
@@ -1952,6 +1954,26 @@ public sealed class LoopRunner : IRecoverableEngine
             $"step {_index + 1}/{_expandedSteps.Count}: {toll} isn't taken with the party; planning the loop again without it");
         PlanAgainRoundAToll(loop);
         return true;
+    }
+
+    // What the lap's steps past the one due will charge us ourselves, in copper:
+    // every toll and fare from the room the step due leads to on to the end of the
+    // lap, read off the exits. The party's check keeps that back before it hands
+    // coin over here (AutoWalkManager.OwnChargesPastTheStepDue is the twin). The
+    // next lap is not counted: its tolls are judged when it comes to them.
+    private long OwnChargesOnTheRestOfTheLap(RoomKey afterTheStepDue)
+    {
+        if (_graph is null) return 0;
+        long copper = 0;
+        RoomKey at = afterTheStepDue;
+        for (int i = _index + 1; i < _expandedSteps.Count; i++)
+        {
+            if (_expandedSteps[i] is not MoveLoopStep move) continue;
+            if (_graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)) break;
+            copper += PaidCrossingDescriber.CostOf(in exit);
+            at = exit.Target;
+        }
+        return copper;
     }
 
     private void PlanAgainRoundAToll(Loop loop)
@@ -1994,8 +2016,8 @@ public sealed class LoopRunner : IRecoverableEngine
         {
             if (_expandedSteps[(_index + n) % _expandedSteps.Count] is not MoveLoopStep move) continue;
             if (_graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)) return false;
-            if (exit.Hint == RoomExitHint.Toll && exit.TollGold > 0
-                && _filter.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.Toll))
+            if (PaidCrossingDescriber.Charges(in exit)
+                && (_filter.DescribeExitBlock(in exit) & (ExitBlockReason.Toll | ExitBlockReason.Fare)) != 0)
                 return true;
             at = exit.Target;
         }

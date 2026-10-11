@@ -70,6 +70,14 @@ public sealed class CashSettings
     // clients must let the leader run commands on them.
     public bool StashTransferPartyShare { get; set; }
 
+    // Leading a party to a toll or a paid ride (an NPC's transport, a sailing) that
+    // a member can't pay: on, the member is handed what they lack out of what the
+    // leader holds beyond its own crossing and the keep-on-hand floor above
+    // (Game.Map.PartyTollGate); off, no coin is handed over and the crossing is
+    // closed to the party for the trip. Off until ticked (user, 2026-10-10:
+    // "default off").
+    public bool FundPartyTolls { get; set; }
+
     // Turn Auto-Combat off during a detour — an auto-sell detour, or an auto-deposit
     // trip to the bank or stash — once it has left the loop's rooms, and back on when
     // it's back or over (Game.Cash.DetourCombatHold). Default off.

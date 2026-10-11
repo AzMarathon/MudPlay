@@ -8,13 +8,14 @@ namespace MudPlay.Game.Remote;
 // warm because a level is stable, wealth drifts with loot and spending, so it is
 // asked for only when a route needs it and believed only briefly.
 //
-// Two users, with two rules:
-//   - NPC fares and boat fares (MinWealth): the party's poorest CONFIRMED purse. A
-//     follower with no fresh reading is skipped, not counted as broke, so a fare
-//     is refused only when someone known can't pay it.
-//   - Toll exits (FreshPurse, Verify): every follower is asked before the party
-//     steps through one, and one who doesn't answer counts as unable to pay
-//     (user, 2026-10-10). PartyTollGate holds the step, asks here and decides.
+// Two readers:
+//   - MinWealth: the party's poorest CONFIRMED purse, a follower with no fresh
+//     reading skipped. No crossing is judged on it; it tells the route warm-ups a
+//     party is led, and it is the bug report's line.
+//   - Tolls, NPC fares and sailings (FreshPurse, Verify): every follower is asked
+//     before the party goes through one, and one who doesn't answer counts as
+//     unable to pay (user, 2026-10-10). PartyTollGate holds the step, asks here
+//     and decides.
 //
 // Nothing here touches the wire from a route search. MinWealth and FreshPurse are
 // cache reads: BFS explores toll and fare edges the party will never walk, so a
@@ -112,9 +113,8 @@ public sealed class PartyWealthTracker
     }
 
     // The party's minimum CONFIRMED on-hand wealth in copper, or null when the
-    // party gate shouldn't apply (solo, not leading, or our own wallet unknown).
-    // For fares, which are refused only on a purse someone has reported: a
-    // follower with no fresh reading is skipped, not counted as broke.
+    // no party is led with a known wallet (solo, not leading, or our own wallet
+    // unknown). A follower with no fresh reading is skipped, not counted as broke.
     public long? MinWealth()
     {
         if (!Leading) return null;

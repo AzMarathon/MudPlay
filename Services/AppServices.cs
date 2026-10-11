@@ -7543,10 +7543,10 @@ public sealed class AppServices
         // Party-wealth probe + tracker. Unlike level, wealth isn't kept warm —
         // it drifts with loot / spend — so @wealth is asked only when a walk's
         // route crosses a paid exit (Probe, from MovementFilter.WarmForRoute) and
-        // at a toll itself (PartyTollGate, further down). The tracker records each
-        // reply and exposes the party's poorest known wallet, which
-        // MovementFilter reads to keep a following party off a fare a member can't
-        // pay; a toll is PartyTollGate's to judge. The probe forwards replies
+        // at a toll, fare or sailing itself (PartyTollGate, further down), which is
+        // what judges the party there. The tracker records each reply and exposes
+        // the party's poorest known wallet, which tells MovementFilter's warm-ups
+        // a party is led and goes in the bug report. The probe forwards replies
         // straight to the tracker (not the players table). The recordWealth closure
         // reads the PartyWealth property lazily, so the construction order is fine.
         PartyWealthProbe = new Game.Remote.PartyWealthProbe(
@@ -9046,11 +9046,13 @@ public sealed class AppServices
             if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;
         };
 
-        // A party at a toll exit (user, 2026-10-10): every follower's purse is
-        // asked before the leader's engine steps through, whoever is short or
-        // silent is handed the coin when we can spare it, and otherwise the exit
+        // A party at a toll exit, an NPC's paid transport or a sailing (user,
+        // 2026-10-10): every follower's purse is asked before the leader's engine
+        // goes through, whoever is short or silent is handed the coin when the
+        // Cash setting allows it and we can spare it, and otherwise the crossing
         // is closed to the party, so the route goes round or the walk ends saying
-        // why. What we spare leaves our own toll and a trip's reserved fees alone.
+        // why. What we spare leaves our own toll or fare and a trip's reserved
+        // fees alone.
         PartyToll = new Game.Map.PartyTollGate(
             PartyWealth,
             ownPurse: () => Inventory.IsLoaded ? Inventory.Snapshot.Currency.TotalCopperValue : (long?)null,
@@ -9070,14 +9072,19 @@ public sealed class AppServices
             // Read when asked: the comeback manager is built further down.
             WentBackFor = (given, from, to) => PartyComeback.WentBackFor(given, from, to),
             KnownLeftBehind = () => PartyComeback.KnownLeftBehind(),
+            // Posted: the hand-over starts from inside the message pump.
+            Notice = text => Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => WriteTerminalNotice($"[Party toll: {text}]")),
         };
         Movement.PartyTollClosedProbe = exit => PartyToll.Closes(in exit);
         Movement.PartyTollClosedReason = exit => PartyToll.DescribeClosed(in exit);
-        Walker.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
-        LoopRunner.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
+        Walker.SetTollStepCheck((from, dir, exit, later) => PartyToll.BeforeTollStep(from, dir, in exit, later));
+        LoopRunner.SetTollStepCheck((from, dir, exit, later) => PartyToll.BeforeTollStep(from, dir, in exit, later));
+        Walker.SetSailingCheck((passage, later) => PartyToll.BeforeSailing(in passage, later));
         Inventory.CoinsGivenAway += (recipient, copper) => PartyToll.OnCoinsGivenAway(recipient, copper);
         Inventory.GiveRefused += recipient => PartyToll.OnGiveRefused(recipient);
         Inventory.CoinGiveMisaimed += () => PartyToll.OnCoinGiveMisaimed();
+        Inventory.CoinGiveLackedCoins += () => PartyToll.OnCoinGiveLackedCoins();
         // A member paid for at a toll has spent it once the room beyond is confirmed.
         RoomTracker.StateChanged += t =>
         {
@@ -9085,6 +9092,23 @@ public sealed class AppServices
                 PartyToll.NoteRoomChanged(left, now.Key);
         };
         Profile.ProfileLoaded += _ => PartyToll.Reset();
+        // The check's two Cash settings are handed to it here, on the UI thread,
+        // when the profile loads, is saved (a Settings save writes the section and
+        // then saves) or closes: a route search asks the check from its own
+        // thread, where the profile's settings dictionary is not safe to read.
+        // The character's own Cash section, as every engine reads its settings;
+        // the floor by the conversion the deposit and the train funding use.
+        void RefreshPartyTollSettings()
+        {
+            Models.Profile.CashSettings cash = ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+            PartyToll.FundsShortMembers = cash.FundPartyTolls;
+            PartyToll.KeepOnHandCopper =
+                cash.KeepOnHandWealth * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
+        }
+        RefreshPartyTollSettings();
+        Profile.ProfileLoaded += _ => RefreshPartyTollSettings();
+        Profile.ProfileSaving += _ => RefreshPartyTollSettings();
+        Profile.ProfileClosed += RefreshPartyTollSettings;
         // A toll closed to the party stays closed for the trip it was closed on.
         MovementControl.StateChanged += () =>
         {
@@ -9298,7 +9322,13 @@ public sealed class AppServices
             // its reply window; the router hears it back on the UI thread.
             requestBankBalances: () => _ = BankBalance.QueryAsync().ContinueWith(
                 _ => Avalonia.Threading.Dispatcher.UIThread.Post(() => TrainFunding.NoteBankRefreshed()),
-                TaskScheduler.Default));
+                TaskScheduler.Default),
+            // A bank stop the trip makes anyway also draws what a party in tow is
+            // short of the trip's tolls and fares (Cash: fund party members' tolls).
+            partyTollFunding: tolls => PartyToll.FundingNeededFor(tolls),
+            readPartyPurses: then => PartyToll.AfterReadingPurses(then),
+            // A stash room picked as the Bank in Settings → Cash + Items.
+            stashIsTheBank: room => Movement.IsStash(room) && PathItemBankRoom() == room);
         // The full parse that answers that `i`: an incremental pickup / drop patch is
         // exactly the drifting figure the refresh exists to replace. Harmless at any
         // other time, since the router only listens while it is holding for one.
@@ -9768,7 +9798,16 @@ public sealed class AppServices
             // arrival (the "sat idle at the shop, never bought" bug).
             walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
-            log: Log);
+            log: Log,
+            // The withdrawal for the item also draws what a party in tow is short
+            // of the tolls on the rest of the walk; their purses are read first,
+            // and only when there is a toll on it to read them for.
+            partyTollTopUp: PathItemPartyTollTopUp,
+            readPartyPurses: (bank, shop, destination, then) =>
+            {
+                if (PathItemTripTolls(bank, shop, destination) > 0) PartyToll.AfterReadingPurses(then);
+                else then();
+            });
         Needs.NeedPosted += PathItemShopRouter.OnNeedPosted;
         Walker.Event += PathItemShopRouter.OnWalkEvent;
         Inventory.Changed += PathItemShopRouter.OnInventoryChanged;
@@ -13936,6 +13975,51 @@ public sealed class AppServices
         return Game.Map.RoomKey.TryParseWire(cash.BankRoomKey, out Game.Map.RoomKey key)
             ? key
             : null;
+    }
+
+    // The tolls and fares on what is left of a path-item detour at its bank stop:
+    // on to the shop, then on to the walk's destination. Each crosser's own.
+    private long PathItemTripTolls(Game.Map.RoomKey bank, Game.Map.RoomKey shop, Game.Map.RoomKey destination) =>
+        Movement.TollCopperOnRoute(Bfs, bank, shop) + Movement.TollCopperOnRoute(Bfs, shop, destination);
+
+    // The deposit this session has seen at the bank whose room this is. Null when
+    // none has: no `bank` listing named it, or the room is no bank's (a stash room
+    // set as the bank, where a `with` draws nothing).
+    private long? KnownDepositAt(Game.Map.RoomKey bankRoom)
+    {
+        IReadOnlyDictionary<string, long> deposits = BankBalance.LastKnown;
+        foreach (Game.GameData.BankShop bank in Game.GameData.BankCatalog.Enumerate(GameData))
+            if (bank.Key == bankRoom && deposits.TryGetValue(bank.Name, out long copper))
+                return copper;
+        return null;
+    }
+
+    // What a path-item detour's withdrawal adds for a party in tow (user,
+    // 2026-10-10: the leader's cash "from hand or bank if its making a bank
+    // trip", and "yes" to this detour drawing it too). The item takes all that
+    // was carried and drawn for it, so the leader needs what it keeps for the
+    // tolls ahead (PartyTollGate.KeptFor) and what the members are short on top.
+    // Never more than the bank is known to hold beyond the item's own draw, since
+    // a `with` for more than the balance draws nothing; with no balance known,
+    // nothing is added.
+    private (long Copper, string Said) PathItemPartyTollTopUp(
+        Game.Map.RoomKey bank, Game.Map.RoomKey shop, Game.Map.RoomKey destination, long drawing)
+    {
+        long tolls = PathItemTripTolls(bank, shop, destination);
+        if (tolls <= 0) return (0, string.Empty);
+        (long needed, string who) = PartyToll.FundingNeededFor(tolls);
+        if (needed <= 0) return (0, string.Empty);
+
+        string lacking = $"The party in tow is {needed:N0} copper short of the walk's {tolls:N0} copper in tolls and fares each ({who}).";
+        if (KnownDepositAt(bank) is not { } balance)
+            return (0, lacking + " Nothing is drawn for them: no balance is known for the bank here.");
+        long wanted = PartyToll.KeptFor(tolls) + needed;
+        long add = Math.Min(wanted, Math.Max(0, balance - drawing));
+        return (add, lacking + (add >= wanted
+            ? $" Drawing {add:N0} copper more: what you keep for your own crossings and their share."
+            : add > 0
+                ? $" Drawing {add:N0} copper more, {wanted - add:N0} short of what that takes: the balance here is {balance:N0}."
+                : $" Nothing more drawn: the balance here ({balance:N0}) has none left beyond the item's {drawing:N0}."));
     }
 
     // Per-copy buy cost in copper for the shop router's affordability gate:

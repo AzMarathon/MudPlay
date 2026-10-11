@@ -64,6 +64,10 @@ public sealed class TrainFundingRouter
     // is one quick burst; nothing is collected inside this window.
     public TimeSpan SurveyWindow { get; set; } = TimeSpan.FromSeconds(1.5);
 
+    // How long a bank stop waits for the party's purses to be read before drawing
+    // on what is known. An @wealth round answers or gives up inside 4 s.
+    public TimeSpan PartyPurseWindow { get; set; } = TimeSpan.FromSeconds(6);
+
     private enum Phase
     {
         Idle, AwaitingBank, AwaitingInventory, WalkingToLeg,
@@ -71,6 +75,9 @@ public sealed class TrainFundingRouter
         // yet); then, the pile being short, the `bank` listing is awaited to decide
         // whether to draw on it at all.
         Surveying, AwaitingStashBank,
+        // At a bank, before the `with`: the party's purses are being read. And the
+        // same at a stash room set as the bank, before anything is taken.
+        AwaitingPartyPurses, AwaitingStashPurses,
         Collecting, Withdrawing,
     }
 
@@ -94,6 +101,9 @@ public sealed class TrainFundingRouter
     private readonly Action<long?>? _limitCollection;
     private readonly Func<long>? _surveyedCopper;
     private readonly Action<long>? _collectSurveyed;
+    private readonly Func<long, (long Copper, string Who)>? _partyTollFunding;
+    private readonly Action<Action>? _readPartyPurses;
+    private readonly Func<RoomKey, bool>? _stashIsTheBank;
     private readonly LogService? _log;
 
     private Phase _phase = Phase.Idle;
@@ -168,8 +178,20 @@ public sealed class TrainFundingRouter
         // set, and take up to a copper value of that surveyed coin.
         Action<long?>? limitCollection = null,
         Func<long>? surveyedCopper = null,
-        Action<long>? collectSurveyed = null)
+        Action<long>? collectSurveyed = null,
+        // A party in tow at a bank stop: what funding its members through tolls and
+        // fares of a given copper each would take from this purse, with who is
+        // short for the log (PartyTollGate.FundingNeededFor), and a way to have
+        // their purses read first, which calls back when the round is over.
+        Func<long, (long Copper, string Who)>? partyTollFunding = null,
+        Action<Action>? readPartyPurses = null,
+        // Whether a stash room is the one set as the bank in Settings: a stop
+        // there takes the party's share as a bank stop draws it.
+        Func<RoomKey, bool>? stashIsTheBank = null)
     {
+        _partyTollFunding = partyTollFunding;
+        _readPartyPurses = readPartyPurses;
+        _stashIsTheBank = stashIsTheBank;
         _autoGetCash = autoGetCash ?? throw new ArgumentNullException(nameof(autoGetCash));
         _setAutoGetCash = setAutoGetCash ?? throw new ArgumentNullException(nameof(setAutoGetCash));
         _currentRoom = currentRoom ?? throw new ArgumentNullException(nameof(currentRoom));
@@ -447,6 +469,23 @@ public sealed class TrainFundingRouter
             return;
         }
 
+        // A party in tow pays the trip's tolls and fares too, each member their own.
+        // The draw covers what they are short (Withdraw), so their purses are read
+        // first: one @wealth round, with the window below in case it never reports.
+        // Withdraw leaves this phase, so whichever of the two calls comes second does nothing.
+        _phase = Phase.AwaitingPartyPurses;
+        if (_readPartyPurses is not null && _partyTollFunding is not null && TollsFrom(_currentRoom()) > 0)
+        {
+            _armTimer(PartyPurseWindow, () => Withdraw(session));
+            _readPartyPurses(() => Withdraw(session));
+        }
+        else Withdraw(session);
+    }
+
+    private void Withdraw(int session)
+    {
+        if (session != _session || _phase != Phase.AwaitingPartyPurses) return;
+
         // The plan priced the trip's tolls from where it stood; standing at the bank,
         // draw enough for the tolls from HERE onward too (report
         // paradigm-20260930-204041: topped up to the bare train fee, then paid a 5 gold
@@ -455,10 +494,42 @@ public sealed class TrainFundingRouter
         long stillShort = Bill(_currentRoom()) - Spendable(_onHandCopper());
         long balance = BalanceAt(_leg.Room);
         if (stillShort > draw) draw = balance > 0 ? Math.Min(stillShort, balance) : stillShort;
+        draw += PartyTollTopUp(draw, balance, "the balance here");
         _phase = Phase.Withdrawing;
         _send($"with {draw}");
         _armTimer(WithdrawWindow, () => CompleteLeg(session));
     }
+
+    // What to draw on top of our own bill so that the party members short of the
+    // trip's tolls and fares can be handed them at each one (user, 2026-10-10: the
+    // leader's cash "from hand or bank if its making a bank trip"). Only ever
+    // added to a withdrawal this errand is making anyway, or to what it takes from
+    // a stash room set as the bank: it never starts either. Less what the purse
+    // will already hold beyond the bill, and no more than the balance (or the
+    // pile) has left, since a `with` for more than the balance draws nothing.
+    private long PartyTollTopUp(long draw, long balance, string held)
+    {
+        long tolls = TollsFrom(_currentRoom());
+        if (tolls <= 0 || _partyTollFunding is null) return 0;
+        (long needed, string who) = _partyTollFunding(tolls);
+        if (needed <= 0) return 0;
+
+        long beyondTheBill = Math.Max(0, Spendable(_onHandCopper()) + draw - Bill(_currentRoom()));
+        long wanted = Math.Max(0, needed - beyondTheBill);
+        long add = Math.Min(wanted, Math.Max(0, balance - draw));
+        _log?.Info(LogCategory,
+            $"The party in tow is {needed:N0} copper short of the trip's {tolls:N0} copper in tolls and fares each ({who}). "
+            + (add > 0
+                ? $"Drawing {add:N0} copper more for them, {draw + add:N0} in all"
+                  + (add < wanted ? $" ({wanted - add:N0} short of it: {held} is {balance:N0})." : ".")
+                : wanted <= 0
+                    ? "The purse already covers that beyond our own bill: nothing more drawn."
+                    : $"Nothing more drawn: {held} ({balance:N0}) has none left beyond our own {draw:N0}."));
+        return add;
+    }
+
+    // The tolls and fares on the trip from a room, each crosser's own.
+    private long TollsFrom(RoomKey? here) => Bill(here) - _cost;
 
     // The stash has answered the search. Enough there: take what the run is short
     // and leave the rest hidden. Short: don't touch it until we know the bank can
@@ -479,6 +550,18 @@ public sealed class TrainFundingRouter
         }
         if (shown >= shortfall)
         {
+            // A stash room set as the bank counts as one for the party's share
+            // (user, 2026-10-10): with more in the pile than our own bill takes,
+            // the members' purses are read and what they are short of the trip's
+            // tolls is taken as well (TakeWithThePartysShare).
+            if (shown > shortfall && _readPartyPurses is not null && _partyTollFunding is not null
+                && _stashIsTheBank?.Invoke(_leg.Room) == true && TollsFrom(_currentRoom()) > 0)
+            {
+                _phase = Phase.AwaitingStashPurses;
+                _armTimer(PartyPurseWindow, () => TakeWithThePartysShare(session));
+                _readPartyPurses(() => TakeWithThePartysShare(session));
+                return;
+            }
             TakeFromStash(shortfall, session);
             return;
         }
@@ -519,6 +602,16 @@ public sealed class TrainFundingRouter
             + "run — leaving the stash hidden.");
         _legsRun++;
         Fail($"short {Math.Max(0, need - spendable - shown):N0} copper even with {_leg.Name} — left it untouched");
+    }
+
+    // The purses are read (or the window passed): take our own shortfall, and what
+    // the members are short on top, out of what the search showed.
+    private void TakeWithThePartysShare(int session)
+    {
+        if (session != _session || _phase != Phase.AwaitingStashPurses) return;
+        long shortfall = Shortfall();
+        long shown = _surveyedCopper?.Invoke() ?? 0;
+        TakeFromStash(shortfall + PartyTollTopUp(shortfall, shown, "the pile here"), session);
     }
 
     private void TakeFromStash(long copper, int session)

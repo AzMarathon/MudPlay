@@ -1,10 +1,25 @@
 # Version history
 
-## 3.175.18
+## 3.176.3
 
 - A loop's Only attack in lair rooms and Wait to enter lairs settings are now each character's own; a loop a character hasn't set them for runs with what the loop file holds
 - Ticking either no longer rewrites the shared loop file
 - `@loop send`: a loop whose name you already have is rejected when it is the same loop, and saved as `<name> 2` when it differs; your own loop and its settings are never changed
+
+## 3.176.1
+
+- Switching game data sets is quicker: the room map's doors, teleports, boats and lookups build about three times faster, with far less memory churned
+- Program log: the room map's load line says how long the build took
+
+## 3.176.0
+
+- New Cash + Items setting, off by default: Fund party members' tolls / rides if short
+- Changed from 3.172.0, which paid tolls for members unasked: with the setting off, a short or silent member closes tolls, NPC rides and sailings to the party for the trip
+- On: the leader keeps the larger of its own crossings (this one and those further on the route) and Minimum cash to keep on hand; only coin above that is handed over
+- No exact change: the smallest larger amount your coins make is handed over, with no other limit; the terminal says how much over
+- Paid NPC transports and sailings are checked and funded like tolls
+- A bank stop already being made (training trip, item purchase, a stash room set as the Bank) also draws what the party is short of the tolls ahead
+- A hidden member can't be given coin and counts as not funded; coin give refusals are read on every realm
 
 ## 3.175.17
 
