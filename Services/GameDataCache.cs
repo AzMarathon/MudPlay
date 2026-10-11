@@ -80,6 +80,20 @@ public sealed class GameDataCache
     private readonly Dictionary<string, object> _derived = new(StringComparer.Ordinal);
     private long _generation;
 
+    // One load of one set: the set's name and a count that moves every time its
+    // tables are dropped for re-reading (a switch, a reload, a set imported again
+    // over itself). The name alone does not change on the last two.
+    public readonly record struct Load(string? Set, long Generation);
+
+    // The load the cache is serving. Whatever keeps something built from the tables
+    // and decides for itself when it is out of date reads this BEFORE building and
+    // keeps it with the result, which is good only while this still equals it. A
+    // build a switch overtook is then never mistaken for one of the set switched
+    // back to, whatever tables it read on the way. Asked on every lookup of such an
+    // index, so it takes no lock: the count alone tells two loads apart, and the
+    // name beside it need not be read in the same instant.
+    public Load ActiveLoad => new(ActiveSet, Interlocked.Read(ref _generation));
+
     // Long enough that anything read per combat round / tick / room entry never ages
     // out; short enough that a startup-only table is gone within minutes of its build.
     public static readonly TimeSpan IdleEvictAfter = TimeSpan.FromMinutes(5);
@@ -225,7 +239,7 @@ public sealed class GameDataCache
         lock (_tables)
         {
             _derived.Clear();
-            _generation++;
+            Interlocked.Increment(ref _generation);
         }
         Log?.Log(LogSeverity.Info, "GameData",
             (outgoing, setName) switch
@@ -623,7 +637,7 @@ public sealed class GameDataCache
         lock (_tables)
         {
             _derived.Clear();
-            _generation++;
+            Interlocked.Increment(ref _generation);
             _tables.Clear();
             _failedTables.Clear();
             _lastRead.Clear();

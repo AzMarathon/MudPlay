@@ -14,7 +14,11 @@ public sealed class TBInfoStore
 {
     private readonly GameDataCache _cache;
     private readonly LogService? _log;
-    private readonly Dictionary<int, TBInfoEntry> _entries = new();
+
+    // Replaced whole on every reload, never refilled: ItemSourceIndex and
+    // RoomFloorItemIndex walk the entries on a worker thread while the UI thread may
+    // be loading the next set, and a walk must see one set's entries from end to end.
+    private volatile Dictionary<int, TBInfoEntry> _entries = new();
 
     // Active set the store was last loaded from, or null if empty.
     public string? ActiveSet { get; private set; }
@@ -49,7 +53,10 @@ public sealed class TBInfoStore
     // call repeatedly. Wired by AppServices to GameDataCache.ActiveSetChanged.
     public void OnActiveSetChanged(string? setName)
     {
-        _entries.Clear();
+        // Empty at once, as a store being reloaded always was; the new entries are
+        // filled apart and put in place whole.
+        _entries = new Dictionary<int, TBInfoEntry>();
+        Dictionary<int, TBInfoEntry> entries = new();
         ActiveSet = setName;
 
         if (string.IsNullOrWhiteSpace(setName))
@@ -77,9 +84,10 @@ public sealed class TBInfoStore
                 skipped++;
                 continue;
             }
-            _entries[entry.Number] = entry;
+            entries[entry.Number] = entry;
             parsed++;
         }
+        _entries = entries;
 
         _cache.EvictTable("TBInfo");
 

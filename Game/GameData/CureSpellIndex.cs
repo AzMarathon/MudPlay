@@ -45,7 +45,9 @@ public sealed class CureSpellIndex
     private readonly GameDataCache _cache;
     private readonly Func<IReadOnlySet<int>> _diseaseApplyNumbers;
     private List<CureSpell>? _cures;
-    private string? _builtForSet;
+    // The load of the set _cures came from, read before the build: a set imported
+    // again over itself keeps its name, so the name alone is no test.
+    private GameDataCache.Load _builtFor;
 
     public CureSpellIndex(GameDataCache cache, Func<IReadOnlySet<int>>? diseaseApplyNumbers = null)
     {
@@ -67,9 +69,10 @@ public sealed class CureSpellIndex
 
     private List<CureSpell> Map()
     {
-        if (_cures is not null && _builtForSet == _cache.ActiveSet) return _cures;
+        GameDataCache.Load load = _cache.ActiveLoad;
+        if (_cures is not null && _builtFor == load) return _cures;
         _cures = Build(_cache, _diseaseApplyNumbers());
-        _builtForSet = _cache.ActiveSet;
+        _builtFor = load;
         return _cures;
     }
 

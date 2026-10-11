@@ -14,11 +14,12 @@ namespace MudPlay.Services;
 //   2. The TBInfo `roomitem` directive fired by a room's CMD chain (e.g. a "make
 //      emblem" command that scatter-drops the dragon emblem).
 // Backs the Navigation Room Info panel's floor-item links and the map's room
-// tooltip. Self-invalidates by comparing the cache's ActiveSet to the set it last
-// built from, and is warmed on a worker thread as a set loads — same lifetime
-// contract as ItemSourceIndex. Left to the first room hovered it stalled the map:
-// the room graph has let the Rooms table go by then, and the build read all of it
-// back on the UI thread.
+// tooltip. Self-invalidates by comparing the cache's load (the set's name and the
+// count that moves when its tables are read afresh) to the load it last built
+// from, and is warmed on a worker thread as a set loads — same lifetime contract as
+// ItemSourceIndex. Left to the first room hovered it stalled the map: the room
+// graph has let the Rooms table go by then, and the build read all of it back on
+// the UI thread.
 public sealed class RoomFloorItemIndex
 {
     private readonly GameDataCache _cache;
@@ -27,7 +28,7 @@ public sealed class RoomFloorItemIndex
 
     // One immutable build, published by a single reference assignment: a reader
     // takes the current one and never sees a map the warm-up is still filling.
-    private sealed record Snapshot(string? Set, Dictionary<RoomKey, List<int>> ItemsByRoom);
+    private sealed record Snapshot(GameDataCache.Load Load, Dictionary<RoomKey, List<int>> ItemsByRoom);
 
     // Serialises builders so a query racing the warm-up waits for it rather than
     // building a second time.
@@ -73,14 +74,15 @@ public sealed class RoomFloorItemIndex
 
     private Snapshot EnsureBuilt()
     {
-        string? active = _cache.ActiveSet;
-        if (_snapshot is { } current && current.Set == active) return current;
+        if (_snapshot is { } current && current.Load == _cache.ActiveLoad) return current;
 
         lock (_buildGate)
         {
-            // Another thread may have published while we waited for the gate.
-            if (_snapshot is { } published && published.Set == active) return published;
-            Snapshot built = new(active, Build(active));
+            // Read once the gate is ours and before the build: another thread may
+            // have published while we waited, and the set may have been loaded again.
+            GameDataCache.Load load = _cache.ActiveLoad;
+            if (_snapshot is { } published && published.Load == load) return published;
+            Snapshot built = new(load, Build(load.Set));
             _snapshot = built;
             return built;
         }

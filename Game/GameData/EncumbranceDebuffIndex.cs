@@ -15,7 +15,9 @@ public sealed class EncumbranceDebuffIndex
 
     private readonly GameDataCache _cache;
     private HashSet<int>? _spells;
-    private string? _builtForSet;
+    // The load of the set _spells came from, read before the build: a set imported
+    // again over itself keeps its name, so the name alone is no test.
+    private GameDataCache.Load _builtFor;
 
     public EncumbranceDebuffIndex(GameDataCache cache)
     {
@@ -27,9 +29,10 @@ public sealed class EncumbranceDebuffIndex
 
     private HashSet<int> Spells()
     {
-        if (_spells is not null && _builtForSet == _cache.ActiveSet) return _spells;
+        GameDataCache.Load load = _cache.ActiveLoad;
+        if (_spells is not null && _builtFor == load) return _spells;
         _spells = Build(_cache.GetTable("Spells"));
-        _builtForSet = _cache.ActiveSet;
+        _builtFor = load;
         return _spells;
     }
 

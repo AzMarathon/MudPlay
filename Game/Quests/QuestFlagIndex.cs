@@ -30,7 +30,7 @@ public readonly record struct QuestFlagRef(
 // (give/add/check/test/fail/removeability), attributes each to its monster / room / spell root
 // by walking the block's Called-From provenance, works out how the line is set off, and
 // resolves ids to names via GameDataCache. Builds on first query and self-invalidates on a set
-// swap by comparing the cache's ActiveSet.
+// swap or re-import by comparing the cache's ActiveLoad.
 public sealed class QuestFlagIndex
 {
     private readonly GameDataCache _cache;
@@ -44,7 +44,7 @@ public sealed class QuestFlagIndex
     // a live view, so everything is built into fresh collections and swapped in whole — never
     // mutated in place after a reader could be holding it.
     private Snapshot _snapshot = Snapshot.Empty;
-    private string? _loadedSet;
+    private GameDataCache.Load _builtFor;
     private bool _built;
 
     // Provenance-walk safety cap — a Called-From chain is a small acyclic tree in practice, but
@@ -101,11 +101,13 @@ public sealed class QuestFlagIndex
 
     private Snapshot EnsureBuilt()
     {
-        string? active = _cache.ActiveSet;
         lock (_gate)
         {
-            if (_built && _loadedSet == active) return _snapshot;
-            return Rebuild(active);
+            // The load, read before the build: a set imported again over itself
+            // keeps its name, so the name alone is no test.
+            GameDataCache.Load load = _cache.ActiveLoad;
+            if (_built && _builtFor == load) return _snapshot;
+            return Rebuild(load);
         }
     }
 
@@ -114,8 +116,9 @@ public sealed class QuestFlagIndex
     // Caller holds _gate. Builds into fresh local collections, then publishes them whole — so
     // a concurrent reader (Entries) sees either the previous snapshot or this finished one,
     // never a list being cleared/appended/sorted underneath it.
-    private Snapshot Rebuild(string? active)
+    private Snapshot Rebuild(GameDataCache.Load load)
     {
+        string? active = load.Set;
         Snapshot snapshot = Snapshot.Empty;
         GameTable? doc = string.IsNullOrWhiteSpace(active) ? null : _cache.GetTable("TBInfo");
         if (doc is not null)
@@ -198,7 +201,7 @@ public sealed class QuestFlagIndex
         }
 
         _snapshot = snapshot;
-        _loadedSet = active;
+        _builtFor = load;
         _built = true;
         return snapshot;
     }
