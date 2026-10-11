@@ -109,23 +109,9 @@ public sealed class DoHandlerTests
     [Fact]
     public void Do_NoArgs_DoesNotAck()
     {
-        // No work was done — no {ok}. A command with its words missing is a
-        // refusal, as a bare @kill is: the failure message, under the Warn setting.
+        // No work was done — no {ok} either.
         var (engine, _, players, _) = Setup();
         SeedPlayer(players, "Trusted", PlayerRemoteControls.ExecuteCommands);
-
-        engine.DispatchForTests(Telepath("Trusted", "@do"));
-
-        Assert.Equal("/Trusted {command invalid or not allowed}\r",
-            Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests)));
-    }
-
-    [Fact]
-    public void Do_NoArgs_IsSilentWithDenialsSilenced()
-    {
-        var (engine, _, players, _) = Setup();
-        SeedPlayer(players, "Trusted", PlayerRemoteControls.ExecuteCommands);
-        engine.WarnOnDenial = false;
 
         engine.DispatchForTests(Telepath("Trusted", "@do"));
 

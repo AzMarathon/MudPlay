@@ -2509,7 +2509,7 @@ Sends a command to the game as if you had typed it. This is the highest-trust co
 | Reply | When |
 |---|---|
 | `ok` | The command was sent to the game. It says nothing about what the game made of it. |
-| the Failure message | **Refusal:** a bare `@do`, with nothing to send. |
+| nothing | A bare `@do`. |
 | `@do suicide is not allowed, use @suicide` | **Refusal:** one of the words after `@do` is `suicide`. Nothing is sent to the game. |
 | nothing | `reroll` appears anywhere in the line. Nothing is sent, and nothing is answered. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
