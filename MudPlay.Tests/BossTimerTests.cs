@@ -503,12 +503,13 @@ public sealed class BossTimerTests : IDisposable
         players.EditCustomization("Bob", new PlayerCustomization(RemoteControls: PlayerRemoteControls.QueryBossTimers));
         // The broadcast channel opened, as with its Talk-tab box unticked.
         engine.DisableBroadcastChannel = false;
-        _ = new BossTimerQueryHandler(engine, store, timers, cache, clock: () => _handlerNow);
+        engine.Now = () => _engineNow;
+        _ = new BossTimerQueryHandler(engine, store, timers, cache);
         return (engine, timers);
     }
 
-    // The handler's clock: it spaces out its answers on the broadcast channel.
-    private DateTimeOffset _handlerNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
+    // The engine's clock: it bounds what it says on the broadcast channel by the minute.
+    private DateTimeOffset _engineNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     private static ChatLogEntry Telepath(string msg) =>
         new(Now, ChatChannel.TelepathIncoming, "Bob", msg, $"Bob telepaths: {msg}");
@@ -565,13 +566,16 @@ public sealed class BossTimerTests : IDisposable
     }
 
     // On the broadcast channel an answer is several lines to everyone there, from
-    // every client the asker may ask. One a minute to each asker: asked again
-    // sooner, the answer is one line saying so (by the Warn setting), not the data.
+    // every client the asker may ask. The whole answer goes out, as one answer; a
+    // second ask from the same player inside the minute draws nothing, and counts
+    // for nothing against the other players there.
     [Fact]
-    public void TimerSync_OnTheBroadcastChannel_IsAnsweredOnceAMinuteToEachAsker()
+    public void TimerSync_OnTheBroadcastChannel_GoesOutWhole_OnceAMinuteToEachAsker()
     {
-        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
-        timers.MarkKilled("ogre king");
+        (string Name, int Number, int Regen)[] bosses =
+            Enumerable.Range(1, 30).Select(i => ($"boss number {i}", 1000 + i, 24)).ToArray();
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, bosses);
+        foreach ((string name, _, _) in bosses) timers.MarkKilled(name);
         ChatLogEntry Asks(string who, ChatChannel channel = ChatChannel.Broadcast) =>
             new(Now, channel, who, "@timer sync", "raw");
         string[] Sent()
@@ -581,34 +585,42 @@ public sealed class BossTimerTests : IDisposable
             return wire;
         }
 
-        void SentTheTimers(string opening)
+        // Every line of the set, in order, decoding to all thirty timers.
+        void SentTheTimersWhole(string opening)
         {
             string[] wire = Sent();
-            Assert.NotEmpty(wire);
-            Assert.All(wire, line => Assert.StartsWith(opening + "{@timerdata ", line));
+            Assert.True(wire.Length >= 3, $"only {wire.Length} line(s): the answer must be several for this test");
+            for (int i = 0; i < wire.Length; i++)
+                Assert.StartsWith($"{opening}{{@timerdata {i + 1}/{wire.Length} ", wire[i]);
+            string blob = string.Concat(wire.Select(StripWire).Select(r => r.Split(' ', 3)[2]));
+            Assert.Equal(30, BossTimerSyncCodec.Decode(blob).Count);
         }
 
         engine.DispatchForTests(Asks("Bob"));
-        SentTheTimers("br ");
+        SentTheTimersWhole("br ");
 
-        _handlerNow += TimeSpan.FromSeconds(59);
-        engine.DispatchForTests(Asks("Bob"));
-        Assert.Equal("br {@timer sync answered here less than a minute ago - ask again shortly}\r", Sent().Single());
-
-        // With the Warn setting off the second ask draws nothing at all.
-        engine.WarnOnDenial = false;
+        _engineNow += TimeSpan.FromSeconds(59);
         engine.DispatchForTests(Asks("Bob"));
         Assert.Empty(Sent());
-        engine.WarnOnDenial = true;
+
+        // The several lines were one answer: the others on the channel still have
+        // theirs this minute, up to the channel's few.
+        for (int i = 1; i < BroadcastAnswerBudget.AnswersPerWindow; i++)
+        {
+            engine.DispatchForTests(Asks($"Passerby{i}"));
+            Assert.Equal("br {command invalid or not allowed}\r", Sent().Single());
+        }
+        engine.DispatchForTests(Asks("OneMore"));
+        Assert.Empty(Sent());
 
         // The bound is on that channel alone: the same player is answered by telepath.
         engine.DispatchForTests(Asks("Bob", ChatChannel.TelepathIncoming));
-        SentTheTimers("/Bob ");
+        SentTheTimersWhole("/Bob ");
 
         // A minute after the answer, it is given again.
-        _handlerNow += TimeSpan.FromSeconds(1);
+        _engineNow += TimeSpan.FromSeconds(1);
         engine.DispatchForTests(Asks("Bob"));
-        SentTheTimers("br ");
+        SentTheTimersWhole("br ");
     }
 
     // The broadcast channel is off until the user opens it: nothing asked there is

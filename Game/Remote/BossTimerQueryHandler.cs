@@ -46,17 +46,11 @@ public sealed class BossTimerQueryHandler : IDisposable
     private readonly BossTimerStore _timers;
     private readonly GameDataCache _gameData;
     private readonly LogService? _log;
-    private readonly Func<DateTimeOffset> _now;
     private bool _disposed;
-
-    private static readonly TimeSpan BroadcastAnswerEvery = TimeSpan.FromMinutes(1);
-
-    // When each asker was last answered on the broadcast channel, by name.
-    private readonly Dictionary<string, DateTimeOffset> _broadcastAnswers = new(StringComparer.OrdinalIgnoreCase);
 
     public BossTimerQueryHandler(
         RemoteCommandManager engine, BossStore bosses, BossTimerStore timers, GameDataCache gameData,
-        LogService? log = null, Func<DateTimeOffset>? clock = null)
+        LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(bosses);
@@ -67,7 +61,6 @@ public sealed class BossTimerQueryHandler : IDisposable
         _timers = timers;
         _gameData = gameData;
         _log = log;
-        _now = clock ?? (() => DateTimeOffset.Now);
 
         if (!RemoteCommandCatalog.TryGetCategory("@timer", out PlayerRemoteControls category))
             throw new InvalidOperationException(
@@ -131,13 +124,8 @@ public sealed class BossTimerQueryHandler : IDisposable
     {
         // No channel check here: a timer sync may go by every channel a remote
         // command can arrive by (TransferChannels), so there is none to refuse.
-        if (ctx.Channel == RemoteChannel.Broadcast && AnsweredOnBroadcastLately(ctx.Sender))
-        {
-            // One line in place of the data, by the Warn setting like any refusal.
-            ctx.Refuse("@timer sync answered here less than a minute ago - ask again shortly");
-            return;
-        }
-
+        // How often one is answered on the broadcast channel is the engine's to
+        // bound, with everything else said there (BroadcastAnswerBudget).
         RealmType realm = _gameData.ActiveRealm;
 
         List<BossTimerSyncRecord> records = new();
@@ -156,27 +144,6 @@ public sealed class BossTimerQueryHandler : IDisposable
             : string.Join(", ", records.Select(r => r.Describe()));
         _log?.Info("BossTimerSync",
             $"answered @timer sync from {ctx.Sender} on {ctx.Channel}: {records.Count} timer(s) in {chunks.Count} line(s): {sent}");
-    }
-
-    // On the broadcast channel an answer is several lines to everyone on it, from
-    // every client the asker has the permission on, and nothing else spaces them
-    // out (they are not telepaths, so the telepath pacer does not see them). One
-    // answer a minute to each asker there: a second ask inside the minute is
-    // refused in one line (decided 2026-10-11). The asker's merge window already
-    // holds the first set.
-    private bool AnsweredOnBroadcastLately(string asker)
-    {
-        DateTimeOffset now = _now();
-        foreach (string stale in _broadcastAnswers.Where(p => now - p.Value >= BroadcastAnswerEvery).Select(p => p.Key).ToList())
-            _broadcastAnswers.Remove(stale);
-        if (_broadcastAnswers.ContainsKey(asker))
-        {
-            _log?.Info("BossTimerSync",
-                $"not answering @timer sync from {asker} on the broadcast channel: answered there less than {BroadcastAnswerEvery.TotalSeconds:0}s ago.");
-            return true;
-        }
-        _broadcastAnswers[asker] = now;
-        return false;
     }
 
     private string Format((BossDef Def, BossWindowState State) t, RealmType realm)

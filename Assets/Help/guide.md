@@ -2439,6 +2439,7 @@ Both ends keep to the table. The client asked refuses a request that comes by an
 - `@roomba sync` and `@loop send` are refused there with where they do work.
 - A player without the permission for one of those three gets the Failure message there.
 - **No other remote command is read on that channel.** It is not followed, answered, refused or relayed.
+- **Your client says little there.** Each player gets one answer a minute on that channel (a set of timers, a refusal or the Failure message), and all players together get four a minute. Anything past that is passed over without a word, so nobody on the channel can make your client flood it, or use up the lines the game lets you send.
 
 #### @timer
 
@@ -2462,7 +2463,6 @@ Reports the boss respawn timers you are tracking, or hands them to the sender's 
 | `no boss timers active` | Bare, and none is running. |
 | `expired` | A name was given and no running timer matches it. |
 | `@timerdata <i>/<k> <data>` | `@timer sync`: up to sixty timers, packed into as many lines as it takes. |
-| `@timer sync answered here less than a minute ago - ask again shortly` | **Refusal:** a second `@timer sync` from the same player on the broadcast channel inside a minute. On the other channels there is no such limit. |
 | the Failure message | **Refusal:** the sender doesn't hold Query boss timers. |
 
 Times read `2h14m`, or `45m` under an hour.
@@ -2471,7 +2471,7 @@ Times read `2h14m`, or `45m` under an hour.
 
 - **The asking side of `@timer sync`:** sending it, by hand or with **Request Timers** on the Bosses tab, opens the merge window that collects the answers. See **Bosses** under *Quests, Bosses, and Deaths*.
 - **On gangpath, say or the broadcast channel** every client that grants you the permission answers, each with its own set, and everyone on the channel sees the lines. The merge window keeps one set per player and folds them together, so several answers are what you want; each is a handful of lines (sixty timers at most).
-- **On the broadcast channel each client answers a player once a minute.** Asked again sooner it sends one line saying so in place of the timers.
+- **On the broadcast channel each client answers a player once a minute, and four players a minute in all.** A whole set of timers is one answer, however many lines it takes. Asked again sooner, or once the minute's four answers are given, the client says nothing; ask again a minute later. The other channels have no such limit.
 - **Answers are taken on the channel you asked on, and on no other.** Asked on gangpath, only gangpath answers are read; by telepath, only telepaths; on broadcast, only broadcast (and only while **Disallow @commands from broadcast** is unticked). The one exception: after a request you **said**, a telepathed answer is read too, because a client that is sneaking answers a said request by telepath rather than speak aloud. A second request typed on another channel while the window is open adds that channel.
 - **Timers heard on the broadcast channel are never adopted without a pick.** On the other channels a timer for a boss you track and hold no timer for is adopted as it arrives. Anyone can join a numbered channel, so there the same timer becomes a row to choose, marked `heard on broadcast` under the sender's name, with **Keep ours** selected until you pick it.
 - **Your own data is never read back as an answer.** A shared channel echoes your lines to you; if your client answered someone else's `@timer sync` while your own merge window was open, that echo is passed over.- **Request Timers with Broadcast chosen and that box ticked** asks nothing and says which box to untick. Typed by hand with the box ticked, your client shows `[the broadcast channel is switched off for @commands: …]` and opens no window.
@@ -6073,7 +6073,7 @@ Settings → Talk.
 **Default:** On (ticked). A profile saved before this setting existed also reads as ticked.
 **What it does:** Drops everything arriving on the **broadcast channel**: the game's numbered channel, the one you `join <n>` and speak on with `br`. It is ticked by default because that channel is public: anyone can join one. While it is ticked your client reads nothing there, neither another player's request nor the answers to a request of your own.
 **Unticked:** only the three client-to-client transfers are read on that channel. `@timer sync` is followed and answered there; `@roomba sync` and `@loop send` are refused there with where they do work; a player without the permission gets the Failure message. **No other `@`-command is read on the broadcast channel**, whatever permissions the sender holds. See *Sharing data between clients* under Remote @-commands.
-**Important notes:** For a timer sync on broadcast the box must be unticked on both clients. Refusals there follow **Warn sender on invalid / denied remote command** like any other, and are seen by everyone on the channel.
+**Important notes:** For a timer sync on broadcast the box must be unticked on both clients. Refusals there follow **Warn sender on invalid / denied remote command** like any other, and are seen by everyone on the channel. Your client answers each player there once a minute at most, and four players a minute in all (a whole set of timers counts as one answer); anything more is passed over in silence. Timers that arrive on this channel are never adopted without your pick.
 
 ### Warn sender on invalid / denied remote command
 

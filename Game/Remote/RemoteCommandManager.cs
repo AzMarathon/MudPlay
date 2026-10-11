@@ -447,6 +447,14 @@ public sealed class RemoteCommandManager : IDisposable
 
     private void OnChatEntry(ChatLogEntry entry)
     {
+        try { Dispatch(entry); }
+        // Whatever was said on the broadcast channel for this line is one answer;
+        // the next line starts another (MayAnswerOnBroadcast).
+        finally { _broadcastAnswering = null; }
+    }
+
+    private void Dispatch(ChatLogEntry entry)
+    {
         // Master kill-switch (Settings.Talk → Disallow all remote control
         // commands). Above everything else — no logging either, no point
         // spamming the log with denied lines when the user explicitly
@@ -510,6 +518,17 @@ public sealed class RemoteCommandManager : IDisposable
         // command is read on it: it is passed over without a word, as everything
         // said there was before the channel carried any of them.
         if (channel.Value == RemoteChannel.Broadcast && TransferChannels.Identify(command, args) is null) return;
+
+        // What is left on that channel would be answered. A speaker already answered
+        // there this minute, or a channel that has had its answers for the minute,
+        // is passed over before anything runs for the line (BroadcastAnswerBudget).
+        if (channel.Value == RemoteChannel.Broadcast
+            && _broadcastAnswers.WhyNot(entry.Speaker, Now()) is { } spent)
+        {
+            _log?.Log(LogSeverity.Debug, "RemoteCmd",
+                $"Passing over {command} from {entry.Speaker} on the broadcast channel: {spent}.");
+            return;
+        }
 
         // Ahead of every block and denial below, so nothing here answers while
         // the switch is off. Only a command this client knows: ordinary chat that
@@ -1163,6 +1182,7 @@ public sealed class RemoteCommandManager : IDisposable
     {
         if (channel == RemoteChannel.Local && StealthedProvider?.Invoke() == true)
             channel = RemoteChannel.Telepath;
+        if (channel == RemoteChannel.Broadcast && !MayAnswerOnBroadcast(recipient)) return;
         // Nothing outside ASCII goes out: see WireText.
         payload = WireText.Ascii(payload);
         string given = GivenName(recipient);
@@ -1179,6 +1199,34 @@ public sealed class RemoteCommandManager : IDisposable
         LastSentForTests.Add(bytes);
         _wireSender?.Invoke(bytes);
     }
+
+    private readonly BroadcastAnswerBudget _broadcastAnswers = new();
+
+    // The speaker whose line on the broadcast channel is being answered right now.
+    private string? _broadcastAnswering;
+
+    // Every line this client says on the broadcast channel passes here, so the
+    // bound on them (BroadcastAnswerBudget) has one gate. The first line said to a
+    // speaker for a line of theirs begins an answer and is counted; the lines that
+    // follow in the same dispatch are that answer, so a timer sync's data goes out
+    // whole. A line that comes later is a new answer, and is held to the minute.
+    private bool MayAnswerOnBroadcast(string recipient)
+    {
+        if (string.Equals(_broadcastAnswering, recipient, StringComparison.OrdinalIgnoreCase)) return true;
+        DateTimeOffset now = Now();
+        if (_broadcastAnswers.WhyNot(recipient, now) is { } spent)
+        {
+            _log?.Log(LogSeverity.Debug, "RemoteCmd",
+                $"Not said to {recipient} on the broadcast channel: {spent}.");
+            return false;
+        }
+        _broadcastAnswers.Note(recipient, now);
+        _broadcastAnswering = recipient;
+        return true;
+    }
+
+    // For tests: how many speakers the broadcast bound is holding a time for.
+    internal int BroadcastSpeakersRememberedForTests => _broadcastAnswers.Remembered;
 
     // True when speaker is the local character (a public-channel self-echo). The gang
     // echo carries a single-word given name, while our own name may be "Given Family", so

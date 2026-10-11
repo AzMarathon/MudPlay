@@ -135,6 +135,10 @@ public sealed class TransferChannelsTests
         public List<string> Ran { get; } = new();
         public LogService Log { get; } = new();
 
+        // The engine's clock: what it says on the broadcast channel is bounded by
+        // the minute.
+        public DateTimeOffset Clock { get; set; } = new(2026, 8, 4, 12, 0, 0, TimeSpan.Zero);
+
         // broadcastOpen: the Talk tab's "Disallow @commands from broadcast" unticked.
         // everyCommand: a handler for every command in the catalogue, not only the
         // three that have a transfer form.
@@ -153,6 +157,7 @@ public sealed class TransferChannelsTests
                 SelfNameProvider = () => "Us",
                 DisableBroadcastChannel = !broadcastOpen,
             };
+            Commands.Now = () => Clock;
             // Stand-ins that answer as the real handlers do for a channel they use,
             // and refuse as they do for one they don't.
             Register("@timer", PlayerRemoteControls.QueryBossTimers, Transfer.TimerSync);
@@ -321,6 +326,9 @@ public sealed class TransferChannelsTests
         {
             e.Commands.LastSentForTests.Clear();
             e.Ran.Clear();
+            // Each line in a minute of its own: what is said there in one minute is
+            // bounded, and that bound has its own tests.
+            e.Clock += TimeSpan.FromMinutes(2);
 
             e.Commands.DispatchForTests(Broadcast(sender, line));
 
@@ -350,6 +358,146 @@ public sealed class TransferChannelsTests
         if (sender == "Stranger") return (warn ? new[] { "br {command invalid or not allowed}\r" } : none, false);
         if (transfer == Transfer.TimerSync) return (new[] { "br {data}\r" }, true);
         return (warn ? new[] { $"br {{{TransferChannels.Refusal(transfer)}}}\r" } : none, true);
+    }
+
+    // The remote commands for Events are ordinary remote commands: on the broadcast
+    // channel they are not read, whoever sends them. By telepath they are.
+    [Theory]
+    [InlineData("@events", "@events")]
+    [InlineData("@event 1 on", "@event")]
+    [InlineData("@event daily bank off", "@event")]
+    [InlineData("@event! 1", "@event")]
+    public void TheEventCommandsOnTheBroadcastChannel_AreNotRead(string line, string command)
+    {
+        Engine e = new(everyCommand: true);
+
+        e.Commands.DispatchForTests(Broadcast("Friend", line));
+        e.Commands.DispatchForTests(Broadcast("Stranger", line));
+
+        Assert.Empty(e.Ran);
+        Assert.Empty(e.Wire);
+
+        e.Commands.DispatchForTests(new ChatLogEntry(Now, ChatChannel.TelepathIncoming, "Friend", line, "raw"));
+        Assert.Equal(new[] { command }, e.Ran);
+    }
+
+    // ----- how much is said on the broadcast channel ------------------------
+
+    private static string[] DebugLines(Engine e) =>
+        e.Log.Snapshot().Where(l => l.Severity == LogSeverity.Debug).Select(l => l.Message).ToArray();
+
+    // A player with no permission is told so once (the Failure message), as on any
+    // channel. Whatever they send in the rest of that minute draws nothing: every
+    // line said there is public and counts against the user's own input.
+    [Fact]
+    public void OnTheBroadcastChannel_AStrangerDrawsOneLineAMinute()
+    {
+        Engine e = new();
+
+        for (int i = 0; i < 30; i++)
+        {
+            e.Commands.DispatchForTests(Broadcast("Stranger", "@timer sync"));
+            e.Commands.DispatchForTests(Broadcast("Stranger", $"@loop send loop {i}"));
+        }
+
+        Assert.Equal("br {command invalid or not allowed}\r", e.Wire.Single());
+        Assert.Equal(59, DebugLines(e).Count(l =>
+            l.Contains("from Stranger on the broadcast channel: they were answered there less than a minute ago")));
+
+        e.Clock += TimeSpan.FromSeconds(59);
+        e.Commands.DispatchForTests(Broadcast("Stranger", "@timer sync"));
+        Assert.Single(e.Wire);
+
+        // A minute after the answer, the next line is answered again.
+        e.Clock += TimeSpan.FromSeconds(1);
+        e.Commands.DispatchForTests(Broadcast("Stranger", "@roomba sync"));
+        e.Commands.DispatchForTests(Broadcast("Stranger", "@roomba sync"));
+        Assert.Equal(2, e.Wire.Length);
+    }
+
+    // The same for a player who holds the permission: one "works by … only" line,
+    // and the handler is not run again for the lines that would draw the rest.
+    [Fact]
+    public void OnTheBroadcastChannel_AGrantedPlayersRepeatedRefusal_IsSaidOnceAMinute()
+    {
+        Engine e = new();
+
+        for (int i = 0; i < 30; i++)
+            e.Commands.DispatchForTests(Broadcast("Friend", "@roomba sync"));
+
+        Assert.Equal("br {@roomba sync works by telepath or gangpath only}\r", e.Wire.Single());
+        Assert.Single(e.Ran);
+
+        // The bound is the broadcast channel's alone.
+        e.Commands.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Local, "Friend", "@roomba sync", "raw"));
+        e.Commands.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Local, "Friend", "@roomba sync", "raw"));
+        Assert.Equal(3, e.Wire.Length);
+    }
+
+    // With the Warn setting off a refusal is not said, so it uses up nothing: the
+    // timers the same player then asks for are sent.
+    [Fact]
+    public void OnTheBroadcastChannel_ALineThatDrawsNothing_UsesUpNoAnswer()
+    {
+        Engine e = new(warn: false);
+
+        e.Commands.DispatchForTests(Broadcast("Friend", "@roomba sync"));
+        Assert.Empty(e.Wire);
+
+        e.Commands.DispatchForTests(Broadcast("Friend", "@timer sync"));
+        Assert.Equal("br {data}\r", e.Wire.Single());
+    }
+
+    // Many speakers cannot make the client flood either: no more than
+    // BroadcastAnswerBudget.AnswersPerWindow answers a minute to all of them
+    // together. Nothing more is remembered than the speakers answered in the last
+    // minute.
+    [Fact]
+    public void OnTheBroadcastChannel_AllSpeakersTogetherDrawAFewAnswersAMinute()
+    {
+        const int cap = BroadcastAnswerBudget.AnswersPerWindow;
+        Engine e = new();
+
+        for (int i = 0; i < 50; i++)
+        {
+            e.Commands.DispatchForTests(Broadcast($"Passerby{i}", "@timer sync"));
+            e.Clock += TimeSpan.FromSeconds(1);
+        }
+
+        Assert.Equal(cap, e.Wire.Length);
+        Assert.Equal(cap, e.Commands.BroadcastSpeakersRememberedForTests);
+        Assert.Contains(DebugLines(e), l => l.Contains($"{cap} answers were given there in the last minute"));
+
+        // A granted player's timers wait their turn like anything else said there.
+        e.Commands.DispatchForTests(Broadcast("Friend", "@timer sync"));
+        Assert.Empty(e.Ran);
+
+        // A minute after the first of those answers, there is room for one more.
+        e.Clock += TimeSpan.FromSeconds(10);
+        e.Commands.DispatchForTests(Broadcast("Friend", "@timer sync"));
+        Assert.Equal(new[] { "@timer sync" }, e.Ran);
+        Assert.Equal("br {data}\r", e.Wire.Last());
+        Assert.Equal(cap, e.Commands.BroadcastSpeakersRememberedForTests);
+    }
+
+    // The bookkeeping holds a speaker for a minute and no longer, and never more of
+    // them than it will answer.
+    [Fact]
+    public void TheBroadcastBound_ForgetsASpeakerAfterAMinute_AndNeverHoldsMoreThanItAnswers()
+    {
+        BroadcastAnswerBudget budget = new();
+        DateTimeOffset now = new(2026, 8, 4, 12, 0, 0, TimeSpan.Zero);
+
+        for (int i = 0; i < 1000; i++)
+        {
+            string speaker = $"Passerby{i}";
+            if (budget.WhyNot(speaker, now) is null) budget.Note(speaker, now);
+            Assert.InRange(budget.Remembered, 1, BroadcastAnswerBudget.AnswersPerWindow);
+            now += TimeSpan.FromSeconds(7);
+        }
+
+        Assert.Null(budget.WhyNot("Passerby0", now + BroadcastAnswerBudget.Window));
+        Assert.Equal(0, budget.Remembered);
     }
 
     // ----- each transfer, each channel, through the engine -----------------
