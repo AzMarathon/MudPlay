@@ -16,8 +16,9 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // The @timer sync merge window. Pick a channel, request timers from other clients,
 // and as each responder's set decodes, its timers fill in as pickable options next to
-// your own. Folding is always manual — Apply writes only the rows you chose, so a bad
-// or stale timer from someone else can't silently overwrite yours.
+// your own. A timer you hold is never overwritten without a pick, and a request that
+// several players could answer (gang, say, broadcast) writes nothing at all until
+// Apply: the user chooses which of the timers received to take in (user, 2026-10-11).
 public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogViewModel<bool>, IDisposable
 {
     private readonly BossStore _bosses;
@@ -108,7 +109,9 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         {
             _collector.Begin(askedOn);
             Requested = true;
-            Status = "Collecting responses to your @timer sync — new timers fold in automatically; you only pick on a conflict…";
+            Status = AdoptsOnArrival(askedOn)
+                ? "Collecting responses to your @timer sync — new timers fold in automatically; you only pick on a conflict…"
+                : "Collecting responses to your @timer sync — pick the timers to take in, then Apply Selected; nothing is written before that…";
         }
     }
 
@@ -137,7 +140,9 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         _send(wire);
         Status = ChannelIndex == 1 && TelepathTarget.Trim().Length == 0
             ? "Enter a player name to telepath, then request again."
-            : "Requested — responders will fill in as their timers arrive…";
+            : AdoptsOnArrival(channel)
+                ? "Requested — responders will fill in as their timers arrive…"
+                : "Requested — pick the timers to take in as they arrive, then Apply Selected; nothing is written before that…";
     }
 
     private void OnResponse(BossTimerSyncResponse response)
@@ -154,27 +159,27 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         _responders.Add(r.Sender);
         int adopted = 0, inSync = 0, conflict = 0;
         foreach (BossTimerSyncRecord rec in r.Records)
-            switch (IngestOffer(EnsureRow(rec.MonsterNumber, rec.Name), r.Sender, rec.KilledAt, r.Channel))
+            switch (IngestOffer(EnsureRow(rec.MonsterNumber, rec.Name), r.Sender, rec.KilledAt, r.Channel, r.AskedOn))
             {
                 case TimerMergeKind.AutoMerge: adopted++; break;
                 case TimerMergeKind.InSync:    inSync++;  break;
                 default:                       conflict++; break;
             }
         _log.Info("BossTimerSync",
-            $"folded {r.Sender}'s {r.Records.Count} timer(s) heard on {r.Channel}: {adopted} adopted, {inSync} already in sync, {conflict} to resolve");
+            $"folded {r.Sender}'s {r.Records.Count} timer(s) heard on {r.Channel}, asked on {r.AskedOn}: {adopted} adopted, {inSync} already in sync, {conflict} to pick");
         UpdateStatus();
     }
 
-    // Route one responder's timer for a boss row, returning what we did with it. A timer
-    // for a boss we track but hold no timer for is adopted outright (nothing of ours to
-    // overwrite); one that matches what we hold is a no-op; only a genuine disagreement —
-    // or a boss we don't track yet, whose adoption adds it to our list — becomes a pickable
-    // conflict the user resolves manually. A timer heard on the broadcast channel is
-    // never adopted outright: it becomes a pick, marked as such.
+    // Route one responder's timer for a boss row, returning what we did with it. One
+    // that matches what we hold is a no-op. A timer for a boss we track but hold no
+    // timer for is adopted outright only when it answers a telepath to one player;
+    // answering a request several players could hear, it is a pick like a genuine
+    // disagreement or a boss we don't track yet (whose adoption adds it to our list).
+    // A timer heard on the broadcast channel is marked as such.
     private TimerMergeKind IngestOffer(
-        BossTimerSyncRowViewModel row, string sender, DateTimeOffset offer, RemoteChannel heardOn)
+        BossTimerSyncRowViewModel row, string sender, DateTimeOffset offer, RemoteChannel heardOn, RemoteChannel askedOn)
     {
-        TimerMergeKind kind = Classify(row.OursKilledAt, row.Tracked, offer, heardOn);
+        TimerMergeKind kind = Classify(row.OursKilledAt, row.Tracked, offer, askedOn);
         switch (kind)
         {
             case TimerMergeKind.AutoMerge:
@@ -208,18 +213,23 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         return SameTimer(ours.Value, offer) ? TimerMergeKind.InSync : TimerMergeKind.Conflict;
     }
 
-    // The same, for the channel the offer was heard on. The broadcast channel is
-    // public: anyone can join it, and our request there tells every listener that a
-    // collection is open. So nothing heard on it is written without a pick, and what
-    // would be adopted outright from the gang or the room is offered as a choice.
+    // The same, for the channel the request went out on. Asked of the gang, the room
+    // or the broadcast channel, several players may answer with different timers for
+    // one boss, and the first to arrive is no better than the rest: nothing is written
+    // without a pick, and what a telepath's one answer adopts outright is offered as a
+    // choice (user, 2026-10-11).
     internal static TimerMergeKind Classify(
-        DateTimeOffset? ours, bool tracked, DateTimeOffset offer, RemoteChannel heardOn)
+        DateTimeOffset? ours, bool tracked, DateTimeOffset offer, RemoteChannel askedOn)
     {
         TimerMergeKind kind = Classify(ours, tracked, offer);
-        return kind == TimerMergeKind.AutoMerge && heardOn == RemoteChannel.Broadcast
+        return kind == TimerMergeKind.AutoMerge && !AdoptsOnArrival(askedOn)
             ? TimerMergeKind.Conflict
             : kind;
     }
+
+    // Only a telepath asks one named player. Every other channel a timer sync goes by
+    // has as many listeners as happen to be there.
+    internal static bool AdoptsOnArrival(RemoteChannel askedOn) => askedOn == RemoteChannel.Telepath;
 
     // A different kill of the same boss is at least a respawn interval (hours) away, so a
     // one-minute window never conflates two respawns — it only absorbs the few-second
@@ -233,7 +243,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         int conflicts = Rows.Count(r => r.HasConflict);
         int adopted = Rows.Count(r => !r.HasConflict && r.WasAutoMerged);
         int inSync = Rows.Count(r => !r.HasConflict && !r.WasAutoMerged && r.ResolvedStatus.Length > 0);
-        Status = $"{_responders.Count} responder(s): {conflicts} to resolve, {adopted} adopted, {inSync} already in sync."
+        Status = $"{_responders.Count} responder(s): {conflicts} to pick, {adopted} adopted, {inSync} already in sync."
             + (_offeredFromBroadcast
                 ? " Timers heard on broadcast are never adopted without a pick: anyone can join that channel."
                 : string.Empty);

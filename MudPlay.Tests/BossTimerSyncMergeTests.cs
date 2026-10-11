@@ -5,9 +5,10 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // The merge-classification rules behind the sync window: a tracked boss we hold no timer
-// for is adopted outright, a matching timer is a no-op, and only a genuine disagreement
-// (or an untracked boss) surfaces a manual pick. Plus the row-VM state transitions that
-// decide whether a row shows the picker or a resolved status line.
+// for is adopted outright when one player was asked and is a pick when several could
+// answer, a matching timer is a no-op, and a genuine disagreement (or an untracked
+// boss) surfaces a manual pick. Plus the row-VM state transitions that decide whether
+// a row shows the picker or a resolved status line.
 public sealed class BossTimerSyncMergeTests
 {
     private static readonly DateTimeOffset T = new(2026, 8, 24, 0, 13, 0, TimeSpan.Zero);
@@ -36,23 +37,37 @@ public sealed class BossTimerSyncMergeTests
         => Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
             BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3)));
 
-    // The broadcast channel is public, so the one outcome that writes without a pick
-    // is a pick there. The outcomes that write nothing are the same on every channel.
+    // Asked where several players may answer (gang, say, broadcast), the one outcome
+    // that writes without a pick is a pick; only a telepath to one player still
+    // adopts outright. The outcomes that write nothing are the same on every channel.
     [Theory]
     [InlineData(MudPlay.Game.Remote.RemoteChannel.Broadcast, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
-    [InlineData(MudPlay.Game.Remote.RemoteChannel.Gangpath, BossTimerSyncViewModel.TimerMergeKind.AutoMerge)]
-    [InlineData(MudPlay.Game.Remote.RemoteChannel.Local, BossTimerSyncViewModel.TimerMergeKind.AutoMerge)]
+    [InlineData(MudPlay.Game.Remote.RemoteChannel.Gangpath, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
+    [InlineData(MudPlay.Game.Remote.RemoteChannel.Local, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
     [InlineData(MudPlay.Game.Remote.RemoteChannel.Telepath, BossTimerSyncViewModel.TimerMergeKind.AutoMerge)]
-    internal void A_timer_we_would_adopt_outright_is_a_pick_when_heard_on_broadcast(
-        MudPlay.Game.Remote.RemoteChannel heardOn, BossTimerSyncViewModel.TimerMergeKind expected)
+    internal void A_timer_we_would_adopt_outright_is_a_pick_unless_one_player_was_asked(
+        MudPlay.Game.Remote.RemoteChannel askedOn, BossTimerSyncViewModel.TimerMergeKind expected)
     {
-        Assert.Equal(expected, BossTimerSyncViewModel.Classify(ours: null, tracked: true, offer: T, heardOn));
+        Assert.Equal(expected, BossTimerSyncViewModel.Classify(ours: null, tracked: true, offer: T, askedOn));
         Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.InSync,
-            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddSeconds(20), heardOn));
+            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddSeconds(20), askedOn));
         Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
-            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3), heardOn));
+            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3), askedOn));
         Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
-            BossTimerSyncViewModel.Classify(ours: null, tracked: false, offer: T, heardOn));
+            BossTimerSyncViewModel.Classify(ours: null, tracked: false, offer: T, askedOn));
+    }
+
+    // The default pick is headed by what it does: with no timer of ours there is
+    // nothing to keep, and once one is adopted there is.
+    [Fact]
+    public void The_default_pick_reads_take_none_until_we_hold_a_timer()
+    {
+        BossTimerSyncRowViewModel row = new("ok", 300, "ok", null, null, "— no timer —");
+        Assert.Equal("Take none", row.KeepOursLabel);
+
+        row.MarkAutoMerged("Bob", T, "Aug 24 00:13");
+
+        Assert.Equal("Keep ours", row.KeepOursLabel);
     }
 
     [Theory]

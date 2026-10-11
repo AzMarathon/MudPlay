@@ -643,8 +643,10 @@ public sealed class BossTimerTests : IDisposable
     private static readonly DateTimeOffset Killed = new(2026, 8, 3, 21, 30, 0, TimeSpan.Zero);
 
     // The merge window over real stores, tracking one boss it holds no timer for:
-    // the case in which an offered timer is adopted outright.
-    private (BossTimerSyncViewModel window, BossTimerStore timers) NewSyncWindow()
+    // the case in which an offered timer is adopted outright when one player was
+    // asked, and is a pick when several could answer.
+    private (BossTimerSyncViewModel window, BossTimerStore timers) NewSyncWindow(
+        RemoteChannel askedOn = RemoteChannel.Broadcast)
     {
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
         SeedBosses(Boss("ogre king", number: 50, rooms: "1/1"));
@@ -652,13 +654,16 @@ public sealed class BossTimerTests : IDisposable
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         BossTimerSyncViewModel window = new(bosses, timers, cache, new ChatRouter(router), send: _ => { },
-            preArmedOn: RemoteChannel.Broadcast, new LogService(), broadcastOff: () => false,
+            preArmedOn: askedOn, new LogService(), broadcastOff: () => false,
             isOurName: _ => false, windowActive: _ => { });
         return (window, timers);
     }
 
-    private static BossTimerSyncResponse Offers(string sender, RemoteChannel heardOn) =>
-        new(sender, new[] { new BossTimerSyncRecord(50, null, Killed) }, heardOn);
+    // One responder's timer for the boss, answering a request on the channel it was
+    // heard on unless told otherwise.
+    private static BossTimerSyncResponse Offers(
+        string sender, RemoteChannel heardOn, RemoteChannel? askedOn = null, double hoursLater = 0) =>
+        new(sender, new[] { new BossTimerSyncRecord(50, null, Killed.AddHours(hoursLater)) }, heardOn, askedOn ?? heardOn);
 
     // Anyone can join the broadcast channel, and a request there tells every
     // listener that a collection is open. A timer a player with no standing sends
@@ -712,21 +717,126 @@ public sealed class BossTimerTests : IDisposable
         }
     }
 
-    // On the other channels the same timer is adopted as it arrives, as before.
-    [Theory]
-    [InlineData(RemoteChannel.Gangpath)]
-    [InlineData(RemoteChannel.Local)]
-    [InlineData(RemoteChannel.Telepath)]
-    public void SyncWindow_TheSameTimerOnAnotherChannel_IsAdoptedOutright(RemoteChannel heardOn)
+    // Asked by telepath of one player, the same timer is adopted as it arrives, and
+    // closing without Apply still reports the write.
+    [Fact]
+    public void SyncWindow_TheSameTimerAnsweringATelepath_IsAdoptedOutright()
     {
-        var (window, timers) = NewSyncWindow();
+        var (window, timers) = NewSyncWindow(RemoteChannel.Telepath);
         using (window)
         {
-            window.Fold(Offers("Bob", heardOn));
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            Assert.Contains("fold in automatically", window.Status);
+
+            window.Fold(Offers("Bob", RemoteChannel.Telepath));
 
             Assert.Equal(Killed, timers.KilledAt("ogre king"));
             Assert.True(Assert.Single(window.Rows).WasAutoMerged);
+            Assert.Contains("0 to pick, 1 adopted", window.Status);
             Assert.DoesNotContain("broadcast", window.Status);
+
+            window.CancelCommand.Execute(null);
+            Assert.True(closedWithWrites);
+        }
+    }
+
+    // Asked where several players may answer (gang, say), nothing is written on
+    // arrival: the timer is a row to pick, with taking none chosen, and closing the
+    // window leaves the timers as they were. A sneaking client's telepathed answer
+    // to a said request is an answer to that request, and no different.
+    [Theory]
+    [InlineData(RemoteChannel.Gangpath, RemoteChannel.Gangpath)]
+    [InlineData(RemoteChannel.Local, RemoteChannel.Local)]
+    [InlineData(RemoteChannel.Local, RemoteChannel.Telepath)]
+    public void SyncWindow_ATimerAnsweringAManyListenerRequest_IsAPick_AndNothingIsWritten(
+        RemoteChannel askedOn, RemoteChannel heardOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn);
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            Assert.Contains("nothing is written before that", window.Status);
+
+            window.Fold(Offers("Bob", heardOn, askedOn));
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.False(row.WasAutoMerged);
+            Assert.True(row.KeepOursSelected);
+            Assert.Equal("Take none", row.KeepOursLabel);
+            Assert.Null(row.SelectedKilledAt);
+            Assert.DoesNotContain("heard on broadcast", Assert.Single(row.Responders).Text);
+            Assert.Contains("1 to pick, 0 adopted, 0 already in sync", window.Status);
+
+            window.CancelCommand.Execute(null);
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.False(closedWithWrites);
+        }
+    }
+
+    // Several responders, each with a different timer for a boss we hold none for:
+    // one row, one pick apiece, none taken until one is chosen. Apply writes the
+    // chosen one and no other; choosing "take none" again writes nothing.
+    [Fact]
+    public void SyncWindow_SeveralRespondersForOneBoss_TheUserPicksWhichOrNone()
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Gangpath);
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+
+            window.Fold(Offers("Bob", RemoteChannel.Gangpath));
+            window.Fold(Offers("Sue", RemoteChannel.Gangpath, hoursLater: 3));
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.Equal(new[] { "Bob", "Sue" }, row.Responders.Select(c => c.Responder));
+            Assert.Contains("2 responder(s): 1 to pick, 0 adopted", window.Status);
+
+            row.Responders[0].AdoptCommand.Execute(null);
+            row.KeepOursCommand.Execute(null);
+            Assert.Null(row.SelectedKilledAt);
+            Assert.All(row.Responders, c => Assert.False(c.IsSelected));
+
+            row.Responders[1].AdoptCommand.Execute(null);
+            Assert.Null(timers.KilledAt("ogre king"));
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(Killed.AddHours(3), timers.KilledAt("ogre king"));
+            Assert.True(closedWithWrites);
+        }
+    }
+
+    // What writes nothing on arrival is the same wherever it was asked: a timer
+    // matching ours is left alone, and one that disagrees is a pick beside ours.
+    [Theory]
+    [InlineData(RemoteChannel.Gangpath)]
+    [InlineData(RemoteChannel.Local)]
+    [InlineData(RemoteChannel.Broadcast)]
+    [InlineData(RemoteChannel.Telepath)]
+    public void SyncWindow_InSyncAndConflictingTimers_AreAsBeforeOnEveryChannel(RemoteChannel askedOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn);
+        using (window)
+        {
+            timers.MarkKilled("ogre king", Killed);
+
+            window.Fold(Offers("Bob", askedOn, hoursLater: 20.0 / 3600));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.HasConflict);
+            Assert.Contains("in sync with Bob", row.ResolvedStatus);
+            Assert.Contains("0 to pick, 0 adopted, 1 already in sync", window.Status);
+
+            window.Fold(Offers("Sue", askedOn, hoursLater: 3));
+            Assert.True(row.HasConflict);
+            Assert.Equal("Keep ours", row.KeepOursLabel);
+            Assert.Equal("Sue", Assert.Single(row.Responders).Responder);
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
         }
     }
 

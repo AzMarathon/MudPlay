@@ -5,9 +5,11 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Remote;
 
-// One responder's fully-reassembled, decoded timer set, and the channel it came by.
+// One responder's fully-reassembled, decoded timer set, the channel it came by, and
+// the channel of the request of ours it answers. The two differ for a sneaking
+// client's telepathed answer to a request we said.
 public readonly record struct BossTimerSyncResponse(
-    string Sender, IReadOnlyList<BossTimerSyncRecord> Records, RemoteChannel Channel);
+    string Sender, IReadOnlyList<BossTimerSyncRecord> Records, RemoteChannel Channel, RemoteChannel AskedOn);
 
 // Requester side of @timer sync: scrapes the `@timerdata <i>/<n> <blob>` reply lines off
 // ChatRouter (they ride the chat as ordinary text — the remote engine ignores the
@@ -97,7 +99,7 @@ public sealed class BossTimerSyncCollector : IDisposable
             return;
         }
 
-        if (TransferChannels.Of(e.Channel) is not { } heardOn || !AnswersAreTakenOn(heardOn)) return;
+        if (TransferChannels.Of(e.Channel) is not { } heardOn || RequestAnsweredOn(heardOn) is not { } askedOn) return;
         if (heardOn == RemoteChannel.Broadcast && _broadcastOff()) return;
         if (e.Speaker is not { Length: > 0 } sender) return;
         // Our own data, echoed back to us by the channel, is no one's answer.
@@ -127,17 +129,25 @@ public sealed class BossTimerSyncCollector : IDisposable
         }
         _log?.Info("BossTimerSync",
             $"received {records.Count} timer(s) from {sender} in {p.N} line(s): {Describe(records)}");
-        ResponseReceived?.Invoke(new BossTimerSyncResponse(sender, records, heardOn));
+        ResponseReceived?.Invoke(new BossTimerSyncResponse(sender, records, heardOn, askedOn));
     }
 
-    // An answer comes back on the channel it was asked on (RemoteCommandManager
-    // answers there), with one exception: a responder who is sneaking answers a said
-    // request by telepath, since speaking aloud would end the sneak. So telepath is
-    // taken after a said request too. Gangpath and broadcast end no sneak and are
-    // never rerouted (GAME_MECHANICS "Channel broadcast").
-    private bool AnswersAreTakenOn(RemoteChannel heardOn) =>
-        _askedOn.Contains(heardOn)
-        || (heardOn == RemoteChannel.Telepath && _askedOn.Contains(RemoteChannel.Local));
+    // The channel of the request of ours that an answer heard on heardOn belongs to,
+    // or null when we asked on none that it could answer. An answer comes back on
+    // the channel it was asked on (RemoteCommandManager answers there), with one
+    // exception: a responder who is sneaking answers a said request by telepath,
+    // since speaking aloud would end the sneak. So telepath is taken after a said
+    // request too. Gangpath and broadcast end no sneak and are never rerouted
+    // (GAME_MECHANICS "Channel broadcast").
+    //
+    // With both a say and a telepath asked, a telepathed answer cannot be told
+    // apart: it is counted as the say's, the one of the two that every listener in
+    // the room could have answered.
+    private RemoteChannel? RequestAnsweredOn(RemoteChannel heardOn)
+    {
+        if (heardOn == RemoteChannel.Telepath && _askedOn.Contains(RemoteChannel.Local)) return RemoteChannel.Local;
+        return _askedOn.Contains(heardOn) ? heardOn : null;
+    }
 
     // Parse "@timerdata <i>/<n> <blob>", tolerating the {} the remote reply path wraps a
     // reply in. The blob is a single spaceless base64url token, so a 3-way split keeps it

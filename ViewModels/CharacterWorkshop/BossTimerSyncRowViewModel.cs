@@ -7,9 +7,10 @@ using CommunityToolkit.Mvvm.Input;
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One boss in the sync merge table. A row is either RESOLVED — its offered timer was
-// auto-adopted (we held none) or already matched what we hold — in which case it shows a
-// muted status line and no buttons; or a CONFLICT — a responder's timer differs from
-// ours, or the boss isn't in our list yet — in which case it shows the "keep ours"
+// auto-adopted (we held none, and one player was asked) or already matched what we
+// hold — in which case it shows a muted status line and no buttons; or a CONFLICT — a
+// responder's timer differs from ours, the boss isn't in our list yet, or we hold no
+// timer and several players could answer — in which case it shows the "keep ours"
 // default plus a pick button per differing responder. Only conflict rows need a decision;
 // SelectedKilledAt is what the Apply button writes for them (null = keep ours).
 public sealed partial class BossTimerSyncRowViewModel : ObservableObject
@@ -27,6 +28,10 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
     // conflict row and the in-sync comparison.
     public DateTimeOffset? OursKilledAt { get; private set; }
     [ObservableProperty] private string _oursText;
+
+    // The default pick's heading. With no timer of ours there is nothing to keep:
+    // the default is to take none of the timers offered.
+    public string KeepOursLabel => OursKilledAt is null ? "Take none" : "Keep ours";
 
     // A conflict row shows the picker; a resolved row (auto-adopted / already in sync)
     // shows ResolvedStatus instead. WasAutoMerged records that we wrote a timer we had
@@ -77,6 +82,7 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
     public void MarkAutoMerged(string responder, DateTimeOffset killedAt, string text)
     {
         OursKilledAt = killedAt;
+        OnPropertyChanged(nameof(KeepOursLabel));
         OursText = text;
         WasAutoMerged = true;
         if (!HasConflict) ResolvedStatus = $"Adopted {responder}'s timer — {text}";

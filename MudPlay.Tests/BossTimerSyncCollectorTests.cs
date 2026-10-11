@@ -129,6 +129,48 @@ public sealed class BossTimerSyncCollectorTests
         Assert.Equal(new[] { "Bob", "Sue" }, got.Select(r => r.Sender));
     }
 
+    // Each answer names the request it answers, which is what decides whether the
+    // merge window writes it on arrival. A telepath after a said request is the
+    // say's answer, from a client that would not speak aloud.
+    [Theory]
+    [InlineData(RemoteChannel.Gangpath, ChatChannel.Gangpath, RemoteChannel.Gangpath)]
+    [InlineData(RemoteChannel.Broadcast, ChatChannel.Broadcast, RemoteChannel.Broadcast)]
+    [InlineData(RemoteChannel.Local, ChatChannel.Local, RemoteChannel.Local)]
+    [InlineData(RemoteChannel.Local, ChatChannel.TelepathIncoming, RemoteChannel.Local)]
+    [InlineData(RemoteChannel.Telepath, ChatChannel.TelepathIncoming, RemoteChannel.Telepath)]
+    public void AnAnswerNamesTheRequestItAnswers(RemoteChannel askedOn, ChatChannel heardOn, RemoteChannel answers)
+    {
+        BossTimerSyncCollector c = NewCollector(out var got);
+        c.Begin(askedOn);
+
+        FeedResponse(c, "Bob", OneTimer, 6, heardOn);
+
+        BossTimerSyncResponse response = Assert.Single(got);
+        Assert.Equal(TransferChannels.Of(heardOn), response.Channel);
+        Assert.Equal(answers, response.AskedOn);
+    }
+
+    // With a telepath and a say both asked, a telepathed answer could be either's.
+    // It is counted as the say's: the request any listener in the room could answer.
+    // A telepath asked beside a gangpath request is still the telepath's own answer.
+    [Fact]
+    public void ATelepathedAnswer_WithASayAlsoAsked_IsCountedAsTheSays()
+    {
+        BossTimerSyncCollector c = NewCollector(out var got);
+        c.Begin(RemoteChannel.Telepath);
+        FeedResponse(c, "Bob", OneTimer, 6, ChatChannel.TelepathIncoming);
+        Assert.Equal(RemoteChannel.Telepath, Assert.Single(got).AskedOn);
+
+        c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, ChatChannel.Local, Us, "@timer sync", "raw"));
+        FeedResponse(c, "Sue", OneTimer, 6, ChatChannel.TelepathIncoming);
+        Assert.Equal(RemoteChannel.Local, got[1].AskedOn);
+
+        c.Begin(RemoteChannel.Gangpath);
+        c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, ChatChannel.TelepathOutgoing, "Bob", "@timer sync", "raw"));
+        FeedResponse(c, "Bob", OneTimer, 6, ChatChannel.TelepathIncoming);
+        Assert.Equal(RemoteChannel.Telepath, got[2].AskedOn);
+    }
+
     // Another player's request on a channel opens nothing for them: only a request
     // of ours does.
     [Fact]
