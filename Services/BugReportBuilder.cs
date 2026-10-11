@@ -1879,6 +1879,9 @@ public static class BugReportBuilder
                 loop.CircleStartRoom is { } start ? $"{start.Map}/{start.Room}" : "(none)");
             // Loop combat-suppression state — answers "why didn't it fight
             // here?" for a do-not-attack / only-attack-in-lair report.
+            // The code `@loop send` shows for this loop: its rooms, their settings and
+            // the two loop settings below as one value, to tell two loops apart.
+            Kv(sb, "Loop signature (short)", Game.Map.LoopSignature.ShortOf(curLoop));
             // Both are this character's settings for the loop, not the loop file's:
             // another character on the same loop can have them the other way.
             Kv(sb, "Loop only-attack-in-lair (this character's)", curLoop.OnlyAttackInLairRooms.ToString());

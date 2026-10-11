@@ -344,8 +344,10 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in DataLines(SampleLoop())) receiver.Ingest(Tele("Raijin", line));
 
         Assert.Equal("9/1", loops.Get("King's Road")!.Waypoints[0].Room);   // ours untouched
-        Assert.Equal(3, loops.Get("King's Road (from Raijin)")!.Waypoints.Count);
-        Assert.Equal("[Received loop 'King's Road' 3 rooms from Raijin, saved as 'King's Road (from Raijin)']", notices.Single());
+        Assert.Equal(3, loops.Get("King's Road 2")!.Waypoints.Count);
+        string theirs = LoopSignature.ShortOf(SampleLoop()), ours = LoopSignature.ShortOf(loops.Get("King's Road")!);
+        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin, saved as 'King's Road 2' ({theirs}): "
+            + $"your 'King's Road' is a different loop ({ours})]", notices.Single());
     }
 
     [Fact]
@@ -358,7 +360,8 @@ public sealed class LoopShareTests : IDisposable
         foreach (string line in DataLines(SampleLoop())) receiver.Ingest(Tele("Raijin", line));
 
         Assert.Single(loops.Loops);
-        Assert.Equal("[Received loop 'King's Road' 3 rooms from Raijin, already have it]", notices.Single());
+        Assert.Equal($"[Received loop 'King's Road' 3 rooms from Raijin, already have it ({LoopSignature.ShortOf(SampleLoop())})]",
+            notices.Single());
     }
 
     [Fact]
