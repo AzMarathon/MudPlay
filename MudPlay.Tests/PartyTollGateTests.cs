@@ -1237,6 +1237,9 @@ public sealed class PartyTollGateTests : IDisposable
         Assert.Empty(keepIsMore.Gives);
         Assert.Equal(new[] { "n" }, keepIsMore.Moves);
         Assert.Contains("you can spare 2 gold after the 8 gold you keep on hand", keepIsMore.Decided);
+        // What a bank stop sizes its draw by is the same amount.
+        Assert.Equal(800, keepIsMore.Gate.KeptFor(500));
+        Assert.Equal(1_200, keepIsMore.Gate.KeptFor(1_200));
 
         Rig crossingIsMore = FundingPartyAtTheToll();             // keep 3 is under our 5 gold toll: 5 spare
         crossingIsMore.KeepOnHand = 300;

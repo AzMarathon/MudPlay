@@ -9207,7 +9207,9 @@ public sealed class AppServices
             // A bank stop the trip makes anyway also draws what a party in tow is
             // short of the trip's tolls and fares (Cash: fund party members' tolls).
             partyTollFunding: tolls => PartyToll.FundingNeededFor(tolls),
-            readPartyPurses: then => PartyToll.AfterReadingPurses(then));
+            readPartyPurses: then => PartyToll.AfterReadingPurses(then),
+            // A stash room picked as the Bank in Settings → Cash + Items.
+            stashIsTheBank: room => Movement.IsStash(room) && PathItemBankRoom() == room);
         // The full parse that answers that `i`: an incremental pickup / drop patch is
         // exactly the drifting figure the refresh exists to replace. Harmless at any
         // other time, since the router only listens while it is holding for one.
@@ -9677,7 +9679,16 @@ public sealed class AppServices
             // arrival (the "sat idle at the shop, never bought" bug).
             walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
-            log: Log);
+            log: Log,
+            // The withdrawal for the item also draws what a party in tow is short
+            // of the tolls on the rest of the walk; their purses are read first,
+            // and only when there is a toll on it to read them for.
+            partyTollTopUp: PathItemPartyTollTopUp,
+            readPartyPurses: (bank, shop, destination, then) =>
+            {
+                if (PathItemTripTolls(bank, shop, destination) > 0) PartyToll.AfterReadingPurses(then);
+                else then();
+            });
         Needs.NeedPosted += PathItemShopRouter.OnNeedPosted;
         Walker.Event += PathItemShopRouter.OnWalkEvent;
         Inventory.Changed += PathItemShopRouter.OnInventoryChanged;
@@ -13733,6 +13744,51 @@ public sealed class AppServices
         return Game.Map.RoomKey.TryParseWire(cash.BankRoomKey, out Game.Map.RoomKey key)
             ? key
             : null;
+    }
+
+    // The tolls and fares on what is left of a path-item detour at its bank stop:
+    // on to the shop, then on to the walk's destination. Each crosser's own.
+    private long PathItemTripTolls(Game.Map.RoomKey bank, Game.Map.RoomKey shop, Game.Map.RoomKey destination) =>
+        Movement.TollCopperOnRoute(Bfs, bank, shop) + Movement.TollCopperOnRoute(Bfs, shop, destination);
+
+    // The deposit this session has seen at the bank whose room this is. Null when
+    // none has: no `bank` listing named it, or the room is no bank's (a stash room
+    // set as the bank, where a `with` draws nothing).
+    private long? KnownDepositAt(Game.Map.RoomKey bankRoom)
+    {
+        IReadOnlyDictionary<string, long> deposits = BankBalance.LastKnown;
+        foreach (Game.GameData.BankShop bank in Game.GameData.BankCatalog.Enumerate(GameData))
+            if (bank.Key == bankRoom && deposits.TryGetValue(bank.Name, out long copper))
+                return copper;
+        return null;
+    }
+
+    // What a path-item detour's withdrawal adds for a party in tow (user,
+    // 2026-10-10: the leader's cash "from hand or bank if its making a bank
+    // trip", and "yes" to this detour drawing it too). The item takes all that
+    // was carried and drawn for it, so the leader needs what it keeps for the
+    // tolls ahead (PartyTollGate.KeptFor) and what the members are short on top.
+    // Never more than the bank is known to hold beyond the item's own draw, since
+    // a `with` for more than the balance draws nothing; with no balance known,
+    // nothing is added.
+    private (long Copper, string Said) PathItemPartyTollTopUp(
+        Game.Map.RoomKey bank, Game.Map.RoomKey shop, Game.Map.RoomKey destination, long drawing)
+    {
+        long tolls = PathItemTripTolls(bank, shop, destination);
+        if (tolls <= 0) return (0, string.Empty);
+        (long needed, string who) = PartyToll.FundingNeededFor(tolls);
+        if (needed <= 0) return (0, string.Empty);
+
+        string lacking = $"The party in tow is {needed:N0} copper short of the walk's {tolls:N0} copper in tolls and fares each ({who}).";
+        if (KnownDepositAt(bank) is not { } balance)
+            return (0, lacking + " Nothing is drawn for them: no balance is known for the bank here.");
+        long wanted = PartyToll.KeptFor(tolls) + needed;
+        long add = Math.Min(wanted, Math.Max(0, balance - drawing));
+        return (add, lacking + (add >= wanted
+            ? $" Drawing {add:N0} copper more: what you keep for your own crossings and their share."
+            : add > 0
+                ? $" Drawing {add:N0} copper more, {wanted - add:N0} short of what that takes: the balance here is {balance:N0}."
+                : $" Nothing more drawn: the balance here ({balance:N0}) has none left beyond the item's {drawing:N0}."));
     }
 
     // Per-copy buy cost in copper for the shop router's affordability gate:

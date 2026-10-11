@@ -56,6 +56,8 @@ public sealed class TrainFundingRouterTests
         public List<long> PartyAskedAbout = new();
         public bool HoldPurseRead;
         public Action? PursesRead;
+        // Whether the stash room is the one set as the bank in Settings.
+        public bool StashIsTheBank;
 
         // Timers fire only when the test says so, so each leg's settle window is an
         // explicit step rather than a race.
@@ -120,7 +122,8 @@ public sealed class TrainFundingRouterTests
                 {
                     if (HoldPurseRead) PursesRead = then;
                     else then();
-                });
+                },
+                stashIsTheBank: room => StashIsTheBank && room.Equals(StashRoom));
 
             Router.Finished += r => Result = r;
         }
@@ -369,6 +372,42 @@ public sealed class TrainFundingRouterTests
         keeps.Router.Begin(1000, Trainer, new TrainTripTolls(_ => 500, _ => false));
         keeps.ArriveAtLastWalk();
         Assert.Contains("with 2700", keeps.Sent);
+    }
+
+    // A stash room set as the bank in Settings counts as one for the party's share
+    // (user, 2026-10-10): the stop takes our own shortfall and what the members
+    // are short of the trip's tolls, once their purses are read, out of what the
+    // search showed. Any other stash room gives up our own shortfall only.
+    [Fact]
+    public void AStashRoomSetAsTheBank_AlsoGivesUpWhatThePartyIsShortOfTheTripsTolls()
+    {
+        Harness h = new() { Purse = 200, StashHolds = 9_000, PartyShortOf = _ => 800, HoldPurseRead = true, StashIsTheBank = true };
+        h.Sources.Add(Stash(9_000));
+        h.Router.Begin(1000, Trainer, new TrainTripTolls(_ => 500, _ => false));
+        h.ArriveAtLastWalk();
+        h.FireTimers();                           // the search has answered
+
+        Assert.Empty(h.Taken);                    // the purses first
+        h.PursesRead!();
+        Assert.Equal(new long[] { 2_100 }, h.Taken);   // 1000 fee and 500 tolls less the 200 carried, and 800 for the members
+        h.FireTimers();
+        Assert.True(h.Result!.Value.Funded);
+        Assert.Contains(h.Reconciled, r => r.Room.Equals(StashRoom) && r.Copper == 9_000 - 2_100);
+
+        Harness thin = new() { Purse = 200, StashHolds = 1_500, PartyShortOf = _ => 800, StashIsTheBank = true };
+        thin.Sources.Add(Stash(1_500));
+        thin.Router.Begin(1000, Trainer, new TrainTripTolls(_ => 500, _ => false));
+        thin.ArriveAtLastWalk();
+        thin.FireTimers();
+        Assert.Equal(new long[] { 1_500 }, thin.Taken);   // our 1300, and the 200 the pile has left
+
+        Harness other = new() { Purse = 200, StashHolds = 9_000, PartyShortOf = _ => 800 };
+        other.Sources.Add(Stash(9_000));
+        other.Router.Begin(1000, Trainer, new TrainTripTolls(_ => 500, _ => false));
+        other.ArriveAtLastWalk();
+        other.FireTimers();
+        Assert.Equal(new long[] { 1_300 }, other.Taken);
+        Assert.Empty(other.PartyAskedAbout);
     }
 
     // What the party is short never starts a bank trip: a purse that covers our own

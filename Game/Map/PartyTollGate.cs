@@ -360,6 +360,10 @@ public sealed class PartyTollGate
     private long Kept(long cost, long later) =>
         Math.Max(cost + Math.Max(0, later) + Math.Max(0, _reservedCopper()), KeepOnHandCopper);
 
+    // The same for a bank stop sizing its draw: what we keep when the crossings
+    // still ahead of us will charge us this much in all.
+    public long KeptFor(long ownCrossingsCopper) => Kept(Math.Max(0, ownCrossingsCopper), later: 0);
+
     // What we can hand over there: the purse on record less Kept. Null while the
     // purse isn't known.
     private long? Spare(long cost, long later = 0) => _ownPurse() is { } purse ? purse - Kept(cost, later) : null;
