@@ -1236,6 +1236,14 @@ public partial class MainWindowViewModel : ObservableObject
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.SummonSettle.NoteRoomDisplayed();
         // Tells the hang-up item check that the room, floor list included, has been read.
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.HangupItems.NoteRoomDisplayed();
+        // Under a typed break's hold the combat engine asks to see the room once a
+        // fight in it goes quiet; a display that lists nobody is how an emptied room
+        // answers. A `look <direction>` shows the next room and answers nothing.
+        _roomDisplayParser.RoomParsed += _ =>
+        {
+            if (!AppServices.Current.RoomTracker.IsPeekSuppressed())
+                AppServices.Current.Combat.NoteRoomDisplayed();
+        };
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
             AppServices.Current.Conditions.IsConfuseFumbleLine,
@@ -3820,6 +3828,20 @@ public partial class MainWindowViewModel : ObservableObject
         // re-attack after the swap, and are left to it.
         if (typed && AppServices.Current.EngineGate.SendingUsersOwnCommand)
             AppServices.Current.OutboundGear.ObserveOutbound(data);
+        // Break observer — the user's own `break` holds the combat engine's attack on
+        // the monster it was fighting, and their own attack lets it go: typed, or
+        // sent by a macro, trigger or event of theirs. An engine's break or attack is
+        // neither, and the raw wire's lines (`sys goto` sends a break ahead of a
+        // jump) are an engine's although nothing wraps them. A line a party member
+        // relayed with `@do` or `@party` counts with the user's (user, 2026-10-10)
+        // and carries their name.
+        string? relayedFor =
+            AppServices.Current.Do.SendingFor is { } doSender ? $"{doSender}'s @do"
+            : AppServices.Current.PartyEssentials.RelayingFor is { } partySender ? $"{partySender}'s @party"
+            : null;
+        if (typed && !AppServices.Current.SendingEngineRawCommand
+            && (AppServices.Current.EngineGate.SendingUsersOwnCommand || relayedFor is not null))
+            AppServices.Current.OutboundBreak.ObserveOutbound(data, relayedFor);
         // Left-behind watch — a typed `leave` is the user leaving the party, and a
         // typed room command can draw an exit's refusal; neither is a follower the
         // leader walked off without. Typed lines only, as for gear.

@@ -742,6 +742,41 @@ public sealed class PartyEssentialHandlersTests
         Assert.Equal("rest\r", Encoding.Latin1.GetString(relay[0]));
     }
 
+    // While the relayed line is going out the handler names whose it is, which is
+    // how the wire tells a member's `@party break` from an engine's; before and
+    // after the send it names nobody.
+    [Fact]
+    public void PartyRelay_NamesTheMember_OnlyWhileItsLineIsBeingSent()
+    {
+        var (engine, handlers, _, party, _, _) = Setup();
+        SeedPartyMember(party, "Leader", isLeader: true);
+        List<string?> duringSend = new();
+        handlers.SetWireSender(_ => duringSend.Add(handlers.RelayingFor));
+
+        Assert.Null(handlers.RelayingFor);
+        engine.DispatchForTests(Say("Leader", "@party break"));
+
+        Assert.Equal(new string?[] { "Leader" }, duringSend);
+        Assert.Null(handlers.RelayingFor);
+    }
+
+    // With the master switch off no remote command is followed, so a `@party break`
+    // never reaches the wire and there is nothing for it to hold. Nor does one from
+    // someone who is not in the party.
+    [Fact]
+    public void PartyBreak_WithTheMasterSwitchOff_OrFromOutsideTheParty_SendsNothing()
+    {
+        var (engine, _, _, party, _, relay) = Setup();
+        SeedPartyMember(party, "Leader", isLeader: true);
+
+        engine.DispatchForTests(Say("Stranger", "@party break"));
+        Assert.Empty(relay);
+
+        engine.BlockedByMasterSwitch = _ => true;
+        engine.DispatchForTests(Say("Leader", "@party break"));
+        Assert.Empty(relay);
+    }
+
     [Fact]
     public void PartyMeditate_MapsToShortForm()
     {

@@ -738,6 +738,14 @@ public static class BugReportBuilder
         // off, and what came of it: a skip here beside a live target is a fight left
         // standing (report paradigm-20261009-122342).
         Kv(sb, "Last attack-resume decision", svc.Combat.LastResumeDecision ?? "(none this session)");
+        // A `break` the user sent (or one a party member relayed with `@do` or
+        // `@party`) holds the engine's attack on that monster until they attack
+        // again, it dies or leaves, or we leave: a fight left standing with this set
+        // is one they asked for. The line says who asked, how many of that name are
+        // listed, when it last attacked, and where the look its silence asks for
+        // stands: silence for a round makes the client look, the look decides, and
+        // in the dark the silence alone does.
+        Kv(sb, "Attack held by the user's break", svc.Combat.UserBreakHoldSummary);
         // A room spell's kills are counted on their exp lines; one left to its
         // *Combat Off* says why (the spell's damage line unread, or more exp lines
         // than the room listed).
@@ -756,6 +764,13 @@ public static class BugReportBuilder
         // won't it rest" report turns on this line.
         Kv(sb, "Room spell and resting", RoomSpellRestLine(svc));
         Kv(sb, "Room spells changed from the default (Periodic Damage Room Spells)", RoomSpellRestChoices(svc));
+        Kv(sb, "Wear a room-spell counter before stepping in (setting)",
+            ViewModels.Settings.PeriodicDamageRoomSpellsSectionViewModel.ReadOrDefault(svc.Profile.Current)
+                .WearCounterBeforeEntering ? "on" : "off");
+        Kv(sb, "Room-spell counters put on by the client", RoomSpellCountersWorn(svc));
+        Kv(sb, "Room-spell counters not in use", RoomSpellCountersOutOfUse(svc));
+        Kv(sb, "Room-spell counter waiting for an empty room (Auto-Sneak on, Auto-Combat off)",
+            svc.CounterWear.WaitingForEmptyRoom.ToString());
         Kv(sb, "Clearing a see-hidden room (combat off)", svc.CombatTracker.SeeHiddenClearActive.ToString());
         Kv(sb, "Sneak broken by a see-hidden monster, not sneaking again yet", svc.CombatTracker.SneakBrokenBySeeHidden.ToString());
         Kv(sb, "Clearing after a failed sneak (combat off)", svc.CombatTracker.SneakFailClearActive.ToString());
@@ -2722,6 +2737,29 @@ public static class BugReportBuilder
         return svc.Health.RestDeferredByRoomSpell is not null
             ? $"{does}; bars resting: resting deferred (healing as set; the rest starts in the next room that isn't barred)"
             : $"{does}; bars resting: no rest would be started here (none is due)";
+    }
+
+    // What RoomSpellCounterWear has on and answers for: each item, the piece it
+    // took the place of and the spell it went on for, and a wear still unanswered.
+    private static string RoomSpellCountersWorn(AppServices svc)
+    {
+        List<string> parts = svc.CounterWear.OwnedSnapshot().Select(o =>
+            $"{o.Item} for {svc.SpellCatalog.GetSpellNameByNumber(o.Spell) ?? "room spell"} (#{o.Spell})"
+            + (o.Displaced is null ? ", no piece taken off for it" : $", in place of {o.Displaced}")
+            // Not in or next to such a room: on because the plan's next step is.
+            + (svc.CounterWear.KeptForNextStep.Contains(o.Item) ? ", kept on for the next step" : string.Empty)).ToList();
+        if (svc.CounterWear.PendingItem is { } pending) parts.Add($"wear of {pending} not answered yet");
+        return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
+    }
+
+    // The counters RoomSpellCounterWear has set aside and why: the game refused
+    // them, or their wear came to nothing. A room they would open is closed to
+    // routes while they are listed here.
+    private static string RoomSpellCountersOutOfUse(AppServices svc)
+    {
+        List<string> parts = svc.CounterWear.OutOfUseSnapshot()
+            .Select(o => $"{svc.ItemNames.GetName(o.Item) ?? "item"} (#{o.Item}): {o.Why}").ToList();
+        return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
     }
 
     // The room spells whose Bars resting box (Settings → Periodic Damage Room

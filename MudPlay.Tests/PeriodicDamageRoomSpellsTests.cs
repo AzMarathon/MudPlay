@@ -329,6 +329,37 @@ public sealed class PeriodicDamageRoomSpellsTests : IDisposable
     }
 
     [Fact]
+    public void Tab_WearCounterBox_StartsTicked_IsSavedWithTheCharacter_AndSaysWhenItChanges()
+    {
+        Tab tab = new();
+        tab.Profile.LoadBlank();
+        using PeriodicDamageRoomSpellsSectionViewModel vm = tab.Open();
+        Assert.True(vm.WearCounterBeforeEntering);
+        Assert.True(PeriodicDamageRoomSpellsSectionViewModel.ReadOrDefault(null).WearCounterBeforeEntering);
+        Assert.False(vm.IsDirty);
+
+        vm.WearCounterBeforeEntering = false;
+        Assert.True(vm.IsDirty);
+        vm.Apply();
+
+        Assert.False(PeriodicDamageRoomSpellsSectionViewModel.ReadOrDefault(tab.Profile.Current).WearCounterBeforeEntering);
+        Assert.Empty(tab.Stored());   // the per-spell choices are untouched
+        Assert.False(vm.IsDirty);
+        Assert.Single(tab.Info, l => l.Contains("is no longer put on, and routes no longer count one that isn't worn"));
+
+        // Cancel puts an unsaved change back.
+        vm.WearCounterBeforeEntering = true;
+        vm.Discard();
+        Assert.False(vm.WearCounterBeforeEntering);
+        Assert.False(vm.IsDirty);
+
+        // A save that only touches the spells leaves the box as stored.
+        vm.Spells[0].BarsResting = false;
+        vm.Apply();
+        Assert.False(PeriodicDamageRoomSpellsSectionViewModel.ReadOrDefault(tab.Profile.Current).WearCounterBeforeEntering);
+    }
+
+    [Fact]
     public void Tab_ATimerSpell_SaysSoInComes_AndStartsTicked()
     {
         Tab tab = new();

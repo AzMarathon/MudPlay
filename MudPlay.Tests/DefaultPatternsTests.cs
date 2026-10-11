@@ -629,6 +629,58 @@ public sealed class DefaultPatternsTests
         => Assert.False(PatternById(KnownPatterns.UserEquipCannotBeWorn).TryMatch(
             Line("You may not wear that item!"), out _));
 
+    // Item names carry hyphens, apostrophes and full stops in both data sets; the
+    // wear and remove lines of such an item were once not read at all.
+    [Theory]
+    [InlineData("You are now wearing phoenix feather.", "phoenix feather")]
+    [InlineData("You are now wearing gnomish fish-helm.", "gnomish fish-helm")]
+    [InlineData("You are now wearing rime-runed cuirass.", "rime-runed cuirass")]
+    [InlineData("You are now wearing giant's girdle.", "giant's girdle")]
+    [InlineData("You lit the torch.", "torch")]
+    public void UserEquippedRegex_ReadsEveryKindOfItemName(string line, string item)
+    {
+        Assert.True(PatternById(KnownPatterns.UserEquipped).TryMatch(Line(line), out MatchResult r));
+        Assert.Equal(item, r.Groups[0]);
+    }
+
+    [Theory]
+    [InlineData("You have removed silver necklace.", "silver necklace")]
+    [InlineData("You have removed half-plate corselet.", "half-plate corselet")]
+    [InlineData("You have removed giant's girdle.", "giant's girdle")]
+    [InlineData("You have removed torch and extinguished it.", "torch")]
+    public void UserRemovedRegex_ReadsEveryKindOfItemName(string line, string item)
+    {
+        Assert.True(PatternById(KnownPatterns.UserRemoved).TryMatch(Line(line), out MatchResult r));
+        Assert.Equal(item, r.Groups[0]);
+    }
+
+    [Fact]
+    public void UserEquipCannotBeWornRegex_ReadsAHyphenatedName()
+    {
+        Assert.True(PatternById(KnownPatterns.UserEquipCannotBeWorn).TryMatch(
+            Line("jeweled main-gauche may not be worn!"), out MatchResult r));
+        Assert.Equal("jeweled main-gauche", r.Groups[0]);
+    }
+
+    // Two answers to a wear that put nothing on: the item named is the one typed in
+    // the first, the piece in the way in the second.
+    [Theory]
+    [InlineData("You do not have phoenix feather left unequipped.", "phoenix feather")]
+    [InlineData("You do not have rime-runed cuirass left unequipped.", "rime-runed cuirass")]
+    public void UserEquipNotInPackRegex_NamesTheItem(string line, string item)
+    {
+        Assert.True(PatternById(KnownPatterns.UserEquipNotInPack).TryMatch(Line(line), out MatchResult r));
+        Assert.Equal(item, r.Groups[0]);
+    }
+
+    [Fact]
+    public void UserEquipOccupantStuckRegex_NamesThePieceInTheWay()
+    {
+        Assert.True(PatternById(KnownPatterns.UserEquipOccupantStuck).TryMatch(
+            Line("You are already wearing ring of the damned and it may not be removed."), out MatchResult r));
+        Assert.Equal("ring of the damned", r.Groups[0]);
+    }
+
     // `set follow`: the `pro` sheet's row and the command's two replies.
     [Theory]
     [InlineData("Follow Mode:        Blind", "Blind")]
