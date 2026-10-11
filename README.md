@@ -1,21 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.169.0**
-> - A carried item that negates a room's spell is worn for you (phoenix feather, else magma amulet, against magma heat)
-> - On when you come next to such a room, on inside it, off one room clear; kept on when the route's next step is next to one again
-> - Sneaking past things (Auto-Sneak on, Auto-Combat off), it goes on in a room with no NPC
-> - Giving the slot back never breaks a sneak that is being kept
-> - A teleport, a drag or a typed step still gets the wear before or on arrival; a held step waits three seconds at most
-> - The piece the game took off for it, or the current set's, goes back on
-> - A wear the game refuses or never answers is set aside and tried again later, not every room
-> - Wear and remove lines of hyphenated item names are read
-> - Routes no longer count a negating item you carry but won't have on
-> - Settings → Periodic Damage Room Spells: a tick box for it, on by default
-> - Off with the master switch
-> - Bug report lists what was put on this way and what was set aside
-> - Periodic Damage Room Spells: Paradigm's desert rows show desert damage, 5–20, cast without the waterskin buff
-> - Periodic Damage Room Spells: chaos storm and the drowning spells show their set damage, no "more with level"
+> **Version 3.169.1**
+> - Help: remote @-commands rewritten as a full reference (forms, matching, replies, situations)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
