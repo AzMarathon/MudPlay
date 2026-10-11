@@ -13,13 +13,29 @@ namespace MudPlay.Game.Remote;
 // The engine registers no handlers itself — subsystems wire their own by calling
 // RegisterHandler; the engine stays untouched.
 //
+// The order of checks on an inbound line (OnChatEntry). The first that stops a
+// command ends it:
+//   a. "Disallow all remote control commands" — nothing is read or answered.
+//   b. The channel: telepath, gangpath or say, each with its own off switch.
+//   c. Our own echo, and anything that doesn't start with `@` (or `&@`).
+//   d. Reserved words other subsystems own (ailment announces, @panic, sync
+//      data) — swallowed.
+//   e. The master switch: off, only @auto-all is followed; no answer.
+//   f. Hard-blocks (1 below) — no answer, whatever the Warn setting says.
+//   g. A word that is no command — no answer.
+//   h. A path-only command (@dupe) said aloud — no answer.
+//   i. The permission (2 and 3 below). A sender without it gets the generic
+//      failure message and nothing else: every check that answers with a reason
+//      of its own comes after this one, so it can tell a stranger nothing.
+//   j. The suicide rules (4 below), then the handler.
+// Every answer to a command that was not carried out goes through
+// SendDenialReply, which the Warn setting silences.
+//
 // Permission model:
-//   1. Hard-blocks first. Any command matching the reroll hard-block (the
+//   1. Hard-blocks. Any command matching the reroll hard-block (the
 //      substring "reroll" appears anywhere in the command name or args) is
-//      blocked unconditionally — no per-player flag can override. Suicide
-//      commands (@do suicide, @party suicide) are blocked when LivesProvider
-//      reports remaining lives ≤ MaxSuicideLivesThreshold. If LivesProvider is
-//      null we treat lives as unknown and block — the safer default.
+//      blocked unconditionally — no per-player flag can override — and so is
+//      `@party set suicide`.
 //   2. Party whitelist. Handlers registered with PlayerRemoteControls.None as
 //      the required category are gated on whether the sender is an active party
 //      member (per PartyState.Members). Used for the base @party <sub> commands
@@ -30,6 +46,12 @@ namespace MudPlay.Game.Remote;
 //      required PlayerRemoteControls flag. Default for never-seen / un-customised
 //      players is PlayerRemoteControls.None → every per-flag handler denies.
 //      Users grant access via the Players tab edit dialog.
+//   4. The suicide rules, for a sender who passed 2 or 3. `@do` with the word
+//      `suicide` among what it would send is refused with a pointer at @suicide.
+//      `@suicide` itself is refused when LivesProvider reports remaining lives ≤
+//      MaxSuicideLivesThreshold; a null LivesProvider is lives unknown, and
+//      blocks — the safer default. Both match the exact command words: a word
+//      that only contains "suicide" is neither.
 //
 // Relay-back: `&@<command> [args]` asks us to send `@<command> [args]` back to its
 // sender (see HandleRelayBack), so the sender's own client runs it as if we'd sent it.
@@ -485,9 +507,8 @@ public sealed class RemoteCommandManager : IDisposable
         }
 
         // @help is a pure query — describing a command isn't executing it — so it's
-        // exempt from the suicide / reroll content guards below, which scan the args
-        // for dangerous tokens meant for action commands (@do suicide, @party reroll).
-        // Without this, `@help suicide` would be swallowed by the suicide policy block.
+        // exempt from the hard-block below, which scans the args for words meant
+        // for action commands (@do reroll, @party set suicide).
         bool isHelp = string.Equals(command, "@help", StringComparison.OrdinalIgnoreCase);
 
         // Hard-blocks first — bypass everything else. Always silent (no
@@ -497,39 +518,6 @@ public sealed class RemoteCommandManager : IDisposable
         {
             _log?.Log(LogSeverity.Info, "RemoteCmd",
                 $"Blocked {command} from {entry.Speaker}: {reason}");
-            return;
-        }
-
-        // Forcible @do / @party suicide redirect — UNCONDITIONALLY
-        // blocked but DOES reply (gated on WarnOnDenial) with a hint
-        // pointing the sender at the dedicated @suicide handler that
-        // owns the elevated-permission + lives-threshold + stored-
-        // password contract. Has to run BEFORE the suicide policy
-        // block below because that one's permissive when lives >
-        // threshold; we don't want @do suicide to slip through
-        // just because we happen to have enough lives.
-        string? forcedSuicideRedirect = isHelp ? null : GetForcedSuicideRedirectReply(command, args);
-        if (forcedSuicideRedirect is not null)
-        {
-            _log?.Log(LogSeverity.Info, "RemoteCmd",
-                $"Forcible-suicide blocked from {entry.Speaker}: {forcedSuicideRedirect}");
-            SendDenialReply(channel.Value, entry.Speaker, specificReason: forcedSuicideRedirect);
-            return;
-        }
-
-        // Suicide lives-threshold — user-configured policy block.
-        // UNLIKE the hard-blocks above, this DOES reply because the
-        // caller is typically a trusted party member and the policy
-        // is explicit, not a safety net. Routes through
-        // SendDenialReply so the WarnOnDenial master gate applies
-        // (specific reason wins over the generic FailureMessage
-        // when WarnOnDenial is on; nothing sent when it's off).
-        string? suicideReply = isHelp ? null : GetSuicidePolicyBlockReply(command, args);
-        if (suicideReply is not null)
-        {
-            _log?.Log(LogSeverity.Info, "RemoteCmd",
-                $"Suicide policy-blocked from {entry.Speaker}: {suicideReply}");
-            SendDenialReply(channel.Value, entry.Speaker, specificReason: suicideReply);
             return;
         }
 
@@ -577,6 +565,33 @@ public sealed class RemoteCommandManager : IDisposable
             if (BlockedByMasterSwitch?.Invoke($"{command} from {entry.Speaker} (not granted)") == true)
                 return;
             SendDenialReply(channel.Value, entry.Speaker);
+            return;
+        }
+
+        // The two suicide rules, for a sender who holds the command's permission.
+        // They come after the permission check so that a sender without it learns
+        // nothing here: the lives rule's answer names our lives count. Both answer
+        // through SendDenialReply, so the Warn setting silences them.
+        //
+        // `@do … suicide` is refused whatever our lives are, with a pointer at
+        // @suicide, which has the elevated permission, the lives rule and the
+        // stored password. It is checked first: the lives rule lets a command
+        // through when lives are above the number set.
+        string? forcedSuicideRedirect = GetForcedSuicideRedirectReply(command, args);
+        if (forcedSuicideRedirect is not null)
+        {
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Forcible-suicide blocked from {entry.Speaker}: {forcedSuicideRedirect}");
+            SendDenialReply(channel.Value, entry.Speaker, specificReason: forcedSuicideRedirect);
+            return;
+        }
+
+        string? suicideReply = GetSuicidePolicyBlockReply(command);
+        if (suicideReply is not null)
+        {
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Suicide policy-blocked from {entry.Speaker}: {suicideReply}");
+            SendDenialReply(channel.Value, entry.Speaker, specificReason: suicideReply);
             return;
         }
 
@@ -816,10 +831,9 @@ public sealed class RemoteCommandManager : IDisposable
         return false;
     }
 
-    // Forcible redirect for @do suicide and @party suicide: both are
-    // unconditionally blocked even at full permissions, but unlike the silent
-    // reroll hard-block they reply with a hint pointing the sender at the
-    // dedicated @suicide handler (which has its own SysopCommands /
+    // Forcible redirect for @do suicide: refused even at full permissions, but
+    // unlike the silent reroll hard-block it replies with a hint pointing the
+    // sender at the dedicated @suicide handler (which has its own SysopCommands /
     // Elevated-Commands grant AND the lives-threshold policy gate).
     //
     // Forcible-death actions route exclusively through @suicide because that
@@ -833,38 +847,35 @@ public sealed class RemoteCommandManager : IDisposable
     //     set suicide rather than inferred mid-session from a wire-sniff.
     //
     // Returns the reply payload (bare text — engine wraps in {} at SendReply
-    // time) for the sender; null when the command isn't a forcible @do / @party
-    // suicide attempt.
+    // time) for the sender; null when the command isn't a forcible @do suicide.
+    //
+    // Only @do, and only when one of the words it would send is `suicide` itself:
+    // a word that merely contains it (`suicidal`) is not the game's command.
+    // @party is a passthrough whose suicide policy is enforced entirely by
+    // IsHardBlocked (only the `set suicide` phrase is refused); a plain
+    // @party suicide relays like any other command, so it must NOT redirect.
     private static string? GetForcedSuicideRedirectReply(string command, string[] args)
     {
-        if (!ContainsToken(command, args, "suicide")) return null;
-        // Only @do routes forcible death to the dedicated @suicide handler. @party
-        // is a passthrough whose suicide policy is enforced entirely by
-        // IsHardBlocked (only the `set suicide` phrase is refused); a plain
-        // @party suicide relays like any other command, so it must NOT redirect.
         if (!command.Equals("@do", StringComparison.OrdinalIgnoreCase)) return null;
-        return "@do suicide is not allowed, use @suicide";
+        foreach (string arg in args)
+            if (arg.Equals("suicide", StringComparison.OrdinalIgnoreCase))
+                return "@do suicide is not allowed, use @suicide";
+        return null;
     }
 
-    // User-configured policy block for direct @suicide based on the lives
-    // threshold. Distinct from IsHardBlocked because policy blocks SHOULD be
-    // communicated back to the sender — the caller is typically a trusted party
-    // member who needs to know why their command isn't firing (otherwise they'll
-    // assume our @-command engine is broken). Returns the reply text for the
-    // sender; null when the command isn't a suicide attempt or the threshold is
-    // satisfied.
+    // User-configured policy block for @suicide based on the lives threshold.
+    // Distinct from IsHardBlocked because policy blocks SHOULD be communicated
+    // back to the sender — the caller holds the Elevated Commands permission and
+    // needs to know why the command isn't firing (otherwise they'll assume our
+    // @-command engine is broken). Returns the reply text for the sender; null
+    // when the command isn't @suicide or the threshold is satisfied.
     //
-    // Forcible @do / @party suicide variants are caught earlier by
-    // GetForcedSuicideRedirectReply; by the time this runs the only
-    // suicide-token-bearing command left is direct @suicide (or some future verb
-    // that legitimately uses suicide as a sub-command).
-    private string? GetSuicidePolicyBlockReply(string command, string[] args)
+    // The rule is @suicide's own. No other command is held to it for having
+    // `suicide` among its words: @do is refused outright above, and @party's
+    // suicide policy lives entirely in IsHardBlocked.
+    private string? GetSuicidePolicyBlockReply(string command)
     {
-        if (!ContainsToken(command, args, "suicide")) return null;
-        // @party's suicide policy lives entirely in IsHardBlocked (only `set
-        // suicide` is forbidden). Don't let the lives-threshold policy re-block a
-        // plain @party suicide passthrough — that would defeat the passthrough.
-        if (command.Equals("@party", StringComparison.OrdinalIgnoreCase)) return null;
+        if (!command.Equals("@suicide", StringComparison.OrdinalIgnoreCase)) return null;
         int? lives = LivesProvider?.Invoke();
         if (lives is null)
             return "suicide blocked, lives unknown to client";
