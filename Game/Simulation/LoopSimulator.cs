@@ -32,6 +32,18 @@ namespace MudPlay.Game.Simulation;
 // attack choice.
 public static class LoopSimulator
 {
+    // Which simulation a saved result came from. Area rankings are kept on disk
+    // between sessions (AreaRankingFiles) and a kept one is only listed while this is
+    // the number it was made with: a ranking by an older simulation is not comparable
+    // with a new one and would be shown as current.
+    //
+    // BUMP THIS whenever a simulated result could change for the same character, lap
+    // and game data: a change here, in SimCharacterBuilder, SimLevelProjection,
+    // SimFreeze or SimProc, in RouteExpResolver.ResolveSimLap, or in the combat,
+    // healing and casting code a simulated round calls. SimulatorVersionPinTests
+    // fails when a pinned result moves, to say so.
+    public const int SimulatorVersion = 1;
+
     public static LoopSimSummary RunMany(
         SimCharacter character, IReadOnlyList<SimRoom> lap, SimWorld world,
         double secondsPerStep, double hours, int runs, CancellationToken cancel = default)
