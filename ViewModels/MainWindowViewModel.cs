@@ -4111,6 +4111,11 @@ public partial class MainWindowViewModel : ObservableObject
                 "[the broadcast channel is switched off for @commands: Settings → Talk → Disallow @commands from broadcast]"));
             return;
         }
+        // Whose request it was. The client also sends these lines for other
+        // players (a `@do /name @roomba sync`, a relay-back): taken as the user's,
+        // such a send would have this client accept data nobody here asked for.
+        bool usersOwn = Game.Remote.TransferChannels.IsUsersOwn(
+            asked.Channel, AppServices.Current.Chat.OutgoingTelepathWasUsers);
         switch (asked.Transfer)
         {
             case Game.Remote.Transfer.TimerSync:
@@ -4121,20 +4126,24 @@ public partial class MainWindowViewModel : ObservableObject
                 // sent for another player (a relay-back, a `@do`) still opens the
                 // window, and its answer is a pick.
                 OpenTimerSyncWindow(asked.Channel,
-                    asked.Channel == Game.Remote.RemoteChannel.Telepath && AppServices.Current.Chat.OutgoingTelepathWasUsers
-                        ? e.Speaker
-                        : null);
+                    asked.Channel == Game.Remote.RemoteChannel.Telepath && usersOwn ? e.Speaker : null);
                 break;
             case Game.Remote.Transfer.RoombaSync:
-                AppServices.Current.RoombaSync.NoteSyncRequested();
+                if (usersOwn) AppServices.Current.RoombaSync.NoteSyncRequested();
+                else LogTransferNotTheUsers(e);
                 break;
             case Game.Remote.Transfer.LoopSend:
                 string[] words = e.Message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (words.Length == 3 && Game.Remote.LoopShareHandler.IsConfirm(words[2]) && e.Speaker is { Length: > 0 } to)
-                    AppServices.Current.LoopShareInbox.NoteSendConfirmed(to);
+                if (words.Length != 3 || !Game.Remote.LoopShareHandler.IsConfirm(words[2]) || e.Speaker is not { Length: > 0 } to)
+                    break;
+                if (usersOwn) AppServices.Current.LoopShareInbox.NoteSendConfirmed(to);
+                else LogTransferNotTheUsers(e);
                 break;
         }
     }
+
+    private static void LogTransferNotTheUsers(MudPlay.Game.ChatLogEntry e) => AppServices.Current.Log.Info("Transfers",
+        $"the {e.Message.Trim()} telepathed to {e.Speaker} was sent by the client for another player's remote command, not by the user: nothing is taken for it.");
 
     private static bool IsSelfName(string speaker)
     {

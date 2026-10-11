@@ -72,6 +72,11 @@ public sealed class ChatRouter : IDisposable
     // that exact text is dropped instead of re-queued. Cleared on the next
     // confirmation (of either kind) so a later, genuinely new send that happens
     // to produce identical text isn't wrongly suppressed.
+    //
+    // For a telepath this one-line guard covers only a row typed by the user and
+    // shown twice. The screen copy of a line the client sent is told by the lines
+    // sent lately (_sentLately): there may be several awaiting their copies at
+    // once, and a copy taken for a typed line is a send nobody made.
     private string? _lastEnqueuedTelepath;
     private string? _lastEnqueuedDirected;
 
@@ -210,10 +215,7 @@ public sealed class ChatRouter : IDisposable
 
     private void OnLineDispatched(Terminal.LineExtractor.EmittedLine line)
     {
-        // What the user types at the terminal goes out key by key and is only ever
-        // seen here, as the line the game shows back: a telepath read off the
-        // screen is theirs unless ObserveOutbound caught the same send first.
-        TryCaptureTelepath(line.Text, usersOwn: true);
+        TryCaptureTypedTelepath(line.Text);
         TryCaptureDirectedSay(line.Text);
         TryCustomDisconnectLine(line);
         TryActionEmote(line);
@@ -308,10 +310,10 @@ public sealed class ChatRouter : IDisposable
     // composites it onto the still-live prompt row, and LineExtractor's
     // prompt-split re-emits that as an ordinary content line, which
     // OnLineDispatched's /-line sniff below ALSO captures a moment later —
-    // the identical text, for the same one physical send. _lastEnqueuedTelepath
-    // / _lastEnqueuedDirected exist to drop that redundant second capture;
-    // without them every engine reply left one extra stale entry in the queue,
-    // permanently drifting every later pairing for the rest of the session.
+    // the identical text, for the same one physical send. _sentLately (for a
+    // telepath) and _lastEnqueuedDirected exist to drop that redundant second
+    // capture; without them every engine reply left one extra stale entry in the
+    // queue, permanently drifting every later pairing for the rest of the session.
     //
     // usersOwn: the send is the user's own doing (a window's button, a macro, a
     // trigger, an event of theirs), as against one the client makes by itself or
@@ -324,10 +326,25 @@ public sealed class ChatRouter : IDisposable
         foreach (string outLine in text.Split(LineBreaks,
                      StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            TryCaptureTelepath(outLine, usersOwn);
+            // Every line seen going out is a send, the same words twice included,
+            // and its screen copy is expected.
+            if (IsTelepathLine(outLine, out _))
+            {
+                AddPendingTelepath(outLine, usersOwn);
+                DateTimeOffset now = _now();
+                _sentLately.RemoveAll(s => now - s.At > PendingCaptureStaleAfter);
+                _sentLately.Add((outLine, now));
+            }
             TryCaptureDirectedSay(outLine);
         }
     }
+
+    // The telepath lines seen going out lately, for telling their screen copies
+    // from what the user typed (TryCaptureTypedTelepath). Kept for as long as a
+    // pending send is, not until its copy has come: a board may show a line back
+    // more than once, and a copy counted as typed would be a send of the user's
+    // that nobody made.
+    private readonly List<(string Line, DateTimeOffset At)> _sentLately = new();
 
     private static readonly char[] LineBreaks = { '\r', '\n' };
 
@@ -342,14 +359,42 @@ public sealed class ChatRouter : IDisposable
     //
     // usersOwn: the line is the user's own doing (typed, or sent by something they
     // set up), not one the client sent by itself or for another player.
-    private void TryCaptureTelepath(string text, bool usersOwn)
+    private void AddPendingTelepath(string text, bool usersOwn)
     {
-        if (text.Length < 3 || text[0] != '/') return;
-        int sp = text.IndexOf(' ');
-        if (sp <= 1 || sp == text.Length - 1) return;
-        if (text == _lastEnqueuedTelepath) return; // duplicate capture of the same send — see _lastEnqueuedTelepath
+        if (!IsTelepathLine(text, out int sp)) return;
         if (_pendingTelepaths.Count >= MaxPendingChatCaptures) _pendingTelepaths.RemoveAt(0);
         _pendingTelepaths.Add(new PendingTelepath(text[1..sp], text[(sp + 1)..], _now(), usersOwn));
+    }
+
+    private static bool IsTelepathLine(string text, out int space)
+    {
+        space = text.Length < 3 || text[0] != '/' ? -1 : text.IndexOf(' ');
+        return space > 1 && space < text.Length - 1;
+    }
+
+    // A screen row that reads as a telepath. What the user types at the terminal
+    // goes out key by key and is only ever seen here, as the line the game shows
+    // back, so such a row is a send of the user's, unless it is the screen copy of
+    // a line the client itself sent: that send is pending already, with whose it
+    // was, and counting its copy as typed would make a second send of it and mark
+    // it the user's.
+    //
+    // A copy does not always come whole: a long line wraps, an incoming line cuts
+    // it, the statline is glued in front and stripped. So a row is taken for a
+    // copy when it is a line sent lately, begins one, or one begins it. A row that
+    // cannot be told from a copy is not the user's; the cost is a telepath the
+    // user typed in the same words as one the client has just sent, which is then
+    // shown without its text and asks for nothing.
+    private void TryCaptureTypedTelepath(string text)
+    {
+        if (!IsTelepathLine(text, out _)) return;
+        DateTimeOffset now = _now();
+        _sentLately.RemoveAll(s => now - s.At > PendingCaptureStaleAfter);
+        if (_sentLately.Exists(s => s.Line.StartsWith(text, StringComparison.Ordinal)
+                                    || text.StartsWith(s.Line, StringComparison.Ordinal)))
+            return;
+        if (text == _lastEnqueuedTelepath) return; // the same typed row seen twice — see _lastEnqueuedTelepath
+        AddPendingTelepath(text, usersOwn: true);
         _lastEnqueuedTelepath = text;
     }
 

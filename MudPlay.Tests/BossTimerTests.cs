@@ -1201,6 +1201,68 @@ public sealed class BossTimerTests : IDisposable
         }
     }
 
+    // A player holding Execute commands sends `@do /<her> @timer sync`, and the
+    // board shows each line the client sends back as a row. The client sent two
+    // telepaths for it (the request and its `{ok}`), so the request's row arrives
+    // with another send made after it. That row is the copy of a line the client
+    // sent, not a telepath the user typed: after any number of further `@do` lines
+    // her data is still a pick.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void SyncWindow_TheScreenCopiesOfWhatTheClientSentForAnotherPlayer_NeverMakeThemAsked(int furtherDos)
+    {
+        // Opened by the confirmation of the request the client sent for her.
+        var (window, timers) = NewSyncWindow(RemoteChannel.Telepath, to: null);
+        using (window)
+        {
+            ClientSends("/Mallory @timer sync");
+            ClientSends("/Mallory {ok}");
+            UserTypes("/Mallory @timer sync");   // the board's row for the first
+            GameConfirms("Mallory");
+            UserTypes("/Mallory {ok}");
+            GameConfirms("Mallory");
+            for (int i = 0; i < furtherDos; i++)
+            {
+                ClientSends("/Mallory {ok}");
+                UserTypes("/Mallory {ok}");
+                GameConfirms("Mallory");
+            }
+
+            Hears(window, ChatChannel.TelepathIncoming, "Mallory");
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal("Mallory", Assert.Single(Assert.Single(window.Rows).Responders).Responder);
+            Assert.Contains("1 to pick, 0 adopted", window.Status);
+        }
+    }
+
+    // What the user types at the terminal is seen only as its row. With lines of
+    // the client's own going out around it, it is still the user's request, and the
+    // player the game confirms it reached is adopted from.
+    [Fact]
+    public void SyncWindow_ATypedRequestAmongClientSends_StillAdoptsFromThePlayerItReached()
+    {
+        // Open and listening on telepath, with nobody asked yet.
+        var (window, timers) = NewSyncWindow(RemoteChannel.Telepath, to: null);
+        using (window)
+        {
+            ClientSends("/Sue @health");
+            ClientSends("/Mallory {ok}");
+            UserTypes("/bo @timer sync");
+            UserTypes("/Sue @health");
+            GameConfirms("Sue");
+            UserTypes("/Mallory {ok}");
+            GameConfirms("Mallory");
+            GameConfirms("Bob");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Sue", hoursLater: 3);
+            Assert.Null(timers.KilledAt("ogre king"));
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+        }
+    }
+
     // Added to our list with no timer yet, the boss is a tracked one we hold none
     // for: the pick is written, as the user chose.
     [Fact]

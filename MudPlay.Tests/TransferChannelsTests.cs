@@ -100,6 +100,90 @@ public sealed class TransferChannelsTests
 
     private static bool IsUs(string name) => name.Equals("Us", StringComparison.OrdinalIgnoreCase);
 
+    // ----- whose request a telepathed one was -------------------------------
+
+    // The requests of ours the chat log raises while a script of sends, screen rows
+    // and confirmations plays, each with whether it can be taken as the user's own:
+    // what the app goes by before it accepts another client's data for one.
+    private static List<(Transfer Transfer, bool UsersOwn)> RequestsSeen(Action<MessageRouter, ChatRouter> play)
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        ChatRouter chat = new(router);
+        List<(Transfer, bool)> seen = new();
+        chat.EntryClassified += e =>
+        {
+            if (TransferChannels.OwnRequest(e, IsUs) is { } asked)
+                seen.Add((asked.Transfer, TransferChannels.IsUsersOwn(asked.Channel, chat.OutgoingTelepathWasUsers)));
+        };
+        play(router, chat);
+        return seen;
+    }
+
+    private static MudPlay.Terminal.LineExtractor.EmittedLine Row(string text) =>
+        new(text, new MudPlay.Terminal.CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
+
+    private static byte[] Sent(string line) => Encoding.Latin1.GetBytes(line + "\r");
+
+    // The client telepaths these lines for other players too: a `@do /<her> @roomba
+    // sync`, or a relay-back of `@loop send yes`. Taken as the user's, the first
+    // would have this client take in her gang-house log and the second accept a
+    // loop she offered. Sent by the client for her, with its `{ok}` after it and
+    // the board showing both rows back, neither is the user's request.
+    [Theory]
+    [InlineData("@roomba sync", Transfer.RoombaSync)]
+    [InlineData("@loop send yes", Transfer.LoopSend)]
+    [InlineData("@timer sync", Transfer.TimerSync)]
+    public void ATransferRequestTheClientTelepathedForAnotherPlayer_IsNotTheUsers(string request, Transfer transfer)
+    {
+        var seen = RequestsSeen((router, chat) =>
+        {
+            chat.ObserveOutbound(Sent($"/Mallory {request}"));
+            chat.ObserveOutbound(Sent("/Mallory {ok}"));
+            router.Dispatch(Row($"/Mallory {request}"));
+            router.Dispatch(Row("--- Telepath sent to Mallory ---"));
+            router.Dispatch(Row("/Mallory {ok}"));
+            router.Dispatch(Row("--- Telepath sent to Mallory ---"));
+            // A further `@do` of hers.
+            chat.ObserveOutbound(Sent("/Mallory {ok}"));
+            router.Dispatch(Row("/Mallory {ok}"));
+            router.Dispatch(Row("--- Telepath sent to Mallory ---"));
+        });
+
+        Assert.Equal(new[] { (transfer, false) }, seen);
+    }
+
+    // Each of them is started by the user and by nothing else in the client: typed
+    // at the terminal (seen as its row), or sent as a line of the user's by a
+    // window, a macro, a trigger or an event. Those still count.
+    [Theory]
+    [InlineData("@roomba sync", Transfer.RoombaSync, true)]
+    [InlineData("@roomba sync", Transfer.RoombaSync, false)]
+    [InlineData("@loop send yes", Transfer.LoopSend, true)]
+    [InlineData("@loop send yes", Transfer.LoopSend, false)]
+    public void ATransferRequestTheUserTelepathed_IsTheUsers(string request, Transfer transfer, bool typedAtTheTerminal)
+    {
+        var seen = RequestsSeen((router, chat) =>
+        {
+            if (typedAtTheTerminal) router.Dispatch(Row($"/mal {request}"));
+            else chat.ObserveOutbound(Sent($"/mal {request}"), usersOwn: true);
+            router.Dispatch(Row("--- Telepath sent to Mallory ---"));
+        });
+
+        Assert.Equal(new[] { (transfer, true) }, seen);
+    }
+
+    // A request on a shared channel comes back with no word of whose send it was,
+    // and is taken as the user's.
+    [Theory]
+    [InlineData(RemoteChannel.Gangpath, false, true)]
+    [InlineData(RemoteChannel.Local, false, true)]
+    [InlineData(RemoteChannel.Broadcast, false, true)]
+    [InlineData(RemoteChannel.Telepath, false, false)]
+    [InlineData(RemoteChannel.Telepath, true, true)]
+    public void OnlyATelepathSaysWhoseRequestItWas(RemoteChannel channel, bool telepathWasUsers, bool usersOwn) =>
+        Assert.Equal(usersOwn, TransferChannels.IsUsersOwn(channel, telepathWasUsers));
+
     [Fact]
     public void OurOwnRequest_IsKnownByItsEcho_WithTheChannelItWentBy()
     {

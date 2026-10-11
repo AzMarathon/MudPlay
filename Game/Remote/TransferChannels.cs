@@ -118,6 +118,15 @@ public static class TransferChannels
         return (transfer, channel);
     }
 
+    // Whether a request of ours seen going out can be taken as the user's own, as
+    // against one the client sent for another player (their `@do`, their
+    // relay-back). For a telepath that is known: telepathWasUsers is the chat
+    // log's word for the confirmation in hand (ChatRouter.OutgoingTelepathWasUsers).
+    // A line on a shared channel comes back with no word of whose send it was, and
+    // is taken as the user's.
+    public static bool IsUsersOwn(RemoteChannel channel, bool telepathWasUsers) =>
+        channel != RemoteChannel.Telepath || telepathWasUsers;
+
     // A channel as the log and a refusal name it.
     public static string NameOf(RemoteChannel channel) => channel switch
     {
