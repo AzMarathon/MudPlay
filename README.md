@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.179.4**
+> **Version 3.179.7**
 > - `@loop send` now works by telepath only; asked or confirmed on another channel it says so and sends nothing
 > - `@roomba sync` now works by telepath or gangpath only, no longer by say
 > - `@timer sync` also works on the broadcast channel (`br`), as a fourth choice in Sync Timers

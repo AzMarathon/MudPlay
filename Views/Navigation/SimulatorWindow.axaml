@@ -52,6 +52,11 @@
             <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
             <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
         </Style>
+        <!-- A kept ranking made at another level of the character than it is at now:
+             still pickable, shown muted. Its status line says so in words. -->
+        <Style Selector="DataGrid.NotCurrent">
+            <Setter Property="Opacity" Value="0.6"/>
+        </Style>
     </Window.Styles>
 
     <Grid Margin="14" RowDefinitions="Auto,Auto,*" RowSpacing="10">
@@ -200,6 +205,7 @@
                                IsVisible="{Binding RankStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                Text="{Binding RankStatus}"/>
                     <DataGrid Grid.Row="2" ItemsSource="{Binding Rankings}" IsVisible="{Binding HasRankings}"
+                              Classes.NotCurrent="{Binding RankingNotCurrent}"
                               SelectedItem="{Binding SelectedRanking, Mode=TwoWay}" SelectionMode="Single">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Area or loop" Width="*" Binding="{ReflectionBinding Name}"/>

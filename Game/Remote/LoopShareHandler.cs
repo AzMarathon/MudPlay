@@ -140,22 +140,14 @@ public sealed class LoopShareHandler
     // from either end: the offer, "sending loop", a data line, "loop send of …
     // cancelled / stopped", or the asker's answer. Each but the data line carries a
     // loop's name, which a player chose and which can say anything. The readers of
-    // other replies (a @comeback's answer, a @status's) skip these, so a loop named
-    // "I can't come" or "no ailments" is never read as an answer of theirs.
+    // other replies (a @comeback's answer, a @status's) skip these by way of
+    // UserNamedReply, so a loop named "I can't come" or "no ailments" is never read
+    // as an answer of theirs.
     public static bool IsLoopSendLine(string inner)
     {
         ArgumentNullException.ThrowIfNull(inner);
         return OpensWith(inner, ResultToken + " ") || OpensWith(inner, DataToken + " ")
             || OpensWith(inner, OfferOpening) || OpensWith(inner, SendingOpening) || OpensWith(inner, StoppedOpening);
-    }
-
-    // The same, for a reply as it arrives, braces and all.
-    public static bool IsLoopSendMessage(string message)
-    {
-        ArgumentNullException.ThrowIfNull(message);
-        string body = message.Trim();
-        if (body.Length >= 2 && body[0] == '{' && body[^1] == '}') body = body[1..^1].Trim();
-        return IsLoopSendLine(body);
     }
 
     private static bool OpensWith(string text, string opening) =>

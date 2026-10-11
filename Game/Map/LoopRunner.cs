@@ -330,6 +330,12 @@ public sealed class LoopRunner : IRecoverableEngine
     // so the rotation a run performs never mutates the retained snapshot.
     public Loop? LastRunLoop { get; private set; }
 
+    // The game-data set LastRunLoop was run on: its rooms are that set's. It is kept
+    // through a switch of game data like the snapshot itself, so whoever would put
+    // the snapshot where it can be saved (the Loop-mode chip's pre-load) can tell it
+    // is another set's.
+    public string? LastRunLoopGameData { get; private set; }
+
     // Loop the user has "loaded" (staged) but not yet started — the Manage dialog's
     // Load action records it here. Distinct from CurrentLoop (which is only set
     // while a run is live): a staged loop sits idle until something begins it. The
@@ -1237,6 +1243,7 @@ public sealed class LoopRunner : IRecoverableEngine
             Notes = loop.Notes,
             OwnSettings = loop.OwnSettings,
         };
+        LastRunLoopGameData = _graph?.ActiveSet;
         _index = 0;
         _stepInFlight = false;
         _awaitingCommandReplies = false;

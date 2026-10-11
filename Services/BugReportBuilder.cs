@@ -942,6 +942,9 @@ public static class BugReportBuilder
                 sb.Append(" · next ").Append(next.ToString("MM-dd HH:mm:ss"));
             if (e.TriggerType == Models.GameData.EventTriggerType.State)
                 sb.Append(" · holds now: ").Append(Game.Events.EventConditionEvaluator.AllHold(e.Conditions, now));
+            // A remote @event switched it this session: who, which way, when.
+            if (svc.Events.LastSwitch(e) is { } switched)
+                sb.Append(" · ").Append(switched);
             sb.Append("\n  `").Append(System.Text.Json.JsonSerializer.Serialize(e, EventDumpJson)).Append("`\n");
         }
         sb.Append('\n');
@@ -2649,6 +2652,10 @@ public static class BugReportBuilder
         Kv(sb, "Route picked", snap.Route ?? "(none)");
         Kv(sb, "Realm", snap.RealmName);
         Kv(sb, "Runs", $"{snap.Runs} × {snap.Hours.ToString("0.#", inv)} h");
+        // Results are kept apart by game data and character; a report of "the list is
+        // empty" or "these aren't my numbers" turns on which pairing is on show.
+        Kv(sb, "Results are for", $"game data {snap.ForSet ?? "(none)"} · character {snap.ForCharacter ?? "(none loaded)"}");
+        Kv(sb, "Area rankings kept this session", $"{snap.RankingsKept} of at most {Game.Simulation.AreaRankingStore.MaxKept}");
 
         sb.Append("\n**Character simulation**\n\n");
         if (snap.Simulation is null) sb.Append("_(not run)_\n");

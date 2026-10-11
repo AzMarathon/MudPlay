@@ -385,6 +385,8 @@ To put a party member back on the **last loop they ran this session** without an
 
 Or build it off the map: **Navigation Management → New Loop** opens an editor where you add rooms by name or key, name and annotate the loop, and set per-waypoint options. While that editor is open, you can also **left-click rooms on the Navigation map** to append them to the waypoint list — the same way the on-map builder works, without typing keys.
 
+**A loop belongs to the game data its rooms are from.** Room numbers mean other rooms under another game-data set, and saved loops are shared by every character on a set. So when the active game data changes to another set while you are building a loop on the map, the loop being built is **dropped**, with a notice in the terminal, and the builder carries on empty on the new game data; the same set imported again or picked again keeps it. The Loop mode chip's pre-load likewise skips a loop last run on other game data. The **Edit Loop** window stays open through a switch, but will not **Save** or take a new room until the game data it was opened on is active again, and says so.
+
 **Run a saved loop** from the **LOOPS + AUTO-LAIRS** rail (or the Management dialog) — each has **Load** (stage it) and **Go** (start now; right-click, or the ▾ in Management, for **Run** / **Sprint**). Queue one and MudPlay joins the circuit at whichever of its rooms is nearest — a room partway along a leg as readily as a waypoint, and right where you stand if you're already on it — then carries on round from there (a lap begun partway along a leg isn't counted as a lap); combat, healing, and pickup keep running throughout. While it runs the badge reads **LOOPING** with "step X of Y on lap Z", and the **CURRENT NAV** rail shows the loop's rooms in **green** — click any room to tune it live without stopping (see *Live-editing a running loop* below). **Stop** ends the loop.
 
 **Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Go**, **Run**, **Sprint**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to *both* right-click Favorites flyouts (the terminal's and the map's, green for loops, amber for lairs) for this character only alongside your starred GOTO rooms, so you can start it from anywhere.
@@ -524,13 +526,15 @@ Another level is simulated by moving **today's** character there: max HP, mana a
 - **areas where you died** (or hung up) after them, however high their number — a run that dies only counts the minutes before it did.
 - **your own saved loops**, ranked right alongside the areas and marked ★, each simulated at that level too — with what **you actually made** on it from your program logs (your record at that level, and your biggest sample a few levels either side). A loop you've played for hours **at the ranked level or below** without dying counts as safe even if a simulated run died; a record from a higher level is shown but doesn't vouch for it.
 
-Each option gets the Simulator's **Runs** and **Hours per run** settings (runs × hours of simulated play), so a ranking takes longer the higher those are. Mapping the areas and simulating them can take a while on a big map: the status line shows how far it has got, the client stays usable meanwhile, and **Cancel** beside the button stops it (switching character, or closing the Navigation window, stops it too).
+Each option gets the Simulator's **Runs** and **Hours per run** settings (runs × hours of simulated play), so a ranking takes longer the higher those are. Mapping the areas and simulating them can take a while on a big map: the status line shows how far it has got, the client stays usable meanwhile, and **Cancel** beside the button stops it (switching game data or character, or closing the Navigation window, stops it too).
 
 **Reach is judged at the chosen level.** A level-gated way in — a `(Level 50+)` exit, a boat or portal with a minimum level — only counts once the ranked level clears it, so ranking below that level leaves the areas behind it out and ranking at or above it brings them in. Reach is judged for you alone: a party's level window isn't considered. Every other gate (doors, keys and items, tolls and fares, class, alignment) and your avoided rooms count as they do for your walks right now. The status line says how many areas were left out as unreachable, and how many were skipped because they have only one lair you can reach or no walkable lap (the same for a saved loop that no longer walks). A few runs is few: an area on the edge (lowest HP in the teens) can land on either side of "died".
 
 Pick a row to see its full result under the table and its route on the map. The route goes on the map as the Exp/Hr Estimator's sketch. If you weren't estimating, the estimator opens for it, unless you're building a loop or a walk, loop or Auto-Lair is running; stop that first. It **replaces whatever you'd sketched**, without asking, so save a sketch you want to keep first. The Simulator's route switches to that sketch, so from there you can trim it and **Save as loop**, or **Simulate** it. Simulate plays it at **your current level and today's gates**, not the level you ranked at.
 
-The detail under the table shows **how the row was tested**: its **Route** (how many rooms a lap takes and the rooms the run walked between, in order; a long tour lists its first 20 and says how many more there are) and **Tested** (the level, runs × hours, walk pace, realm, and the room you ranked from — the settings the ranking ran with, even if you've changed them since). An area row has a **Save as loop** button beside its headline: it saves that exact tour, every room of it, as one of your loops, named after the area and level (for example `Hills - Caves (L40 sim)`; when a different loop already has that name, it is saved as `Hills - Caves (L40 sim) 2` and that loop is left alone), with the simulated result and how it was tested in the loop's **notes**. The new loop appears in the Navigation window's Loops list, ready to run, and becomes the Simulator's **Route**. It is saved the way it was simulated, fighting in every room it walks and going straight into lairs: **Only attack in lair rooms** and **Wait to enter lairs until I can debuff** are both off, and the simulated figures stop holding if you turn either on. If the tour is already one of your loops (the same rooms in the same order, run the same way), nothing is saved; the status line names that loop and it becomes the Route. It works whatever the map is doing, building a loop or running one included. The loop walks between its rooms with your gates as they are when you start it, so run it at the level you ranked; ranked above your level, a level-gated way in may still be shut to you, and when you save, the status line says how many of the loop's legs you can't walk yet. A ranking made before you switched game data can't be saved, since its room numbers belong to the other set: rank again. A ★ row is already one of your loops, so it has no button.
+The detail under the table shows **how the row was tested**: its **Route** (how many rooms a lap takes and the rooms the run walked between, in order; a long tour lists its first 20 and says how many more there are) and **Tested** (the level, runs × hours, walk pace, realm, and the room you ranked from — the settings the ranking ran with, even if you've changed them since). An area row has a **Save as loop** button beside its headline: it saves that exact tour, every room of it, as one of your loops, named after the area and level (for example `Hills - Caves (L40 sim)`; when a different loop already has that name, it is saved as `Hills - Caves (L40 sim) 2` and that loop is left alone), with the simulated result and how it was tested in the loop's **notes**. The new loop appears in the Navigation window's Loops list, ready to run, and becomes the Simulator's **Route**. It is saved the way it was simulated, fighting in every room it walks and going straight into lairs: **Only attack in lair rooms** and **Wait to enter lairs until I can debuff** are both off, and the simulated figures stop holding if you turn either on. If the tour is already one of your loops (the same rooms in the same order, run the same way), nothing is saved; the status line names that loop and it becomes the Route. It works whatever the map is doing, building a loop or running one included. The loop walks between its rooms with your gates as they are when you start it, so run it at the level you ranked; ranked above your level, a level-gated way in may still be shut to you, and when you save, the status line says how many of the loop's legs you can't walk yet. A ★ row is already one of your loops, so it has no button.
+
+**A ranking belongs to the game data and the character it was made on.** Its rooms are that game data's and its figures are that character's stats and gear, so it is listed only while both are the ones loaded. Switch game data or character and the table shows the ranking you made for that pairing, or is empty if you haven't ranked there yet; switch back and the first ranking is listed again with nothing picked (pick a row to put its route back on the map). Nothing made on one game data can be picked, drawn on the map or saved as a loop under another. Either switch also cancels a ranking in progress and drops the **Simulation** result and the check against your play; a switch of game data clears the Exp/Hr Estimator's sketch as well, since it is the other game data's rooms. Rankings are kept for as long as the client runs, through closing the Navigation window too, but not across a restart, and only the eight most recently made or shown are kept. A character that is renamed, moved to another BBS, or first named with **Save as** keeps its rankings under the new name. Importing a game-data set again drops the rankings made on it, whichever set is active when you import, since its tables may have changed. So does deleting the set, copying or moving message edits or Game Data Browser edits into it or moving them out of it in **Manage Sets** (the loop library alone doesn't count), and picking the active set again from the menu. A ranking listed again from those kept says so: its status line starts with when it was made and at what level, and when you have changed level since, your level now (`Made 14:32 at L42; you are L43 now.`), with the table shown muted. It is still the ranking of the character as it was and is not redone for you. A change of gear, spells or settings, or an edit to game data, is not noticed at all: the **Tested** line says what it was made with, so rank again when that no longer matches.
 
 A whole-area tour walks *every* lair in the area, including the rooms a hand-built loop would skip — so a loop you've tuned inside a good area will usually beat its area's number (your loops in the list show it), and an area whose tour dies may still hold a safe corner. Use an area row to find where to look, then build the loop there. Another level moves today's character there, the same way **Check against my play** does.
 
@@ -1022,11 +1026,13 @@ Your client goes through these checks in this order. The first one that stops a 
 | Move player | `@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@rego` |
 | Execute commands | `@do`, `@kill`, `@heal`, `@trap`, `@train`, `@equip`, `@get-all`, `@get-stash`, `@drop-all`, `@hide-all`, `@deposit-all`, and relaying a `&@` command |
 | Hangup/disconnect | `@hangup`, `@relog` |
-| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@reset` |
+| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@events`, `@event`, `@reset` |
 | Divert conversations | `@divert` |
 | Elevated Commands | `@suicide`, `@dupe` |
 
 A player your client has never seen has no box ticked, so every command in the table is refused. The Players batch editor's **Set all permissions** ticks or clears all sixteen for the selected players.
+
+**What Alter settings allows through your events.** A player who holds **Alter settings** can switch your events on and off with `@event`, and an event switched on does whatever you defined it to do: walk somewhere, run a loop or Auto-Lair, make a bank trip, send a command. Sent as commands of their own, those would need **Move player** or **Execute commands**. The holder can't define an event or change what one does, only switch on and off the ones you made. See **@events and @event**.
 
 **Party members get some commands with no box ticked.** Anyone on your party roster (matched by first name) may send:
 
@@ -1072,7 +1078,7 @@ In the reply tables of the command topics, a row that begins **Refusal:** is sen
 
 **Plain characters only.** Every reply is sent in plain ASCII, which is all the game's line carries safely. Where a reply has to carry a name with something else in it (a loop you named with a long dash, say), that character is spelled plainly (`-`) or, failing that, sent as `?`.
 
-**On the receiving side** nothing pops up. A plain query leaves no trace but the reply itself, which shows in your terminal as the telepath or say your client sent. A command that makes your client act shows there too, as whatever it sent to the game. Commands that change something are written to the program log with the sender's name (`@do`, `@kill`, the `@auto-…` toggles, `@atkprio`, `@atkorder`, `@reset`, `@dupe`, `@get-stash`, a loop send, a `&@` relay). A refused command is logged only with Debug diagnostics on.
+**On the receiving side** nothing pops up. A plain query leaves no trace but the reply itself, which shows in your terminal as the telepath or say your client sent. A command that makes your client act shows there too, as whatever it sent to the game. Commands that change something are written to the program log with the sender's name (`@do`, `@kill`, the `@auto-…` toggles, `@atkprio`, `@atkorder`, `@event` switching an event, `@reset`, `@dupe`, `@get-stash`, a loop send, a `&@` relay). A refused command is logged only with Debug diagnostics on.
 
 ### Commands that never answer
 
@@ -1164,6 +1170,8 @@ One row per command. **Needs** is the box the sender must have ticked on your Pl
 | `@roomba` | `@roomba <item>` · `@roomba sync` | Query Roomba | Where an item was last seen; `sync` hands over your whole log. |
 | `@auto-all` | `@auto-all` · `@auto-all on` · `@auto-all off` | Alter settings | The master switch. |
 | `@auto-combat` `@auto-nuke` `@auto-heal` `@auto-rest` `@auto-bless` `@auto-light` `@auto-cash` `@auto-get` `@auto-sneak` `@auto-hide` `@auto-search` | each one bare, or with `on` or `off` | Alter settings | Flips or sets that one auto toggle. |
+| `@events` | `@events` | Alter settings | Your Events by number and name, each on or off. |
+| `@event` | `@event <name>` · `@event <name> on` · `@event <name> off` · the same with a number from `@events` for the name | Alter settings | One of your Events: its state, or switches it on or off. |
 | `@reset` | `@reset` | Alter settings, or party member | Zeroes your session statistics. |
 | `@divert` | `@divert <player>` · `@divert` | Divert conversations | Forwards your incoming telepaths to that player; bare stops it. |
 | `@do` | `@do <command>` | Execute commands | Sends the command to the game as if you typed it. |
@@ -2551,6 +2559,80 @@ Eleven commands, one for each auto toggle on your toolbar and in Settings → Ge
 - **It is saved** to your character, like ticking the box yourself.
 - **Master switch off:** ignored, no answer. Only `@auto-all` is followed then.
 - **On your own screen:** a change is written to the program log with the sender's name.
+
+#### @events and @event
+
+`@events` lists the events you defined under Settings → Events. `@event` reports one of them, or switches it on or off. Switching an event is the same as ticking or clearing the **Disabled** box in its editor: it takes effect at once and is saved to your character.
+
+**Forms:**
+
+- `@events`: every event's number and name, and whether it is on.
+- `@event bank run`: that one event: on or off, when it fires, and what kind of thing it does.
+- `@event bank run off`: switch it off. `disable` is taken for `off`.
+- `@event bank run on`: switch it on. `enable` is taken for `on`.
+- `@event 3`, `@event 3 off`, `@event 3 on`: the same, for the third event in the list.
+
+**How a name finds an event.** The same way `@loop` finds a loop. A name that equals what was typed (ignoring case) wins outright. Otherwise an event matches when its name holds **every typed word, in any order**: `@event run bank off` finds *Evening bank run*. If nothing matches, it is tried once more without apostrophes. Exactly one match is used; none, or more than one, is refused. An event with no name is listed as `(unnamed)` and can't be named: use its number.
+
+Two events with the same name (or names that differ only in capitals) can't be told apart by name: every `@event` naming them is refused, and the refusal gives their numbers. Use a number, or rename one in its editor.
+
+**By number.** `@events` numbers the events in the order of the Events tab, and `@event` takes that number in place of a name. It is the way to an event with no name, and to one of two that share a name.
+
+- **The number is the event's place in the list now.** If you added, removed or reordered events after the sender read the list, the number points at a different event. So every answer to a numbered request says the number and the name it found: `event 3 'Bank run' switched off`, or `event 3 (unnamed) switched off`.
+- **A name comes first.** If one of your events is itself named `3`, `@event 3` means that event, and the list shows both (`2 3 on` is the second event, named *3*). `@event #3` always means the third event, whatever anything is named. An event named `Farm 3` doesn't get in the way: only a whole name counts.
+- **A number with no event** is refused with how many there are: `no event number 9: there are 4`. Zero and negative numbers are refused the same way.
+
+A name longer than 40 characters is shown cut short, as its first 37 characters and `...`, in every reply. The event is still found by its words, the cut ones included, and by the name typed as it was shown.
+
+The last word is read as the switch (`on`, `off`, `enable`, `disable`), unless everything after `@event` is itself an event's whole name. So an event called *Lights on* is asked about with `@event lights on` and switched with `@event lights on on`. With both a *Lights* and a *Lights on* defined, `@event lights on` asks about *Lights on*; switch *Lights* on with `@event lights enable`.
+
+**Who may send it:** a player with **Alter settings**, on any of the three channels. It is the permission `@settings`, `@profile` and the `@auto-…` toggles need: seeing how your client is set up needs the same grant as changing it. A player without it gets the Failure message whatever they typed, and so can't learn whether an event of some name exists.
+
+**What granting it allows here.** A player who holds Alter settings can switch your events on and off, and an event switched on does whatever you defined it to do: walk somewhere, run a loop or Auto-Lair, make a bank trip, send a command. They can't define an event or change what one does.
+
+**What an answer may say.** An event's number and name, and whether it is on. The one-event answer adds the *kind* of its trigger and action in fixed words (`fires on logon`, `sends a command`), and for an event on a clock the schedule it runs on: its period (`fires every 30 minutes`) or its time of day (`fires at 21:30 daily`), worded as the Events tab's **When** column words them. The list doesn't give the schedule. No answer says what an event sends, or names its loop, its Auto-Lair setup, its rooms or its boss: an event's command can hold anything you typed, and a boss-timer event is only said to follow a boss timer.
+
+| Reply | When |
+|---|---|
+| `events: 1 Night stats on, 2 Bank run on, 3 Sell junk off` | `@events`. The events in the order of the Events tab, each with its number. |
+| `events (1/3): …` and so on | Too long for one line: the whole list is sent over several replies. The numbering runs on from one reply to the next. |
+| `events (all disabled): …` | **Disable all events** is ticked on the Events tab. Each event's own state is still shown; none fires until the box is cleared. |
+| any of the above, with `<name> off (target missing)` | That event is off because its saved loop or Auto-Lair setup no longer exists. It can't be switched on from here. |
+| `no events defined` | `@events`, and you have none. |
+| `event '<name>' is on: fires at 21:30 daily, makes a bank trip` | `@event <name>`. It reads `is off`, or `is off (target missing)`, for one that is. It ends `; all events are disabled` while **Disable all events** is ticked. |
+| `event '<name>' switched off` | It was on. It fires no more. |
+| `event '<name>' switched off; the run it has under way finishes` | The same, switched off in the middle of its own run. |
+| `event '<name>' switched on` | It was off. It ends `; all events are disabled, so it won't fire yet` while **Disable all events** is ticked. |
+| `event '<name>' is already on` (or `already off`) | Nothing needed changing, and nothing was saved. |
+| `event '<name>' can't be switched on: its loop is missing` (or `its Auto-Lair setup is missing`) | **Refusal:** the event names a saved loop or Auto-Lair setup that no longer exists. |
+| any `event '<name>' …` reply above, as `event 3 '<name>' …` or `event 3 (unnamed) …` | The event was asked for by number. |
+| `no event named '<text>'` | **Refusal:** no event's name fits. |
+| `no event number 9: there are 4` | **Refusal:** there is no event at that place in the list. It ends `there is 1`, or `no events defined`, when that is so. |
+| `event name '<text>' matches 2: '<name>' (number 1), '<name>' (number 4)` | **Refusal:** the name fits more than one. Each name is said once, with the number of the event. Up to four names are given, fewer when they are long, then `+3 more` for the rest. Nothing is switched. |
+| `event name '<text>' matches 3: '<name>' (numbers 2, 5), '<name>' (number 7); use a number in place of the name` | **Refusal:** the same, where two or more of the events share a name. Up to four numbers are given for a name, then `and 3 more`. |
+| the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
+
+Two more refusals carry a usage line. `@event` with nothing after it, or with only `on` or `off`, is refused with `usage: @event <name or number> [on|off]`. `@events` with anything after it is refused with `usage: @events lists them; @event <name or number> on|off switches one`, and nothing is switched: `@events off` does not disable your events.
+
+What the one-event answer describes an event by:
+
+| Part | Reads |
+|---|---|
+| Trigger | `fires on logon`, `fires on logoff`, `fires on re-log`, `fires at 21:30 daily` (its own time), `fires every 30 minutes` (its own period, in seconds, minutes or hours), `fires on a condition`, `fires on a boss timer`. An event whose saved time or period can't be read says `fires at a set time` or `fires on a timer`. |
+| Action | `walks to a room`, `runs a loop`, `runs Auto-Lair`, `sends a command`, `runs a Roomba sweep`, `waits`, `rests up`, `makes a bank trip`, `moves a stash to the bank` |
+
+**Situations:**
+
+- **An event that is running when it is switched off** finishes that run, its Then step included. What stops is every later firing; a firing of it that was waiting its turn behind another event is dropped when its turn comes. To stop the run itself, stop what it is doing (`@stop`, or Stop in the client).
+- **An event the client switched off for a missing target** can't be switched on by `@event`. Put the loop or Auto-Lair setup back, or point the event at another one in its editor, and clear its **Disabled** box there.
+- **Disable all events** is not changed by either command. There is no remote command for that box.
+- **The Settings window open on the Events tab** shows the change at once: a disabled event carries an `off` badge in the list.
+- **The event's editor open when it is switched.** The editor's **Disabled** box moves with the switch as you watch, and everything else you changed there stays as you left it. **Save** then saves your changes with the event in its switched state, unless you set the box yourself first: the box is yours, and Save saves what it shows. **Cancel** saves nothing, so the switch stands.
+- **Timers.** Switching an **Every** event on starts its countdown from that moment; switching it off stops it. The countdowns of your other events run on untouched. (Saving an event from its editor still starts every **Every** countdown over.)
+- **A condition event (When …) switched off and on again** can fire again though its condition never stopped holding. Such an event fires once when its condition turns true, then waits for the condition to stop holding. While it is off it counts as not holding, so once your money, encumbrance, experience or level has changed while it was off, switching it on with the condition still true fires it at the next such change. Switched off and on with no change between, it stays as it was.
+- **Through the Local control API** (`POST /command`) both work the same, with no permission check, and a refusal's reason is always returned.
+- **Master switch off:** ignored, no answer.
+- **On your own screen:** a switch is written to the program log with the sender's name, and the bug report's event list says who last switched an event. A list request is logged only with Debug diagnostics on.
 
 #### @reset
 
@@ -6558,7 +6640,7 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 ### Event list (New… / Modify… / Remove)
 
 **What it does:** Shows every scheduled event you've defined, with its **Name**, its trigger (**When**), a live countdown to its next fire (**Next**), and its action, its stop rule and its Then step (**What**, e.g. `Loop "Sewer" (until 3 laps) → go back`). **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
-**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time**, **Every** and timed **Boss** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
+**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A disabled event shows an **off** badge in the list. A player you grant **Alter settings** can list your events and switch one on or off, by its name or by its number in the list, with the remote commands `@events` and `@event` (see *Remote @-commands*); an event they switch on does whatever you defined it to do. The list shows the change at once, and so does the event's editor if it is open: its **Disabled** box moves with the switch. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time**, **Every** and timed **Boss** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
 
 ### Event editor — Sound
 

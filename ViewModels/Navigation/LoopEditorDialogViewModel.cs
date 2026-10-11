@@ -23,6 +23,18 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
 
     private readonly Loop _original;
     private readonly LoopManager _loops;
+    // The game-data set the loop was opened on: its rooms are that set's. The window
+    // is modeless and stays open through a switch of game data, after which Save
+    // would write it into the other set's Loops folder, a file every character and
+    // running client on that set reads, and a room added would be the other set's.
+    private readonly string? _openedOn;
+
+    // Why the loop can't be saved or added to right now, or null: another game-data
+    // set is active than the one it was opened on.
+    private string? OtherGameDataRefusal() =>
+        string.Equals(_loops.SetName, _openedOn, StringComparison.OrdinalIgnoreCase) ? null
+        : $"This loop's rooms belong to game data '{_openedOn ?? "(none)"}', and '{_loops.SetName ?? "(none)"}' is active now — " +
+          "switch back to that game data to change or save it.";
     private readonly RoomGraphManager _graph;
     private readonly LoopRunner? _runner;
     private readonly ConfirmService? _confirm;
@@ -111,6 +123,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         ArgumentNullException.ThrowIfNull(graph);
         _original = loop;
         _loops = loops;
+        _openedOn = loops.SetName;
         _graph = graph;
         _runner = runner;
         _confirm = confirm;
@@ -263,6 +276,11 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     [RelayCommand]
     private void AddWaypoint()
     {
+        if (OtherGameDataRefusal() is { } refusal)
+        {
+            AddWaypointError = refusal;
+            return;
+        }
         RoomKey? resolved =
               SelectedSearchResult?.Key
            ?? (SearchResults.Count > 0 ? SearchResults[0].Key : (RoomKey?)null)
@@ -297,6 +315,11 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // same-room-twice-in-a-row is allowed on purpose, same as AddWaypoint above.
     public void AddWaypointByRoomKey(RoomKey key)
     {
+        if (OtherGameDataRefusal() is { } refusal)
+        {
+            AddWaypointError = refusal;
+            return;
+        }
         if (_graph.GetRoom(key) is null) return;
         Waypoints.Add(new LoopWaypointRowViewModel(new LoopWaypoint(key), _graph));
         RenumberRows();
@@ -367,6 +390,11 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
             // set is active — surface the cause instead of disappearing
             // the dialog with no feedback.
             SaveError = "No active game-data set — select one before saving loops.";
+            return;
+        }
+        if (OtherGameDataRefusal() is { } refusal)
+        {
+            SaveError = refusal;
             return;
         }
 

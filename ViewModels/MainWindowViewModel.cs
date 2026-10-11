@@ -5505,6 +5505,10 @@ public partial class MainWindowViewModel : ObservableObject
             // switch to the set, so the ensuing set-switch loads the seeded files.
             // Once-only per set (marker), additive, best-effort.
             NavSeedBootstrapper.SeedIfNeeded(result.FolderName, AppServices.Current.Log);
+            // The set's tables are new whether or not it was the active one, and only
+            // an import over the active set reads as "read in again" to what follows
+            // the switch below.
+            AppServices.Current.ForgetSimulatorRankings(result.FolderName, "was imported again");
             SwitchActiveGameDataSet(result.FolderName);
             Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionGameDataImported);
         }

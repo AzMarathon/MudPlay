@@ -211,10 +211,10 @@ public sealed partial class PartyWealthProbe : IDisposable
         if (entry.Channel != ChatChannel.TelepathIncoming) return;
         if (string.IsNullOrEmpty(entry.Speaker)) return;
         if (string.IsNullOrEmpty(entry.Message)) return;
-        // A `@loop send` line names a loop, and a loop can be named "(= 5 copper)":
-        // read as a purse, that would be a member with five copper, and the toll
-        // funding hands coin over on these readings.
-        if (LoopShareHandler.IsLoopSendMessage(entry.Message)) return;
+        // A `@loop send` line names a loop and an @events one an event, and either
+        // can be named "(= 5 copper)": read as a purse, that would be a member with
+        // five copper, and the toll funding hands coin over on these readings.
+        if (UserNamedReply.IsMessage(entry.Message)) return;
 
         bool known = TryParseWealthReply(entry.Message, out long copper);
         bool unknown = !known && WealthUnknownReply().IsMatch(entry.Message);

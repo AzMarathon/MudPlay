@@ -18,6 +18,11 @@ namespace MudPlay.Services;
 //   - Deleting the active set switches the cache to no-set first (so nothing
 //     is still loaded from the directory), then fires onSetDeleted so the
 //     caller can clear any profile / global reference that named the removed set.
+//   - onSetDataReplaced names each set whose data an op replaced, active or not: the
+//     destination of a copy or move, the source of a move, a deleted set. For what
+//     is held per set outside the live stores, which reloadActive never reaches for
+//     a set that isn't the active one. A copy or move of the loop library alone
+//     replaces none of a set's data and names nothing.
 // The manager itself only touches the filesystem + GameDataCache;
 // settings/profile writes are the caller's job via the injected callbacks, which
 // keeps it unit-testable against an isolated set folder.
@@ -26,13 +31,15 @@ public sealed class GameDataSetManager
     private readonly GameDataCache _cache;
     private readonly Action<GameDataSetPart> _reloadActive;
     private readonly Action<string> _onSetDeleted;
+    private readonly Action<string>? _onSetDataReplaced;
     private readonly LogService? _log;
 
     public GameDataSetManager(
         GameDataCache cache,
         Action<GameDataSetPart> reloadActive,
         Action<string> onSetDeleted,
-        LogService? log = null)
+        LogService? log = null,
+        Action<string>? onSetDataReplaced = null)
     {
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(reloadActive);
@@ -40,6 +47,7 @@ public sealed class GameDataSetManager
         _cache = cache;
         _reloadActive = reloadActive;
         _onSetDeleted = onSetDeleted;
+        _onSetDataReplaced = onSetDataReplaced;
         _log = log;
     }
 
@@ -105,14 +113,14 @@ public sealed class GameDataSetManager
         {
             _log?.Warn("GameData", $"{verb} '{sourceSet}' → '{destSet}' failed: {ex.Message}");
             // Whatever went across before the failure is live on disk: reload it.
-            if (changed != GameDataSetPart.None) ReloadIfActive(sourceSet, destSet, changed);
+            if (changed != GameDataSetPart.None) Changed(sourceSet, destSet, changed, move);
             return new OpResult(false, $"Failed to {verb}: {ex.Message}");
         }
 
         if (changed == GameDataSetPart.None)
             return new OpResult(false, $"'{sourceSet}' has none of that to {verb}.");
 
-        ReloadIfActive(sourceSet, destSet, changed);
+        Changed(sourceSet, destSet, changed, move);
         string past = move ? "Moved" : "Copied";
         string summary = $"{past} {string.Join(", ", done)} from '{sourceSet}' to '{destSet}'.";
         _log?.Info("GameData", summary);
@@ -226,8 +234,24 @@ public sealed class GameDataSetManager
         }
 
         _onSetDeleted(setName);
+        // A set imported later under this name is another set.
+        _onSetDataReplaced?.Invoke(setName);
         _log?.Info("GameData", $"deleted game data set '{setName}' (tables + loops).");
         return new OpResult(true, $"Deleted set '{setName}'.");
+    }
+
+    // The parts in changed went from sourceSet into destSet. The destination's data
+    // is replaced, and so is the source's when they were moved out of it; the loop
+    // library alone is no part of a set's data. Told before the reload, so what a
+    // reload of the active set shows is already without what was held for it.
+    private void Changed(string sourceSet, string destSet, GameDataSetPart changed, bool move)
+    {
+        if (changed != GameDataSetPart.Loops)
+        {
+            _onSetDataReplaced?.Invoke(destSet);
+            if (move) _onSetDataReplaced?.Invoke(sourceSet);
+        }
+        ReloadIfActive(sourceSet, destSet, changed);
     }
 
     private void ReloadIfActive(string sourceSet, string destSet, GameDataSetPart changed)

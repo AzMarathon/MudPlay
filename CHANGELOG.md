@@ -1,11 +1,26 @@
 # Version history
 
-## 3.179.4
+## 3.179.7
 
 - `@loop send` now works by telepath only; asked or confirmed on another channel it says so and sends nothing
 - `@roomba sync` now works by telepath or gangpath only, no longer by say
 - `@timer sync` also works on the broadcast channel (`br`), as a fourth choice in Sync Timers
 - Settings → Talk: new "Disallow @commands from broadcast", ticked by default; untick it on both clients to sync timers there
+
+## 3.179.3
+
+- Simulator: an area ranking belongs to the game data and character it was made on; a switch lists that pairing's own ranking or none, and switching back lists the first again
+- Nothing ranked on one game data can be picked, drawn on the map or saved as a loop under another; a game-data switch also clears the estimator's sketch
+- Rankings are kept while the client runs (the last eight), through closing the Navigation window and a rename of the character; a set imported again, deleted, re-picked or changed in Manage Sets loses the ones made on it
+- A ranking listed again says when it was made and at what level, and is marked once the character has levelled since
+- A loop being built is dropped, with a notice, when the game data changes to another set; the Edit Loop window won't save or take a room until its own game data is active again
+- Bug report: the Simulator section names the game data and character its results are for
+
+## 3.179.0
+
+- New remote commands `@events` (lists your Events by number, each on or off) and `@event <name or number> [on|off]` (one event's state and schedule, or switches it); both need Alter settings
+- Answers give an event's name, state, schedule and kind only, never what it sends or the loop, room or boss it uses
+- The Events tab shows an `off` badge on a disabled event; the tab and an open event editor follow a remote switch at once
 
 ## 3.178.1
 
