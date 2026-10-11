@@ -3408,9 +3408,9 @@ public sealed class AppServices
         // retarget runs against the live engine at @kill time.
         Kill = new Game.Remote.KillHandler(
             RemoteCommands,
-            // A player named by @kill is a fight with a player; anything else is
-            // the combat engine's.
-            name => { if (!PvpFight.EngageOnOrder(name)) Combat.RetargetTo(name); },
+            // A player named by @kill is a fight with a player, or a refusal when
+            // we won't fight them; anything else is the combat engine's.
+            name => PvpFight.TakeKillOrder(name, Combat.RetargetTo),
             Log);
         // @trap auto-disarm flow — manager owns the state machine,
         // handler owns the @-command auth boundary. Wire-sender +

@@ -1660,7 +1660,7 @@ Has you attack a named target now, for the sender.
 
 **How the target is found:**
 
-- **A player who is in your room:** on a realm with PvP switched on, a fight with that player starts, by your Settings → PvP rules. It doesn't start when PvP is off, when that player is in your party, or when you are already in a fight with another player.
+- **A player who is in your room:** on a realm with PvP switched on, a fight with that player starts, by your Settings → PvP rules. It doesn't start when PvP is off, when that player is in your party, or when you are already in a fight with another player. Then nothing is attacked at all: the name is not passed on to your combat engine, and the sender is told why.
 - **Anything else** goes to your combat engine. If a monster in your room has exactly that name (ignoring case), it becomes your target and this round is fought the way your combat settings would fight any single target (weapon, attack spell or backstab). If no monster in the room, as your client last read it, has that full name (a shortened name counts as no match), your normal attack command is sent with the text as typed, and the game decides what it means.
 
 **Who may send it:** a player with **Execute commands**, on any of the three channels. Party membership alone is not enough.
@@ -1668,6 +1668,9 @@ Has you attack a named target now, for the sender.
 | Reply | When |
 |---|---|
 | nothing | The target was taken. The attack is the answer. |
+| `not attacking <name>: PvP is off` | **Refusal:** the name is a player in your room, and PvP is off. |
+| `not attacking <name>: they are in my party` | **Refusal:** the name is a member of your own party. |
+| `not attacking <name>: I'm fighting <other player>` | **Refusal:** you are already in a fight with another player. |
 | the Failure message | **Refusal:** nothing followed `@kill`. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
 

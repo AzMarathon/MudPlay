@@ -249,6 +249,37 @@ public sealed class PvpFight : IDisposable
         return IsHere(given) && Engage(given, chase: false, "ordered by @kill", byOrder: true);
     }
 
+    // A leader's @kill, whoever it names. A player in the room is ours to decide
+    // on: fought when we may, and otherwise NOT handed to the combat engine, which
+    // would attack by that name all the same and keep sending the attack (with
+    // PvP off, at a member of our own party, or in the middle of another fight).
+    // The answer is then why, for the sender. Any other name is a monster's and
+    // goes to retargetMonster. Null when the order was taken.
+    public string? TakeKillOrder(string name, Action<string> retargetMonster)
+    {
+        ArgumentNullException.ThrowIfNull(retargetMonster);
+        if (EngageOnOrder(name)) return null;
+        string given = PlayerObservation.SplitName(name).Given;
+        if (!IsHere(given))
+        {
+            retargetMonster(name);
+            return null;
+        }
+        string why = WhyNotFought(given);
+        _log?.Info(LogCategory, $"@kill {given} not taken: {why}");
+        return $"not attacking {given}: {why}";
+    }
+
+    // Why Engage turned a player down, in its own order of checks.
+    private string WhyNotFought(string given)
+    {
+        if (!_pvpEnabled()) return "PvP is off";
+        if (_inParty(given)) return "they are in my party";
+        if (_target is { } current && !string.Equals(current, given, StringComparison.OrdinalIgnoreCase))
+            return $"I'm fighting {current}";
+        return "automation is switched off";
+    }
+
     private void LoadSpells(PvpSettings settings)
     {
         _spells.Clear();

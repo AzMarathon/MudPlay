@@ -180,6 +180,67 @@ public sealed class PvpFightTests
         Assert.Equal("a Bob", Assert.Single(h.Sent));
     }
 
+    // A whole @kill: a player we may fight is fought, and any name that is no
+    // player in the room is handed to the combat engine as a monster's.
+    [Fact]
+    public void AtKill_Taken_FightsThePlayer_AndAMonsterGoesToTheCombatEngine()
+    {
+        using Harness h = new();
+        h.Feed("Also here: Bob.");
+        List<string> monsters = new();
+
+        Assert.Null(h.Fight.TakeKillOrder("Bob", monsters.Add));
+        Assert.Equal("a Bob", Assert.Single(h.Sent));
+        Assert.Empty(monsters);
+
+        Assert.Null(h.Fight.TakeKillOrder("giant rat", monsters.Add));
+        Assert.Equal(new[] { "giant rat" }, monsters);
+    }
+
+    // A player in the room we won't fight is NOT handed to the combat engine,
+    // which would attack by that name all the same. The sender is told why.
+    [Fact]
+    public void AtKill_NamingAPlayer_WithPvpOff_IsRefused_NotRetargeted()
+    {
+        using Harness h = new() { PvpEnabled = false };
+        h.Feed("Also here: Bob.");
+        List<string> monsters = new();
+
+        Assert.Equal("not attacking Bob: PvP is off", h.Fight.TakeKillOrder("Bob", monsters.Add));
+
+        Assert.Empty(monsters);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void AtKill_NamingAPartyMember_IsRefused_NotRetargeted()
+    {
+        using Harness h = new();
+        h.Party.Add("Bob");
+        h.Feed("Also here: Bob.");
+        List<string> monsters = new();
+
+        Assert.Equal("not attacking Bob: they are in my party", h.Fight.TakeKillOrder("Bob", monsters.Add));
+
+        Assert.Empty(monsters);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void AtKill_NamingAPlayer_WithAnotherFightUnderWay_IsRefused_NotRetargeted()
+    {
+        using Harness h = new();
+        h.Feed("Also here: Bob, Ann.");
+        h.Fight.Engage("Ann", chase: false, "x");
+        int sentBefore = h.Sent.Count;
+        List<string> monsters = new();
+
+        Assert.Equal("not attacking Bob: I'm fighting Ann", h.Fight.TakeKillOrder("Bob", monsters.Add));
+
+        Assert.Empty(monsters);
+        Assert.Equal(sentBefore, h.Sent.Count);
+    }
+
     // ----- the PvP spells --------------------------------------------------
 
     private static readonly PvpSpellInfo Slow = new(BetweenRound: true, Duration: TimeSpan.FromSeconds(15), MonsterOnly: false);

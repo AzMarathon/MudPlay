@@ -137,7 +137,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         PartyEssentialHandlers essentials = new(engine, new PlayerState(), party);
         essentials.SetWireSender(ToGame);
         _ = new HelpHandler(engine);
-        _ = new KillHandler(engine, _ => game.Add("(retarget)"));
+        _ = new KillHandler(engine, _ => { game.Add("(retarget)"); return null; });
         _ = new AttackTargetingRemoteHandler(engine, new ProfileService());
         _ = new AutoModeRemoteHandler(engine, profile, new AutoModeController(profile));
         TrapDisarmManager trapManager = new(router, new PlayerStats { Traps = traps }, cache);
