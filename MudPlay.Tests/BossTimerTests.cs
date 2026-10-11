@@ -550,8 +550,9 @@ public sealed class BossTimerTests : IDisposable
         Assert.Equal(50, Assert.Single(BossTimerSyncCodec.Decode(blob)).MonsterNumber);
     }
 
-    // Sneaking, the answer to a said request goes by telepath; the asker takes it
-    // there (BossTimerSyncCollectorTests), since telepath is a channel timers use.
+    // Sneaking, the answer to a said request goes by telepath; the asker takes a
+    // telepathed answer after a said request for that reason
+    // (BossTimerSyncCollectorTests).
     [Fact]
     public void TimerSync_SaidToASneakingClient_IsAnsweredByTelepath()
     {
