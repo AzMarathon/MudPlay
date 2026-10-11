@@ -387,4 +387,23 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.Equal(ranking.Rows, reopened.Simulator.Rankings);
         Assert.Equal(ranking.Summary, reopened.Simulator.RankStatus);
     }
+
+    [Fact]
+    public void TheBugReportSaysWhoseResultsAreListed()
+    {
+        using Harness h = Build();
+        h.Simulator.ListFinishedRanking(Ranking("Hills"));
+        Assert.Equal("alpha", h.Simulator.ToSnapshot().ForSet);
+        Assert.Equal(One, h.Simulator.ToSnapshot().ForCharacter);
+        Assert.NotNull(h.Simulator.ToSnapshot().AreaRanking);
+
+        h.Cache.SwitchSet("beta");
+        h.Simulator.CharacterChanged(Two);
+        SimulatorSnapshot snap = h.Simulator.ToSnapshot();
+
+        Assert.Equal("beta", snap.ForSet);
+        Assert.Equal(Two, snap.ForCharacter);
+        Assert.Equal(1, snap.RankingsKept);
+        Assert.Null(snap.AreaRanking);
+    }
 }

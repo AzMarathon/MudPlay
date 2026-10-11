@@ -902,7 +902,8 @@ public sealed partial class SimulatorViewModel : ObservableObject
                     .Concat(RankStats.Count == 0 ? Array.Empty<string>()
                         : RankStats.Select(s => "  " + Line(s)).Prepend($"Picked: {RankHeadline}"))
                     .Where(l => !string.IsNullOrEmpty(l)).ToList(),
-            SimResult is null ? null : _simRouteName);
+            SimResult is null ? null : _simRouteName,
+            _owner.Set, _owner.Character, _rankings.Count);
     }
 }
 
