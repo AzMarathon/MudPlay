@@ -236,6 +236,29 @@ public sealed class PartyAilmentTrackerTests
         Assert.True(mage.Blinded);
     }
 
+    // An @events or @event reply names an event, and an event can be named
+    // anything as well: it is no @status reply, on any channel.
+    [Theory]
+    [InlineData(@"Mage telepaths: {events: no ailments check on}")]
+    [InlineData(@"Mage telepaths: {events (2/3): no ailments off, Bank on}")]
+    [InlineData(@"Mage telepaths: {event 'no ailments' switched off}")]
+    [InlineData(@"Mage telepaths: {event 'no ailments' is on: fires on a timer, sends a command}")]
+    [InlineData(@"Mage telepaths: {no event named 'no ailments'}")]
+    [InlineData(@"Mage telepaths: {event name 'ailments' matches 2: 'no ailments', 'no ailments 2'}")]
+    [InlineData(@"Mage telepaths: {events: 1 no ailments on, 2 Bank off}")]
+    [InlineData(@"Mage telepaths: {event 2 'no ailments' switched off}")]
+    [InlineData(@"Mage says ""{events: no ailments check on}""")]
+    public void EventReplyNamingAnEvent_IsNoStatusReply(string line)
+    {
+        using Harness h = new();
+        PartyMember mage = h.AddMember("Mage");
+        h.Say(@"Mage says ""@blind on""");
+
+        h.Say(line);
+
+        Assert.True(mage.Blinded);
+    }
+
     [Fact]
     public void StatusReply_NoAilments_LeavesHeldChipUntouched()
     {

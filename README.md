@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.178.1**
-> - A game-data set whose empty text blocks link round in a circle no longer freezes the client as it loads; the program log names the blocks
+> **Version 3.179.0**
+> - New remote commands `@events` (lists your Events by number, each on or off) and `@event <name or number> [on|off]` (one event's state and schedule, or switches it); both need Alter settings
+> - Answers give an event's name, state, schedule and kind only, never what it sends or the loop, room or boss it uses
+> - The Events tab shows an `off` badge on a disabled event; the tab and an open event editor follow a remote switch at once
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
