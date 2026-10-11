@@ -9710,7 +9710,13 @@ public sealed class AppServices
                 Game.Health.HangupPenaltyNotice.HpShareTop(ResolveActiveRealm()?.Realm, pvp, inFight),
             stockRealm: () => GameData.ActiveRealm == Game.RealmType.Stock,
             recordDeath: RoomTracker.NoteUnwitnessedDeath,
-            staysOnDeath: EveryItemOfThisNameStaysOnDeath);
+            staysOnDeath: EveryItemOfThisNameStaysOnDeath,
+            // Whether the room the character came back in is where the dead of the
+            // room it hung up in arrive. The list is Stock's own, and trusted less
+            // on any other realm (HangupDeathArrivalRooms).
+            entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.EntrySays(
+                hungUpIn, enteredIn, stock: GameData.ActiveRealm == Game.RealmType.Stock),
+            roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}");
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
         // The lives a `stat` on this connection gave: the count carried over a

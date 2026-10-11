@@ -218,6 +218,13 @@ public static class BugReportBuilder
               + $", lives {(heldList.Lives is { } heldLives ? $"{heldLives}" : "not known")}"
               + (heldList.PvpFight ? ", in a fight with a player" : heldList.InCombat ? ", in a fight with a monster" : ", in no fight")
               + $", {heldList.Worn?.Count ?? 0} worn, {heldList.Coins?.TotalCoinCount ?? 0} coin(s)"
+              // Where a death by a hang-up in that room would put the character, and
+              // what an earlier connection that judged nothing saw of the way back in.
+              + (heldList.Room is { } hungUpIn
+                  ? "; its dead arrive in " + (Game.Recovery.HangupDeathArrivalRooms.For(new Game.Map.RoomKey(hungUpIn.Map, hungUpIn.Room)) is { } arrivals
+                      ? string.Join(" or ", arrivals) : "(not known for this room)")
+                  : "")
+              + (heldList.EntryRoomSince is { } cameBack ? $"; came back in {cameBack.Map}/{cameBack.Room} on a connection since" : "")
             : "(none)");
         // Whether the last hang-up the penalty could have killed for was taken
         // for a death, and on what.

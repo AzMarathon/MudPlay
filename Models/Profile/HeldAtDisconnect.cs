@@ -64,6 +64,10 @@ public sealed class HeldAtDisconnect
     public bool LoginLinesSeenSince { get; set; }
     public int? HpAtFirstEntrySince { get; set; }
 
+    // The same for the first room the map confirmed on that connection, before
+    // the character moved: where the hang-up left it, or where its dead arrive.
+    public RoomRef? EntryRoomSince { get; set; }
+
     // HP and max HP as the statline last showed them, or null when they weren't
     // known. At or below 0 the character was dropped.
     public int? Hp { get; set; }
