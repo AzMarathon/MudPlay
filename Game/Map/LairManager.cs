@@ -47,8 +47,15 @@ public sealed class LairManager
                .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
                .ToArray();
 
-    // Fired after every mutation (load / save / delete).
+    // Fired after every mutation (load / save / delete / an outside change taken in).
     public event Action? SetupsChanged;
+
+    private readonly SharedFolderStamp _stamp = new();
+    private readonly HashSet<string> _unreadable = new(StringComparer.Ordinal);
+
+    // When the folder was last re-read because another client had changed it; null
+    // until it has been.
+    public DateTimeOffset? LastOutsideReadAt { get; private set; }
 
     // The loaded character's favourites, kept on its profile and plugged in the
     // same way LoopManager's are.
@@ -87,10 +94,12 @@ public sealed class LairManager
     public void LoadAll(string? setName)
     {
         _setups.Clear();
+        _unreadable.Clear();
         _setName = setName;
 
         if (string.IsNullOrWhiteSpace(setName))
         {
+            _stamp.Accept(new SharedFolderStamp.Snapshot());
             SetupsChanged?.Invoke();
             return;
         }
@@ -106,10 +115,14 @@ public sealed class LairManager
 
         if (!Directory.Exists(folder))
         {
+            _stamp.Accept(new SharedFolderStamp.Snapshot());
             _log?.Info("Lairs", $"no loops folder for set '{setName}'; empty lair catalogue.");
             SetupsChanged?.Invoke();
             return;
         }
+        // Marked before the files are read, so a file another client writes meanwhile
+        // shows on the next poll instead of being taken as already read.
+        _stamp.Rebase(folder, LairFileSuffix);
 
         int loaded = 0;
         int failed = 0;
@@ -142,6 +155,51 @@ public sealed class LairManager
         SetupsChanged?.Invoke();
     }
 
+    // Follow what another client running on this set did to the Loops folder: a setup
+    // saved, edited, renamed, moved or deleted. Same rules as LoopManager's: read only
+    // once the folder has looked the same on two polls (or at once with settleNow), a
+    // file that can't be read leaves the copy held in memory where it is, and nothing
+    // already held is mutated.
+    public bool TakeInOutsideChanges(bool settleNow = false)
+    {
+        if (_setName is null) return false;
+        string root = AppPaths.GameDataSetLoopsFolder(_setName);
+        if (_stamp.TakeSettledChange(root, LairFileSuffix, settleNow) is not { } now) return false;
+
+        NavReread<LairSetup> found = NavCatalogueReread.Run(_stamp.Known, now, _setups,
+            s => s.Name,
+            s => Path.GetFullPath(Path.Combine(NavFolders.ToDirectory(root, s.Folder), SafeFileName(s.Name))),
+            (a, b) => NavCatalogueReread.SameRecord(a, a.Folder, b, b.Folder),
+            path => ReadOutsideFile(root, path),
+            _unreadable,
+            (path, why) => _log?.Warn("Lairs", $"setup file '{path}' changed outside but can't be read ({why}); keeping the copy held."));
+        _stamp.Accept(now);
+        if (!found.AnyItemChanged && !found.FoldersChanged) return false;
+
+        _setups.Clear();
+        foreach ((string name, LairSetup setup) in found.Fresh) _setups[name] = setup;
+        LastOutsideReadAt = DateTimeOffset.UtcNow;
+        if (found.AnyItemChanged) _log?.Info("Lairs", NavCatalogueReread.Summary("lair setups", found));
+        SetupsChanged?.Invoke();
+        return true;
+    }
+
+    private LairSetup? ReadOutsideFile(string root, string path)
+    {
+        LairSetup? setup = JsonStore.Load<LairSetup>(path);
+        if (setup is null || string.IsNullOrWhiteSpace(setup.Name)) return null;
+        setup.Folder = NavFolders.RelativeFolder(root, path);
+        Stamp(setup);
+        return setup;
+    }
+
+    // A folder was made here with nothing filed in it: take it as already seen.
+    public void AcceptFolderTree()
+    {
+        if (_setName is null) return;
+        _stamp.NoteFolders(AppPaths.GameDataSetLoopsFolder(_setName), LairFileSuffix);
+    }
+
     // Persist setup under GameDataSetLoopsFolder with the LairFileSuffix
     // filename extension. No-op when no set is active.
     public void Save(LairSetup setup)
@@ -154,14 +212,15 @@ public sealed class LairManager
         setup.SchemaVersion = 1;
         setup.Folder = NavFolders.Normalize(setup.Folder);
         string root = AppPaths.GameDataSetLoopsFolder(_setName);
-        // A setup name is unique set-wide, so a folder change is a move:
-        // delete any stale file for this name (in any folder) first so
-        // we don't leave a duplicate behind.
-        DeleteFileForName(root, setup.Name);
         string dir = NavFolders.ToDirectory(root, setup.Folder);
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, SafeFileName(setup.Name));
+        // A setup name is unique set-wide, so a folder change is a move: the stale
+        // file for this name (in any folder) goes after the write, so another client
+        // reading the folder between the two sees the setup twice, never not at all.
         JsonStore.Save(path, setup);
+        _stamp.NoteWritten(root, path);
+        DeleteFileForName(root, setup.Name, keep: path);
         Stamp(setup);
         _setups[setup.Name] = setup;
         SetupsChanged?.Invoke();
@@ -194,13 +253,19 @@ public sealed class LairManager
 
     // Delete the on-disk .lair file for name wherever it lives under root
     // (the name is unique set-wide). Best-effort — failures are logged.
-    private void DeleteFileForName(string root, string name)
+    private void DeleteFileForName(string root, string name, string? keep = null)
     {
         if (!Directory.Exists(root)) return;
         string fileName = SafeFileName(name);
         foreach (string path in Directory.EnumerateFiles(root, fileName, SearchOption.AllDirectories))
         {
-            try { File.Delete(path); }
+            if (keep is not null && string.Equals(Path.GetFullPath(path), Path.GetFullPath(keep), StringComparison.OrdinalIgnoreCase))
+                continue;
+            try
+            {
+                File.Delete(path);
+                _stamp.NoteGone(path);
+            }
             catch (Exception ex)
             {
                 _log?.Warn("Lairs", $"failed to delete setup file '{path}': {ex.Message}");

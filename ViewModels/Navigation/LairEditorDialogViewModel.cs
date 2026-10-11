@@ -281,6 +281,8 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
         // confirm the overwrite explicitly.
         string trimmed = Name.Trim();
         bool nameChanged = !string.Equals(trimmed, _original.Name, StringComparison.OrdinalIgnoreCase);
+        // A setup of that name another client saved a moment ago counts too.
+        _setups.TakeInOutsideChanges(settleNow: true);
         if (nameChanged && _setups.Get(trimmed) is not null && _confirm is not null)
         {
             bool ok = await _confirm.ConfirmAsync(

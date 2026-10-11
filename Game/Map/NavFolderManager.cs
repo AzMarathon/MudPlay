@@ -77,6 +77,9 @@ public sealed class NavFolderManager
         string dir = NavFolders.ToDirectory(AppPaths.GameDataSetLoopsFolder(setName), norm);
         if (Directory.Exists(dir)) return false;
         Directory.CreateDirectory(dir);
+        // Our own folder: neither catalogue re-reads the tree for it as an outside change.
+        _loops.AcceptFolderTree();
+        _lairs.AcceptFolderTree();
         _log?.Info("NavFolders", $"created folder '{norm}'");
         FoldersChanged?.Invoke();
         return true;

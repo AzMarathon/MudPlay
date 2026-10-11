@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.172.0**
-> - Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay
-> - Members who are short are handed exactly what they lack when you can spare it and your coins make the amount; the step waits for the game to confirm it
-> - Otherwise the route goes round the toll, or the walk or loop ends naming the toll and who can't pay
-> - A member paid for at a toll that still turned them away is not paid for twice there
+> **Version 3.172.2**
+> - Loops and Auto-Lair setups saved, edited, renamed, moved or deleted in one running client now appear in the others within a few seconds, without a restart
+> - A loop already running, paused or staged keeps going from the copy it started with
+> - A loop is now written before its old copy is removed, so a client reading at that moment never sees it missing
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
