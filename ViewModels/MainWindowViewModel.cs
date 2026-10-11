@@ -4065,10 +4065,11 @@ public partial class MainWindowViewModel : ObservableObject
     // (rather than via the Bosses-tab "Sync Timers…" button) — otherwise nothing is
     // collecting and the responders' `@timerdata` replies vanish, the "I got a string
     // back but nothing happened" report. Only our own outbound request should trigger
-    // it: TelepathOutgoing is always ours, and a Local "You say" line has a null speaker
-    // (the self-say form), so an inbound request we're merely responding to is excluded.
-    // A hand-typed gang request ("You gangpath:" — unclassified) isn't caught; that path
-    // uses the button.
+    // it: TelepathOutgoing is always ours, a Local "You say" line has a null speaker
+    // (the self-say form), and a gang or broadcast line a board shows us back carries
+    // our own name, so an inbound request we're merely responding to is excluded. On
+    // a board that does not show us our own line on a channel, a request typed there
+    // isn't caught; that path uses the button.
     //
     // The same watcher serves the other two transfers. Our own `@roomba sync` opens
     // the receiver's adopt window, so the responders' `@roombadata` replies are
@@ -4107,7 +4108,10 @@ public partial class MainWindowViewModel : ObservableObject
         switch (asked.Transfer)
         {
             case Game.Remote.Transfer.TimerSync:
-                OpenTimerSyncWindow(asked.Channel);
+                // A telepath's echo names the player it went to: the one whose
+                // answer is an answer to that request.
+                OpenTimerSyncWindow(asked.Channel,
+                    asked.Channel == Game.Remote.RemoteChannel.Telepath ? e.Speaker : null);
                 break;
             case Game.Remote.Transfer.RoombaSync:
                 AppServices.Current.RoombaSync.NoteSyncRequested();
@@ -4129,7 +4133,8 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // askedOn: the channel our request went out on, the one its answers are taken on.
-    private async void OpenTimerSyncWindow(Game.Remote.RemoteChannel askedOn)
+    // telepathedTo: the player it was telepathed to, when it was.
+    private async void OpenTimerSyncWindow(Game.Remote.RemoteChannel askedOn, string? telepathedTo)
     {
         // Already collecting: the open window's collector sees the request go out
         // too, and takes answers on its channel as well.
@@ -4140,7 +4145,8 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.GameData,
             AppServices.Current.Chat,
             AppServices.Current.SendTypedInput,
-            preArmedOn: askedOn);
+            preArmedOn: askedOn,
+            preArmedTo: telepathedTo);
         await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.CharacterWorkshop.BossTimerSyncViewModel, bool>(vm);
     }

@@ -37,24 +37,42 @@ public sealed class BossTimerSyncMergeTests
         => Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
             BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3)));
 
-    // Asked where several players may answer (gang, say, broadcast), the one outcome
-    // that writes without a pick is a pick; only a telepath to one player still
-    // adopts outright. The outcomes that write nothing are the same on every channel.
+    // The one outcome that writes without a pick is a pick unless the offer is the
+    // answer of the one player a telepath asked: from anyone else, or with a request
+    // out where several players listen (gang, say, broadcast), it is offered as a
+    // choice. The outcomes that write nothing are the same whoever it is from.
     [Theory]
-    [InlineData(MudPlay.Game.Remote.RemoteChannel.Broadcast, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
-    [InlineData(MudPlay.Game.Remote.RemoteChannel.Gangpath, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
-    [InlineData(MudPlay.Game.Remote.RemoteChannel.Local, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
-    [InlineData(MudPlay.Game.Remote.RemoteChannel.Telepath, BossTimerSyncViewModel.TimerMergeKind.AutoMerge)]
+    [InlineData(false, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
+    [InlineData(true, BossTimerSyncViewModel.TimerMergeKind.AutoMerge)]
     internal void A_timer_we_would_adopt_outright_is_a_pick_unless_one_player_was_asked(
-        MudPlay.Game.Remote.RemoteChannel askedOn, BossTimerSyncViewModel.TimerMergeKind expected)
+        bool askedOfSenderAlone, BossTimerSyncViewModel.TimerMergeKind expected)
     {
-        Assert.Equal(expected, BossTimerSyncViewModel.Classify(ours: null, tracked: true, offer: T, askedOn));
+        Assert.Equal(expected, BossTimerSyncViewModel.Classify(ours: null, tracked: true, offer: T, askedOfSenderAlone));
         Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.InSync,
-            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddSeconds(20), askedOn));
+            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddSeconds(20), askedOfSenderAlone));
         Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
-            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3), askedOn));
+            BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3), askedOfSenderAlone));
         Assert.Equal(BossTimerSyncViewModel.TimerMergeKind.Conflict,
-            BossTimerSyncViewModel.Classify(ours: null, tracked: false, offer: T, askedOn));
+            BossTimerSyncViewModel.Classify(ours: null, tracked: false, offer: T, askedOfSenderAlone));
+    }
+
+    // A row brought up to a timer of ours that moved: the default pick is chosen
+    // again, and what matched the old timer is no longer said to.
+    [Fact]
+    public void A_rebased_row_goes_back_to_the_default_pick_against_the_new_timer()
+    {
+        BossTimerSyncRowViewModel row = new("ok", 300, "ok", null, null, "— no timer —");
+        row.AddConflict("Bob", T, "Aug 24 00:13");
+        row.Responders[0].AdoptCommand.Execute(null);
+        Assert.Equal(T, row.SelectedKilledAt);
+
+        row.Rebase(T.AddHours(6), "Aug 24 06:13");
+
+        Assert.Null(row.SelectedKilledAt);
+        Assert.True(row.KeepOursSelected);
+        Assert.False(row.Responders[0].IsSelected);
+        Assert.Equal("Keep ours", row.KeepOursLabel);
+        Assert.Equal(T.AddHours(6), row.OursKilledAt);
     }
 
     // The default pick is headed by what it does: with no timer of ours there is

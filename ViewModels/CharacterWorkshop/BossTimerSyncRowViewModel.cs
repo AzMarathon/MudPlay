@@ -88,6 +88,21 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
         if (!HasConflict) ResolvedStatus = $"Adopted {responder}'s timer — {text}";
     }
 
+    // Our timer for this boss is no longer the one the row was showing (a kill of
+    // our own, a pick just written, a timer that ran out). The row is weighed
+    // against the new one from here on: the default pick is chosen again, since any
+    // other was made against a timer we no longer hold, and what was said to match
+    // the old one is forgotten.
+    public void Rebase(DateTimeOffset? oursKilledAt, string oursText)
+    {
+        OursKilledAt = oursKilledAt;
+        OnPropertyChanged(nameof(KeepOursLabel));
+        OursText = oursText;
+        _inSyncWith.Clear();
+        if (!HasConflict && !WasAutoMerged) ResolvedStatus = string.Empty;
+        KeepOurs();
+    }
+
     // Their offer matched what we already hold — nothing to do.
     public void MarkInSync(string responder)
     {

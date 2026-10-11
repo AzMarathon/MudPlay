@@ -1270,7 +1270,9 @@ public sealed class RemoteCommandManager : IDisposable
         return GivenName(self).Equals(GivenName(speaker), StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GivenName(string name)
+    // The name a telepath is addressed by and a chat line is tagged with: the first
+    // word of "Given Family".
+    internal static string GivenName(string name)
     {
         if (string.IsNullOrEmpty(name)) return name;
         int space = name.IndexOf(' ');
