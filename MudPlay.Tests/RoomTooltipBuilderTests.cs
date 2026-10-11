@@ -47,6 +47,23 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Assert.False(RoomTooltipBuilder.TryParseLairMax(tag, out _));
     }
 
+    // A tag that opens with "(Max N)" is read in place and any other by pattern.
+    // The two have to agree, so the forms on the border between them are pinned.
+    [Theory]
+    [InlineData("(Max  12): 7",          true, 12)]   // more than one space
+    [InlineData("(max 3): 7",            true, 3)]    // lower case
+    [InlineData("(Max\t4): 7",           true, 4)]    // a tab for the space
+    [InlineData("lair (Max 6): 7",       true, 6)]    // not at the head
+    [InlineData("(Max 2x) (Max 9): 7",   true, 9)]    // the head form broken, a later one whole
+    [InlineData("(Max ): 7",             false, 0)]
+    [InlineData("(Max 7",                false, 0)]   // never closed
+    [InlineData("(Max 99999999999): 7",  false, 0)]   // too big for an int
+    public void TryParseLairMax_ReadsTheSameCount_InPlaceOrByPattern(string tag, bool found, int expected)
+    {
+        Assert.Equal(found, RoomTooltipBuilder.TryParseLairMax(tag, out int max));
+        Assert.Equal(expected, max);
+    }
+
     // FormatLairRegen is shared by the map tooltip and the Room Info panel, so
     // both surfaces show the identical "Max Regen: N @ time" line.
     [Theory]

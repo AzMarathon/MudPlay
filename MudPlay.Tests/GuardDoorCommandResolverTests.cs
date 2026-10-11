@@ -154,4 +154,52 @@ public sealed class GuardDoorCommandResolverTests : IDisposable
         Assert.Equal(Direction.S, cmds[0].Direction);   // dir index 1 → S
         Assert.Equal(0, cmds[0].AbilityGate);            // no checkability
     }
+
+    // The graph build reads a greet once and asks it about every room its monster
+    // stands in. One reading has to answer each room as a fresh Resolve would: a
+    // keyword's first exit in that room, with the ability gate seen before it.
+    [Fact]
+    public void Read_AnswersEachRoom_AsResolveDoes()
+    {
+        const string tbinfo = """
+            [
+              { "Number": 400, "LinkTo": 0, "Action": "gate:401\nvault:402\nweather:403\n", "Called From": "" },
+              { "Number": 401, "LinkTo": 0,
+                "Action": "remoteaction 10 5 0 0:checkability 50 1:remoteaction 20 5 0 1:remoteaction 20 5 0 2\n",
+                "Called From": "" },
+              { "Number": 402, "LinkTo": 0,
+                "Action": "checkability 60 1:remoteaction 20 5 0 3\nremoteaction 30 5 0 8\n", "Called From": "" },
+              { "Number": 403, "LinkTo": 0, "Action": "message 9\n", "Called From": "" }
+            ]
+            """;
+        TBInfoStore store = NewStore(tbinfo);
+
+        GuardDoorCommandResolver.GreetDoors doors = GuardDoorCommandResolver.Read(store, 400, "the warden");
+        Assert.False(doors.IsEmpty);
+
+        foreach (int room in new[] { 10, 20, 30, 40, 0 })
+            Assert.Equal(
+                GuardDoorCommandResolver.Resolve(store, 400, "the warden", room).ToList(),
+                doors.For(room).ToList());
+
+        Assert.Equal(
+            new[] { new GuardDoorCommandResolver.GuardDoorCommand("ask warden gate", Direction.N, 0) },
+            doors.For(10));
+        // Room 20: `gate` opens S (its first exit there, behind ability 50), `vault` opens W (behind 60).
+        Assert.Equal(
+            new[]
+            {
+                new GuardDoorCommandResolver.GuardDoorCommand("ask warden gate", Direction.S, 50),
+                new GuardDoorCommandResolver.GuardDoorCommand("ask warden vault", Direction.W, 60),
+            },
+            doors.For(20));
+        // The ability gate carries on down the block: 60 still stands at room 30's line.
+        Assert.Equal(
+            new[] { new GuardDoorCommandResolver.GuardDoorCommand("ask warden vault", Direction.U, 60) },
+            doors.For(30));
+        Assert.Empty(doors.For(40));
+
+        // A greet that only talks opens nothing anywhere.
+        Assert.True(GuardDoorCommandResolver.Read(store, 403, "the warden").IsEmpty);
+    }
 }
