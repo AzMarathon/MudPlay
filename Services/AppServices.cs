@@ -2745,8 +2745,10 @@ public sealed class AppServices
     // seed, the user's record overrides), remembering content hashes between asks.
     private readonly RankingStampReader _rankingStamps = new();
 
-    // The data of set was replaced (an import over it, a Manage Sets change): what the
-    // Simulator ranked on the old data is stale, whichever set is active.
+    // The data of set was replaced by a Manage Sets change (its deletion, the
+    // user's edits copied or moved into or out of it): what the Simulator ranked on
+    // the old data is stale, whichever set is active. An import over a set is not
+    // told here: the rankings' own table stamps say whether its files changed.
     public void ForgetSimulatorRankings(string set, string why) =>
         LogStaleSimulatorRankings(set, why, SimulatorRankings.ForgetSet(set));
 
@@ -8453,7 +8455,9 @@ public sealed class AppServices
 
         // The Simulator's rankings follow the set too, but nothing reloads: a switch
         // leaves each set's where they are. The active set's name coming round again
-        // is that set read in afresh, and what was ranked on its old tables is stale.
+        // is that set read in afresh, with the same tables or other ones: the store
+        // is told, and compares each ranking's tables with the new load's when it is
+        // next listed. Only one that carries no record of its tables goes here.
         // Each ranking is also kept in a file in its set's folder, so it is there
         // after a restart; what a read finds is handed back on the UI thread.
         SimulatorRankings = new Game.Simulation.AreaRankingStore(

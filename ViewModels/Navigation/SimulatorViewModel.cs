@@ -95,11 +95,12 @@ public sealed partial class SimulatorViewModel : ObservableObject
     // made.
     //
     // The same name again is the set read in afresh (a re-import, the set picked
-    // again, record overrides synced in): its tables may differ, so the ranking
-    // listed was made on tables that are gone and is taken off, while the sketch,
-    // still that set's rooms, stays. The store drops what it kept for the set by
-    // itself (AreaRankingStore.NoteActiveSet), told by the app and not from here,
-    // since no Simulator need be open when a set is read in again.
+    // again, record overrides synced in). Its tables may be the same files or other
+    // ones: the ranking is listed again from what is kept, which compares the
+    // tables it was made on with the new load's and drops it only if they changed
+    // (user, 2026-10-11). The sketch, still that set's rooms, stays. The store is
+    // told of the new load by the app and not from here (AreaRankingStore.
+    // NoteActiveSet), since no Simulator need be open when a set is read in again.
     //
     // The character is read with the set. A profile load changes both, the set
     // first: taken one at a time, the pairing in between (the new set with the
@@ -108,8 +109,12 @@ public sealed partial class SimulatorViewModel : ObservableObject
     {
         bool readAgain = string.Equals(set, _owner.Set, StringComparison.OrdinalIgnoreCase);
         if (!readAgain && _sketch() is { HasClicks: true } sketch) sketch.Clear();
-        ChangeOwner(new SimulatorOwner(set, _character()));
-        if (readAgain) ShowRanking(null);
+        var owner = new SimulatorOwner(set, _character());
+        bool samePairing = owner == _owner;
+        ChangeOwner(owner);
+        // A new pairing was listed by the change. The same one is listed again here:
+        // what is on show was checked against the load that has just gone.
+        if (readAgain && samePairing) ListKept(owner);
     }
 
     // Another character was loaded, or the loaded one closed: a result is one
@@ -157,10 +162,13 @@ public sealed partial class SimulatorViewModel : ObservableObject
     // has been listed meanwhile.
     private void ListKept(SimulatorOwner owner)
     {
-        AreaRanking? own = _rankings.Get(owner);
+        // The world in hand, for the one held in memory as for the one on disk: a
+        // ranking made on other tables is not listed from either.
+        RankingWorld? world = _simulation?.World();
+        AreaRanking? own = _rankings.Get(owner, world);
         ShowRanking(own, kept: true);
         if (own is not null) { LogListed(owner, own); return; }
-        if (_simulation?.World() is not { } world) return;
+        if (world is null) return;
         _rankings.Load(owner, world, saved =>
         {
             if (saved is null || owner != _owner || IsRanking || Rankings.Count > 0) return;

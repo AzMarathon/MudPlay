@@ -469,6 +469,59 @@ public sealed class AreaRankingFilesTests : IDisposable
         Assert.False(File.Exists(AreaRankingFiles.FileFor(owner)));
     }
 
+    // A set read in again is not a set whose data was replaced: its saved rankings
+    // stay on disk. A read that was out at the time was compared with the load that
+    // has gone, so what it found is not handed back or held; asked again with the
+    // world of the new load, the ranking comes back if its tables are that load's.
+    [Fact]
+    public void ARankingBeingReadWhenItsSetIsReadInAgain_IsNotHandedBack_AndItsFileStays()
+    {
+        string set = NewSet("a");
+        var owner = new SimulatorOwner(set, One);
+        var first = new Client();
+        first.Store.Keep(owner, Ranking("Hills"));
+        first.Settle();
+
+        var later = new Client();
+        later.Store.NoteActiveSet(set);
+        var handed = new List<AreaRanking?>();
+        later.Store.Load(owner, World, handed.Add);
+        later.Store.NoteActiveSet(set);
+        later.Settle();
+
+        Assert.Empty(handed);
+        Assert.Null(later.Store.Get(owner));
+        Assert.True(File.Exists(AreaRankingFiles.FileFor(owner)));
+
+        Assert.Equal("Hills", later.Load(owner)?.Rows[0].Area);
+        Assert.True(File.Exists(AreaRankingFiles.FileFor(owner)));
+    }
+
+    // The same set read in again, twice over, with a client holding its rankings in
+    // memory and on disk: nothing is deleted from either.
+    [Fact]
+    public void TheSameSetReadInAgain_DeletesNoSavedRanking()
+    {
+        string set = NewSet("a");
+        var owner = new SimulatorOwner(set, One);
+        var other = new SimulatorOwner(set, Two);
+        var client = new Client();
+        client.Store.NoteActiveSet(set);
+        client.Store.Keep(owner, Ranking("Hills"));
+        client.Store.Keep(other, Ranking("Marsh"));
+        client.Settle();
+
+        Assert.Equal(0, client.Store.NoteActiveSet(set));
+        Assert.Equal(0, client.Store.NoteActiveSet(set));
+        client.Settle();
+
+        Assert.Equal(2, client.Store.Count);
+        Assert.True(File.Exists(AreaRankingFiles.FileFor(owner)));
+        Assert.True(File.Exists(AreaRankingFiles.FileFor(other)));
+        Assert.DoesNotContain(client.Store.DiskNotes, n => n.Contains("deleted") || n.Contains("dropped"));
+        Assert.NotNull(client.Store.Get(owner, World));
+    }
+
     [Fact]
     public void ARankingWhoseSetIsReplacedWhileItIsBeingRead_IsNotPutBack()
     {
@@ -481,7 +534,6 @@ public sealed class AreaRankingFilesTests : IDisposable
         foreach (Action<AreaRankingStore> replaced in new Action<AreaRankingStore>[]
                  {
                      s => s.ForgetSet(set),
-                     s => { s.NoteActiveSet(set); s.NoteActiveSet(set); },
                      s => s.ForgetCharacter(One),
                      s => s.ForgetBbs(Board),
                  })

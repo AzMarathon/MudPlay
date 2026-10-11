@@ -9,8 +9,8 @@ namespace MudPlay.Tests;
 
 // The Simulator's finished rankings, kept by the game data and character each was
 // made on: a pairing gets its own back and no other's, names match without case, a
-// set read in again loses all of its rankings, and only the last few made or shown
-// are held.
+// set read in again keeps the rankings whose tables it still has, and only the last
+// few made or shown are held.
 public sealed class AreaRankingStoreTests
 {
     private static AreaRanking Ranking(string area) => new(
@@ -54,8 +54,82 @@ public sealed class AreaRankingStoreTests
         Assert.Null(store.Get(owner));
     }
 
+    private static readonly RankingWorld Tables = new(
+        1, RankingWorld.TableNames.ToDictionary(t => t, _ => "10:1"), "seed");
+
+    private static readonly RankingWorld OtherTables = Tables with
+    {
+        Tables = RankingWorld.TableNames.ToDictionary(t => t, t => t == "Rooms" ? "11:2" : "10:1"),
+    };
+
+    // A switch drops nothing, and neither does the same set read in again: a
+    // ranking that says which tables it was made on is kept, and handed back while
+    // the load in hand has those tables.
     [Fact]
-    public void ASwitchOfGameDataDropsNothingButTheSameSetReadInAgainDropsAllOfItsRankings()
+    public void NeitherASwitchOfGameDataNorTheSameSetReadInAgainDropsARankingOfTheSameTables()
+    {
+        var store = new AreaRankingStore();
+        store.NoteActiveSet("alpha");
+        AreaRanking hills = Ranking("Hills") with { World = Tables };
+        var one = new SimulatorOwner("alpha", "board/one");
+        store.Keep(one, hills);
+        store.Keep(new SimulatorOwner("alpha", "board/two"), Ranking("Marsh") with { World = Tables });
+        store.Keep(new SimulatorOwner("beta", "board/one"), Ranking("Fen") with { World = Tables });
+
+        Assert.Equal(0, store.NoteActiveSet("beta"));
+        Assert.Equal(0, store.NoteActiveSet("alpha"));
+        Assert.Equal(0, store.NoteActiveSet("Alpha"));
+
+        Assert.Equal(3, store.Count);
+        Assert.Same(hills, store.Get(one, Tables));
+        // Compared once with the load in hand, it is handed back for the rest of it.
+        Assert.Same(hills, store.Get(one));
+    }
+
+    // Read in again, the set's tables may be other files. A ranking made on the old
+    // ones is dropped when it is next asked for, with the world in hand: memory
+    // hands back nothing a read from disk would refuse. Until it can be compared it
+    // is neither handed back nor dropped.
+    [Fact]
+    public void ARankingHeldThroughAReloadIsComparedWithTheNewLoadBeforeItIsHandedBack()
+    {
+        var store = new AreaRankingStore();
+        store.NoteActiveSet("alpha");
+        var one = new SimulatorOwner("alpha", "board/one");
+        var two = new SimulatorOwner("alpha", "board/two");
+        store.Keep(one, Ranking("Hills") with { World = Tables });
+        store.Keep(two, Ranking("Marsh") with { World = Tables });
+
+        store.NoteActiveSet("alpha");
+
+        // No world to compare with (the load can't be stamped): not shown, still held.
+        Assert.Null(store.Get(one));
+        Assert.Equal(2, store.Count);
+
+        Assert.Null(store.Get(one, OtherTables));
+        Assert.Equal(1, store.Count);
+        Assert.Contains(store.DiskNotes, n => n.Contains("was dropped: the game data's Rooms table has changed since"));
+        Assert.NotNull(store.Get(two, Tables));
+    }
+
+    // A world handed in is the active set's: it says nothing of a ranking held for
+    // another set, which is handed back as it is and never dropped by it.
+    [Fact]
+    public void TheWorldInHandIsNotComparedWithARankingOfAnotherSet()
+    {
+        var store = new AreaRankingStore();
+        store.NoteActiveSet("alpha");
+        var onBeta = new SimulatorOwner("beta", "board/one");
+        store.Keep(onBeta, Ranking("Fen") with { World = Tables });
+
+        Assert.NotNull(store.Get(onBeta, OtherTables));
+        Assert.Equal(1, store.Count);
+    }
+
+    // A ranking with no record of its tables can be compared with nothing. A switch
+    // leaves it; its set read in again drops it, as it dropped every ranking before.
+    [Fact]
+    public void ARankingWithNoRecordOfItsTablesGoesWhenItsSetIsReadInAgain()
     {
         var store = new AreaRankingStore();
         store.NoteActiveSet("alpha");
