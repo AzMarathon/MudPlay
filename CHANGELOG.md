@@ -1,5 +1,10 @@
 # Version history
 
+## 3.172.4
+
+- Switching game data sets is quicker: the room map's doors, teleports, boats and lookups build in a fraction of the time, with far less memory churned
+- Program log: the room map's load line says how long the build took
+
 ## 3.172.0
 
 - Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay
