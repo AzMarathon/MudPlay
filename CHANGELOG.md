@@ -1,6 +1,6 @@
 # Version history
 
-## 3.174.3
+## 3.174.5
 
 - Hang-up death check reads the room you come back in: where that room's dead arrive agrees with a death; back where you left rules one out, and so does any other room on unmodified Stock data and the zones Paradigm shares with Stock
 - Lives not read before the hang-up: back stripped where the dead arrive is now recorded as a death; owning nothing a death takes, the room alone is enough
@@ -9,6 +9,18 @@
 - A hang-up while dropped in an arena room is recorded as an arena death (nothing lost, no pile), on any realm, with or without a lives count from before
 - Sysop god lives asks no life back after an arena death, on either realm
 - Bug report shows where the stored list's dead arrive, how far that is trusted, and the room come back in
+
+## 3.174.2
+
+- No fight is opened from a room you are stepping out of (a swing at you, a hit line, a room re-run); the attack used to land in the next room
+- A lair entered that way opens with its debuff, then the room attack
+- A step with no landing or refusal within 3 s counts as not taken: the attacker is fought back where you stand
+- Bug report shows an engage held for a move in flight
+- bug reports addressed: paradigm-20261010-231540
+
+## 3.174.1
+
+- Item records show a Used on section listing every exit that names the item as the one needed to pass (a key on a locked door, an item to carry, a ticket): room, map/room and direction, one line per exit
 
 ## 3.174.0
 

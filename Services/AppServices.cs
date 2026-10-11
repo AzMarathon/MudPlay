@@ -5641,9 +5641,10 @@ public sealed class AppServices
         Combat.SetKeepRunning(Health.KeepRunning);
         // A held character's move can't land, so one still unanswered is no reason
         // to hold a fight back.
-        Combat.SetMoveInFlightProbe(() =>
-            RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending
-            && !Conditions.IsMovementPrevented);
+        Combat.SetMoveInFlightProbe(
+            () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending
+                && !Conditions.IsMovementPrevented,
+            moveSentAt: () => RoomTracker.LastMoveSentAt);
         RoomTracker.MoveBlocked += () => Combat.NoteMoveRefused();
 
         // ShadowRest (Paradigm): a race or class carrying ability code 1103 can rest

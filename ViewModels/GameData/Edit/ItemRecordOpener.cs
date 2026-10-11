@@ -56,7 +56,8 @@ public static class ItemRecordOpener
             roomCommands:      mdb.RoomCommands,
             castsSpells:       mdb.CastsSpells,
             summons:           mdb.Summons,
-            teleportsTo:       mdb.TeleportsTo);
+            teleportsTo:       mdb.TeleportsTo,
+            exitUses:          new ItemMdbViewBuilder(cache, 50).ExitUsesOf(itemNumber));
 
         await s.Dialogs.OpenWindowAsync<ItemEditDialogViewModel, ItemEditResult>(vm);
     }
