@@ -451,7 +451,7 @@ public sealed class RoomGraphManager
             // text / teleport exits that happen to collide with an action key
             // are left as-is.
             bool leverDoor = exit.Hint is RoomExitHint.Door or RoomExitHint.KeyLocked;
-            if (exit.Hint != RoomExitHint.MultiActionHidden && !leverDoor) continue;
+            if (!exit.AcceptsActions) continue;
 
             // With no explicit "Needs N Actions" modifier, actions that share a
             // StepNumber are redundant alternatives (e.g. two guardroom levers that
