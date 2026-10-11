@@ -213,15 +213,22 @@ A hand-cast **heal/buff/cure** (0 energy) is *not* an override — after it land
 
 **Changing gear by hand mid-fight.** Putting a piece on or taking one off (`eq`, `wear`, `wield`, `rem`) makes the game stop your attack, the same as a cast does. Type one during a fight and the engine attacks again as soon as the game says the fight has stopped, as it does after a gear swap of its own. Several in a row get one re-attack, and the fight is picked up again with the next round if the last of them stopped it. It is the same for a gear command of yours that the client sends for you: one in a macro, an alias, a trigger's response or an event's Command action. All of it needs Auto-Combat on; with it off nothing is re-attacked. (The Action menu's Equip entries swap a whole gear set through the Equipment Manager, which re-attacks after its own swap.)
 
-**Stopping the fight yourself: `break`.** Type `break` (or `bre`, `brea`: the game takes it from three letters; `br` is broadcast) while Auto-Combat is fighting and the engine **holds its attack** on the monster it was fighting. The terminal says so: `[Attack on <monster> held by your break: attack to carry on]`. While the hold is up the engine sends no attack at all, at that monster or any other in the room: no swing, no attack spell, no room spell, no backstab. Heals, buffs and cures carry on, and a loop or walk waits in the room as it does for any fight. A monster hitting you does not end it; you chose to stand.
+**Stopping the fight yourself: `break`.** Type `break` (or `bre`, `brea`: the game takes it from three letters; `br` is broadcast) while Auto-Combat is fighting and the engine **holds its attack** on the monster it was fighting. The terminal says so: `[Attack on <monster> held by your break: attack to carry on]`. While the hold is up the engine sends no attack at all, at that monster or any other in the room: no swing, no attack spell, no room spell, no backstab. Heals, buffs and cures carry on. A monster hitting you does not end it; you chose to stand.
+
+A loop or walk **waits in the room** while the hold is up, as it does for any fight. A **flee still runs**: the low-HP or low-mana run, the run from a monster set to Flee, and the run from a player all move you as usual, and leaving the room ends the hold.
 
 The hold ends, and the terminal says why, when:
 
 - **You attack.** Any attack command (`a`, `aa`/`bash`, `sma`, `bs`, `pu`, `kic`, `ju`, …) or an attack spell, at that monster or another. The engine carries on with what you attacked. An attack in a macro, an alias, a trigger's response or an event's Command action counts as yours.
-- **The monster dies or leaves,** whoever killed it. The engine then picks its next target as usual. With several monsters of the same name in the room, the hold stays while any of them is there. When a fight in the room goes quiet the client looks at the room once (a bare Enter) to see whether the monster still stands; it doesn't in a dark room, where a look lists nobody.
+- **The monster dies or leaves,** whoever killed it. The engine then picks its next target as usual. The game tells the client nothing when a monster it isn't attacking dies, so it goes by three things:
+  - **One fewer monster of that name in the room.** The client only knows monsters by name, so with several of the same name, the death (or the leaving) of any one of them ends the hold.
+  - **Experience from a kill of your own** in the round you typed `break`.
+  - **A full round with no attack from it.** A hostile monster attacks every round, so once a whole round has gone by with no attack from it (a hit or a miss, on you or on anyone else in the room) it is taken for dead. In a lit room the client looks at the room once (a bare Enter) and then picks its next target; if a monster of that name is still listed, it is fought like any other. In a dark room, where a look lists nobody, the hold simply ends. This takes one to two rounds after its last attack. A monster that is stunned or held and misses a round is taken for dead the same way.
 - **You leave the room,** the connection drops, another profile is loaded, or you press **Reset States**.
 
-Turning **Auto-Combat** off and on again does not end the hold, and neither does the **Auto-All** master switch: with the engine off there is nothing to hold back, and the hold is still there when it comes back on. A `break` the client sends for itself (before fleeing, for hit and run, before a rest) holds nothing, and neither does one a party leader sends you with `@do`. With Auto-Combat off, a `break` after an attack you typed yourself is remembered the same way, without the terminal line.
+Turning **Auto-Combat** off and on again does not end the hold, and neither does the **Auto-All** master switch: with the engine off there is nothing to hold back, and the hold is still there when it comes back on.
+
+**Whose `break` counts.** Yours, and one a party member sends you with **`@do break`**: that holds the attack exactly as yours does, and the terminal names who asked (`[Attack on <monster> held by <name>'s @do break: attack to carry on]`). An attack they send with `@do` lifts it again. It needs the same grant as any `@do`, and with **Auto-All** off no remote command is followed, so nothing is held. A `break` the client sends for itself (before fleeing, for hit and run, before a rest, from the Sys Goto menu) holds nothing. With Auto-Combat off, a `break` after an attack you typed yourself is remembered the same way, without the terminal line.
 
 ## Fighting back (self-defense)
 
@@ -1005,7 +1012,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 
 ### Do something on my behalf
 
-- `@do <command>` — sends the command verbatim to the game (the highest-trust command).
+- `@do <command>` — sends the command verbatim to the game (the highest-trust command). An `@do break` holds Auto-Combat's attack the way a `break` you type does, and an `@do` attack lifts it (**Combat → The round loop**, *Stopping the fight yourself*).
 - `@kill <target>` — retargets your combat onto the named monster this round. On a PvP realm, naming a player who is in your room starts a fight with that player instead (Settings → PvP).
 - `@heal` — asks a configured party healer to heal whoever's low (only a healer responds).
 - `@trap <dir>` — disarm a trap in that direction; `@trap stop` aborts. Your client answers `{Attempting to disarm trap <dir>.}` when it takes the job, then the result when it's done.
