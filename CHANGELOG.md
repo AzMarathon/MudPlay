@@ -9,6 +9,12 @@
 - Stock: two deaths the standard list doesn't allow mark the board as having edited rooms; the list then only says yes there
 - Paradigm: map 1's dungeon rooms (1/2171 to 1/2188) send their dead to Newhaven's healer; Albion takes in rooms only a same-map room command reaches
 
+## 3.177.5
+
+- `@loop send`: a loop you already hold as a numbered copy (`<name> 2`, `<name> 3`) is rejected too, and the notice names which one it matches
+- `@loop send`: the offer carries the loop's code; the loop that arrives is checked against it and not saved when it doesn't match
+- `@loop send`: the asking client tells the sender whether the loop was saved (and under which name), already held, or has to be sent again
+
 ## 3.177.2
 
 - Simulator area ranking: **Save as loop** turns a ranked area's tour into a saved loop you can run, with how it was tested in the loop's notes

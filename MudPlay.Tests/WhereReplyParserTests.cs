@@ -25,6 +25,17 @@ public class WhereReplyParserTests
         Assert.False(WhereReplyParser.TryParseRoom("i'm around map 9, room 1012 somewhere", out _));
     }
 
+    // A `@loop send` line names a loop, and a loop can be named after a room: it is
+    // not where the player who sent it stands.
+    [Theory]
+    [InlineData("{@loopresult 9da659db saved as 'Camp (map 1, room 5)'}")]
+    [InlineData("{@loopresult 9da659db already have it as 'Camp (map 1, room 5) 2'}")]
+    [InlineData("{sending loop 'Camp (map 1, room 5)' (3 rooms, 1 line)}")]
+    [InlineData("{preparing to send: Camp (map 1, room 5), yes to confirm, no to deny (code 9da659db)}")]
+    [InlineData("{loop send of 'Camp (map 1, room 5)' cancelled}")]
+    public void LoopSendLineNamingALoopAfterARoom_IsNoWhereReply(string message) =>
+        Assert.False(WhereReplyParser.TryParseRoom(message, out _));
+
     [Theory]
     [InlineData("{Some Room (map 0, room 5)}")]     // map <= 0
     [InlineData("{Some Room (map 5, room 0)}")]     // room <= 0

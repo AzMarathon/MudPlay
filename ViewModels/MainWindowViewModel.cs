@@ -4127,7 +4127,11 @@ public partial class MainWindowViewModel : ObservableObject
             || !words[1].Equals(Game.Remote.LoopShareHandler.SendVerb, StringComparison.OrdinalIgnoreCase)
             || !Game.Remote.LoopShareHandler.IsConfirm(words[2]))
             return;
-        AppServices.Current.LoopShareInbox.NoteSendConfirmed(telepath ? e.Speaker : null);
+        // The channel the yes went by is the only one the loop is then taken on.
+        AppServices.Current.LoopShareInbox.NoteSendConfirmed(telepath ? e.Speaker : null,
+            telepath ? Game.Remote.RemoteChannel.Telepath
+            : e.Channel == MudPlay.Game.ChatChannel.Gangpath ? Game.Remote.RemoteChannel.Gangpath
+            : Game.Remote.RemoteChannel.Local);
     }
 
     private async void OpenTimerSyncWindow()

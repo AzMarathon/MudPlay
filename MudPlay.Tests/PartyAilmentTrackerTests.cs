@@ -217,6 +217,25 @@ public sealed class PartyAilmentTrackerTests
         Assert.False(mage.Blinded);
     }
 
+    // A `@loop send` line names a loop, and a loop can be named anything: it is no
+    // @status reply, on any channel.
+    [Theory]
+    [InlineData(@"Mage telepaths: {@loopresult 9da659db saved as 'no ailments'}")]
+    [InlineData(@"Mage telepaths: {@loopresult 9da659db already have it as 'no ailments 2'}")]
+    [InlineData(@"Mage telepaths: {sending loop 'no ailments' (3 rooms, 1 line)}")]
+    [InlineData(@"Mage telepaths: {preparing to send: no ailments, yes to confirm, no to deny (code 9da659db)}")]
+    [InlineData(@"Mage says ""{@loopresult 9da659db saved as 'no ailments'}""")]
+    public void LoopSendLineNamingALoop_IsNoStatusReply(string line)
+    {
+        using Harness h = new();
+        PartyMember mage = h.AddMember("Mage");
+        h.Say(@"Mage says ""@blind on""");
+
+        h.Say(line);
+
+        Assert.True(mage.Blinded);
+    }
+
     [Fact]
     public void StatusReply_NoAilments_LeavesHeldChipUntouched()
     {

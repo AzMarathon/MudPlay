@@ -88,9 +88,15 @@ public static class LoopShareCodec
         return chunks;
     }
 
-    public static Loop Decode(IEnumerable<string> chunks)
+    public static Loop Decode(IEnumerable<string> chunks) => Decode(chunks, out _);
+
+    // lairWaitUnknown: the loop named a way of waiting this client does not know (a
+    // later version's) and was given none. It then is not the loop the sender
+    // offered, in that one setting, and cannot be checked against the sender's code.
+    public static Loop Decode(IEnumerable<string> chunks, out bool lairWaitUnknown)
     {
         ArgumentNullException.ThrowIfNull(chunks);
+        lairWaitUnknown = false;
         byte[] packed;
         try { packed = Base64Url.DecodeFromChars(string.Concat(chunks)); }
         catch (FormatException ex) { throw new FormatException("not base64url", ex); }
@@ -103,6 +109,9 @@ public static class LoopShareCodec
 
         string name = payload.Name?.Trim() ?? string.Empty;
         if (name.Length == 0 || name.Length > MaxNameChars) throw new FormatException("bad loop name");
+        // The name goes into a file name, the Loops list and the notice written to
+        // the terminal: an escape sequence in it would be run there.
+        if (name.Any(char.IsControl)) throw new FormatException("control character in the loop name");
         if (payload.Waypoints is not { Count: >= 2 and <= MaxWaypoints })
             throw new FormatException("a loop needs 2 or more rooms");
         if (payload.Notes is { Length: > MaxNotesChars }) throw new FormatException("notes too long");
@@ -113,6 +122,12 @@ public static class LoopShareCodec
             if (w is null || !RoomKey.TryParseWire(w.Room, out RoomKey key))
                 throw new FormatException($"bad room '{w?.Room}'");
             if (w.Command is { Length: > MaxCommandChars }) throw new FormatException("command too long");
+            // A room's command is sent to the game when the loop gets there. Several
+            // commands are chained with ';' or the two characters '^M', never with a
+            // real line end, so a control character here is no command anyone wrote:
+            // a carriage return would slip a line of its own to the game.
+            if (w.Command is { } command && command.Any(char.IsControl))
+                throw new FormatException("control character in a room's command");
             if (w.DelayMs < 0) throw new FormatException("negative delay");
             waypoints.Add(new LoopWaypoint(key, w.Command, w.DelayMs, w.DoNotRest, w.DoNotAttack)
             {
@@ -121,13 +136,12 @@ public static class LoopShareCodec
             });
         }
 
+        lairWaitUnknown = !Enum.IsDefined(typeof(LairEntryDebuffMode), payload.LairEntryDebuff);
         return new Loop(name, waypoints)
         {
             Notes = payload.Notes ?? string.Empty,
             OnlyAttackInLairRooms = payload.OnlyAttackInLairRooms,
-            LairEntryDebuff = Enum.IsDefined(typeof(LairEntryDebuffMode), payload.LairEntryDebuff)
-                ? (LairEntryDebuffMode)payload.LairEntryDebuff
-                : LairEntryDebuffMode.Off,
+            LairEntryDebuff = lairWaitUnknown ? LairEntryDebuffMode.Off : (LairEntryDebuffMode)payload.LairEntryDebuff,
         };
     }
 
