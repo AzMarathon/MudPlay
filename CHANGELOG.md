@@ -1,5 +1,12 @@
 # Version history
 
+## 3.175.17
+
+- Loops and Auto-Lair setups saved, edited, renamed, moved or deleted in one running client now appear in the others within a few seconds, without a restart
+- A loop already running, paused or staged keeps going from the copy it started with
+- A loop is now written before its old copy is removed, so a client reading at that moment never sees it missing
+- bug reports addressed: paradigm-20261010-225215, paradigm-20261010-225246
+
 ## 3.175.15
 
 - Remote commands: a sender without the permission gets only the Failure message; `@suicide`'s lives rule and `@do suicide` answer only a sender who holds it

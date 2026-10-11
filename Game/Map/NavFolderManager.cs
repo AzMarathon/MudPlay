@@ -35,11 +35,47 @@ public sealed class NavFolderManager
         _log = log;
     }
 
-    // Fires after any folder mutation (create / rename / delete). The rail /
-    // Manage dialog refresh their folder tree on this — empty-folder creation
-    // produces no loop/lair change, so the UI can't rely on the managers' own
-    // events alone.
+    // Fires after any folder mutation (create / rename / delete), and when another
+    // client makes or removes an empty folder. The rail / Manage dialog refresh their
+    // folder tree on this — empty-folder creation produces no loop/lair change, so the
+    // UI can't rely on the managers' own events alone.
     public event Action? FoldersChanged;
+
+    // The folders with nothing filed in them, as this client last saw them; null until
+    // the first walk of the tree after the set changes or a folder is renamed/removed
+    // here, which then takes the tree as it finds it. Folders that hold files follow
+    // their files: a change to those is the loop and lair catalogues' own.
+    private HashSet<string>? _knownBare;
+    private long _generation;
+
+    // Bumped by every folder change this client makes (see LoopManager.Generation).
+    internal long Generation => _generation;
+
+    // The set changed, or a folder was moved or removed here: what the next walk of
+    // the tree shows is the new baseline, not another client's change.
+    internal void ForgetBaseline()
+    {
+        _knownBare = null;
+        _generation++;
+    }
+
+    // True when another client made or removed an empty folder.
+    internal bool DiffersFrom(NavTreeScan scan)
+    {
+        if (_knownBare is null)
+        {
+            _knownBare = new HashSet<string>(scan.BareFolders, StringComparer.Ordinal);
+            return false;
+        }
+        return !_knownBare.SetEquals(scan.BareFolders);
+    }
+
+    internal void ApplyOutside(NavTreeScan scan)
+    {
+        _knownBare = new HashSet<string>(scan.BareFolders, StringComparer.Ordinal);
+        _log?.Info("NavFolders", "folders changed on disk");
+        FoldersChanged?.Invoke();
+    }
 
     // The game-data set whose Loops directory we operate on. Sourced from
     // LoopManager.
@@ -77,6 +113,9 @@ public sealed class NavFolderManager
         string dir = NavFolders.ToDirectory(AppPaths.GameDataSetLoopsFolder(setName), norm);
         if (Directory.Exists(dir)) return false;
         Directory.CreateDirectory(dir);
+        // Our own folder: not an outside change when the tree is next walked.
+        _knownBare?.Add(Path.GetFullPath(dir));
+        _generation++;
         _log?.Info("NavFolders", $"created folder '{norm}'");
         FoldersChanged?.Invoke();
         return true;
@@ -170,6 +209,7 @@ public sealed class NavFolderManager
 
     private void ReloadStores(string setName)
     {
+        ForgetBaseline();
         _loops.LoadAll(setName);
         _lairs.LoadAll(setName);
     }

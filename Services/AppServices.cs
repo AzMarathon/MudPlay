@@ -2729,6 +2729,9 @@ public sealed class AppServices
     // move so their in-memory Folder values stay in sync.
     public Game.Map.NavFolderManager NavFolders { get; private set; } = null!;
 
+    // Follows what other clients on this set do to the shared Loops folder.
+    public Game.Map.NavFolderWatcher NavWatcher { get; private set; } = null!;
+
     // Game Data → "Manage Sets…" backend: copy / move a set's loop
     // library to another set, delete a set (tables + loops).
     public GameDataSetManager GameDataSetManager { get; private set; } = null!;
@@ -8385,6 +8388,13 @@ public sealed class AppServices
         // and reloads both managers, instead of either racing the dir.
         NavFolders = new Game.Map.NavFolderManager(Loops, Lairs, Log);
 
+        // Every client on this set shares the Loops folder: pick up what another one
+        // saved, renamed, moved or deleted. The walk runs off the UI thread; the
+        // watcher hands its result back there, where a local change raises the same
+        // events.
+        NavWatcher = new Game.Map.NavFolderWatcher(Loops, Lairs, NavFolders, Log);
+        Tick.HeartbeatElapsed += NavWatcher.OnHeartbeat;
+
         // Game Data → "Manage Sets…" backend. The reload callback re-pulls what
         // a copy/move changed in the active set: the loop/lair caches alone when
         // only the library moved, otherwise the whole set, the way a re-import
@@ -8480,6 +8490,8 @@ public sealed class AppServices
         // overlay.
         LoopRunner = new Game.Map.LoopRunner(RoomTracker, MovementCoordinator,
             PromptScanner, Log, RoomGraph, Recovery, Bfs, Walker, Movement);
+        Loops.NamesInUse = () => new[] { LoopRunner.CurrentLoop?.Name, LoopRunner.StagedLoop?.Name }
+            .OfType<string>().ToArray();
         // A confusion fumble ("You convulse violently!" / "You fumble in
         // confusion!") can bonk several consecutive moves in a row well inside
         // the loop's bounded recovery budget; EnterRecovery reads this to avoid
