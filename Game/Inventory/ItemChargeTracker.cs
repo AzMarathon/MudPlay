@@ -396,17 +396,23 @@ public sealed class ItemChargeTracker : IDisposable
     private string? ResolveHeld(string arg)
     {
         if (arg.Length < 2) return null;
-        string a = arg.ToLowerInvariant();
-        foreach (string held in _held())
-            if (!string.IsNullOrWhiteSpace(held) && held.ToLowerInvariant().Contains(a))
-                return Singular(held);
+        foreach (string held in HeldMatching(_held(), arg)) return held;
         // `use <item> <target>` — fall back to the first word matching a held item.
-        string first = a.Split(' ')[0];
-        if (first.Length >= MinLookArgLength && first != a)
-            foreach (string held in _held())
-                if (!string.IsNullOrWhiteSpace(held) && held.ToLowerInvariant().Contains(first))
-                    return Singular(held);
+        string first = arg.Split(' ')[0];
+        if (first.Length >= MinLookArgLength && first.Length != arg.Length)
+            foreach (string held in HeldMatching(_held(), first)) return held;
         return null;
+    }
+
+    // Every held item whose name contains the text, in the order held, with a stack's
+    // leading count stripped: the one loose match the resolvers of a typed item name
+    // share (this tracker's, and ItemUseStealthRule's, which has to weigh every item
+    // the words could name rather than take the first).
+    public static IEnumerable<string> HeldMatching(IReadOnlyList<string> heldItems, string text)
+    {
+        foreach (string held in heldItems)
+            if (!string.IsNullOrWhiteSpace(held) && held.Contains(text, StringComparison.OrdinalIgnoreCase))
+                yield return Singular(held);
     }
 
     public void Dispose()

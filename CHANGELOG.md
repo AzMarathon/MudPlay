@@ -11,6 +11,11 @@
 - Off with the master switch
 - Bug report lists what was put on this way
 
+## 3.167.17
+
+- An item whose use, eat or drink casts a spell ends the sneak; the next move re-sneaks
+- Sneak-ending commands and a sent direction drop a hide too
+
 ## 3.167.15
 
 - A new attack's `*Combat Off*` is no longer read as a kill (an attack sent at the survivor of a room spell)

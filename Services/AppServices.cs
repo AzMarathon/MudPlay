@@ -2398,11 +2398,17 @@ public sealed class AppServices
     // gate, and hand-typed lines through SendUserInput (report
     // paradigm-20260928-163051: a typed `sea` left the client believing it still
     // sneaked, so sneak keeping held every buff for a quarter of an hour).
-    public void NoteSentForSneak(string command)
-    {
-        if (Game.Stealth.SneakBreakingCommands.EndsSneak(command, shadowRest: CharacterHasShadowRest()))
-            Stealth.NoteSneakBroken($"'{command.Trim()}'");
-    }
+    //
+    // The same commands end a hide, a few excepted. An item command (`use`, `read`,
+    // `eat`, `drink`, `light`) ends either only when the item's spell is cast, which
+    // _itemUseStealth reads off the pack and the game data.
+    //
+    // Each command is reported here once: a typed line by SendUserInput, the client's
+    // own by the send gate.
+    public void NoteSentForSneak(string command) =>
+        Stealth.NoteCommandSent(command, CharacterHasShadowRest, _itemUseStealth);
+
+    private Game.Stealth.ItemUseStealthRule? _itemUseStealth;
 
     // Sniffs a hand-typed PHYSICAL attack verb so Combat treats it as a user override
     // (holds the auto attack until next round). Hooked from SendUserInput.
@@ -5475,6 +5481,10 @@ public sealed class AppServices
         // detects silent loss on room change, and sends `sneak` /
         // `hide` per AutoMode toggles.
         Stealth = new Game.Stealth.StealthManager(Router, PlayerState, Log);
+        _itemUseStealth = new Game.Stealth.ItemUseStealthRule(
+            HeldItemNames,
+            name => Game.Stealth.ItemUseFactsIndex.Lookup(GameData, name),
+            debug: line => Log.Debug(Game.Stealth.StealthManager.LogCategory, line));
         Stealth.SetSneakHoldForHeal(() => Health.IsGateFleeing && CastDirector.IsEmergencyHealDue);
         // A buff cast mid-rest doesn't re-sneak unless ShadowRest keeps it through the rest.
         Stealth.SetReSneakSkipForRest(() => (Health.IsRecoveringRest || Health.RestInFlight) && !Health.UsesShadowRest);
@@ -8078,6 +8088,7 @@ public sealed class AppServices
         // runs before the typed bytes go out, so the `sn` leaves ahead of them). After
         // the gear hook above: equipping ends a sneak, so any swap goes out first.
         OutboundMovement.MoveSent += Stealth.NoteTypedMove;
+        OutboundMovement.DirectionalMoveSent += Stealth.NoteDirectionalMoveSent;
         // Every move re-opens the backstab surprise round, typed moves included.
         OutboundMovement.MoveSent += Combat.NoteMoveSent;
         OutboundMovement.MoveSent += CombatTracker.NoteMoveSent;
