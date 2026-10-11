@@ -96,10 +96,32 @@ public sealed class PartyComebackManagerTests : IDisposable
         }
     }
 
-    private Harness NewHarness()
+    // The strip, plus 1/4 west of 1/1: 1/4's way east into 1/1 needs an item.
+    private const string GatedGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "1/4",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "C",
+            "Light": 0, "Shop": 0, "Lair": "[1-1-1][1]Group(lair): 1/3", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "D",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/1 (Item: 474)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private Harness NewHarness(string graphJson = GraphJson)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), graphJson);
         File.WriteAllText(Path.Combine(_root, "alpha", "Lairs.json"), LairsJson);
 
         MessageRouter router = new();
@@ -168,6 +190,17 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Lair.Mark(new RoomKey(1, 3));
         Assert.True(h.Lair.Start());
         Assert.True(h.Lair.IsActive);
+    }
+
+    // Those players stand in the room as it was last shown.
+    private static void AlsoHere(Harness h, params string[] names)
+    {
+        foreach (string name in names)
+            if (h.Players.Find(name) is null)
+                h.Players.Players.Add(new MudPlay.Models.GameData.PlayerRecord(
+                    GivenName: name, FamilyName: "", Class: "Warrior", Race: "Human", Alignment: "Neutral",
+                    Title: null, Gang: null, Role: null, FirstSeenUtc: DateTime.UtcNow, LastSeenUtc: DateTime.UtcNow));
+        h.Router.Dispatch(Line($"Also here: {string.Join(", ", names)}."));
     }
 
     private static bool Sent(Harness h, string fragment) =>
@@ -1056,6 +1089,1027 @@ public sealed class PartyComebackManagerTests : IDisposable
             m => m.Name.Equals("Mage", StringComparison.OrdinalIgnoreCase));
         Assert.False(h.Lair.IsActive);                    // Tank's pickup still in flight
         Assert.Equal(WalkState.Walking, h.Walker.State);
+    }
+
+    // ----- followers an exit turned away (leader's screen, Paradigm 2026-10-10) -----
+
+    // One step through a gated exit left both followers behind, and with nobody
+    // following the party is gone. Each asks to be fetched from outside any party
+    // of ours; both are, one after the other, and then the engine is put back.
+    [Fact]
+    public void AllFollowersGated_PartyDisbanded_BothAreFetchedInTurn()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));   // where they are left
+        StartLair(h);                               // we've moved on to 1/1
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Healer started to follow you."));
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Router.Dispatch(Line("Healer is no longer following you."));
+        h.Router.Dispatch(Line("Your party has been disbanded."));
+        h.Router.Dispatch(Line("You are not in a party at the present time."));
+
+        Assert.False(h.PartyState.IsInParty);
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Equal(new[] { "Healer" }, h.Comeback.QueuedRecoveries);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
+        Assert.Contains("coming to your location", h.LastReply);
+        h.Engine.DispatchForTests(Telepath("Healer", "@comeback 1/2"));
+        Assert.Contains("fetching Tank first, then you", h.LastReply);
+        Assert.Equal(new[] { "Healer" }, h.Comeback.QueuedRecoveries);
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));   // reached the room they stand in
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        Assert.Equal("Healer", h.Comeback.RecoveringMember);
+        Assert.Empty(h.Comeback.QueuedRecoveries);
+        Assert.False(h.Lair.IsActive);              // not put back until both are along
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Router.Dispatch(Line("Healer started to follow you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+    }
+
+    // With one of two turned away the party stays; the one left asks and is fetched.
+    [Fact]
+    public void OneOfTwoFollowersGated_PartyStays_TheirComebackIsHonoured()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Healer started to follow you."));
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.True(h.PartyState.IsInParty);
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Empty(h.Comeback.QueuedRecoveries);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
+
+        Assert.Contains("coming to your location", h.LastReply);
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
+    }
+
+    // A loop that goes through an exit the member can't pass would leave them there
+    // again every lap: their request is refused and the loop carries on.
+    [Fact]
+    public void LoopThroughAGate_FollowerDroppedThere_IsRefused_AndTheLoopCarriesOn()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        StartLoopAtTheGate(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        StepThroughTheGate(h);
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+        Assert.Single(h.Comeback.LeftAtLoopGates);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+
+        Assert.Contains(PartyComebackManager.LoopGateRefusal, h.LastReply);
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+    }
+
+    // The refusal is a denial: with denials silenced nothing is said, and the
+    // loop still isn't stopped.
+    [Fact]
+    public void LoopThroughAGate_WithDenialsSilenced_RefusesWithoutAReply()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        h.Engine.WarnOnDenial = false;
+        StartLoopAtTheGate(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        StepThroughTheGate(h);
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        int sentBefore = h.Engine.LastSentForTests.Count;
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+
+        Assert.Equal(sentBefore, h.Engine.LastSentForTests.Count);
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+    }
+
+    // Where the game tells a leader nothing, the room the member names does: it is
+    // a room the loop's own circuit just left by an exit that admits only some.
+    [Fact]
+    public void LoopThroughAGate_NoLineFromTheGame_TheNamedRoomIsEnough()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        SeatFollower(h, "Tank");
+        StartLoopAtTheGate(h);
+        StepThroughTheGate(h);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+
+        Assert.Contains(PartyComebackManager.LoopGateRefusal, h.LastReply);
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+    }
+
+    // The same with no room named (the member's map wasn't sure): the latest gated
+    // exit the loop itself has crossed since they were last seen following answers.
+    [Fact]
+    public void LoopThroughAGate_NoLineFromTheGame_ABareRequestIsJudgedTheSameWay()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        SeatFollower(h, "Tank");
+        StartLoopAtTheGate(h);
+        StepThroughTheGate(h);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback"));
+
+        Assert.Contains(PartyComebackManager.LoopGateRefusal, h.LastReply);
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+    }
+
+    // A member seen following after the loop's last crossing wasn't left at it.
+    [Fact]
+    public void LoopThroughAGate_MemberSeenFollowingSinceTheCrossing_IsGoneBackFor()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        StartLoopAtTheGate(h);
+        StepThroughTheGate(h);
+        h.Comeback.NowProvider = () => DateTimeOffset.UtcNow.AddSeconds(5);
+        h.Router.Dispatch(Line("Tank started to follow you."));   // with us, this side of the gate
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback"));
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+    }
+
+    // The gate was crossed before the loop began (a train trip's walk, the walk to
+    // the circuit, a step by hand): it isn't the loop's, so the loop won't leave
+    // them there again and the member is gone back for.
+    [Fact]
+    public void GateCrossedBeforeTheLoop_NotOnItsCircuit_MemberIsGoneBackFor()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        h.Tracker.SetLocated(new RoomKey(1, 1));   // through the item exit, not on any loop
+        h.Party.ExpectComebackFrom("Tank");
+        Assert.True(h.Loop.Start(new Loop("circuit", [new RoomKey(1, 1), new RoomKey(1, 3)])));
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+
+        Assert.Contains("coming to your location", h.LastReply);
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+    }
+
+    // Held, or too heavy, on the very step that takes the loop through a gated
+    // exit: the exit didn't turn them away, so they are gone back for.
+    [Fact]
+    public void LoopThroughAGate_MemberWhoSignalledAHold_IsGoneBackFor()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        h.Comeback.MemberSignalledHold = name => name == "Tank";
+        StartLoopAtTheGate(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        StepThroughTheGate(h);
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Empty(h.Comeback.LeftAtLoopGates);
+    }
+
+    // What the leader holds of the member decides where it can: one the exit is
+    // known to admit was stopped by something else; one it is known to turn away,
+    // or can't be judged, counts as turned away.
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(null, false)]
+    public void LoopThroughAGate_WhatIsKnownOfTheMemberDecides(bool? canPass, bool goneBackFor)
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        h.Comeback.MemberCanPass = (_, exit) => exit.AdmitsOnlySome ? canPass : true;
+        StartLoopAtTheGate(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        StepThroughTheGate(h);
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Equal(goneBackFor ? "Tank" : null, h.Comeback.RecoveringMember);
+    }
+
+    // A circuit that begins in 1/4 and leaves it east by the exit that needs an item.
+    private static void StartLoopAtTheGate(Harness h)
+    {
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Loop.Start(new Loop("circuit", [new RoomKey(1, 4), new RoomKey(1, 3)])));
+    }
+
+    private static void StepThroughTheGate(Harness h)
+    {
+        h.Tracker.NoteMoveSent(Direction.E);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+    }
+
+    // The same exit on a walk-to: the leader goes back, re-invites, and waits for
+    // the follow.
+    [Fact]
+    public void WalkToThroughAGate_FollowerDroppedThere_IsGoneBackFor_AndReInvited()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        List<string> partyWire = new();
+        h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+        Assert.Contains("coming to your location", h.LastReply);
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.Contains("invite Tank", partyWire);
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);   // waiting for the follow
+
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    // A follower who rejoins before their turn is nobody's to fetch.
+    [Fact]
+    public void QueuedFollower_BackBeforeTheirTurn_IsNotFetched()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Healer started to follow you."));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Router.Dispatch(Line("Healer is no longer following you."));
+
+        h.Router.Dispatch(Line("Healer started to follow you."));
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Empty(h.Comeback.QueuedRecoveries);
+    }
+
+    // A member waiting their turn who calls it off is not fetched.
+    [Fact]
+    public void QueuedFollower_WhoSendsForget_IsTakenOffTheQueue()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Engine.ForgetEligibility = h.Party.WasRecentlyPartied;   // as the app wires it
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Healer started to follow you."));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Router.Dispatch(Line("Healer is no longer following you."));
+        Assert.Equal(new[] { "Healer" }, h.Comeback.QueuedRecoveries);
+
+        h.Engine.DispatchForTests(Telepath("Healer", "@forget"));
+
+        Assert.Empty(h.Comeback.QueuedRecoveries);
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+    }
+
+    // Probe3_G1. What we hold of the member says the exit lets them through, and
+    // the game keeps turning them away (a stale level, a purse the toll emptied).
+    // Fetched once and dropped at the same exit again, they are gated there for
+    // this loop run: refused from then on, however long after.
+    [Fact]
+    public void LoopThroughAGate_FetchedOnce_DroppedThereAgain_IsRefusedFromThenOn()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        h.Comeback.MemberCanPass = (_, _) => true;
+        StartLoopAtTheGate(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        now += TimeSpan.FromSeconds(1);
+        StepThroughTheGate(h);
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);       // lap one: gone back for
+        AlsoHere(h, "Tank");
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+
+        now += TimeSpan.FromSeconds(1);
+        StepThroughTheGate(h);
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);                // lap two: not again
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+        Assert.Equal(new[] { "Tank at 1/4" }, h.Comeback.LeftAtLoopGates);
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+        Assert.Contains(PartyComebackManager.LoopGateRefusal, h.LastReply);
+
+        now += h.Comeback.ComebackWindow + TimeSpan.FromMinutes(5);
+        int sent = h.Engine.LastSentForTests.Count;
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+        Assert.Equal(sent + 1, h.Engine.LastSentForTests.Count);
+        Assert.Contains(PartyComebackManager.LoopGateRefusal, h.LastReply);
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    // The loop the user stops and starts again is a new run: the member is judged
+    // afresh on it.
+    [Fact]
+    public void LoopRestartedByTheUser_AMemberProvenGated_IsJudgedAfresh()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        h.Comeback.MemberCanPass = (_, _) => true;
+        StartLoopAtTheGate(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        now += TimeSpan.FromSeconds(1);
+        StepThroughTheGate(h);
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        AlsoHere(h, "Tank");
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        now += TimeSpan.FromSeconds(1);
+        StepThroughTheGate(h);
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        Assert.Null(h.Comeback.RecoveringMember);
+
+        h.Loop.Stop();
+        StartLoopAtTheGate(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        now += TimeSpan.FromSeconds(1);
+        StepThroughTheGate(h);
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Empty(h.Comeback.LeftAtLoopGates);
+    }
+
+    // The wait a member has out with us says why they were left, and is let go
+    // when they are. It is read first by the same handler that lets it go, so the
+    // reading can't depend on which listener of the game's line runs before which.
+    [Fact]
+    public void LeftBehind_TheMembersWaitIsReadBeforeItIsLetGo()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        HashSet<string> waiting = new() { "Tank" };
+        h.Comeback.MemberSignalledHold = waiting.Contains;
+        h.Comeback.ReleaseMemberWait = name => waiting.Remove(name);
+        StartLoopAtTheGate(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        StepThroughTheGate(h);
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);   // the hold, not the exit
+        Assert.Empty(waiting);
+    }
+
+    // An @ok a moment before being left behind is the premature-@ok case: they said
+    // they were free and didn't move, so it reads as a hold.
+    [Fact]
+    public void LoopThroughAGate_AnOkAMomentBefore_ReadsAsAHold()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        h.Comeback.OkedWithin = (name, window) => name == "Tank" && window == TimeSpan.FromSeconds(5);
+        StartLoopAtTheGate(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        StepThroughTheGate(h);
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+    }
+
+    // ----- a walk-to through an exit that turns a member away -------------------
+
+    // The strip with two gated exits on the way from 1/4 to 1/3: east out of 1/4
+    // and north out of 1/1.
+    private const string TwoGatesGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Item: 475)", "S": "0", "E": "0", "W": "1/4",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "C",
+            "Light": 0, "Shop": 0, "Lair": "[1-1-1][1]Group(lair): 1/3", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "D",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/1 (Item: 474)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // A walk from 1/4 to 1/3 whose first step, east, drops Tank; the leader goes
+    // back, re-invites, and the walk is under way again from 1/4.
+    private static void WalkThroughTheGate_PickUpOnce(Harness h, Action tick)
+    {
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        tick();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        AlsoHere(h, "Tank");
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+        Assert.NotEqual(WalkState.Idle, h.Walker.State);
+    }
+
+    // The walk went back once. Turned away at the same exit again, it would be
+    // every time: the walk ends there with a notice naming the member and the
+    // exit, and no second pickup is started (user, 2026-10-10: "option A").
+    [Fact]
+    public void WalkToThroughAGate_DroppedThereAgainAfterThePickup_EndsTheWalk_WithANotice()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        List<string> notices = new();
+        h.Comeback.Notice = notices.Add;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        WalkThroughTheGate_PickUpOnce(h, () => now += TimeSpan.FromSeconds(1));
+
+        now += TimeSpan.FromSeconds(1);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        string notice = Assert.Single(notices);
+        Assert.Contains("Tank", notice);
+        Assert.Contains("east out of 1/4", notice);
+
+        // Their request afterwards is answered by where that leaves the leader.
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+        Assert.Contains("I can't I'm idle", h.LastReply);
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    // Another gated exit further on is another matter: it gets its own one pickup.
+    [Fact]
+    public void WalkToThroughAGate_ADifferentExitLater_GetsItsOwnPickup()
+    {
+        using Harness h = NewHarness(TwoGatesGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        List<string> notices = new();
+        h.Comeback.Notice = notices.Add;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        WalkThroughTheGate_PickUpOnce(h, () => now += TimeSpan.FromSeconds(1));
+
+        now += TimeSpan.FromSeconds(1);
+        h.Tracker.SetLocated(new RoomKey(1, 1));               // through the first exit, Tank with us
+        now += TimeSpan.FromSeconds(1);
+        h.Tracker.SetLocated(new RoomKey(1, 2));               // through the second
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Empty(notices);
+    }
+
+    // Stock tells a leader nothing of the drop, so the member's request is the
+    // first it hears of the second one: the walk ends, and the answer is the one
+    // an idle leader gives.
+    [Fact]
+    public void WalkToThroughAGate_NoLineFromTheGame_TheSecondRequestEndsTheWalk()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        List<string> notices = new();
+        h.Comeback.Notice = notices.Add;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        SeatFollower(h, "Tank");
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        now += TimeSpan.FromSeconds(1);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        now += TimeSpan.FromSeconds(1);
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        now += TimeSpan.FromSeconds(1);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        Assert.Null(h.Comeback.RecoveringMember);
+
+        now += TimeSpan.FromSeconds(1);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        now += TimeSpan.FromSeconds(1);
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+
+        Assert.Single(notices);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Contains("I can't I'm idle", h.LastReply);
+    }
+
+    // ----- Auto-Lair and an exit that turns a member away -----------------------
+
+    // Auto-Lair doesn't break off for them (user, 2026-10-10: "auto-lair will just
+    // pick them up again on its next pass"). It carries on, answers their request
+    // once, and invites them when a pass next finds them in a room it enters.
+    [Fact]
+    public void AutoLairThroughAGate_CarriesOn_AnswersOnce_AndInvitesOnSight()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        List<string> partyWire = new();
+        h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        h.Lair.Mark(new RoomKey(1, 1));
+        h.Lair.Mark(new RoomKey(1, 3));
+        Assert.True(h.Lair.Start());
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        StepThroughTheGate(h);
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+        Assert.Equal(new[] { "Tank" }, h.Comeback.InviteOnSight);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+        Assert.Contains(PartyComebackManager.LairGateReply, h.LastReply);
+        int sent = h.Engine.LastSentForTests.Count;
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+        Assert.Equal(sent, h.Engine.LastSentForTests.Count);     // said once
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+        Assert.DoesNotContain("invite Tank", partyWire);
+
+        AlsoHere(h, "Tank");                                     // a later pass finds them
+        Assert.Single(partyWire, w => w == "invite Tank");
+        AlsoHere(h, "Tank");                                     // the room shown again
+        Assert.Single(partyWire, w => w == "invite Tank");
+
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        Assert.Empty(h.Comeback.InviteOnSight);
+    }
+
+    // Held on that same step, the exit isn't why: gone back for as before.
+    [Fact]
+    public void AutoLairThroughAGate_AMemberWhoSignalledAHold_IsGoneBackFor()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        h.Comeback.MemberSignalledHold = name => name == "Tank";
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        h.Lair.Mark(new RoomKey(1, 1));
+        h.Lair.Mark(new RoomKey(1, 3));
+        Assert.True(h.Lair.Start());
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        StepThroughTheGate(h);
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Empty(h.Comeback.InviteOnSight);
+    }
+
+    // ----- a party train trip -------------------------------------------------
+
+    // The trip's walk goes through an exit that turns a follower away. The game
+    // tells the leader; the trip's walk is not stopped, and nobody is gone back for.
+    [Fact]
+    public void TrainTrip_FollowerDroppedOnTheWay_DoesNotStopTheTripsWalk()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        bool tripOn = true;
+        h.Comeback.TrainTripRunning = () => tripOn;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));     // the trip's walk
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));             // through the item exit
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+        Assert.Equal(new[] { "Tank at 1/4" }, h.Comeback.LeftOnTrainTrip);
+    }
+
+    // A member on a client that holds nothing back asks in the middle of the trip:
+    // told once that they will be fetched after training, and kept, with the room
+    // they name in place of the one we had.
+    [Fact]
+    public void TrainTrip_ComebackDuringTheTrip_IsAnsweredOnce_AndKept()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        h.Comeback.TrainTripRunning = () => true;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
+        Assert.Contains(PartyComebackManager.TrainTripReply, h.LastReply);
+        int replies = h.Engine.LastSentForTests.Count;
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
+
+        Assert.Equal(replies, h.Engine.LastSentForTests.Count);
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(new[] { "Tank at 1/2" }, h.Comeback.LeftOnTrainTrip);
+    }
+
+    // The trip is over and its engine is back: everyone it left is fetched, one
+    // after the other, from the room each was left in.
+    [Fact]
+    public void TrainTrip_Over_EveryoneItLeftIsFetchedInTurn()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        List<string> partyWire = new();
+        h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        bool tripOn = true;
+        h.Comeback.TrainTripRunning = () => tripOn;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Healer started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Router.Dispatch(Line("Healer is no longer following you."));
+        h.Walker.Stop("the trip's walk is done");
+        tripOn = false;
+        StartLair(h);                                        // the engine the trip had paused
+
+        h.Comeback.TrainTripEnded(byItself: true, setOut: ["Tank", "Healer"]);
+
+        Assert.Empty(h.Comeback.LeftOnTrainTrip);
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Equal(new[] { "Healer" }, h.Comeback.QueuedRecoveries);
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+
+        AlsoHere(h, "Tank", "Healer");                       // both stand where the trip left them
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.Contains("invite Tank", partyWire);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        Assert.Equal("Healer", h.Comeback.RecoveringMember);
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        h.Router.Dispatch(Line("Healer started to follow you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+    }
+
+    // The trip began with no walk or loop running, so there is none to go back to:
+    // the fetch runs all the same. The trip was ours, so the fetch is.
+    [Fact]
+    public void TrainTrip_Over_WithNoEngineToReturnTo_StillFetches()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        bool tripOn = true;
+        h.Comeback.TrainTripRunning = () => tripOn;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 1)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        tripOn = false;
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+
+        h.Comeback.TrainTripEnded(byItself: true, setOut: ["Tank"]);
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+    }
+
+    // The leader's own train run with the party in tow keeps no roll: nobody is
+    // gone back for in the middle of it, and whom the game said it dropped is
+    // fetched when the run is over.
+    [Fact]
+    public void OwnTrainRun_WithNoRoll_KeepsWhomItLeft_AndFetchesAtItsEnd()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        bool runOn = true;
+        h.Comeback.TrainTripRunning = () => runOn;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));       // the run's walk to its trainer
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        h.Walker.Stop("the run's walk is done");
+        runOn = false;
+
+        h.Comeback.TrainTripEnded(byItself: true, setOut: []);
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+    }
+
+    // Probe3_T4. The user ended the trip (a second Stop, a run started over it).
+    // The player has taken over, so nothing walks back on its own: who was left
+    // is named once, and their own request is still a member's, answered by what
+    // the leader is doing when it comes.
+    [Fact]
+    public void TrainTrip_TakenOver_NobodyIsFetched_TheyAreNamedOnce_AndStayMembers()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        List<string> notices = new();
+        h.Comeback.Notice = notices.Add;
+        bool tripOn = true;
+        h.Comeback.TrainTripRunning = () => tripOn;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Walker.Stop("user stop");
+        tripOn = false;
+
+        h.Comeback.TrainTripEnded(byItself: false, setOut: ["Tank", "Scout"]);
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        string notice = Assert.Single(notices);
+        Assert.Contains("Tank at 1/4", notice);
+        Assert.Contains("Scout (room not known)", notice);
+        Assert.True(h.Party.WasRecentlyPartied("Tank"));
+        Assert.True(h.Party.WasRecentlyPartied("Scout"));
+
+        // Their request is answered by the leader's state: idle here.
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+        Assert.Contains("I can't I'm idle", h.LastReply);
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    // Probe3_T5. The trip ended further off than the return distance. The fetch is
+    // the trip's own and isn't bound by it; a request out of the blue still is.
+    [Fact]
+    public void TrainTrip_Over_TheFetchIsNotBoundByTheReturnDistance()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        List<string> wire = new();
+        h.Comeback.SetWireSender(b => wire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        h.Comeback.ReturnDistanceRooms = 1;
+        bool tripOn = true;
+        h.Comeback.TrainTripRunning = () => tripOn;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Tracker.SetLocated(new RoomKey(1, 3));               // three rooms from 1/4
+        tripOn = false;
+
+        h.Comeback.TrainTripEnded(byItself: true, setOut: ["Tank"]);
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+        Assert.DoesNotContain(wire, w => w.Contains("@forget"));
+    }
+
+    [Fact]
+    public void OrdinaryComeback_IsStillBoundByTheReturnDistance()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        List<string> wire = new();
+        h.Comeback.SetWireSender(b => wire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        h.Comeback.ReturnDistanceRooms = 1;
+        SeatFollower(h, "Tank");
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 1)));
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Contains(wire, w => w == "/Tank @forget");
+    }
+
+    // Probe3_T3. Stock tells a leader nothing of a follower it drops, so the trip
+    // ends with nobody on its list. The roll knows who set out: the request that
+    // follows `trip off` is the trip's fetch, though the leader has no engine to
+    // go back to and the member is further off than the return distance.
+    [Fact]
+    public void TrainTrip_Over_AMemberTheGameNeverReported_IsFetchedOnTheirRequest_EvenIdle()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        h.Comeback.ReturnDistanceRooms = 1;
+        bool tripOn = true;
+        h.Comeback.TrainTripRunning = () => tripOn;
+        SeatFollower(h, "Tank");                               // still on our list: no drop line came
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        tripOn = false;
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+
+        h.Comeback.TrainTripEnded(byItself: true, setOut: ["Tank"]);
+        Assert.Null(h.Comeback.RecoveringMember);              // nowhere to go yet
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+
+        Assert.Contains("coming to your location", h.LastReply);
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+    }
+
+    // The same request once the window a @comeback is taken in has passed is an
+    // ordinary one again.
+    [Fact]
+    public void TrainTrip_Over_ARequestLongAfter_IsAnOrdinaryOne()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        SeatFollower(h, "Tank");
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        h.Comeback.TrainTripEnded(byItself: true, setOut: ["Tank"]);
+        now += h.Comeback.ComebackWindow + TimeSpan.FromSeconds(1);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
+
+        Assert.Contains("I can't I'm idle", h.LastReply);
+    }
+
+    // The room the trip left them in was ours to guess (the one our step left when
+    // the game dropped them). Empty on arrival, nobody is invited into it and the
+    // engine isn't held for the follow wait: the member says where they are.
+    [Fact]
+    public void TrainTrip_Fetch_ARoomWeGuessed_IsCheckedOnArrival()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        List<string> partyWire = new();
+        h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        bool tripOn = true;
+        h.Comeback.TrainTripRunning = () => tripOn;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Walker.Stop("the trip's walk is done");
+        tripOn = false;
+        StartLair(h);
+        h.Comeback.TrainTripEnded(byItself: true, setOut: ["Tank"]);
+
+        h.Tracker.SetLocated(new RoomKey(1, 4));               // nobody here
+
+        Assert.DoesNotContain("invite Tank", partyWire);
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.False(h.Comeback.FollowTimerRunning);
+        Assert.True(h.Lair.IsActive);
+        Assert.Equal(new[] { "Tank" }, h.Comeback.AwaitedAfterTrainTrip);
+
+        // They say where they are: fetched as the trip's own.
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
+    }
+
+    // On the way to the room we guessed, the member names another: go there.
+    [Fact]
+    public void TrainTrip_Fetch_TheMemberNamesAnotherRoomOnTheWay_WeGoThere()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        List<string> partyWire = new();
+        h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        bool tripOn = true;
+        h.Comeback.TrainTripRunning = () => tripOn;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        tripOn = false;
+        h.Comeback.TrainTripEnded(byItself: true, setOut: ["Tank"]);
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/1"));
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+
+        // Named by them, so no looking round on arrival: invited at once.
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.Contains("invite Tank", partyWire);
+    }
+
+    // The trip ended with the master switch off. Whom it left is kept, and fetched
+    // when the switch is back on, by the rule a @comeback kept for the switch is
+    // replayed by: only inside the window a @comeback is taken in.
+    [Theory]
+    [InlineData(30, true)]
+    [InlineData(600, false)]
+    public void TrainTrip_OverWithTheMasterSwitchOff_FetchesWhenItIsBackOn_IfStillFresh(int secondsOff, bool fetched)
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        bool tripOn = true, masterOff = false;
+        h.Comeback.TrainTripRunning = () => tripOn;
+        h.Comeback.MasterSwitchOff = () => masterOff;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 1)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        tripOn = false;
+        masterOff = true;
+
+        h.Comeback.TrainTripEnded(byItself: true, setOut: ["Tank"]);
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Equal(new[] { "Tank at 1/4" }, h.Comeback.TripFetchOwed);
+
+        now += TimeSpan.FromSeconds(secondsOff);
+        masterOff = false;
+        h.Comeback.SettleAfterMasterSwitch();
+
+        Assert.Equal(fetched ? "Tank" : null, h.Comeback.RecoveringMember);
+        Assert.Empty(h.Comeback.TripFetchOwed);
+    }
+
+    // Someone the trip left who is following again by its end is nobody's to fetch.
+    [Fact]
+    public void TrainTrip_Over_AMemberBackWithUs_IsNotFetched()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        bool tripOn = true;
+        h.Comeback.TrainTripRunning = () => tripOn;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 1)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        tripOn = false;
+
+        h.Comeback.TrainTripEnded(byItself: true, setOut: ["Tank"]);
+
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    // "If leading, wait only" at 0 means no limit. A re-invited follower who never
+    // answers must still not hold the stopped engine for good.
+    [Fact]
+    public void FollowWaitSetToNoLimit_StillEndsForAFollowerWhoNeverAnswers()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.FollowWaitWindow = TimeSpan.Zero;
+        SeatFollower(h, "Tank");
+        StartLair(h);
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/1"));
+        h.Tracker.SetLocated(new RoomKey(1, 1));   // there, and re-invited
+
+        Assert.True(h.Comeback.FollowTimerRunning);
+        h.Comeback.FireFollowTimeoutForTests();
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
     }
 
     // ----- registration shape ----------------------------------------

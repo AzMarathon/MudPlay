@@ -236,6 +236,19 @@ public sealed class PartyHandOverMemory
         return true;
     }
 
+    // How many copies of the item this member is remembered to hold, from a
+    // hand-over or a count they answered; null when nothing is remembered of it.
+    public int? CopiesRememberedFor(string member, int itemId)
+    {
+        lock (_gate)
+        {
+            return _byMember.TryGetValue(member, out Dictionary<int, Remembered>? items)
+                && items.TryGetValue(itemId, out Remembered? known)
+                ? known.Copies
+                : null;
+        }
+    }
+
     // The members taken to hold this item on the strength of a hand-over alone:
     // they never answered a count of it. A gate they were refused at is not
     // something the leader is always told about, so they are the ones worth
