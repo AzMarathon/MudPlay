@@ -68,8 +68,11 @@ public sealed class GameDataCache
     private readonly Dictionary<string, long> _lastRead = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string Set, string Table), long> _prewarmedAt = new();
 
+    // A table file as the cache found it when it read it: length and last-write time.
+    internal readonly record struct TableFileStamp(long Length, DateTime LastWriteUtc);
+
     // What one read of a table file came to: the table, or why there is none.
-    private readonly record struct ReadOutcome(GameTable? Table, Exception? Failure, long Kilobytes);
+    private readonly record struct ReadOutcome(GameTable? Table, Exception? Failure, long Kilobytes, TableFileStamp Stamp);
 
     // A read of a table file that is running, or done and not yet put in its place.
     // A lookup that arrives meanwhile waits for it (Lazy lets one thread run the read
@@ -104,6 +107,11 @@ public sealed class GameDataCache
         public int GetHashCode((string Set, string Table) key) =>
             HashCode.Combine(key.Set, StringComparer.OrdinalIgnoreCase.GetHashCode(key.Table));
     }
+
+    // The file each table of this load was last read from. Kept when the idle sweep
+    // drops the table, replaced when the table is read again, and cleared with the
+    // tables on a switch or reload. Guarded by the _tables lock.
+    private readonly Dictionary<string, TableFileStamp> _stamps = new(StringComparer.OrdinalIgnoreCase);
 
     // Raised on the reading thread just before a table file is opened, with the
     // table's name. A test seam: counts the reads and holds one open.
@@ -376,6 +384,7 @@ public sealed class GameDataCache
             {
                 _prewarmedAt.Remove((ActiveSet, tableName));
                 _tables[tableName] = warmed.Table!;
+                _stamps[tableName] = warmed.Stamp;
                 _lastRead[tableName] = Environment.TickCount64;
                 Log?.Log(LogSeverity.Debug, "GameData",
                     $"'{tableName}' claimed from background prewarm for '{ActiveSet}'.");
@@ -450,6 +459,7 @@ public sealed class GameDataCache
             {
                 result = outcome.Table;
                 _tables[tableName] = result;
+                _stamps[tableName] = outcome.Stamp;
                 _lastRead[tableName] = Environment.TickCount64;
                 Log?.Log(LogSeverity.Debug, "GameData", shared && read.Prewarm
                     ? $"'{tableName}' taken from the prewarm in flight for '{set}'."
@@ -492,12 +502,28 @@ public sealed class GameDataCache
             TableReadStarting?.Invoke(tableName);
             using FileStream file = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
                 bufferSize: 0, FileOptions.SequentialScan);
-            return new ReadOutcome(GameTableReader.Read(file), null, file.Length / 1024);
+            // Of the open file, so they describe the bytes read even if the file is
+            // replaced on disk meanwhile.
+            TableFileStamp stamp = new(file.Length, File.GetLastWriteTimeUtc(file.SafeFileHandle));
+            return new ReadOutcome(GameTableReader.Read(file), null, file.Length / 1024, stamp);
         }
         catch (Exception ex)
         {
-            return new ReadOutcome(null, ex, 0);
+            return new ReadOutcome(null, ex, 0, default);
         }
+    }
+
+    // The file tableName was last read from in this load of the active set: its
+    // length and last-write time, taken from the open file as it was read. Null for
+    // a table not read since the set's tables were last dropped for re-reading (a
+    // switch, a reload, a re-import), and for one whose file is missing or did not
+    // parse. The idle sweep dropping the table does not forget it; reading the table
+    // again replaces it with the file as that read found it.
+    internal TableFileStamp? FileStampAsRead(string tableName)
+    {
+        ArgumentNullException.ThrowIfNull(tableName);
+        lock (_tables)
+            return _stamps.TryGetValue(tableName, out TableFileStamp stamp) ? stamp : null;
     }
 
     // Parse tableNames for setName on background threads, ahead of setName actually
@@ -709,6 +735,7 @@ public sealed class GameDataCache
             _tables.Clear();
             _failedTables.Clear();
             _lastRead.Clear();
+            _stamps.Clear();
         }
     }
 

@@ -305,4 +305,69 @@ public sealed class GameDataCacheSharedReadTests : IDisposable
         Assert.Equal("troll", FirstName(cache.GetTable("Monsters")));
         Assert.Equal(2, gate.Reads);
     }
+
+    [Fact]
+    public void FileStampAsRead_IsTheFileAsTheCacheReadIt()
+    {
+        string path = Seed("alpha", "Monsters", Monsters("orc"));
+        DateTime written = new(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(path, written);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+
+        // Nothing is known of a table not read in this load, or with no file.
+        Assert.Null(cache.FileStampAsRead("Monsters"));
+        Assert.Null(cache.FileStampAsRead("Items"));
+        cache.GetTable("Items");
+        Assert.Null(cache.FileStampAsRead("Items"));
+
+        cache.GetTable("Monsters");
+        GameDataCache.TableFileStamp read = new(new FileInfo(path).Length, written);
+        Assert.Equal(read, cache.FileStampAsRead("Monsters"));
+        Assert.Equal(read, cache.FileStampAsRead("monsters"));
+
+        // The file changing on disk changes nothing: the cache has not read it again.
+        File.WriteAllText(path, Monsters("a much longer name"));
+        DateTime rewritten = new(2026, 4, 5, 6, 7, 8, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(path, rewritten);
+        Assert.Equal(read, cache.FileStampAsRead("Monsters"));
+
+        // Dropped by the idle sweep: still the file the dropped table came from.
+        cache.EvictIdle(TimeSpan.Zero);
+        Assert.False(cache.IsTableLoaded("Monsters"));
+        Assert.Equal(read, cache.FileStampAsRead("Monsters"));
+
+        // Read again after the drop: the file as this read found it.
+        cache.GetTable("Monsters");
+        GameDataCache.TableFileStamp reread = new(new FileInfo(path).Length, rewritten);
+        Assert.NotEqual(read, reread);
+        Assert.Equal(reread, cache.FileStampAsRead("Monsters"));
+
+        // A new load of the set starts with nothing known.
+        cache.ReloadActiveSet();
+        Assert.Null(cache.FileStampAsRead("Monsters"));
+        cache.GetTable("Monsters");
+        Assert.Equal(reread, cache.FileStampAsRead("Monsters"));
+        cache.SwitchSet(null);
+        Assert.Null(cache.FileStampAsRead("Monsters"));
+    }
+
+    // A table claimed from a prewarm carries the stamp of the file the prewarm read,
+    // not of the file on disk when it was claimed.
+    [Fact]
+    public async Task FileStampAsRead_OfAPrewarmedTable_IsTheFileThePrewarmRead()
+    {
+        string path = Seed("alpha", "Monsters", Monsters("orc"));
+        DateTime written = new(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(path, written);
+        GameDataCache.TableFileStamp prewarmed = new(new FileInfo(path).Length, written);
+        GameDataCache cache = new(_root);
+
+        await cache.PrewarmAsync("alpha", new[] { "Monsters" });
+        File.WriteAllText(path, Monsters("a much longer name"));
+        cache.SwitchSet("alpha");
+
+        Assert.Equal("orc", FirstName(cache.GetTable("Monsters")));
+        Assert.Equal(prewarmed, cache.FileStampAsRead("Monsters"));
+    }
 }
