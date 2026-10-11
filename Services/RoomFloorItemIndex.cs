@@ -82,8 +82,13 @@ public sealed class RoomFloorItemIndex
             // have published while we waited, and the set may have been loaded again.
             GameDataCache.Load load = _cache.ActiveLoad;
             if (_snapshot is { } published && published.Load == load) return published;
+            // The cache's load moves before the textblock store reloads. A build that
+            // begins in between reads this load's rooms and the last load's
+            // textblocks: it answers the caller and is not kept, so the next ask
+            // builds again from the store once it is this load's.
+            bool textblocksAreThisLoads = _tb.LoadedFor == load;
             Snapshot built = new(load, Build(load.Set));
-            _snapshot = built;
+            if (textblocksAreThisLoads) _snapshot = built;
             return built;
         }
     }

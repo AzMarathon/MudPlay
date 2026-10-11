@@ -232,6 +232,96 @@ public sealed class IndexesAfterReimportTests : IDisposable
         Assert.Equal("Alpha Guard", Assert.Single(sources.GiversOf(25)).Name);
     }
 
+    // The cache's load moves before the handlers that reload the textblock store run.
+    // An index asked in that moment (here by a handler ahead of the store's; in the
+    // app by a warm-up of the last load that only now gets to run) builds from the
+    // new load's tables and the LAST load's textblocks. It may answer with that, but
+    // must not keep it as the new load's.
+    [Fact]
+    public void ItemSourceIndex_AskedBeforeTheTextblockStoreReloads_DoesNotKeepWhatItBuilt()
+    {
+        Write("Items", """[ { "Number": 25, "Name": "Bloodstone Orb" }, { "Number": 26, "Name": "Gate Key" } ]""");
+        Write("TBInfo", """[ { "Number": 5, "Action": "get orb:giveitem 25", "Called From": "Room 3/606" } ]""");
+        GameDataCache cache = Cache();
+        TBInfoStore tb = new(cache);
+        tb.OnActiveSetChanged(Set);
+        ItemSourceIndex sources = new(cache, tb);
+        int asked = 0;
+        cache.ActiveSetChanged += _ =>
+        {
+            asked++;
+            sources.GiversOf(25);
+        };
+        cache.ActiveSetChanged += tb.OnActiveSetChanged;
+        Assert.Single(sources.GiversOf(25));
+
+        Write("TBInfo", """[ { "Number": 5, "Action": "get key:giveitem 26", "Called From": "Room 4/707" } ]""");
+        cache.ReloadActiveSet();
+
+        Assert.Equal(1, asked);
+        Assert.Empty(sources.GiversOf(25));
+        ItemGiver after = Assert.Single(sources.GiversOf(26));
+        Assert.Equal((4, 707), (after.Map, after.Room));
+    }
+
+    [Fact]
+    public void RoomFloorItemIndex_AskedBeforeTheTextblockStoreReloads_DoesNotKeepWhatItBuilt()
+    {
+        Write("Rooms", "[]");
+        Write("TBInfo", """[ { "Number": 5, "Action": "make emblem:roomitem 474 1", "Called From": "Room 7/1008" } ]""");
+        GameDataCache cache = Cache();
+        TBInfoStore tb = new(cache);
+        tb.OnActiveSetChanged(Set);
+        RoomFloorItemIndex floor = new(cache, tb);
+        int asked = 0;
+        cache.ActiveSetChanged += _ =>
+        {
+            asked++;
+            floor.FloorItemsOf(new RoomKey(7, 1008));
+        };
+        cache.ActiveSetChanged += tb.OnActiveSetChanged;
+        Assert.Equal(new[] { 474 }, floor.FloorItemsOf(new RoomKey(7, 1008)));
+
+        Write("TBInfo", """[ { "Number": 5, "Action": "make relic:roomitem 812 1", "Called From": "Room 3/500" } ]""");
+        cache.ReloadActiveSet();
+
+        Assert.Equal(1, asked);
+        Assert.Empty(floor.FloorItemsOf(new RoomKey(7, 1008)));
+        Assert.Equal(new[] { 812 }, floor.FloorItemsOf(new RoomKey(3, 500)));
+    }
+
+    // The same moment met by a real switch to another set.
+    [Fact]
+    public void IndexesAskedMidSwitch_DoNotKeepTheLastSetsTextblocksForTheNewSet()
+    {
+        Write("Items", """[ { "Number": 25, "Name": "Bloodstone Orb" } ]""");
+        Write("Rooms", "[]");
+        Write("TBInfo", """[ { "Number": 5, "Action": "get orb:giveitem 25\nmake emblem:roomitem 474 1", "Called From": "Room 3/606" } ]""");
+        string beta = Path.Combine(_root, "beta");
+        Directory.CreateDirectory(beta);
+        File.WriteAllText(Path.Combine(beta, "Items.json"), """[ { "Number": 25, "Name": "Bloodstone Orb" } ]""");
+        File.WriteAllText(Path.Combine(beta, "Rooms.json"), "[]");
+        File.WriteAllText(Path.Combine(beta, "TBInfo.json"), "[]");
+        GameDataCache cache = Cache();
+        TBInfoStore tb = new(cache);
+        tb.OnActiveSetChanged(Set);
+        ItemSourceIndex sources = new(cache, tb);
+        RoomFloorItemIndex floor = new(cache, tb);
+        cache.ActiveSetChanged += _ =>
+        {
+            sources.GiversOf(25);
+            floor.FloorItemsOf(new RoomKey(3, 606));
+        };
+        cache.ActiveSetChanged += tb.OnActiveSetChanged;
+        Assert.Single(sources.GiversOf(25));
+        Assert.Equal(new[] { 474 }, floor.FloorItemsOf(new RoomKey(3, 606)));
+
+        cache.SwitchSet("beta");
+
+        Assert.Empty(sources.GiversOf(25));
+        Assert.Empty(floor.FloorItemsOf(new RoomKey(3, 606)));
+    }
+
     // Reload drops the tables without raising ActiveSetChanged; the indexes that
     // notice by themselves must notice that too.
     [Fact]

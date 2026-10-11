@@ -1557,9 +1557,15 @@ public sealed class AppServices
     // restocks, with the rooms that sell it and their price at the character's Charm.
     public IReadOnlyList<Game.Train.ShopSpellOffer> ShopSpellOffers()
     {
-        (GameDataCache.Load, int, int, int, int) key = (GameData.ActiveLoad, Spellbook.ClassNumber, Spellbook.CharAlign,
+        GameDataCache.Load load = GameData.ActiveLoad;
+        (GameDataCache.Load, int, int, int, int) key = (load, Spellbook.ClassNumber, Spellbook.CharAlign,
             PlayerStats.Charm, RoomGraph.Rooms.Count());
         if (key == _shopSpellOffersKey) return _shopSpellOffers;
+        // The cache's load moves before the room graph and the shop stock are
+        // rebuilt for it (the spell book is reseeded ahead of both). Asked in
+        // between, this answers from the last load's rooms and stock and keeps
+        // nothing, so the next ask builds from the load's own.
+        bool roomsAndStockAreThisLoads = RoomGraph.LoadedFor == load && ShopStock.LoadedFor == load;
 
         Dictionary<int, List<Game.Map.RoomKey>> roomsByShop = new();
         foreach (Game.Map.Room room in RoomGraph.Rooms)
@@ -1570,13 +1576,15 @@ public sealed class AppServices
             rooms.Add(room.Key);
         }
 
-        _shopSpellOffers = Game.Train.ShopSpellCatalog.Build(
+        IReadOnlyList<Game.Train.ShopSpellOffer> offers = Game.Train.ShopSpellCatalog.Build(
             GameData, Spellbook.Available, SpellCatalog.GetTeachingItems(Spellbook.ClassNumber),
             Spellbook.ClassNumber, PlayerStats.Charm,
             ShopStock.ShopsSelling,
             shop => roomsByShop.TryGetValue(shop, out List<Game.Map.RoomKey>? rooms)
                 ? rooms
                 : Array.Empty<Game.Map.RoomKey>());
+        if (!roomsAndStockAreThisLoads) return offers;
+        _shopSpellOffers = offers;
         _shopSpellOffersKey = key;
         return _shopSpellOffers;
     }

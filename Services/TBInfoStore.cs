@@ -15,17 +15,27 @@ public sealed class TBInfoStore
     private readonly GameDataCache _cache;
     private readonly LogService? _log;
 
-    // Replaced whole on every reload, never refilled: ItemSourceIndex and
-    // RoomFloorItemIndex walk the entries on a worker thread while the UI thread may
-    // be loading the next set, and a walk must see one set's entries from end to end.
-    private volatile Dictionary<int, TBInfoEntry> _entries = new();
+    // The entries and the load of the set they are of, replaced together and never
+    // refilled: ItemSourceIndex and RoomFloorItemIndex walk the entries on a worker
+    // thread while the UI thread may be loading the next set, and a walk must see one
+    // set's entries from end to end.
+    private sealed record Loaded(GameDataCache.Load Load, Dictionary<int, TBInfoEntry> Entries);
+
+    private volatile Loaded _loaded = new(default, new Dictionary<int, TBInfoEntry>());
 
     // Active set the store was last loaded from, or null if empty.
     public string? ActiveSet { get; private set; }
 
+    // The load of the set whose entries are in place. The cache's load moves before
+    // the handlers that reload this store run, so for a moment in every set load the
+    // cache is on the new load and these entries are still the last one's. Whatever
+    // builds from both the tables and these entries, and keeps the result for the
+    // cache's load, keeps it only if this equalled that load when the build began.
+    public GameDataCache.Load LoadedFor => _loaded.Load;
+
     // Number of entries in the active store (0 when no set is active or load
     // failed).
-    public int EntryCount => _entries.Count;
+    public int EntryCount => _loaded.Entries.Count;
 
     // Fires after every successful (re)load, including the transition to
     // no-set-active (empty store). Subscribers should drop any cached TBInfo
@@ -43,24 +53,26 @@ public sealed class TBInfoStore
 
     // Look up a single entry by its primary key. Returns null when absent.
     public TBInfoEntry? GetEntry(int number)
-        => _entries.TryGetValue(number, out TBInfoEntry? e) ? e : null;
+        => _loaded.Entries.TryGetValue(number, out TBInfoEntry? e) ? e : null;
 
     // Read-only snapshot of every entry in load order. Empty when no set is
     // active.
-    public IEnumerable<TBInfoEntry> Entries => _entries.Values;
+    public IEnumerable<TBInfoEntry> Entries => _loaded.Entries.Values;
 
     // Reload the store from setName's TBInfo.json. Pass null to clear. Safe to
     // call repeatedly. Wired by AppServices to GameDataCache.ActiveSetChanged.
     public void OnActiveSetChanged(string? setName)
     {
-        // Empty at once, as a store being reloaded always was; the new entries are
-        // filled apart and put in place whole.
-        _entries = new Dictionary<int, TBInfoEntry>();
+        // Empty at once, as a store being reloaded always was, and of no load; the
+        // new entries are filled apart and put in place whole with theirs.
+        GameDataCache.Load load = _cache.ActiveLoad;
+        _loaded = new Loaded(GameDataCache.Load.None, new Dictionary<int, TBInfoEntry>());
         Dictionary<int, TBInfoEntry> entries = new();
         ActiveSet = setName;
 
         if (string.IsNullOrWhiteSpace(setName))
         {
+            _loaded = new Loaded(load, entries);
             _log?.Log(LogSeverity.Info, "TBInfo", "No active game-data set; TBInfo cleared.");
             StoreReloaded?.Invoke();
             return;
@@ -69,6 +81,7 @@ public sealed class TBInfoStore
         GameTable? doc = _cache.GetTable("TBInfo");
         if (doc is null)
         {
+            _loaded = new Loaded(load, entries);
             _log?.Log(LogSeverity.Info, "TBInfo",
                 $"Active set '{setName}' has no TBInfo.json; store is empty.");
             StoreReloaded?.Invoke();
@@ -87,7 +100,7 @@ public sealed class TBInfoStore
             entries[entry.Number] = entry;
             parsed++;
         }
-        _entries = entries;
+        _loaded = new Loaded(load, entries);
 
         _cache.EvictTable("TBInfo");
 
