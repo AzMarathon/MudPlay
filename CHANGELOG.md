@@ -1,5 +1,9 @@
 # Version history
 
+## 3.180.1
+
+- A BBS renamed by capitals only keeps its characters' saved Simulator rankings
+
 ## 3.180.0
 
 - Simulator: area rankings are kept between sessions, one file for each character on each game data, read back when that character and game data are next on show

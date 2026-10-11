@@ -565,6 +565,31 @@ public sealed class AreaRankingFilesTests : IDisposable
     }
 
     [Fact]
+    public void ABbsRenameThatOnlyChangesCapitals_KeepsEveryRankingUnderIt()
+    {
+        string set = NewSet("a");
+        string capitals = Board.ToUpperInvariant();
+        Assert.NotEqual(Board, capitals);
+        var first = new Client();
+        first.Store.Keep(new SimulatorOwner(set, One), Ranking("Hills"));
+        first.Store.Keep(new SimulatorOwner(set, Two), Ranking("Fen"));
+        first.Settle();
+        string oldFolder = Path.GetDirectoryName(AreaRankingFiles.FileFor(new SimulatorOwner(set, One))!)!;
+        // Not a ranking: where capitals are told apart it stays behind, and is not
+        // taken with the folder.
+        File.WriteAllText(Path.Combine(oldFolder, "notes.txt"), "kept");
+
+        var later = new Client();
+        later.Store.RenameBbs(Board, capitals);
+        later.Settle();
+
+        string one = One[(Board.Length + 1)..], two = Two[(Board.Length + 1)..];
+        Assert.Equal("Hills", new Client().Load(new SimulatorOwner(set, $"{capitals}/{one}"))?.Rows[0].Area);
+        Assert.Equal("Fen", new Client().Load(new SimulatorOwner(set, $"{capitals}/{two}"))?.Rows[0].Area);
+        Assert.True(File.Exists(Path.Combine(oldFolder, "notes.txt")));
+    }
+
+    [Fact]
     public void ACharacterRenamedMovedOrDeleted_TakesItsFilesOrLosesThem_WhetherOrNotHeldInMemory()
     {
         string a = NewSet("a"), b = NewSet("b");
