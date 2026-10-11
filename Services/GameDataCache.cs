@@ -41,7 +41,10 @@ namespace MudPlay.Services;
 // BbsProfile.ActiveGameDataSet drives the switch automatically (falling back to
 // GlobalSettings.DefaultGameDataSet when no BBS is pinned). Manual switches via
 // the File → Game Data → Active set menu write back to the resolved BBS profile.
-public sealed class GameDataCache
+//
+// Two small types other classes name live in files of their own: Load
+// (GameDataCache.Load.cs) and TableFileStamp (GameDataCache.TableFileStamp.cs).
+public sealed partial class GameDataCache
 {
     // FindRowByNumber / FindRowByName / RowNumbers go through each table's own
     // number and name indexes, built on its first lookup; they go when it does.
@@ -67,9 +70,6 @@ public sealed class GameDataCache
     // each prewarm's parse), for the idle sweep. Guarded by the _tables lock.
     private readonly Dictionary<string, long> _lastRead = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string Set, string Table), long> _prewarmedAt = new();
-
-    // A table file as the cache found it when it read it: length and last-write time.
-    internal readonly record struct TableFileStamp(long Length, DateTime LastWriteUtc);
 
     // What one read of a table file came to: the table, or why there is none.
     private readonly record struct ReadOutcome(GameTable? Table, Exception? Failure, long Kilobytes, TableFileStamp Stamp);
@@ -123,17 +123,7 @@ public sealed class GameDataCache
     private readonly Dictionary<string, object> _derived = new(StringComparer.Ordinal);
     private long _generation;
 
-    // One load of one set: the set's name and a count that moves every time its
-    // tables are dropped for re-reading (a switch, a reload, a set imported again
-    // over itself). The name alone does not change on the last two.
-    public readonly record struct Load(string? Set, long Generation)
-    {
-        // No load the cache ever serves (its count starts at 0 and only rises): what
-        // a store that reloads with the set holds while it is between two loads.
-        public static readonly Load None = new(null, -1);
-    }
-
-    // The load the cache is serving. Whatever keeps something built from the tables
+    // The load the cache is serving (see Load, in GameDataCache.Load.cs). Whatever keeps something built from the tables
     // and decides for itself when it is out of date reads this BEFORE building and
     // keeps it with the result, which is good only while this still equals it. A
     // build a switch overtook is then never mistaken for one of the set switched
