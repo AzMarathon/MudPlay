@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.173.0**
+> **Version 3.174.0**
 > - Timers of the buffs on you stop while you are out of the game (dropped link, relog, the board's menu) and run on with the time they had left
 > - None of yours is recast for time spent away; a buff on a party member keeps its real end, as before
 > - A whole-party buff stands still on you only: in a party it is recast when it would have run out had you not left
