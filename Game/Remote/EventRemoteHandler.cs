@@ -68,18 +68,18 @@ public sealed class EventRemoteHandler : IDisposable
         if (ctx.Args.Count > 0)
         {
             // "@events off" must not read as having switched anything.
-            ctx.Refuse("usage: @events lists them; @event <name> on|off switches one");
+            ctx.Refuse(ListUsage);
             return;
         }
         _log?.Debug(LogCategory, $"@events from {ctx.Sender}: {_events.Events.Count} event(s) listed");
         if (_events.Events.Count == 0)
         {
-            ctx.Reply("no events defined");
+            ctx.Reply(NoneDefined);
             return;
         }
         List<string> items = new(_events.Events.Count);
         foreach (ScheduledEvent e in _events.Events) items.Add($"{Label(e)} {State(e)}");
-        InventoryQueryHandler.ReplyChunked(ctx, _events.AllDisabled ? "events (all disabled)" : "events", items);
+        InventoryQueryHandler.ReplyChunked(ctx, _events.AllDisabled ? ListLabelAllDisabled : ListLabel, items);
     }
 
     private void OnEvent(RemoteCommandContext ctx)
@@ -110,8 +110,9 @@ public sealed class EventRemoteHandler : IDisposable
         if (found.Count != 1)
         {
             ctx.Refuse(found.Count == 0
-                ? $"no event named '{name}'"
-                : $"'{name}' matches {found.Count} events: " + string.Join(", ", found.Take(4).Select(e => $"'{Label(e)}'")));
+                ? $"{NoneNamedOpening}{name}'"
+                : $"{AmbiguousOpening}{name}' matches {found.Count}: "
+                    + string.Join(", ", found.Take(4).Select(e => $"'{Label(e)}'")));
             return;
         }
         ScheduledEvent e = found[0];
@@ -119,7 +120,7 @@ public sealed class EventRemoteHandler : IDisposable
         if (switchOn is not { } on)
         {
             _log?.Debug(LogCategory, $"@event from {ctx.Sender}: asked about '{Label(e)}'");
-            ctx.Reply($"event '{Label(e)}' is {State(e)}: {When(e)}, {Does(e)}"
+            ctx.Reply($"{OneOpening}{Label(e)}' is {State(e)}: {When(e)}, {Does(e)}"
                 + (_events.AllDisabled ? "; all events are disabled" : ""));
             return;
         }
@@ -128,26 +129,53 @@ public sealed class EventRemoteHandler : IDisposable
         switch (_events.SetEnabled(e, on, $"remote @event from {ctx.Sender}"))
         {
             case EventManager.SwitchResult.SwitchedOn:
-                ctx.Reply($"event '{Label(e)}' switched on"
+                ctx.Reply($"{OneOpening}{Label(e)}' switched on"
                     + (_events.AllDisabled ? "; all events are disabled, so it won't fire yet" : ""));
                 break;
             case EventManager.SwitchResult.SwitchedOff:
-                ctx.Reply($"event '{Label(e)}' switched off"
+                ctx.Reply($"{OneOpening}{Label(e)}' switched off"
                     + (wasRunning ? "; the run it has under way finishes" : ""));
                 break;
             case EventManager.SwitchResult.AlreadyOn:
-                ctx.Reply($"event '{Label(e)}' is already on");
+                ctx.Reply($"{OneOpening}{Label(e)}' is already on");
                 break;
             case EventManager.SwitchResult.AlreadyOff:
-                ctx.Reply($"event '{Label(e)}' is already off");
+                ctx.Reply($"{OneOpening}{Label(e)}' is already off");
                 break;
             case EventManager.SwitchResult.TargetMissing:
-                ctx.Refuse($"event '{Label(e)}' can't be switched on: {MissingWhat(e)} is missing");
+                ctx.Refuse($"{OneOpening}{Label(e)}' can't be switched on: {MissingWhat(e)} is missing");
                 break;
         }
     }
 
-    private const string Usage = "usage: @event <name> [on|off]";
+    // Every reply of the two commands opens with one of these: fixed words, ahead
+    // of anything the user named. IsEventReplyLine knows a reply by them.
+    private const string ListLabel = "events";
+    private const string ListLabelAllDisabled = "events (all disabled)";
+    private const string NoneDefined = "no events defined";
+    private const string OneOpening = "event '";
+    private const string AmbiguousOpening = "event name '";
+    private const string NoneNamedOpening = "no event named '";
+    private const string UsageOpening = "usage: @event";
+    private const string Usage = UsageOpening + " <name> [on|off]";
+    private const string ListUsage = UsageOpening + "s lists them; @event <name> on|off switches one";
+
+    // Whether the text inside a braced reply is one of @events' or @event's own
+    // lines. All but the fixed ones carry an event's name, or the name the sender
+    // typed, and a name can say anything. The readers of other replies (a
+    // @wealth's, a @where's, a @comeback's answer) skip these, so an event named
+    // "Sell run (= 5 copper)" is never read as a purse.
+    public static bool IsEventReplyLine(string inner)
+    {
+        ArgumentNullException.ThrowIfNull(inner);
+        return OpensWith(inner, ListLabel + ": ") || OpensWith(inner, ListLabel + " (")
+            || OpensWith(inner, OneOpening) || OpensWith(inner, AmbiguousOpening)
+            || OpensWith(inner, NoneNamedOpening) || OpensWith(inner, NoneDefined)
+            || OpensWith(inner, UsageOpening);
+    }
+
+    private static bool OpensWith(string text, string opening) =>
+        text.StartsWith(opening, StringComparison.OrdinalIgnoreCase);
 
     private bool IsAnEventsWholeName(string typed)
     {

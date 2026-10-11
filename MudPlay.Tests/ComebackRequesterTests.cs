@@ -1351,6 +1351,29 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Equal(1, h.Sent);
     }
 
+    // The leader's client can as well be answering an @events or @event of ours.
+    // Those replies name an event, and an event can be named like a refusal.
+    [Theory]
+    [InlineData("events: I can't come on, Bank off")]
+    [InlineData("events (all disabled) (2/3): forget me off, Bank on")]
+    [InlineData("event 'going idle' switched off")]
+    [InlineData("event 'my party is full' is on: fires on a timer, sends a command")]
+    [InlineData("no event named 'path failed'")]
+    [InlineData("event name 'come' matches 2: 'I can't come', 'I can't come 2'")]
+    public void EventReplyNamingAnEvent_IsNoAnswerToTheComeback(string line)
+    {
+        using Harness h = NewFollower();
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+        string before = h.Requester.LastIncidentSummary;
+
+        h.Feed($"Boss telepaths: {{{line}}}");
+
+        Assert.Equal(before, h.Requester.LastIncidentSummary);
+        Assert.DoesNotContain("leader answered", h.Requester.LastIncidentSummary);
+        Assert.Equal(1, h.Sent);
+    }
+
     // ----- held and left behind --------------------------------------------------
 
     // A follower too heavy to move tells the leader to wait, and then, left behind

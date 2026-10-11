@@ -320,7 +320,7 @@ public sealed class EventRemoteHandlerTests : IDisposable
         r.Events.Add(b);
 
         Assert.Equal(
-            new[] { Reply("'bank run' matches 2 events: 'Morning bank run', 'Evening bank run'") },
+            new[] { Reply("event name 'bank run' matches 2: 'Morning bank run', 'Evening bank run'") },
             r.Ask("@event bank run off"));
         Assert.False(a.Disabled);
         Assert.False(b.Disabled);
@@ -666,6 +666,102 @@ public sealed class EventRemoteHandlerTests : IDisposable
         r.Events.Add(BankTrip("Bank run"));
         r.Events.Add(Command("Bank run"));
 
-        Assert.Equal(new[] { Reply("'bank run' matches 2 events: 'Bank run', 'Bank run'") }, r.Ask("@event bank run off"));
+        Assert.Equal(new[] { Reply("event name 'bank run' matches 2: 'Bank run', 'Bank run'") }, r.Ask("@event bank run off"));
     }
+
+    // ----- the other readers of a braced reply leave these alone -----------------
+
+    private static string Inner(string sent)
+    {
+        string opening = $"/{Friend} {{";
+        Assert.StartsWith(opening, sent);
+        Assert.EndsWith("}\r", sent);
+        return sent[opening.Length..^2];
+    }
+
+    // An event's name is the user's and can say anything: a purse, a room, a
+    // refusal. Every answer and refusal either command gives opens with fixed
+    // words, so each is known as one of theirs whatever the name inside it.
+    [Theory]
+    [InlineData("Sell run (= 5 copper)")]
+    [InlineData("Camp (map 1, room 5)")]
+    [InlineData("Farm 2")]
+    [InlineData("I can't come")]
+    [InlineData("going idle")]
+    [InlineData("no ailments check")]
+    [InlineData("ailments: blind")]
+    [InlineData("sending loop 'x'")]
+    public void EveryReply_IsKnownAsOne_WhateverTheEventIsNamed(string name)
+    {
+        using Rig r = Build();
+        List<string> wire = new();
+        wire.AddRange(r.Ask("@events"));                          // none defined
+        wire.AddRange(r.Ask("@events off"));                      // the list's usage
+        wire.AddRange(r.Ask("@event"));                           // the one-event usage
+
+        ScheduledEvent e = Command(name);
+        r.Events.Add(e);
+        wire.AddRange(r.Ask("@events"));
+        wire.AddRange(r.Ask($"@event {name}"));                   // asked about
+        wire.AddRange(r.Ask($"@event {name} off"));
+        wire.AddRange(r.Ask($"@event {name} off"));               // already off
+        wire.AddRange(r.Ask($"@event {name} on"));
+        wire.AddRange(r.Ask($"@event {name} on"));                // already on
+        wire.AddRange(r.Ask($"@event {name} nowhere"));           // nothing of that name
+
+        r.Events.Add(Command(name));
+        wire.AddRange(r.Ask($"@event {name}"));                   // fits two
+        r.Events.Remove(r.Events.Events[1]);
+
+        ScheduledEvent lost = LoopNobodySaved(name + " loop");
+        r.Events.Add(lost);
+        wire.AddRange(r.Ask($"@event {name} loop on"));           // target missing
+        wire.AddRange(r.Ask("@events"));
+        r.Events.Remove(lost);
+
+        ScheduledEvent held = new()
+        {
+            Name = name + " hold", TriggerType = EventTriggerType.Every, EveryAmount = 1, EveryUnit = EventTimeUnit.Hours,
+            ActionType = EventActionType.Wait, WaitSeconds = 600, Then = EventThenType.Nothing,
+        };
+        r.Events.Add(held);
+        Assert.True(r.Events.Fire(held));
+        wire.AddRange(r.Ask($"@event {name} hold off"));          // its run finishes
+
+        r.H.Profile.Current!.EventsGloballyDisabled = true;
+        wire.AddRange(r.Ask("@events"));                          // all disabled
+        wire.AddRange(r.Ask($"@event {name}"));
+        wire.AddRange(r.Ask($"@event {name} off"));
+        wire.AddRange(r.Ask($"@event {name} on"));                // won't fire yet
+        for (int i = 0; i < 30; i++) r.Events.Add(Command($"{name} {i:00}"));
+        wire.AddRange(r.Ask("@events"));                          // numbered parts
+
+        Assert.True(wire.Count >= 20, $"{wire.Count} replies");
+        Assert.All(wire, sent => Assert.True(EventRemoteHandler.IsEventReplyLine(Inner(sent)), sent));
+        Assert.All(wire, sent => Assert.True(UserNamedReply.IsLine(Inner(sent)), sent));
+        Assert.All(wire, sent => Assert.True(UserNamedReply.IsMessage($"{{{Inner(sent)}}}"), sent));
+    }
+
+    [Theory]
+    [InlineData("I can't come, forget me")]
+    [InlineData("Standing; not moving; no ailments")]
+    [InlineData("eventually coming to your location")]
+    [InlineData("events are fun")]
+    [InlineData("event horizon (map 1, room 5)")]
+    [InlineData("1,200 gold (= 12,000 copper)")]
+    [InlineData("MudPlay 3.179.0")]
+    public void OtherReplies_AreNotEventReplies(string inner)
+    {
+        Assert.False(EventRemoteHandler.IsEventReplyLine(inner));
+        Assert.False(UserNamedReply.IsLine(inner));
+    }
+
+    // The one check the readers make covers the `@loop send` lines as well.
+    [Theory]
+    [InlineData("{sending loop 'King's Road' (3 rooms, 1 line)}")]
+    [InlineData("{@loopresult 9da659db saved as 'King's Road 2'}")]
+    [InlineData("  {events: Night stats on}  ")]
+    [InlineData("events: Night stats on")]
+    public void TheSharedCheck_TakesALoopSendLineAndAnEventReply_BracedOrNot(string message) =>
+        Assert.True(UserNamedReply.IsMessage(message));
 }
