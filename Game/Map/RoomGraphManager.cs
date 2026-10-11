@@ -1483,13 +1483,18 @@ public sealed class RoomGraphManager
     {
         if (_tbinfo is null || _spellCatalog is null) return;
 
+        // Empty text blocks linked round in a circle (a damaged set). Every room
+        // whose command leads into one meets the same blocks, so they are gathered
+        // over the whole pass and named in one line.
+        HashSet<int> loopedBlocks = new();
+
         foreach (RoomKey key in cmdRooms)
         {
             Room room = _rooms[key];
 
             List<BoatPassage>? passages = null;
             foreach (BoatPassage passage in
-                     BoatPassageResolver.EnumerateBoatPassages(_tbinfo, key, room.Cmd, _spellCatalog))
+                     BoatPassageResolver.EnumerateBoatPassages(_tbinfo, key, room.Cmd, _spellCatalog, loopedBlocks))
                 (passages ??= new()).Add(passage);
             if (passages is null) continue;
 
@@ -1500,6 +1505,11 @@ public sealed class RoomGraphManager
                     + $"fare {p.FareCopper} copper"
                     + (p.RequiresCheckability ? ", quest-attunement required)." : ")."));
         }
+
+        if (loopedBlocks.Count > 0)
+            _log?.Log(LogSeverity.Warn, "RoomGraph",
+                $"TBInfo text block(s) {string.Join(", ", loopedBlocks.Order())} of '{ActiveSet}' are empty and link "
+                + "back to themselves; nothing was read past them. The set's text blocks are damaged there.");
     }
 
     private void BuildSecondaryIndexes()

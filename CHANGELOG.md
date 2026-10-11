@@ -6,6 +6,10 @@
 - Answers give an event's name, state and kind only, never what it sends
 - The Events tab shows an `off` badge on a disabled event, and follows a remote switch at once
 
+## 3.178.1
+
+- A game-data set whose empty text blocks link round in a circle no longer freezes the client as it loads; the program log names the blocks
+
 ## 3.178.0
 
 - The client learns where a room's dead arrive from a death it sees, keeps it with the game-data set for every client on it, and shows it in the bug report
