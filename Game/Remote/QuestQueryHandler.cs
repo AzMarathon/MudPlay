@@ -101,7 +101,7 @@ public sealed class QuestQueryHandler : IDisposable
         int? resolved = QuestNameResolver.Resolve(query, BuildCandidates(log));
         if (resolved is not int flag)
         {
-            ctx.Reply($"no quest matches \"{query}\"");
+            ctx.Refuse($"no quest matches \"{query}\"");
             return;
         }
 
@@ -160,7 +160,7 @@ public sealed class QuestQueryHandler : IDisposable
         catch (Exception ex)
         {
             _log?.Warn("QuestFlags", $"@quest update failed: {ex.Message}");
-            if (_engine.WarnOnDenial) ctx.Reply("quest flag read failed");
+            ctx.Refuse("quest flag read failed");
             return;
         }
 
@@ -170,17 +170,16 @@ public sealed class QuestQueryHandler : IDisposable
             case QuestFlagSyncManager.UpdateOutcome.Done:
                 ctx.Reply($"{result.FlagsRead} flag(s) read, {result.Marked.Count} newly marked"
                     + (result.Progressed > 0 ? $", {result.Progressed} in progress advanced" : "")
-                    + " — " + QuestQueryReport.FormatAll(log, _quests));
+                    + " - " + QuestQueryReport.FormatAll(log, _quests));
                 break;
             case QuestFlagSyncManager.UpdateOutcome.NothingToCheck:
-                ctx.Reply("nothing to check — " + QuestQueryReport.FormatAll(log, _quests));
+                ctx.Reply("nothing to check - " + QuestQueryReport.FormatAll(log, _quests));
                 break;
-            // Failure replies obey the WarnOnDenial master gate like every other one.
             case QuestFlagSyncManager.UpdateOutcome.NoAccess:
-                if (_engine.WarnOnDenial) ctx.Reply("can't read quest flags here (stock needs sys-god access)");
+                ctx.Refuse("can't read quest flags here (stock needs sys-god access)");
                 break;
             case QuestFlagSyncManager.UpdateOutcome.Busy:
-                if (_engine.WarnOnDenial) ctx.Reply("a quest flag read is already running");
+                ctx.Refuse("a quest flag read is already running");
                 break;
         }
     }

@@ -12,9 +12,9 @@ namespace MudPlay.Game.Remote;
 //      (n / north / ne / northeast / ...) into the canonical short form before
 //      queueing.
 //   2. Channel-aware soft-gate on TrapDisarmManager.CanDisarm:
-//        - Telepath / Gangpath + no skill → reply {can't disarm — no Traps
-//          skill} so the sender knows we're not the right target. Gated on
-//          RemoteCommandManager.WarnOnDenial.
+//        - Telepath / Gangpath + no skill → reply {can't disarm - no Traps
+//          skill} so the sender knows we're not the right target. A refusal,
+//          so the Warn setting silences it.
 //        - Local (Say) + no skill → silent. Broadcast channels reach every
 //          player in the room; only trap-skilled characters should answer, and a
 //          chorus of "{can't disarm}" replies from everyone else would be noise.
@@ -51,12 +51,10 @@ public sealed class TrapHandler : IDisposable
 
     private void OnTrap(RemoteCommandContext ctx)
     {
-        // No args → missing direction. Per user spec: denial reply
-        // with a hint, gated on WarnOnDenial.
+        // No args → missing direction. Per user spec: a refusal with a hint.
         if (ctx.Args.Count == 0)
         {
-            if (!_engine.WarnOnDenial) return;
-            ctx.Reply("missing direction (e.g. @trap n)");
+            ctx.Refuse("missing direction (e.g. @trap n)");
             return;
         }
 
@@ -78,8 +76,7 @@ public sealed class TrapHandler : IDisposable
         string? direction = TrapDisarmManager.NormaliseDirection(arg0);
         if (direction is null)
         {
-            if (!_engine.WarnOnDenial) return;
-            ctx.Reply($"unknown direction '{arg0}'");
+            ctx.Refuse($"unknown direction '{arg0}'");
             return;
         }
 
@@ -88,8 +85,7 @@ public sealed class TrapHandler : IDisposable
         if (!_manager.CanDisarm)
         {
             if (ctx.Channel == RemoteChannel.Local) return;
-            if (!_engine.WarnOnDenial) return;
-            ctx.Reply("can't disarm — no Traps skill");
+            ctx.Refuse("can't disarm - no Traps skill");
             return;
         }
 
@@ -97,6 +93,9 @@ public sealed class TrapHandler : IDisposable
         // captures (channel, sender) so when the manager invokes it
         // later from any state-machine terminal point, the reply
         // routes back via the same channel the @trap arrived on.
+        // Both lines below are protocol: the asking client's walk reads the
+        // acceptance and the result (TrapReply), a failed disarm included, so
+        // they go whatever the Warn setting says.
         // Accepted: say so before starting, so the asker knows someone has the trap
         // and waits for the result instead of walking into it.
         ctx.Reply(TrapReply.Attempting(direction));

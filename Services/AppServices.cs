@@ -3473,9 +3473,9 @@ public sealed class AppServices
         // retarget runs against the live engine at @kill time.
         Kill = new Game.Remote.KillHandler(
             RemoteCommands,
-            // A player named by @kill is a fight with a player; anything else is
-            // the combat engine's.
-            name => { if (!PvpFight.EngageOnOrder(name)) Combat.RetargetTo(name); },
+            // A player named by @kill is a fight with a player, or a refusal when
+            // we won't fight them; anything else is the combat engine's.
+            name => PvpFight.TakeKillOrder(name, Combat.RetargetTo),
             Log);
         // @trap auto-disarm flow — manager owns the state machine,
         // handler owns the @-command auth boundary. Wire-sender +
@@ -6436,7 +6436,15 @@ public sealed class AppServices
                 timer.Tick += (_, _) => { timer.Stop(); action(); };
                 timer.Start();
             },
-            log: Log);
+            log: Log)
+        {
+            // @deposit-all answers "depositing" only where a deposit can start. The
+            // tracker is built later; a room it can't place or isn't sure of is
+            // unknown, not "no bank" (BankCatalog.StandingInBank).
+            InBank = () => RoomTracker?.State is { } at
+                ? Game.GameData.BankCatalog.StandingInBank(GameData, at.CurrentRoom?.Key, at.Confidence)
+                : null,
+        };
         PromptScanner.PromptObserved += _ => InventoryAction.NotePrompt();
 
         // @get-stash: a leader's stash transfer has us search and carry a load too.

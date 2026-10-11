@@ -18,17 +18,19 @@ namespace MudPlay.Game.Remote;
 // Success is silent — a retarget produces no reply, mirroring how the local
 // engine retargets without chatter. A missing target name is a generic failure:
 // it falls through to FailureMessage, gated by WarnOnDenial (suppressed when the
-// user has muted denial replies).
+// user has muted denial replies). A named player we won't fight is refused with
+// the reason the order's taker gives.
 public sealed class KillHandler : IDisposable
 {
     private const string LogCategory = "RemoteCmd";
 
     private readonly RemoteCommandManager _engine;
-    private readonly Action<string> _retarget;
+    // Takes the order for a name. Null when it was taken; otherwise why not.
+    private readonly Func<string, string?> _retarget;
     private readonly LogService? _log;
     private bool _disposed;
 
-    public KillHandler(RemoteCommandManager engine, Action<string> retarget, LogService? log = null)
+    public KillHandler(RemoteCommandManager engine, Func<string, string?> retarget, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(retarget);
@@ -52,18 +54,20 @@ public sealed class KillHandler : IDisposable
     {
         if (ctx.Args.Count == 0)
         {
-            // No target named — generic syntax failure. Falls through to the
-            // configured FailureMessage, gated by WarnOnDenial.
-            if (_engine.WarnOnDenial)
-                ctx.Reply(_engine.FailureMessage);
+            // No target named — generic syntax failure: the configured
+            // FailureMessage, under the Warn setting.
+            ctx.Refuse();
             return;
         }
 
         // Re-join tokens so multi-word monster names ("giant rat") survive the
         // engine's whitespace tokenisation.
         string target = string.Join(' ', ctx.Args);
-        _retarget(target);
-        _log?.Log(LogSeverity.Info, LogCategory, $"@kill from {ctx.Sender}: '{target}'");
+        string? refusal = _retarget(target);
+        _log?.Log(LogSeverity.Info, LogCategory, refusal is null
+            ? $"@kill from {ctx.Sender}: '{target}'"
+            : $"@kill from {ctx.Sender}: '{target}' refused ({refusal})");
         // Silent on success — a retarget makes no reply.
+        if (refusal is not null) ctx.Refuse(refusal);
     }
 }

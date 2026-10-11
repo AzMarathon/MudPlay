@@ -11,7 +11,7 @@ namespace MudPlay.Game.Remote;
 // The reply names the profile and lists its slots by cast code (the swap report).
 // AlterSettings-gated (like @auto-*): the receiver must have granted the sender
 // that control. A successful switch replies unconditionally; a no-match / no-
-// profiles failure obeys WarnOnDenial, per the remote-command reply policy.
+// profiles failure is a refusal, per the remote-command reply policy.
 public sealed class ProfileSwapHandler : IDisposable
 {
     private readonly RemoteCommandManager _engine;
@@ -43,14 +43,26 @@ public sealed class ProfileSwapHandler : IDisposable
         string arg = string.Join(' ', ctx.Args).Trim();
         if (arg.Length == 0)
         {
+            // The roster comes wrapped in braces for the terminal; the engine wraps
+            // every reply in its own pair, so that pair is taken off here.
             string? roster = _profiles.RosterReport();
-            if (roster is not null) ctx.Reply(roster);
-            else if (_engine.WarnOnDenial) ctx.Reply("no combat profiles configured");
+            if (roster is not null) ctx.Reply(ForTheWire(Unbraced(roster)));
+            else ctx.Refuse("no combat profiles configured");
             return;
         }
 
         string? report = _profiles.SwitchByArg(arg);
-        if (report is not null) ctx.Reply(report);                      // success — always replies
-        else if (_engine.WarnOnDenial) ctx.Reply($"no combat profile matches '{arg}'");
+        if (report is not null) ctx.Reply(ForTheWire(report));          // success — always replies
+        else ctx.Refuse($"no combat profile matches '{arg}'");
     }
+
+    // The swap report is written for our own terminal and log, with a long dash
+    // after the profile and dots between the slots. Neither survives the wire
+    // (WireText), so the copy sent to the asker uses a hyphen and commas.
+    private static string Unbraced(string text) =>
+        text.Length >= 2 && text[0] == '{' && text[^1] == '}' ? text[1..^1] : text;
+
+    private static string ForTheWire(string report) =>
+        report.Replace(" — ", " - ", StringComparison.Ordinal)
+              .Replace(" · ", ", ", StringComparison.Ordinal);
 }

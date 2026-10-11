@@ -169,8 +169,13 @@ public sealed class LoopShareTests : IDisposable
 
     // ----- Sender (LoopShareHandler) ---------------------------------
 
+    // Refusals land in the same list, as they do from an engine with the Warn
+    // setting on.
     private static RemoteCommandContext Ctx(string sender, List<string> replies) =>
-        new(sender, "@loop", Array.Empty<string>(), "@loop send", RemoteChannel.Telepath, replies.Add);
+        new(sender, "@loop", Array.Empty<string>(), "@loop send", RemoteChannel.Telepath, replies.Add)
+        {
+            Refusal = why => replies.Add(why ?? "command invalid or not allowed"),
+        };
 
     [Fact]
     public void Send_OffersTheBestMatch_ThenSendsOnYes()
@@ -207,7 +212,7 @@ public sealed class LoopShareTests : IDisposable
         share.OnSend(Ctx("Raijin", replies), "yes");
 
         Assert.Equal("loop send of 'King's Road' cancelled", replies[1]);
-        Assert.Equal("no loop send pending — use @loop send <name> first", replies[2]);
+        Assert.Equal("no loop send pending - use @loop send <name> first", replies[2]);
     }
 
     [Fact]
@@ -222,7 +227,7 @@ public sealed class LoopShareTests : IDisposable
         _now += TimeSpan.FromMinutes(5);
         share.OnSend(Ctx("Raijin", replies), "yes");
 
-        Assert.Equal("no loop send pending — use @loop send <name> first", replies[1]);
+        Assert.Equal("no loop send pending - use @loop send <name> first", replies[1]);
     }
 
     [Fact]
@@ -236,7 +241,7 @@ public sealed class LoopShareTests : IDisposable
         share.OnSend(Ctx("Raijin", replies), "king");
         share.OnSend(Ctx("Suijin", replies), "yes");   // someone else can't confirm Raijin's offer
 
-        Assert.Equal("no loop send pending — use @loop send <name> first", replies[1]);
+        Assert.Equal("no loop send pending - use @loop send <name> first", replies[1]);
     }
 
     [Fact]
@@ -254,7 +259,7 @@ public sealed class LoopShareTests : IDisposable
 
         Assert.Equal("no saved loop named 'dragon'", replies[0]);
         Assert.StartsWith("'sewer' matches 2 loops:", replies[1]);
-        Assert.Equal("not running a loop — @loop send <name> for a saved one", replies[2]);
+        Assert.Equal("not running a loop - @loop send <name> for a saved one", replies[2]);
     }
 
     [Fact]
