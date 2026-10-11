@@ -1,5 +1,14 @@
 # Version history
 
+## 3.171.3
+
+- Hang-up death check reads the room you come back in: where that room's dead arrive agrees with a death; back where you left (on Stock, anywhere else) rules one out
+- Lives not read before the hang-up: back stripped where the dead arrive is now recorded as a death
+- The death record and notice name the room you came back in
+- A hang-up while dropped in an arena room is recorded as an arena death (nothing lost, no pile), on any realm
+- Sysop god lives asks no life back after an arena death, on either realm
+- Bug report shows where the stored list's dead arrive and the room come back in
+
 ## 3.171.0
 
 - Hazard buff (desert waterskin) tracked: drinks again only shortly before it runs out

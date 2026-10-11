@@ -1,16 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.171.0**
-> - Hazard buff (desert waterskin) tracked: drinks again only shortly before it runs out
-> - Auto-Sneak on: from 60 s before, with a hazard room here or within 5 steps, the drink waits for a room with no NPCs, then re-sneaks before stepping on
-> - Auto-Sneak off, or the last 15 s: it drinks where you stand; a sneak spent that way counts as lost there
-> - Kept up while you stand in a hazard room by hand too, with Auto-All on
-> - The drink takes the round's in-between cast; a refused one is retried next round or set aside
-> - The step into a hazard room waits for the drink's answer
-> - A dropped link pauses its clock; death, a buff-stripping room or room command, and a token end it
-> - Paradigm: the desert's thirst line is read, and counts the buff as off
-> - Bug report shows the tracked hazard buff
+> **Version 3.171.3**
+> - Hang-up death check reads the room you come back in: where that room's dead arrive agrees with a death; back where you left (on Stock, anywhere else) rules one out
+> - Lives not read before the hang-up: back stripped where the dead arrive is now recorded as a death
+> - The death record and notice name the room you came back in
+> - A hang-up while dropped in an arena room is recorded as an arena death (nothing lost, no pile), on any realm
+> - Sysop god lives asks no life back after an arena death, on either realm
+> - Bug report shows where the stored list's dead arrive and the room come back in
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
