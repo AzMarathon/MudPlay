@@ -548,8 +548,8 @@ public sealed class EventRemoteHandlerTests : IDisposable
 
     // ----- what a switch does elsewhere -----------------------------------------
 
-    // The list raises a Replace for the event: what restarts the scheduler's
-    // timers and redraws an open Events tab.
+    // The list raises a Replace carrying the same event: what the scheduler, an
+    // open Events tab and an open edit window each go by.
     [Fact]
     public void ASwitch_RaisesAReplaceForThatEvent()
     {
@@ -743,7 +743,171 @@ public sealed class EventRemoteHandlerTests : IDisposable
         r.Events.Add(BankTrip("Bank run"));
         r.Events.Add(Command("Bank run"));
 
-        Assert.Equal(new[] { Reply("event name 'bank run' matches 2: 'Bank run', 'Bank run'") }, r.Ask("@event bank run off"));
+        Assert.Equal(
+            new[] { Reply("event name 'bank run' matches 2 named 'Bank run': rename one to switch it") },
+            r.Ask("@event bank run off"));
+    }
+
+    // Names that differ only by case are one name to the match, and are said once.
+    [Fact]
+    public void Event_NamesThatDifferOnlyByCase_AreOneNameInTheRefusal()
+    {
+        using Rig r = Build();
+        r.Events.Add(BankTrip("Bank run"));
+        r.Events.Add(Command("BANK RUN"));
+        r.Events.Add(Command("bank run"));
+        r.Events.Add(Command("Sell run"));
+
+        Assert.Equal(
+            new[] { Reply("event name 'run' matches 4: 'Bank run' (x3), 'Sell run'") },
+            r.Ask("@event run"));
+    }
+
+    // More names fit the typed words than one refusal says: four, and the count
+    // of the rest.
+    [Fact]
+    public void Event_MoreThanFourNamesFit_FourAreSaid_AndHowManyMore()
+    {
+        using Rig r = Build();
+        foreach (string place in new[] { "north", "south", "east", "west", "upper", "lower", "inner" })
+            r.Events.Add(Command($"Patrol {place}"));
+
+        Assert.Equal(
+            new[] { Reply("event name 'patrol' matches 7: 'Patrol north', 'Patrol south', 'Patrol east', 'Patrol west', +3 more") },
+            r.Ask("@event patrol off"));
+        Assert.All(r.Events.Events, e => Assert.False(e.Disabled));
+    }
+
+    // ----- long names ------------------------------------------------------------
+
+    private static readonly string LongName = "Scheduled " + new string('x', 180) + " tail";
+    private static readonly string LongNameShown = "Scheduled " + new string('x', 27) + "...";
+
+    private static void AssertFitsOneTelepath(IEnumerable<string> sent) =>
+        Assert.All(sent, line => Assert.True(line.TrimEnd('\r').Length <= 225, $"{line.TrimEnd('\r').Length}: {line}"));
+
+    // A name is shown cut short past forty characters, in every reply that
+    // carries one, so none outgrows the one telepath it has to fit.
+    [Fact]
+    public void ALongName_IsShownCutShort_InEveryReply_AndEachFitsOneTelepath()
+    {
+        using Rig r = Build();
+        Assert.Equal(40, LongNameShown.Length);
+        ScheduledEvent e = new()
+        {
+            Name = LongName, TriggerType = EventTriggerType.Boss, BossName = "The Warden",
+            ActionType = EventActionType.StashTransfer,
+        };
+        r.Events.Add(e);
+        r.H.Profile.Current!.EventsGloballyDisabled = true;
+        List<string> all = new();
+
+        List<string> sent = r.Ask("@events");
+        all.AddRange(sent);
+        Assert.Equal(new[] { Reply($"events (all disabled): {LongNameShown} on") }, sent);
+
+        sent = r.Ask($"@event {LongName}");
+        all.AddRange(sent);
+        Assert.Equal(
+            new[] { Reply($"event '{LongNameShown}' is on: fires on a boss timer, moves a stash to the bank; all events are disabled") },
+            sent);
+
+        all.AddRange(r.Ask("@event scheduled tail off"));           // found by its words, the cut ones too
+        Assert.True(e.Disabled);
+        sent = r.Ask($"@event {LongNameShown} on");                 // and by the name as it was shown
+        all.AddRange(sent);
+        Assert.Equal(
+            new[] { Reply($"event '{LongNameShown}' switched on; all events are disabled, so it won't fire yet") },
+            sent);
+
+        sent = r.Ask($"@event {new string('q', 190)} off");         // the typed name comes back cut short too
+        all.AddRange(sent);
+        Assert.Equal(new[] { Reply($"no event named '{new string('q', 37)}...'") }, sent);
+
+        Assert.Equal(5, all.Count);
+        AssertFitsOneTelepath(all);
+    }
+
+    // Many events with long names, some switched off for a missing target: the
+    // list's parts each fit one telepath, and so does the refusal that names them.
+    [Fact]
+    public void ManyLongNames_TheListsParts_AndTheAmbiguityRefusal_EachFitOneTelepath()
+    {
+        using Rig r = Build();
+        for (int i = 0; i < 24; i++)
+        {
+            string name = $"Scheduled {new string((char)('a' + i), 150)} tail";
+            r.Events.Add(i % 2 == 0 ? Command(name) : LoopNobodySaved(name));
+        }
+        r.H.Profile.Current!.EventsGloballyDisabled = true;
+
+        List<string> list = r.Ask("@events");
+        List<string> refusal = r.Ask($"@event scheduled {new string('z', 150)} tail off");
+        List<string> ambiguous = r.Ask("@event scheduled tail off");
+
+        Assert.True(list.Count > 3);
+        Assert.StartsWith($"/{Friend} {{events (all disabled) (1/{list.Count}): Scheduled aaa", list[0]);
+        Assert.Equal(12, list.Sum(part => part.Split("off (target missing)").Length - 1));
+        Assert.StartsWith($"/{Friend} {{event name 'scheduled tail' matches 24: 'Scheduled aaa", Assert.Single(ambiguous));
+        Assert.EndsWith(" more}\r", ambiguous[0]);
+        Assert.Single(refusal);
+        AssertFitsOneTelepath(list.Concat(refusal).Concat(ambiguous));
+    }
+
+    // A name in characters the wire can't carry is counted as it goes out: the
+    // engine spells a typographic ellipsis as three dots, so forty of them would
+    // be a hundred and twenty characters if the cut were made first.
+    [Fact]
+    public void ANameInCharactersTheWireCantCarry_IsCutAsItGoesOut()
+    {
+        using Rig r = Build();
+        r.Events.Add(Command(new string('…', 40)));
+
+        Assert.Equal(new[] { Reply($"events: {new string('.', 37)}... on") }, r.Ask("@events"));
+    }
+
+    // ----- a condition event switched on -------------------------------------------
+
+    // A condition event fires when its condition turns true and waits for it to
+    // stop holding before it can fire again. Switched off, it reads as not holding:
+    // a reading taken meanwhile re-arms it, so switched on with the condition still
+    // true it fires again at the next reading. Off and on with no reading between
+    // leaves it as it was.
+    [Fact]
+    public void AConditionEvent_SwitchedOffAndOn_FiresAgain_OnceAReadingWasTakenWhileItWasOff()
+    {
+        using Rig r = Build();
+        ScheduledEvent rich = new()
+        {
+            Name = "Rich", TriggerType = EventTriggerType.State, ActionType = EventActionType.Command, CommandText = "dep all",
+            Conditions = new()
+            {
+                new EventCondition { Stat = EventConditionStat.Money, Comparison = EventComparison.AtLeast, Value = 1_000 },
+            },
+        };
+        r.Events.Add(rich);
+        EventStateWatcher watcher = new(
+            r.Events, () => true, () => new EventConditionEvaluator.Readings(5_000, 0, 0, 1), r.H.Log);
+        int Fired() => r.H.EventLog.Count(line => line.StartsWith("State event 'Rich' fired", StringComparison.Ordinal));
+
+        watcher.Evaluate();
+        Assert.Equal(1, Fired());
+        watcher.Evaluate();
+        Assert.Equal(1, Fired());                       // still holding: once per crossing
+
+        Assert.Equal(
+            new[] { Reply("event 'Rich' is on: fires on a condition, sends a command") }, r.Ask("@event rich"));
+        Assert.Equal(new[] { Reply("event 'Rich' switched off") }, r.Ask("@event rich off"));
+        Assert.Equal(new[] { Reply("event 'Rich' switched on") }, r.Ask("@event rich on"));
+        watcher.Evaluate();
+        Assert.Equal(1, Fired());                       // no reading while it was off
+
+        r.Ask("@event rich off");
+        watcher.Evaluate();                             // a reading while it is off
+        Assert.Equal(1, Fired());
+        Assert.Equal(new[] { Reply("event 'Rich' switched on") }, r.Ask("@event rich enable"));
+        watcher.Evaluate();
+        Assert.Equal(2, Fired());
     }
 
     // ----- the other readers of a braced reply leave these alone -----------------

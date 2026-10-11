@@ -283,9 +283,10 @@ public sealed class EventManager : IDisposable
     }
 
     // Switch one event on or off for `by` (who asked, for the log and the bug
-    // report). Takes effect at once: the list raises a Replace for the event, which
-    // is what restarts the scheduler's timers and redraws an open Events tab, as
-    // saving it from the edit window does.
+    // report). Takes effect at once: the list raises a Replace carrying the same
+    // event, which is what starts or stops its own countdown in the scheduler,
+    // redraws an open Events tab and moves the Disabled box of an edit window
+    // open on it.
     //
     // Switched off, the event fires no more and a firing of it still waiting in
     // the queue is dropped when its turn comes; a run of it already under way goes

@@ -2538,7 +2538,11 @@ Eleven commands, one for each auto toggle on your toolbar and in Settings → Ge
 
 **How a name finds an event.** The same way `@loop` finds a loop. A name that equals what was typed (ignoring case) wins outright. Otherwise an event matches when its name holds **every typed word, in any order**: `@event run bank off` finds *Evening bank run*. If nothing matches, it is tried once more without apostrophes. Exactly one match is used; none, or more than one, is refused. An event with no name is listed as `(unnamed)` and can't be named in `@event`.
 
-The last word is read as the switch (`on`, `off`, `enable`, `disable`), unless everything after `@event` is itself an event's whole name. So an event called *Lights on* is asked about with `@event lights on` and switched with `@event lights on on`.
+Two events with the same name (or names that differ only in capitals) can't be told apart by name: every `@event` naming them is refused. Rename one in its editor.
+
+A name longer than 40 characters is shown cut short, as its first 37 characters and `...`, in every reply. The event is still found by its words, the cut ones included, and by the name typed as it was shown.
+
+The last word is read as the switch (`on`, `off`, `enable`, `disable`), unless everything after `@event` is itself an event's whole name. So an event called *Lights on* is asked about with `@event lights on` and switched with `@event lights on on`. With both a *Lights* and a *Lights on* defined, `@event lights on` asks about *Lights on*; switch *Lights* on with `@event lights enable`.
 
 **Who may send it:** a player with **Alter settings**, on any of the three channels. It is the permission `@settings`, `@profile` and the `@auto-…` toggles need: seeing how your client is set up needs the same grant as changing it. A player without it gets the Failure message whatever they typed, and so can't learn whether an event of some name exists.
 
@@ -2558,7 +2562,8 @@ The last word is read as the switch (`on`, `off`, `enable`, `disable`), unless e
 | `event '<name>' is already on` (or `already off`) | Nothing needed changing, and nothing was saved. |
 | `event '<name>' can't be switched on: its loop is missing` (or `its Auto-Lair setup is missing`) | **Refusal:** the event names a saved loop or Auto-Lair setup that no longer exists. |
 | `no event named '<text>'` | **Refusal:** no event's name fits. |
-| `'<text>' matches 2 events: '<name>', '<name>'` | **Refusal:** the name fits more than one. Up to four are named. Nothing is switched. |
+| `event name '<text>' matches 3: '<name>' (x2), '<name>'` | **Refusal:** the name fits more than one. Each name is said once, with `(x2)` after one that two events bear. Up to four names are given, fewer when they are long, then `+3 more` for the rest. Nothing is switched. |
+| `event name '<text>' matches 2 named '<name>': rename one to switch it` | **Refusal:** every event the name fits has that same name. |
 | the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
 
 Two more refusals carry a usage line. `@event` with nothing after it, or with only `on` or `off`, is refused with `usage: @event <name> [on|off]`. `@events` with anything after it is refused with `usage: @events lists them; @event <name> on|off switches one`, and nothing is switched: `@events off` does not disable your events.
@@ -2576,7 +2581,9 @@ The kinds an event is described by:
 - **An event the client switched off for a missing target** can't be switched on by `@event`. Put the loop or Auto-Lair setup back, or point the event at another one in its editor, and clear its **Disabled** box there.
 - **Disable all events** is not changed by either command. There is no remote command for that box.
 - **The Settings window open on the Events tab** shows the change at once: a disabled event carries an `off` badge in the list.
-- **Timers start over.** Switching any event restarts the countdown of every **Every** event, as saving an event from its editor does.
+- **The event's editor open when it is switched.** The editor's **Disabled** box moves with the switch as you watch, and everything else you changed there stays as you left it. **Save** then saves your changes with the event in its switched state, unless you set the box yourself first: the box is yours, and Save saves what it shows. **Cancel** saves nothing, so the switch stands.
+- **Timers.** Switching an **Every** event on starts its countdown from that moment; switching it off stops it. The countdowns of your other events run on untouched. (Saving an event from its editor still starts every **Every** countdown over.)
+- **A condition event (When …) switched off and on again** can fire again though its condition never stopped holding. Such an event fires once when its condition turns true, then waits for the condition to stop holding. While it is off it counts as not holding, so once your money, encumbrance, experience or level has changed while it was off, switching it on with the condition still true fires it at the next such change. Switched off and on with no change between, it stays as it was.
 - **Through the Local control API** (`POST /command`) both work the same, with no permission check, and a refusal's reason is always returned.
 - **Master switch off:** ignored, no answer.
 - **On your own screen:** a switch is written to the program log with the sender's name, and the bug report's event list says who last switched an event. A list request is logged only with Debug diagnostics on.

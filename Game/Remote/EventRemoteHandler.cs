@@ -109,10 +109,7 @@ public sealed class EventRemoteHandler : IDisposable
         IReadOnlyList<ScheduledEvent> found = _events.FindByName(name);
         if (found.Count != 1)
         {
-            ctx.Refuse(found.Count == 0
-                ? $"{NoneNamedOpening}{name}'"
-                : $"{AmbiguousOpening}{name}' matches {found.Count}: "
-                    + string.Join(", ", found.Take(4).Select(e => $"'{Label(e)}'")));
+            ctx.Refuse(found.Count == 0 ? $"{NoneNamedOpening}{Shown(name)}'" : Ambiguous(name, found));
             return;
         }
         ScheduledEvent e = found[0];
@@ -191,8 +188,55 @@ public sealed class EventRemoteHandler : IDisposable
         _ => null,
     };
 
+    // The refusal for a name that fits several events. Each distinct name is said
+    // once, with how many events bear it: two events of one name can't be told
+    // apart by name, and saying the name twice tells the sender nothing. As many
+    // names as fit one telepath, four at most, and how many more there are.
+    private static string Ambiguous(string typed, IReadOnlyList<ScheduledEvent> found)
+    {
+        List<(string Name, int Count)> names = found
+            .GroupBy(e => e.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => (Label(g.First()), g.Count()))
+            .ToList();
+        string head = $"{AmbiguousOpening}{Shown(typed)}' matches {found.Count}";
+        if (names.Count == 1) return $"{head} named '{names[0].Name}': rename one to switch it";
+
+        List<string> said = new();
+        int length = head.Length;
+        foreach ((string name, int count) in names)
+        {
+            string part = count > 1 ? $"'{name}' (x{count})" : $"'{name}'";
+            if (said.Count == MaxNamesInARefusal) break;
+            if (said.Count > 0 && length + 2 + part.Length > RefusalBudget) break;
+            said.Add(part);
+            length += 2 + part.Length;
+        }
+        string more = said.Count < names.Count ? $", +{names.Count - said.Count} more" : "";
+        return $"{head}: {string.Join(", ", said)}{more}";
+    }
+
+    private const int MaxNamesInARefusal = 4;
+
+    // Room for the names in an ambiguity refusal, short of the game's limit on one
+    // telepath by the braces, the "/<player> " it is addressed with and the count
+    // of the names left out.
+    private const int RefusalBudget = 180;
+
+    // A name as a reply shows it: in the wire's plain characters, as the engine
+    // would send it anyway, and cut short past NameCap so that no reply built round
+    // one name outgrows a telepath and no entry of the list outgrows a part. A
+    // name cut short is still found by its words. No other reply of the client's
+    // shortens a name, so the form (the start, then "...") is this handler's own.
+    private const int NameCap = 40;
+
+    private static string Shown(string text)
+    {
+        string plain = WireText.Ascii(text.Trim());
+        return plain.Length <= NameCap ? plain : plain[..(NameCap - 3)].TrimEnd() + "...";
+    }
+
     private static string Label(ScheduledEvent e) =>
-        string.IsNullOrWhiteSpace(e.Name) ? "(unnamed)" : e.Name.Trim();
+        string.IsNullOrWhiteSpace(e.Name) ? "(unnamed)" : Shown(e.Name);
 
     // An event the client switched off for a missing target says so: switching it
     // on would be refused, and the sender should know why before trying.
