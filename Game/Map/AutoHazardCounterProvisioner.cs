@@ -25,8 +25,11 @@ namespace MudPlay.Game.Map;
 //    when a hazard room is next. A dropped link does not: "buffs survive
 //    disconnects, relogs", and "as soon as we've disconnected all timers need to be
 //    paused until we're back in the game, then they all resume" (user, 2026-10-10),
-//    so the clock stops at the drop and runs on from the first prompt back in the
-//    game with the time it had left (Pause / Resume).
+//    so the clock stops when the game is left and runs on from the first prompt back
+//    in it with the time it had left (Pause / Resume). What it had left is kept in
+//    the character's profile meanwhile and put back by a client started later
+//    (SnapshotForSave / Restore, driven with the cast pass's timers by
+//    Game.Spells.BuffTimerKeeper).
 //  • The window — with Auto-Sneak on, inside RefreshWindowSeconds of the end, and
 //    with a countered room here or a few planned steps ahead, the refresh is offered
 //    to the between-round cast scheduler (CastingDirector.SetClientUseSource), which

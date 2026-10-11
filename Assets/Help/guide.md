@@ -747,7 +747,7 @@ Either way the previewed route now **draws its line on the map** even though you
 - **The step into a hazard room waits for the drink to be answered** (a few seconds at most), so you go in with the buff on.
 - **Standing in a hazard room with nothing running** (no walk, no loop, no leader to follow) it keeps the buff up the same way, as long as Auto-All is on.
 - **Following a party leader** it drinks on arriving in a hazard room with the buff off (it can't see the leader's next step), and by the same clock after that.
-- **A dropped link pauses the clock.** The buff stays on your character while you are off the board, so the time away is not counted: the clock starts again, with what it had left, at the first prompt back in the game. It is not kept across closing MudPlay.
+- **A dropped link pauses the clock.** The buff stays on your character while you are off the board, so the time away is not counted: the clock starts again, with what it had left, at the first prompt back in the game. Closing MudPlay keeps it as well, like every other buff timer (see *Buff Watchdog*).
 - **It forgets the buff** when you die (a hang-up death found at the login too), when you enter a room whose own spell strips buffs (negate magic), when you send a room command that casts one (`enter tapestry`, `enter portal`, `go courtyard`), when you use a transport token, and on a new profile. It then treats the buff as off the next time a hazard room is ahead. A room command is judged when it is sent, so one the game then turns away can cost a drink too early.
 - **A drink the game refuses** is logged with the reason. *You have already cast a spell this round!* is tried again next round, and only then: the step into the hazard room waits out the round for it. An item the game says you don't have, or that is out of uses, is left alone until your pack changes (a new one bought, the spent one sold or dropped). An item MudPlay's own charge count shows as empty is not sent at all.
 
@@ -4103,9 +4103,12 @@ A **drag bar** sits between the config table and the timer bars — grab it to r
 **Death and disconnect are handled to match the game:**
 
 - **Death** wipes all your magical effects, so your own death clears your self-buff timers, and a party member's death clears the timers you hold on that member.
-- **A hangup / reconnect does not** — your buffs persist server-side through a brief link-drop, so on reconnect the watchdog **keeps** every timer (self and party) at its real remaining and does **not** rebuff. Only timers whose duration actually lapsed while you were offline drop and recast.
+- **A hangup, a dropped link or a relog does not.** Your buffs stay on your character while it is out of the game and do not run down, so **every timer stops** the moment you leave the game (the link dropping, or going out to the board's menu) and **runs on with exactly the time it had left** at your first prompt back in. It doesn't matter how long you were away: a 5-minute buff with 3 minutes left still has 3 minutes left an hour later, and nothing is recast for the time away. The bars stand still while you are out.
+- **Timers on party members stop with yours.** A member who stayed in the game went on losing time MudPlay could not count, so such a buff may be recast a little late, by no more than the time you were out.
+- **Closing MudPlay keeps them too.** What each of your own buffs had left is saved with the character when you leave the game or close the client, and put back, standing still, when you load that character again; the bars are there before you connect, and run on from your first prompt in the game. Buffs on party members are not kept across a restart, and nor is anything if the client was killed while you were in the game: then it buffs afresh, as it always did.
+- **What ends a buff still ends a saved one:** your death (one MudPlay only works out at the login too), and the buff's own wear-off line.
 
-Switching characters starts the watchdog empty.
+None of this is automation, so it happens with Auto-All off as well; putting timers back casts nothing. Switching to a character with nothing saved starts the watchdog empty.
 
 The window is a live view — it refreshes about once a second while open. *When* a buff may cast — its mana floor, and whether it casts in a recovery rest or a fight — is set on the buff itself, in its edit dialog, and holds for casts on you and on the party alike.
 
