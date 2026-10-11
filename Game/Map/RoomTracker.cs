@@ -211,6 +211,11 @@ public sealed class RoomTracker
     // room wasn't known.
     public RoomKey? LastDeathRoom { get; private set; }
 
+    // Whether the last witnessed death was an arena death, which takes no item,
+    // coin or key (NoteDeath's tookNothing). For the same listeners: what they do
+    // about a pile, a purse or a life spent doesn't apply to one.
+    public bool LastDeathTookNothing { get; private set; }
+
     // The exit the one move in flight is crossing: what a refusal of that move is a
     // refusal of. Null with no move in flight, with more than one queued (the one
     // refused isn't then the one out of this room), or when it maps to no exit.
@@ -1347,17 +1352,25 @@ public sealed class RoomTracker
     // drain pending state, and transition to PendingRespawn so the next
     // observation lands as the new authoritative position without churning
     // Suspect strikes.
-    public void NoteDeath(int livesRemaining, string? messageText = null, DateTimeOffset? whenUtc = null)
+    //
+    // tookNothing: an arena death (ArenaDeathRooms.DeathTookNothing, decided by the
+    // caller once the death's own lines have been read). It is a death like any
+    // other for where the character is, and goes in the history, but nothing was
+    // dropped: the record holds no pile and is written Recovered, so nothing sets
+    // out to recover one.
+    public void NoteDeath(int livesRemaining, string? messageText = null, DateTimeOffset? whenUtc = null,
+        bool tookNothing = false)
     {
         DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
         Room? died = State.CurrentRoom;
         LastDeathRoom = died?.Key;
+        LastDeathTookNothing = tookNothing;
 
         if (_profile is not null)
         {
             List<DeathItem>? equipped = null, lost = null;
             CurrencyHoldings? coins = null;
-            if (_inventorySnapshot is { } provider)
+            if (!tookNothing && _inventorySnapshot is { } provider)
             {
                 InventorySnapshot snapshot = provider();
                 (equipped, lost) = DeathLootCapture.FromSnapshot(snapshot);
@@ -1365,7 +1378,7 @@ public sealed class RoomTracker
             }
             AppendDeathRecord(_profile, when,
                 died is null ? null : new RoomRef(died.Key.Map, died.Key.Room), died?.Name,
-                livesRemaining, messageText, equipped, lost, coins);
+                livesRemaining, messageText, equipped, lost, coins, nothingLost: tookNothing);
         }
 
         while (_pending.TryDequeue(out _)) { /* drain */ }
@@ -1410,24 +1423,33 @@ public sealed class RoomTracker
     private DeathRecord AppendDeathRecord(
         CharacterProfile profile, DateTimeOffset when, RoomRef? room, string? roomName,
         int livesRemaining, string? messageText,
-        List<DeathItem>? equipped, List<DeathItem>? lost, CurrencyHoldings? coins)
+        List<DeathItem>? equipped, List<DeathItem>? lost, CurrencyHoldings? coins, bool nothingLost = false)
     {
         profile.DeathHistory ??= new List<DeathRecord>();
         DeathRecord record = new(when, room, livesRemaining, messageText)
         {
             RecordNumber = profile.DeathHistory.Count + 1,
             RoomName = roomName,
-            Status = DeathRecoveryStatus.Active,
+            // Recovered, not Active: every reader of the history takes Active and
+            // Partial for a pile still out there.
+            Status = nothingLost ? DeathRecoveryStatus.Recovered : DeathRecoveryStatus.Active,
+            RecoveryMessage = nothingLost ? ArenaDeathNote : null,
+            NothingLost = nothingLost,
             EquippedAtDeath = equipped,
             LostItems = lost,
             CoinsAtDeath = coins,
         };
         profile.DeathHistory.Add(record);
-        _log?.Log(LogSeverity.Info, "RoomTracker",
-            $"Death recorded at {(room is null ? "(unknown room)" : $"{room.Map}/{room.Room}")}; {livesRemaining} lives remaining; " +
-            $"deathpile worn={equipped?.Count ?? 0}, lost (pack, lit light, keys)={lost?.Count ?? 0}.");
+        string where = room is null ? "(unknown room)" : $"{room.Map}/{room.Room}";
+        _log?.Log(LogSeverity.Info, "RoomTracker", nothingLost
+            ? $"Arena death recorded at {where}; {livesRemaining} lives remaining; nothing was lost, so no deathpile and nothing to recover."
+            : $"Death recorded at {where}; {livesRemaining} lives remaining; " +
+              $"deathpile worn={equipped?.Count ?? 0}, lost (pack, lit light, keys)={lost?.Count ?? 0}.");
         return record;
     }
+
+    // The note an arena death's record carries: the Deaths list shows it on the row.
+    public const string ArenaDeathNote = "Arena death: nothing was lost.";
 
     // A movement-refusal line was seen (e.g. "You are too paralyzed to move." /
     // "You can't go that way."). Drains the most recently queued pending move

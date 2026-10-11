@@ -37,8 +37,13 @@ public static class RoomSpellDamageText
         {
             case RoomSpellDamage.EveryTick:
                 // The tick damage is the Damage column's; what its timer ends in
-                // is said here, apart from it.
-                return timed.Length > 0 ? $"every tick; then {timed}" : "every tick";
+                // is said here, apart from it. A follow-on the user named is said
+                // as what it is: another spell, cast for the want of a buff.
+                string every = reading.FollowOnSpell > 0
+                    ? $"every tick: {Name(reading.FollowOnSpell, spellName)} is cast on a character without the "
+                        + $"{Name(reading.FollowOnWithoutBuff, spellName)} buff"
+                    : "every tick";
+                return timed.Length > 0 ? $"{every}; then {timed}" : every;
             case RoomSpellDamage.AfterATimer:
                 return $"on a timer: {timed}";
             case RoomSpellDamage.OnARoll:
@@ -57,9 +62,12 @@ public static class RoomSpellDamageText
 
     // "drowning 5–20 after 25 rounds": the spell a timer ends in, what it does and
     // when, counted from the room's first cast (a later one doesn't restart it).
+    private static string Name(int spell, Func<int, string?>? spellName) =>
+        spellName?.Invoke(spell) ?? $"spell {spell.ToString(CultureInfo.InvariantCulture)}";
+
     private static string Stage(RoomSpellDamageStage stage, Func<int, string?>? spellName)
     {
-        string name = spellName?.Invoke(stage.Spell) ?? $"spell {stage.Spell.ToString(CultureInfo.InvariantCulture)}";
+        string name = Name(stage.Spell, spellName);
         string amount = stage.MaxDamage <= 0 ? string.Empty
             : stage.MinDamage == stage.MaxDamage ? $" {stage.MaxDamage.ToString(CultureInfo.InvariantCulture)}"
             : $" {stage.MinDamage.ToString(CultureInfo.InvariantCulture)}–{stage.MaxDamage.ToString(CultureInfo.InvariantCulture)}";

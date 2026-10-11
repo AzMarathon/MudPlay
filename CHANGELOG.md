@@ -1,9 +1,38 @@
 # Version history
 
-## 3.168.1
+## 3.169.6
 
 - Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held until after the fight
+- Every lair wait also holds while mana is under the debuff's Min mana per cast (nav chip: Waiting for Mana to Debuff)
+- A lair wait ends at once when the loop is stopped or paused, or Auto-Combat or the master switch goes off
+- A buff you can't pay for is passed over for the next due buff, not waited behind
+- Entire Loop Settings offers the lair wait while a loop walks to its first room
 - Program log and bug report say what a lair wait is for, what it holds back and why it ended
+
+## 3.169.1
+
+- Help: remote @-commands rewritten as a full reference (forms, matching, replies, situations)
+
+## 3.169.0
+
+- A carried item that negates a room's spell is worn for you (phoenix feather, else magma amulet, against magma heat)
+- On when you come next to such a room, on inside it, off one room clear; kept on when the route's next step is next to one again
+- Sneaking past things (Auto-Sneak on, Auto-Combat off), it goes on in a room with no NPC
+- Giving the slot back never breaks a sneak that is being kept
+- A teleport, a drag or a typed step still gets the wear before or on arrival; a held step waits three seconds at most
+- The piece the game took off for it, or the current set's, goes back on
+- A wear the game refuses or never answers is set aside and tried again later, not every room
+- Wear and remove lines of hyphenated item names are read
+- Routes no longer count a negating item you carry but won't have on
+- Settings → Periodic Damage Room Spells: a tick box for it, on by default
+- Off with the master switch
+- Bug report lists what was put on this way and what was set aside
+- Periodic Damage Room Spells: Paradigm's desert rows show desert damage, 5–20, cast without the waterskin buff
+- Periodic Damage Room Spells: chaos storm and the drowning spells show their set damage, no "more with level"
+
+## 3.168.1
+
+- An arena death is recorded with nothing lost: no deathpile, no recovery, no re-wear
 
 ## 3.168.0
 

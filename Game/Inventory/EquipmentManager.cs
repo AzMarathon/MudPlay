@@ -79,7 +79,13 @@ public sealed class EquipmentManager
     // SKIPS these slots (BuildApplyCommands filters them) so a WhileMoving /
     // Bossing / rest trigger firing inside the area doesn't clobber the location
     // item. Released on area exit (ClearSlotOverride re-asserts the set's item).
-    private readonly HashSet<EquipmentSlot> _overriddenSlots = new();
+    // A slot can be held for more than one reason at once (a location rule and the
+    // room-spell counter), so each slot keeps who holds it and for which item, and
+    // goes back to the sets when the last of them lets go. A pressing claim (the
+    // counter: its room does damage on every cast) takes the slot from one that
+    // isn't, which gets it back when the pressing one lets go.
+    private readonly record struct SlotClaim(string Owner, string Item, bool Pressing);
+    private readonly Dictionary<EquipmentSlot, List<SlotClaim>> _slotOwners = new();
 
     // ----- unwearable-slot blocks ----------------------------------------
     // A (set, slot) the live character can't wear the configured item in — either
@@ -113,7 +119,11 @@ public sealed class EquipmentManager
     // weapon.") can be attributed to the specific slot+item it concerns.
     // Successful wears are removed as their confirmation line arrives; the oldest
     // remaining attempt of the matching kind is the one the refusal blocks.
-    private readonly record struct PendingEquip(string SetId, EquipmentSlot Slot, string ItemName);
+    // Owner is set for a slot override's wear (a location rule's item, a room-spell
+    // counter), which belongs to no set: its answer goes to SlotWearAnswered and
+    // blocks no set slot. The game answers gear commands in the order they were
+    // sent, so the one list keeps every wear the client has out in that order.
+    private readonly record struct PendingEquip(string SetId, EquipmentSlot Slot, string ItemName, string? Owner = null);
     private readonly List<PendingEquip> _pending = new();
     private DateTimeOffset _pendingStamp;
     private static readonly TimeSpan PendingWindow = TimeSpan.FromSeconds(6);
@@ -374,7 +384,7 @@ public sealed class EquipmentManager
         // This combat weapon path sends wear/eq too, but isn't a set apply — drop
         // any set-apply pending so a refusal it draws can't be misattributed back
         // to a set slot (which would wrongly block a wearable set item).
-        _pending.Clear();
+        _pending.RemoveAll(static p => p.Owner is null);
 
         string? wornWeapon = SlotItem(snap, "Weapon Hand");
         string? wornOffHand = SlotItem(snap, "Off-Hand");
@@ -419,14 +429,24 @@ public sealed class EquipmentManager
     // hold returns false and claims nothing (so the normal set item stays put).
     // Idempotent: re-owning an already-owned slot with the same worn item is a
     // no-op, which is what the per-room re-fire inside a same-named area wants.
-    public bool SetSlotOverride(string itemName)
+    //
+    public bool SetSlotOverride(string itemName, string owner = LocationOwner) =>
+        ClaimSlot(itemName, owner, urgent: false) is not (SlotClaimResult.NotClaimed or SlotClaimResult.NotSent);
+
+    // The same claim, saying what became of the wear: a caller that holds a step
+    // for the game's answer must know whether a command went out at all. owner
+    // names who asked, for the log: a location rule, or the room-spell counter
+    // (RoomSpellCounterWear). urgent sends the wear through a sneak the guard is
+    // keeping, and takes the slot from a claim that isn't: a counter left off costs
+    // the room's damage on every cast, which is worse than the sneak the wear ends.
+    public SlotClaimResult ClaimSlot(string itemName, string owner, bool urgent)
     {
         string name = itemName?.Trim() ?? "";
-        if (name.Length == 0) return false;
+        if (name.Length == 0) return SlotClaimResult.NotClaimed;
         if (_resolveItemSlot?.Invoke(name) is not { } slot)
         {
-            _log?.Debug(LogCategory, $"location-equip: '{name}' is not wearable gear — ignored");
-            return false;
+            _log?.Debug(LogCategory, $"{owner}: '{name}' is not wearable gear — ignored");
+            return SlotClaimResult.NotClaimed;
         }
 
         InventorySnapshot snap = _getSnapshot();
@@ -434,66 +454,199 @@ public sealed class EquipmentManager
             e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
         ISet<string>? held = HeldNames(snap);
         bool carried = held is not null && held.Contains(name);
-        if (!worn && !carried) return false;   // not available — don't own the slot
+        if (!worn && !carried) return SlotClaimResult.NotClaimed;   // not available — don't own the slot
 
-        if (!worn && HoldGear($"override:{slot}", () => SetSlotOverride(name), $"location-equip wear of '{name}'"))
-            return true;
-        bool newlyOwned = _overriddenSlots.Add(slot);
-        if (!worn)
+        if (!worn && !urgent
+            && HoldGear($"override:{slot}:{owner}", () => SetSlotOverride(name, owner), $"{owner} wear of '{name}'"))
+            return SlotClaimResult.Held;
+        if (!_slotOwners.TryGetValue(slot, out List<SlotClaim>? claims))
+            _slotOwners[slot] = claims = new List<SlotClaim>();
+        List<SlotClaim> others = claims.Where(c => c.Owner != owner).ToList();
+        // A claim is an owner's on one item. The same owner can have a second
+        // piece claimed for the slot while the first is still unanswered (the
+        // counter's next candidate), and each is let go by its own name.
+        bool Mine(SlotClaim c) => c.Owner == owner && string.Equals(c.Item, name, StringComparison.OrdinalIgnoreCase);
+        bool newlyOwned = !claims.Any(Mine);
+
+        SlotClaimResult result;
+        if (worn)
+            result = SlotClaimResult.AlreadyWorn;
+        // Another owner's claim on the same item means its wear is already on the
+        // way (a location rule and the room-spell counter both wanting the feather
+        // in the volcano): the slot is shared, and the command isn't sent twice.
+        else if (others.Any(c => string.Equals(c.Item, name, StringComparison.OrdinalIgnoreCase)))
+            result = SlotClaimResult.OnItsWay;
+        // A pressing claim holds the slot with another piece: this one waits its turn.
+        else if (!urgent && others.Any(static c => c.Pressing))
+            result = SlotClaimResult.Waiting;
+        // A locked send gate drops the command: nothing is claimed for a wear that
+        // never left, and the caller tries again at its next occasion.
+        else if (_sendGateLocked?.Invoke() == true)
         {
-            _log?.Info(LogCategory, $"location-equip: entering area — wearing '{name}' ({slot})");
-            _wire.Send($"{Verb(slot)} {name}");
+            if (claims.Count == 0) _slotOwners.Remove(slot);
+            return SlotClaimResult.NotSent;
         }
-        else if (newlyOwned)
+        else
+            result = SlotClaimResult.Sent;
+
+        claims.RemoveAll(Mine);
+        claims.Add(new SlotClaim(owner, name, urgent));
+        switch (result)
         {
-            _log?.Info(LogCategory, $"location-equip: '{name}' already worn — holding {slot}");
+            case SlotClaimResult.Sent:
+                _log?.Info(LogCategory, $"{Entering(owner)}wearing '{name}' ({slot})");
+                _wire.Send($"{Verb(slot)} {name}");
+                _pending.Add(new PendingEquip(string.Empty, slot, name, owner));
+                _pendingStamp = DateTimeOffset.Now;
+                break;
+            case SlotClaimResult.AlreadyWorn when newlyOwned:
+                _log?.Info(LogCategory, $"{owner}: '{name}' already worn — holding {slot}");
+                break;
+            case SlotClaimResult.OnItsWay when newlyOwned:
+                _log?.Info(LogCategory, $"{owner}: '{name}' is already being put on for another reason — holding {slot} too");
+                break;
+            case SlotClaimResult.Waiting when newlyOwned:
+                _log?.Info(LogCategory, $"{owner}: {slot} is held by a more pressing piece — '{name}' goes on when that one lets go");
+                break;
         }
-        return true;
+        return result;
     }
+
+    // True while a send would be dropped on the floor (EngineSendGate.IsLocked: a
+    // password prompt, the trainer form). Unset, sends are taken to go out.
+    private Func<bool>? _sendGateLocked;
+    public void SetSendGateProbe(Func<bool> locked) => _sendGateLocked = locked;
+
+    private const string LocationOwner = "location-equip";
+
+    // A location rule's lines say which edge of its area was crossed; another
+    // owner's own log line has already said why.
+    private static string Entering(string owner) =>
+        owner == LocationOwner ? "location-equip: entering area — " : $"{owner}: ";
+
+    private static string Leaving(string owner) =>
+        owner == LocationOwner ? "location-equip: exited area — " : $"{owner}: ";
 
     // Release the slot `itemName` fills and revert it to the active gear set's
     // item (re-asserted now, since set applies were skipping it while owned). If
-    // the current set leaves that slot bare, the location item is simply removed.
-    // No-op if the slot wasn't owned.
-    public void ClearSlotOverride(string itemName)
+    // the current set leaves that slot bare, the item is taken off, and otherwise,
+    // when given, goes on in its place: the piece the item displaced, for a
+    // character whose slot no set dresses. No-op if the slot wasn't owned.
+    //
+    // While a sneak is being kept nothing is sent and the claim stands (Held). The
+    // revert is queued to run as it is when the hold lifts, which is what a
+    // location rule wants; queueIfHeld false leaves it to an owner that decides
+    // again then (the room-spell counter, which may need the item after all).
+    public SlotReleaseResult ClearSlotOverride(
+        string itemName, string owner = LocationOwner, string? otherwise = null, bool queueIfHeld = true)
     {
         string name = itemName?.Trim() ?? "";
-        if (name.Length == 0) return;
-        if (_resolveItemSlot?.Invoke(name) is not { } slot) return;
-        if (!_overriddenSlots.Contains(slot)) return;
+        if (name.Length == 0) return SlotReleaseResult.NotOwned;
+        if (_resolveItemSlot?.Invoke(name) is not { } slot) return SlotReleaseResult.NotOwned;
+        bool Mine(SlotClaim c) => c.Owner == owner && string.Equals(c.Item, name, StringComparison.OrdinalIgnoreCase);
+        if (!_slotOwners.TryGetValue(slot, out List<SlotClaim>? claims) || !claims.Any(Mine))
+            return SlotReleaseResult.NotOwned;
         // Checked before the slot is released, so the redo still finds it owned.
-        if (HoldGear($"override:{slot}", () => ClearSlotOverride(name), $"location-equip revert of '{name}'")) return;
-        _overriddenSlots.Remove(slot);
+        if (queueIfHeld
+                ? HoldGear($"override:{slot}:{owner}", () => ClearSlotOverride(name, owner, otherwise), $"{owner} revert of '{name}'")
+                : _gearHeld?.Invoke() == true)
+            return SlotReleaseResult.Held;
+        claims.RemoveAll(Mine);
 
-        // The location item is also what counters the hazard of the room we are in
-        // now (the rule's area ended, the lava didn't). The slot goes back to the
-        // gear sets, which hold it the same way until the hazard is behind us.
+        InventorySnapshot snap = _getSnapshot();
+        bool IsOn(string item) => snap.EquippedItems.Any(
+            e => string.Equals(e.Name, item, StringComparison.OrdinalIgnoreCase));
+        bool paired = Capacity(FamilyOf(slot)) > 1;
+
+        if (claims.Count == 0)
+            _slotOwners.Remove(slot);
+        else
+        {
+            // Still claimed. A claim on this same piece keeps it on; one whose own
+            // piece was pushed out gets it back now. In a pair the other's piece
+            // can be on beside this one, which then comes off like any other.
+            SlotClaim next = claims[^1];
+            if (string.Equals(next.Item, name, StringComparison.OrdinalIgnoreCase))
+                return SlotReleaseResult.Released;
+            if (!IsOn(next.Item))
+            {
+                _log?.Info(LogCategory, $"{Leaving(owner)}{slot} goes back to '{next.Item}' ({next.Owner})");
+                SendRevert(slot, name, next.Item);
+                return SlotReleaseResult.ReleasedWithCommands;
+            }
+            if (!paired) return SlotReleaseResult.Released;
+        }
+
+        // The item is also what counters the hazard of the room we are in now (a
+        // rule's area ended, the lava didn't). The slot goes back to the gear sets,
+        // which hold it the same way until the hazard is behind us.
         if (_roomProtection?.Invoke() is { } protecting
             && protecting.Contains(name, StringComparer.OrdinalIgnoreCase))
         {
             _log?.Info(LogCategory,
-                $"location-equip: exited area — '{name}' stays on, it protects you in this room");
-            return;
+                $"{Leaving(owner)}'{name}' stays on, it protects you in this room");
+            return SlotReleaseResult.Released;
         }
 
-        string? setItem = CurrentSetItemFor(slot);
-        if (!string.IsNullOrEmpty(setItem)
-            && !string.Equals(setItem, name, StringComparison.OrdinalIgnoreCase))
-        {
-            _log?.Info(LogCategory,
-                $"location-equip: exited area — reverting {slot} to '{setItem}'");
-            _wire.Send($"{Verb(slot)} {setItem}");
-        }
-        else if (string.IsNullOrEmpty(setItem))
-        {
-            _log?.Info(LogCategory, $"location-equip: exited area — removing '{name}' ({slot})");
-            _wire.Send($"rem {name}");
-        }
+        string? setItem = RevertTargetFor(slot, name, IsOn, HeldNames(snap))
+            ?? (string.IsNullOrWhiteSpace(otherwise) || IsOn(otherwise.Trim()) ? null : otherwise.Trim());
+        if (string.Equals(setItem, name, StringComparison.OrdinalIgnoreCase))
+            return SlotReleaseResult.Released;   // the set in force wears this very piece
+        _log?.Info(LogCategory, string.IsNullOrEmpty(setItem)
+            ? $"{Leaving(owner)}removing '{name}' ({slot})"
+            : $"{Leaving(owner)}reverting {slot} to '{setItem}'");
+        SendRevert(slot, name, setItem);
+        return SlotReleaseResult.ReleasedWithCommands;
+    }
+
+    // Take `name` out of its slot and put `back` there, or nothing. A single slot
+    // needs only the wear, which pushes the old piece out. A finger or a wrist has
+    // two places and an `eq` into a full pair evicts whichever the realm picks
+    // (ComposePairedSlotCommands), so the piece comes off first and the other
+    // then fills the place it left.
+    private void SendRevert(EquipmentSlot slot, string name, string? back)
+    {
+        bool paired = Capacity(FamilyOf(slot)) > 1;
+        if (paired || string.IsNullOrEmpty(back)) _wire.Send($"rem {name}");
+        if (!string.IsNullOrEmpty(back)) _wire.Send($"{Verb(slot)} {back}");
+    }
+
+    // What the set in force would have in the place `leaving` gives up: its item
+    // for the slot, or for a pair the first of its two that is in the pack and not
+    // on. Null when the set has nothing for it (or no set is current).
+    private string? RevertTargetFor(EquipmentSlot slot, string leaving, Func<string, bool> isOn, ISet<string>? held)
+    {
+        if (Capacity(FamilyOf(slot)) == 1) return CurrentSetItemFor(slot);
+        if (CurrentSetId is null) return null;
+        EquipmentSet? set = _readEquipment().Sets
+            .FirstOrDefault(s => string.Equals(s.Id, CurrentSetId, StringComparison.Ordinal));
+        if (set is null) return null;
+        List<string> members = set.Slots
+            .Where(e => FamilyOf(e.Slot) == FamilyOf(slot) && !string.IsNullOrWhiteSpace(e.ItemName))
+            .Select(static e => e.ItemName!.Trim())
+            .ToList();
+        // The set itself wears the piece: it stays where it is.
+        if (members.Contains(leaving, StringComparer.OrdinalIgnoreCase)) return leaving;
+        return members.FirstOrDefault(item => !isOn(item) && IsHeld(held, item));
+    }
+
+    // Let go of the owner's claim for `itemName` with nothing sent: the wear that
+    // claimed it was refused, or the item is no longer on. Only that item's claim:
+    // the owner's claim for another piece in the same slot (the counter's second
+    // candidate, by then the one that is on) stands.
+    public void DropSlotOverride(string itemName, string owner)
+    {
+        string name = itemName?.Trim() ?? "";
+        _pending.RemoveAll(p => p.Owner == owner && string.Equals(p.ItemName, name, StringComparison.OrdinalIgnoreCase));
+        if (_resolveItemSlot?.Invoke(name) is not { } slot
+            || !_slotOwners.TryGetValue(slot, out List<SlotClaim>? claims)) return;
+        claims.RemoveAll(c => c.Owner == owner && string.Equals(c.Item, name, StringComparison.OrdinalIgnoreCase));
+        if (claims.Count == 0) _slotOwners.Remove(slot);
     }
 
     // Drop all location ownership without touching the wire — used on a profile
     // swap, where the new character's gear + rules are unrelated to the old.
-    public void ForgetSlotOverrides() => _overriddenSlots.Clear();
+    public void ForgetSlotOverrides() => _slotOwners.Clear();
 
     // The active gear set's configured item for a slot (null if no set is current
     // or the set doesn't dress that slot).
@@ -566,7 +719,7 @@ public sealed class EquipmentManager
         // burst); clear any set-apply pending so a refusal here can't misblock a
         // set slot.
         if (HoldGear("backstab-armor", () => ApplyBackstabArmor(), "backstab armor")) return EquipResult.Busy;
-        _pending.Clear();
+        _pending.RemoveAll(static p => p.Owner is null);
         _log?.Info(LogCategory, $"backstab armor — {cmds.Count} piece(s)");
         foreach (string cmd in cmds) _wire.Send(cmd);
         return EquipResult.Applied;
@@ -721,7 +874,7 @@ public sealed class EquipmentManager
     {
         List<string> cmds = PrependTwoHandOffHandConflictRems(set, snap.EquippedItems, _isTwoHanded,
             BuildApplyCommandsCore(set, snap, fillFromInventory, armorOnly));
-        return KeepRoomProtection(set, snap, DropLocationOwnedSlots(set, cmds));
+        return KeepRoomProtection(set, snap, DropLocationOwnedSlots(set, cmds, snap));
     }
 
     // The worn items that are what keeps the character safe where it stands: the
@@ -783,17 +936,78 @@ public sealed class EquipmentManager
     // The dropped command is the set's own item for that slot — the exact string
     // BuildWearCommands would have emitted — so removal is precise. On area exit
     // the LocationEquipManager releases the slot and the set re-dresses it.
-    private List<string> DropLocationOwnedSlots(EquipmentSet set, List<string> cmds)
+    //
+    // A finger or a wrist has two places and the claim holds one of them. The set
+    // still dresses the other (DressAroundOwnedPair).
+    private List<string> DropLocationOwnedSlots(EquipmentSet set, List<string> cmds, InventorySnapshot snap)
     {
-        if (_overriddenSlots.Count == 0 || cmds.Count == 0) return cmds;
+        if (_slotOwners.Count == 0 || cmds.Count == 0) return cmds;
         var drop = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (EquipmentSlotEntry e in set.Slots)
         {
-            if (!_overriddenSlots.Contains(e.Slot)) continue;
+            if (Capacity(FamilyOf(e.Slot)) > 1 || !_slotOwners.ContainsKey(e.Slot)) continue;
             string? name = e.ItemName?.Trim();
             if (!string.IsNullOrEmpty(name)) drop.Add($"{Verb(e.Slot)} {name}");
         }
         if (drop.Count > 0) cmds.RemoveAll(drop.Contains);
+        foreach (EquipmentSlot family in PairedFamilies)
+        {
+            List<string> claimed = _slotOwners
+                .Where(kv => FamilyOf(kv.Key) == family)
+                .SelectMany(static kv => kv.Value.Select(static c => c.Item))
+                .ToList();
+            if (claimed.Count > 0) cmds = DressAroundOwnedPair(set, cmds, snap, family, claimed);
+        }
+        return cmds;
+    }
+
+    // The set's commands for a pair one of whose places a claim holds, written
+    // again so that nothing of the claim's is taken off: a bare `eq` into a full
+    // pair pushes out whichever piece the realm picks, which could be the claimed
+    // one. A set piece goes into a free place; with none free, a worn piece that is
+    // neither claimed nor the set's own comes off first to make one; with neither,
+    // the set piece waits for the claim to let go.
+    private List<string> DressAroundOwnedPair(
+        EquipmentSet set, List<string> cmds, InventorySnapshot snap, EquipmentSlot family, List<string> claimed)
+    {
+        List<string> members = set.Slots
+            .Where(e => !IsVirtual(e.Slot) && FamilyOf(e.Slot) == family && !string.IsNullOrWhiteSpace(e.ItemName))
+            .Select(static e => e.ItemName!.Trim())
+            .ToList();
+        List<string> worn = snap.EquippedItems
+            .Where(e => (_resolveItemSlot?.Invoke(e.Name) ?? EquipmentSlotMap.FromWornString(e.Slot)) is { } s
+                        && FamilyOf(s) == family)
+            .Select(static e => e.Name.Trim())
+            .ToList();
+        // A claimed piece whose wear is still on its way already has its place.
+        foreach (string c in claimed)
+            if (!worn.Contains(c, StringComparer.OrdinalIgnoreCase)) worn.Add(c);
+
+        var mine = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string m in members) mine.Add($"{Verb(family)} {m}");
+        foreach (string w in worn) mine.Add($"rem {w}");
+        int at = cmds.FindIndex(mine.Contains);
+        if (at < 0) return cmds;
+        List<string> wanted = cmds.Where(c => c.StartsWith(Verb(family) + " ", StringComparison.Ordinal) && mine.Contains(c))
+            .ToList();
+        cmds.RemoveAll(mine.Contains);
+
+        var again = new List<string>();
+        foreach (string wear in wanted)
+        {
+            if (worn.Count >= Capacity(family))
+            {
+                string? oddOut = worn.FirstOrDefault(w =>
+                    !claimed.Contains(w, StringComparer.OrdinalIgnoreCase)
+                    && !members.Contains(w, StringComparer.OrdinalIgnoreCase));
+                if (oddOut is null) continue;
+                again.Add($"rem {oddOut}");
+                worn.Remove(oddOut);
+            }
+            again.Add(wear);
+            worn.Add(wear[(Verb(family).Length + 1)..]);
+        }
+        cmds.InsertRange(Math.Min(at, cmds.Count), again);
         return cmds;
     }
 
@@ -1136,6 +1350,11 @@ public sealed class EquipmentManager
     private static int Capacity(EquipmentSlot family) =>
         family is EquipmentSlot.Finger1 or EquipmentSlot.Wrist1 ? 2 : 1;
 
+    // How many pieces the slot's family takes, and whether two slots are the same
+    // family's, for a caller weighing what a wear would push out.
+    public static int PlacesFor(EquipmentSlot slot) => Capacity(FamilyOf(slot));
+    public static bool SharePlaces(EquipmentSlot a, EquipmentSlot b) => FamilyOf(a) == FamilyOf(b);
+
     // The equip verb: weapons take the universal `eq` (wear is armor-only per the
     // game's verb set); everything worn takes `wear`, matching the set-only diff.
     // The universal `eq` verb for weapons AND the paired finger / wrist families;
@@ -1299,7 +1518,8 @@ public sealed class EquipmentManager
     // set's own picks are tracked (an inventory-fallback fill isn't a set slot).
     private void RecordPending(EquipmentSet set, IReadOnlyList<string> cmds)
     {
-        _pending.Clear();
+        // A slot claim's wear still out keeps its place ahead of this apply's.
+        _pending.RemoveAll(static p => p.Owner is null);
         _pendingStamp = DateTimeOffset.Now;
         foreach (string c in cmds)
         {
@@ -1327,7 +1547,64 @@ public sealed class EquipmentManager
     {
         ExpirePending();
         string n = itemName.Trim();
+        List<PendingEquip> claimed = _pending
+            .Where(p => p.Owner is not null && string.Equals(p.ItemName, n, StringComparison.OrdinalIgnoreCase))
+            .ToList();
         _pending.RemoveAll(p => string.Equals(p.ItemName, n, StringComparison.OrdinalIgnoreCase));
+        foreach (PendingEquip p in claimed) SlotWearAnswered?.Invoke(p.ItemName, SlotWearAnswer.Worn);
+    }
+
+    // The game's answer to a slot claim's wear (ClaimSlot said Sent): the item and
+    // what was said. A claim's wear blocks no set slot; its owner decides what a
+    // refusal means.
+    public event Action<string, SlotWearAnswer>? SlotWearAnswered;
+
+    // A claim's attempt answered with something other than the wear line: it leaves
+    // the list and its owner is told. False for a set's attempt, which the caller
+    // goes on to block.
+    private bool AnswerClaim(int idx, SlotWearAnswer answer)
+    {
+        PendingEquip p = _pending[idx];
+        if (p.Owner is null) return false;
+        _pending.RemoveAt(idx);
+        _log?.Info(LogCategory, $"{p.Owner}: the game would not put '{p.ItemName}' on ({Describe(answer)})");
+        SlotWearAnswered?.Invoke(p.ItemName, answer);
+        return true;
+    }
+
+    private static string Describe(SlotWearAnswer answer) => answer switch
+    {
+        SlotWearAnswer.Refused => "you may not wear it",
+        SlotWearAnswer.CannotBeWorn => "it can't be worn",
+        SlotWearAnswer.NoRoom => "no room to wear it",
+        SlotWearAnswer.NotInPack => "it isn't in the pack",
+        SlotWearAnswer.OccupantStuck => "what is in its place can't come off",
+        _ => "worn",
+    };
+
+    // "You do not have <item> left unequipped.": the game echoes the name typed, so
+    // the line goes to the claim's attempt of that name. A set's attempt is left
+    // where it is: its re-send guard (IsReapplyInFlight) counts on it staying.
+    public void NoteNotLeftUnequipped(string itemName)
+    {
+        ExpirePending();
+        string n = itemName.Trim();
+        int idx = _pending.FindIndex(p => p.Owner is not null
+            && string.Equals(p.ItemName, n, StringComparison.OrdinalIgnoreCase));
+        if (idx >= 0) AnswerClaim(idx, SlotWearAnswer.NotInPack);
+    }
+
+    // "You are already wearing <occupant> and it may not be removed.": a cursed
+    // piece sits where the wear was going. The line names the occupant, so it goes
+    // to the oldest attempt for that piece's place.
+    public void NoteOccupantNotRemovable(string occupant)
+    {
+        ExpirePending();
+        EquipmentSlot? place = _resolveItemSlot?.Invoke(occupant.Trim());
+        int idx = place is { } slot
+            ? _pending.FindIndex(p => FamilyOf(p.Slot) == FamilyOf(slot))
+            : _pending.FindIndex(static p => p.Slot != EquipmentSlot.Weapon);
+        if (idx >= 0) AnswerClaim(idx, SlotWearAnswer.OccupantStuck);
     }
 
     // The game refused an armor wear ("You may not wear that item!"). Attribute
@@ -1359,6 +1636,8 @@ public sealed class EquipmentManager
             : _pending.FindIndex(p => p.Slot != EquipmentSlot.Weapon);
         if (idx < 0) return null;
         PendingEquip p = _pending[idx];
+        if (AnswerClaim(idx, named.Length == 0 ? SlotWearAnswer.NoRoom : SlotWearAnswer.CannotBeWorn))
+            return null;
         _pending.RemoveAt(idx);
         SetBlock((p.SetId, p.Slot), p.ItemName, serverConfirmed: true, announce: true,
             transient: named.Length == 0);
@@ -1416,6 +1695,7 @@ public sealed class EquipmentManager
         int idx = _pending.FindIndex(p => (p.Slot == EquipmentSlot.Weapon) == weapon);
         if (idx < 0) return null;
         PendingEquip p = _pending[idx];
+        if (AnswerClaim(idx, SlotWearAnswer.Refused)) return null;
         _pending.RemoveAt(idx);
         SetBlock((p.SetId, p.Slot), p.ItemName, serverConfirmed: true, announce: true);
         return p.ItemName;
