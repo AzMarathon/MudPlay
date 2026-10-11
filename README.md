@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.1**
-> - A BBS renamed by capitals only keeps its characters' saved Simulator rankings
+> **Version 3.180.6**
+> - A learned room name is kept per realm and put back on the map each session; `Rooms.json` is no longer written
+> - A room the game data leaves unnamed takes a new name when the board prints one as you walk in, and asks once whether to save it in place of the old
+> - A learned name shows in the trainer, bank, quest, item and spell lists
+> - Saving a learned name says in the terminal when it could not be kept, and why
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
