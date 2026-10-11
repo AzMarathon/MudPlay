@@ -1028,6 +1028,8 @@ Your client goes through these checks in this order. The first one that stops a 
 
 A player your client has never seen has no box ticked, so every command in the table is refused. The Players batch editor's **Set all permissions** ticks or clears all sixteen for the selected players.
 
+**What Alter settings allows through your events.** A player who holds **Alter settings** can switch your events on and off with `@event`, and an event switched on does whatever you defined it to do: walk somewhere, run a loop or Auto-Lair, make a bank trip, send a command. Sent as commands of their own, those would need **Move player** or **Execute commands**. The holder can't define an event or change what one does, only switch on and off the ones you made. See **@events and @event**.
+
 **Party members get some commands with no box ticked.** Anyone on your party roster (matched by first name) may send:
 
 - `@health`, `@status` and `@lives`;
@@ -2552,6 +2554,8 @@ A name longer than 40 characters is shown cut short, as its first 37 characters 
 The last word is read as the switch (`on`, `off`, `enable`, `disable`), unless everything after `@event` is itself an event's whole name. So an event called *Lights on* is asked about with `@event lights on` and switched with `@event lights on on`. With both a *Lights* and a *Lights on* defined, `@event lights on` asks about *Lights on*; switch *Lights* on with `@event lights enable`.
 
 **Who may send it:** a player with **Alter settings**, on any of the three channels. It is the permission `@settings`, `@profile` and the `@auto-…` toggles need: seeing how your client is set up needs the same grant as changing it. A player without it gets the Failure message whatever they typed, and so can't learn whether an event of some name exists.
+
+**What granting it allows here.** A player who holds Alter settings can switch your events on and off, and an event switched on does whatever you defined it to do: walk somewhere, run a loop or Auto-Lair, make a bank trip, send a command. They can't define an event or change what one does.
 
 **What an answer may say.** An event's number and name, and whether it is on. The one-event answer adds the *kind* of its trigger and action in fixed words (`fires on logon`, `sends a command`), and for an event on a clock the schedule it runs on: its period (`fires every 30 minutes`) or its time of day (`fires at 21:30 daily`), worded as the Events tab's **When** column words them. The list doesn't give the schedule. No answer says what an event sends, or names its loop, its Auto-Lair setup, its rooms or its boss: an event's command can hold anything you typed, and a boss-timer event is only said to follow a boss timer.
 
@@ -6596,7 +6600,7 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 ### Event list (New… / Modify… / Remove)
 
 **What it does:** Shows every scheduled event you've defined, with its **Name**, its trigger (**When**), a live countdown to its next fire (**Next**), and its action, its stop rule and its Then step (**What**, e.g. `Loop "Sewer" (until 3 laps) → go back`). **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
-**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A disabled event shows an **off** badge in the list. A player you grant **Alter settings** can list your events and switch one on or off with the remote commands `@events` and `@event` (see *Remote @-commands*); the list shows the change at once. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time**, **Every** and timed **Boss** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
+**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A disabled event shows an **off** badge in the list. A player you grant **Alter settings** can list your events and switch one on or off, by its name or by its number in the list, with the remote commands `@events` and `@event` (see *Remote @-commands*); an event they switch on does whatever you defined it to do. The list shows the change at once, and so does the event's editor if it is open: its **Disabled** box moves with the switch. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time**, **Every** and timed **Boss** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
 
 ### Event editor — Sound
 

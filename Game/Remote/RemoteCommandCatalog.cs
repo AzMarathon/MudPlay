@@ -173,7 +173,10 @@ public static class RemoteCommandCatalog
             ["@profile"]      = PlayerRemoteControls.AlterSettings,   // swap the active casting spell profile
             // The character's Events (Settings → Events): listed, and one switched
             // on or off. Reading how the client is set up needs the same grant as
-            // changing it, as @settings and a bare @profile do.
+            // changing it, as @settings and a bare @profile do. AlterSettings for
+            // the switch is the owner's decision of 2026-10-11, made knowing that
+            // an event switched on can walk, run a loop or Auto-Lair, bank or send
+            // a command, which otherwise need MovePlayer or ExecuteCommands.
             ["@events"]       = PlayerRemoteControls.AlterSettings,
             ["@event"]        = PlayerRemoteControls.AlterSettings,
             ["@divert"]       = PlayerRemoteControls.DivertConversations,

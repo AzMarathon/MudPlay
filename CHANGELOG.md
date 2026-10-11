@@ -2,9 +2,9 @@
 
 ## 3.179.0
 
-- New remote commands `@events` (lists your Events, each on or off) and `@event <name> [on|off]` (one event's state, or switches it); both need Alter settings
-- Answers give an event's name, state and kind only, never what it sends
-- The Events tab shows an `off` badge on a disabled event, and follows a remote switch at once
+- New remote commands `@events` (lists your Events by number, each on or off) and `@event <name or number> [on|off]` (one event's state and schedule, or switches it); both need Alter settings
+- Answers give an event's name, state, schedule and kind only, never what it sends or the loop, room or boss it uses
+- The Events tab shows an `off` badge on a disabled event; the tab and an open event editor follow a remote switch at once
 
 ## 3.178.1
 

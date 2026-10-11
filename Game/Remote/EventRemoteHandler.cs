@@ -21,6 +21,13 @@ namespace MudPlay.Game.Remote;
 // it before this handler runs, so a player without it is told nothing here and
 // can't learn whether an event of some name exists.
 //
+// That grant is the owner's decision of 2026-10-11, made knowing what it lets a
+// holder do: an event switched on does whatever it was defined to do (walk, run
+// a loop or Auto-Lair, make a bank trip, send a command), which sent as commands
+// of their own would need MovePlayer or ExecuteCommands. The holder can only
+// switch on what the user defined, never define an event or change one. Help
+// says so where it describes the permission.
+//
 // What an answer may say: the name, the state, and for the one-event form the
 // kinds of its trigger and action in fixed words, with the schedule a clock
 // trigger runs on ("every 30 minutes", "at 21:30 daily"). The owner asked for
