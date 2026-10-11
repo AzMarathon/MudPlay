@@ -1115,9 +1115,11 @@ public sealed class PartyComebackManager : IDisposable
     // (ComebackRequester) reads each one to decide whether to give the follow up
     // at once ("I can't", "my party is full", "can't find a path", "can't come",
     // "forget me", "going idle"), to give up after a pickup that failed ("can't
-    // reach", "path failed", "follow timed out"), or to keep waiting (anything
-    // else). Silenced, a follower would wait out its whole window for a leader
-    // who had already said no. The words it matches on are not to be reworded.
+    // reach", "path failed", "follow timed out"), or to wait for us for longer
+    // (the answers SaysComingOrLater names). Silenced, a follower would wait out
+    // its whole window for a leader who had already said no. The words it matches
+    // on are not to be reworded. (The three answers OnComeback gives through
+    // Refuse are not among these: they follow the Warn setting.)
     private void BeginRecovery(string senderGiven, RoomKey? target, Action<string> reply,
         ResumeTarget? carried = null, bool tripFetch = false, bool roomUnconfirmed = false)
     {
