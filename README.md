@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.177.0**
-> - Imported game data is held in a compact form instead of parsed JSON: about 25 MB less memory through a Paradigm session (14 MB on Stock), and 80 MB less in the first minutes after a set loads
-> - Loading a set's tables allocates a third of the memory it did
-> - Program log shows what each game-data table holds when a set loads
+> **Version 3.177.2**
+> - Simulator area ranking: **Save as loop** turns a ranked area's tour into a saved loop you can run, with how it was tested in the loop's notes
+> - A picked ranking now shows its route (the first 20 rooms in order, and how many more) and what it was tested at (level, runs × hours, walk pace, start room)
+> - A tour that is already one of your saved loops is not saved again; a name that is taken gets a number
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

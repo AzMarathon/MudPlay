@@ -363,6 +363,18 @@ public sealed class LoopManager
     public Loop? Get(string name) =>
         _loops.TryGetValue(name, out Loop? loop) ? loop : null;
 
+    // "<name> 2", or the next number up that no loop has: what a loop is saved as
+    // when its own name belongs to another loop, so that one is never overwritten.
+    // Names are matched without case, as the catalogue matches them.
+    public string NumberedName(string name)
+    {
+        for (int n = 2; ; n++)
+        {
+            string candidate = $"{name} {n}";
+            if (!_loops.ContainsKey(candidate)) return candidate;
+        }
+    }
+
     // Resolve a typed loop name the way the remote @loop commands do: an exact
     // (case-insensitive) name wins outright; otherwise every loop whose name holds
     // every typed word, in any order ("godfrey bank" → "Bank of Godfrey Loop").
