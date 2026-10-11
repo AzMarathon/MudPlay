@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.1**
-> - A BBS renamed by capitals only keeps its characters' saved Simulator rankings
+> **Version 3.180.2**
+> - Yells from other players are read as chat and show in the Conversation window; before, only your own yell was
+> - A yell heard from the next room shows as from Someone with where it came from, e.g. Someone (from the north), and the talk log keeps that
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
