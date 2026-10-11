@@ -70,6 +70,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
         public bool Following;
         public bool SneakKept;
         public bool SendBlocked;
+        public bool AutoSneak = true;
         public List<RoomKey> RoomsAhead = new() { Dunes };
         public List<string> Wire { get; } = new();
         public int UsesSent;
@@ -99,7 +100,8 @@ public sealed class HazardBuffRefreshTests : IDisposable
                 allCounters: () => new[] { Counter },
                 sneakKept: () => SneakKept,
                 chargesLeft: _ => Charges,
-                sendBlocked: () => SendBlocked);
+                sendBlocked: () => SendBlocked,
+                autoSneakOn: () => AutoSneak);
             Engine.SetWireSender(b => Wire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
             Engine.UseSent += () => UsesSent++;
             Engine.SneakSpentHere += () => SneakSpent++;
@@ -167,8 +169,42 @@ public sealed class HazardBuffRefreshTests : IDisposable
 
     // ----- timing: before it wears off, but not too soon ---------------------
 
-    // Standing in the desert with the buff up: nothing is due until 60 s before it
-    // ends, it can wait until 15 s before, and then it can't.
+    // The window buys the search for a room with no NPCs, so it comes with
+    // Auto-Sneak. Without it the refresh keeps to the last 15 s, and then it can't
+    // wait.
+    [Theory]
+    [InlineData(1740, false)]
+    [InlineData(1784, false)]
+    [InlineData(1785, true)]
+    [InlineData(1900, true)]
+    public void AutoSneakOff_TheRefreshIsDueOnlyAtTheLastCall(int secondsOn, bool due)
+    {
+        Field f = new() { AutoSneak = false };
+        f.Engine.OnServerLine(SwigLine);
+
+        f.Advance(secondsOn);
+
+        Assert.Equal(due ? ("use waterskin", true) : null, f.Engine.DueNow());
+    }
+
+    // Nor is anything looked ahead for: with the desert a step away and the buff off
+    // nothing is on offer, and the first drink goes out at the edge, on the step.
+    [Fact]
+    public void AutoSneakOff_NoLookAhead_TheFirstDrinkGoesOutAtTheEdge()
+    {
+        Field f = new() { AutoSneak = false, RoomsAhead = new() { Oasis, Dunes } };
+
+        Assert.Null(f.Engine.DueNow());
+        Assert.False(f.Engine.FireDue(sneakKept: false));
+        Assert.Empty(f.Wire);
+
+        f.Engine.OnApproachingRoom(Dunes);
+        Assert.Equal(new[] { "use waterskin" }, f.Wire);
+        Assert.Contains(f.LogLines, l => l.Contains("refreshed in its last 15 s (Auto-Sneak off"));
+    }
+
+    // Standing in the desert with Auto-Sneak on and the buff up: nothing is due until
+    // 60 s before it ends, it can wait until 15 s before, and then it can't.
     [Theory]
     [InlineData(1739, false, false)]
     [InlineData(1740, true, false)]

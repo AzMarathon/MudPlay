@@ -22,11 +22,15 @@ namespace MudPlay.Game.Map;
 //    hand as much as for ours. The waterskin buff has no wear-off line, so the end
 //    is worked out from the duration. A death, a dropped link, a new profile and a
 //    new game-data set forget it: unknown counts as off when a hazard room is next.
-//  • The window — inside RefreshWindowSeconds of the end the refresh is offered to
-//    the between-round cast scheduler (CastingDirector.SetClientUseSource), which
-//    gives it the round's one cast and holds it for sneak keeping like any buff:
-//    with Auto-Sneak on it waits for a room with no NPCs, goes out there, and the
-//    re-sneak that follows is answered before the next step.
+//  • The window — with Auto-Sneak on, inside RefreshWindowSeconds of the end, and
+//    with a countered room here or a few planned steps ahead, the refresh is offered
+//    to the between-round cast scheduler (CastingDirector.SetClientUseSource), which
+//    gives it the round's one cast and holds it for sneak keeping like any buff: it
+//    waits for a room with no NPCs, goes out there, and the re-sneak that follows is
+//    answered before the next step. The early window and the look ahead exist to buy
+//    that search and nothing else, so with Auto-Sneak off there is neither: "not too
+//    soon before it wears off or we'll be using a lot more waterskins than we should
+//    be" (user, 2026-10-10). The refresh then keeps to the last call.
 //  • The last call — inside ForcedLeadSeconds of the end (or with the buff off)
 //    it can't wait any longer. The step into a countered room sends it where the
 //    character stands (OnApproachingRoom, asked ahead of the sneak check), a
@@ -64,10 +68,11 @@ public sealed class AutoHazardCounterProvisioner
     // LogService category — [HazardCounter] rows per decision.
     public const string LogCategory = "HazardCounter";
 
-    // The refresh is on offer this long before the buff runs out. One charge buys
-    // 1800 s of waterskin, so a refresh at the very start of the window gives up a
-    // thirtieth of one; twelve 5 s combat rounds is room to finish a fight, find a
-    // room with no NPCs on a sneaked walk and get the round's one cast.
+    // With Auto-Sneak on the refresh is on offer this long before the buff runs out.
+    // One charge buys 1800 s of waterskin, so a refresh at the very start of the
+    // window gives up a thirtieth of one; twelve 5 s combat rounds is room to finish
+    // a fight, find a room with no NPCs on a sneaked walk and get the round's one
+    // cast. With Auto-Sneak off there is no search to buy, and no window.
     public const int RefreshWindowSeconds = 60;
 
     // Inside this of the end the `use` goes out wherever the character stands: three
@@ -76,9 +81,10 @@ public sealed class AutoHazardCounterProvisioner
     // between the lapse and the refresh.
     public const int ForcedLeadSeconds = 15;
 
-    // How many planned steps ahead a countered room makes the buff matter. Far enough
-    // to find a room with no NPCs before the edge, near enough that a route passing
-    // by spends nothing.
+    // With Auto-Sneak on, how many planned steps ahead a countered room makes the buff
+    // matter. Far enough to find a room with no NPCs before the edge, near enough
+    // that a route passing by spends nothing. With Auto-Sneak off nothing is looked
+    // ahead for: the first drink goes out at the edge, on the step's last call.
     public const int LookaheadSteps = 5;
 
     // Fallback refresh interval when the buff's duration isn't in the data (Dur 0):
@@ -114,6 +120,9 @@ public sealed class AutoHazardCounterProvisioner
     private readonly Func<IEnumerable<RoomHazardIndex.BuffCounter>>? _allCounters;
     // SneakGuard.Holds: a sneak is being kept that a `use` would end.
     private readonly Func<bool>? _sneakKept;
+    // Auto-Sneak is on: the refresh gets its window and its look ahead, to find a
+    // room with no NPCs in. Null → off.
+    private readonly Func<bool>? _autoSneakOn;
     // Charges left in the carried item, null when the client doesn't know.
     private readonly Func<int, int?>? _chargesLeft;
     // The engine send gate is up (a password prompt, mortally wounded): a send now
@@ -182,7 +191,8 @@ public sealed class AutoHazardCounterProvisioner
         Func<IEnumerable<RoomHazardIndex.BuffCounter>>? allCounters = null,
         Func<bool>? sneakKept = null,
         Func<int, int?>? chargesLeft = null,
-        Func<bool>? sendBlocked = null)
+        Func<bool>? sendBlocked = null,
+        Func<bool>? autoSneakOn = null)
     {
         ArgumentNullException.ThrowIfNull(resolveRoom);
         ArgumentNullException.ThrowIfNull(hazardForSpell);
@@ -203,6 +213,7 @@ public sealed class AutoHazardCounterProvisioner
         _sneakKept = sneakKept;
         _chargesLeft = chargesLeft;
         _sendBlocked = sendBlocked;
+        _autoSneakOn = autoSneakOn;
     }
 
     // Bind the wire-sender — the gate-wrapped engine pipeline from
@@ -425,14 +436,19 @@ public sealed class AutoHazardCounterProvisioner
         if (!_walkActive() && !_followingLeader()) return null;
         if (_roomsAhead?.Invoke() is not { Count: > 0 } rooms) return null;
 
+        // The window and the look ahead buy the search for a room with no NPCs. With
+        // Auto-Sneak off there is nothing to search for: only the room we stand in
+        // counts, and only at the last call.
+        bool searching = _autoSneakOn?.Invoke() == true;
+        int reach = searching ? rooms.Count : 1;
         DateTimeOffset now = _now();
-        for (int i = 0; i < rooms.Count; i++)
+        for (int i = 0; i < reach; i++)
         {
             if (_resolveRoom(rooms[i]) is not { Spell: > 0 } room) continue;
             if (_hazardForSpell(room.Spell) is not { } hazard) continue;
             foreach (RoomHazardIndex.BuffCounter c in hazard.BuffCounters)
             {
-                if (!InWindow(c, now)) continue;
+                if (!(searching ? InWindow(c, now) : MustUseNow(c, now))) continue;
                 if (SourceToUse(c) is not int item) continue;
                 if (_itemName(item) is not { Length: > 0 } name) continue;
                 counter = c;
@@ -652,9 +668,14 @@ public sealed class AutoHazardCounterProvisioner
 
     private static string Describe(Room room) => $"{room.Key} ({room.Name})";
 
-    private static string Lasts(in RoomHazardIndex.BuffCounter counter) => counter.DurationSeconds > 0
-        ? $"lasts {counter.DurationSeconds} s; the refresh window opens {RefreshWindowSeconds} s before it ends"
+    private string Lasts(in RoomHazardIndex.BuffCounter counter) => counter.DurationSeconds > 0
+        ? $"lasts {counter.DurationSeconds} s; {Refreshed()}"
         : $"length not in the game data; used again after {UnknownDurationRefreshSeconds} s";
+
+    // When the refresh comes, as things stand.
+    private string Refreshed() => _autoSneakOn?.Invoke() == true
+        ? $"refresh window {RefreshWindowSeconds} s, last call {ForcedLeadSeconds} s"
+        : $"refreshed in its last {ForcedLeadSeconds} s (Auto-Sneak off: no window, no look ahead)";
 
     // The tracked buffs, one line each, for the bug report. Empty when none is known
     // to be on.
@@ -670,7 +691,7 @@ public sealed class AutoHazardCounterProvisioner
                 : "length unknown";
             lines.Add($"buff {buffSpell}: on since {onSince.ToLocalTime():HH:mm:ss} "
                 + (confirmed ? "(its line was seen)" : "(a `use` went out; its line not seen)")
-                + $", {ends}; refresh window {RefreshWindowSeconds} s, last call {ForcedLeadSeconds} s"
+                + $", {ends}; {Refreshed()}"
                 + (_pending is { } p && p.BuffSpell == buffSpell ? "; answer to the `use` still awaited" : ""));
         }
         foreach ((int item, int count) in _refusedAtCount)

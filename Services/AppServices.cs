@@ -7891,7 +7891,10 @@ public sealed class AppServices
             allCounters:    () => RoomHazards.Hazards.SelectMany(h => h.BuffCounters),
             sneakKept:      () => SneakGuard.Holds,
             chargesLeft:    id => ItemNames.GetName(id) is { } name ? CarriedCharges.RemainingForName(name) : null,
-            sendBlocked:    () => EngineGate.IsLocked);
+            sendBlocked:    () => EngineGate.IsLocked,
+            // The early window and the look ahead are for finding a room with no
+            // NPCs to drink in, so they come with Auto-Sneak and not without.
+            autoSneakOn:    () => ReadAutoModeFlag(d => d.AutoSneak));
         // The refresh inside its window is sent by the between-round cast pass: one
         // cast a round, held while a sneak is being kept, then the fight's resume and
         // the re-sneak. Nothing is offered while the master switch is off. A `use`
