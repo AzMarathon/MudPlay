@@ -1,5 +1,11 @@
 # Version history
 
+## 3.174.5
+
+- A room title or prayer line shown mid-fight is no longer read as a miss (Wire Inspector's Classified tags; a monster's attack under a `break` hold); only dark cyan is one
+- Classified: your room spell's damage line is tagged `You Hit`, not `Monster Hit (you)`
+- bug reports addressed: paradigm-20261010-215619
+
 ## 3.174.3
 
 - Used on also lists the rooms where a command needs the item held to work an exit (lever, rubbed orb, titanium fork), naming the exit it opens
