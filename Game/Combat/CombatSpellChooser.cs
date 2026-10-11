@@ -647,24 +647,48 @@ public sealed class CombatSpellChooser
             ? minManaPerCast
             : (int)System.Math.Round(maxMa * minManaPerCast / 100.0);
 
-    // The debuff a profile casts on walking into a room, and the mana its slot's "min
-    // mana per cast" asks for; null with no debuff to cast or no minimum to meet. Asked
-    // from outside the room, where the head count isn't known. With the AoE debuff set
+    // The mana a profile's entry debuff needs, asked from outside the room: which
+    // debuff sets the figure, the figure, and whether it is the spell's own cost rather
+    // than its slot's "min mana per cast". Null with no debuff that can be cast, or
+    // none known to need any mana.
+    //
+    // A debuff needs what ManaOk asks of it: its slot's minimum, and never less than
+    // the spell's cost (a minimum of 0 is no reserve, not a free cast; an unknown cost
+    // asks nothing). From outside, the head count isn't known: with the AoE debuff set
     // and Auto-Nuke on, TryDebuffing casts it at or over its minimum enemies and the
-    // single-target one under that, so either may be the one: the lower of their two
-    // minimums is given, and a caller waiting on it never waits for a debuff the room
-    // turns out not to get. With only one of them castable, it is that one's.
-    public static (string Spell, int Mana)? EntryDebuffReserve(CombatSettings settings, bool allowNukes, int maxMa)
+    // single-target one under that, so either may be the one cast. The HIGHER of the
+    // two needs is given (user, 2026-10-10: "it should value the mana cost of whichever
+    // debuff is higher, then use which ever debuff gets triggered in the lair room"),
+    // so mana covers the debuff whichever the room turns out to get.
+    //
+    // A debuff that is never cast doesn't count: no spell set, its casts per room at 0,
+    // the AoE one with Auto-Nuke off, or a need over maximum mana while the other's is
+    // within it. With every need over maximum mana the highest is still given, for the
+    // caller to see it can't be met.
+    public static (string Spell, int Mana, bool IsSpellCost)? EntryDebuffReserve(
+        CombatSettings settings, bool allowNukes, int maxMa, System.Func<string, int?>? manaCostOf = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        CombatSpellSlot? area = IsConfigured(settings.AreaDebuffSpell) && allowNukes ? settings.AreaDebuffSpell : null;
-        CombatSpellSlot? single = IsConfigured(settings.SingleTargetDebuffSpell) ? settings.SingleTargetDebuffSpell : null;
-        CombatSpellSlot? slot = area is null ? single
-            : single is null ? area
-            : single.MinManaPerCast < area.MinManaPerCast ? single
-            : area;
-        if (slot is null || slot.MinManaPerCast <= 0) return null;
-        return (slot.SpellName!.Trim(), ReserveInMana(slot.MinManaPerCast, maxMa, settings.SpellManaThresholdMode));
+        (string Spell, int Mana, bool IsSpellCost)? area =
+            allowNukes ? EntryNeed(settings.AreaDebuffSpell, settings.SpellManaThresholdMode, maxMa, manaCostOf) : null;
+        (string Spell, int Mana, bool IsSpellCost)? single =
+            EntryNeed(settings.SingleTargetDebuffSpell, settings.SpellManaThresholdMode, maxMa, manaCostOf);
+        if (area is not { } a) return single;
+        if (single is not { } s) return area;
+        bool areaInReach = a.Mana <= maxMa, singleInReach = s.Mana <= maxMa;
+        if (areaInReach != singleInReach) return areaInReach ? area : single;
+        return s.Mana > a.Mana ? single : area;
+    }
+
+    private static (string Spell, int Mana, bool IsSpellCost)? EntryNeed(
+        CombatSpellSlot slot, ThresholdMode mode, int maxMa, System.Func<string, int?>? manaCostOf)
+    {
+        if (!IsConfigured(slot) || slot.MaxCastsPerRoom == 0) return null;
+        string spell = slot.SpellName!.Trim();
+        int reserve = slot.MinManaPerCast > 0 ? ReserveInMana(slot.MinManaPerCast, maxMa, mode) : 0;
+        int cost = manaCostOf?.Invoke(spell) ?? 0;
+        int need = System.Math.Max(reserve, cost);
+        return need > 0 ? (spell, need, cost > reserve) : null;
     }
 }
 

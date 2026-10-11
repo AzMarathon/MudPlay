@@ -3,9 +3,9 @@
 <!-- current-version:start -->
 > **Version 3.173.0**
 > - Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held
-> - Held buffs are let through once the debuff has gone out in the lair, a fight's first round at the latest, and held again at the next lair's door
+> - Held buffs are let through once the debuff has gone out in the lair, two rounds into its fight at the latest, and held again at the next lair's door
 > - A buff held at one lair with no cast since gets one cast at the next door first
-> - Every lair wait also holds while mana is under the debuff's Min mana per cast (nav chip: Waiting for Mana to Debuff); mana-regen buffs still go out
+> - Every lair wait also holds while mana is under what the debuff needs: its Min mana per cast, never less than the spell's cost, the higher of the two debuffs' (nav chip: Waiting for Mana to Debuff); mana-regen buffs still go out
 > - A fight at the doorstep holds no buff
 > - At a lair's door a buff you can't pay for is passed over for the next due one
 > - A lair wait ends at once when the loop is stopped or paused, or Auto-Combat or the master switch goes off

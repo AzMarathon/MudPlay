@@ -8437,7 +8437,10 @@ public sealed class AppServices
             healOrCureDue: () => CastDirector.HealOrCureDue(),
             debuffMana: LairEntryDebuffMana,
             inCombat: () => PlayerState.InCombat,
-            manaIsFull: () => Health.ManaIsAtGameFull);
+            manaIsFull: () => Health.ManaIsAtGameFull,
+            // Where the combat engine itself judges a fight to be: the room a loop
+            // step in flight is entering, else the one the tracker has us in.
+            fightRoom: () => CombatSuppressionVerdict().Room);
         CastDirector.SetLairEntryBuffHold(LairDebuffHold);
         CastDirector.SetManaRegenBuffProbe(IsManaRegenRollSpell);
         // An engage with no debuff to cast first: the hold has nothing to keep the
@@ -11533,17 +11536,18 @@ public sealed class AppServices
             && !Game.Map.LoopCombatSuppression.IsSuppressed(loop, next, currentIsLair: true);
     }
 
-    // The debuff a lair wait is for and the mana its slot's "min mana per cast" asks
-    // for, against what the character has. Null when there is nothing to wait for: no
-    // minimum set, or mana not read yet.
-    private (string Spell, int Needed, int Mana, int MaxMana)? LairEntryDebuffMana()
+    // The debuff a lair wait is for and the mana it needs (the higher-asking of the
+    // profile's two debuffs, by the cost the combat engine checks a cast against),
+    // against what the character has. Null when there is nothing to wait for: no
+    // debuff that needs mana, or mana not read yet.
+    private (string Spell, int Needed, int Mana, int MaxMana, bool IsSpellCost)? LairEntryDebuffMana()
     {
         if (PlayerState.MaxMa <= 0) return null;
         Models.Profile.CombatSettings combat =
             ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
         return Game.Combat.CombatSpellChooser.EntryDebuffReserve(
-                combat, ReadAutoModeFlag(d => d.AutoNuke), PlayerState.MaxMa) is { } reserve
-            ? (reserve.Spell, reserve.Mana, PlayerState.Ma, PlayerState.MaxMa)
+                combat, ReadAutoModeFlag(d => d.AutoNuke), PlayerState.MaxMa, Spellbook.ManaCostOf) is { } reserve
+            ? (reserve.Spell, reserve.Mana, PlayerState.Ma, PlayerState.MaxMa, reserve.IsSpellCost)
             : null;
     }
 

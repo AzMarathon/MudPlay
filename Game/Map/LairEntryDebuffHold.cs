@@ -20,10 +20,10 @@ namespace MudPlay.Game.Map;
 // should be let through after the debuff spell has gone out in the lair room and held
 // again once the user ends up next to the next lair room"):
 //   - The hold put up at the go-ahead lifts the moment the debuff is sent
-//     (NoteDebuffSent). It never outlasts the fight's first round: it also lifts when
-//     the combat engine attacks with no debuff to cast first, when the fight is one
-//     round old, when the fight ends, when the loop asks for its next step, and, with
-//     no fight started, when EntryWindow runs out. See Advance.
+//     (NoteDebuffSent). With none sent it lifts when the combat engine opens the
+//     fight in the lair with no debuff to cast, when that fight is two rounds old,
+//     when it ends, when the loop asks for its next step, and, with no fight started,
+//     when EntryWindow runs out. See Advance.
 //   - It goes up again at the next doorstep ask, which is the loop about to step into
 //     the next lair. Being next to that lair while still fighting in this one holds
 //     nothing: with lairs side by side the character is next to the next one the
@@ -62,13 +62,15 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     // How long buffs stay held back after the go-ahead when no fight starts (the step
     // never landed, the lair was empty, or nothing in it is fought).
     private static readonly TimeSpan EntryWindow = TimeSpan.FromSeconds(5);
-    // How far into a fight the hold after the go-ahead may reach with no debuff sent:
-    // one round (five seconds) and the pass that follows it, so a debuff the engine
-    // put off to the second round (behind a backstab, or a cast spent as the fight
-    // began) still gets that round's cast ahead of the buffs. Past it a buff the
-    // character fights with (a shield cast "during combat") must not be kept waiting
-    // for a debuff that isn't coming.
-    private static readonly TimeSpan HeldIntoAFight = TimeSpan.FromSeconds(6);
+    // How far into the lair's fight, counted from the engage, the hold after the
+    // go-ahead may reach with no debuff sent. Only a backstop: when no debuff is coming the combat engine says so
+    // as it opens the fight (NoteNoDebuffThisFight), and the hold is gone at once. What
+    // is left is a debuff put off to a later round (behind a backstab, or a cast spent
+    // as the fight began), and it must get its cast ahead of the buffs: a backstab on a
+    // late first round, and the pass that waits for HP to settle after it, can pass six
+    // seconds. Two rounds and that pass is as long as any buff the character fights
+    // with (a shield cast "during combat") is kept waiting.
+    private static readonly TimeSpan HeldIntoAFight = TimeSpan.FromSeconds(11);
     // How long a doorstep gives the one cast owed to buffs an earlier lair's hold
     // kept back. A round is five seconds, so a cast spent as the loop arrives is free
     // again within that; the rest is for the cast scheduler's next pass. One window a
@@ -88,9 +90,10 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     private readonly Func<bool, IReadOnlyList<string>>? _buffsDue;
     private readonly Func<bool>? _stillWanted;
     private readonly Func<string?>? _healOrCureDue;
-    private readonly Func<(string Spell, int Needed, int Mana, int MaxMana)?>? _debuffMana;
+    private readonly Func<(string Spell, int Needed, int Mana, int MaxMana, bool IsSpellCost)?>? _debuffMana;
     private readonly Func<bool>? _inCombat;
     private readonly Func<bool>? _manaIsFull;
+    private readonly Func<RoomKey?>? _fightRoom;
 
     private LairEntryDebuffMode _mode;
     private bool _waiting;
@@ -99,6 +102,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     private int _roundsWaited;
     private DateTimeOffset _waitStarted;
     private bool _waitLineSaid;
+    private bool _doorFightSaid;
     private bool _blockWhileWaiting;
     private bool _blockOrdinaryWhileWaiting;
     private WaitLimit _limitReached;
@@ -131,9 +135,10 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     // until one does), and whether its time without one ran out.
     private DateTimeOffset _lastPriorityCast;
     private bool _ranOutThisWait;
-    // What such waits have learned at this doorstep, kept across asks for the same lair:
-    // how often each priority buff went out, the ones given up on, and that the time
-    // ran out once (it is not waited out a second time).
+    // What the waits have learned at this doorstep, kept across asks for the same lair:
+    // how often each buff they let through went out (the priority buffs of a
+    // WaitForPriorityBuffs wait, the mana-bringing ones of a wait for mana), the ones
+    // given up on, and that the time ran out once (it is not waited out a second time).
     private RoomKey? _doorstep;
     private readonly Dictionary<string, int> _prioritySends = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _givenUpOn = new(StringComparer.OrdinalIgnoreCase);
@@ -142,10 +147,10 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     // The wait is past its casts and stands for mana: what the debuff needs against
     // what there is, as last read; when that was last said in the log; and, once mana
     // is back, the read that ended it.
-    private (string Spell, int Needed, int Mana, int MaxMana)? _forMana;
+    private (string Spell, int Needed, int Mana, int MaxMana, bool IsSpellCost)? _forMana;
     private DateTimeOffset _manaSaidAt;
     private bool _stoodForMana;
-    private (string Spell, int Needed, int Mana, int MaxMana)? _manaCameBack;
+    private (string Spell, int Needed, int Mana, int MaxMana, bool IsSpellCost)? _manaCameBack;
     private string? _lastOutcome;
     private int _generation;
 
@@ -155,16 +160,20 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     // back or not, and healOrCureDue the heal or cure that is. stillWanted: the loop
     // is still about to step into a lair it waits outside (asked while a wait stands,
     // since a loop that was stopped or switched off never asks ReadyToEnter again).
-    // debuffMana: the debuff the wait is for, the mana its "min mana per cast" asks
-    // for, and current and maximum mana; null when there is no minimum to wait for.
+    // debuffMana: the debuff the wait is for, the mana it needs (its "min mana per
+    // cast", or the spell's cost where that is the higher: IsSpellCost), and current
+    // and maximum mana; null when no debuff needs mana waited for.
     // inCombat: the cast scheduler's own "in combat". manaIsFull: mana is as high as
-    // the game will take it, whatever maximum the client believes in.
+    // the game will take it, whatever maximum the client believes in. fightRoom: the
+    // room a fight now is in, as the combat engine judges it (the room a loop step
+    // in flight is entering, else the one the character stands in); without it the
+    // hold can't tell a fight at the door from one in the lair.
     public LairEntryDebuffHold(MovementCoordinator coordinator, Func<bool> slotUsed, Func<bool> castDue,
         Action<TimeSpan, Action> scheduleAfter, Func<DateTimeOffset>? now = null, LogService? log = null,
         Func<bool, IReadOnlyList<string>>? buffsDue = null, Func<bool>? stillWanted = null,
         Func<string?>? healOrCureDue = null,
-        Func<(string Spell, int Needed, int Mana, int MaxMana)?>? debuffMana = null,
-        Func<bool>? inCombat = null, Func<bool>? manaIsFull = null)
+        Func<(string Spell, int Needed, int Mana, int MaxMana, bool IsSpellCost)?>? debuffMana = null,
+        Func<bool>? inCombat = null, Func<bool>? manaIsFull = null, Func<RoomKey?>? fightRoom = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(slotUsed);
@@ -182,6 +191,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
         _debuffMana = debuffMana;
         _inCombat = inCombat;
         _manaIsFull = manaIsFull;
+        _fightRoom = fightRoom;
     }
 
     // ----- What is asked ----------------------------------------------
@@ -200,9 +210,10 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
 
     public bool SkipsUnpayableBuffs => _waiting || _deciding;
 
-    // A priority buff this doorstep's wait has given up on, while the loop stands there.
-    public bool HoldsPriorityBuff(string buff) =>
-        (_blockOrdinaryWhileWaiting || _givingOwedCast) && !FightingWhereItWaits && _givenUpOn.Contains(buff);
+    // A buff this doorstep's wait has given up on (it went out as often as one may),
+    // while the loop stands there or asks for the step again.
+    public bool HasGivenUpOn(string buff) =>
+        (_waiting || _deciding) && !FightingNow && _givenUpOn.Contains(buff);
 
     public bool IsWaiting => _waiting;
 
@@ -212,10 +223,23 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
 
     private bool FightingWhereItWaits => _waiting && FightingNow;
 
-    // The hold put up at the go-ahead still stands: by the clock alone, so asking
-    // changes nothing. Advance takes it down for the things that happen.
+    // The combat engine has engaged: "in combat" where that is known, since the combat
+    // gate goes up at the room's roster, a moment before.
+    private bool Engaged => _inCombat is null ? FightingNow : _inCombat();
+
+    // Where a fight now is, against the lair this hold is for. Neither is true when
+    // either room isn't known.
+    private bool InTheLair => _doorstep is { } lair && _fightRoom?.Invoke() is { } here && here == lair;
+
+    private bool StillAtTheDoor => _doorstep is { } lair && _fightRoom?.Invoke() is { } here && here != lair;
+
+    // The hold put up at the go-ahead still stands: by the clock and what is read off
+    // the game alone, so asking changes nothing. Advance takes it down for the things
+    // that happen. A fight where the loop still stands, before the step in, sets it
+    // aside as a fight sets a wait aside.
     private bool EntryHoldStands =>
-        _entryHold && (_fightSeenAt is { } since ? _now() - since < HeldIntoAFight : _now() < _blockUntil);
+        _entryHold && !(StillAtTheDoor && FightingNow)
+        && (_fightSeenAt is { } since ? _now() - since < HeldIntoAFight : _now() < _blockUntil);
 
     // What the hold is doing and how its last wait ended, for the bug report.
     public string Describe()
@@ -240,7 +264,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
                 + $"{OwedCastWindow.TotalSeconds:0}s; nothing held; due: {JoinOrNone(DueHeldUnpaid())})" + last;
         if (_forMana is { } need)
             return $"waiting for mana ({LairEntryDebuffModes.Label(_mode)}; {(now - _waitStarted).TotalSeconds:0}s; "
-                + $"mana {need.Mana} of the {need.Needed} the debuff {need.Spell} needs, its min mana per cast; "
+                + $"mana {need.Mana} of the {need.Needed} the debuff {need.Spell} needs, {Basis(need.IsSpellCost)}; "
                 + "every buff held bar the ones that bring mana back)" + last;
         string held = _blockWhileWaiting ? "every buff held"
             : _blockOrdinaryWhileWaiting ? "buffs not ticked priority held"
@@ -373,6 +397,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     // take it down on the spot.
     public void Advance()
     {
+        if (_waiting && FightingNow) SayAFightIsAtTheDoor();
         if (!_entryHold) return;
         DateTimeOffset now = _now();
         bool fighting = FightingNow;
@@ -380,11 +405,16 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
         {
             if (!fighting) ReleaseBuffs("the fight ended with no debuff sent");
             else if (now - since >= HeldIntoAFight)
-                ReleaseBuffs("the fight is past its first round with no debuff sent");
+                ReleaseBuffs("the fight is two rounds old with no debuff sent");
         }
+        // The go-ahead was given and a monster came to where the loop still stands:
+        // that fight is not the lair's, and holds nothing. The loop asks again after it.
+        else if (fighting && StillAtTheDoor)
+            ReleaseBuffs("a fight at the door before the step in");
         else if (now >= _blockUntil)
             ReleaseBuffs($"no fight started within {EntryWindow.TotalSeconds:0} seconds of the go-ahead");
-        else if (fighting) _fightSeenAt = now;
+        // The backstop's clock runs from the engage.
+        else if (Engaged) _fightSeenAt = now;
         if (_entryHold) NoteWhatIsHeld();
     }
 
@@ -401,9 +431,13 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
 
     // The combat engine opened a fight with no debuff to cast first (none allowed on
     // this target, its mana or its cap not met): there is nothing to keep the cast for.
+    // Only for a fight in the lair this hold is for. The engine says the same of a
+    // monster it engages where the loop still stands, and letting the buffs go on that
+    // would hand one of them the round's cast as the loop steps in: the lair's debuff
+    // put off a round, the very thing the hold is for.
     public void NoteNoDebuffThisFight()
     {
-        if (_entryHold) ReleaseBuffs("the attack went out with no debuff to cast first");
+        if (_entryHold && InTheLair) ReleaseBuffs("the attack went out with no debuff to cast first");
     }
 
     private void ReleaseBuffs(string why)
@@ -413,20 +447,20 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
         _log?.Info("Loop", $"buffs released: {why}");
     }
 
-    // A buff not ticked priority went out: the ones this hold kept back have had
-    // their cast.
-    public void NoteOrdinaryBuffCast()
+    // A buff not ticked priority went out (named as BuffsDue names it): the ones this
+    // hold kept back have had their cast. During a wait for mana only the buffs that
+    // bring mana back go out, and each of them counts toward its limit of sends.
+    public void NoteOrdinaryBuffCast(string buff)
     {
         _ordinaryHeldUnpaid = false;
         _owedRanOutOn = null;
         if (_givingOwedCast) _owedCastWentOut = true;
+        if (_waiting && _forMana is not null) CountASend(buff, "buff");
     }
 
     // The cast scheduler sent a buff ticked "Priority buff" (named as BuffsDue names
     // it). While the loop stands outside a lair for those, each one going out is the
-    // wait getting somewhere, and restarts the time it may go without one. One that
-    // has gone out as often as one may is given up on here: it is held back like the
-    // buffs not ticked priority, and the wait goes on for the others.
+    // wait getting somewhere, and restarts the time it may go without one.
     public void NotePriorityBuffCast(string buff)
     {
         if (_priorityHeldUnpaid)
@@ -436,20 +470,38 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
         }
         // The owed cast is one cast: a priority buff taking it ends it as any other does.
         if (_givingOwedCast) _owedCastWentOut = true;
-        if (!_waiting || _mode != LairEntryDebuffMode.WaitForPriorityBuffs) return;
-        _lastPriorityCast = _now();
+        if (!_waiting) return;
+        if (_mode == LairEntryDebuffMode.WaitForPriorityBuffs) _lastPriorityCast = _now();
+        else if (_forMana is null) return;
+        CountASend(buff, "priority buff");
+    }
+
+    // One more send of a buff the loop stands here letting through: a priority buff in
+    // a WaitForPriorityBuffs wait, a buff that brings mana back in a wait for mana. One
+    // that has gone out as often as one may is given up on at this doorstep: it is held
+    // back with the other buffs, and the wait goes on for the rest.
+    private void CountASend(string buff, string what)
+    {
         int sends = _prioritySends[buff] = _prioritySends.GetValueOrDefault(buff) + 1;
         if (sends != MaxSendsOfOnePriorityBuff)
         {
             _log?.Info("Loop", sends == 1
-                ? $"priority buff {buff} cast while waiting outside the lair"
-                : $"priority buff {buff} cast again while waiting outside the lair (sent {sends} times)");
+                ? $"{what} {buff} cast while waiting outside the lair"
+                : $"{what} {buff} cast again while waiting outside the lair (sent {sends} times)");
             return;
         }
         _givenUpOn.Add(buff);
         _log?.Info("Loop",
-            $"priority buff {buff} went out {sends} times outside this lair, the most one may — it is held back "
+            $"{what} {buff} went out {sends} times outside this lair, the most one may — it is held back "
             + "with the other buffs now, and the wait goes on for the rest");
+    }
+
+    // A fight where the loop stands waiting: said once a fight.
+    private void SayAFightIsAtTheDoor()
+    {
+        if (_doorFightSaid) return;
+        _doorFightSaid = true;
+        _log?.Info("Loop", "a fight at the door: buffs are free, the wait resumes after");
     }
 
     // ----- Deciding ------------------------------------------------------
@@ -485,7 +537,12 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
         // the debuff is for the lair, so nothing is decided until the fight is over.
         // What the wait holds is left as it is; BlockingBuffs sets it aside for the
         // fight, and it is in force again the moment the fight ends.
-        if (FightingNow) return false;
+        if (FightingNow)
+        {
+            SayAFightIsAtTheDoor();
+            return false;
+        }
+        _doorFightSaid = false;
 
         if (GivingTheOwedCast(now, used)) return false;
 
@@ -596,8 +653,9 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
         return false;
     }
 
-    // The cast is free and nothing more is waited for. The debuff the wait is for has
-    // a mana minimum of its own (the slot's "min mana per cast"), and under it the
+    // The cast is free and nothing more is waited for. The debuff the wait is for needs
+    // mana of its own (the slot's "min mana per cast", and never less than the spell
+    // costs; with two debuffs set, the higher need of the two), and under it the
     // combat engine won't cast it: walking in now would be the very entry without a
     // debuff this hold exists to prevent. So the loop stays until mana is back (user,
     // 2026-10-10: "we should also hold to get mana back and make a program log entry
@@ -608,7 +666,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     // the client believes in overshoots it.
     private bool ShortOfManaForTheDebuff(DateTimeOffset now)
     {
-        (string Spell, int Needed, int Mana, int MaxMana)? read = _debuffMana?.Invoke();
+        (string Spell, int Needed, int Mana, int MaxMana, bool IsSpellCost)? read = _debuffMana?.Invoke();
         if (read is not { } need || need.Mana >= need.Needed)
         {
             if (_forMana is not null) _manaCameBack = read;
@@ -627,7 +685,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
             {
                 _manaNotWaitedForSaid = true;
                 _log?.Info("Loop",
-                    $"the debuff {need.Spell} asks for {need.Needed} mana (its min mana per cast) and {outOfReach}, "
+                    $"the debuff {need.Spell} asks for {need.Needed} mana ({Basis(need.IsSpellCost)}) and {outOfReach}, "
                     + "so the lair is entered without waiting for it");
             }
             _forMana = null;
@@ -643,10 +701,14 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
             _manaSaidAt = now;
             _log?.Info("Loop",
                 $"waiting outside the lair for mana: {need.Mana} of the {need.Needed} the debuff {need.Spell} needs "
-                + "(its min mana per cast) — buffs held back meanwhile, bar the ones that bring mana back");
+                + $"({Basis(need.IsSpellCost)}) — buffs held back meanwhile, bar the ones that bring mana back");
         }
         return true;
     }
+
+    // Which of a debuff's two figures set what it needs: with two debuffs set, the one
+    // named is the one that asks for more.
+    private static string Basis(bool isSpellCost) => isSpellCost ? "its mana cost" : "its min mana per cast";
 
     private void GoIn()
     {
@@ -698,7 +760,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
         if (_stoodForMana)
             return _manaCameBack is { } back
                 ? $"mana is back at {back.Mana}, and the debuff {back.Spell} needs {back.Needed} — entering the lair"
-                : "mana for the debuff is no longer waited for (its minimum was taken off, or mana is as full as "
+                : "mana for the debuff is no longer waited for (the debuff was taken off, or mana is as full as "
                     + "it gets) — entering the lair on a free between-round cast";
         switch (_limitReached)
         {

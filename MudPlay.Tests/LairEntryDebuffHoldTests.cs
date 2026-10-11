@@ -26,12 +26,16 @@ public sealed class LairEntryDebuffHoldTests
         public LogService Log { get; } = new();
         // The loop is still about to step into the lair it waits outside.
         public bool StillWanted = true;
-        // The debuff's "min mana per cast" against the character's mana; null = none set.
+        // What the debuff needs against the character's mana; null = nothing to wait for.
         public (string Spell, int Needed, int Mana, int MaxMana)? DebuffMana;
+        // The need is the spell's own cost, not its slot's "min mana per cast".
+        public bool NeedIsTheSpellsCost;
         // A fight is on, as the cast scheduler reads it.
         public bool InCombat;
         // The game calls mana full here, under the maximum the client believes in.
         public bool ManaIsFull;
+        // The room a fight now is in, as the combat engine judges it; null = not known.
+        public RoomKey? FightRoom;
         // The delay each look was scheduled with, newest last.
         public List<TimeSpan> ScheduledDelays { get; } = new();
 
@@ -40,9 +44,12 @@ public sealed class LairEntryDebuffHoldTests
                 (delay, action) => { ScheduledDelays.Add(delay); Scheduled.Add(action); }, () => Now, Log,
                 priority => priority ? PriorityDue : OrdinaryDue,
                 stillWanted: () => StillWanted,
-                debuffMana: () => DebuffMana,
+                debuffMana: () => DebuffMana is { } need
+                    ? (need.Spell, need.Needed, need.Mana, need.MaxMana, NeedIsTheSpellsCost)
+                    : null,
                 inCombat: () => InCombat,
-                manaIsFull: () => ManaIsFull);
+                manaIsFull: () => ManaIsFull,
+                fightRoom: () => FightRoom);
 
         public bool Held => Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffGate);
         public bool HeldForMana => Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffManaGate);
@@ -240,7 +247,7 @@ public sealed class LairEntryDebuffHoldTests
         h.Now = h.Now.AddSeconds(4);
         Assert.True(h.Hold.BlockingBuffs);
         Assert.True(h.Hold.BlockingOrdinaryBuffs);
-        Assert.StartsWith("has the go-ahead, buffs held until the debuff is sent, the fight ends, or it is 6s old (4s now)",
+        Assert.StartsWith("has the go-ahead, buffs held until the debuff is sent, the fight ends, or it is 11s old (4s now)",
             h.Hold.Describe());
 
         h.Hold.NoteDebuffSent("dbuf");
@@ -271,43 +278,48 @@ public sealed class LairEntryDebuffHoldTests
         Assert.Equal(new[] { "buffs released: the fight ended with no debuff sent" }, h.LoopLog);
     }
 
-    // The debuff never comes (the target can't be debuffed, its cast cap is spent,
-    // mana is short): a buff the character fights with, a shield cast "during combat",
-    // must not wait the whole fight for it. The hold reaches one round into a fight
-    // and the pass after it, no further.
+    // A debuff the engine put off (behind a backstab, or a cast spent as the fight
+    // began) sends no signal and is still coming. The hold waits two rounds of the
+    // fight for it and no longer: a buff the character fights with, a shield cast
+    // "during combat", must not wait the whole fight. The clock runs from the engage.
     [Theory]
     [InlineData(LairEntryDebuffMode.WaitForSpells)]
     [InlineData(LairEntryDebuffMode.BlockSpells)]
     [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
-    public void NoDebuffSent_TheHoldNeverOutlastsTheFightsFirstRound(LairEntryDebuffMode mode)
+    public void NoDebuffSent_TheHoldLastsTwoRoundsOfTheFight_AndNoLonger(LairEntryDebuffMode mode)
     {
         Harness h = new();
         Assert.True(h.Hold.ReadyToEnter(mode, new RoomKey(1, 100)));
-        h.InCombat = true;
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);   // the lair's roster is read
+        h.Now = h.Now.AddSeconds(2);
         h.Hold.Advance();
-        h.Now = h.Now.AddSeconds(5);                // the round's own pass: the debuff's, if one was put off to it
+        h.InCombat = true;                          // the engage, two seconds on: the clock starts here
+        h.Hold.Advance();
+        h.Now = h.Now.AddSeconds(10.5);             // two rounds, and the pass that waits for HP to settle
         h.Hold.Advance();
         Assert.True(h.Hold.BlockingBuffs);
 
-        h.Now = h.Now.AddSeconds(1);
+        h.Now = h.Now.AddSeconds(0.5);
         Assert.False(h.Hold.BlockingBuffs);         // by the clock alone
         h.Hold.Advance();
 
-        Assert.Equal(new[] { "buffs released: the fight is past its first round with no debuff sent" }, h.LoopLog);
+        Assert.Equal(new[] { "buffs released: the fight is two rounds old with no debuff sent" }, h.LoopLog);
         h.Now = h.Now.AddMinutes(2);                // the rest of a long fight
         Assert.False(h.Hold.BlockingBuffs);
     }
 
-    // The combat engine opens the fight with no debuff to cast (none allowed on this
-    // target, its mana or cap not met): it has decided, and the buffs go at once.
+    // The combat engine opens the lair's fight with no debuff to cast (none allowed on
+    // this target, its mana or cap not met): it has decided, and the buffs go at once.
     [Theory]
     [InlineData(LairEntryDebuffMode.WaitForSpells)]
     [InlineData(LairEntryDebuffMode.BlockSpells)]
     [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
-    public void EngineAttacksWithNoDebuffToCast_TheBuffsAreReleasedAtOnce(LairEntryDebuffMode mode)
+    public void EngineOpensTheLairsFightWithNoDebuffToCast_TheBuffsAreReleasedAtOnce(LairEntryDebuffMode mode)
     {
-        Harness h = new();
-        Assert.True(h.Hold.ReadyToEnter(mode, new RoomKey(1, 100)));
+        RoomKey lair = new(1, 100);
+        Harness h = new() { FightRoom = new RoomKey(1, 99) };
+        Assert.True(h.Hold.ReadyToEnter(mode, lair));
+        h.FightRoom = lair;                         // the step is in flight, or has landed
         h.InCombat = true;
         h.Hold.Advance();
         Assert.True(h.Hold.BlockingBuffs);
@@ -316,6 +328,51 @@ public sealed class LairEntryDebuffHoldTests
 
         Assert.False(h.Hold.BlockingBuffs);
         Assert.Equal(new[] { "buffs released: the attack went out with no debuff to cast first" }, h.LoopLog);
+    }
+
+    // The same signal while the loop still stands at the door: the engine engaged
+    // something there with no debuff to cast. That says nothing about the lair. Acting
+    // on it handed a held buff the round's cast as the loop stepped in, and the lair's
+    // debuff was put off a round.
+    [Theory]
+    [InlineData(LairEntryDebuffMode.WaitForSpells)]
+    [InlineData(LairEntryDebuffMode.BlockSpells)]
+    [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
+    public void EngineSignalAtTheDoor_DoesNotReleaseTheBuffs(LairEntryDebuffMode mode)
+    {
+        RoomKey lair = new(1, 100);
+        Harness atTheDoor = new() { FightRoom = new RoomKey(1, 99) };
+        Assert.True(atTheDoor.Hold.ReadyToEnter(mode, lair));
+        atTheDoor.Hold.NoteNoDebuffThisFight();
+        Assert.True(atTheDoor.Hold.BlockingBuffs);
+        Assert.Empty(atTheDoor.LoopLog);
+
+        Harness whoKnowsWhere = new();              // the room isn't known: not taken for the lair
+        Assert.True(whoKnowsWhere.Hold.ReadyToEnter(mode, lair));
+        whoKnowsWhere.Hold.NoteNoDebuffThisFight();
+        Assert.True(whoKnowsWhere.Hold.BlockingBuffs);
+    }
+
+    // A monster comes to where the loop stands after the go-ahead, before the step in.
+    // It is a fight at the door like any other: buffs free in it, and the loop asks
+    // again when it is over, so the cast is free again as it does step in.
+    [Fact]
+    public void FightAtTheDoorAfterTheGoAhead_HoldsNoBuff_AndTheLoopAsksAgainAfterIt()
+    {
+        RoomKey lair = new(1, 100);
+        Harness h = new() { FightRoom = new RoomKey(1, 99) };
+        Assert.True(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, lair));
+        Assert.True(h.Hold.BlockingBuffs);
+
+        h.InCombat = true;
+        Assert.False(h.Hold.BlockingBuffs);         // read off the game: the fight is not the lair's
+        h.Hold.Advance();
+        Assert.Equal(new[] { "buffs released: a fight at the door before the step in" }, h.LoopLog);
+
+        h.InCombat = false;
+        h.SlotUsed = true;                          // the fight spent this round's cast
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, lair));
+        Assert.True(h.Hold.BlockingBuffs);          // held again until the cast is free
     }
 
     // An empty lair, or one nothing in is fought: no fight starts, and the hold ends
@@ -418,7 +475,7 @@ public sealed class LairEntryDebuffHoldTests
         Assert.True(h.Hold.ReadyToEnter(mode, new RoomKey(1, 100)));
         h.InCombat = true;
         h.Hold.NoteDebuffSent("dbuf");
-        h.Hold.NoteOrdinaryBuffCast();              // a buff went out mid-fight: nothing is owed
+        h.Hold.NoteOrdinaryBuffCast("plai");              // a buff went out mid-fight: nothing is owed
         h.Now = h.Now.AddSeconds(20);               // the rest of the fight, next door to the next lair
         Assert.False(h.Hold.BlockingOrdinaryBuffs);
 
@@ -455,7 +512,7 @@ public sealed class LairEntryDebuffHoldTests
             + "earlier lair held, 8s left of 8s; nothing held; due: plai)", h.Hold.Describe());
 
         h.SlotUsed = true;                          // it went out
-        h.Hold.NoteOrdinaryBuffCast();
+        h.Hold.NoteOrdinaryBuffCast("plai");
         h.OrdinaryDue.Clear();
         h.OrdinaryDue.Add("pla2");                  // another is due, and is not let through as well
         h.Poll();
@@ -518,7 +575,7 @@ public sealed class LairEntryDebuffHoldTests
         {
             CastPriorityBuff(h, "star");
             sends++;
-            if (h.Hold.HoldsPriorityBuff("star")) h.CastDue = false;   // held: no longer due to the wait
+            if (h.Hold.HasGivenUpOn("star")) h.CastDue = false;   // held: no longer due to the wait
             h.SlotUsed = false;
             h.Poll();
         }
@@ -580,7 +637,7 @@ public sealed class LairEntryDebuffHoldTests
         paid.OrdinaryDue.Add("plai");
         Assert.True(paid.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, new RoomKey(1, 100)));
         Assert.True(paid.Hold.ReadyToEnter(LairEntryDebuffMode.Off));
-        paid.Hold.NoteOrdinaryBuffCast();           // it went out in the room between
+        paid.Hold.NoteOrdinaryBuffCast("plai");           // it went out in the room between
         paid.OrdinaryDue.Clear();
         Assert.True(paid.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, new RoomKey(1, 101)));
 
@@ -608,7 +665,7 @@ public sealed class LairEntryDebuffHoldTests
         Harness paid = new();
         Assert.True(paid.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, lair));
         paid.Hold.NoteDebuffSent("dbuf");
-        paid.Hold.NoteOrdinaryBuffCast();
+        paid.Hold.NoteOrdinaryBuffCast("plai");
         paid.CastDue = true;
         Assert.True(paid.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, new RoomKey(1, 101)));
     }
@@ -672,6 +729,25 @@ public sealed class LairEntryDebuffHoldTests
         Assert.False(h.Held);
         Assert.True(h.Hold.BlockingBuffs);          // held for the step in, as ever
         Assert.Equal("mana is back at 60, and the debuff dbuf needs 60 — entering the lair", h.LoopLog.Last());
+    }
+
+    // With the slot's minimum at 0 the debuff still needs what the spell costs: the
+    // log says that figure is the cost, so nobody goes looking for a minimum that
+    // isn't set.
+    [Fact]
+    public void ManaUnderTheDebuffsCost_TheLogSaysTheFigureIsItsCost()
+    {
+        Harness h = new() { DebuffMana = ("dbuf", 12, 5, 100), NeedIsTheSpellsCost = true };
+
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells));
+
+        Assert.True(h.HeldForMana);
+        Assert.Equal(new[]
+        {
+            "waiting outside the lair for mana: 5 of the 12 the debuff dbuf needs "
+                + "(its mana cost) — buffs held back meanwhile, bar the ones that bring mana back",
+        }, h.LoopLog);
+        Assert.Contains("mana 5 of the 12 the debuff dbuf needs, its mana cost", h.Hold.Describe());
     }
 
     [Theory]
@@ -931,12 +1007,12 @@ public sealed class LairEntryDebuffHoldTests
         CastPriorityBuff(h, "star");
         CastPriorityBuff(h, "other");               // a different buff doesn't count against it
         CastPriorityBuff(h, "star");
-        Assert.False(h.Hold.HoldsPriorityBuff("star"));   // twice: still let through
+        Assert.False(h.Hold.HasGivenUpOn("star"));   // twice: still let through
 
         Assert.Equal(3, LairEntryDebuffHold.MaxSendsOfOnePriorityBuff);
         CastPriorityBuff(h, "star");
-        Assert.True(h.Hold.HoldsPriorityBuff("star"));    // three times: held back from here on
-        Assert.False(h.Hold.HoldsPriorityBuff("other"));
+        Assert.True(h.Hold.HasGivenUpOn("star"));    // three times: held back from here on
+        Assert.False(h.Hold.HasGivenUpOn("other"));
         Assert.False(h.Hold.BlockingBuffs);         // the other priority buffs still get their turn
         Assert.Contains(h.LoopLog, m => m.StartsWith(
             "priority buff star went out 3 times outside this lair, the most one may"));
@@ -971,14 +1047,14 @@ public sealed class LairEntryDebuffHoldTests
         h.Now = h.Now.AddSeconds(6);                // the step never landed
         h.SlotUsed = true;
         Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs, lair));
-        Assert.True(h.Hold.HoldsPriorityBuff("star"));
+        Assert.True(h.Hold.HasGivenUpOn("star"));
         Assert.Contains("given up on: star", h.Hold.Describe());
 
         h.SlotUsed = false; h.Poll();               // in, and on to the next lair
-        h.Hold.NoteOrdinaryBuffCast();              // a buff went out in there: none is owed a cast
+        h.Hold.NoteOrdinaryBuffCast("plai");              // a buff went out in there: none is owed a cast
         h.SlotUsed = true;
         Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs, nextLair));
-        Assert.False(h.Hold.HoldsPriorityBuff("star"));
+        Assert.False(h.Hold.HasGivenUpOn("star"));
         Assert.Contains("sent: none; given up on: none", h.Hold.Describe());
     }
 

@@ -39,6 +39,8 @@ public sealed class LairEntryPriorityBuffWaitTests
         public int? DebuffMinMana { get; set; }
         // The game calls mana full here, under the maximum the client believes in.
         public bool ManaIsFull { get; set; }
+        // The room a fight now is in, as the combat engine judges it; null = not known.
+        public RoomKey? FightRoom { get; set; }
         // The cast codes that are mana-regen buffs.
         public HashSet<string> ManaRegenBuffs { get; } = new(StringComparer.OrdinalIgnoreCase);
         // A buff's own duration; 600 seconds where none is given.
@@ -87,9 +89,10 @@ public sealed class LairEntryPriorityBuffWaitTests
                 buffsDue: Director.BuffsDue,
                 stillWanted: () => LoopStillAtTheDoor,
                 healOrCureDue: Director.HealOrCureDue,
-                debuffMana: () => DebuffMinMana is { } min ? ("dbuf", min, State.Ma, State.MaxMa) : null,
+                debuffMana: () => DebuffMinMana is { } min ? ("dbuf", min, State.Ma, State.MaxMa, false) : null,
                 inCombat: () => State.InCombat,
-                manaIsFull: () => ManaIsFull);
+                manaIsFull: () => ManaIsFull,
+                fightRoom: () => FightRoom);
             Director.SetLairEntryBuffHold(Hold);
             Director.SetManaRegenBuffProbe(ManaRegenBuffs.Contains);
 
@@ -739,12 +742,12 @@ public sealed class LairEntryPriorityBuffWaitTests
     [InlineData(LairEntryDebuffMode.WaitForSpells)]
     [InlineData(LairEntryDebuffMode.BlockSpells)]
     [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
-    public void LongFightInTheLairWithNoDebuff_ADuringCombatBuffGoesOutByTheSecondRound(LairEntryDebuffMode mode)
+    public void LongFightInTheLairWithNoDebuff_ADuringCombatBuffGoesOutByTheThirdRound(LairEntryDebuffMode mode)
     {
         using Harness h = new();
         Assert.True(h.Hold.ReadyToEnter(mode, new RoomKey(1, 100)));
         h.NextRound(seconds: 2);                            // the step lands
-        h.State.InCombat = true;
+        h.State.InCombat = true;                            // engaged; the engine sent no signal (it put a debuff off)
         h.AddBuff("shl2", priority: false, duringCombat: true);   // ran out, or was knocked off
         List<string?> rounds = new();
         for (int round = 0; round < 24; round++)            // two minutes of fight
@@ -753,26 +756,122 @@ public sealed class LairEntryPriorityBuffWaitTests
             rounds.Add(h.Director.Evaluate());
         }
 
-        Assert.Null(rounds[0]);                             // the first round's cast is kept for the debuff
-        Assert.Equal("shl2", rounds[1]);
-        Assert.Contains("buffs released: the fight is past its first round with no debuff sent", h.InfoLog("Loop"));
+        Assert.Null(rounds[0]);                             // two rounds' casts are kept for the debuff
+        Assert.Null(rounds[1]);
+        Assert.Equal("shl2", rounds[2]);
+        Assert.Contains("buffs released: the fight is two rounds old with no debuff sent", h.InfoLog("Loop"));
     }
 
-    // The combat engine opens the fight with no debuff to cast: the buff goes out on
-    // the very next pass.
-    [Fact]
-    public void EngineOpensTheFightWithNoDebuffToCast_ADuringCombatBuffGoesOutAtOnce()
+    // A debuff the engine put off (a backstab went first, or a heal took the cast)
+    // sends no signal. It is offered again a round later, and must get that cast ahead
+    // of a during-combat buff: at six seconds, where the hold used to end, and up to
+    // two rounds in.
+    [Theory]
+    [InlineData(5.5, "dbuf")]
+    [InlineData(6.5, "dbuf")]
+    [InlineData(10.5, "dbuf")]
+    [InlineData(11.5, "shld")]
+    public void PutOffDebuff_GetsItsCastAheadOfADuringCombatBuff_ForTwoRounds(double secondsIntoTheFight, string cast)
     {
         using Harness h = new();
         Assert.True(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, new RoomKey(1, 100)));
+        h.NextRound(seconds: 1);
+        h.State.InCombat = true;
+        h.Director.MarkBetweenRoundSlotUsed();              // the round's cast went elsewhere: the debuff is put off
+        h.AddBuff("shld", priority: false, duringCombat: true);
+        h.DebuffOwed = "dbuf";                              // offered again from the next round
+
+        h.Now = h.Now.AddSeconds(secondsIntoTheFight);
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+
+        Assert.Equal(cast, h.Director.Evaluate());
+    }
+
+    // The combat engine opens the lair's fight with no debuff to cast: the buff goes
+    // out on the very next pass.
+    [Fact]
+    public void EngineOpensTheLairsFightWithNoDebuffToCast_ADuringCombatBuffGoesOutAtOnce()
+    {
+        RoomKey lair = new(1, 100);
+        using Harness h = new() { FightRoom = new RoomKey(1, 99) };
+        Assert.True(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, lair));
         h.AddBuff("shl2", priority: false, duringCombat: true);
         h.NextRound(seconds: 2);
+        h.FightRoom = lair;                                 // the step is in flight into the lair
         h.State.InCombat = true;
         Assert.Empty(h.CastsSent);
 
         h.Hold.NoteNoDebuffThisFight();
 
         Assert.Equal("shl2", h.Director.Evaluate());
+    }
+
+    // The reviewer's sequence: the go-ahead with a buff held, then the engine engages
+    // something at the door with no debuff to cast. The buff used to go out on the
+    // next pass and spend the cast the lair's debuff needed. It stays held.
+    [Theory]
+    [InlineData(LairEntryDebuffMode.WaitForSpells)]
+    [InlineData(LairEntryDebuffMode.BlockSpells)]
+    [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
+    public void EngineSignalAtTheDoorAfterTheGoAhead_TheHeldBuffStaysHeld_AndTheCastStaysFree(LairEntryDebuffMode mode)
+    {
+        RoomKey lair = new(1, 100);
+        using Harness h = new() { FightRoom = new RoomKey(1, 99) };
+        Assert.True(h.Hold.ReadyToEnter(mode, lair));       // the go-ahead
+        h.AddBuff("plai", priority: false);                 // due, and held for the step in
+
+        h.Hold.NoteNoDebuffThisFight();                     // an engage at the door, no debuff to cast
+
+        Assert.Null(h.Director.Evaluate());
+        Assert.False(h.Director.BetweenRoundSlotUsed);
+        Assert.Empty(h.CastsSent);
+
+        using Harness unknown = new();                      // where the fight is isn't known: the same
+        Assert.True(unknown.Hold.ReadyToEnter(mode, lair));
+        unknown.AddBuff("plai", priority: false);
+        unknown.Hold.NoteNoDebuffThisFight();
+        Assert.Null(unknown.Director.Evaluate());
+    }
+
+    // Standing for mana, a mana-bringing buff that is always due again (shorter than
+    // its recast lead, or refused) is not cast round after round: three sends, like
+    // any buff a wait lets through, then it is held with the rest.
+    [Fact]
+    public void StandingForMana_AManaBuffThatIsAlwaysDue_IsGivenUpOnAfterThreeSends()
+    {
+        using Harness h = new() { DebuffMinMana = 60 };
+        h.AutoBless = false;
+        h.State.Ma = 30;
+        h.AutoBless = true;
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, new RoomKey(1, 100)));
+        h.AddBuff("regn", priority: false).BlessIfAboveMa = 0;
+        h.ManaRegenBuffs.Add("regn");
+        h.BuffDurations["regn"] = 10;                       // under its recast lead: due again at once
+        h.Health.RestIfBelowMa = 0;
+
+        for (int round = 0; round < 8; round++) h.Round();
+
+        Assert.True(h.HeldForMana);
+        Assert.Equal(new[] { "regn", "regn", "regn" }, h.CastsSent);
+        Assert.Contains(h.InfoLog("Loop"), m => m.StartsWith("buff regn went out 3 times outside this lair, the most one may"));
+    }
+
+    // A fight where the loop stands waiting is said in the log, once.
+    [Fact]
+    public void FightAtTheDoor_IsLoggedOnce()
+    {
+        using Harness h = new();
+        h.AddBuff("star", priority: true);
+        Assert.False(h.AskToEnter());
+
+        h.State.InCombat = true;                            // the scheduler's pass on the fight starting
+        for (int look = 0; look < 5; look++) { h.Poll(); h.Director.Evaluate(); }
+        h.State.InCombat = false;
+        h.Poll();
+
+        Assert.Single(h.InfoLog("Loop"), m => m == "a fight at the door: buffs are free, the wait resumes after");
+        Assert.True(h.Hold.IsWaiting);
     }
 
     // An item-cast buff ticked priority is a priority buff to the scheduler, so it is

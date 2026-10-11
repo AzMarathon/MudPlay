@@ -2262,7 +2262,7 @@ public sealed class CastingDirector : IDisposable
     private void NoteBuffCast(SpellCategory category, CastCandidate cast)
     {
         if (category == SpellCategory.PriorityBuffing) _lairHold?.NotePriorityBuffCast(BuffName(cast));
-        else _lairHold?.NoteOrdinaryBuffCast();
+        else _lairHold?.NoteOrdinaryBuffCast(BuffName(cast));
     }
 
     // The combat engine sent its pre-attack debuff itself, not through a decision
@@ -2788,12 +2788,12 @@ public sealed class CastingDirector : IDisposable
         if (holdsAll && !forMana) return null;
         if (!holdsAll && !priority && _lairHold is { BlockingOrdinaryBuffs: true }) return null;
 
-        // A priority buff that loop has given up waiting for is held as well; the next
-        // due one takes its place.
+        // A buff that loop let through and has given up on (it went out as often as
+        // one may there) is held as well; the next due one takes its place.
         foreach (CastCandidate due in DueBuffs(health, priority, peek))
         {
-            if (forMana ? !due.RestoresMana : priority && _lairHold?.HoldsPriorityBuff(BuffName(due)) == true)
-                continue;
+            if (forMana && !due.RestoresMana) continue;
+            if (_lairHold?.HasGivenUpOn(BuffName(due)) == true) continue;
             return due;
         }
         return null;

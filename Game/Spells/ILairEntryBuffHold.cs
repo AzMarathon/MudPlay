@@ -20,9 +20,10 @@ public interface ILairEntryBuffHold
     // passed over for the next one instead of standing in its way.
     bool SkipsUnpayableBuffs { get; }
 
-    // A priority buff the wait has given up on and holds with the others, named as
-    // CastingDirector.BuffsDue names it.
-    bool HoldsPriorityBuff(string buff);
+    // A buff the wait let through, saw go out as often as one may, and now holds with
+    // the others: a priority buff, or one that brings mana back during a wait for mana.
+    // Named, here and below, as CastingDirector.BuffsDue names it.
+    bool HasGivenUpOn(string buff);
 
     // A decision pass is starting: the hold looks at what has happened since the last
     // (a fight begun or over, its time up) before it is asked anything.
@@ -30,7 +31,7 @@ public interface ILairEntryBuffHold
 
     void NotePriorityBuffCast(string buff);
 
-    void NoteOrdinaryBuffCast();
+    void NoteOrdinaryBuffCast(string buff);
 
     // The combat profile's debuff went out, by a decision pass or sent by the combat
     // engine itself.
