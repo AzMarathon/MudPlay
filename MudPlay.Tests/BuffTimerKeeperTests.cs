@@ -415,6 +415,101 @@ public sealed class BuffTimerKeeperTests : IDisposable
         Assert.Single(c.Hazard.DescribeTracking());
     }
 
+    // ----- a profile swap ---------------------------------------------------
+
+    // "if they swap profiles while still connected, toss the timers" (user,
+    // 2026-10-10). The calls are the ones ProfileService.Load makes, in its order:
+    // the outgoing profile's save, ProfileClosed, then ProfileLoaded for the next.
+    [Fact]
+    public void ProfileSwappedInTheGame_TossesTheTimers_SavesNone_CarriesNoneIn()
+    {
+        CharacterProfile outgoing = new();
+        using Client c = InTheGame(outgoing);
+        c.RaiseBuff("mysh", total: 200, left: 200);
+        c.Advance(100);
+        CharacterProfile incoming = SavedOutOfTheGame();   // with timers of its own on file
+
+        c.Keeper.WriteTo(outgoing);
+        c.Keeper.NoteProfileClosed();
+        c.Profile = incoming;
+        c.ProfileName = "Other";
+        c.Keeper.RestoreFrom(incoming);
+
+        Assert.Null(outgoing.BuffTimers);
+        Assert.Empty(c.Director.SnapshotActiveBuffs());
+        Assert.Empty(c.Hazard.DescribeTracking());
+        Assert.Null(c.Director.PausedAtUtc);       // tossed, not frozen
+        Assert.Null(incoming.BuffTimers);
+        Assert.Contains(c.LogLines, l => l ==
+            "the profile was swapped with the character in the game — 3 buff timers tossed: "
+            + "not saved with the outgoing profile, and none carried into the next");
+        Assert.Contains(c.LogLines, l => l ==
+            "dropped 2 buff timers saved with the character: the profile was loaded with a character already in the game");
+        Assert.Contains(c.Keeper.Describe(), l => l.StartsWith("3 buff timers tossed at ")
+            && l.EndsWith(": the profile was swapped with the character in the game"));
+
+        // The session goes on in the game: nothing comes back at the next save or
+        // when the link drops, and a later load of the outgoing profile finds none.
+        c.Advance(60);
+        c.Keeper.NoteLeftGame("the link dropped");
+        Assert.Null(incoming.BuffTimers);
+        using Client later = new(Start.AddDays(1), outgoing);
+        later.Keeper.RestoreFrom(outgoing);
+        Assert.Empty(later.Director.SnapshotActiveBuffs());
+        Assert.Empty(later.Hazard.DescribeTracking());
+    }
+
+    // Out of the game it is the ordinary swap: the timers stand still, go to disk
+    // with the profile they belong to, and are put back when it is loaded again.
+    [Fact]
+    public void ProfileSwappedOutOfTheGame_KeepsTheTimersWithTheirProfile()
+    {
+        CharacterProfile outgoing = new();
+        using Client c = InTheGame(outgoing);
+        c.Advance(100);
+        c.Keeper.NoteLeftGame("the link dropped");
+
+        c.Keeper.WriteTo(outgoing);
+        c.Keeper.NoteProfileClosed();
+
+        Assert.Equal(200, outgoing.BuffTimers!.Buffs.Single().RemainingSec);
+        Assert.Single(outgoing.BuffTimers.HazardBuffs);
+        Assert.DoesNotContain(c.LogLines, l => l.Contains("tossed"));
+    }
+
+    // The restart for an update is a restart and no swap: the client drops the link
+    // (MainWindowViewModel.StandDownForUpdateAsync), closes, and the one started in
+    // its place loads the same profile. The timers stop at the drop, ride the
+    // profile, and run on from the new client's first in-game prompt.
+    [Fact]
+    public void UpdateRestart_IsNoSwap_TheTimersPauseAndPersist()
+    {
+        string file = Path.Combine(_root, "Tester.json");
+        using (Client old = InTheGame(new CharacterProfile()))
+        {
+            old.Advance(100);
+            old.Keeper.NoteLeftGame("the link dropped or the game was left");   // the stand-down's disconnect
+            old.Advance(5);
+            old.Keeper.NoteClientClosing();
+            old.Keeper.WriteTo(old.Profile);       // the window's closing save
+            JsonStore.Save(file, old.Profile);
+            Assert.DoesNotContain(old.LogLines, l => l.Contains("tossed"));
+        }
+
+        CharacterProfile loaded = JsonStore.Load<CharacterProfile>(file)!;
+        using Client relaunched = new(Start.AddSeconds(120), loaded);
+        relaunched.Keeper.NoteProfileClosed();     // whatever was loaded first at startup going
+        relaunched.Keeper.RestoreFrom(loaded);
+        relaunched.Advance(20);                    // the logon
+
+        relaunched.Keeper.NoteBackInGame();
+
+        Assert.Equal(200, relaunched.LeftOn("bles"));
+        Assert.Contains("in 1700 s", relaunched.Hazard.DescribeTracking()[0]);
+        Assert.Null(loaded.BuffTimers);
+        Assert.DoesNotContain(relaunched.LogLines, l => l.Contains("tossed"));
+    }
+
     // Restoring is bookkeeping: with nothing saved, nothing is touched and the cast
     // pass is not latched.
     [Fact]

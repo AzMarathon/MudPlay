@@ -16,4 +16,11 @@ public sealed class SavedBuffTimer
 
     // The card a draw item dealt, null for anything else.
     public string? Outcome { get; set; }
+
+    // When the cast runs out by the clock that never stopped: the expiry it would
+    // have had with no time out of the game at all, this stretch and any before it.
+    // That is where a whole-party buff ends on the members it covered, whose buffs
+    // ran on while ours stood still. A record without it reads as long run out,
+    // which errs on the side of casting again.
+    public DateTime RanOnUntilUtc { get; set; }
 }

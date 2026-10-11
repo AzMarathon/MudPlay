@@ -1114,7 +1114,12 @@ public static class BugReportBuilder
                 string target = string.IsNullOrEmpty(b.Target) ? "self" : b.Target;
                 System.TimeSpan remaining = b.Until - asOf;
                 string what = b.Outcome is { Length: > 0 } drawn ? $"{b.Short} ({drawn})" : b.Short;
-                sb.Append($"- {what} on {target}: {(remaining > System.TimeSpan.Zero ? $"{remaining.TotalSeconds:F0}s remaining" : "expired, not yet cleared")} (of {b.TotalSec}s)\n");
+                // Carried over time out of the game: the clock a whole-party buff is
+                // recast by in a party, which reads earlier than the bar on ourselves.
+                string carried = b.RanOnUntil is { } ranOn
+                    ? $"; carried over time out of the game{(b.Restored ? ", from the saved profile" : "")}, ran on for anyone else it covered until {ranOn:HH:mm:ss} UTC"
+                    : "";
+                sb.Append($"- {what} on {target}: {(remaining > System.TimeSpan.Zero ? $"{remaining.TotalSeconds:F0}s remaining" : "expired, not yet cleared")} (of {b.TotalSec}s){carried}\n");
             }
         }
         sb.Append('\n');

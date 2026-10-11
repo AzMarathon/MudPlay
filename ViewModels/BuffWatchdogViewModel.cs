@@ -259,7 +259,8 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     // The timers on ourselves ran on after standing still out of the game, the ones
     // named having had their expiry moved on by the time away. The expiries kept here
     // move with exactly those: a later expiry is how a recast is told, and this one is
-    // no recast, so the record of who the buff covered stays as it was.
+    // no recast, so the record of who the buff covered stays as it was. (How long it
+    // still covers them is another matter: their rows count by ActiveBuffTimer.RanOnUntil.)
     private void OnTimersResumed(TimeSpan away, IReadOnlyCollection<string> moved)
     {
         foreach (string code in moved)
@@ -432,6 +433,13 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
             foreach (ActiveBuffTimer t in snap)
                 if (t.Target.Length == 0 && string.Equals(t.Short, row.CastCode, StringComparison.OrdinalIgnoreCase))
                 { entry = t; break; }
+            // A member's row of a whole-party buff that stood still on us over time
+            // out of the game: the member's ran on, so their bar counts by the expiry
+            // the cast had with no time away, which is also what the recast goes by
+            // in a party. Reading our own timer showed them covered for longer than
+            // they were, by exactly the time we were out.
+            if (row.IsWholeParty && row.MemberKey.Length > 0 && entry is { RanOnUntil: { } ranOn } carried)
+                entry = carried with { Until = ranOn };
             string? coveredBy = null;
             if (!row.IsParty) coverage.TryGetValue(row.CastCode, out coveredBy);
             row.Update(entry, now, coveredBy: coveredBy, conflicted: isConflicted);
@@ -505,8 +513,10 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
                     // One row under each CURRENT member: covered (in the party when it was
                     // cast → reads the shared timer) or NOT covered (joined after → shows
-                    // "not up", flagging they lack the party buff). Recast is on OUR timer;
-                    // a new member is picked up on the next recast (which re-snapshots).
+                    // "not up", flagging they lack the party buff). Recast is on OUR timer
+                    // (or, for one carried over time out of the game, on the expiry it
+                    // had with no time away); a new member is picked up on the next
+                    // recast (which re-snapshots).
                     if (wpActive)
                     {
                         _wholePartyCoverage.TryGetValue(code, out (DateTime Until, HashSet<string> Covered) cov);

@@ -10,6 +10,10 @@ namespace MudPlay.Game.Spells;
 // Restored is true for a timer on ourselves that was put back from the profile of an
 // earlier session and has not been raised again since: the client did not see that
 // cast, so it cannot say who else it landed on.
+// RanOnUntil is set for a timer on ourselves that stood still over time out of the
+// game and has not been raised again since: the expiry it would have had with no
+// time away, which is where the same cast runs out on a party member it covered
+// (theirs kept running).
 public readonly record struct ActiveBuffTimer(
     string Target,
     string Short,
@@ -17,4 +21,5 @@ public readonly record struct ActiveBuffTimer(
     int MarginSec,
     int TotalSec,
     string? Outcome = null,
-    bool Restored = false);
+    bool Restored = false,
+    System.DateTime? RanOnUntil = null);

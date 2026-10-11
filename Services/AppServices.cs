@@ -10138,6 +10138,7 @@ public sealed class AppServices
         // save on the way in runs.
         PromptScanner.PromptObserved += _ => BuffTimers.NoteBackInGame();
         Profile.ProfileSaving += BuffTimers.WriteTo;
+        Profile.ProfileClosed += BuffTimers.NoteProfileClosed;
         Profile.ProfileLoaded += BuffTimers.RestoreFrom;
 
         // The opens owed for what a hang-up took end with the check that would

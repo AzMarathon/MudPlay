@@ -2770,8 +2770,9 @@ public sealed class CastingDirectorTests
     // Our own timer stands still while we are out. A party member's does not: the
     // member may have stayed in the game, where its buff ran down the whole time
     // (user, 2026-08-28), so its timer keeps its real expiry, and one that passed
-    // while we were away is dropped and the buff cast again. Whether the 2026-10-10
-    // ruling means members' timers too is with the user.
+    // while we were away is dropped and the buff cast again. The 2026-10-10 ruling
+    // does not reach members' timers: "if the party member is still in the game when
+    // we arent, its better to assume their timers keep ticking" (user, 2026-10-10).
     [Fact]
     public void PauseResume_OurOwnTimerStandsStill_APartyMembersRunsOn()
     {
@@ -2823,6 +2824,199 @@ public sealed class CastingDirectorTests
         ActiveBuffTimer ours = Assert.Single(h.Director.SnapshotActiveBuffs());
         Assert.Equal(string.Empty, ours.Target);
         Assert.Equal(300, SecondsLeft(h.Director, h.Now, "", "mysh"));
+    }
+
+    // ----- a whole-party buff carried over time out of the game -------------
+    //
+    // One cast lands on us and on every member, and it has the one timer, keyed to
+    // us. Carried over time out of the game that timer stood still, while the
+    // members' buffs ran on: "if the party member is still in the game when we
+    // arent, its better to assume their timers keep ticking" (user, 2026-10-10). So
+    // the carried timer covers us and no member, and in a party the buff is recast
+    // by the expiry the cast had with no time away.
+
+    // In a party with chan cast `beforeLeaving` seconds ago (it lasts 300 s), no
+    // recast lead, and the cast pass free to cast again.
+    private static PartyBlessHarness InAPartyWithChanUp(int beforeLeaving)
+    {
+        PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddWholePartySlot("chan").RecastMarginSec = 0;
+        h.BuffInfo["chan"] = (string.Empty, 300);
+        h.AddMember("Raijin");
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "chan" }, h.CastsSent);
+        h.CastsSent.Clear();
+        h.Now = h.Now.AddSeconds(beforeLeaving);
+        return h;
+    }
+
+    private static List<string> CastsAfter(PartyBlessHarness h, int seconds)
+    {
+        h.Now = h.Now.AddSeconds(seconds);
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.Director.Evaluate();
+        return h.CastsSent;
+    }
+
+    [Fact]
+    public void WholePartyBuff_CarriedOverAPause_IsRecastForThePartyByTheClockThatDidNotStop()
+    {
+        using PartyBlessHarness h = InAPartyWithChanUp(beforeLeaving: 100);   // 200 s left on everyone
+        DateTime castAt = h.Now.AddSeconds(-100);
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(150);
+        h.Director.ResumeBuffTimers();
+
+        // Ours has the 200 s it had; the members' is down to 50 s.
+        ActiveBuffTimer carried = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal(200, (carried.Until - h.Now).TotalSeconds);
+        Assert.Equal(castAt.AddSeconds(300), carried.RanOnUntil);
+        Assert.Contains(h.Log.Snapshot(), e => e.Message.Contains(
+            "Whole-party buffs among them cover only us: in a party each is recast by the time it had left with no time away (chan 50 s)."));
+
+        Assert.Empty(CastsAfter(h, 40));           // 10 s left on the members: not yet
+        // Run out on the members, with 150 s still on our own bar. Going by that bar
+        // left them without it for those 150 s.
+        Assert.Equal(new[] { "chan" }, CastsAfter(h, 10));
+
+        // The recast is a cast like any other: seen, not carried, and it covers the party.
+        ActiveBuffTimer recast = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Null(recast.RanOnUntil);
+        Assert.Equal(300, (recast.Until - h.Now).TotalSeconds);
+        h.CastsSent.Clear();
+        Assert.Empty(CastsAfter(h, 299));
+    }
+
+    // Away for longer than the buff had left: it is gone from the members on the way
+    // back in, and cast at once, though our own bar has all it had.
+    [Fact]
+    public void WholePartyBuff_AwayLongerThanItHadLeft_IsRecastForThePartyOnTheWayBackIn()
+    {
+        using PartyBlessHarness h = InAPartyWithChanUp(beforeLeaving: 100);
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(3600);
+        h.Director.ResumeBuffTimers();
+
+        Assert.Equal(200, SecondsLeft(h.Director, h.Now, "", "chan"));
+        Assert.Equal(new[] { "chan" }, CastsAfter(h, 0));
+    }
+
+    // Alone, there is nobody whose buff ran on: the buff goes by our own timer, which
+    // stood still.
+    [Fact]
+    public void WholePartyBuff_CarriedOverAPause_Alone_GoesByOurOwnTimer()
+    {
+        using PartyBlessHarness h = InAPartyWithChanUp(beforeLeaving: 100);
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(3600);
+        h.Party.Members.Clear();                   // the party did not survive the drop
+        h.Party.IsInParty = false;
+        h.Director.ResumeBuffTimers();
+
+        Assert.Empty(CastsAfter(h, 199));
+        Assert.Equal(new[] { "chan" }, CastsAfter(h, 1));
+    }
+
+    // A party joined later is covered by nobody's memory of the old cast: once the
+    // cast has run out by the clock that did not stop, the buff is theirs to get.
+    [Fact]
+    public void WholePartyBuff_CarriedOverAPause_APartyJoinedLater_IsNotCountedAsCovered()
+    {
+        using PartyBlessHarness h = InAPartyWithChanUp(beforeLeaving: 100);
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(3600);
+        h.Party.Members.Clear();
+        h.Party.IsInParty = false;
+        h.Director.ResumeBuffTimers();
+        Assert.Empty(CastsAfter(h, 20));           // alone, 180 s left on us
+
+        h.AddMember("Raijin");
+
+        Assert.Equal(new[] { "chan" }, CastsAfter(h, 0));
+    }
+
+    // The same after a restart: the timer put back from the profile is ours, and the
+    // members' ran on from the moment the earlier session left the game.
+    [Theory]
+    [InlineData(30, 169, false)]    // a quick restart, 170 s left on the members: not yet
+    [InlineData(30, 170, true)]     // ... and run out on them 170 s on, 30 s before our own
+    [InlineData(7200, 0, true)]     // a restart two hours later: gone from them already
+    public void WholePartyBuff_PutBackFromTheProfile_IsRecastForThePartyByTheClockThatDidNotStop(
+        int awaySec, int inGameSec, bool recast)
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddWholePartySlot("chan").RecastMarginSec = 0;
+        h.BuffInfo["chan"] = (string.Empty, 300);
+        h.AddMember("Raijin");
+        DateTime leftTheGame = h.Now.AddSeconds(-awaySec);
+
+        h.Director.RestoreSelfTimers(new[]
+        {
+            new SavedBuffTimer
+            {
+                Short = "chan", RemainingSec = 200, MarginSec = 0, TotalSec = 300,
+                RanOnUntilUtc = leftTheGame.AddSeconds(200),
+            },
+        });
+        h.Director.ResumeBuffTimers();
+
+        ActiveBuffTimer ours = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.True(ours.Restored);
+        Assert.Equal(200, (ours.Until - h.Now).TotalSeconds);
+        Assert.Equal(leftTheGame.AddSeconds(200), ours.RanOnUntil);
+
+        // inGameSec is under the 200 s our own timer has, so only the members' clock
+        // can be what sends this.
+        Assert.Equal(recast ? new[] { "chan" } : Array.Empty<string>(), CastsAfter(h, inGameSec));
+    }
+
+    // The clock that did not stop is counted from the cast through any number of
+    // stretches away, and goes into the profile with the timer: a pause and then a
+    // restart must not start it again from the second time the game was left.
+    [Fact]
+    public void WholePartyBuff_TheClockThatDidNotStop_IsKeptThroughAPause_AndSavedWithTheTimer()
+    {
+        using PartyBlessHarness h = InAPartyWithChanUp(beforeLeaving: 100);
+        DateTime castAt = h.Now.AddSeconds(-100);
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(60);
+        h.Director.ResumeBuffTimers();
+        h.Now = h.Now.AddSeconds(20);              // 180 s left on us, 120 s on the members
+
+        h.Director.PauseBuffTimers();              // out again, and this time the client closes
+        SavedBuffTimer saved = Assert.Single(h.Director.SnapshotSelfTimersForSave());
+
+        Assert.Equal(180, saved.RemainingSec);
+        Assert.Equal(castAt.AddSeconds(300), saved.RanOnUntilUtc);
+    }
+
+    // A self buff has nobody else on it: carried, it goes by our own timer whether
+    // we are in a party or not.
+    [Fact]
+    public void SelfBuff_CarriedOverAPause_InAParty_GoesByOurOwnTimer()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "mysh", CastOnSelf = true, RecastMarginSec = 0 });
+        h.BuffInfo["mysh"] = (string.Empty, 300);
+        h.AddMember("Raijin");
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "mysh" }, h.CastsSent);
+        h.CastsSent.Clear();
+        h.Now = h.Now.AddSeconds(100);
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(3600);
+        h.Director.ResumeBuffTimers();
+
+        Assert.Empty(CastsAfter(h, 199));
+        Assert.Equal(new[] { "mysh" }, CastsAfter(h, 1));
     }
 
     // A second drop before any prompt is the same stretch away: the first pause

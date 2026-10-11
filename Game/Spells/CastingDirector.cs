@@ -1185,17 +1185,31 @@ public sealed class CastingDirector : IDisposable
     // left. So a death the client did not see and finds out about late takes exactly
     // these (ClearCarriedSelfTimers), where wiping every timer would take buffs
     // raised since.
-    private readonly Dictionary<string, (DateTime Until, bool Restored)> _carried = new(StringComparer.OrdinalIgnoreCase);
+    //
+    // RanOnUntil is the expiry the timer would have had with no time out of the
+    // game: where the same cast runs out on anyone else it landed on, who stayed in
+    // the game for all the client knows (CarriedBuffRanOutOnParty).
+    private readonly Dictionary<string, (DateTime Until, bool Restored, DateTime RanOnUntil)> _carried = new(StringComparer.OrdinalIgnoreCase);
 
-    private bool IsCarried(string code, out bool restored)
+    private bool IsCarried(string code, out (DateTime Until, bool Restored, DateTime RanOnUntil) mark)
     {
-        restored = false;
-        if (!_carried.TryGetValue(code, out (DateTime Until, bool Restored) mark)
-            || !_activeUntil.TryGetValue(("", code), out (DateTime Until, int MarginSec, int TotalSec) timer)
-            || timer.Until != mark.Until)
-            return false;
-        restored = mark.Restored;
-        return true;
+        return _carried.TryGetValue(code, out mark)
+            && _activeUntil.TryGetValue(("", code), out (DateTime Until, int MarginSec, int TotalSec) timer)
+            && timer.Until == mark.Until;
+    }
+
+    // A whole-party buff lands on us and on every member with the one cast, and has
+    // the one timer, keyed to us. Carried over time out of the game, that timer says
+    // what is left on US: it stood still while the members' ran on, "if the party
+    // member is still in the game when we arent, its better to assume their timers
+    // keep ticking" (user, 2026-10-10). So a carried timer vouches for nobody else,
+    // and in a party the buff is due by the clock that did not stop. Without this
+    // the recast came late for the members by exactly the time we were away.
+    private bool CarriedBuffRanOutOnParty(string code)
+    {
+        if (!IsCarried(code, out (DateTime Until, bool Restored, DateTime RanOnUntil) mark)) return false;
+        int margin = EffectiveMargin("", code, _activeUntil[("", code)].MarginSec);
+        return (mark.RanOnUntil - _now()).TotalSeconds <= margin;
     }
 
     // The character is out of the game: the link dropped, or it left for the board's
@@ -1223,7 +1237,11 @@ public sealed class CastingDirector : IDisposable
             if (kv.Key.Target.Length != 0) continue;
             ours++;
             // One that had already run out is kept for a recast wait, not for a buff.
-            if (kv.Value.Until > now) _carried[kv.Key.Short] = (kv.Value.Until, false);
+            if (kv.Value.Until <= now) continue;
+            // Carried before and not raised since: its mark stands, with the expiry
+            // it had before the first time away.
+            if (IsCarried(kv.Key.Short, out _)) continue;
+            _carried[kv.Key.Short] = (kv.Value.Until, false, kv.Value.Until);
         }
         _log?.Info(LogCategory,
             $"buff timers paused — {ours} on ourselves keep the time they have left until we are back in the game; "
@@ -1240,8 +1258,8 @@ public sealed class CastingDirector : IDisposable
     // A timer on a party member keeps its real expiry, and one that passed while we
     // were away is dropped so the buff is cast again: the member stayed in the game
     // for all the client knows, and there its buff ran down the whole time (user,
-    // 2026-08-28). Whether the 2026-10-10 ruling means these too is an open question
-    // (GAME_MECHANICS "Buff timers across a disconnect").
+    // 2026-08-28, and again 2026-10-10: "its better to assume their timers keep
+    // ticking").
     public void ResumeBuffTimers()
     {
         // First in-game prompt after a (re)connect — lift the cast-suspend latch
@@ -1255,6 +1273,7 @@ public sealed class CastingDirector : IDisposable
         DateTime now = _now();
         TimeSpan away = now - since;
         List<string> moved = new();
+        List<string> partyClock = new();
         int lapsed = 0;
         foreach ((string Target, string Short) key in _activeUntil.Keys.ToList())
         {
@@ -1269,17 +1288,22 @@ public sealed class CastingDirector : IDisposable
             // Only what was running at the pause stood still. A buff whose line
             // showed on the way back in, ahead of the first prompt, started then.
             if (timer.Until.AddSeconds(-timer.TotalSec) > since) continue;
-            bool carried = IsCarried(key.Short, out bool restored);
+            bool carried = IsCarried(key.Short, out (DateTime Until, bool Restored, DateTime RanOnUntil) mark);
             _activeUntil[key] = (timer.Until + away, timer.MarginSec, timer.TotalSec);
             moved.Add(key.Short);
             if (!carried) continue;
-            _carried[key.Short] = (timer.Until + away, restored);
+            _carried[key.Short] = (timer.Until + away, mark.Restored, mark.RanOnUntil);
             LatchAsApplied(key.Short);
+            if (_isPartyWideBuff?.Invoke(key.Short) == true)
+                partyClock.Add($"{key.Short} {Math.Max(0L, (long)(mark.RanOnUntil - now).TotalSeconds)} s");
         }
 
         _log?.Info(LogCategory,
             $"buff timers resumed after {(long)away.TotalSeconds} s out of the game — {moved.Count} on ourselves run on with the time they had left; "
-            + $"{lapsed} on party members ran out meanwhile and were dropped.");
+            + $"{lapsed} on party members ran out meanwhile and were dropped."
+            + (partyClock.Count == 0 ? "" :
+                " Whole-party buffs among them cover only us: in a party each is recast by the time it had left with no time away ("
+                + string.Join(", ", partyClock) + ")."));
         TimersResumed?.Invoke(away, moved);
     }
 
@@ -1346,6 +1370,9 @@ public sealed class CastingDirector : IDisposable
                 MarginSec = kv.Value.MarginSec,
                 TotalSec = kv.Value.TotalSec,
                 Outcome = _drawnOutcome.TryGetValue(kv.Key.Short, out string? card) ? card : null,
+                RanOnUntilUtc = IsCarried(kv.Key.Short, out (DateTime Until, bool Restored, DateTime RanOnUntil) mark)
+                    ? mark.RanOnUntil
+                    : kv.Value.Until,
             });
         }
         return saved;
@@ -1365,7 +1392,7 @@ public sealed class CastingDirector : IDisposable
             DateTime until = now.AddSeconds(timer.RemainingSec);
             _activeUntil[("", timer.Short)] = (until, timer.MarginSec, timer.TotalSec);
             if (!string.IsNullOrWhiteSpace(timer.Outcome)) _drawnOutcome[timer.Short] = timer.Outcome;
-            if (timer.RemainingSec > 0) _carried[timer.Short] = (until, true);
+            if (timer.RemainingSec > 0) _carried[timer.Short] = (until, true, timer.RanOnUntilUtc);
             restored++;
         }
         if (restored == 0) return 0;
@@ -1437,12 +1464,13 @@ public sealed class CastingDirector : IDisposable
         foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
         {
             bool ours = kv.Key.Target.Length == 0;
-            bool restored = false;
-            if (ours) IsCarried(kv.Key.Short, out restored);
+            (DateTime Until, bool Restored, DateTime RanOnUntil) mark = default;
+            bool carried = ours && IsCarried(kv.Key.Short, out mark);
             list.Add(new ActiveBuffTimer(kv.Key.Target, kv.Key.Short, kv.Value.Until,
                 EffectiveMargin(kv.Key.Target, kv.Key.Short, kv.Value.MarginSec), kv.Value.TotalSec,
                 ours && _drawnOutcome.TryGetValue(kv.Key.Short, out string? card) ? card : null,
-                restored));
+                carried && mark.Restored,
+                carried ? mark.RanOnUntil : null));
         }
         return list;
     }
@@ -3079,7 +3107,8 @@ public sealed class CastingDirector : IDisposable
             bool wantSelfCast = partyWide
                 ? slot.WholePartyOn && (inParty ? partyAllowed : slot.CastSolo && selfEligible)
                 : slot.CastOnSelf && selfEligible && (covered is null || !covered.ContainsKey(slot.Spell));
-            if (wantSelfCast && IsRecastDue("", slot.Spell))
+            if (wantSelfCast
+                && (IsRecastDue("", slot.Spell) || (partyWide && inParty && CarriedBuffRanOutOnParty(slot.Spell))))
                 return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
 
             // Member targets (single-target spell) — party-gated, one per pass. Skipped for

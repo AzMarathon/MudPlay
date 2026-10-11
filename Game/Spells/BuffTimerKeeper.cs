@@ -63,6 +63,9 @@ public sealed class BuffTimerKeeper
     // What the last profile load put back, for the bug report.
     private string? _restoredNote;
 
+    // What the last profile swap in the game threw away, for the bug report.
+    private string? _tossedNote;
+
     // profile: the loaded profile when it is a named character's, else null (the
     // default profile is the template new characters are made from, and timers
     // written there would be handed to each). realmKey: the BBS and realm now
@@ -151,6 +154,33 @@ public sealed class BuffTimerKeeper
         _frozenFor = (_realmKey(), _profileName());
     }
 
+    // ProfileService.ProfileClosed: the loaded profile is going, ahead of the load
+    // of the next. With the character in the game that is a swap under a live
+    // session: "if they swap profiles while still connected, toss the timers" (user,
+    // 2026-10-10). The timers are then neither profile's. The outgoing one was
+    // saved on its way out with none (WriteTo, in the game), and the incoming one's
+    // own saved copy is dropped as it loads (RestoreFrom). The live ones are wiped
+    // here and not left to the reset its load brings, so the rule and its log line
+    // do not hang on what two other subscribers happen to do.
+    //
+    // Out of the game it is not that kind of swap: the timers stand still and were
+    // saved with the outgoing profile, and the incoming one's are put back. The
+    // restart for an update is of this kind, since it drops the link first.
+    public void NoteProfileClosed()
+    {
+        if (!_inGame) return;
+        IReadOnlyList<ActiveBuffTimer> live = _director.SnapshotActiveBuffs();
+        int onMembers = live.Count(t => t.Target.Length != 0);
+        int tossed = live.Count + _hazard.SnapshotForSave().Count;
+        _director.ResetBuffTracking();
+        _hazard.Forget("the profile was swapped with the character in the game");
+        _tossedNote = $"{CountText(tossed)} tossed at {Local(_utcNow())}: the profile was swapped with the character in the game";
+        _log?.Info(LogCategory,
+            $"the profile was swapped with the character in the game — {CountText(tossed)} tossed"
+            + (onMembers > 0 ? $" ({onMembers} of them on party members)" : "")
+            + ": not saved with the outgoing profile, and none carried into the next");
+    }
+
     // ProfileService.ProfileSaving: the timers go into the profile while the
     // character is out of the game, and come out of it while it is in.
     public void WriteTo(CharacterProfile saving)
@@ -227,8 +257,8 @@ public sealed class BuffTimerKeeper
             + (restored < kept ? $"; dropped {kept - restored} this game data or its settings no longer know" : ""));
     }
 
-    // For the bug report: running or standing still, since when, and what a load
-    // put back.
+    // For the bug report: running or standing still, since when, what a load put
+    // back, and what a swap in the game threw away.
     public IReadOnlyList<string> Describe()
     {
         List<string> lines = new()
@@ -240,6 +270,7 @@ public sealed class BuffTimerKeeper
                     : "standing still: the character has not been in the game yet",
         };
         if (_restoredNote is not null) lines.Add(_restoredNote);
+        if (_tossedNote is not null) lines.Add(_tossedNote);
         lines.Add(_profile()?.BuffTimers is { } saved
             ? $"saved with the character: {saved.Buffs.Count} buff timer(s), {saved.HazardBuffs.Count} hazard buff(s)"
             : "saved with the character: none");
