@@ -5341,15 +5341,10 @@ public sealed class AppServices
             characterName: () => PlayerStats.Name,
             send: cmd => SendGameCommand(cmd),
             log: Log);
-        // Not for a death the Stock engine answered with its colliseum line: that
-        // one leaves the lives as they were (GAME_MECHANICS "Death threshold &
-        // consequences"), and the command would add a life that was never spent.
-        RoomTracker.PlayerDeathObserved += () =>
-        {
-            if (!Death.LastDeathSavedInColliseum) SysopGodLife.OnDeath();
-            else if (SysopGodLivesEnabledHere())
-                Log.Info("SysopGodLife", "A colliseum death spends no life: no life is asked back.");
-        };
+        // Not for an arena death, on either realm: it leaves the lives as they
+        // were (GAME_MECHANICS "Death threshold & consequences"), and the command
+        // would add a life that was never spent.
+        RoomTracker.PlayerDeathObserved += () => SysopGodLife.OnDeath(RoomTracker.LastDeathTookNothing);
 
         // "Sysop goto": gate `sys goto <name>` (per-BBS power + active-combat block +
         // table + level) and, on a fired jump, re-anchor position when the landing
@@ -10021,10 +10016,10 @@ public sealed class AppServices
         // life is as spent as in a death that was seen, whenever it is found out;
         // it is asked for under the master switch like everything else this check
         // sends: a `stat` the user types can bring the verdict, and with the switch
-        // off nothing automatic goes out.
+        // off nothing automatic goes out. An arena death spent none.
         RoomTracker.UnwitnessedDeathRecorded += () =>
         {
-            if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath();
+            if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath(RoomTracker.LastDeathTookNothing);
         };
         // The buff timers were only frozen when the link dropped. Cleared for a
         // death found at the login only: one found later would wipe the timers of
