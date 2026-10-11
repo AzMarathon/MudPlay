@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.26**
+> **Version 3.168.5**
 > - A `break` you type holds Auto-Combat's attack until you attack, the monster dies or leaves, or you leave the room
 > - A party member's `@do break` holds it the same way
 > - The hold ends when any monster of that name dies, or after a round with no attack from it

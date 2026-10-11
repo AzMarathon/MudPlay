@@ -150,6 +150,14 @@ public readonly partial record struct RoomExit(
     // presence flag rather than a 0-sentinel.
     public bool HasAlignmentGate => AlignmentGate is not null;
 
+    // True when the exit lets through only some of the characters who try it: an
+    // item or ticket in hand, a toll or fare, a level, class, race or alignment
+    // window. A door is not one: opened, it is open to everybody behind the opener.
+    public bool AdmitsOnlySome =>
+        ExitGateItems.Of(this).Count > 0
+        || Hint == RoomExitHint.Toll || TollGold > 0 || FareCopper > 0
+        || HasLevelGate || HasClassGate || HasRaceGate || HasAlignmentGate;
+
     // True when stepping this exit fires a spell (before or after the move).
     // Drives the map's per-exit spell-wall glyph: the user sees which direction
     // out of a room will trigger a cast on them.
