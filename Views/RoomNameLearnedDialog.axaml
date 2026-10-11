@@ -27,7 +27,7 @@
         </Style>
     </Window.Styles>
 
-    <Grid RowDefinitions="Auto,Auto,Auto" Margin="20">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="20">
         <TextBlock Grid.Row="0"
                    Text="{Binding HeaderText}"
                    FontSize="13" FontWeight="SemiBold"
@@ -37,11 +37,11 @@
         <Grid Grid.Row="1"
               ColumnDefinitions="160,*"
               RowDefinitions="Auto,Auto"
-              RowSpacing="8" Margin="0,0,0,20">
+              RowSpacing="8" Margin="0,0,0,16">
             <TextBlock Grid.Row="0" Grid.Column="0"
-                       Classes="Label" Text="{Binding SavedNameLabel}"/>
+                       Classes="Label" Text="{Binding DataNameLabel}"/>
             <TextBlock Grid.Row="0" Grid.Column="1"
-                       Classes="Value NullValue" Text="{Binding SavedNameValue}"/>
+                       Classes="Value NullValue" Text="{Binding DataNameValue}"/>
 
             <TextBlock Grid.Row="1" Grid.Column="0"
                        Classes="Label" Text="{Binding ObservedNameLabel}"/>
@@ -49,7 +49,13 @@
                        Classes="Value" Text="{Binding ObservedNameValue}"/>
         </Grid>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal"
+        <TextBlock Grid.Row="2"
+                   Classes="Label"
+                   Text="{Binding WhereKeptText}"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,20"/>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8">
             <Button Content="Skip" Command="{Binding SkipCommand}"
                     MinWidth="80"/>

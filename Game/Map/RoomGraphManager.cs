@@ -129,9 +129,9 @@ public sealed class RoomGraphManager
             ? list
             : Array.Empty<RemoteLeverRef>();
 
-    // Fires once per name learned via LearnRoomName. Carries the room key + the
-    // name the tracker just adopted. AppServices subscribes to surface the
-    // persist-to-Rooms.json prompt.
+    // Fires once per name learned via LearnRoomName, with the room and the name
+    // the tracker just adopted. Not raised for a stored name put back by
+    // ApplyStoredNames.
     public event Action<RoomKey, string>? RoomNameLearned;
 
     // Replace the in-memory Room at key with a copy whose Name is the new value,
@@ -146,15 +146,7 @@ public sealed class RoomGraphManager
         if (!_rooms.TryGetValue(key, out Room? existing)) return null;
         if (string.Equals(existing.Name, name, StringComparison.Ordinal)) return null;
 
-        // Drop the old (name, mask) index entries before re-inserting
-        // — the empty-name bucket still belongs in _byName when the
-        // pre-learn name was empty, but we just won't find it by an
-        // empty-string lookup anyway. Be defensive on both sides.
-        DropFromIndexes(existing);
-
-        Room replaced = existing with { Name = name };
-        _rooms[key] = replaced;
-        AddToIndexes(replaced);
+        Room replaced = Rename(existing, name);
 
         _log?.Log(LogSeverity.Info, "RoomGraph",
             $"Learned name '{name}' for {key} (was '{existing.Name}').");
@@ -162,10 +154,76 @@ public sealed class RoomGraphManager
         return replaced;
     }
 
+    // What ApplyStoredNames did: how many rooms now bear a name from the client's
+    // store, and the rooms it was handed a name for that the data names itself.
+    public readonly record struct StoredNames(int Applied, IReadOnlyList<RoomKey> NamedByData);
+
+    // Make the rooms the data gives no name bear exactly the names the client's own
+    // store holds for this set (LearnedRoomNameStore), and no other name from it: a
+    // name put here by an earlier call and absent from this one is taken off again,
+    // which is how a change of realm swaps one board's names for another's. A name
+    // the tracker learned this session and the store never took is left alone.
+    //
+    // The quiet side of LearnRoomName: nothing is learned here, so RoomNameLearned
+    // is not raised and no line is logged per room; the caller says the count.
+    //
+    // A room the data names keeps the data's name. Those are handed back for the
+    // store to drop. A room not in the graph is skipped.
+    public StoredNames ApplyStoredNames(IReadOnlyDictionary<RoomKey, string> names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+
+        List<RoomKey>? withdrawn = null;
+        foreach (RoomKey key in _namedFromStore)
+            if (!names.ContainsKey(key)) (withdrawn ??= new()).Add(key);
+        if (withdrawn is not null)
+        {
+            foreach (RoomKey key in withdrawn)
+            {
+                _namedFromStore.Remove(key);
+                if (_rooms.TryGetValue(key, out Room? room)) Rename(room, string.Empty);
+            }
+        }
+
+        int applied = 0;
+        List<RoomKey>? namedByData = null;
+        foreach ((RoomKey key, string name) in names)
+        {
+            if (string.IsNullOrWhiteSpace(name) || !_rooms.TryGetValue(key, out Room? room)) continue;
+            if (!_unnamedInData.Contains(key))
+            {
+                (namedByData ??= new()).Add(key);
+                continue;
+            }
+            if (!string.Equals(room.Name, name, StringComparison.Ordinal)) Rename(room, name);
+            _namedFromStore.Add(key);
+            applied++;
+        }
+        return new StoredNames(applied, namedByData is null ? Array.Empty<RoomKey>() : namedByData);
+    }
+
+    // The rooms the data gives no name: the only ones a stored name may be put on.
+    // Whether a room's name came from the data can't be read off the room once the
+    // tracker or the store has named it, so it is noted when the graph is built.
+    private readonly HashSet<RoomKey> _unnamedInData = new();
+
+    // Of those, the ones bearing a name ApplyStoredNames put there.
+    private readonly HashSet<RoomKey> _namedFromStore = new();
+
+    private Room Rename(Room existing, string name)
+    {
+        DropFromIndexes(existing);
+        Room replaced = existing with { Name = name };
+        _rooms[existing.Key] = replaced;
+        AddToIndexes(replaced);
+        return replaced;
+    }
+
     private void DropFromIndexes(Room room)
     {
-        if (!string.IsNullOrEmpty(room.Name)
-            && _byName.TryGetValue(room.Name, out List<Room>? nameBucket))
+        // The nameless bucket too: a room can be given its name back and lose it
+        // again, and would otherwise be listed there once for each time.
+        if (_byName.TryGetValue(room.Name, out List<Room>? nameBucket))
         {
             nameBucket.RemoveAll(r => r.Key.Equals(room.Key));
             if (nameBucket.Count == 0) _byName.Remove(room.Name);
@@ -724,6 +782,8 @@ public sealed class RoomGraphManager
     {
         ForgetDerived();
         _rooms.Clear();
+        _unnamedInData.Clear();
+        _namedFromStore.Clear();
         _byName.Clear();
         _byNameAndExits.Clear();
         _leversByRoom.Clear();
@@ -1519,6 +1579,8 @@ public sealed class RoomGraphManager
         var lairSize = new Dictionary<int, (int Count, long SumMax, int MaxMax)>();
         foreach (Room room in _rooms.Values)
         {
+            if (room.HasUnknownName) _unnamedInData.Add(room.Key);
+
             if (!_byName.TryGetValue(room.Name, out List<Room>? nameBucket))
             {
                 nameBucket = new List<Room>();

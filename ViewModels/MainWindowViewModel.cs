@@ -2348,30 +2348,29 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Rooms we've already prompted about this session. Prevents asking
-    // the same yes/no twice when the player re-enters or the tracker
-    // re-observes the same null-name room.
-    private readonly HashSet<Game.Map.RoomKey> _nameLearnedPrompted = new();
+    // Rooms we've already prompted about this session, each with the realm it
+    // was seen on: a name is kept per realm, so the same room is asked about
+    // again on another. Prevents asking the same yes/no twice when the player
+    // re-enters or the tracker re-observes the same null-name room.
+    private readonly HashSet<(string Realm, Game.Map.RoomKey Room)> _nameLearnedPrompted = new();
 
     private void OnRoomNameLearned(Game.Map.NameLearnedEvent e)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() => PromptForLearnedNameAsync(e));
 
     private async void PromptForLearnedNameAsync(Game.Map.NameLearnedEvent e)
     {
-        // Session-dedupe — one prompt per (RoomKey) per app run.
-        if (!_nameLearnedPrompted.Add(e.Key)) return;
+        // A kept name goes in the realm's folder. With no realm there is nowhere
+        // to keep it and so nothing to ask: the map has the name for the session.
+        if (AppServices.Current.ActiveRealmFolder() is not { } realm) return;
+        if (!_nameLearnedPrompted.Add((realm, e.Key))) return;
 
         var vm = new ViewModels.RoomNameLearnedDialogViewModel(e.Key, e.ObservedName);
-        bool save = await AppServices.Current.Dialogs
+        bool keep = await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.RoomNameLearnedDialogViewModel, bool>(vm);
-        if (!save) return;
+        if (!keep) return;
 
-        bool ok = AppServices.Current.RoomNamePersist.Persist(e.Key, e.ObservedName);
-        if (!ok)
-        {
-            AppServices.Current.Log.Log(Services.LogSeverity.Warn, "Main",
-                $"Failed to persist learned name '{e.ObservedName}' for {e.Key}.");
-        }
+        // The store says in the program log why, when it doesn't keep one.
+        AppServices.Current.LearnedRoomNames.Keep(e.Key, e.ObservedName, seenOnRealm: realm);
     }
 
     private void RefreshLocationSlot()

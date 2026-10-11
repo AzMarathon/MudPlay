@@ -191,8 +191,8 @@ public sealed class RoomTracker
 
     // Fired the first time we learn a real name for a room that shipped without
     // one (typical of map-15 ganghouse rooms in the 1.x MDB exports).
-    // Subscribers — the main window in particular — prompt the user to write the
-    // learned name back to the active game-data set's Rooms.json.
+    // Subscribers — the main window in particular — ask the user whether to keep
+    // the learned name for later sessions (LearnedRoomNameStore).
     public event Action<NameLearnedEvent>? NameLearned;
 
     // Fired from NoteDeath for BOTH death phrasings ("You now have N lives
@@ -2890,6 +2890,6 @@ public readonly record struct RoomTransition(
 
 // Payload of RoomTracker.NameLearned. Carries the room the tracker just adopted
 // by ExitMask + the verbatim observed name it learned. The main window's
-// prompt-handler decides whether to persist the new name back to the active
-// set's Rooms.json.
+// prompt-handler decides whether the new name is kept with the realm's data
+// (LearnedRoomNameStore); the game data files are never written.
 public readonly record struct NameLearnedEvent(RoomKey Key, string ObservedName);

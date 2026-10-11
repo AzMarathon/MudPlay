@@ -748,6 +748,13 @@ public static class AppPaths
     public static string RealmStashBalancesFile(string realmFolder) =>
         Path.Combine(realmFolder, "stash-balances.json");
 
+    // The names seen on this realm for rooms the game data gives none
+    // (Game.Map.LearnedRoomNameStore), each filed under the game-data set whose
+    // room numbers it goes by. What such a room is called is only known from what
+    // the board printed, so the names are the realm's, never written into the set.
+    public static string RealmLearnedRoomNamesFile(string realmFolder) =>
+        Path.Combine(realmFolder, "learned-room-names.json");
+
     // Where a realm's quest-guide edits used to be kept, before the guides went
     // back to the game-data set (QuestsFile). A set takes each realm's in once.
     public static string LegacyRealmQuestsFile(string realmFolder) =>

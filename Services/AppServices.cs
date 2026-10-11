@@ -2455,11 +2455,10 @@ public sealed class AppServices
     // per-session by MainWindowViewModel after connect.
     public Game.Map.PyramidSolver PyramidSolver { get; private set; } = null!;
 
-    // Writer that persists tracker-learned room names back into the
-    // active set's Rooms.json. Consumed by the
-    // MainWindowViewModel name-learned prompt handler after the user
-    // confirms the rename.
-    public RoomNamePersistence RoomNamePersist { get; private set; } = null!;
+    // The names seen on the realm for rooms the game data gives none, kept in the
+    // realm's folder and put back on the room map each time it is built. The
+    // MainWindowViewModel name-learned prompt hands it a name the user keeps.
+    public Game.Map.LearnedRoomNameStore LearnedRoomNames { get; private set; } = null!;
 
     // Sniffs outbound user-typed commands and tells
     // RoomTracker about look <dir> peeks
@@ -3902,6 +3901,19 @@ public sealed class AppServices
         // so the build can promote CMD-teleport-shadowed door exits to Teleport,
         // and SpellCatalog so a cast-based CMD teleport becomes a routable edge.
         RoomGraph = new Game.Map.RoomGraphManager(GameData, Log, TBInfo, SpellCatalog);
+        // The realm's learned room names go on the map before anything else hears
+        // of a rebuilt graph: this must stay the first GraphReloaded subscription,
+        // so every later listener (the list warm-up below, the tracker, the map
+        // layout, the maze index, room search) is handed rooms already named. The
+        // profile handlers sit here too, ahead of the tracker's, so a loaded
+        // character's last room is looked up under the name its realm has for it.
+        LearnedRoomNames = new Game.Map.LearnedRoomNameStore(RoomGraph, ActiveRealmFolder, Log);
+        RoomGraph.GraphReloaded += LearnedRoomNames.OnGraphReloaded;
+        Profile.ProfileLoaded += _ => LearnedRoomNames.OnRealmChanged();
+        Profile.BbsPinApplied += _ => LearnedRoomNames.OnRealmChanged();
+        Profile.ProfileClosed += LearnedRoomNames.OnRealmChanged;
+        LearnedRoomNames.OnRealmChanged();
+        Tick.HeartbeatElapsed += () => LearnedRoomNames.TakeInOutsideChanges();
         // Once a set's graph is loaded, build the lists Navigation, Settings and the
         // map's right-click menu show, off the UI thread, so the first open doesn't
         // pay for them (the trainer list alone re-read the 22 MB Rooms table).
@@ -4070,11 +4082,6 @@ public sealed class AppServices
         // at app scope like the tracker. The solver that consumes it is built
         // after the Walker below.
         MazeIndex = new Game.Map.TeleportMazeIndex(RoomGraph, Log);
-
-        // Writer that persists tracker-learned names back to
-        // Rooms.json. The MainWindowVM subscribes to NameLearned to
-        // prompt the user, then calls this on accept.
-        RoomNamePersist = new RoomNamePersistence(GameData, Log);
 
         // Hand the loaded profile to the tracker so it can hydrate
         // LastKnownRoom + RecentSteps (replay-from-last-Confirmed
