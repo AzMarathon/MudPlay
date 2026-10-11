@@ -43,7 +43,14 @@ public sealed class UpdateInstaller
         try
         {
             Directory.CreateDirectory(work);
-            string archive = Path.Combine(work, asset.Name);
+            // The asset's name comes from the release's page: kept to one file name in
+            // the work folder.
+            if (PathGuard.Child(work, Path.GetFileName(asset.Name)) is not { } archive)
+            {
+                _log?.Warn("Update", $"release asset name {PathGuard.Show(asset.Name)} can't be a file name — refusing to install");
+                TryDelete(work);
+                return UpdateApplyResult.Fail("the release's download has a name that can't be saved — not installed");
+            }
 
             _log?.Info("Update", $"downloading {asset.Name} ({asset.Size / (1024 * 1024)} MB)");
             await DownloadAsync(asset, archive, progress, ct).ConfigureAwait(false);

@@ -208,6 +208,7 @@ public sealed partial class EmoteStore
             Directory.CreateDirectory(tempDir);
             List<EmoteDraft> drafts = new();
             HashSet<string> namedImages = new(System.StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, string> written = new(System.StringComparer.OrdinalIgnoreCase);
 
             if (zip.GetEntry("emotes.json") is { } manifest)
             {
@@ -219,9 +220,10 @@ public sealed partial class EmoteStore
                     if (NormalizeShortcode(e.Shortcode) is not { } name) continue;
                     if (!string.IsNullOrEmpty(e.Image) && zip.GetEntry(e.Image) is { } imgEntry)
                     {
-                        string temp = Path.Combine(tempDir, e.Image);
+                        string fileName = Path.GetFileName(e.Image);
+                        if (TempFileFor(tempDir, fileName, imgEntry.FullName, written) is not { } temp) continue;
                         imgEntry.ExtractToFile(temp, overwrite: true);
-                        namedImages.Add(e.Image);
+                        namedImages.Add(fileName);
                         drafts.Add(new EmoteDraft { Shortcode = name, ImageSourcePath = temp, DisplayName = e.DisplayName });
                     }
                     else if (!string.IsNullOrEmpty(e.Emoji))
@@ -234,13 +236,33 @@ public sealed partial class EmoteStore
             {
                 if (string.IsNullOrEmpty(entry.Name) || namedImages.Contains(entry.Name)) continue;
                 if (!ImageExts.Contains(Path.GetExtension(entry.Name).ToLowerInvariant())) continue;
-                string temp = Path.Combine(tempDir, entry.Name);
+                if (TempFileFor(tempDir, entry.Name, entry.FullName, written) is not { } temp) continue;
                 entry.ExtractToFile(temp, overwrite: true);
                 drafts.Add(new EmoteDraft { ImageSourcePath = temp, SuggestedShortcode = SuggestName(entry.Name) });
             }
             return drafts;
         }
         catch (System.Exception ex) { _log?.Warn("Emotes", $"read of package '{srcZipPath}' failed: {ex.Message}"); return null; }
+    }
+
+    // Where a package's image of this file name is unpacked in tempDir, or null when
+    // it can't go there: a manifest is another player's text, so an image is only ever
+    // written as one file directly in tempDir. A name an earlier image from another
+    // entry already took is refused too, so one image never silently replaces another;
+    // written maps each file name taken to the entry it was unpacked from.
+    private string? TempFileFor(string tempDir, string fileName, string entryName, Dictionary<string, string> written)
+    {
+        if (string.IsNullOrEmpty(fileName) || PathGuard.Child(tempDir, fileName) is not { } path)
+        {
+            _log?.Warn("Emotes", $"skipped package image {PathGuard.Show(fileName)}: not a file name that can be unpacked");
+            return null;
+        }
+        if (!written.TryAdd(fileName, entryName) && written[fileName] != entryName)
+        {
+            _log?.Warn("Emotes", $"skipped package image {PathGuard.Show(fileName)}: another image in the package already has that file name");
+            return null;
+        }
+        return path;
     }
 
     // Copy every image in folderPath into tempDir and return UNDEFINED drafts (the
