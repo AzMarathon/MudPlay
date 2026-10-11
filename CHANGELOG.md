@@ -1,9 +1,43 @@
 # Version history
 
-## 3.177.6
+## 3.179.4
 
 - The room map holds its exits in a compact form: about 37 MB less memory with a Paradigm set loaded (16 MB on Stock)
 - Finding a route and laying out the map allocate half the memory they did
+
+## 3.179.3
+
+- Simulator: an area ranking belongs to the game data and character it was made on; a switch lists that pairing's own ranking or none, and switching back lists the first again
+- Nothing ranked on one game data can be picked, drawn on the map or saved as a loop under another; a game-data switch also clears the estimator's sketch
+- Rankings are kept while the client runs (the last eight), through closing the Navigation window and a rename of the character; a set imported again, deleted, re-picked or changed in Manage Sets loses the ones made on it
+- A ranking listed again says when it was made and at what level, and is marked once the character has levelled since
+- A loop being built is dropped, with a notice, when the game data changes to another set; the Edit Loop window won't save or take a room until its own game data is active again
+- Bug report: the Simulator section names the game data and character its results are for
+
+## 3.179.0
+
+- New remote commands `@events` (lists your Events by number, each on or off) and `@event <name or number> [on|off]` (one event's state and schedule, or switches it); both need Alter settings
+- Answers give an event's name, state, schedule and kind only, never what it sends or the loop, room or boss it uses
+- The Events tab shows an `off` badge on a disabled event; the tab and an open event editor follow a remote switch at once
+
+## 3.178.1
+
+- A game-data set whose empty text blocks link round in a circle no longer freezes the client as it loads; the program log names the blocks
+
+## 3.178.0
+
+- The client learns where a room's dead arrive from a death it sees, keeps it with the game-data set for every client on it, and shows it in the bug report
+- One death stands for its land (the rooms walked to from it on its map); a room's own reading wins
+- Two readings of one room: neither is used until one is seen again, and a reading in use gives way to another seen as often
+- Hang-up death check: back in a learned room counts as where the dead arrive, never as "the wrong room"; with no lives count it also needs HP read at the first prompt
+- Stock: two deaths the standard list doesn't allow mark the board as having edited rooms; the list then only says yes there
+- Paradigm: map 1's dungeon rooms (1/2171 to 1/2188) send their dead to Newhaven's healer; Albion takes in rooms only a same-map room command reaches
+
+## 3.177.5
+
+- `@loop send`: a loop you already hold as a numbered copy (`<name> 2`, `<name> 3`) is rejected too, and the notice names which one it matches
+- `@loop send`: the offer carries the loop's code; the loop that arrives is checked against it and not saved when it doesn't match
+- `@loop send`: the asking client tells the sender whether the loop was saved (and under which name), already held, or has to be sent again
 
 ## 3.177.2
 

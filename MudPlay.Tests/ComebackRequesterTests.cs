@@ -1328,6 +1328,56 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Equal(1, h.Sent);
     }
 
+    // A leader's client can be sending us a loop, or answering one we sent, while
+    // we wait on a @comeback. Those lines name the loop, and a loop can be named
+    // like a refusal: none of them is the leader's answer.
+    [Theory]
+    [InlineData("@loopresult 9da659db saved as 'I can't come'")]
+    [InlineData("@loopresult 9da659db already have it as 'forget me 2'")]
+    [InlineData("sending loop 'my party is full' (3 rooms, 1 line)")]
+    [InlineData("preparing to send: path failed, yes to confirm, no to deny (code 9da659db)")]
+    [InlineData("loop send of 'going idle' cancelled")]
+    public void LoopSendLineNamingALoop_IsNoAnswerToTheComeback(string line)
+    {
+        using Harness h = NewFollower();
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+        string before = h.Requester.LastIncidentSummary;
+
+        h.Feed($"Boss telepaths: {{{line}}}");
+
+        Assert.Equal(before, h.Requester.LastIncidentSummary);
+        Assert.DoesNotContain("leader answered", h.Requester.LastIncidentSummary);
+        Assert.Equal(1, h.Sent);
+    }
+
+    // The leader's client can as well be answering an @events or @event of ours.
+    // Those replies name an event, and an event can be named like a refusal.
+    [Theory]
+    [InlineData("events: I can't come on, Bank off")]
+    [InlineData("events (all disabled) (2/3): forget me off, Bank on")]
+    [InlineData("event 'going idle' switched off")]
+    [InlineData("event 'my party is full' is on: fires on a timer, sends a command")]
+    [InlineData("no event named 'path failed'")]
+    [InlineData("event name 'come' matches 2: 'I can't come', 'I can't come 2'")]
+    [InlineData("events: 1 I can't come on, 2 Bank off")]
+    [InlineData("event 2 'I can't come' is already off")]
+    [InlineData("event 2 (unnamed) switched off; the run it has under way finishes")]
+    [InlineData("no event number 9: there are 4")]
+    public void EventReplyNamingAnEvent_IsNoAnswerToTheComeback(string line)
+    {
+        using Harness h = NewFollower();
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+        string before = h.Requester.LastIncidentSummary;
+
+        h.Feed($"Boss telepaths: {{{line}}}");
+
+        Assert.Equal(before, h.Requester.LastIncidentSummary);
+        Assert.DoesNotContain("leader answered", h.Requester.LastIncidentSummary);
+        Assert.Equal(1, h.Sent);
+    }
+
     // ----- held and left behind --------------------------------------------------
 
     // A follower too heavy to move tells the leader to wait, and then, left behind

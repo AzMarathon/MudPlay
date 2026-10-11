@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.177.6**
+> **Version 3.179.4**
 > - The room map holds its exits in a compact form: about 37 MB less memory with a Paradigm set loaded (16 MB on Stock)
 > - Finding a route and laying out the map allocate half the memory they did
 >

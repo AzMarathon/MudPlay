@@ -416,6 +416,7 @@ public static class BugReportBuilder
         // Whether the last hang-up the penalty could have killed for was taken
         // for a death, and on what.
         Kv(sb, "Hang-up death check", svc.HangupItems.LastDeathCheck);
+        Kv(sb, "Learned arrival rooms", LearnedArrivalsText(svc));
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
             + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));
@@ -585,20 +586,63 @@ public static class BugReportBuilder
     {
         Game.Recovery.HangupArrivalListTrust trust = svc.HangupArrivalListTrust;
         (IReadOnlyList<Game.Map.RoomKey>? rooms, bool allKnown, bool albion) =
-            Game.Recovery.HangupDeathArrivalRooms.ArrivalsOn(hungUpIn, trust, svc.InParadigmAlbion);
+            Game.Recovery.HangupDeathArrivalRooms.ArrivalsOn(hungUpIn, trust, svc.InParadigmAlbion, svc.LearnedArrivalLands.For);
+        IReadOnlyList<Game.Recovery.LearnedArrival>? learned =
+            Game.Recovery.HangupDeathArrivalRooms.LearnedFor(hungUpIn, trust, svc.InParadigmAlbion, svc.LearnedArrivalLands.For);
+        // A room a death was seen to end in, when that is one of them: in the room
+        // itself, or in another of its land.
+        string seen = learned is null ? "" : "; learned from deaths seen: "
+            + string.Join(", ", learned.Select(l => l.SeenIn == hungUpIn ? $"{l.Arrival} (in that room)" : $"{l.Arrival} (in {l.SeenIn}, same land)"))
+            + " (says yes, never no; where the room alone would record a death, HP must have risen too)";
         if (albion)
-            return $"its dead arrive in {string.Join(" or ", rooms!)}: Albion (reachable from "
+            return $"its dead arrive in {Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault}: Albion (reachable from "
                 + $"{Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault} without a boat); that room says yes, no other says no";
-        if (rooms is null || !allKnown)
+        if (rooms is null)
             return trust == Game.Recovery.HangupArrivalListTrust.Paradigm
-                ? "where its dead arrive isn't known (one of Paradigm's own rooms, outside Albion)"
-                : "where its dead arrive isn't known (a room the Stock map file doesn't have)";
-        return $"by the Stock map file its dead arrive in {string.Join(" or ", rooms)}" + trust switch
+                ? "where its dead arrive isn't known (one of Paradigm's own rooms, outside Albion; no death seen in its land to learn it from)"
+                : "where its dead arrive isn't known (a room the Stock map file doesn't have; no death seen in its land to learn it from)";
+        if (!allKnown)
+            return "no list has this room" + seen;
+        return $"by the Stock map file its dead arrive in {string.Join(" or ", Game.Recovery.HangupDeathArrivalRooms.ListedOn(hungUpIn, trust)!)}" + trust switch
         {
             Game.Recovery.HangupArrivalListTrust.VanillaStock => "",
             Game.Recovery.HangupArrivalListTrust.Paradigm => " (a zone Paradigm shares with Stock)",
             _ => " (not confirmed for this game data: the room it comes back in can say yes, never no)",
-        };
+        } + seen;
+    }
+
+    // What the set has learned of where the dead arrive, from deaths seen: how
+    // many rooms, which are disputed (two readings, neither used until one is seen
+    // again), which rooms' own reading is at odds with their land's, the pair the
+    // last hang-up death check went by, and whether this board's deaths have
+    // shown its rooms to differ from the standard data set.
+    private static string LearnedArrivalsText(AppServices svc)
+    {
+        LearnedArrivalRoomStore store = svc.LearnedArrivals;
+        string disputed = store.DisputedCount == 0 ? "none disputed"
+            : $"{store.DisputedCount} disputed and out of use ("
+              + string.Join("; ", store.Disputed.Select(d => $"{d.DiedIn} → {string.Join(" / ", d.Arrivals)}")) + ")";
+        // A reading in use with another seen beside it, and how often each: the
+        // other takes over when it has been seen as often.
+        IReadOnlyList<string> challenged = store.Challenged;
+        var odd = svc.LearnedArrivalLands.AtOddsWithTheirLand();
+        string exceptions = string.Join("; ", odd.Where(o => o.Exception)
+            .Select(o => $"{o.Room} → {o.Own} (its land: {string.Join(" / ", o.Land)})"));
+        string twoInOneLand = string.Join("; ", odd.Where(o => !o.Exception)
+            .Select(o => $"{o.Room} → {o.Own}, beside {string.Join(" / ", o.Land)}"));
+        int contradicted = svc.StandardListContradictions.Count;
+        return $"{store.Count} room(s) for '{svc.GameData.ActiveSet ?? "(no set)"}', {disputed}; "
+            + $"in use with another reading seen beside it: {(challenged.Count == 0 ? "(none)" : string.Join("; ", challenged))}; "
+            + $"rooms whose own reading differs from their land's: {(exceptions.Length == 0 ? "(none)" : exceptions)}; "
+            + $"lands with two readings: {(twoInOneLand.Length == 0 ? "(none)" : twoInOneLand)}; "
+            + $"used by the last hang-up death check: {svc.HangupItems.LastLearnedArrivalUsed ?? "(none)"}; "
+            + $"this board's deaths have contradicted the standard list: {contradicted}"
+            + (svc.StandardListContradictions.Marked
+                ? " (the list is taken here as on a board with edited rooms: yes only, never no; counted against this set, "
+                  + "and pointing the realm at another set starts afresh)"
+                : contradicted > 0
+                    ? $" ({Game.Recovery.StandardListContradictions.DeathsToMark} mark the board as one with edited rooms)"
+                    : "");
     }
 
     // Party roster snapshot — who's grouped, their roles, and the pending-invite
@@ -898,6 +942,9 @@ public static class BugReportBuilder
                 sb.Append(" · next ").Append(next.ToString("MM-dd HH:mm:ss"));
             if (e.TriggerType == Models.GameData.EventTriggerType.State)
                 sb.Append(" · holds now: ").Append(Game.Events.EventConditionEvaluator.AllHold(e.Conditions, now));
+            // A remote @event switched it this session: who, which way, when.
+            if (svc.Events.LastSwitch(e) is { } switched)
+                sb.Append(" · ").Append(switched);
             sb.Append("\n  `").Append(System.Text.Json.JsonSerializer.Serialize(e, EventDumpJson)).Append("`\n");
         }
         sb.Append('\n');
@@ -2605,6 +2652,10 @@ public static class BugReportBuilder
         Kv(sb, "Route picked", snap.Route ?? "(none)");
         Kv(sb, "Realm", snap.RealmName);
         Kv(sb, "Runs", $"{snap.Runs} × {snap.Hours.ToString("0.#", inv)} h");
+        // Results are kept apart by game data and character; a report of "the list is
+        // empty" or "these aren't my numbers" turns on which pairing is on show.
+        Kv(sb, "Results are for", $"game data {snap.ForSet ?? "(none)"} · character {snap.ForCharacter ?? "(none loaded)"}");
+        Kv(sb, "Area rankings kept this session", $"{snap.RankingsKept} of at most {Game.Simulation.AreaRankingStore.MaxKept}");
 
         sb.Append("\n**Character simulation**\n\n");
         if (snap.Simulation is null) sb.Append("_(not run)_\n");

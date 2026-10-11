@@ -25,6 +25,32 @@ public class WhereReplyParserTests
         Assert.False(WhereReplyParser.TryParseRoom("i'm around map 9, room 1012 somewhere", out _));
     }
 
+    // A `@loop send` line names a loop, and a loop can be named after a room: it is
+    // not where the player who sent it stands.
+    [Theory]
+    [InlineData("{@loopresult 9da659db saved as 'Camp (map 1, room 5)'}")]
+    [InlineData("{@loopresult 9da659db already have it as 'Camp (map 1, room 5) 2'}")]
+    [InlineData("{sending loop 'Camp (map 1, room 5)' (3 rooms, 1 line)}")]
+    [InlineData("{preparing to send: Camp (map 1, room 5), yes to confirm, no to deny (code 9da659db)}")]
+    [InlineData("{loop send of 'Camp (map 1, room 5)' cancelled}")]
+    public void LoopSendLineNamingALoopAfterARoom_IsNoWhereReply(string message) =>
+        Assert.False(WhereReplyParser.TryParseRoom(message, out _));
+
+    // An @events or @event reply names an event, and an event can be named after
+    // a room as well.
+    [Theory]
+    [InlineData("{events: Camp (map 1, room 5) on}")]
+    [InlineData("{events (all disabled) (2/3): Bank off, Camp (map 1, room 5) on}")]
+    [InlineData("{event 'Camp (map 1, room 5)' is on: fires on a timer, sends a command}")]
+    [InlineData("{event 'Camp (map 1, room 5)' switched off}")]
+    [InlineData("{no event named 'Camp (map 1, room 5)'}")]
+    [InlineData("{event name 'camp (map 1, room 5)' matches 2: 'Camp (map 1, room 5)', 'Camp (map 1, room 5) b'}")]
+    [InlineData("{events: 1 Camp (map 1, room 5) on, 2 Bank off}")]
+    [InlineData("{event 3 'Camp (map 1, room 5)' switched off}")]
+    [InlineData("{event name 'camp' matches 2: 'Camp (map 1, room 5)' (numbers 1, 2); use a number in place of the name}")]
+    public void EventReplyNamingAnEventAfterARoom_IsNoWhereReply(string message) =>
+        Assert.False(WhereReplyParser.TryParseRoom(message, out _));
+
     [Theory]
     [InlineData("{Some Room (map 0, room 5)}")]     // map <= 0
     [InlineData("{Some Room (map 5, room 0)}")]     // room <= 0

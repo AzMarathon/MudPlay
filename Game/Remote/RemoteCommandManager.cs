@@ -800,6 +800,36 @@ public sealed class RemoteCommandManager : IDisposable
         SendReply(channel, sender, text);
     }
 
+    // Tell a player what became of something they sent because the user here asked
+    // for it: a loop taken with `@loop send`. It answers no command of theirs, so no
+    // handler's context carries it, but it leaves the way every reply does (braced,
+    // plain ASCII, on that channel, by telepath in place of a say while sneaking).
+    // Returns whether it was sent.
+    //
+    // What holds it back:
+    // - The master switch. With it off nothing goes out by itself, this included.
+    //   The loop is still taken: the user typed the yes (decided 2026-10-11).
+    // - failed, with the Warn setting off. "It did not arrive, send again" is a
+    //   failure answer and follows that setting like every other.
+    // An answer that says what was done with what the user accepted (saved, or
+    // already held) is not a refusal and the Warn setting does not silence it.
+    // Neither the "disallow all remote commands" setting nor a channel's own off
+    // switch applies: those stop players' commands from being obeyed, and this is
+    // the end of something the user started.
+    public bool SendOutcome(RemoteChannel channel, string recipient, string text, bool failed)
+    {
+        if (string.IsNullOrWhiteSpace(recipient) || string.IsNullOrWhiteSpace(text)) return false;
+        if (BlockedByMasterSwitch?.Invoke($"answer to {recipient}: {text}") == true) return false;
+        if (failed)
+        {
+            if (!WarnOnDenial) return false;
+            SendDenialReply(channel, recipient, specificReason: text);
+            return true;
+        }
+        SendReply(channel, recipient, text);
+        return true;
+    }
+
     // Remote commands are accepted from every inbound chat channel EXCEPT the
     // realm-wide noise channels — Gossip (also carries auctions), Yell
     // (shout-style noise), system-level Broadcast / RealmEvent, and our own

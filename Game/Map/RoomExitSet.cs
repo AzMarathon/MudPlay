@@ -6,8 +6,8 @@ namespace MudPlay.Game.Map;
 
 // A room's exits as the graph holds them. A realm has well over a hundred
 // thousand exits and nineteen in twenty are a target and nothing else, so an exit
-// like that is kept as its target alone and only the rest are kept whole. A
-// dictionary of whole exits for every room was two thirds of the room map.
+// like that is kept as its target alone and only the rest are kept whole. Whole
+// exits in a dictionary per room would be two thirds of the room map.
 //
 // The exits come back in Direction order: the order a Rooms row lists them in,
 // with the Teleport slot a build pass may add coming last. A set never changes

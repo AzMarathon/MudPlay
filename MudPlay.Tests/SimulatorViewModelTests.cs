@@ -50,6 +50,40 @@ public sealed class SimulatorViewModelTests : IDisposable
         public required ExpEstimatorSessionViewModel Session { get; init; }
         public required SimulatorViewModel Simulator { get; init; }
         public required LoopManager Loops { get; init; }
+        public required GameDataCache Cache { get; init; }
+        public required AreaRankingStore Rankings { get; init; }
+        public required LogService Log { get; init; }
+        // What the Simulator has written to the program log.
+        public string[] Said => Log.Snapshot().Where(e => e.Source == "Simulator").Select(e => e.Message).ToArray();
+        // The loaded profile as the Simulator reads it; null is the default profile.
+        public string? Character { get; set; } = One;
+        // The character's level as the last `stat` gave it; 0 before any.
+        public int Level { get; set; } = 30;
+
+        // A profile swap as the Simulator hears of it: the loaded character is
+        // closed, then the next is loaded.
+        public void Load(string? character)
+        {
+            Character = null;
+            Simulator.CharacterChanged();
+            if (character is null) return;
+            Character = character;
+            Simulator.CharacterChanged();
+        }
+
+        // A ranking started for the pairing now loaded finishes, uncancelled.
+        public void Finish(AreaRanking ranking) =>
+            Simulator.ListFinishedRanking(new SimulatorOwner(Cache.ActiveSet, Character), ranking);
+
+        // The loaded profile comes to go by another name, as the app's store and the
+        // Navigation window's Simulator hear of it.
+        public void Rename(string? character)
+        {
+            Rankings.RenameCharacter(Character, character);
+            Character = character;
+            Simulator.CharacterRenamed();
+        }
+
         public void Dispose()
         {
             Resolver.Dispose();
@@ -57,7 +91,11 @@ public sealed class SimulatorViewModelTests : IDisposable
         }
     }
 
-    private Harness Build(bool saveLoops = false)
+    // The character the harness starts as, and another, as the Navigation window
+    // names them to the Simulator.
+    private const string One = "board/one", Two = "board/two";
+
+    private Harness Build(bool saveLoops = false, AreaRankingStore? rankings = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Json);
@@ -69,14 +107,44 @@ public sealed class SimulatorViewModelTests : IDisposable
         var resolver = new RouteExpResolver(graph, new BfsMapper(graph), timers, cache);
         var loops = new LoopManager(new BfsMapper(graph), graph);
         if (saveLoops) loops.LoadAll(_loopSet);
+        Harness? harness = null;
         var simulation = new SimulationSource(
-            _ => null, () => null, () => 30, _ => 1.0, () => new RoomKey(1, 1), _root);
+            _ => null, () => null, () => harness?.Level ?? 30, _ => 1.0, () => new RoomKey(1, 1), _root);
         var session = new ExpEstimatorSessionViewModel(resolver, loops, graph, cache);
         SimulatorViewModel? sim = null;
-        sim = new SimulatorViewModel(resolver, loops, cache, null, simulation, null, () => session,
-            (rooms, name) => { session.LoadRoute(rooms, name); return null; });
+        AreaRankingStore? store = rankings;
+        if (store is null)
+        {
+            // As the app wires the store it holds for as long as it runs.
+            AreaRankingStore made = store = new AreaRankingStore();
+            made.NoteActiveSet(cache.ActiveSet);
+            cache.ActiveSetChanged += set => made.NoteActiveSet(set);
+        }
+        var log = new LogService();
+        sim = new SimulatorViewModel(resolver, loops, cache, null, simulation, log, () => session,
+            (rooms, name) => { session.LoadRoute(rooms, name); return null; }, store,
+            () => harness is null ? One : harness.Character);
         session.RouteChanged += sim.SketchChanged;
-        return new Harness { Timers = timers, Resolver = resolver, Session = session, Simulator = sim, Loops = loops };
+        // As the Navigation window wires it.
+        cache.ActiveSetChanged += sim.GameDataChanged;
+        return harness = new Harness
+        {
+            Timers = timers, Resolver = resolver, Session = session, Simulator = sim, Loops = loops,
+            Cache = cache, Rankings = store, Log = log,
+        };
+    }
+
+    // A finished ranking of one area, as RankAreas hands one over.
+    private static AreaRanking Ranking(string area, int level = 30) => new(
+        new[] { new AreaRank(area, level, new[] { new RoomKey(1, 1), new RoomKey(1, 2) }, 2, new LoopSimSummary(new[] { Run })) },
+        level, 1.25, 1.0, 3, new RoomKey(1, 1), "Stock", $"L{level}: {area} ranked", DateTimeOffset.Now, CharacterLevel: 30);
+
+    // The status line of a ranking listed from those kept: when it was made and at
+    // what level, then its own summary.
+    private static void AssertListedAsKept(AreaRanking ranking, string status, string after = @"\.")
+    {
+        Assert.Matches($@"^Made \d\d:\d\d at L{ranking.Level}{after} ", status);
+        Assert.EndsWith(" " + ranking.Summary, status);
     }
 
     [Fact]
@@ -227,5 +295,291 @@ public sealed class SimulatorViewModelTests : IDisposable
 
         Assert.False(h.Simulator.RankIsArea);
         Assert.False(h.Simulator.SaveRankingAsLoopCommand.CanExecute(null));
+    }
+
+    // ----- Results belong to the game data and character they were made on ---------
+
+    [Fact]
+    public void ARankingIsListedPickedAndSavedOnlyOnTheGameDataItWasMadeOn()
+    {
+        using Harness h = Build(saveLoops: true);
+        AreaRanking onAlpha = Ranking("Hills");
+        h.Finish(onAlpha);
+        h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
+        h.Simulator.SimResult = new LoopSimSummary(new[] { Run });
+        Assert.Equal(2, h.Session.Clicks.Count);
+        Assert.True(h.Simulator.SaveRankingAsLoopCommand.CanExecute(null));
+
+        h.Cache.SwitchSet("beta");
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.False(h.Simulator.HasRankings);
+        Assert.Null(h.Simulator.SelectedRanking);
+        Assert.False(h.Simulator.HasRankDetail);
+        Assert.Equal("", h.Simulator.RankStatus);
+        Assert.False(h.Simulator.SaveRankingAsLoopCommand.CanExecute(null));
+        Assert.Null(h.Simulator.SimResult);
+        // The tour picked on alpha went on the map as the sketch: alpha's rooms.
+        Assert.Empty(h.Session.Clicks);
+        Assert.DoesNotContain(h.Simulator.Routes, r => r.IsSketch);
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+        Assert.Empty(h.Loops.Loops);
+    }
+
+    [Fact]
+    public void SwitchingBackListsTheFirstGameDatasRankingAgainAndEachIsKeptApart()
+    {
+        using Harness h = Build();
+        AreaRanking onAlpha = Ranking("Hills"), onBeta = Ranking("Marsh", level: 55);
+        h.Finish(onAlpha);
+        h.Cache.SwitchSet("beta");
+        h.Finish(onBeta);
+        Assert.Equal(onBeta.Rows, h.Simulator.Rankings);
+
+        h.Cache.SwitchSet("alpha");
+
+        Assert.Equal(onAlpha.Rows, h.Simulator.Rankings);
+        AssertListedAsKept(onAlpha, h.Simulator.RankStatus);
+        // Listed, not picked: a switch draws nothing on the map by itself.
+        Assert.Null(h.Simulator.SelectedRanking);
+        Assert.Empty(h.Session.Clicks);
+        // A row picked now is quoted with the settings its own ranking ran with.
+        h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
+        Assert.Contains(h.Simulator.RankStats, s => s.Label == "Tested" && s.Value.StartsWith("L30 · 3 × 1 h · "));
+
+        h.Cache.SwitchSet("BETA");
+        Assert.Equal(onBeta.Rows, h.Simulator.Rankings);
+        AssertListedAsKept(onBeta, h.Simulator.RankStatus);
+    }
+
+    [Fact]
+    public void ARankingListedFromThoseKeptSaysWhenItWasMadeAndIsMarkedOnceTheCharacterHasLevelled()
+    {
+        using Harness h = Build();
+        AreaRanking made = Ranking("Hills");
+
+        // Just made: its own summary and nothing in front of it.
+        h.Finish(made);
+        Assert.Equal(made.Summary, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+
+        // Listed again at the level it was made at: when, and no mark.
+        h.Cache.SwitchSet("beta");
+        h.Cache.SwitchSet("alpha");
+        AssertListedAsKept(made, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+
+        // Listed again a level on: marked, in the line and on the table.
+        h.Level = 31;
+        h.Cache.SwitchSet("beta");
+        Assert.False(h.Simulator.RankingNotCurrent);
+        h.Cache.SwitchSet("alpha");
+        AssertListedAsKept(made, h.Simulator.RankStatus, after: "; you are L31 now\\.");
+        Assert.True(h.Simulator.RankingNotCurrent);
+
+        // Ranked again at the new level: current, and plain.
+        AreaRanking again = Ranking("Hills") with { CharacterLevel = 31 };
+        h.Finish(again);
+        Assert.Equal(again.Summary, h.Simulator.RankStatus);
+        Assert.False(h.Simulator.RankingNotCurrent);
+    }
+
+    [Fact]
+    public void ACharacterSwapListsThatCharactersOwnRankingOrNone()
+    {
+        using Harness h = Build();
+        AreaRanking ones = Ranking("Hills"), twos = Ranking("Marsh");
+        h.Finish(ones);
+
+        h.Load(null);
+        Assert.Empty(h.Simulator.Rankings);
+        h.Load(Two);
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal("", h.Simulator.RankStatus);
+
+        h.Finish(twos);
+        h.Load(One);
+        Assert.Equal(ones.Rows, h.Simulator.Rankings);
+
+        // The second character's is its own on this game data only.
+        h.Load(Two);
+        Assert.Equal(twos.Rows, h.Simulator.Rankings);
+        h.Cache.SwitchSet("beta");
+        Assert.Empty(h.Simulator.Rankings);
+    }
+
+    [Fact]
+    public void AProfileLoadThatAlsoSwitchesGameDataGoesStraightToTheNewPairing()
+    {
+        using Harness h = Build();
+        AreaRanking inBetween = Ranking("Fen"), twos = Ranking("Marsh");
+        h.Finish(Ranking("Hills"));
+        h.Rankings.Keep(new SimulatorOwner("beta", One), inBetween);
+        h.Rankings.Keep(new SimulatorOwner("beta", Two), twos);
+
+        // The second profile is the loaded one by the time its game data is applied,
+        // and the Simulator hears of the game data before it hears of the load.
+        h.Character = Two;
+        h.Cache.SwitchSet("beta");
+        Assert.Equal(twos.Rows, h.Simulator.Rankings);
+        h.Simulator.CharacterChanged();
+        Assert.Equal(twos.Rows, h.Simulator.Rankings);
+
+        // Nothing was listed, or logged as listed, for the first character on beta.
+        Assert.DoesNotContain(h.Said, m => m.StartsWith("listing") && m.Contains($"'{One}'"));
+        Assert.Single(h.Said, m => m.StartsWith($"listing the area ranking kept for game data 'beta', character '{Two}'"));
+        Assert.Single(h.Said, m => m.StartsWith($"the area ranking for game data 'alpha', character '{One}' is off the list"));
+    }
+
+    [Fact]
+    public void ARenamedCharacterKeepsItsRankingsUnderTheNewNameAndLeavesNoneUnderTheOld()
+    {
+        using Harness h = Build();
+        const string renamed = "board/renamed";
+        AreaRanking onAlpha = Ranking("Hills"), onBeta = Ranking("Marsh");
+        h.Finish(onAlpha);
+        h.Rankings.Keep(new SimulatorOwner("beta", One), onBeta);
+
+        h.Rename(renamed);
+
+        // Still the same character's list.
+        Assert.Equal(onAlpha.Rows, h.Simulator.Rankings);
+        Assert.Equal(renamed, h.Simulator.ToSnapshot().ForCharacter);
+        h.Cache.SwitchSet("beta");
+        Assert.Equal(onBeta.Rows, h.Simulator.Rankings);
+        // A ranking made after the rename is the renamed character's.
+        AreaRanking again = Ranking("Fen");
+        h.Finish(again);
+        Assert.Same(again, h.Rankings.Get(new SimulatorOwner("beta", renamed)));
+
+        // Another profile later given the old name is another character.
+        h.Load(One);
+        Assert.Empty(h.Simulator.Rankings);
+        h.Cache.SwitchSet("alpha");
+        Assert.Empty(h.Simulator.Rankings);
+    }
+
+    [Fact]
+    public void TheDefaultProfileGivenANameTakesWhatWasRankedAsItAndNoCharacterIsLeftWithIt()
+    {
+        using Harness h = Build();
+        h.Load(null);
+        AreaRanking asDraft = Ranking("Hills");
+        h.Finish(asDraft);
+
+        h.Rename("board/named");
+        AreaRanking asNamed = Ranking("Marsh");
+        h.Finish(asNamed);
+
+        h.Load(null);
+        Assert.Empty(h.Simulator.Rankings);
+        h.Load("board/named");
+        Assert.Equal(asNamed.Rows, h.Simulator.Rankings);
+    }
+
+    [Fact]
+    public void ARankingIsKeptForThePairingItWasStartedForWhateverIsOnShow()
+    {
+        using Harness h = Build();
+        var alpha = new SimulatorOwner("alpha", One);
+        AreaRanking onBeta = Ranking("Marsh"), late = Ranking("Hills");
+        h.Cache.SwitchSet("beta");
+        h.Finish(onBeta);
+
+        h.Simulator.ListFinishedRanking(alpha, late);
+
+        Assert.Equal(onBeta.Rows, h.Simulator.Rankings);
+        Assert.Equal(onBeta.Summary, h.Simulator.RankStatus);
+        Assert.Same(late, h.Rankings.Get(alpha));
+        Assert.Same(onBeta, h.Rankings.Get(new SimulatorOwner("beta", One)));
+    }
+
+    [Fact]
+    public void ARankingCancelledByASwitchLeavesTheListNowOnShowAlone()
+    {
+        using Harness h = Build();
+        var alpha = new SimulatorOwner("alpha", One);
+        AreaRanking onBeta = Ranking("Marsh");
+        h.Rankings.Keep(new SimulatorOwner("beta", One), onBeta);
+        h.Cache.SwitchSet("beta");
+
+        // The ranking that was running on alpha finds out it was cancelled only now.
+        h.Simulator.RankingStopped(alpha, "Ranking cancelled.");
+        Assert.Equal(onBeta.Rows, h.Simulator.Rankings);
+        AssertListedAsKept(onBeta, h.Simulator.RankStatus);
+
+        // Cancelled with its own game data still on show, its list is empty and says why.
+        h.Simulator.RankingStopped(new SimulatorOwner("beta", One), "Ranking cancelled.");
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal("Ranking cancelled.", h.Simulator.RankStatus);
+    }
+
+    [Fact]
+    public void AGameDataSetImportedAgainFromAnotherSetListsNothingOnTheWayBack()
+    {
+        using Harness h = Build(saveLoops: true);
+        h.Finish(Ranking("Hills"));
+        h.Cache.SwitchSet("beta");
+
+        // What an import of alpha does when it finishes, whichever set is active;
+        // it then switches to the imported set.
+        h.Rankings.ForgetSet("alpha");
+        h.Cache.SwitchSet("alpha");
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal("", h.Simulator.RankStatus);
+        Assert.False(h.Simulator.SaveRankingAsLoopCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void GameDataReadInAgainDropsEveryRankingMadeOnItAndKeepsTheSketch()
+    {
+        using Harness h = Build();
+        h.Rankings.Keep(new SimulatorOwner("alpha", Two), Ranking("Marsh"));
+        h.Rankings.Keep(new SimulatorOwner("beta", One), Ranking("Fen"));
+        h.Finish(Ranking("Hills"));
+        h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
+
+        h.Cache.ReloadActiveSet();
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Null(h.Simulator.SelectedRanking);
+        Assert.Equal(1, h.Rankings.Count);
+        Assert.NotNull(h.Rankings.Get(new SimulatorOwner("beta", One)));
+        // Still this game data's rooms.
+        Assert.Equal(2, h.Session.Clicks.Count);
+    }
+
+    [Fact]
+    public void ARankingOutlivesTheNavigationWindowItWasMadeIn()
+    {
+        var kept = new AreaRankingStore();
+        AreaRanking ranking = Ranking("Hills");
+        using (Harness first = Build(rankings: kept))
+            first.Finish(ranking);
+
+        using Harness reopened = Build(rankings: kept);
+
+        Assert.Equal(ranking.Rows, reopened.Simulator.Rankings);
+        AssertListedAsKept(ranking, reopened.Simulator.RankStatus);
+    }
+
+    [Fact]
+    public void TheBugReportSaysWhoseResultsAreListed()
+    {
+        using Harness h = Build();
+        h.Finish(Ranking("Hills"));
+        Assert.Equal("alpha", h.Simulator.ToSnapshot().ForSet);
+        Assert.Equal(One, h.Simulator.ToSnapshot().ForCharacter);
+        Assert.NotNull(h.Simulator.ToSnapshot().AreaRanking);
+
+        h.Cache.SwitchSet("beta");
+        h.Load(Two);
+        SimulatorSnapshot snap = h.Simulator.ToSnapshot();
+
+        Assert.Equal("beta", snap.ForSet);
+        Assert.Equal(Two, snap.ForCharacter);
+        Assert.Equal(1, snap.RankingsKept);
+        Assert.Null(snap.AreaRanking);
     }
 }

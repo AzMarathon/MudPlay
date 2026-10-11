@@ -206,4 +206,56 @@ public sealed class ProfileManagementTests : IDisposable
 
         Assert.Throws<IOException>(() => svc.MoveProfile(_bbsA, "One", _bbsB, "One"));
     }
+
+    // ----- ProfileRenamed: the loaded profile known by another pair ----------
+
+    [Fact]
+    public void ProfileRenamed_TellsThePairTheLoadedProfileHad_WhenItIsRenamedOrMoved()
+    {
+        var svc = new ProfileService();
+        svc.CreateProfile(_bbsA, "first");
+        svc.Load(_bbsA, "first");
+        var had = new List<(string? Bbs, string? Name)>();
+        svc.ProfileRenamed += (bbs, name) => had.Add((bbs, name));
+
+        svc.MoveProfile(_bbsA, "first", _bbsA, "second");
+        svc.MoveProfile(_bbsA, "second", _bbsB, "second");
+
+        Assert.Equal(new (string?, string?)[] { (_bbsA, "first"), (_bbsA, "second") }, had);
+        Assert.Equal(_bbsB, svc.CurrentBbsName);
+        Assert.Equal("second", svc.CurrentProfileName);
+    }
+
+    [Fact]
+    public void ProfileRenamed_Tells_WhenTheDefaultProfileIsGivenAName()
+    {
+        var svc = new ProfileService();
+        svc.LoadBlank();
+        var had = new List<(string? Bbs, string? Name)>();
+        svc.ProfileRenamed += (bbs, name) => had.Add((bbs, name));
+
+        svc.SaveAs(_bbsA, "named");
+
+        (string? bbs, string? name) = Assert.Single(had);
+        Assert.Null(name);
+        Assert.Null(bbs);
+        Assert.Equal("named", svc.CurrentProfileName);
+    }
+
+    [Fact]
+    public void ProfileRenamed_IsNotForALoad_ASaveUnderTheSameName_OrAProfileThatIsNotLoaded()
+    {
+        var svc = new ProfileService();
+        svc.CreateProfile(_bbsA, "loaded");
+        svc.CreateProfile(_bbsA, "other");
+        int told = 0;
+        svc.ProfileRenamed += (_, _) => told++;
+
+        svc.Load(_bbsA, "loaded");
+        svc.SaveAs(_bbsA, "loaded");
+        svc.MoveProfile(_bbsA, "other", _bbsB, "other");
+        svc.Load(_bbsB, "other");
+
+        Assert.Equal(0, told);
+    }
 }
