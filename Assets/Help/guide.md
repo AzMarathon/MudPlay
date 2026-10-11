@@ -1364,7 +1364,7 @@ Pauses your movement, exactly as the toolbar's Pause button does. Fighting, heal
 |---|---|
 | `movement paused, I'm in <room name> (<map>/<room>)` | The pause was set. |
 | `movement paused` | The pause was set and your room isn't known. |
-| `already @stopped` | **Refusal:** a pause of yours was already in place, from an earlier `@stop` or from the Pause button. |
+| `already @stopped` | A pause of yours was already in place, from an earlier `@stop` or from the Pause button. |
 | the Failure message | **Refusal:** the sender doesn't hold Move player. |
 
 **Situations:**
@@ -1953,7 +1953,7 @@ Reports the daily charges left on your transport tokens (Paradigm).
 | Reply | When |
 |---|---|
 | `token charges - <place>: <n>, <place>: <n>` | Bare. |
-| `no token charges read yet (hold transport tokens and log in on Paradigm)` | **Refusal:** bare, and none has been read. |
+| `no token charges read yet (hold transport tokens and log in on Paradigm)` | Bare, and none has been read. |
 | `token of <place>: <n> use(s) remaining` | The named token's charges are known. |
 | `no charge count for a token of <place> - not held, or not read yet` | **Refusal:** they are not. The place is echoed as typed. |
 | the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
@@ -2497,7 +2497,7 @@ Sends a command to the game as if you had typed it. This is the highest-trust co
 | Reply | When |
 |---|---|
 | `ok` | The command was sent to the game. It says nothing about what the game made of it. |
-| nothing | A bare `@do`. |
+| the Failure message | **Refusal:** a bare `@do`, with nothing to send. |
 | `@do suicide is not allowed, use @suicide` | **Refusal:** one of the words after `@do` is `suicide`. Nothing is sent to the game. |
 | nothing | `reroll` appears anywhere in the line. Nothing is sent, and nothing is answered. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |

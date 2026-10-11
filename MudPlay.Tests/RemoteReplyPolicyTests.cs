@@ -241,10 +241,10 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         }
     }
 
-    // The second of two @stops, and a disarm asked of a character with no Traps
-    // skill, need a state the fresh character doesn't start in.
+    // The second of two @stops is an answer: the sender wanted us stopped, and
+    // we are.
     [Fact]
-    public void WarnOff_ARepeatedStop_IsAnsweredWithNothing()
+    public void WarnOff_ARepeatedStop_IsStillAnswered()
     {
         using Rig r = Build();
         r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@stop"));
@@ -253,9 +253,11 @@ public sealed class RemoteReplyPolicyTests : IDisposable
 
         r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@stop"));
 
-        Assert.Empty(Sent(r.Engine));
+        Assert.Equal($"/{Sender} {{already @stopped}}\r", Assert.Single(Sent(r.Engine)));
     }
 
+    // A disarm asked of a character with no Traps skill needs a state the fresh
+    // character doesn't start in.
     [Fact]
     public void WarnOff_ADisarmAskedOfACharacterWithoutTheSkill_IsAnsweredWithNothing()
     {

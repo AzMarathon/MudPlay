@@ -72,7 +72,9 @@ public sealed class DoHandler : IDisposable
 
     private void OnDo(RemoteCommandContext ctx)
     {
-        if (ctx.Args.Count == 0) return;
+        // Nothing to send is the command failing, as a bare @kill is: the generic
+        // failure message, under the Warn setting.
+        if (ctx.Args.Count == 0) { ctx.Refuse(); return; }
         if (_wireSender is null) return;
         // Re-join the args with single spaces. The engine tokenised on
         // whitespace + RemoveEmptyEntries, so multi-space sequences in

@@ -509,7 +509,8 @@ public sealed class MovePlayerHandler : IDisposable
     {
         if (_controller.IsUserPaused)
         {
-            ctx.Refuse("already @stopped");
+            // The sender wanted us stopped and we are: an answer, not a refusal.
+            ctx.Reply("already @stopped");
             return;
         }
         if (_controller.IsActive) _controller.Pause();
