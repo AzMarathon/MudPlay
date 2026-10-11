@@ -182,8 +182,61 @@ public sealed class MovePlayerHandler : IDisposable
             ? (_graph.GetRoom(key)?.DisplayName ?? "?")
             : fav.Label!;
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
-        if (_walker.WalkTo(key)) ctx.Reply($"walking to GOTO '{label}' ({key.Map}/{key.Room})");
-        else ctx.Refuse($"no path to GOTO '{label}'");
+        WalkAndAnswer(ctx, key,
+            walking: $"walking to GOTO '{label}' ({key.Map}/{key.Room})",
+            already: $"already at GOTO '{label}' ({key.Map}/{key.Room})",
+            noPath: $"no path to GOTO '{label}'");
+    }
+
+    // Ask the walker for a walk and answer with what came of it. The walker's
+    // "true" is a walk under way in all but two cases, and the answer follows
+    // them:
+    //   - we stand in the room already: it ends the walk on the spot, and the
+    //     answer is `already` (null: this walk never ends where we stand);
+    //   - a move of ours is still in flight: it plans only once that move has
+    //     settled, so whether there is a path isn't known yet. The answer waits
+    //     for the plan, and is `walking` or `noPath` then.
+    private void WalkAndAnswer(RemoteCommandContext ctx, RoomKey key, string walking, string? already, string noPath)
+    {
+        bool there = already is not null
+            && _tracker.State.CurrentRoom is { } here && here.Key.Equals(key);
+        bool plannedLater = _tracker.State.Confidence == RoomConfidence.Pending;
+        if (!_walker.WalkTo(key)) { ctx.Refuse(noPath); return; }
+        if (!plannedLater)
+        {
+            ctx.Reply(there ? already! : walking);
+            return;
+        }
+
+        void OnPlanned(WalkEvent e)
+        {
+            bool ours = key.Equals(e.Destination) || key.Equals(e.Requested);
+            switch (e.Kind)
+            {
+                case WalkEventKind.Started when ours:
+                case WalkEventKind.StepCompleted when ours:
+                    _walker.Event -= OnPlanned;
+                    ctx.Reply(walking);
+                    break;
+                case WalkEventKind.Finished when ours:
+                    _walker.Event -= OnPlanned;
+                    ctx.Reply(already ?? walking);
+                    break;
+                case WalkEventKind.Failed when ours:
+                    _walker.Event -= OnPlanned;
+                    ctx.Refuse(noPath);
+                    break;
+                case WalkEventKind.Started:
+                case WalkEventKind.Stopped:
+                case WalkEventKind.Finished:
+                case WalkEventKind.Failed:
+                    // Another walk took the walker, or ours was stopped before it
+                    // was planned: nothing of ours is left to answer for.
+                    _walker.Event -= OnPlanned;
+                    break;
+            }
+        }
+        _walker.Event += OnPlanned;
     }
 
     // Resolve a boss name from the boss table and walk to its CLOSEST listed room
@@ -230,10 +283,13 @@ public sealed class MovePlayerHandler : IDisposable
         // real route), so we just target the boss room and let the walker halt
         // adjacent — the reply is worded from the flag for the sender's benefit.
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
-        if (!_walker.WalkTo(target)) { ctx.Refuse($"no path to {boss.Name}"); return true; }
-        ctx.Reply(boss.StopBefore
-            ? $"walking to boss {boss.Name}, stopping just outside ({target.Map}/{target.Room})"
-            : $"walking to boss {boss.Name} ({target.Map}/{target.Room})");
+        WalkAndAnswer(ctx, target,
+            walking: boss.StopBefore
+                ? $"walking to boss {boss.Name}, stopping just outside ({target.Map}/{target.Room})"
+                : $"walking to boss {boss.Name} ({target.Map}/{target.Room})",
+            // A boss we stop short of is walked to from its own room too.
+            already: boss.StopBefore ? null : $"already at boss {boss.Name} ({target.Map}/{target.Room})",
+            noPath: $"no path to {boss.Name}");
         return true;
     }
 
@@ -257,8 +313,10 @@ public sealed class MovePlayerHandler : IDisposable
     private void DispatchGoto(RemoteCommandContext ctx, RoomSearchResult match)
     {
         StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Walker);
-        if (_walker.WalkTo(match.Key)) ctx.Reply($"walking to {match.Name} ({match.Key.Map}/{match.Key.Room})");
-        else ctx.Refuse($"no path to {match.Name}");
+        WalkAndAnswer(ctx, match.Key,
+            walking: $"walking to {match.Name} ({match.Key.Map}/{match.Key.Room})",
+            already: $"already at {match.Name} ({match.Key.Map}/{match.Key.Room})",
+            noPath: $"no path to {match.Name}");
     }
 
     private void OnLoop(RemoteCommandContext ctx)
@@ -286,18 +344,14 @@ public sealed class MovePlayerHandler : IDisposable
                 ctx.Refuse("no loop has run yet this session");
                 return;
             }
-            StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Loop);
-            _loopRunner.Start(last);
-            ctx.Reply($"restarting last loop '{last.Name}' ({last.Waypoints.Count} rooms)");
+            StartLoop(ctx, last, $"restarting last loop '{last.Name}' ({last.Waypoints.Count} rooms)");
             return;
         }
 
         if (RoomSearchService.TryParseCoordList(raw) is { Count: >= 2 } coords)
         {
-            StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Loop);
             List<LoopWaypoint> waypoints = coords.Select(k => new LoopWaypoint(k)).ToList();
-            _loopRunner.Start(new Loop($"@loop from {ctx.Sender}", waypoints));
-            ctx.Reply($"looping {coords.Count} rooms");
+            StartLoop(ctx, new Loop($"@loop from {ctx.Sender}", waypoints), $"looping {coords.Count} rooms");
             return;
         }
 
@@ -306,10 +360,44 @@ public sealed class MovePlayerHandler : IDisposable
         // loop — "godfrey bank" resolves to "Bank of Godfrey Loop" when it's the only
         // loop carrying both words.
         if (ResolveSavedLoop(ctx, _loops, raw) is not { } saved) return;
-        StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Loop);
-        _loopRunner.Start(saved);
-        ctx.Reply($"starting loop '{saved.Name}' ({saved.Waypoints.Count} rooms)");
+        StartLoop(ctx, saved, $"starting loop '{saved.Name}' ({saved.Waypoints.Count} rooms)");
     }
+
+    // Start a loop and answer with what happened: `started` only when the runner
+    // took it, otherwise the runner's own reason as a refusal. A loop the runner
+    // can tell beforehand it won't run (a room no route enters, a leg behind a toll
+    // we can't pay) is refused before anything is stopped for it, so what was
+    // running carries on.
+    private void StartLoop(RemoteCommandContext ctx, Loop loop, string started)
+    {
+        if (_loopRunner.RefusalFor(loop) is { } refusal)
+        {
+            ctx.Refuse(NotStarted(loop, refusal));
+            return;
+        }
+
+        StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Loop);
+
+        // The runner says why a start failed in the Failed event it raises on the
+        // way out, before Start returns.
+        string? failure = null;
+        void NoteFailure(LoopEvent e)
+        {
+            if (e.Kind == LoopEventKind.Failed) failure ??= e.Detail;
+        }
+        _loopRunner.Event += NoteFailure;
+        bool ok;
+        try { ok = _loopRunner.Start(loop); }
+        finally { _loopRunner.Event -= NoteFailure; }
+
+        if (ok) ctx.Reply(started);
+        else ctx.Refuse(NotStarted(loop, failure ?? "it has fewer than two rooms"));
+    }
+
+    private static string NotStarted(Loop loop, string why) =>
+        why.Contains(loop.Name, StringComparison.Ordinal)
+            ? $"not started: {why}"
+            : $"loop '{loop.Name}' not started: {why}";
 
     // One saved loop for a typed name (LoopManager.FindByName), replying on a miss or
     // an ambiguity. Null when it replied instead of resolving.
@@ -330,22 +418,43 @@ public sealed class MovePlayerHandler : IDisposable
 
         if (RoomSearchService.TryParseCoordList(raw) is { Count: >= 2 } coords)
         {
-            StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Lair);
-            _autoLair.Clear();
-            foreach (RoomKey k in coords) _autoLair.Mark(k);
-            if (_autoLair.Start($"{coords.Count} lairs")) ctx.Reply($"auto-lair: {coords.Count} lairs");
-            else ctx.Refuse("auto-lair failed to start");
+            StartLair(ctx, coords.Select(k => (k, (int?)null)).ToList(),
+                label: $"{coords.Count} lairs", started: $"auto-lair: {coords.Count} lairs");
             return;
         }
 
         Models.Profile.LairSetup? setup = _lairs.Setups.FirstOrDefault(s =>
             string.Equals(s.Name, raw, StringComparison.OrdinalIgnoreCase));
         if (setup is null) { ctx.Refuse($"no saved lair setup named '{raw}'"); return; }
-        StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Lair);
+        StartLair(ctx,
+            setup.Markers.Select(m => (new RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds)).ToList(),
+            label: setup.Name, started: $"auto-lair '{setup.Name}': {setup.MarkerCount} lairs");
+    }
+
+    // Replace the marked lairs and start Auto-Lair on them, answering `started`
+    // only when it did start. What Auto-Lair would refuse (fewer than two lair
+    // rooms, no known room to set out from) is refused here first, before the
+    // marks we have are cleared or anything running is stopped. A run already
+    // under way is stopped like any other engine: left running, Start would be a
+    // no-op and the answer would report a start that never happened.
+    private void StartLair(RemoteCommandContext ctx, List<(RoomKey Room, int? RespawnSeconds)> lairs,
+        string label, string started)
+    {
+        if (lairs.Select(l => l.Room).Distinct().Count() < 2)
+        {
+            ctx.Refuse("auto-lair not started: it needs at least two lair rooms");
+            return;
+        }
+        if (_tracker.State.CurrentRoom is null)
+        {
+            ctx.Refuse("auto-lair not started: I don't know what room I'm in");
+            return;
+        }
+
+        StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.None);
         _autoLair.Clear();
-        foreach (Models.Profile.LairMarker m in setup.Markers)
-            _autoLair.Mark(new RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
-        if (_autoLair.Start(setup.Name)) ctx.Reply($"auto-lair '{setup.Name}': {setup.MarkerCount} lairs");
+        foreach ((RoomKey room, int? respawn) in lairs) _autoLair.Mark(room, respawn);
+        if (_autoLair.Start(label)) ctx.Reply(started);
         else ctx.Refuse("auto-lair failed to start");
     }
 
