@@ -349,6 +349,22 @@ public sealed class LoopManagerTests : IDisposable
         Assert.Equal("loop/with:bad*chars", m2.Loops[0].Name);
     }
 
+    [Fact]
+    public void NumberedName_IsTheFirstNumberFromTwoThatNoLoopHas_MatchedWithoutCase()
+    {
+        LoopManager m = NewManager();
+        m.LoadAll(_setName);
+        var pair = new[] { new RoomKey(1, 1), new RoomKey(1, 2) };
+        Assert.Equal("Sewers 2", m.NumberedName("Sewers"));
+
+        m.Save(new Loop("Sewers", pair));
+        m.Save(new Loop("SEWERS 2", pair));
+        Assert.Equal("Sewers 3", m.NumberedName("Sewers"));
+
+        m.Save(new Loop("Sewers 4", pair));
+        Assert.Equal("Sewers 3", m.NumberedName("Sewers"));
+    }
+
     // ----- ExpandWaypoints --------------------------------------------
 
     [Fact]

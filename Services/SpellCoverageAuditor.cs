@@ -85,7 +85,7 @@ public sealed class SpellCoverageAuditor
             return null;
         }
 
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is null)
         {
             Latest = new CoverageResult(set, 0, 0, Array.Empty<UnanchoredSpell>());
@@ -116,7 +116,7 @@ public sealed class SpellCoverageAuditor
 
         int considered = 0;
         List<UnanchoredSpell> gaps = new();
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             if (!IsPlayerFacing(row, out string name, out int number)) continue;
             considered++;
@@ -159,11 +159,11 @@ public sealed class SpellCoverageAuditor
     // player-cast, NPC-cast-at-player, and item-proc respectively — everything
     // else (test rows, internal NPC-only effects with no monster reference,
     // deprecated entries) drops out and doesn't pollute the unanchored count.
-    private static bool IsPlayerFacing(JsonElement row, out string name, out int number)
+    private static bool IsPlayerFacing(GameRow row, out string name, out int number)
     {
         name = string.Empty;
         number = 0;
-        if (!row.TryGetProperty("Number", out JsonElement numEl)) return false;
+        if (!row.TryGetProperty("Number", out GameValue numEl)) return false;
         if (numEl.ValueKind != JsonValueKind.Number || !numEl.TryGetInt32(out number)) return false;
 
         string? rawName = ReadString(row, "Name");
@@ -172,7 +172,7 @@ public sealed class SpellCoverageAuditor
         if (rawName.All(char.IsDigit)) return false;
         name = rawName;
 
-        bool learnable = row.TryGetProperty("Learnable", out JsonElement lEl)
+        bool learnable = row.TryGetProperty("Learnable", out GameValue lEl)
                       && lEl.ValueKind == JsonValueKind.Number
                       && lEl.TryGetInt32(out int li) && li == 1;
         bool castedBy   = HasContent(ReadString(row, "Casted By"));
@@ -192,9 +192,9 @@ public sealed class SpellCoverageAuditor
         return false;
     }
 
-    private static string? ReadString(JsonElement row, string property)
+    private static string? ReadString(GameRow row, string property)
     {
-        if (!row.TryGetProperty(property, out JsonElement el)) return null;
+        if (!row.TryGetProperty(property, out GameValue el)) return null;
         if (el.ValueKind != JsonValueKind.String) return null;
         string? raw = el.GetString();
         // Strip the all-NUL sentinel here too so display columns never
@@ -295,10 +295,10 @@ public sealed class SpellCoverageAuditor
         if (spellMagery == 0) return "(none)";
 
         List<string> mageryClassNames = new();
-        System.Text.Json.JsonDocument? doc = _cache.GetRawTable("Classes");
+        GameTable? doc = _cache.GetTable("Classes");
         if (doc is not null)
         {
-            foreach (System.Text.Json.JsonElement cls in doc.RootElement.EnumerateArray())
+            foreach (GameRow cls in doc.Rows)
             {
                 if (ReadInt(cls, "MageryType") != spellMagery) continue;
                 if (ReadInt(cls, "MageryLVL")  <  spellMageryLvl) continue;
@@ -310,9 +310,9 @@ public sealed class SpellCoverageAuditor
     }
 
     // Reads an int property or returns 0 when missing / wrong-typed.
-    private static int ReadInt(System.Text.Json.JsonElement row, string property)
+    private static int ReadInt(GameRow row, string property)
     {
-        if (!row.TryGetProperty(property, out System.Text.Json.JsonElement el)) return 0;
+        if (!row.TryGetProperty(property, out GameValue el)) return 0;
         if (el.ValueKind != System.Text.Json.JsonValueKind.Number) return 0;
         return el.TryGetInt32(out int n) ? n : 0;
     }

@@ -347,9 +347,9 @@ public sealed class MonsterCatalog
         // per-slot single-cast damage. Both drop with the Spells eviction below.
         Dictionary<int, int> spellAttType = new();
         Dictionary<int, SpellFormulaInput> spellFormulas = new();
-        JsonDocument? spells = _cache.GetRawTable("Spells");
+        GameTable? spells = _cache.GetTable("Spells");
         if (spells is not null)
-            foreach (JsonElement row in spells.RootElement.EnumerateArray())
+            foreach (GameRow row in spells.Rows)
                 if (TryInt(row, "Number", out int spellNum))
                 {
                     spellAttType[spellNum] = TryInt(row, "AttType", out int at) ? at : -1;
@@ -358,9 +358,9 @@ public sealed class MonsterCatalog
 
         Dictionary<int, MonsterCatalogEntry> map = new();
         HashSet<int> outOfPlay = new();
-        JsonDocument? doc = _cache.GetRawTable("Monsters");
+        GameTable? doc = _cache.GetTable("Monsters");
         if (doc is not null)
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
                 if (TryInt(row, "Number", out int number))
                 {
                     map[number] = BuildEntry(row, number, spellAttType, spellFormulas);
@@ -376,7 +376,7 @@ public sealed class MonsterCatalog
     }
 
     private static MonsterCatalogEntry BuildEntry(
-        JsonElement row, int number, IReadOnlyDictionary<int, int> spellAttType,
+        GameRow row, int number, IReadOnlyDictionary<int, int> spellAttType,
         IReadOnlyDictionary<int, SpellFormulaInput> spellFormulas)
     {
         // A spell slot / mid-spell casts once when it lands, so its damage is the
@@ -550,28 +550,28 @@ public sealed class MonsterCatalog
     private static readonly System.Globalization.CultureInfo Inv =
         System.Globalization.CultureInfo.InvariantCulture;
 
-    private static int ReadInt(JsonElement el, string field)
+    private static int ReadInt(GameRow el, string field)
     {
-        if (!el.TryGetProperty(field, out JsonElement v)) return 0;
+        if (!el.TryGetProperty(field, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 
-    private static double ReadDouble(JsonElement el, string field)
+    private static double ReadDouble(GameRow el, string field)
     {
-        if (!el.TryGetProperty(field, out JsonElement v)) return 0d;
+        if (!el.TryGetProperty(field, out GameValue v)) return 0d;
         return v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out double d) ? d : 0d;
     }
 
-    private static string ReadString(JsonElement el, string field)
+    private static string ReadString(GameRow el, string field)
     {
-        if (!el.TryGetProperty(field, out JsonElement v)) return string.Empty;
+        if (!el.TryGetProperty(field, out GameValue v)) return string.Empty;
         return v.ValueKind == JsonValueKind.String ? v.GetString() ?? string.Empty : string.Empty;
     }
 
-    private static bool TryInt(JsonElement row, string prop, out int value)
+    private static bool TryInt(GameRow row, string prop, out int value)
     {
         value = 0;
-        return row.TryGetProperty(prop, out JsonElement el)
+        return row.TryGetProperty(prop, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out value);
     }

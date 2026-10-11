@@ -27,17 +27,16 @@ public readonly record struct ItemChargeMeta(int MaxUses, bool Recharges)
     public static ItemChargeMeta? Read(GameDataCache cache, int itemNumber)
     {
         if (cache is null || itemNumber <= 0) return null;
-        if (cache.GetRawTable("Items") is not { } items) return null;
-        foreach (JsonElement row in items.RootElement.EnumerateArray())
+        if (cache.GetTable("Items") is not { } items) return null;
+        foreach (GameRow row in items.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (ReadInt(row, "Number") != itemNumber) continue;
             return new ItemChargeMeta(ReadInt(row, "UseCount"), ReadInt(row, "Retain After Uses") == 1);
         }
         return null;
     }
 
-    private static int ReadInt(JsonElement row, string prop)
-        => row.TryGetProperty(prop, out JsonElement el) && el.ValueKind == JsonValueKind.Number
+    private static int ReadInt(GameRow row, string prop)
+        => row.TryGetProperty(prop, out GameValue el) && el.ValueKind == JsonValueKind.Number
            && el.TryGetInt32(out int v) ? v : 0;
 }

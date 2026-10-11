@@ -3518,6 +3518,8 @@ public partial class MainWindowViewModel : ObservableObject
                 // That reconnect request is the only one for this split: the
                 // left-behind watch stands down until we follow again.
                 if (wasConnected) AppServices.Current.ComebackRequest.NoteDisconnected();
+                // Leaving the game takes us off every member list we were still on.
+                if (wasConnected) AppServices.Current.Party.NoteLinkDropped();
                 // A member's @comeback kept for the master switch names a place
                 // from the stay that just ended.
                 AppServices.Current.RemoteCommands.DropHeldComebacks("disconnected");

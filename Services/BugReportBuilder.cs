@@ -656,6 +656,12 @@ public static class BugReportBuilder
         Kv(sb, "In party", party.IsInParty.ToString());
         Kv(sb, "Self is leader", party.SelfIsLeader.ToString());
         Kv(sb, "Leader", party.LeaderName ?? "(none)");
+        // Stock: a follower an exit turned away stops following and stays on the
+        // leader's member list. A "why didn't I rejoin" report turns on whether the
+        // client still counted itself as listed.
+        Kv(sb, "Listed, not following (Stock)", svc.Party.ListedWithLeader is { } listedWith
+            ? $"on {listedWith}'s member list, following nobody: a `join` with them in the room puts us back"
+            : "(no)");
         // Blind means a follow move prints no room for the map to confirm against.
         Kv(sb, "Follow mode (set follow)", svc.FollowModes.Mode switch
         {
@@ -684,6 +690,10 @@ public static class BugReportBuilder
             Kv(sb, "Left-behind check pending", $"judging whether {pendingLeader} left without us");
         if (svc.ComebackRequest.HeldBack is { } heldBack)
             Kv(sb, "Left-behind @comeback held back", heldBack);
+        // The last join this client sent a leader: its own (a Stock follower still
+        // on the leader's list joins by itself) or one a leader's @join asked for.
+        if (svc.ComebackRequest.JoinSummary is { } ownJoin)
+            Kv(sb, "Last join sent to a leader", ownJoin);
         if (svc.PartyComeback.QueuedRecoveries is { Count: > 0 } queued)
             Kv(sb, "Recoveries waiting their turn", string.Join(", ", queued));
         if (svc.PartyComeback.LeftAtLoopGates is { Count: > 0 } atGates)
@@ -698,6 +708,11 @@ public static class BugReportBuilder
             Kv(sb, "Left at an exit by Auto-Lair (invited when a pass finds them)", string.Join(", ", onSight));
         if (svc.PartyComeback.FetchedAtGates is { Count: > 0 } fetched)
             Kv(sb, "Fetched once from an exit that may turn them away", string.Join(", ", fetched));
+        // Stock: a member still on our list is told to join, and invited only if
+        // that doesn't bring them back. A "leader came and never invited me" report
+        // is answered here.
+        if (svc.PartyComeback.AskedToJoin is { Count: > 0 } askedToJoin)
+            Kv(sb, "Told to join, no invite yet (Stock: still on our list)", string.Join(", ", askedToJoin));
         Kv(sb, "Party train trip we set out on", svc.PartyTrain.TripWeSetOutOn ?? "(none)");
         // Leader-side reconnect reform state — the followers we snapshotted at the
         // last drop and will wait for on reconnect. A "leader sprinted off / didn't
@@ -780,7 +795,10 @@ public static class BugReportBuilder
             List<string> tags = new();
             if (m.IsSelf) tags.Add("self");
             if (m.IsLeader) tags.Add("leader");
-            if (m.IsInvited) tags.Add("invited");
+            // Stock: a member who followed us and now reads [Invited] was left
+            // behind and is still on our list, which is not a pending invite.
+            if (m.IsInvited)
+                tags.Add(svc.Party.IsLeftBehindOnOurList(m.Name) ? "listed, not following (followed us before)" : "invited");
             tags.Add(m.Rank.ToString().ToLowerInvariant() + "rank");
             tags.Add(m.Position.ToString());
             if (m.IsWaiting) tags.Add("WAIT");

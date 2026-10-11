@@ -1,5 +1,5 @@
-using System.Text.Json;
 using MudPlay.Models.GameData;
+using MudPlay.Services;
 
 namespace MudPlay.Game.Spells;
 
@@ -167,17 +167,16 @@ public sealed class HealLineReader
     // time restores an amount no single line states — `par` corrects those), not a
     // self-only spell (a potion heals only whoever uses it), and no damage or drain
     // ability, which would make who gained the HP ambiguous.
-    public static IReadOnlyList<HealSpell> InstantHeals(JsonElement spellsTable)
+    public static IReadOnlyList<HealSpell> InstantHeals(GameTable spellsTable)
     {
         List<HealSpell> heals = new();
-        if (spellsTable.ValueKind != JsonValueKind.Array) return heals;
-        foreach (JsonElement row in spellsTable.EnumerateArray())
+        foreach (GameRow row in spellsTable.Rows)
         {
-            if (!row.TryGetProperty("Name", out JsonElement nameEl)
+            if (!row.TryGetProperty("Name", out GameValue nameEl)
                 || nameEl.GetString() is not { Length: > 0 } name) continue;
             SpellFormulaInput formula = SpellFormulaReader.Read(row);
             if (formula.Dur != 0 || formula.DurInc != 0) continue;
-            int targets = row.TryGetProperty("Targets", out JsonElement t) && t.TryGetInt32(out int tv) ? tv : 0;
+            int targets = row.TryGetProperty("Targets", out GameValue t) && t.TryGetInt32(out int tv) ? tv : 0;
             if (targets == TargetsSelfOnly) continue;
             bool heals18 = false, harms = false;
             foreach (SpellAbility a in formula.Abilities)

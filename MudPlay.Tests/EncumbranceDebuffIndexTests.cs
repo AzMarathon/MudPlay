@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using MudPlay.Game.GameData;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
@@ -19,7 +18,7 @@ public sealed class EncumbranceDebuffIndexTests
     [Fact]
     public void Build_PicksSpellsWithANegativeEncumPercent()
     {
-        using JsonDocument spells = JsonDocument.Parse("""
+        GameTable spells = TestRows.Table("""
             [
               { "Number": 424, "Name": "weakness", "Abil-0": 4, "Abil-1": 96, "AbilVal-1": -25, "Abil-2": 22, "AbilVal-2": -10 },
               { "Number": 949, "Name": "frail", "Abil-0": 99, "AbilVal-0": -15, "Abil-2": 96, "AbilVal-2": -5 },

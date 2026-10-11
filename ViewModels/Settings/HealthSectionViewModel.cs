@@ -311,7 +311,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     private void RefreshShadowRestAvailability()
     {
         ShadowRestAvailable =
-            Game.GameData.AbilityNames.AnyClassHasShadowRest(_gameData?.GetRawTable("Classes"));
+            Game.GameData.AbilityNames.AnyClassHasShadowRest(_gameData?.GetTable("Classes"));
     }
 
     // Rebuild the wimpy-escape picker from the active BBS's Sys Goto locations and

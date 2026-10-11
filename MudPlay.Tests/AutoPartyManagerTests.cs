@@ -1836,4 +1836,85 @@ public sealed class AutoPartyManagerTests
         engine.OnPlayerArrival(new RoomEntryArrivalEvent("Raijin", EntityKind.Player, "nowhere", default));
         Assert.Single(engine.LastSentForTests);
     }
+
+    // ----- a follower an exit refused: Stock keeps them on the leader's list -----
+    //
+    // GAME_MECHANICS "A follower who can't move is left behind". With no probe
+    // saying a member was left behind on our list (Paradigm) nothing differs from
+    // what it always was.
+
+    // A member who followed us and now reads [Invited] is seen in the room while a
+    // loop runs: re-invited, and the loop held for them. Returns the loop's gate.
+    private static MovementCoordinator InvitedRowSeenWhileLooping(
+        AutoPartyManager engine, MessageRouter router, PlayerDatabase players, PartyState party, DateTime t0)
+    {
+        SeedPlayer(players, "Tank", inviteOnSeen: true);
+        party.Members.Add(new PartyMember { Name = "Tank", IsInvited = true });
+        party.IsInParty = true;
+        party.SelfIsLeader = true;
+        engine.NowProvider = () => t0;
+        MovementCoordinator coord = new();
+        engine.InviteWaitWindow = TimeSpan.FromSeconds(90);
+        engine.SetMovementGate(coord, isLooping: () => true);
+        Dispatch(router, "Also here: Tank.");
+        Assert.Contains(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "invite Tank\r");
+        Assert.True(coord.IsPaused);
+        engine.LastSentForTests.Clear();
+        return coord;
+    }
+
+    [Fact]
+    public void Paradigm_InviteWaitRunsOut_ForAnInvitedRow_Uninvites()
+    {
+        var (engine, router, players, party) = Setup();
+        DateTime t0 = Now;
+        MovementCoordinator coord = InvitedRowSeenWhileLooping(engine, router, players, party, t0);
+
+        engine.NowProvider = () => t0.AddSeconds(91);
+        engine.TickNagsForTests();
+
+        Assert.Contains(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "uninvite Tank\r");
+        Assert.False(coord.IsPaused);
+    }
+
+    // On Stock a member who followed us and was left behind at an exit is still on
+    // our list, and a `join` of theirs needs no invite. An uninvite would take
+    // that from them: the loop resumes without one.
+    [Fact]
+    public void Stock_InviteWaitRunsOut_ForAMemberLeftBehindOnOurList_ResumesWithoutUninviting()
+    {
+        var (engine, router, players, party) = Setup();
+        engine.LeftBehindOnOurList = given => given == "Tank";
+        DateTime t0 = Now;
+        MovementCoordinator coord = InvitedRowSeenWhileLooping(engine, router, players, party, t0);
+
+        engine.NowProvider = () => t0.AddSeconds(91);
+        engine.TickNagsForTests();
+
+        Assert.DoesNotContain(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "uninvite Tank\r");
+        Assert.False(coord.IsPaused);
+
+        // And the loop isn't held for them again on the next lap.
+        engine.LastSentForTests.Clear();
+        engine.NowProvider = () => t0.AddSeconds(200);
+        Dispatch(router, "Also here: Tank.");
+        Assert.Empty(engine.LastSentForTests);
+        Assert.False(coord.IsPaused);
+    }
+
+    // Somebody we invited who never joined is uninvited on Stock as anywhere.
+    [Fact]
+    public void Stock_InviteWaitRunsOut_ForSomeoneWhoNeverJoined_Uninvites()
+    {
+        var (engine, router, players, party) = Setup();
+        engine.LeftBehindOnOurList = given => given == "Somebody";
+        DateTime t0 = Now;
+        MovementCoordinator coord = InvitedRowSeenWhileLooping(engine, router, players, party, t0);
+
+        engine.NowProvider = () => t0.AddSeconds(91);
+        engine.TickNagsForTests();
+
+        Assert.Contains(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "uninvite Tank\r");
+        Assert.False(coord.IsPaused);
+    }
 }

@@ -18,10 +18,17 @@ public sealed class SimulatorViewModelTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "mudplay-simulator-" + Path.GetRandomFileName());
+    private readonly string _loopSet = "test-set-" + Guid.NewGuid().ToString("N")[..12];
 
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); }
+        catch { /* best-effort temp cleanup */ }
+        try
+        {
+            string loops = Path.Combine(AppPaths.GameDataRoot, _loopSet);
+            if (Directory.Exists(loops)) Directory.Delete(loops, recursive: true);
+        }
         catch { /* best-effort temp cleanup */ }
     }
 
@@ -42,6 +49,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         public required RouteExpResolver Resolver { get; init; }
         public required ExpEstimatorSessionViewModel Session { get; init; }
         public required SimulatorViewModel Simulator { get; init; }
+        public required LoopManager Loops { get; init; }
         public void Dispose()
         {
             Resolver.Dispose();
@@ -49,7 +57,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         }
     }
 
-    private Harness Build()
+    private Harness Build(bool saveLoops = false)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Json);
@@ -60,6 +68,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         var timers = new LairTimerStore(cache, graph, new RoomTracker(graph));
         var resolver = new RouteExpResolver(graph, new BfsMapper(graph), timers, cache);
         var loops = new LoopManager(new BfsMapper(graph), graph);
+        if (saveLoops) loops.LoadAll(_loopSet);
         var simulation = new SimulationSource(
             _ => null, () => null, () => 30, _ => 1.0, () => new RoomKey(1, 1), _root);
         var session = new ExpEstimatorSessionViewModel(resolver, loops, graph, cache);
@@ -67,7 +76,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         sim = new SimulatorViewModel(resolver, loops, cache, null, simulation, null, () => session,
             (rooms, name) => { session.LoadRoute(rooms, name); return null; });
         session.RouteChanged += sim.SketchChanged;
-        return new Harness { Timers = timers, Resolver = resolver, Session = session, Simulator = sim };
+        return new Harness { Timers = timers, Resolver = resolver, Session = session, Simulator = sim, Loops = loops };
     }
 
     [Fact]
@@ -103,5 +112,120 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.True(h.Simulator.HasRankDetail);
         Assert.Contains("L40", h.Simulator.RankHeadline);
         Assert.True(h.Simulator.SimulateCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void SavingARankedAreaMakesARunnableLoopOfItsTourWithoutOverwritingOne()
+    {
+        using Harness h = Build(saveLoops: true);
+        RoomKey[] tour = { new(1, 2), new(1, 1) };
+        // The name is held by a different loop: the same rooms the other way round.
+        RoomKey[] held = { new(1, 1), new(1, 2) };
+        h.Loops.Save(new Loop("Hills / Caves (L40 sim)".Replace('/', '-'), held));
+        h.Simulator.SelectedRanking = new AreaRank("Hills / Caves", 40, tour, 2, new LoopSimSummary(new[] { Run }));
+        Assert.True(h.Simulator.RankIsArea);
+
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+
+        Loop saved = Assert.IsType<Loop>(h.Loops.Get("Hills - Caves (L40 sim) 2"));
+        Assert.Equal(tour, saved.Waypoints.Select(w => w.Key));
+        Assert.Equal(held, h.Loops.Get("Hills - Caves (L40 sim)")?.Waypoints.Select(w => w.Key));
+        Assert.Contains("L40", saved.Notes);
+        Assert.Contains("1/2 → 1/1", saved.Notes);
+        // Saved as it was simulated: fighting everywhere, no lair wait, for this
+        // character and in the file the others read.
+        Assert.Equal(default, saved.OwnSettings);
+        Assert.Equal(default, saved.SharedSettings);
+        Assert.Contains("both Entire Loop Settings off", saved.Notes);
+        Assert.Equal("Hills - Caves (L40 sim) 2", h.Simulator.SelectedRoute?.Loop?.Name);
+    }
+
+    [Fact]
+    public void SavingATourThatIsAlreadyASavedLoopSavesNothingAndPicksThatLoop()
+    {
+        using Harness h = Build(saveLoops: true);
+        RoomKey[] tour = { new(1, 2), new(1, 1) };
+        h.Loops.Save(new Loop("My caves", tour) { Notes = "mine" });
+        h.Simulator.SelectedRanking = new AreaRank("Hills", 40, tour, 2, new LoopSimSummary(new[] { Run }));
+
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+
+        Assert.Equal(new[] { "My caves" }, h.Loops.Loops.Select(l => l.Name));
+        Assert.Equal("mine", h.Loops.Get("My caves")?.Notes);
+        Assert.Equal("My caves", h.Simulator.SelectedRoute?.Loop?.Name);
+        Assert.Contains("Already saved as loop \"My caves\"", h.Simulator.RankStatus);
+
+        // Run another way, it is another loop: the tour is saved beside it.
+        h.Loops.SetSettings("My caves", new LoopOwnSettings(OnlyAttackInLairRooms: true, LairEntryDebuffMode.Off));
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+        Assert.NotNull(h.Loops.Get("Hills (L40 sim)"));
+    }
+
+    [Fact]
+    public void SavingARankedAreaLeavesALoopAnotherClientJustSavedUnderItsName()
+    {
+        using Harness h = Build(saveLoops: true);
+        using Harness other = Build(saveLoops: true);
+        RoomKey[] theirs = { new(1, 1), new(1, 2), new(1, 1), new(1, 2) };
+        other.Loops.Save(new Loop("Hills (L40 sim)", theirs));
+        Assert.Null(h.Loops.Get("Hills (L40 sim)"));
+        RoomKey[] tour = { new(1, 2), new(1, 1) };
+        h.Simulator.SelectedRanking = new AreaRank("Hills", 40, tour, 2, new LoopSimSummary(new[] { Run }));
+
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+
+        Assert.Equal(theirs, h.Loops.Get("Hills (L40 sim)")?.Waypoints.Select(w => w.Key));
+        Assert.Equal(tour, h.Loops.Get("Hills (L40 sim) 2")?.Waypoints.Select(w => w.Key));
+        other.Loops.LoadAll(h.Loops.SetName);
+        Assert.Equal(theirs, other.Loops.Get("Hills (L40 sim)")?.Waypoints.Select(w => w.Key));
+    }
+
+    [Fact]
+    public void SavingATourTheCharacterCantWalkNowSaysSo()
+    {
+        using Harness h = Build(saveLoops: true);
+        h.Simulator.SelectedRanking = new AreaRank("Walkable", 40, new[] { new RoomKey(1, 1), new RoomKey(1, 2) }, 2,
+            new LoopSimSummary(new[] { Run }));
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+        Assert.DoesNotContain("can't be walked", h.Simulator.RankStatus);
+
+        // 1/9 is on no map here, so no leg reaches it or leaves it.
+        h.Simulator.SelectedRanking = new AreaRank("Shut", 40, new[] { new RoomKey(1, 1), new RoomKey(1, 9) }, 2,
+            new LoopSimSummary(new[] { Run }));
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+
+        Assert.NotNull(h.Loops.Get("Shut (L40 sim)"));
+        Assert.Contains("2 of its 2 legs can't be walked", h.Simulator.RankStatus);
+    }
+
+    [Fact]
+    public void AWholeAreasTourIsSavedInFullButItsRouteLineStaysShort()
+    {
+        using Harness h = Build(saveLoops: true);
+        RoomKey[] tour = Enumerable.Range(0, 400).Select(i => new RoomKey(17, 1200 + i)).ToArray();
+        h.Simulator.SelectedRanking = new AreaRank("Plateau", 40, tour, 2000, new LoopSimSummary(new[] { Run }));
+
+        h.Simulator.SaveRankingAsLoopCommand.Execute(null);
+
+        Loop saved = Assert.IsType<Loop>(h.Loops.Get("Plateau (L40 sim)"));
+        Assert.Equal(tour, saved.Waypoints.Select(w => w.Key));
+        string route = h.Simulator.RankStats.First(s => s.Label == "Route").Value;
+        Assert.StartsWith("400 lairs, 2000 rooms a lap: 17/1200 → 17/1201 → ", route);
+        Assert.EndsWith("17/1219 → … (380 more)", route);
+        // Notes that named all 400 rooms were refused by the player it was sent to.
+        Loop received = MudPlay.Game.Remote.LoopShareCodec.Decode(MudPlay.Game.Remote.LoopShareCodec.Encode(saved));
+        Assert.Equal(saved.Notes, received.Notes);
+    }
+
+    [Fact]
+    public void ASavedLoopRowOffersNoSave()
+    {
+        using Harness h = Build();
+        h.Simulator.SelectedRanking = new AreaRank("Mine", 40, new[] { new RoomKey(1, 1), new RoomKey(1, 2) }, 2,
+            new LoopSimSummary(new[] { Run }), IsLoop: true);
+
+        Assert.False(h.Simulator.RankIsArea);
+        Assert.False(h.Simulator.SaveRankingAsLoopCommand.CanExecute(null));
     }
 }

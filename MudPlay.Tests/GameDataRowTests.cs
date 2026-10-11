@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MudPlay.ViewModels.GameData.Tables;
 using Xunit;
 
@@ -13,8 +12,7 @@ public sealed class GameDataRowTests
     private static GameDataRow Row(string json, IReadOnlyDictionary<string, Func<string?, string?>>? formatters = null,
         IReadOnlyDictionary<string, string?>? computed = null)
     {
-        using JsonDocument doc = JsonDocument.Parse(json);
-        return GameDataRow.FromJson(doc.RootElement, Columns, formatters, computed);
+        return GameDataRow.FromRow(TestRows.Row(json), Columns, formatters, computed);
     }
 
     [Fact]

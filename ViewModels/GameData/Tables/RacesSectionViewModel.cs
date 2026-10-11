@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text.Json;
 using MudPlay.Game.GameData;
 using MudPlay.Services;
 
@@ -47,7 +46,7 @@ public sealed class RacesSectionViewModel : JsonTableSectionViewModel
     // Synthesise the "Abilities" column from each row's Abil-N / AbilVal-N pairs so the grid
     // shows every racial perk at a glance (e.g. Dark-Elf → "Illu +80, RaceStealth, Crits +1,
     // Accuracy3 +3").
-    protected override IReadOnlyDictionary<string, string?> ComputeRowCells(JsonElement element)
+    protected override IReadOnlyDictionary<string, string?> ComputeRowCells(GameRow element)
         => new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             ["Abilities"] = AbilityNames.SummarizeAbilities(element),

@@ -71,7 +71,7 @@ public static class ItemUsedOnIndex
         var exitsByItem = new Dictionary<int, List<ExitKeyUse>>();
         var actionsByItem = new Dictionary<int, List<ActionUse>>();
         bool wasLoaded = gameData.IsTableLoaded("Rooms");
-        if (gameData.GetRawTable("Rooms") is { } rooms)
+        if (gameData.GetTable("Rooms") is { } rooms)
         {
             // A Rooms row names its exits by the Direction names, N to D.
             string[] columns = new string[(int)Direction.D + 1];
@@ -79,23 +79,22 @@ public static class ItemUsedOnIndex
 
             // An action cell can name an exit of another room, and whether that exit is
             // there is known only once every row has been read.
-            var rowsByKey = new Dictionary<RoomKey, (string Name, JsonElement Row)>();
+            var rowsByKey = new Dictionary<RoomKey, (string Name, GameRow Row)>();
             var pending = new List<(RoomKey Where, string Name, MultiActionExitData.ActionCell Cell)>();
             var ids = new List<int>(2);
-            foreach (JsonElement row in rooms.RootElement.EnumerateArray())
+            foreach (GameRow row in rooms.Rows)
             {
-                if (row.ValueKind != JsonValueKind.Object) continue;
                 int map = ReadInt(row, "Map Number");
                 int room = ReadInt(row, "Room Number");
                 if (map <= 0 || room <= 0) continue;
-                string name = row.TryGetProperty("Name", out JsonElement n) && n.ValueKind == JsonValueKind.String
+                string name = row.TryGetProperty("Name", out GameValue n) && n.ValueKind == JsonValueKind.String
                     ? n.GetString() ?? string.Empty : string.Empty;
                 var where = new RoomKey(map, room);
                 rowsByKey[where] = (name, row);
 
                 for (int i = 0; i < columns.Length; i++)
                 {
-                    if (!row.TryGetProperty(columns[i], out JsonElement cell) || cell.ValueKind != JsonValueKind.String
+                    if (!row.TryGetProperty(columns[i], out GameValue cell) || cell.ValueKind != JsonValueKind.String
                         || cell.GetString() is not { } wire)
                         continue;
 
@@ -126,8 +125,8 @@ public static class ItemUsedOnIndex
                 // The room the exit is in: the cell's own room, or the one it names.
                 RoomKey target = cell.RemoteSourceRoom ?? where;
                 ActionTarget? opens = null;
-                if (rowsByKey.TryGetValue(target, out (string Name, JsonElement Row) hit)
-                    && hit.Row.TryGetProperty(columns[(int)cell.ExitDirection], out JsonElement exitCell)
+                if (rowsByKey.TryGetValue(target, out (string Name, GameRow Row) hit)
+                    && hit.Row.TryGetProperty(columns[(int)cell.ExitDirection], out GameValue exitCell)
                     && exitCell.ValueKind == JsonValueKind.String
                     && RoomExit.TryParseWire(exitCell.GetString(), out RoomExit exit)
                     && exit.AcceptsActions)
@@ -173,6 +172,6 @@ public static class ItemUsedOnIndex
         return byMap != 0 ? byMap : a.Room.CompareTo(b.Room);
     }
 
-    private static int ReadInt(JsonElement row, string field) =>
-        row.TryGetProperty(field, out JsonElement v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
+    private static int ReadInt(GameRow row, string field) =>
+        row.TryGetProperty(field, out GameValue v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
 }

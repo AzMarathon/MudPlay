@@ -26,7 +26,7 @@ namespace MudPlay.Services;
 // Mirrors RoomHazardIndex: subscribes to GameDataCache.ActiveSetChanged, reads
 // Rooms (for the room-entry spell and command sets), Spells (for the ability
 // chains) and TBInfo (for the casts) once, builds the set, and evicts the
-// JsonDocuments it touched.
+// tables it touched.
 public sealed class RoomBuffStripIndex
 {
     private const int SpellAbilSlots = 10;   // Spells: Abil-0..9
@@ -129,8 +129,8 @@ public sealed class RoomBuffStripIndex
             return;
         }
 
-        JsonDocument? rooms = _cache.GetRawTable("Rooms");
-        JsonDocument? spells = _cache.GetRawTable("Spells");
+        GameTable? rooms = _cache.GetTable("Rooms");
+        GameTable? spells = _cache.GetTable("Spells");
         if (rooms is null || spells is null)
         {
             _log?.Info("RoomBuffStripIndex",
@@ -167,7 +167,7 @@ public sealed class RoomBuffStripIndex
 
     // The strips a textblock's `cast` reaches: from a room spell's own textblock, and
     // from the command lines of a room's CMD block.
-    private void IndexTextblockCasts(JsonDocument rooms, HashSet<int> roomSpells, Dictionary<int, int[]> spellAbils)
+    private void IndexTextblockCasts(GameTable rooms, HashSet<int> roomSpells, Dictionary<int, int[]> spellAbils)
     {
         Dictionary<int, string> blocks = ReadTextBlockActions();
         if (blocks.Count == 0) return;
@@ -261,25 +261,23 @@ public sealed class RoomBuffStripIndex
     private Dictionary<int, string> ReadTextBlockActions()
     {
         Dictionary<int, string> map = new();
-        JsonDocument? table = _cache.GetRawTable("TBInfo");
+        GameTable? table = _cache.GetTable("TBInfo");
         if (table is null) return map;
-        foreach (JsonElement row in table.RootElement.EnumerateArray())
+        foreach (GameRow row in table.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryReadInt(row, "Number", out int number) || number <= 0) continue;
-            if (row.TryGetProperty("Action", out JsonElement action) && action.ValueKind == JsonValueKind.String
+            if (row.TryGetProperty("Action", out GameValue action) && action.ValueKind == JsonValueKind.String
                 && action.GetString() is { Length: > 0 } text)
                 map[number] = text;
         }
         return map;
     }
 
-    private static HashSet<int> CollectRoomCommands(JsonDocument rooms)
+    private static HashSet<int> CollectRoomCommands(GameTable rooms)
     {
         HashSet<int> set = new();
-        foreach (JsonElement row in rooms.RootElement.EnumerateArray())
+        foreach (GameRow row in rooms.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (TryReadInt(row, "CMD", out int cmd) && cmd > 0) set.Add(cmd);
         }
         return set;
@@ -316,12 +314,11 @@ public sealed class RoomBuffStripIndex
         return strips;
     }
 
-    private static HashSet<int> CollectRoomSpells(JsonDocument rooms)
+    private static HashSet<int> CollectRoomSpells(GameTable rooms)
     {
         HashSet<int> set = new();
-        foreach (JsonElement row in rooms.RootElement.EnumerateArray())
+        foreach (GameRow row in rooms.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (TryReadInt(row, "Spell", out int spell) && spell > 0) set.Add(spell);
         }
         return set;
@@ -329,12 +326,11 @@ public sealed class RoomBuffStripIndex
 
     // Spell Number → flat [Abil0, Val0, Abil1, Val1, …] slot array (2 * SpellAbilSlots),
     // then MinBase and MaxBase.
-    private static Dictionary<int, int[]> ReadSpellAbils(JsonDocument spells)
+    private static Dictionary<int, int[]> ReadSpellAbils(GameTable spells)
     {
         Dictionary<int, int[]> map = new();
-        foreach (JsonElement row in spells.RootElement.EnumerateArray())
+        foreach (GameRow row in spells.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryReadInt(row, "Number", out int number) || number <= 0) continue;
 
             int[] slots = new int[SpellAbilSlots * 2 + 2];
@@ -350,10 +346,10 @@ public sealed class RoomBuffStripIndex
         return map;
     }
 
-    private static bool TryReadInt(JsonElement row, string property, out int value)
+    private static bool TryReadInt(GameRow row, string property, out int value)
     {
         value = 0;
-        return row.TryGetProperty(property, out JsonElement el)
+        return row.TryGetProperty(property, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out value);
     }

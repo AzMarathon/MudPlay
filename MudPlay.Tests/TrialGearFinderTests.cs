@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Inventory;
 using MudPlay.Models.Profile;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -15,7 +15,7 @@ namespace MudPlay.Tests;
 // combination across the other slots.
 public sealed class TrialGearFinderTests
 {
-    private static readonly JsonElement EmptyRow = JsonDocument.Parse("{}").RootElement;
+    private static readonly GameRow EmptyRow = TestRows.Row("{}");
 
     // With Unknown class + level 0 + null alignment, ItemEquipFilter.CanEquip disables
     // every gate, so an empty row is "equippable" — lets the tests focus on scoring.
@@ -105,7 +105,7 @@ public sealed class TrialGearFinderTests
     public void FindBest_HonorsEquipGate_LevelTooLow()
     {
         // Abil-135 = MinLevel 50; searching at level 10 filters it out.
-        JsonElement lvl50 = JsonDocument.Parse("{\"Abil-0\":135,\"AbilVal-0\":50}").RootElement;
+        GameRow lvl50 = TestRows.Row("{\"Abil-0\":135,\"AbilVal-0\":50}");
         var catalog = new[]
         {
             new ItemFinderEntry { Name = "high helm", Slot = EquipmentSlot.Head, SlotLabel = "Head", Row = lvl50, Ac = 9 },

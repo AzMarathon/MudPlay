@@ -49,9 +49,9 @@ public sealed class MonsterSummonTargetsIndex
 
         // Spell Number → summoned monster Numbers.
         var spellTargets = new Dictionary<int, IReadOnlyList<int>>();
-        if (_cache.GetRawTable("Spells") is { } spells)
+        if (_cache.GetTable("Spells") is { } spells)
         {
-            foreach (JsonElement row in spells.RootElement.EnumerateArray())
+            foreach (GameRow row in spells.Rows)
             {
                 if (!TryInt(row, "Number", out int num)) continue;
                 IReadOnlyList<int> targets = SummonTargets(row);
@@ -59,9 +59,9 @@ public sealed class MonsterSummonTargetsIndex
             }
         }
 
-        if (spellTargets.Count > 0 && _cache.GetRawTable("Monsters") is { } monsters)
+        if (spellTargets.Count > 0 && _cache.GetTable("Monsters") is { } monsters)
         {
-            foreach (JsonElement row in monsters.RootElement.EnumerateArray())
+            foreach (GameRow row in monsters.Rows)
             {
                 if (!TryInt(row, "Number", out int number)) continue;
                 List<int>? children = null;
@@ -86,7 +86,7 @@ public sealed class MonsterSummonTargetsIndex
     // Monster Number(s) a spell summons, or empty when it isn't a summon spell.
     // The summon abilities' own positive values (AbilVal) win; only when none name
     // a target does the spell's MinBase stand in.
-    private static IReadOnlyList<int> SummonTargets(JsonElement spell)
+    private static IReadOnlyList<int> SummonTargets(GameRow spell)
     {
         List<int>? targets = null;
         bool isSummon = false;
@@ -104,10 +104,10 @@ public sealed class MonsterSummonTargetsIndex
         return targets ?? (IReadOnlyList<int>)Array.Empty<int>();
     }
 
-    private static bool TryInt(JsonElement row, string prop, out int value)
+    private static bool TryInt(GameRow row, string prop, out int value)
     {
         value = 0;
-        return row.TryGetProperty(prop, out JsonElement el)
+        return row.TryGetProperty(prop, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out value);
     }

@@ -80,23 +80,23 @@ public sealed class MonsterResistIndex
         if (_byNumber is { } cached) return cached;
 
         Dictionary<int, Dictionary<int, int>> map = new();
-        JsonDocument? doc = _cache.GetRawTable("Monsters");
+        GameTable? doc = _cache.GetTable("Monsters");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Number", out JsonElement numEl)) continue;
+                if (!row.TryGetProperty("Number", out GameValue numEl)) continue;
                 if (numEl.ValueKind != JsonValueKind.Number) continue;
                 if (!numEl.TryGetInt32(out int number)) continue;
 
                 Dictionary<int, int>? resists = null;
                 for (int i = 0; i < AbilitySlots; i++)
                 {
-                    if (!row.TryGetProperty($"Abil-{i}", out JsonElement abilEl)) continue;
+                    if (!row.TryGetProperty($"Abil-{i}", out GameValue abilEl)) continue;
                     if (abilEl.ValueKind != JsonValueKind.Number) continue;
                     if (!abilEl.TryGetInt32(out int code)) continue;
                     if (!IsElementalResistCode(code)) continue;
-                    if (!row.TryGetProperty($"AbilVal-{i}", out JsonElement valEl)) continue;
+                    if (!row.TryGetProperty($"AbilVal-{i}", out GameValue valEl)) continue;
                     if (valEl.ValueKind != JsonValueKind.Number) continue;
                     if (!valEl.TryGetInt32(out int val)) continue;
                     if (val == 0) continue;   // 0% resist is no resist — skip the noise
@@ -107,9 +107,9 @@ public sealed class MonsterResistIndex
             }
         }
 
-        // Folded into the map — release the pinned raw Monsters JsonDocument.
+        // Folded into the map — the cache may drop the Monsters table.
         // (MonsterMagicIndex evicts the same table; whichever builds second just
-        // triggers a one-time reload via GetRawTable.)
+        // triggers a one-time reload via GetTable.)
         _cache.EvictTable("Monsters");
         _byNumber = map;
         return map;

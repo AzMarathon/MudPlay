@@ -383,15 +383,15 @@ public sealed class ItemSourceIndex
     // row carries what the command asks for, which the source entry doesn't say.
     private int CompleteRoomGiversFromItemSources(Dictionary<int, List<ItemGiver>> giversByItem)
     {
-        JsonDocument? items = _cache.GetRawTable("Items");
+        GameTable? items = _cache.GetTable("Items");
         if (items is null) return 0;
 
         Dictionary<(int Map, int Room), string>? roomNames = null;
         int withSources = 0;
-        foreach (JsonElement row in items.RootElement.EnumerateArray())
+        foreach (GameRow row in items.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object || !TryInt(row, "Number", out int itemId)) continue;
-            if (!row.TryGetProperty("Obtained From", out JsonElement cell) || cell.ValueKind != JsonValueKind.String)
+            if (!TryInt(row, "Number", out int itemId)) continue;
+            if (!row.TryGetProperty("Obtained From", out GameValue cell) || cell.ValueKind != JsonValueKind.String)
                 continue;
             string? text = cell.GetString();
             if (text is null || !text.Contains("Room(", StringComparison.Ordinal)) continue;
@@ -439,12 +439,11 @@ public sealed class ItemSourceIndex
         Dictionary<int, (string Name, List<int> Drops)> guaranteed = BuildGuaranteedDroppers();
         if (guaranteed.Count == 0) return;
 
-        JsonDocument? rooms = _cache.GetRawTable("Rooms");
+        GameTable? rooms = _cache.GetTable("Rooms");
         if (rooms is null) return;
 
-        foreach (JsonElement row in rooms.RootElement.EnumerateArray())
+        foreach (GameRow row in rooms.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryInt(row, "CMD", out int cmd) || cmd <= 0) continue;
             if (!TryInt(row, "Map Number", out int map) || !TryInt(row, "Room Number", out int room))
                 continue;
@@ -477,12 +476,11 @@ public sealed class ItemSourceIndex
     private Dictionary<int, (string Name, List<int> Drops)> BuildGuaranteedDroppers()
     {
         var byMonster = new Dictionary<int, (string, List<int>)>();
-        JsonDocument? doc = _cache.GetRawTable("Monsters");
+        GameTable? doc = _cache.GetTable("Monsters");
         if (doc is null) return byMonster;
 
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryInt(row, "Number", out int id) || id <= 0) continue;
 
             List<int>? drops = null;
@@ -495,7 +493,7 @@ public sealed class ItemSourceIndex
             }
             if (drops is null) continue;
 
-            string name = row.TryGetProperty("Name", out JsonElement nm)
+            string name = row.TryGetProperty("Name", out GameValue nm)
                           && nm.ValueKind == JsonValueKind.String
                 ? nm.GetString() ?? string.Empty
                 : string.Empty;
@@ -519,13 +517,12 @@ public sealed class ItemSourceIndex
                     giverMonsters.Add(g.Number);
         if (giverMonsters.Count == 0) return;
 
-        JsonDocument? doc = _cache.GetRawTable("Monsters");
+        GameTable? doc = _cache.GetTable("Monsters");
         if (doc is null) return;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryInt(row, "Number", out int num) || !giverMonsters.Contains(num)) continue;
-            if (!row.TryGetProperty("Summoned By", out JsonElement s)
+            if (!row.TryGetProperty("Summoned By", out GameValue s)
                 || s.ValueKind != JsonValueKind.String)
                 continue;
             if (MonsterDropIndex.ParseSummonedByRooms(s.GetString()) is { } rooms)
@@ -711,14 +708,13 @@ public sealed class ItemSourceIndex
     private Dictionary<int, string> BuildNameMap(string table)
     {
         var map = new Dictionary<int, string>();
-        JsonDocument? doc = _cache.GetRawTable(table);
+        GameTable? doc = _cache.GetTable(table);
         if (doc is null) return map;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
-            if (!row.TryGetProperty("Number", out JsonElement n) || n.ValueKind != JsonValueKind.Number) continue;
+            if (!row.TryGetProperty("Number", out GameValue n) || n.ValueKind != JsonValueKind.Number) continue;
             if (!n.TryGetInt32(out int num) || num <= 0) continue;
-            if (row.TryGetProperty("Name", out JsonElement nm) && nm.ValueKind == JsonValueKind.String)
+            if (row.TryGetProperty("Name", out GameValue nm) && nm.ValueKind == JsonValueKind.String)
                 map[num] = nm.GetString() ?? string.Empty;
         }
         return map;
@@ -727,13 +723,12 @@ public sealed class ItemSourceIndex
     private Dictionary<(int Map, int Room), string> BuildRoomNameMap()
     {
         var map = new Dictionary<(int, int), string>();
-        JsonDocument? doc = _cache.GetRawTable("Rooms");
+        GameTable? doc = _cache.GetTable("Rooms");
         if (doc is null) return map;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryInt(row, "Map Number", out int m) || !TryInt(row, "Room Number", out int r)) continue;
-            if (row.TryGetProperty("Name", out JsonElement nm) && nm.ValueKind == JsonValueKind.String)
+            if (row.TryGetProperty("Name", out GameValue nm) && nm.ValueKind == JsonValueKind.String)
                 map[(m, r)] = nm.GetString() ?? string.Empty;
         }
         return map;
@@ -845,10 +840,10 @@ public sealed class ItemSourceIndex
             : 0;
     }
 
-    private static bool TryInt(JsonElement row, string property, out int value)
+    private static bool TryInt(GameRow row, string property, out int value)
     {
         value = 0;
-        return row.TryGetProperty(property, out JsonElement el)
+        return row.TryGetProperty(property, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out value);
     }

@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using MudPlay.Game.Spells;
 using MudPlay.Services;
@@ -25,6 +24,13 @@ public static class ItemUseTeleportResolver
     private const int TextBlockAbility = 148; // spell points at a TBInfo chain
     private const int AbilitySlots = 20;
 
+    // The slot column names, made once: every item row is asked for all twenty
+    // pairs, and building the names per read was most of a pass over the table.
+    private static readonly string[] s_abilNames =
+        Enumerable.Range(0, AbilitySlots).Select(i => $"Abil-{i}").ToArray();
+    private static readonly string[] s_abilValNames =
+        Enumerable.Range(0, AbilitySlots).Select(i => $"AbilVal-{i}").ToArray();
+
     // One item-use teleport: the item you carry + use (HolderItemId / Name), the
     // room-fixture item the teleport TBInfo gates on (GateItemId — the anchor the
     // caller resolves to a source room), the fixed destination, and any minlevel
@@ -33,22 +39,20 @@ public static class ItemUseTeleportResolver
         int HolderItemId, string HolderItemName, int GateItemId, RoomKey Destination, int MinLevel);
 
     public static IEnumerable<ItemUseTeleport> Enumerate(
-        JsonDocument itemsDoc, KnownSpellCatalog catalog, TBInfoStore store)
+        GameTable itemsDoc, KnownSpellCatalog catalog, TBInfoStore store)
     {
         ArgumentNullException.ThrowIfNull(itemsDoc);
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(store);
 
-        foreach (JsonElement row in itemsDoc.RootElement.EnumerateArray())
+        foreach (GameRow row in itemsDoc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
-            if (!MayCastASpell(row)) continue;
             if (!TryReadInt(row, "Number", out int itemNumber) || itemNumber <= 0) continue;
 
             for (int i = 0; i < AbilitySlots; i++)
             {
-                if (!TryReadInt(row, $"Abil-{i}", out int code) || code != CastsSpAbility) continue;
-                if (!TryReadInt(row, $"AbilVal-{i}", out int spellNumber) || spellNumber <= 0) continue;
+                if (!TryReadInt(row, s_abilNames[i], out int code) || code != CastsSpAbility) continue;
+                if (!TryReadInt(row, s_abilValNames[i], out int spellNumber) || spellNumber <= 0) continue;
                 if (catalog.GetFormulaByNumber(spellNumber) is not { } formula) continue;
 
                 foreach (SpellAbility ab in formula.Abilities)
@@ -89,33 +93,6 @@ public static class ItemUseTeleportResolver
         return false;
     }
 
-    // Whether the row's text could hold the casts-spell code as a column's value:
-    // a `43` written straight after a colon. An item row has some ninety columns
-    // and asking for a slot by name walks them all, twenty times over for the
-    // ability slots; one scan of the row's bytes settles the usual case, an item
-    // that casts nothing. It may say yes for a row that doesn't cast (the 43 is
-    // another column's, or sits inside a text), never no for one that does, and
-    // a row it lets through is still read slot by slot.
-    private static bool MayCastASpell(JsonElement row)
-    {
-        ReadOnlySpan<byte> text = JsonMarshal.GetRawUtf8Value(row);
-        ReadOnlySpan<byte> code = "43"u8;
-        for (int from = 0; from < text.Length;)
-        {
-            int at = text[from..].IndexOf(code);
-            if (at < 0) return false;
-            at += from;
-            from = at + 1;
-
-            int after = at + code.Length;
-            if (after < text.Length && text[after] is >= (byte)'0' and <= (byte)'9') continue;   // 430, 43x…
-            int before = at - 1;
-            while (before >= 0 && text[before] is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\r') before--;
-            if (before >= 0 && text[before] == (byte)':') return true;
-        }
-        return false;
-    }
-
     private static int FirstInt(string token)
     {
         foreach (string w in token.Split(' ', StringSplitOptions.RemoveEmptyEntries))
@@ -123,15 +100,15 @@ public static class ItemUseTeleportResolver
         return 0;
     }
 
-    private static bool TryReadInt(JsonElement row, string prop, out int value)
+    private static bool TryReadInt(GameRow row, string prop, out int value)
     {
         value = 0;
-        return row.TryGetProperty(prop, out JsonElement el)
+        return row.TryGetProperty(prop, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out value);
     }
 
-    private static string? TryReadString(JsonElement row, string prop)
-        => row.TryGetProperty(prop, out JsonElement el) && el.ValueKind == JsonValueKind.String
+    private static string? TryReadString(GameRow row, string prop)
+        => row.TryGetProperty(prop, out GameValue el) && el.ValueKind == JsonValueKind.String
             ? el.GetString() : null;
 }

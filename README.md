@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.177.0**
+> **Version 3.178.0**
 > - The client learns where a room's dead arrive from a death it sees, keeps it with the game-data set for every client on it, and shows it in the bug report
 > - One death stands for its land (the rooms walked to from it on its map); a room's own reading wins
 > - Two readings of one room: neither is used until one is seen again, and a reading in use gives way to another seen as often

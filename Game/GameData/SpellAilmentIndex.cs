@@ -63,13 +63,13 @@ public sealed class SpellAilmentIndex
     private static Dictionary<int, HashSet<string>> Build(GameDataCache cache)
     {
         var result = new Dictionary<int, HashSet<string>>();
-        JsonDocument? doc = cache.GetRawTable("Spells");
+        GameTable? doc = cache.GetTable("Spells");
         if (doc is null) return result;
 
         // number -> (own codes, EndCast targets) — one pass, then resolve chains.
         var codes = new Dictionary<int, HashSet<int>>();
         var endcasts = new Dictionary<int, List<int>>();
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             int num = ReadInt(row, "Number");
             if (num <= 0) continue;
@@ -125,8 +125,8 @@ public sealed class SpellAilmentIndex
         return tokens;
     }
 
-    private static int ReadInt(JsonElement row, string prop)
-        => row.TryGetProperty(prop, out JsonElement e)
+    private static int ReadInt(GameRow row, string prop)
+        => row.TryGetProperty(prop, out GameValue e)
            && e.ValueKind == JsonValueKind.Number
            && e.TryGetInt32(out int n) ? n : 0;
 }

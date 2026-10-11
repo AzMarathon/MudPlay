@@ -25,21 +25,20 @@ internal static class QuestDeathSpells
     private static IReadOnlyDictionary<int, IReadOnlyList<int>> Build(GameDataCache cache)
     {
         Dictionary<int, List<int>> bySpell = new();
-        JsonDocument? monsters = cache.GetRawTable("Monsters");
-        JsonDocument? spells = cache.GetRawTable("Spells");
+        GameTable? monsters = cache.GetTable("Monsters");
+        GameTable? spells = cache.GetTable("Spells");
         if (monsters is null || spells is null) return Publish(bySpell);
 
-        Dictionary<int, JsonElement> spellRows = new();
-        foreach (JsonElement row in spells.RootElement.EnumerateArray())
-            if (row.ValueKind == JsonValueKind.Object && Int(row, "Number") is int n and > 0)
+        Dictionary<int, GameRow> spellRows = new();
+        foreach (GameRow row in spells.Rows)
+            if (Int(row, "Number") is int n and > 0)
                 spellRows.TryAdd(n, row);
 
-        foreach (JsonElement row in monsters.RootElement.EnumerateArray())
+        foreach (GameRow row in monsters.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (Int(row, "Number") is not int monster || monster <= 0) continue;
             if (Int(row, "DeathSpell") is not int death || death <= 0) continue;
-            if (!spellRows.TryGetValue(death, out JsonElement deathRow)) continue;
+            if (!spellRows.TryGetValue(death, out GameRow deathRow)) continue;
             // A death spell that targets no one (0) or a user (8) never fires on death.
             if (Int(deathRow, "Targets") is null or 0 or 8) continue;
 
@@ -49,7 +48,7 @@ internal static class QuestDeathSpells
             while (pending.Count > 0 && seen.Count < MaxChain)
             {
                 int spell = pending.Dequeue();
-                if (!seen.Add(spell) || !spellRows.TryGetValue(spell, out JsonElement spellRow)) continue;
+                if (!seen.Add(spell) || !spellRows.TryGetValue(spell, out GameRow spellRow)) continue;
                 if (!bySpell.TryGetValue(spell, out List<int>? owners)) bySpell[spell] = owners = new List<int>();
                 if (!owners.Contains(monster)) owners.Add(monster);
 
@@ -67,8 +66,8 @@ internal static class QuestDeathSpells
     private static IReadOnlyDictionary<int, IReadOnlyList<int>> Publish(Dictionary<int, List<int>> bySpell)
         => bySpell.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<int>)kv.Value);
 
-    private static int? Int(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el)
+    private static int? Int(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el)
            && el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int value)
             ? value : null;
 }

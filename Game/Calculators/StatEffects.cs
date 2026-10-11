@@ -59,9 +59,8 @@ public readonly record struct StatContext(
                                       string? raceName, RealmType realm)
     {
         int minHits = 0, maxHits = 0, mageryType = 0, mageryLevel = 0, raceHp = 0, combatLvl = 0;
-        System.Text.Json.JsonElement? classRow = null, raceRow = null;
-        if (gameData.FindRowByName("Classes", className ?? string.Empty) is System.Text.Json.JsonElement cls
-            && cls.ValueKind == System.Text.Json.JsonValueKind.Object)
+        MudPlay.Services.GameRow? classRow = null, raceRow = null;
+        if (gameData.FindRowByName("Classes", className ?? string.Empty) is MudPlay.Services.GameRow cls)
         {
             classRow = cls;
             minHits = Int(cls, "MinHits");
@@ -70,8 +69,7 @@ public readonly record struct StatContext(
             mageryLevel = Int(cls, "MageryLVL");
             combatLvl = Int(cls, "CombatLVL");
         }
-        if (gameData.FindRowByName("Races", raceName ?? string.Empty) is System.Text.Json.JsonElement race
-            && race.ValueKind == System.Text.Json.JsonValueKind.Object)
+        if (gameData.FindRowByName("Races", raceName ?? string.Empty) is MudPlay.Services.GameRow race)
         {
             raceRow = race;
             raceHp = Int(race, "HPPerLVL");
@@ -83,8 +81,8 @@ public readonly record struct StatContext(
             thievery, traps, picklocks, tracking, combatLvl);
     }
 
-    private static int Int(System.Text.Json.JsonElement row, string property) =>
-        row.TryGetProperty(property, out System.Text.Json.JsonElement v)
+    private static int Int(MudPlay.Services.GameRow row, string property) =>
+        row.TryGetProperty(property, out MudPlay.Services.GameValue v)
         && v.ValueKind == System.Text.Json.JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
 }
 

@@ -1,6 +1,5 @@
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using MudPlay.Game.Map;
 using MudPlay.Game.Spells;
 using MudPlay.Services;
@@ -28,7 +27,7 @@ public sealed class ItemUseTeleportResolverTests : IDisposable
         catch { /* best-effort */ }
     }
 
-    private (JsonDocument Items, KnownSpellCatalog Catalog, TBInfoStore Store) NewSet(
+    private (GameTable Items, KnownSpellCatalog Catalog, TBInfoStore Store) NewSet(
         string itemsJson, string spellsJson, string tbinfoJson)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
@@ -39,7 +38,7 @@ public sealed class ItemUseTeleportResolverTests : IDisposable
         cache.SwitchSet("alpha");
         TBInfoStore store = new(cache);
         store.OnActiveSetChanged("alpha");
-        return (cache.GetRawTable("Items")!, new KnownSpellCatalog(cache), store);
+        return (cache.GetTable("Items")!, new KnownSpellCatalog(cache), store);
     }
 
     private const string PotionItems = """
@@ -57,7 +56,7 @@ public sealed class ItemUseTeleportResolverTests : IDisposable
     [Fact]
     public void ResolvesItemCastSpellTextblockTeleportChain()
     {
-        (JsonDocument items, KnownSpellCatalog catalog, TBInfoStore store) = NewSet(PotionItems, PotionSpells, PotionTbInfo);
+        (GameTable items, KnownSpellCatalog catalog, TBInfoStore store) = NewSet(PotionItems, PotionSpells, PotionTbInfo);
 
         ItemUseTeleportResolver.ItemUseTeleport t =
             Assert.Single(ItemUseTeleportResolver.Enumerate(items, catalog, store));
@@ -76,7 +75,7 @@ public sealed class ItemUseTeleportResolverTests : IDisposable
         const string items = """
             [ { "Number": 992, "Name": "plain rock", "Abil-0": 44, "AbilVal-0": 607 } ]
             """;
-        (JsonDocument doc, KnownSpellCatalog catalog, TBInfoStore store) = NewSet(items, PotionSpells, PotionTbInfo);
+        (GameTable doc, KnownSpellCatalog catalog, TBInfoStore store) = NewSet(items, PotionSpells, PotionTbInfo);
         Assert.Empty(ItemUseTeleportResolver.Enumerate(doc, catalog, store));
     }
 
@@ -87,14 +86,13 @@ public sealed class ItemUseTeleportResolverTests : IDisposable
         const string tb = """
             [ { "Number": 1421, "LinkTo": 0, "Action": "message 1835\n", "Called From": "Spell #607" } ]
             """;
-        (JsonDocument doc, KnownSpellCatalog catalog, TBInfoStore store) = NewSet(PotionItems, PotionSpells, tb);
+        (GameTable doc, KnownSpellCatalog catalog, TBInfoStore store) = NewSet(PotionItems, PotionSpells, tb);
         Assert.Empty(ItemUseTeleportResolver.Enumerate(doc, catalog, store));
     }
 
-    // Rows are sifted by their raw text before any slot is read, so a casting item
-    // has to be found however its row is spaced, and a 43 that isn't an ability
-    // slot's code (another column's value, part of a longer number, inside a text)
-    // must not make an item cast.
+    // A casting item is found however its row is spaced and whichever slot holds
+    // the code, and a 43 that isn't an ability slot's code (another column's value,
+    // part of a longer number, inside a text) must not make an item cast.
     [Theory]
     [InlineData("""{"Number":992,"Name":"potion","Abil-0":43,"AbilVal-0":607}""", true)]          // no spaces
     [InlineData("{ \"Number\": 992, \"Name\": \"potion\", \"Abil-3\" :\t43 , \"AbilVal-3\": 607 }", true)]   // tab after the colon
@@ -105,7 +103,7 @@ public sealed class ItemUseTeleportResolverTests : IDisposable
     [InlineData("""{ "Number": 992, "Name": "rock", "Abil-0": "43", "AbilVal-0": 607 }""", false)]   // a text, not a number
     public void CastingItemIsFound_HoweverTheRowIsWritten(string row, bool casts)
     {
-        (JsonDocument doc, KnownSpellCatalog catalog, TBInfoStore store) =
+        (GameTable doc, KnownSpellCatalog catalog, TBInfoStore store) =
             NewSet("[ " + row + " ]", PotionSpells, PotionTbInfo);
 
         Assert.Equal(casts ? 1 : 0, ItemUseTeleportResolver.Enumerate(doc, catalog, store).Count());
