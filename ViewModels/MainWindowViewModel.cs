@@ -2349,11 +2349,12 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // Rooms we've already prompted about this session, each with the realm and
-    // the game-data set it was seen on: a name is kept per realm and filed under
-    // its set, so the same room number is asked about again on another of either.
-    // Prevents asking the same yes/no twice when the player re-enters or the
-    // tracker re-observes the same null-name room.
-    private readonly HashSet<(string Realm, string Set, Game.Map.RoomKey Room)> _nameLearnedPrompted = new();
+    // the game-data set it was seen on, and the name last asked about: a name is
+    // kept per realm and filed under its set, so the same room number is asked
+    // about again on another of either, and again when the game prints another
+    // name for it (a board can rename such a room). Prevents asking the same
+    // yes/no twice when the player re-enters or the tracker re-observes the room.
+    private readonly Dictionary<(string Realm, string Set, Game.Map.RoomKey Room), string> _nameLearnedPrompted = new();
 
     private void OnRoomNameLearned(Game.Map.NameLearnedEvent e)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() => PromptForLearnedNameAsync(e));
@@ -2365,9 +2366,15 @@ public partial class MainWindowViewModel : ObservableObject
         // the map has the name for the session.
         if (AppServices.Current.ActiveRealmFolder() is not { } realm) return;
         if (AppServices.Current.RoomGraph.ActiveSet is not { Length: > 0 } set) return;
-        if (!_nameLearnedPrompted.Add((realm, set.ToUpperInvariant(), e.Key))) return;
+        (string, string, Game.Map.RoomKey) asked = (realm, set.ToUpperInvariant(), e.Key);
+        if (_nameLearnedPrompted.TryGetValue(asked, out string? last)
+            && string.Equals(last, e.ObservedName, StringComparison.Ordinal))
+            return;
+        _nameLearnedPrompted[asked] = e.ObservedName;
 
-        var vm = new ViewModels.RoomNameLearnedDialogViewModel(e.Key, e.ObservedName);
+        // The name on file for the room, when the game has printed another since.
+        string? keptBefore = AppServices.Current.LearnedRoomNames.NameFor(e.Key);
+        var vm = new ViewModels.RoomNameLearnedDialogViewModel(e.Key, e.ObservedName, keptBefore);
         bool keep = await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.RoomNameLearnedDialogViewModel, bool>(vm);
         if (!keep) return;

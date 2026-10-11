@@ -149,6 +149,8 @@ public sealed class RoomGraphManager
         Room replaced = Rename(existing, name);
         bool unnamedInData = _unnamedInData.Contains(key);
         if (unnamedInData) _learnedThisSession.Add(key);
+        // Learned over a stored name: the first one replaced is the one on file.
+        if (_namedFromStore.Contains(key)) _learnedOverStored.TryAdd(key, existing.Name);
 
         _log?.Log(LogSeverity.Info, "RoomGraph",
             $"Learned name '{name}' for {key} (was '{existing.Name}').");
@@ -185,6 +187,8 @@ public sealed class RoomGraphManager
             foreach (RoomKey key in withdrawn)
             {
                 _namedFromStore.Remove(key);
+                // The name it bears now was learned since: that one is the session's.
+                if (_learnedOverStored.Remove(key)) continue;
                 if (!_rooms.TryGetValue(key, out Room? room)) continue;
                 Rename(room, string.Empty);
                 moved = true;
@@ -200,6 +204,15 @@ public sealed class RoomGraphManager
             {
                 (namedByData ??= new()).Add(key);
                 continue;
+            }
+            // The game has printed another name for the room since this one was
+            // stored, and the tracker took it: the stored one is the older word
+            // and is not put back over it. A store that holds something else by
+            // now (the new name kept, or another client's) is newer and stands.
+            if (_learnedOverStored.TryGetValue(key, out string? replaced))
+            {
+                if (string.Equals(replaced, name, StringComparison.Ordinal)) continue;
+                _learnedOverStored.Remove(key);
             }
             if (!string.Equals(room.Name, name, StringComparison.Ordinal))
             {
@@ -231,6 +244,7 @@ public sealed class RoomGraphManager
             moved = true;
         }
         _learnedThisSession.Clear();
+        _learnedOverStored.Clear();
         if (moved) LearnedNamesMoved(tellKeptLists: true);
     }
 
@@ -271,6 +285,16 @@ public sealed class RoomGraphManager
     // Of those, the ones LearnRoomName named since the graph was built or the
     // realm last changed.
     private readonly HashSet<RoomKey> _learnedThisSession = new();
+
+    // Rooms whose stored name the tracker has learned another name over, with the
+    // stored name it replaced. A board's name for such a room can change, so the
+    // name printed now outranks the one on file until the store holds another.
+    private readonly Dictionary<RoomKey, string> _learnedOverStored = new();
+
+    // Whether the imported data gives this room no name, whatever it is called on
+    // the map by now. Such a room's name is the board's to give and to change, so
+    // the tracker does not hold the name it has for one against what is printed.
+    public bool IsUnnamedInData(RoomKey key) => _unnamedInData.Contains(key);
 
     private Room Rename(Room existing, string name)
     {
@@ -847,6 +871,7 @@ public sealed class RoomGraphManager
         _unnamedInData.Clear();
         _namedFromStore.Clear();
         _learnedThisSession.Clear();
+        _learnedOverStored.Clear();
         _learnedNames = NoLearnedNames;
         _byName.Clear();
         _byNameAndExits.Clear();

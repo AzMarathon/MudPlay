@@ -117,6 +117,11 @@ public sealed class LearnedRoomNameStore
     // (nothing is kept then).
     public string? RealmFolder => _realmFolder;
 
+    // The name on file for a room of the set in use, or null: what a name the
+    // game prints now would replace.
+    public string? NameFor(RoomKey room) =>
+        HeldForActiveSet() is { } held && held.TryGetValue(room, out string? name) ? name : null;
+
     // RoomGraphManager.GraphReloaded: the map was built afresh from the data and
     // bears no learned name.
     public void OnGraphReloaded()

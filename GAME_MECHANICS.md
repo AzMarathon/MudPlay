@@ -4859,6 +4859,22 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 **Client use:**
 - The room-name detector anchors on **position**: `RoomDisplayParser` keeps the nearest bright-cyan line to the exits, not the first in the block.
 
+### Rooms the data leaves unnamed
+*Status: mixed; tags on each bullet · Realm: both (counts differ)*
+
+- **Some rooms have no name in the imported Rooms table** *([OBSERVED] 2026-10-11, game-data lookup, `Rooms.json` `Name` null)*:
+  - Stock (`data-v1.11p`): 140 rooms, 134 on map 15 and 6 on map 1. Eighteen of the map 15 rooms each host a `Gang Shop #<n>` (`Shops` rows numbered between 125 and 145, `ShopType` 11).
+  - Paradigm (`data-Paradigm-1.9.1`): 16 rooms, 10 on map 5 and 6 on map 1.
+  - The name such a room prints is not in the data. Which of these rooms are gang-house rooms, beyond the map 15 ones with a gang shop, is not recorded.
+- **A gang's house name can change whenever the sysop edits it, and the change typically only shows after a cleanup has run** *([CONFIRMED] 2026-10-11, user)*. So the name printed for such a room on one day is not proof of what it prints on another. When exactly a change shows, other than "typically after a cleanup", is not recorded.
+- **The printed name is the same for every character on the realm** *([CONFIRMED] 2026-10-11, user)*. It does not depend on who is looking.
+- **Client policy** (user, 2026-10-11: "learned room names are per realm on a BBS"; "we shouldnt be writing in the game data file"): a name learned for such a room is kept per realm of a BBS, filed under the game-data set whose room numbers it goes by, and the game data files are never written. A name seen on one realm is not put on the map of another.
+
+**Client use:**
+- `RoomTracker` adopts a predicted neighbour that has no name when the display's exits are all exits of that room, and takes the printed name (`MatchesPredictedNameless`, `TryMatchNullNameNeighbour`; `NameLearned` asks the user whether to keep it). Because the name can change, the same holds for a room the data leaves unnamed that already bears a learned name, when the display has another (`MatchesPredictedRenamed`, `TryRelearnRenamedRoom`): the room is adopted on its exits, the new name replaces the old on the map, and the user is asked again. Never for a room the data names.
+- `RoomGraphManager` notes which rooms the data left unnamed when the graph is built (`IsUnnamedInData`), renames one in place with its name indexes (`LearnRoomName`, `ApplyStoredNames`), takes the session's learned names off on a change of realm (`WithdrawLearnedNames`), and does not put a stored name back over one learned since (`_learnedOverStored`).
+- `LearnedRoomNameStore` keeps the names in the realm's folder (`AppPaths.RealmLearnedRoomNamesFile`) and puts them on the map each time it is built and each time the realm changes. `RoomNameIndex.NameOf` gives the learned name to the lists that label rooms from the Rooms table.
+
 ### Sneaking — commands, equip order, and the sneak state machine
 *Status: commands OBSERVED (the client issues these) · equip-before-sneak CONFIRMED · sneak lines OBSERVED (parsed by the client)*
 

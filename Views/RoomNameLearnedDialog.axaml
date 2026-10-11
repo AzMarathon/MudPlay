@@ -36,7 +36,7 @@
 
         <Grid Grid.Row="1"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto"
+              RowDefinitions="Auto,Auto,Auto"
               RowSpacing="8" Margin="0,0,0,16">
             <TextBlock Grid.Row="0" Grid.Column="0"
                        Classes="Label" Text="{Binding DataNameLabel}"/>
@@ -44,8 +44,15 @@
                        Classes="Value NullValue" Text="{Binding DataNameValue}"/>
 
             <TextBlock Grid.Row="1" Grid.Column="0"
-                       Classes="Label" Text="{Binding ObservedNameLabel}"/>
+                       Classes="Label" Text="{Binding KeptBeforeLabel}"
+                       IsVisible="{Binding HasKeptBefore}"/>
             <TextBlock Grid.Row="1" Grid.Column="1"
+                       Classes="Value" Text="{Binding KeptBeforeValue}"
+                       IsVisible="{Binding HasKeptBefore}"/>
+
+            <TextBlock Grid.Row="2" Grid.Column="0"
+                       Classes="Label" Text="{Binding ObservedNameLabel}"/>
+            <TextBlock Grid.Row="2" Grid.Column="1"
                        Classes="Value" Text="{Binding ObservedNameValue}"/>
         </Grid>
 

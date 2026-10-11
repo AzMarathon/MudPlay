@@ -812,4 +812,265 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_root, "BBS", "gone")));
         Assert.True(client.Unnamed(House));
     }
+
+    // ----- the board gives such a room another name (the owner, 2026-10-11: "a
+    //       gang's house name can change whenever the sysop edits it") ------
+
+    private const string Renamed = "Shop Red House Room";
+
+    // A session in which the house is on the map under its stored name.
+    private Client WithHouseStored(bool cellarToo = false)
+    {
+        Client first = Start(_realmA);
+        first.See(House, HouseName);
+        Assert.True(first.Keep(House, HouseName));
+        if (cellarToo)
+        {
+            first.See(Cellar, CellarName);
+            Assert.True(first.Keep(Cellar, CellarName));
+        }
+        _log.Clear();
+        Client client = Start(_realmA);
+        Assert.Equal(HouseName, client.NameOf(House));
+        return client;
+    }
+
+    private static RoomTracker TrackerAt(Client client, RoomKey room, List<NameLearnedEvent> asked)
+    {
+        RoomTracker tracker = new(client.Graph);
+        tracker.NameLearned += asked.Add;
+        tracker.SetLocated(room);
+        return tracker;
+    }
+
+    private static void Step(RoomTracker tracker, Direction step, string printed, params Direction[] exits)
+    {
+        tracker.NoteMoveSent(step);
+        tracker.NoteRoomObserved(new RoomObservation(printed, new HashSet<Direction>(exits)));
+    }
+
+    [Fact]
+    public void ARoomUnderAStoredName_PrintingAnother_IsAdoptedOnItsExits_AndTheNewNameAskedAbout()
+    {
+        Client client = WithHouseStored();
+        List<NameLearnedEvent> asked = new();
+        RoomTracker tracker = TrackerAt(client, Street, asked);
+
+        Step(tracker, Direction.S, Renamed, Direction.N, Direction.D, Direction.U);
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(House, tracker.State.CurrentRoom!.Key);
+        Assert.Equal(new[] { new NameLearnedEvent(House, Renamed) }, asked);
+        Assert.Equal(Renamed, client.NameOf(House));
+        Assert.Equal(new[] { House }, client.Graph.FindCandidates(Renamed, HouseExits));
+        Assert.Equal(new[] { House }, client.Graph.FindByName(Renamed).Select(r => r.Key));
+        Assert.Empty(client.Graph.FindCandidates(HouseName, HouseExits));
+        Assert.Empty(client.Graph.FindByName(HouseName));
+        // What Save would replace is still on file.
+        Assert.Equal(HouseName, client.Store.NameFor(House));
+
+        // On into a room with no name at all: that one is learned too, where a
+        // tracker left unsure in the house could not.
+        Step(tracker, Direction.D, CellarName, Direction.U);
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(Cellar, tracker.State.CurrentRoom!.Key);
+        Assert.Equal(new NameLearnedEvent(Cellar, CellarName), asked[^1]);
+    }
+
+    // Save: the new name replaces the stored one for the room on this realm and set.
+    [Fact]
+    public void KeepingTheNewName_ReplacesTheStoredOne()
+    {
+        Client client = WithHouseStored();
+        Step(TrackerAt(client, Street, new()), Direction.S, Renamed, Direction.N, Direction.D, Direction.U);
+
+        Assert.True(client.Keep(House, Renamed));
+
+        string file = File.ReadAllText(NamesFile(_realmA));
+        Assert.Contains(Renamed, file);
+        Assert.DoesNotContain(HouseName, file);
+        Assert.Equal((1, 1), (client.Store.CountForActiveSet, client.Store.OnRoomMap));
+        Assert.Equal(Renamed, Start(_realmA).NameOf(House));
+    }
+
+    // Skip: the new name is the map's for the session, whatever the store does
+    // meanwhile, and the old one stays on file, so the next session asks again.
+    // Only a store that holds something newer puts another name on the room.
+    [Fact]
+    public void SkippingTheNewName_LeavesItOnTheMapForTheSession_AndTheOldOneOnFile()
+    {
+        Client client = WithHouseStored();
+        Step(TrackerAt(client, Street, new()), Direction.S, Renamed, Direction.N, Direction.D, Direction.U);
+
+        client.Store.OnRealmChanged();
+        client.Store.TakeInOutsideChanges();
+        client.See(Cellar, CellarName);
+        Assert.True(client.Keep(Cellar, CellarName));
+
+        Assert.Equal(Renamed, client.NameOf(House));
+        Assert.Equal(HouseName, client.Store.NameFor(House));
+        Assert.Contains(HouseName, File.ReadAllText(NamesFile(_realmA)));
+
+        // Another client keeps a name for the room: newer than the one replaced.
+        Client other = Start(_realmA);
+        other.See(House, "Shop Blue House Room");
+        Assert.True(other.Keep(House, "Shop Blue House Room"));
+        File.SetLastWriteTimeUtc(NamesFile(_realmA), DateTime.UtcNow.AddSeconds(5));
+        Assert.True(client.Store.TakeInOutsideChanges());
+        Assert.Equal("Shop Blue House Room", client.NameOf(House));
+    }
+
+    [Fact]
+    public void TheNextSessionAfterASkip_AsksAgain()
+    {
+        Client client = WithHouseStored();
+        Step(TrackerAt(client, Street, new()), Direction.S, Renamed, Direction.N, Direction.D, Direction.U);
+
+        Client next = Start(_realmA);
+        Assert.Equal(HouseName, next.NameOf(House));
+        List<NameLearnedEvent> asked = new();
+        Step(TrackerAt(next, Street, asked), Direction.S, Renamed, Direction.N, Direction.D, Direction.U);
+        Assert.Equal(new[] { new NameLearnedEvent(House, Renamed) }, asked);
+    }
+
+    // The same for a name learned this session and never saved.
+    [Fact]
+    public void ARoomUnderANameLearnedThisSession_PrintingAnother_IsRelearned()
+    {
+        Client client = Start(_realmA);
+        List<NameLearnedEvent> asked = new();
+        Step(TrackerAt(client, Street, asked), Direction.S, HouseName, Direction.N, Direction.D, Direction.U);
+        Assert.Equal(HouseName, client.NameOf(House));
+
+        RoomTracker tracker = TrackerAt(client, Street, asked);
+        Step(tracker, Direction.S, Renamed, Direction.N, Direction.D, Direction.U);
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(House, tracker.State.CurrentRoom!.Key);
+        Assert.Equal(new[] { new NameLearnedEvent(House, HouseName), new NameLearnedEvent(House, Renamed) }, asked);
+        Assert.Equal(Renamed, client.NameOf(House));
+        Assert.True(client.Keep(House, Renamed));
+        string file = File.ReadAllText(NamesFile(_realmA));
+        Assert.Contains(Renamed, file);
+        Assert.DoesNotContain(HouseName, file);
+    }
+
+    // Coming back into the game standing in the room, its name changed since: no
+    // move is in flight, and it is the room we stand in that is renamed.
+    [Fact]
+    public void TheRoomWeStandIn_PrintingAnotherName_IsRelearnedInPlace()
+    {
+        Client client = WithHouseStored();
+        List<NameLearnedEvent> asked = new();
+        RoomTracker tracker = TrackerAt(client, House, asked);
+
+        tracker.NoteRoomObserved(new RoomObservation(Renamed, HouseExits));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(House, tracker.State.CurrentRoom!.Key);
+        Assert.Equal(Renamed, tracker.State.CurrentRoom.Name);
+        Assert.Equal(new[] { new NameLearnedEvent(House, Renamed) }, asked);
+        Assert.True(client.Unnamed(Cellar));
+        Assert.True(client.Unnamed(Attic));
+    }
+
+    // With no move in flight and standing next to it: the one neighbour that fits.
+    [Fact]
+    public void ANeighbourUnderAStoredName_PrintingAnother_IsAdoptedWithNoMoveInFlight()
+    {
+        Client client = WithHouseStored();
+        List<NameLearnedEvent> asked = new();
+        RoomTracker tracker = TrackerAt(client, Street, asked);
+
+        tracker.NoteRoomObserved(new RoomObservation(Renamed, HouseExits));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(House, tracker.State.CurrentRoom!.Key);
+        Assert.Equal(new[] { new NameLearnedEvent(House, Renamed) }, asked);
+    }
+
+    // The exits are the only evidence, as for a room with no name: a display
+    // with an exit the room doesn't have is not the room.
+    [Fact]
+    public void ADisplayWhoseExitsAreNotTheRooms_RelearnsNothing()
+    {
+        Client client = WithHouseStored();
+        List<NameLearnedEvent> asked = new();
+        RoomTracker tracker = TrackerAt(client, Street, asked);
+
+        Step(tracker, Direction.S, Renamed, Direction.N, Direction.E);
+
+        Assert.Empty(asked);
+        Assert.Equal(HouseName, client.NameOf(House));
+        Assert.NotEqual(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Empty(client.Graph.FindByName(Renamed));
+    }
+
+    // A room the data names is held to that name: another printed there is a
+    // mismatch, as it always was.
+    [Fact]
+    public void ARoomTheDataNames_PrintingAnotherName_IsNotRelearned()
+    {
+        SeedSet("alpha", houseName: "Data House");
+        Client client = Start(_realmA);
+        Assert.False(client.Graph.IsUnnamedInData(House));
+        Assert.True(client.Graph.IsUnnamedInData(Cellar));
+        List<NameLearnedEvent> asked = new();
+        RoomTracker tracker = TrackerAt(client, Street, asked);
+
+        Step(tracker, Direction.S, Renamed, Direction.N, Direction.D, Direction.U);
+
+        Assert.Empty(asked);
+        Assert.Equal("Data House", client.NameOf(House));
+        Assert.NotEqual(RoomConfidence.Confirmed, tracker.State.Confidence);
+
+        // Standing in it with no move in flight, likewise.
+        RoomTracker standing = TrackerAt(client, House, asked);
+        standing.NoteRoomObserved(new RoomObservation(Renamed, HouseExits));
+        Assert.Empty(asked);
+        Assert.Equal("Data House", client.NameOf(House));
+    }
+
+    // A redisplay of the room being left, while the step into such a room is
+    // still unanswered, is not the arrival: its exits can all be exits of the
+    // room ahead, and the room ahead must not take its name.
+    [Fact]
+    public void ARedisplayOfTheRoomBeingLeft_IsNotTakenForTheRenamedRoomAhead()
+    {
+        Client client = WithHouseStored(cellarToo: true);
+        List<NameLearnedEvent> asked = new();
+        RoomTracker tracker = TrackerAt(client, Cellar, asked);
+
+        Step(tracker, Direction.U, CellarName, Direction.U);
+
+        Assert.Empty(asked);
+        Assert.Equal(HouseName, client.NameOf(House));
+        Assert.Equal(Cellar, tracker.State.CurrentRoom!.Key);
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+
+        // The arrival, when it comes, is.
+        tracker.NoteRoomObserved(new RoomObservation(Renamed, HouseExits));
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(House, tracker.State.CurrentRoom!.Key);
+        Assert.Equal(new[] { new NameLearnedEvent(House, Renamed) }, asked);
+    }
+
+    // The prompt says what Save would replace, when there is a name on file.
+    [Fact]
+    public void ThePrompt_ShowsTheNameKeptBefore_WhenThereIsOne()
+    {
+        ViewModels.RoomNameLearnedDialogViewModel first = new(House, HouseName);
+        Assert.False(first.HasKeptBefore);
+        Assert.Equal("Save the name seen for room 15/861?", first.HeaderText);
+        Assert.Equal("(none)", first.DataNameValue);
+
+        ViewModels.RoomNameLearnedDialogViewModel again = new(House, Renamed, keptBefore: HouseName);
+        Assert.True(again.HasKeptBefore);
+        Assert.Equal((HouseName, Renamed), (again.KeptBeforeValue, again.ObservedNameValue));
+        Assert.Equal("(none)", again.DataNameValue);
+        Assert.Contains("replaces the name kept", again.WhereKeptText);
+
+        // The same name on file is nothing to replace.
+        Assert.False(new ViewModels.RoomNameLearnedDialogViewModel(House, HouseName, keptBefore: HouseName).HasKeptBefore);
+    }
 }

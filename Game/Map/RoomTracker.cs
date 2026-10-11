@@ -1766,6 +1766,19 @@ public sealed class RoomTracker
             return;
         }
 
+        // A room the data leaves unnamed, under another name than the one learned
+        // for it (the board gives such a room its name and can change it). Only
+        // for a display the map has no room for. No move is in flight here, so
+        // the room we stand in is tried before its neighbours: the usual case is
+        // coming back into the game in such a room after its name was changed.
+        if (current is not null && candidates.Count == 0
+            && TryRelearnRenamedRoom(current, observation, out Room? renamed))
+        {
+            ClearPendingAndSteps();
+            SetRoom(renamed, RoomConfidence.Confirmed, when, "room unnamed in the data, name re-learned");
+            return;
+        }
+
         // Same-named-area recovery — most commonly a client relaunch. Hydrate
         // seeds Confirmed at the persisted LastKnownRoom (the last KNOWN unique
         // room) and primes RecentSteps with the walk taken since. In an ambiguous
@@ -1992,23 +2005,43 @@ public sealed class RoomTracker
             // Without this branch a walk INTO a null-name ganghouse
             // room never resolves: MatchesPredicted fails on the null
             // name, candidate search returns 0, tracker bumps Suspect.
-            if (expected is not null
+            //
+            // The same holds for a neighbour the data leaves unnamed that bears a
+            // name learned earlier, when the display has another (GAME_MECHANICS
+            // "Rooms the data leaves unnamed": the board gives such a room its
+            // name and can change it). The learned name is then no evidence
+            // against having arrived, and the exits decide as they do for a room
+            // with no name. Two things a nameless room can't be mistaken for are
+            // ruled out first, since this can happen on every entry and not only
+            // the first: a redisplay of the room being left, and a display the
+            // map already has a room for.
+            bool nameless = expected is not null
                 && expected.HasUnknownName
-                && MatchesPredictedNameless(expected, observation)
+                && MatchesPredictedNameless(expected, observation);
+            bool renamed = !nameless
+                && expected is not null
+                && MatchesPredictedRenamed(expected, observation)
+                && !MatchesPredicted(source, observation)
+                && _graph.FindCandidates(observation.Name, observation.Exits).Count == 0;
+            if (expected is not null
+                && (nameless || renamed)
                 && !string.IsNullOrWhiteSpace(observation.Name))
             {
+                string bore = expected.Name;
                 Room? learned = _graph.LearnRoomName(expected.Key, observation.Name);
                 if (learned is not null)
                 {
-                    _log?.Log(LogSeverity.Info, "RoomTracker",
-                        $"Learned name '{observation.Name}' for {expected.Key} (pending-target null-name match).");
+                    _log?.Log(LogSeverity.Info, "RoomTracker", renamed
+                        ? $"Learned name '{observation.Name}' for {expected.Key} (pending target; it bore '{bore}', and the data gives it no name)."
+                        : $"Learned name '{observation.Name}' for {expected.Key} (pending-target null-name match).");
                     NameLearned?.Invoke(new NameLearnedEvent(expected.Key, observation.Name));
                     _pending.TryDequeue(out _);
                     State.SuspectStrikes = 0;
                     RoomConfidence target = _pending.IsEmpty
                         ? RoomConfidence.Confirmed
                         : RoomConfidence.Pending;
-                    SetRoom(learned, target, when, $"move {moveLabel} confirmed (null-name learned)");
+                    SetRoom(learned, target, when,
+                        $"move {moveLabel} confirmed ({(renamed ? "name re-learned" : "null-name learned")})");
                     ArmCastDisplayWait();
                     MoveConfirmed?.Invoke();
                     return;
@@ -2641,9 +2674,53 @@ public sealed class RoomTracker
     private static bool MatchesPredictedNameless(Room target, RoomObservation observation)
     {
         if (!target.HasUnknownName) return false;
+        return ObservedExitsAreOf(target, observation);
+    }
+
+    private static bool ObservedExitsAreOf(Room target, RoomObservation observation)
+    {
         uint observedMask = 0;
         foreach (Direction d in observation.Exits) observedMask |= 1u << (int)d;
         return (observedMask & target.ExitMask) == observedMask;
+    }
+
+    // The nameless match for a room the data leaves unnamed that bears a learned
+    // name: the display has another name, and its exits are the room's. Never
+    // true of a room the data names; the name the data gives is held to.
+    private bool MatchesPredictedRenamed(Room target, RoomObservation observation) =>
+        !target.HasUnknownName
+        && _graph.IsUnnamedInData(target.Key)
+        && !string.IsNullOrWhiteSpace(observation.Name)
+        && !string.Equals(target.Name, observation.Name, StringComparison.OrdinalIgnoreCase)
+        && ObservedExitsAreOf(target, observation);
+
+    // With no move in flight and a display the map has no room for: the room we
+    // stand in under another name, else the one neighbour that fits. Two
+    // neighbours that fit are ambiguous, as for nameless ones: nothing is learned.
+    private bool TryRelearnRenamedRoom(Room current, RoomObservation observation, out Room? learned)
+    {
+        learned = null;
+        Room? match = MatchesPredictedRenamed(current, observation) ? current : null;
+        if (match is null)
+        {
+            foreach ((Direction _, RoomExit exit) in current.Exits)
+            {
+                if (_graph.GetRoom(exit.Target) is not { } candidate) continue;
+                if (!MatchesPredictedRenamed(candidate, observation)) continue;
+                if (match is not null && match.Key != candidate.Key) return false;
+                match = candidate;
+            }
+        }
+        if (match is null) return false;
+
+        string bore = match.Name;
+        learned = _graph.LearnRoomName(match.Key, observation.Name);
+        if (learned is null) return false;
+
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            $"Learned name '{observation.Name}' for {match.Key} (it bore '{bore}', and the data gives it no name).");
+        NameLearned?.Invoke(new NameLearnedEvent(match.Key, observation.Name));
+        return true;
     }
 
     // Search the source room's cardinal neighbours for a null-name room whose
