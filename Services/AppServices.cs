@@ -623,6 +623,10 @@ public sealed class AppServices
 
     // The `i` a refused toll or fare asks for, kept owed while it can't be sent.
     public Game.Inventory.OwedPurseRead PurseRead { get; private set; } = null!;
+
+    // A leader's check at a toll exit: every follower's purse asked, the short
+    // ones paid for when we can spare it, the exit closed to the party otherwise.
+    public Game.Map.PartyTollGate PartyToll { get; private set; } = null!;
     public Game.Remote.PathReplyTracker PathReply { get; private set; } = null!;
     public Game.Remote.LeaderBossTravelProbe LeaderBossTravel { get; private set; } = null!;
 
@@ -7452,13 +7456,13 @@ public sealed class AppServices
         };
 
         // Party-wealth probe + tracker. Unlike level, wealth isn't kept warm —
-        // it drifts with loot / spend — so the tracker probes @wealth only when
-        // BFS actually evaluates a toll exit (MinWealth is the demand trigger),
-        // records each reply, and exposes the party's minimum wallet;
-        // MovementFilter reads that to route a following party around a toll a
-        // member can't afford. The probe forwards replies straight to the
-        // tracker (not the players table). Always on — a toll is per-crosser, so
-        // stranding a member at a gate is never wanted. The recordWealth closure
+        // it drifts with loot / spend — so @wealth is asked only when a walk's
+        // route crosses a paid exit (Probe, from MovementFilter.WarmForRoute) and
+        // at a toll itself (PartyTollGate, further down). The tracker records each
+        // reply and exposes the party's poorest known wallet, which
+        // MovementFilter reads to keep a following party off a fare a member can't
+        // pay; a toll is PartyTollGate's to judge. The probe forwards replies
+        // straight to the tracker (not the players table). The recordWealth closure
         // reads the PartyWealth property lazily, so the construction order is fine.
         PartyWealthProbe = new Game.Remote.PartyWealthProbe(
             PartyBroadcaster, Chat, PartyState,
@@ -8921,6 +8925,59 @@ public sealed class AppServices
         Walker.Event += e =>
         {
             if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;
+        };
+
+        // A party at a toll exit (user, 2026-10-10): every follower's purse is
+        // asked before the leader's engine steps through, whoever is short or
+        // silent is handed the coin when we can spare it, and otherwise the exit
+        // is closed to the party, so the route goes round or the walk ends saying
+        // why. What we spare leaves our own toll and a trip's reserved fees alone.
+        PartyToll = new Game.Map.PartyTollGate(
+            PartyWealth,
+            ownPurse: () => Inventory.IsLoaded ? Inventory.Snapshot.Currency.TotalCopperValue : (long?)null,
+            reservedCopper: () => Movement.ReservedCopper,
+            holdings: () => Inventory.IsLoaded ? Inventory.Snapshot.Currency : null,
+            runicName: () => Currency.RunicName,
+            send: cmd => SendGameCommand(cmd),
+            assertGate: reason => MovementCoordinator.AssertGate(
+                Game.Map.MovementCoordinator.PartyTollGate, nameof(PartyToll), reason),
+            clearGate: reason => MovementCoordinator.ClearGate(
+                Game.Map.MovementCoordinator.PartyTollGate, nameof(PartyToll), reason),
+            schedule: uiOneShot,
+            roomName: key => RoomGraph.GetRoom(key)?.Name,
+            log: Log)
+        {
+            MasterSwitchOff = MasterSwitchOff("Party polls"),
+            // Read when asked: the comeback manager is built further down.
+            WentBackFor = (given, from, to) => PartyComeback.WentBackFor(given, from, to),
+            KnownLeftBehind = () => PartyComeback.KnownLeftBehind(),
+        };
+        Movement.PartyTollClosedProbe = exit => PartyToll.Closes(in exit);
+        Movement.PartyTollClosedReason = exit => PartyToll.DescribeClosed(in exit);
+        Walker.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
+        LoopRunner.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
+        Inventory.CoinsGivenAway += (recipient, copper) => PartyToll.OnCoinsGivenAway(recipient, copper);
+        Inventory.GiveRefused += recipient => PartyToll.OnGiveRefused(recipient);
+        Inventory.CoinGiveMisaimed += () => PartyToll.OnCoinGiveMisaimed();
+        // A member paid for at a toll has spent it once the room beyond is confirmed.
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.PreviousRoom is { } left && t.NewRoom is { } now && left.Key != now.Key)
+                PartyToll.NoteRoomChanged(left, now.Key);
+        };
+        Profile.ProfileLoaded += _ => PartyToll.Reset();
+        // A toll closed to the party stays closed for the trip it was closed on.
+        MovementControl.StateChanged += () =>
+        {
+            if (MovementControl.IsIdle) PartyToll.NoteTripEnded();
+        };
+        // The purses asked for as a route was planned are in: a toll further on
+        // that the party can't be taken through is turned from now, not at its gate.
+        PartyWealth.RoundSettled += () =>
+        {
+            PartyToll.RefreshLeftBehind();
+            Walker.ReplanIfATollAheadIsClosed();
+            LoopRunner.ReplanIfATollAheadIsClosed();
         };
 
         // A held or knocked-down character can't walk and isn't dragged by a leader,

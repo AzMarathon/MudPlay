@@ -305,21 +305,27 @@ public sealed class LoopUnpaidCrossingTests : IDisposable
         Assert.Equal(LoopState.Idle, rig.Runner.State);
     }
 
-    // Leading a party, our own purse plenty and a follower's fresh reading short:
-    // that is the party rules' to judge, and is not what this refusal is for. The
-    // loop gets no toll refusal (and, with no leg left, the plain failure).
+    // Leading a party, our own purse plenty and the party-toll check's verdict that
+    // not everyone gets through (a follower short, and more than we can spare):
+    // with no way round, the loop is refused for the toll, naming who can't pay
+    // (user, 2026-10-10). Until that ruling a follower's short purse left the loop
+    // with no toll refusal and the plain "no leg" failure.
     [Fact]
-    public void ALoop_OverATollOnlyAFollowerCantPay_IsNotRefusedForTheToll()
+    public void ALoop_OverATollThePartyCantAllPay_IsRefusedNamingWho()
     {
         Rig rig = NewRig(TollPurseDoubtTests.TollTheOnlyWayJson, Plenty);
-        rig.Filter!.PartyWealthProvider = () => 50;
+        rig.Filter!.PartyTollClosedProbe = _ => true;
+        rig.Filter.PartyTollClosedReason = _ => "Bob holds 0 copper, 5 gold short";
         rig.Tracker.SetLocated(Bailey);
 
-        Assert.Null(rig.Runner.RefusalFor(LoopOf(Bailey, Road)));
+        const string refusal =
+            "loop 'toll': no way from 1/2 to 1/3 without a toll east from 1/2 (Bailey) (5 gold) "
+            + "the party can't all pay: Bob holds 0 copper, 5 gold short";
+        Assert.Equal(refusal, rig.Runner.RefusalFor(LoopOf(Bailey, Road)));
         Assert.False(rig.Runner.Start(LoopOf(Bailey, Road)));
 
-        Assert.Equal("loop 'toll' has no leg that can be walked: no route from 1/2 to 1/3", rig.Failure);
-        Assert.Empty(rig.Unpaid);
+        Assert.Equal(refusal, rig.Failure);
+        Assert.Equal(new[] { refusal }, rig.Unpaid);
     }
 
     // The coin ran out part-way round, and the record knows it: with nothing reading

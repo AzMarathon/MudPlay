@@ -690,11 +690,11 @@ public sealed class MovementFilterTests
     public void PartyWealth_TakesPrecedence_OverSelfWealth()
     {
         (_, MovementFilter filter) = NewPair();
-        // We can afford the toll, but the party's poorest member can't —
-        // route around so we don't strand them at the gate.
+        // We can afford the toll, but the party can't all get through it (the
+        // party-toll check's verdict) — route around so nobody is left at the gate.
         filter.WealthProvider = () => 1000;
-        filter.PartyWealthProvider = () => 100;
-        Assert.True(filter.IsExitBlocked(TollExit(5)));   // need 500, party min 100
+        filter.PartyTollClosedProbe = _ => true;
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
     }
 
     [Fact]
@@ -710,7 +710,10 @@ public sealed class MovementFilterTests
     {
         (_, MovementFilter filter) = NewPair();
         filter.PartyWealthProvider = () => 499;
-        Assert.True(filter.IsExitBlocked(TollExit(5)));   // one short of 500
+        Assert.True(filter.IsExitBlocked(FareExit(500)));  // a fare: one short of 500
+        // A toll isn't judged on the poorest known purse: the party-toll check asks
+        // everyone at the toll and pays for whoever is short (user, 2026-10-10).
+        Assert.False(filter.IsExitBlocked(TollExit(5)));
     }
 
     [Fact]
@@ -970,13 +973,14 @@ public sealed class MovementFilterTests
         WithGraph(TollStripJson, bfs =>
         {
             (_, MovementFilter filter) = NewPair();
-            filter.PartyWealthProvider = () => 100;   // party can't cover 500
+            filter.PartyWealthProvider = () => 100;   // leading, so the warm runs
+            filter.WealthProvider = () => 100;        // we can't cover 500
             filter.WealthWarmProbe = () => { };
 
             filter.WarmForRoute(bfs, new RoomKey(1, 1), new RoomKey(1, 3));
 
-            // The suspend flag is cleared in the finally: a toll the party
-            // can't afford still blocks after warming.
+            // The suspend flag is cleared in the finally: a toll we can't
+            // afford still blocks after warming.
             Assert.True(filter.IsExitBlocked(TollExit(5)));
         });
     }

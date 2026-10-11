@@ -1617,6 +1617,11 @@ public static class BugReportBuilder
         // character couldn't pay turns on what the client took the purse to be.
         Kv(sb, "Purse for tolls and fares", svc.Movement.DescribePurse()
             + (svc.PurseRead.Owed ? "; its re-read is owed and not yet sent (master switch off, or the send gate held)" : string.Empty));
+        // A party at a toll: what the leader's check decided there (asked, paid for
+        // whom, gone round or stopped for whom) and the purses it last judged on.
+        Kv(sb, "Party toll decisions", svc.PartyToll.Decisions is { Count: > 0 } tollDecisions
+            ? string.Join(" | ", tollDecisions) : "(none)");
+        Kv(sb, "Party toll, purses last judged on", svc.PartyToll.LastReadings);
         // Whether the Auto-All kill switch is the one holding navigation — it
         // suspends an in-flight nav on engage and resumes it on restore.
         Kv(sb, "Auto-All suspended nav", svc.MovementControl.IsAutoAllSuspended.ToString());

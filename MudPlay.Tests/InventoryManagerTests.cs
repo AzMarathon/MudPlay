@@ -1741,6 +1741,55 @@ public sealed class InventoryManagerTests
         Assert.Equal(20, h.Inv.Snapshot.Currency.Gold);
     }
 
+    // A coin hand-over of ours names who got it and what it was worth, in both
+    // wordings: what a give that waits to be confirmed is confirmed by. Coins handed
+    // to us raise nothing.
+    [Theory]
+    [InlineData("You gave Bob 3 gold", "Bob", 300)]
+    [InlineData("You gave Bob 3 gold crowns", "Bob", 300)]
+    [InlineData("You gave Bob 0 gold", "Bob", 0)]
+    [InlineData("You give 3 gold crowns to Bob", "Bob", 300)]
+    [InlineData("You give 1 platinum piece to Bob", "Bob", 10_000)]
+    // A fifth coin under a board's own name is worth what a runic is.
+    [InlineData("You give 2 mithril coins to Bob", "Bob", 2_000_000)]
+    [InlineData("You gave Bob 2 mithril", "Bob", 2_000_000)]
+    public void GiveAway_Coins_SaysWhoGotThemAndWhatTheyWereWorth(string line, string recipient, long copper)
+    {
+        using Harness h = new();
+        h.Feed("You are carrying lantern, 30 gold crowns, 2 platinum pieces.");
+        h.Feed("Wealth:    23000 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+        List<(string Recipient, long Copper)> given = new();
+        h.Inv.CoinsGivenAway += (to, worth) => given.Add((to, worth));
+
+        h.Feed("Bob gave you 5 gold");
+        Assert.Empty(given);
+        h.Feed(line);
+
+        Assert.Equal(new[] { (recipient, copper) }, given);
+    }
+
+    // The Stock engine's answer to a coin give at nobody it can find for us: told
+    // apart from the refusals that name the player, and moving nothing.
+    [Fact]
+    public void GiveAway_Coins_TheLineForNobodyHereToGiveTo_IsRaised_AndMovesNothing()
+    {
+        using Harness h = new();
+        h.Feed("You are carrying lantern, 30 gold crowns.");
+        h.Feed("Wealth:    3000 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+        int misaimed = 0;
+        bool refused = false;
+        h.Inv.CoinGiveMisaimed += () => misaimed++;
+        h.Inv.GiveRefused += _ => refused = true;
+
+        h.Feed("Why would you want to give to that?");
+
+        Assert.Equal(1, misaimed);
+        Assert.False(refused);
+        Assert.Equal(30, h.Inv.Snapshot.Currency.Gold);
+    }
+
     // The count-then-words shape with more than one unknown word names no coin.
     [Fact]
     public void Receive_Coins_IgnoresALineThatNamesNoCoin()
