@@ -1022,11 +1022,10 @@ Everything else a party member sends needs its box, like anyone else's. In parti
 
 In the reply tables of the command topics, a row that begins **Refusal:** is sent only while that setting is on. Every other row is sent whatever it is set to. The usual refusal, "the sender doesn't hold the permission", gets the Failure message.
 
-**Three kinds of answer are not refusals,** and are sent with the setting off too:
+**Two kinds of answer are not refusals,** and are sent with the setting off too:
 
 - **A result,** however empty: `no one` from `@who`, `nothing on the ground here` from `@what`, `expired` from `@timer`, `no record of …` from `@roomba`.
 - **An answer another MudPlay client is waiting on.** A follower's client reads its leader's answers to `@comeback` to know whether to give the follow up, keep waiting, or expect the leader; a walk reads the result of the `@trap` it asked for; a leader's stash transfer waits on each member's `@get-stash` and `@deposit-all` answer; its route planning counts a member's `wealth unknown` or `level unknown` as an answer. Silenced, the asking client would sit out its whole wait for an answer that was never coming. Each topic says which of its answers these are.
-- **`Can't invite - I'm mortally wounded…`** (and the `@join` twin): a helper is always told why.
 
 **Some commands answer later, not at once:**
 
@@ -1542,9 +1541,9 @@ Two rewrites are made before sending. `@party meditate` sends `medi`. `@party go
 | Reply | When |
 |---|---|
 | nothing | The `invite` or `join` was sent to the game. |
-| `Can't invite - I'm mortally wounded; being dragged by <name>.` | `@invite`, and you are down. Sent whatever the Warn setting says: a helper is always told why. |
-| `Can't invite - I'm mortally wounded; nobody is dragging me.` | The same, when nobody is dragging you. |
-| `Can't join - I'm mortally wounded; being dragged by <name>.` (or `…; nobody is dragging me.`) | `@join`, and you are down. Sent whatever the Warn setting says. |
+| `Can't invite - I'm mortally wounded; being dragged by <name>.` | **Refusal:** `@invite`, and you are down. |
+| `Can't invite - I'm mortally wounded; nobody is dragging me.` | **Refusal:** the same, when nobody is dragging you. |
+| `Can't join - I'm mortally wounded; being dragged by <name>.` (or `…; nobody is dragging me.`) | **Refusal:** `@join`, and you are down. |
 | `My party is full: <name>, <name> are following me.` | **Refusal:** `@invite`, and your roster already holds six. |
 | `I'm following <leader>; denied.` | **Refusal:** you are following someone. |
 | `I'm following someone; denied.` | **Refusal:** the same, when the leader's name isn't known. |

@@ -620,18 +620,16 @@ public sealed class PartyEssentialHandlers : IDisposable
     // rejects the join/invite command outright ("You may not do that while you
     // are mortally wounded!"). Reply with the reason, and who (if anyone) is
     // dragging our downed body, so the partymate understands why and whether help
-    // is already underway instead of watching the command bounce. Fires
-    // regardless of WarnOnDenial: this is party-coordination info for a member
-    // trying to help, not a security-sensitive denial to a stranger. It is the one
-    // refusal a person reads that the Warn setting doesn't silence, and a test
-    // pins it so. Returns true when it handled (blocked) the command.
+    // is already underway instead of watching the command bounce. A refusal like
+    // any other: the Warn setting silences it (user, 2026-10-10). Returns true
+    // when it handled (blocked) the command.
     private bool RejectIfMortallyWounded(RemoteCommandContext ctx, string verb)
     {
         if (!_player.IsMortallyWounded) return false;
         string drag = _readDraggedBy?.Invoke() is { Length: > 0 } who
             ? $"being dragged by {who}"
             : "nobody is dragging me";
-        ctx.Reply($"Can't {verb} - I'm mortally wounded; {drag}.");
+        ctx.Refuse($"Can't {verb} - I'm mortally wounded; {drag}.");
         return true;
     }
 
