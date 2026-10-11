@@ -181,7 +181,7 @@ public sealed class AreaRankingFiles
         try
         {
             if (!File.Exists(path)) return default;
-            file = JsonStore.Load<RankingFile>(path, Form);
+            file = JsonStore.LoadStream<RankingFile>(path, Form);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
                                        or JsonException or NotSupportedException)
@@ -326,7 +326,7 @@ public sealed class AreaRankingFiles
     {
         try
         {
-            if (JsonStore.Load<RankingFile>(path, Form) is not { } file) { TryDelete(path); return; }
+            if (JsonStore.LoadStream<RankingFile>(path, Form) is not { } file) { TryDelete(path); return; }
             file.Character = character;
             JsonStore.Save(path, file, Form);
         }

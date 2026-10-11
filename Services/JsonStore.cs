@@ -27,21 +27,47 @@ internal static class JsonStore
     // Read and deserialize T from path. Returns null if the file does not
     // exist. Throws with the file path in the message if the JSON is
     // malformed — corrupt configuration is loud, not silent.
-    public static T? Load<T>(string path) where T : class => Load<T>(path, Options);
-
-    // As Load, in another form than the shared one: a large file the program alone
-    // reads is kept compact, not laid out for a hand edit.
-    public static T? Load<T>(string path, JsonSerializerOptions options) where T : class
+    public static T? Load<T>(string path) where T : class
     {
         if (ReadWithRetry(path) is not { } json) return null;
         try
         {
-            return JsonSerializer.Deserialize<T>(json, options);
+            return JsonSerializer.Deserialize<T>(json, Options);
         }
         catch (JsonException ex)
         {
             throw new InvalidDataException(
                 $"Failed to parse {typeof(T).Name} from '{path}': {ex.Message}", ex);
+        }
+    }
+
+    // As Load, for a large file the program alone reads: in the form it was written
+    // in (compact, not laid out for a hand edit), and read from the file as a
+    // stream. Load holds the whole text as a string, which for a file of megabytes
+    // is that many characters twice over before a single object exists.
+    public static T? LoadStream<T>(string path, JsonSerializerOptions options) where T : class
+    {
+        const int attempts = 20;
+        for (int i = 1; ; i++)
+        {
+            if (!File.Exists(path)) return null;
+            try
+            {
+                using FileStream file = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                    bufferSize: 64 * 1024, FileOptions.SequentialScan);
+                return JsonSerializer.Deserialize<T>(file, options);
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidDataException(
+                    $"Failed to parse {typeof(T).Name} from '{path}': {ex.Message}", ex);
+            }
+            // The same brief wait for another client's replace of the file that
+            // ReadWithRetry gives.
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && i < attempts)
+            {
+                Thread.Sleep(Math.Min(i, 10) * 3);
+            }
         }
     }
 
