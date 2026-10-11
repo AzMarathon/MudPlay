@@ -219,6 +219,7 @@ public sealed class EventManager : IDisposable
         if (idx < 0) return false;
         Events[idx] = updated;
         _autoDisabled.Remove(original);
+        _lastSwitch.Remove(original);
         ReconcileTargets();
         _profile?.Save();
         return true;
@@ -230,8 +231,102 @@ public sealed class EventManager : IDisposable
         ArgumentNullException.ThrowIfNull(e);
         if (!Events.Remove(e)) return false;
         _autoDisabled.Remove(e);
+        _lastSwitch.Remove(e);
         _profile?.Save();
         return true;
+    }
+
+    // ----- One event switched on or off, without opening it for edit ------------
+    //
+    // What the remote @event command does. The state is the same Disabled flag the
+    // edit window's "Disabled" box sets, saved with the character at once.
+
+    public enum SwitchResult { SwitchedOn, SwitchedOff, AlreadyOn, AlreadyOff, TargetMissing }
+
+    // "Disable all events" (Settings → Events) is ticked: nothing fires, whatever
+    // each event's own state says.
+    public bool AllDisabled => _profile?.Current?.EventsGloballyDisabled == true;
+
+    // That event is the one whose run is under way.
+    public bool IsRunning(ScheduledEvent e) => _run is { } run && ReferenceEquals(run.Event, e);
+
+    // For the bug report: who last switched that event by remote command, which
+    // way and when, this session. Null when nobody has.
+    public string? LastSwitch(ScheduledEvent e) => _lastSwitch.GetValueOrDefault(e);
+
+    private readonly Dictionary<ScheduledEvent, string> _lastSwitch = new();
+
+    // The events a typed name stands for, by the rule the remote @loop commands
+    // use for a loop's name (LoopManager.FindByName): a name that equals it wins
+    // outright; otherwise every event whose name holds every typed word, in any
+    // order; and once more without apostrophes, which typed chat drops. One result
+    // is a match, several an ambiguity for the caller to report, none a miss. An
+    // event with no name can't be named.
+    //
+    // The three steps are written out here and not shared with LoopManager: loops
+    // are keyed by name, one to a name, and events are a list that may hold two of
+    // a name, so the exact step differs. The word match itself is the shared one.
+    public IReadOnlyList<ScheduledEvent> FindByName(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return Array.Empty<ScheduledEvent>();
+        string typed = query.Trim();
+        ScheduledEvent[] found = Events
+            .Where(e => string.Equals(e.Name?.Trim(), typed, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (found.Length > 0) return found;
+        found = Events.Where(e => RoomSearchService.NameMatchesTokens(e.Name, typed)).ToArray();
+        if (found.Length > 0) return found;
+        string bare = typed.Replace("'", "");
+        return Events.Where(e => RoomSearchService.NameMatchesTokens(e.Name?.Replace("'", ""), bare)).ToArray();
+    }
+
+    // Switch one event on or off for `by` (who asked, for the log and the bug
+    // report). Takes effect at once: the list raises a Replace for the event, which
+    // is what restarts the scheduler's timers and redraws an open Events tab, as
+    // saving it from the edit window does.
+    //
+    // Switched off, the event fires no more and a firing of it still waiting in
+    // the queue is dropped when its turn comes; a run of it already under way goes
+    // on to its end, as it does when the event is edited mid-run. An event whose
+    // saved loop or Auto-Lair setup is gone is not switched on: it could not run,
+    // and the reconciler would only switch it off again.
+    public SwitchResult SetEnabled(ScheduledEvent e, bool enabled, string by)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        int index = Events.IndexOf(e);
+        if (index < 0) throw new ArgumentException("The event is not one of this character's.", nameof(e));
+        if (enabled != e.Disabled) return enabled ? SwitchResult.AlreadyOn : SwitchResult.AlreadyOff;
+        if (enabled && MissingTarget(e) is { } missing)
+        {
+            _log?.Info("Events", $"Event '{Label(e)}' not switched on for {by}: {missing}.");
+            return SwitchResult.TargetMissing;
+        }
+
+        e.Disabled = !enabled;
+        _autoDisabled.Remove(e);
+        _lastSwitch[e] = $"switched {(enabled ? "on" : "off")} by {by} at {Now().ToLocalTime():HH:mm:ss}";
+        Events[index] = e;
+        _profile?.Save();
+        _log?.Info("Events",
+            $"Event '{Label(e)}' switched {(enabled ? "on" : "off")} by {by}"
+            + (!enabled && IsRunning(e) ? "; its run under way goes on to its end" : "")
+            + (enabled && AllDisabled ? "; \"Disable all events\" is on, so it won't fire yet" : "")
+            + ".");
+        return enabled ? SwitchResult.SwitchedOn : SwitchResult.SwitchedOff;
+    }
+
+    // Why that event can't run as it is saved: the loop or Auto-Lair setup its
+    // action names is no longer in the catalogue. Null when nothing is missing.
+    public string? MissingTarget(ScheduledEvent e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        return e.ActionType switch
+        {
+            EventActionType.Loop when !string.IsNullOrEmpty(e.LoopName) && FindLoop(e.LoopName) is null
+                => $"referenced loop '{e.LoopName}' was deleted or renamed",
+            EventActionType.AutoLair when !string.IsNullOrEmpty(e.AutoLairSetupName) && FindSetup(e.AutoLairSetupName) is null
+                => $"referenced auto-lair setup '{e.AutoLairSetupName}' was deleted or renamed",
+            _ => null,
+        };
     }
 
     // ----- Run hooks ---------------------------------------------------
@@ -1755,26 +1850,9 @@ public sealed class EventManager : IDisposable
         bool anyChanged = false;
         foreach (ScheduledEvent e in Events)
         {
-            if (e.Disabled) continue;
-            switch (e.ActionType)
-            {
-                case EventActionType.Loop:
-                    if (FindLoop(e.LoopName) is null && !string.IsNullOrEmpty(e.LoopName))
-                    {
-                        AutoDisableInternal(e,
-                            $"referenced loop '{e.LoopName}' was deleted or renamed");
-                        anyChanged = true;
-                    }
-                    break;
-                case EventActionType.AutoLair:
-                    if (FindSetup(e.AutoLairSetupName) is null && !string.IsNullOrEmpty(e.AutoLairSetupName))
-                    {
-                        AutoDisableInternal(e,
-                            $"referenced auto-lair setup '{e.AutoLairSetupName}' was deleted or renamed");
-                        anyChanged = true;
-                    }
-                    break;
-            }
+            if (e.Disabled || MissingTarget(e) is not { } missing) continue;
+            AutoDisableInternal(e, missing);
+            anyChanged = true;
         }
         if (anyChanged)
         {
@@ -1837,6 +1915,7 @@ public sealed class EventManager : IDisposable
         LastThenSummary = "(none)";
         Events.Clear();
         _autoDisabled.Clear();
+        _lastSwitch.Clear();
         bool converted = p.Events is not null && ConvertToThen(p.Events);
         if (p.Events is not null)
             foreach (ScheduledEvent e in p.Events) Events.Add(e);
@@ -1876,6 +1955,7 @@ public sealed class EventManager : IDisposable
         LastThenSummary = "(none)";
         Events.Clear();
         _autoDisabled.Clear();
+        _lastSwitch.Clear();
     }
 
     private void SnapshotForSave(CharacterProfile p)

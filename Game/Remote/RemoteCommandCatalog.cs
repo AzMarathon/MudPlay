@@ -171,6 +171,11 @@ public static class RemoteCommandCatalog
             ["@settings"]     = PlayerRemoteControls.AlterSettings,
             ["@reset"]        = PlayerRemoteControls.AlterSettings,
             ["@profile"]      = PlayerRemoteControls.AlterSettings,   // swap the active casting spell profile
+            // The character's Events (Settings → Events): listed, and one switched
+            // on or off. Reading how the client is set up needs the same grant as
+            // changing it, as @settings and a bare @profile do.
+            ["@events"]       = PlayerRemoteControls.AlterSettings,
+            ["@event"]        = PlayerRemoteControls.AlterSettings,
             ["@divert"]       = PlayerRemoteControls.DivertConversations,
             ["@hangup"]       = PlayerRemoteControls.HangupDisconnect,
             ["@relog"]        = PlayerRemoteControls.HangupDisconnect,
@@ -290,6 +295,8 @@ public static class RemoteCommandCatalog
             ["@settings"]     = new("@settings", "reports every engine's on/off state"),
             ["@reset"]        = new("@reset", "zeroes your Session Stats counters"),
             ["@profile"]      = new("@profile [n|name]", "swaps your active combat profile; bare reports the roster"),
+            ["@events"]       = new("@events", "lists your Events (Settings > Events) by name, each on or off; 'target missing' marks one switched off because its loop or Auto-Lair setup is gone"),
+            ["@event"]        = new("@event <name> [on|off]", "one of your Events: bare says whether it is on and what kind it is; on/off (or enable/disable) switches it. The name may be its words in any order"),
             ["@divert"]       = new("@divert [player]", "forwards your incoming telepaths to another player; bare stops"),
             ["@hangup"]       = new("@hangup", "drops your connection and stays down (no auto-reconnect)"),
             ["@relog"]        = new("@relog", "cleanly exits, then reconnects and auto-logs back in"),

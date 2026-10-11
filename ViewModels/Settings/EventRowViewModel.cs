@@ -20,7 +20,15 @@ public sealed partial class EventRowViewModel : ObservableObject
         _isAutoDisabled = isAutoDisabled;
     }
 
-    [ObservableProperty] private bool _isAutoDisabled;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsOffBadge))]
+    private bool _isAutoDisabled;
+
+    // The "off" badge: the event is disabled by the user's own choice (its edit
+    // window, or a remote @event). One the reconciler switched off shows the
+    // target-missing badge in its place. The row is rebuilt whenever the event's
+    // state is switched, so this is read once per row.
+    public bool ShowsOffBadge => IsDisabled && !IsAutoDisabled;
 
     // Countdown to this event's next scheduled fire, refreshed on a ticker by
     // the section VM (EventScheduler owns the real due-time; the row just

@@ -179,7 +179,10 @@ public sealed class InventoryQueryHandler : IDisposable
     // comma-joined chunk within PackBudget so a big pack doesn't overrun the game's
     // say-input limit. A single chunk reads "<label>: a, b, c"; a split list labels
     // each part "<label> (i/N): ..." so the reader knows it's continued.
-    private static void ReplyChunked(RemoteCommandContext ctx, string label, IReadOnlyList<string> items)
+    //
+    // Shared with the other handlers that answer with a list of any length
+    // (EventRemoteHandler), so a long list reads the same whoever sends it.
+    internal static void ReplyChunked(RemoteCommandContext ctx, string label, IReadOnlyList<string> items)
     {
         List<string> chunks = ChunkJoined(items, PackBudget);
         if (chunks.Count == 1) { ctx.Reply($"{label}: {chunks[0]}"); return; }

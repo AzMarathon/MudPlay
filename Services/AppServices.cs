@@ -728,6 +728,10 @@ public sealed class AppServices
     // @profile — swap the active casting spell profile (AlterSettings-gated).
     public Game.Remote.ProfileSwapHandler ProfileSwap { get; private set; } = null!;
 
+    // @events / @event — list the character's Events and switch one on or off
+    // (AlterSettings-gated).
+    public Game.Remote.EventRemoteHandler EventRemote { get; private set; } = null!;
+
     // Consumer of RemoteCommands for @suicide.
     // Authorised callers (Elevated-Commands permission, lives above
     // the suicide threshold) trigger the suicide round-trip; on
@@ -10110,6 +10114,9 @@ public sealed class AppServices
         // loading, reaches those too, or a run would start or go on with the
         // settings the copy was made with. Hooked up here, once every holder exists.
         Loops.SettingsChanged += name => Loops.CopySettingsTo(LoopsHeldApartFromTheCatalogue(), name);
+
+        // @events / @event: the events seen and switched by a trusted player.
+        EventRemote = new Game.Remote.EventRemoteHandler(RemoteCommands, Events, Log);
 
         // EventScheduler. Owns the AtTime ticker +
         // per-event Every-timers + connection-aware Logon / Re-log

@@ -898,6 +898,9 @@ public static class BugReportBuilder
                 sb.Append(" · next ").Append(next.ToString("MM-dd HH:mm:ss"));
             if (e.TriggerType == Models.GameData.EventTriggerType.State)
                 sb.Append(" · holds now: ").Append(Game.Events.EventConditionEvaluator.AllHold(e.Conditions, now));
+            // A remote @event switched it this session: who, which way, when.
+            if (svc.Events.LastSwitch(e) is { } switched)
+                sb.Append(" · ").Append(switched);
             sb.Append("\n  `").Append(System.Text.Json.JsonSerializer.Serialize(e, EventDumpJson)).Append("`\n");
         }
         sb.Append('\n');
