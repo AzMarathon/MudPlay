@@ -15,8 +15,9 @@ namespace MudPlay.Services;
 // well-formed is still read without loss or complaint, as the parsed document was:
 // a top level that is not an array gives a table with no rows, an array element
 // that is not an object gives a row with no fields, and a field holding a nested
-// object or array keeps that value's exact JSON text. Malformed JSON throws
-// JsonException, which the cache reports as an unreadable table.
+// object or array keeps that value's exact JSON text. Malformed JSON, or text that
+// is not valid Unicode, throws JsonException, which the cache reports as an
+// unreadable table.
 internal static class GameTableReader
 {
     // Larger than any field the importer writes; a longer token grows it.
@@ -42,7 +43,17 @@ internal static class GameTableReader
                 }
 
                 Utf8JsonReader reader = new(block.AsSpan(0, filled), final, state);
-                while (reader.Read()) builder.Token(ref reader, before);
+                try
+                {
+                    while (reader.Read()) builder.Token(ref reader, before);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    // A name or an escaped text that is not valid Unicode (half a
+                    // surrogate pair, a broken UTF-8 sequence): the file is as
+                    // unreadable as one with broken syntax.
+                    throw new JsonException("The table holds text that is not valid Unicode.", ex);
+                }
                 if (final) break;
 
                 state = reader.CurrentState;

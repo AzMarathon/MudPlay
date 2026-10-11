@@ -144,6 +144,16 @@ public sealed class GameTableTests
         Assert.ThrowsAny<JsonException>(() => JsonDocument.Parse(json).Dispose());
     }
 
+    // Half a surrogate pair is well-formed JSON that no string can hold: the table is
+    // refused whole, where the parsed document failed only when that field was read.
+    [Theory]
+    [InlineData("""[{"Name":"\ud800"}]""")]
+    [InlineData("""[{"\udc00":1}]""")]
+    public void Text_that_is_not_valid_unicode_is_refused(string json)
+    {
+        Assert.ThrowsAny<JsonException>(() => TestRows.Table(json));
+    }
+
     // The reader works a block of the file at a time: rows, texts and numbers that
     // straddle a block, and one text longer than a block.
     [Fact]
