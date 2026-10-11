@@ -19,7 +19,10 @@ namespace MudPlay.ViewModels.Navigation;
 // (Check against my play), and ranks every reachable hunting area at a level. It
 // lives with the Navigation window rather than the estimator session, since only
 // the sketch route needs estimator mode. A route, simulation setting, character or
-// game-data change drops a result as stale and cancels a run still in flight.
+// game-data change drops a result as stale and cancels a run still in flight. A
+// finished ranking is kept for the game data and character it was made on
+// (AreaRankingStore) and listed again when both are back; nothing made on one game
+// data is listed, picked or saved under another.
 public sealed partial class SimulatorViewModel : ObservableObject
 {
     private readonly RouteExpResolver _resolver;
@@ -41,19 +44,29 @@ public sealed partial class SimulatorViewModel : ObservableObject
     // the check (which reads saved loops, not the chosen route) running.
     private CancellationTokenSource? _checkCancel;
     private CancellationTokenSource? _rankCts;
+    private readonly AreaRankingStore _rankings;
+    // The loaded character as results are kept under (SimulatorOwner.CharacterKey),
+    // read when it is needed: a profile comes to be known by another name without
+    // being loaded again, and the name told at the last load would then be stale.
+    private readonly Func<string?> _character;
+    // The game data and character the results on show were made on.
+    private SimulatorOwner _owner;
 
     // showOnMap loads a ranked tour into the estimator's sketch and returns null, or
     // returns why it couldn't.
     public SimulatorViewModel(
         RouteExpResolver resolver, LoopManager loops, GameDataCache gameData, IRoomFilter? filter,
         SimulationSource? simulation, LogService? log,
-        Func<ExpEstimatorSessionViewModel?> sketch, Func<IReadOnlyList<RoomKey>, string, string?> showOnMap)
+        Func<ExpEstimatorSessionViewModel?> sketch, Func<IReadOnlyList<RoomKey>, string, string?> showOnMap,
+        AreaRankingStore rankings, Func<string?> character)
     {
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(loops);
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(sketch);
         ArgumentNullException.ThrowIfNull(showOnMap);
+        ArgumentNullException.ThrowIfNull(rankings);
+        ArgumentNullException.ThrowIfNull(character);
         _resolver = resolver;
         _loops = loops;
         _gameData = gameData;
@@ -62,8 +75,108 @@ public sealed partial class SimulatorViewModel : ObservableObject
         _log = log;
         _sketch = sketch;
         _showOnMap = showOnMap;
+        _rankings = rankings;
+        _character = character;
+        _owner = new SimulatorOwner(gameData.ActiveSet, character());
         RefreshRoutes();
+        // The store outlives the Navigation window this lives with, so a ranking made
+        // before the window was last closed is listed again.
+        ShowRanking(_rankings.Get(_owner), kept: true);
     }
+
+    // ----- Whose results these are ---------
+
+    // The active game-data set changed. Under another set every room number here
+    // means another room, so nothing of the set left behind stays: the result and
+    // live check, a run in flight, the ranking and its picked row, and the
+    // estimator's sketch, which is that set's rooms on the map and a route this
+    // window offers. The new set's ranking for this character is listed if one was
+    // made.
+    //
+    // The same name again is the set read in afresh (a re-import, the set picked
+    // again, record overrides synced in): its tables may differ, so the ranking
+    // listed was made on tables that are gone and is taken off, while the sketch,
+    // still that set's rooms, stays. The store drops what it kept for the set by
+    // itself (AreaRankingStore.NoteActiveSet), told by the app and not from here,
+    // since no Simulator need be open when a set is read in again.
+    //
+    // The character is read with the set. A profile load changes both, the set
+    // first: taken one at a time, the pairing in between (the new set with the
+    // character just left) would be listed and logged though nobody is ever it.
+    public void GameDataChanged(string? set)
+    {
+        bool readAgain = string.Equals(set, _owner.Set, StringComparison.OrdinalIgnoreCase);
+        if (!readAgain && _sketch() is { HasClicks: true } sketch) sketch.Clear();
+        ChangeOwner(new SimulatorOwner(set, _character()));
+        if (readAgain) ShowRanking(null);
+    }
+
+    // Another character was loaded, or the loaded one closed: a result is one
+    // character's stats and gear, so the ranking listed is that character's own for
+    // the active game data, or none.
+    public void CharacterChanged() => ChangeOwner(_owner with { Character = _character() });
+
+    // The loaded character goes by another name (renamed, moved to another BBS, the
+    // default profile given a name). It is the same character, so what is listed
+    // stays; the name its results are kept under moves, as the store has moved what
+    // it kept (AreaRankingStore.RenameCharacter). A ranking still running was
+    // started under the old name and is cancelled, not kept under a name that is no
+    // longer this character's.
+    public void CharacterRenamed()
+    {
+        SimulatorOwner renamed = _owner with { Character = _character() };
+        if (renamed == _owner) return;
+        if (IsRanking)
+        {
+            _rankCts?.Cancel();
+            RankStatus = "Ranking cancelled: the character was renamed. Rank again.";
+        }
+        _owner = renamed;
+    }
+
+    private void ChangeOwner(SimulatorOwner owner)
+    {
+        // A profile load that leaves the pairing as it was (the same character read
+        // again) still stops a run and drops the result, as it always has.
+        _rankCts?.Cancel();
+        ClearSimulation(alsoCheck: true);
+        if (owner == _owner) return;
+        // Each line says only what happened, since a profile swap passes through "no
+        // character" on its way to the next one.
+        if (Rankings.Count > 0)
+            _log?.Info("Simulator", $"the area ranking for {_owner.Label} is off the list: it is {owner.Label} now");
+        _owner = owner;
+        AreaRanking? own = _rankings.Get(owner);
+        ShowRanking(own, kept: true);
+        if (own is not null)
+            _log?.Info("Simulator", $"listing the area ranking kept for {owner.Label}, made at L{own.Level} ({own.Rows.Count} options)");
+    }
+
+    // List a ranking (null: none). No row is picked: picking one puts its tour on
+    // the map as the estimator's sketch, which a switch must not do by itself.
+    //
+    // kept: it comes from those kept, not from a ranking that has just finished. It
+    // then says when it was made and at what level, and is marked when the character
+    // has changed level since (user, 2026-10-11): it is listed as what it is, a
+    // ranking of the character as it was.
+    private void ShowRanking(AreaRanking? ranking, bool kept = false)
+    {
+        SelectedRanking = null;
+        _shown = ranking;
+        Rankings.Clear();
+        if (ranking is not null)
+            foreach (AreaRank r in ranking.Rows) Rankings.Add(r);
+        OnPropertyChanged(nameof(HasRankings));
+        int levelNow = _simulation?.Level() ?? 0;
+        RankingNotCurrent = kept && ranking is not null && !ranking.IsCurrentAt(levelNow);
+        RankStatus = ranking is null ? ""
+            : kept ? $"{ranking.KeptNote(levelNow, DateTimeOffset.Now)} {ranking.Summary}"
+            : ranking.Summary;
+    }
+
+    // The ranking listed was made at another level of the character than it is at
+    // now: the table is shown muted.
+    [ObservableProperty] private bool _rankingNotCurrent;
 
     public string RealmLabel => _gameData.ActiveRealm == RealmType.ParaMud ? "Paradigm" : "Stock";
 
@@ -292,6 +405,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
             _checkCancel?.Cancel();
             CheckRows.Clear();
             CheckStatus = "";
+            CheckNote = "";
             OnPropertyChanged(nameof(HasCheckRows));
         }
         SimulateCommand.NotifyCanExecuteChanged();
@@ -423,11 +537,9 @@ public sealed partial class SimulatorViewModel : ObservableObject
     public ObservableCollection<SimStat> RankStats { get; } = new();
     public bool HasRankings => Rankings.Count > 0;
     public bool HasRankDetail => RankStats.Count > 0;
-    // The settings the shown ranking ran with — its detail and a loop saved from it
-    // quote these, not settings the user has changed since.
-    private RankRun? _rankRun;
-
-    private sealed record RankRun(double Step, double Hours, int Runs, RoomKey From, string Realm, string? Set);
+    // The ranking listed, with the settings it ran with — a picked row's detail and a
+    // loop saved from it quote these, not settings the user has changed since.
+    private AreaRanking? _shown;
 
     // Every hunting area's lair tour (AreaTours, grouped by the Monsters' Region /
     // Area labels) played by the character at RankLevel, safe areas first by
@@ -436,13 +548,14 @@ public sealed partial class SimulatorViewModel : ObservableObject
     // rendering through comes before each piece of that work (the reach search, each
     // area grouping, each tour search, each lap resolve, area and saved loop alike);
     // then the areas simulate in parallel on workers. CancelRanking (the Cancel
-    // button, the window's teardown, a profile swap or a room-graph reload) stops it
-    // at the next yield or between simulations.
+    // button, the window's teardown, a room-graph reload) or a change of game data
+    // or character stops it at the next yield or between simulations.
     [RelayCommand(CanExecute = nameof(CanRunCheck))]
     private async Task RankAreasAsync()
     {
         if (_simulation is null || _filter is null) return;
-        int level = RankLevel > 0 ? RankLevel : _simulation.Level();
+        int ownLevel = _simulation.Level();
+        int level = RankLevel > 0 ? RankLevel : ownLevel;
         if (_simulation.Build(level) is not { } setup)
         {
             RankStatus = "No character yet — log in and type `stat` first.";
@@ -453,16 +566,18 @@ public sealed partial class SimulatorViewModel : ObservableObject
             RankStatus = "MudPlay doesn't know which room you're in yet — step into a room so it can tell which areas you can reach.";
             return;
         }
-        string? set = _loops.SetName;
+        // Whose ranking this is, for as long as it runs: a switch of game data or
+        // character cancels it, and by the time it finds that out the list on show is
+        // another pairing's.
+        SimulatorOwner owner = _owner;
         using var cts = new CancellationTokenSource();
         _rankCts = cts;
         CancellationToken cancel = cts.Token;
         IsSimulating = true;
         IsRanking = true;
-        Rankings.Clear();
-        OnPropertyChanged(nameof(HasRankings));
-        ClearRankDetail();
-        _rankRun = null;
+        // Ranking again replaces the pairing's ranking from here on, as the list does.
+        _rankings.Forget(owner);
+        ShowRanking(null);
         try
         {
             // Only what the character could reach from here at that level: level gates
@@ -519,6 +634,8 @@ public sealed partial class SimulatorViewModel : ObservableObject
             IReadOnlyList<LiveLoopRecord> live = string.IsNullOrWhiteSpace(character)
                 ? Array.Empty<LiveLoopRecord>()
                 : await Task.Run(() => LiveLoopSessions.Pool(LiveLoopSessions.ReadFolder(logs), character!, CheckMinHours), cancel);
+            // The read may have finished just before a cancel that came with a switch.
+            cancel.ThrowIfCancellationRequested();
 
             double step = Math.Max(0.1, SimWalkSeconds), hours = Math.Clamp(SimHours, 0.1, 24);
             int runs = Math.Clamp(SimRuns, 1, 20);
@@ -545,34 +662,33 @@ public sealed partial class SimulatorViewModel : ObservableObject
                     return rank;
                 })
                 .ToList(), cancel));
+            // The last simulation may have finished just before a cancel: after a
+            // switch these rows are not the pairing's now on show, and after the set
+            // was read in again they were made on tables that are gone.
+            cancel.ThrowIfCancellationRequested();
 
-            _rankRun = new RankRun(step, hours, runs, here, RealmLabel, set);
-            foreach (AreaRank r in ranked) Rankings.Add(r);
-            OnPropertyChanged(nameof(HasRankings));
             int safe = ranked.Count(r => r.Safe);
             string skipped = (skippedAreas > 0 ? $"; {skippedAreas} area(s) skipped (one lair or no walkable lap)" : "")
                 + (skippedLoops > 0 ? $"; {skippedLoops} of your loops skipped (no walkable lap)" : "");
-            RankStatus = $"L{level} from {here.Map}/{here.Room}: {safe} safe option(s) (areas and your loops), best first; {ranked.Count - safe} where you died listed last"
+            string summary = $"L{level} from {here.Map}/{here.Room}: {safe} safe option(s) (areas and your loops), best first; {ranked.Count - safe} where you died listed last"
                 + (gatedAreas > 0 ? $"; {gatedAreas} area(s) you can't reach at L{level} left out" : "") + skipped
                 + ". Pick one to see its route and details, show it on the map, and save it as a loop to run.";
-            _log?.Info("Simulator", $"ranked {ranked.Count} options at L{level} ({gatedAreas} areas unreachable, " +
+            ListFinishedRanking(owner, new AreaRanking(
+                ranked, level, step, hours, runs, here, RealmLabel, summary, DateTimeOffset.Now, ownLevel));
+            _log?.Info("Simulator", $"ranked {ranked.Count} options at L{level} for {owner.Label} ({gatedAreas} areas unreachable, " +
                 $"{skippedAreas} areas and {skippedLoops} loops skipped): " +
                 string.Join(" | ", ranked.Take(10).Select(r => r.Label)));
         }
         catch (Exception ex) when (cancel.IsCancellationRequested && IsCancellation(ex))
         {
-            Rankings.Clear();
-            OnPropertyChanged(nameof(HasRankings));
-            RankStatus = "Ranking cancelled.";
-            _log?.Info("Simulator", $"area ranking at L{level} cancelled");
+            RankingStopped(owner, "Ranking cancelled.");
+            _log?.Info("Simulator", $"area ranking at L{level} for {owner.Label} cancelled");
         }
         catch (Exception ex)
         {
             // A ranking fault must never take the client down with it.
             _log?.Warn("Simulator", $"area ranking at L{level} failed: {ex.GetType().Name}: {ex.Message}");
-            Rankings.Clear();
-            OnPropertyChanged(nameof(HasRankings));
-            RankStatus = "Ranking failed — see the program log.";
+            RankingStopped(owner, "Ranking failed — see the program log.");
         }
         finally
         {
@@ -582,8 +698,30 @@ public sealed partial class SimulatorViewModel : ObservableObject
         }
     }
 
+    // A ranking finished for owner, the pairing it was started for: it is kept as
+    // that pairing's, and listed while that pairing is still the one on show. A
+    // switch cancels a ranking that is running, so one that finishes does so for
+    // the pairing on show; keying on its own owner is what makes that true of a
+    // ranking kept even should a path ever finish one late.
+    internal void ListFinishedRanking(SimulatorOwner owner, AreaRanking ranking)
+    {
+        if (_rankings.Keep(owner, ranking) is { } dropped)
+            _log?.Info("Simulator", $"the area ranking for {dropped.Label} was let go: only the last {AreaRankingStore.MaxKept} made or shown are kept");
+        if (owner == _owner) ShowRanking(ranking);
+    }
+
+    // A ranking for owner was cancelled or failed. Its own list is left empty with
+    // the reason; after a switch the list on show is another pairing's and is left
+    // as it is.
+    internal void RankingStopped(SimulatorOwner owner, string status)
+    {
+        if (owner != _owner) return;
+        ShowRanking(null);
+        RankStatus = status;
+    }
+
     // Stops a running RankAreas: the Cancel button, the Navigation window's teardown,
-    // a profile swap, or a room-graph reload.
+    // a change of game data or character, or a room-graph reload.
     [RelayCommand(CanExecute = nameof(IsRanking))]
     public void CancelRanking() => _rankCts?.Cancel();
 
@@ -627,9 +765,9 @@ public sealed partial class SimulatorViewModel : ObservableObject
         OnPropertyChanged(nameof(RankIsArea));
         if (value is null) { ClearRankDetail(); return; }
         RankHeadline = $"{value.Area} at L{value.Level} — {Headline(value.Result)}";
-        double step = _rankRun?.Step ?? SimWalkSeconds;
+        double step = _shown?.Step ?? SimWalkSeconds;
         Fill(RankStats, value.Result, step);
-        if (_rankRun is { } run)
+        if (_shown is { } run)
             RankStats.Insert(0, new SimStat("Tested", $"L{value.Level} · {run.Runs} × {run.Hours:0.#} h · " +
                                                      $"{run.Step:0.00} s a room · {run.Realm} · from {run.From.Map}/{run.From.Room}"));
         RankStats.Insert(0, new SimStat("Route", RouteLine(value)));
@@ -667,18 +805,11 @@ public sealed partial class SimulatorViewModel : ObservableObject
             RankStatus = "No game-data set is active, so there's nowhere to save a loop.";
             return;
         }
-        // A ranking stays listed through a game-data switch, and its tour is room
-        // numbers of the set it was ranked on: under another set they are other rooms.
-        if (_rankRun is { } ranked && !string.Equals(ranked.Set, _loops.SetName, StringComparison.OrdinalIgnoreCase))
-        {
-            RankStatus = "This ranking was made on other game data, so its rooms aren't these — rank again to save a loop.";
-            return;
-        }
         // A loop another client saved a moment ago counts for both checks below, so
         // the folder is read first.
         _loops.TakeInOutsideChanges();
         string wanted = $"{rank.Area.Replace('/', '-')} (L{rank.Level} sim)";
-        var loop = new Loop(wanted, rank.Tour) { Notes = LoopNotes(rank, _rankRun) };
+        var loop = new Loop(wanted, rank.Tour) { Notes = LoopNotes(rank, _shown) };
         // The same tour saved again would be one loop under two names. Loops are told
         // apart as @loop send tells them (LoopSignature): this one is its rooms in
         // order with nothing set on a room and both loop settings off, which is how
@@ -734,7 +865,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
 
     private bool CanSaveRankingAsLoop() => SelectedRanking is { IsLoop: false } && !IsRanking;
 
-    private static string LoopNotes(AreaRank r, RankRun? run)
+    private static string LoopNotes(AreaRank r, AreaRanking? run)
     {
         LoopSimSummary s = r.Result;
         string deaths = s.Deaths + s.HangUps == 0 ? "no deaths"
@@ -812,7 +943,8 @@ public sealed partial class SimulatorViewModel : ObservableObject
                     .Concat(RankStats.Count == 0 ? Array.Empty<string>()
                         : RankStats.Select(s => "  " + Line(s)).Prepend($"Picked: {RankHeadline}"))
                     .Where(l => !string.IsNullOrEmpty(l)).ToList(),
-            SimResult is null ? null : _simRouteName);
+            SimResult is null ? null : _simRouteName,
+            _owner.Set, _owner.Character, _rankings.Count);
     }
 }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -417,6 +418,30 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         && ConditionsError.Length == 0;
 
     // ----- Save / Cancel ----------------------------------------------
+
+    // Keeps the Disabled box in step with a switch of `original` made elsewhere (a
+    // remote @event) while this window is open on it. The window works on a copy
+    // taken when it opened, and Save replaces the event with that copy: without
+    // this, a save would quietly put the event back the way it was before the
+    // switch. Only the box follows; everything else typed here stays as typed.
+    // Cancel changes nothing, so the switch stands. Returns what stops following,
+    // for the caller to run when the window closes.
+    public Action FollowSwitches(ObservableCollection<ScheduledEvent> events, ScheduledEvent original)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+        ArgumentNullException.ThrowIfNull(original);
+        void OnChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            // The same event put back in its place is a switch; an edit puts in
+            // another.
+            if (e.Action == NotifyCollectionChangedAction.Replace
+                && e.OldItems is [ScheduledEvent before] && e.NewItems is [ScheduledEvent after]
+                && ReferenceEquals(before, original) && ReferenceEquals(after, original))
+                DisabledFlag = original.Disabled;
+        }
+        events.CollectionChanged += OnChanged;
+        return () => events.CollectionChanged -= OnChanged;
+    }
 
     [RelayCommand]
     private void Save()

@@ -501,9 +501,15 @@ public sealed class BossTimerTests : IDisposable
         RemoteCommandManager engine = new(chat, party, players);
         players.RecordObservation("Bob", null, null, null, null, null, null, Now);
         players.EditCustomization("Bob", new PlayerCustomization(RemoteControls: PlayerRemoteControls.QueryBossTimers));
+        // The broadcast channel opened, as with its Talk-tab box unticked.
+        engine.DisableBroadcastChannel = false;
+        engine.Now = () => _engineNow;
         _ = new BossTimerQueryHandler(engine, store, timers, cache);
         return (engine, timers);
     }
+
+    // The engine's clock: it bounds what it says on the broadcast channel by the minute.
+    private DateTimeOffset _engineNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     private static ChatLogEntry Telepath(string msg) =>
         new(Now, ChatChannel.TelepathIncoming, "Bob", msg, $"Bob telepaths: {msg}");
@@ -520,6 +526,222 @@ public sealed class BossTimerTests : IDisposable
         int open = s.IndexOf('{');
         int close = s.LastIndexOf('}');
         return open >= 0 && close > open ? s[(open + 1)..close] : s;
+    }
+
+    // A timer sync may be asked for wherever players talk: said, telepathed, on the
+    // gang channel or on the broadcast channel. It is answered on that channel, and
+    // what is answered decodes back to the timer.
+    [Theory]
+    [InlineData(ChatChannel.TelepathIncoming, "/Bob {@timerdata ")]
+    [InlineData(ChatChannel.Gangpath, "bg {@timerdata ")]
+    [InlineData(ChatChannel.Local, ">Bob {@timerdata ")]
+    [InlineData(ChatChannel.Broadcast, "br {@timerdata ")]
+    public void TimerSync_OnEveryChannelItMayUse_IsAnsweredThere(ChatChannel channel, string opening)
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+
+        engine.DispatchForTests(new ChatLogEntry(Now, channel, "Bob", "@timer sync", "raw"));
+
+        string[] wire = engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToArray();
+        Assert.NotEmpty(wire);
+        Assert.All(wire, line => Assert.StartsWith(opening, line));
+        string blob = string.Concat(Replies(engine).Select(r => r.Split(' ', 3)[2]));
+        Assert.Equal(50, Assert.Single(BossTimerSyncCodec.Decode(blob)).MonsterNumber);
+    }
+
+    // Sneaking, the answer to a said request goes by telepath; the asker takes a
+    // telepathed answer after a said request for that reason
+    // (BossTimerSyncCollectorTests).
+    [Fact]
+    public void TimerSync_SaidToASneakingClient_IsAnsweredByTelepath()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+        engine.StealthedProvider = () => true;
+
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Local, "Bob", "@timer sync", "raw"));
+
+        Assert.All(engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)),
+            line => Assert.StartsWith("/Bob {@timerdata ", line));
+    }
+
+    // On the broadcast channel an answer is several lines to everyone there, from
+    // every client the asker may ask. The whole answer goes out, as one answer; a
+    // second ask from the same player inside the minute draws nothing, and counts
+    // for nothing against the other players there.
+    [Fact]
+    public void TimerSync_OnTheBroadcastChannel_GoesOutWhole_OnceAMinuteToEachAsker()
+    {
+        (string Name, int Number, int Regen)[] bosses =
+            Enumerable.Range(1, 30).Select(i => ($"boss number {i}", 1000 + i, 24)).ToArray();
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, bosses);
+        foreach ((string name, _, _) in bosses) timers.MarkKilled(name);
+        ChatLogEntry Asks(string who, ChatChannel channel = ChatChannel.Broadcast) =>
+            new(Now, channel, who, "@timer sync", "raw");
+        string[] Sent()
+        {
+            string[] wire = engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToArray();
+            engine.LastSentForTests.Clear();
+            return wire;
+        }
+
+        // Every line of the set, in order, decoding to all thirty timers.
+        void SentTheTimersWhole(string opening)
+        {
+            string[] wire = Sent();
+            Assert.True(wire.Length >= 3, $"only {wire.Length} line(s): the answer must be several for this test");
+            for (int i = 0; i < wire.Length; i++)
+                Assert.StartsWith($"{opening}{{@timerdata {i + 1}/{wire.Length} ", wire[i]);
+            string blob = string.Concat(wire.Select(StripWire).Select(r => r.Split(' ', 3)[2]));
+            Assert.Equal(30, BossTimerSyncCodec.Decode(blob).Count);
+        }
+
+        engine.DispatchForTests(Asks("Bob"));
+        SentTheTimersWhole("br ");
+
+        _engineNow += TimeSpan.FromSeconds(59);
+        engine.DispatchForTests(Asks("Bob"));
+        Assert.Empty(Sent());
+
+        // The several lines were one answer: the others on the channel still have
+        // theirs this minute, up to the channel's few.
+        for (int i = 1; i < BroadcastAnswerBudget.AnswersPerWindow; i++)
+        {
+            engine.DispatchForTests(Asks($"Passerby{i}"));
+            Assert.Equal("br {command invalid or not allowed}\r", Sent().Single());
+        }
+        engine.DispatchForTests(Asks("OneMore"));
+        Assert.Empty(Sent());
+
+        // The bound is on that channel alone: the same player is answered by telepath.
+        engine.DispatchForTests(Asks("Bob", ChatChannel.TelepathIncoming));
+        SentTheTimersWhole("/Bob ");
+
+        // A minute after the answer, it is given again.
+        _engineNow += TimeSpan.FromSeconds(1);
+        engine.DispatchForTests(Asks("Bob"));
+        SentTheTimersWhole("br ");
+    }
+
+    // The broadcast channel is off until the user opens it: nothing asked there is
+    // read, timers included.
+    [Fact]
+    public void TimerSync_OnTheBroadcastChannelSwitchedOff_IsNotAnswered()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+        engine.DisableBroadcastChannel = true;
+
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer sync", "raw"));
+
+        Assert.Empty(engine.LastSentForTests);
+    }
+
+    // ----- the merge window: what is written without a pick -----------------
+
+    private static readonly DateTimeOffset Killed = new(2026, 8, 3, 21, 30, 0, TimeSpan.Zero);
+
+    // The merge window over real stores, tracking one boss it holds no timer for:
+    // the case in which an offered timer is adopted outright.
+    private (BossTimerSyncViewModel window, BossTimerStore timers) NewSyncWindow()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "1/1"));
+        var (bosses, timers, cache) = NewStores();
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        BossTimerSyncViewModel window = new(bosses, timers, cache, new ChatRouter(router), send: _ => { },
+            preArmedOn: RemoteChannel.Broadcast, new LogService(), broadcastOff: () => false,
+            isOurName: _ => false, windowActive: _ => { });
+        return (window, timers);
+    }
+
+    private static BossTimerSyncResponse Offers(string sender, RemoteChannel heardOn) =>
+        new(sender, new[] { new BossTimerSyncRecord(50, null, Killed) }, heardOn);
+
+    // Anyone can join the broadcast channel, and a request there tells every
+    // listener that a collection is open. A timer a player with no standing sends
+    // on it, for a boss we track and hold no timer for, is written nowhere: it is a
+    // row to pick, naming who sent it and where it was heard, with "keep ours"
+    // chosen. Closing the window leaves the timers as they were.
+    [Fact]
+    public void SyncWindow_ATimerHeardOnBroadcast_IsOfferedAsAPick_AndNothingIsWritten()
+    {
+        var (window, timers) = NewSyncWindow();
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+
+            window.Fold(Offers("Stranger", RemoteChannel.Broadcast));
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.False(row.WasAutoMerged);
+            Assert.True(row.KeepOursSelected);
+            Assert.Null(row.SelectedKilledAt);
+            BossTimerSyncCellViewModel offer = Assert.Single(row.Responders);
+            Assert.Equal("Stranger", offer.Responder);
+            Assert.False(offer.IsSelected);
+            Assert.EndsWith("heard on broadcast", offer.Text);
+            Assert.Contains("never adopted without a pick", window.Status);
+
+            window.ApplyCommand.Execute(null);   // nothing picked
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.False(closedWithWrites);
+        }
+    }
+
+    // Picked, the same row is merged like any other.
+    [Fact]
+    public void SyncWindow_APickedBroadcastRow_IsMergedOnApply()
+    {
+        var (window, timers) = NewSyncWindow();
+        using (window)
+        {
+            window.Fold(Offers("Stranger", RemoteChannel.Broadcast));
+            Assert.Null(timers.KilledAt("ogre king"));
+
+            Assert.Single(Assert.Single(window.Rows).Responders).AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+        }
+    }
+
+    // On the other channels the same timer is adopted as it arrives, as before.
+    [Theory]
+    [InlineData(RemoteChannel.Gangpath)]
+    [InlineData(RemoteChannel.Local)]
+    [InlineData(RemoteChannel.Telepath)]
+    public void SyncWindow_TheSameTimerOnAnotherChannel_IsAdoptedOutright(RemoteChannel heardOn)
+    {
+        var (window, timers) = NewSyncWindow();
+        using (window)
+        {
+            window.Fold(Offers("Bob", heardOn));
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.True(Assert.Single(window.Rows).WasAutoMerged);
+            Assert.DoesNotContain("broadcast", window.Status);
+        }
+    }
+
+    // On the broadcast channel only the sync is followed: the readable report is an
+    // ordinary remote command, and none of those is taken there.
+    [Fact]
+    public void TimerReport_OnTheBroadcastChannel_IsNotAnswered()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer", "raw"));
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer ogre", "raw"));
+
+        Assert.Empty(engine.LastSentForTests);
     }
 
     [Fact]

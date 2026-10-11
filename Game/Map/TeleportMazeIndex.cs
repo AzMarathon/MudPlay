@@ -169,12 +169,12 @@ public sealed class TeleportMazeIndex
         {
             RoomKey cur = queue.Dequeue();
             if (_graph.ExitsAt(cur) is not { } exits) continue;
-            foreach (RoomExit exit in exits.Values)
+            foreach (RoomKey target in exits.Targets)
             {
-                if (seen.Add(exit.Target))
+                if (seen.Add(target))
                 {
                     if (seen.Count > MaxPocketRooms) return null;
-                    queue.Enqueue(exit.Target);
+                    queue.Enqueue(target);
                 }
             }
         }
@@ -185,7 +185,7 @@ public sealed class TeleportMazeIndex
     {
         foreach (RoomKey k in pocket)
             if (_graph.ExitsAt(k) is { } exits)
-                foreach (RoomExit exit in exits.Values)
+                foreach ((Direction _, RoomExit exit) in exits)
                     if (exit.CastTeleportRandom)
                         return true;
         return false;

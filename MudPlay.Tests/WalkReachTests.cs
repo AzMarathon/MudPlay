@@ -90,10 +90,10 @@ public sealed class WalkReachTests : IDisposable
         try { Directory.Delete(_root, recursive: true); } catch { /* temp cleanup */ }
     }
 
-    private RoomGraphManager NewGraph()
+    private RoomGraphManager NewGraph(string rooms = Rooms, string tbInfo = TbInfo)
     {
-        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Rooms);
-        File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"), TbInfo);
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), rooms);
+        File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"), tbInfo);
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
         TBInfoStore store = new(cache);
@@ -124,8 +124,64 @@ public sealed class WalkReachTests : IDisposable
             new HashSet<RoomKey>(reached));
     }
 
+    // A room command that lands on the room's own map is a way through the same
+    // place, and is followed: the Chamber of Wisdom is reached only by `touch
+    // altar`, and its dead arrive in the Burial Vault like the rest of Albion's
+    // (the owner, 2026-10-10). What lies beyond the room it lands in is reached
+    // too, and a command there that leads off the map is still not followed.
     [Fact]
-    public void ARoomCommandThatMovesTheCharacter_IsNotWalking()
+    public void ARoomCommandThatStaysOnTheMap_IsFollowed()
+    {
+        const string rooms = """
+            [
+              { "Map Number": 14, "Room Number": 1077, "Name": "Burial Vault",
+                "Light": -50, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 5,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "14/10438", "D": "0" },
+              { "Map Number": 14, "Room Number": 10438, "Name": "Altar of the Old One",
+                "Light": 0, "Shop": 0, "NPC": 0, "CMD": 9001, "Lair": "", "Delay": 5,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "14/1077" },
+              { "Map Number": 14, "Room Number": 10440, "Name": "Chamber of Wisdom",
+                "Light": 0, "Shop": 0, "NPC": 0, "CMD": 9002, "Lair": "", "Delay": 5,
+                "N": "14/10441", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 14, "Room Number": 10441, "Name": "Chamber of Wisdom",
+                "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 5,
+                "N": "0", "S": "14/10440", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 8, "Room Number": 1225, "Name": "Negative Power Plane",
+                "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 5,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string tbInfo = """
+            [ { "Number": 9001, "LinkTo": 0,
+                "Action": "touch altar:teleport 10440 14\n",
+                "Called From": "Room 14/10438" },
+              { "Number": 9002, "LinkTo": 0,
+                "Action": "go portal:teleport 1225 8\n",
+                "Called From": "Room 14/10440" } ]
+            """;
+        RoomGraphManager graph = NewGraph(rooms, tbInfo);
+        // Guard the fixture: both commands are edges of the graph.
+        Assert.True(graph.GetRoom(new RoomKey(14, 10438))!.Exits.TryGetValue(Direction.Teleport, out RoomExit altar)
+                    && altar.Target == new RoomKey(14, 10440)
+                    && graph.GetRoom(new RoomKey(14, 10440))!.Exits.TryGetValue(Direction.Teleport, out RoomExit portal)
+                    && portal.Target == new RoomKey(8, 1225),
+            "fixture no longer produces the two room-command teleport edges");
+
+        IReadOnlySet<RoomKey> reached = WalkReach.From(graph, Vault);
+
+        Assert.Equal(
+            new HashSet<RoomKey> { Vault, new(14, 10438), new(14, 10440), new(14, 10441) },
+            new HashSet<RoomKey>(reached));
+    }
+
+    // One that lands on another map is a way out of the place, and is not.
+    [Fact]
+    public void ARoomCommandThatLeadsOffTheMap_IsNotFollowed()
     {
         RoomGraphManager graph = NewGraph();
         // Guard the fixture: the graph does make an edge of `go portal`.
@@ -147,6 +203,102 @@ public sealed class WalkReachTests : IDisposable
         RoomGraphManager graph = NewGraph();
 
         Assert.DoesNotContain(new RoomKey(14, 759), WalkReach.From(graph, Vault));
+    }
+
+    // The land a room stands on is the same walk kept to its map: the toll road
+    // runs onto map 2, and neither that room nor anything reached through it is
+    // part of the land. A room command that stays on the map still is.
+    [Fact]
+    public void TheLandOfARoom_StopsAtTheEdgeOfItsMap()
+    {
+        RoomGraphManager graph = NewGraph();
+
+        Assert.Equal(
+            new HashSet<RoomKey>
+            {
+                Vault, new(14, 1072), new(14, 2000), new(14, 2001), new(14, 2002), new(14, 2003),
+                new(14, 2004), new(14, 2005), new(14, 2006),
+            },
+            Land(graph, Vault));
+        // From the far side of the map's edge it is that map's land, which does
+        // not come back.
+        Assert.Equal(new HashSet<RoomKey> { new(2, 11960) }, Land(graph, new RoomKey(2, 11960)));
+        // A room the graph doesn't have is in no land, its own included.
+        Assert.False(WalkReach.OnItsMap(graph, new RoomKey(14, 9999), new RoomKey(14, 9999)));
+        Assert.False(WalkReach.OnItsMap(graph, Vault, new RoomKey(14, 9999)));
+        Assert.Null(WalkReach.KnotOnItsMap(graph, new RoomKey(14, 9999)));
+    }
+
+    // Every room of the graph that is in the land start stands on.
+    private static HashSet<RoomKey> Land(RoomGraphManager graph, RoomKey start) =>
+        new(graph.RoomKeys.Where(room => WalkReach.OnItsMap(graph, start, room)));
+
+    // The walk is one way, so the land is told from the room asked about: the
+    // docks lead into the crypt and nothing leads back, so the docks' land holds
+    // the crypt and the crypt's land doesn't hold the docks. Two rooms that do
+    // reach each other have one land between them, and are one knot.
+    [Fact]
+    public void TheLandIsToldFromTheRoomAskedAbout_AndRoomsThatReachEachOtherAreOneKnot()
+    {
+        RoomGraphManager graph = NewGraph();
+        RoomKey docks = new(14, 759), crypt = new(14, 1072), behindTheDoor = new(14, 2000);
+
+        Assert.True(WalkReach.OnItsMap(graph, docks, crypt));
+        Assert.False(WalkReach.OnItsMap(graph, crypt, docks));
+        Assert.Same(WalkReach.KnotOnItsMap(graph, crypt), WalkReach.KnotOnItsMap(graph, behindTheDoor));
+        Assert.NotSame(WalkReach.KnotOnItsMap(graph, crypt), WalkReach.KnotOnItsMap(graph, docks));
+        Assert.Equal(new HashSet<RoomKey> { crypt, behindTheDoor }, new HashSet<RoomKey>(WalkReach.KnotOnItsMap(graph, crypt)!));
+        // The vault leads up into the crypt and nothing leads down again.
+        Assert.False(WalkReach.OnItsMap(graph, crypt, Vault));
+    }
+
+    // A map's lands are cut out in one pass: a long one-way road into a ring of
+    // rooms. Every room of the ring has the ring for its land, and they are one
+    // knot; a room of the road has the rest of the road and the ring; nothing
+    // reaches back up the road. Long enough that a walk kept on the call stack
+    // would not do.
+    [Fact]
+    public void AMapsLands_AreRightForALongRoadIntoARing()
+    {
+        const int road = 6000, ring = 400;
+        System.Text.StringBuilder rooms = new("[");
+        for (int n = 1; n <= road + ring; n++)
+        {
+            // The road runs east; the ring runs east and closes on its first room.
+            int east = n < road + ring ? n + 1 : road + 1;
+            rooms.Append(n == 1 ? "" : ",").Append(
+                $$"""{ "Map Number": 7, "Room Number": {{n}}, "Name": "Stretch {{n}}", "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 5, "N": "0", "S": "0", "E": "7/{{east}}", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }""");
+        }
+        rooms.Append(']');
+        RoomGraphManager graph = NewGraph(rooms.ToString(), "[]");
+
+        HashSet<RoomKey> ofTheRing = Land(graph, new RoomKey(7, road + 1));
+        Assert.Equal(ring, ofTheRing.Count);
+        Assert.Equal(ring, WalkReach.KnotOnItsMap(graph, new RoomKey(7, road + 1))!.Count);
+        Assert.Same(WalkReach.KnotOnItsMap(graph, new RoomKey(7, road + 1)), WalkReach.KnotOnItsMap(graph, new RoomKey(7, road + ring)));
+        Assert.DoesNotContain(new RoomKey(7, road), ofTheRing);
+
+        Assert.Equal(road + ring, Land(graph, new RoomKey(7, 1)).Count);
+        HashSet<RoomKey> fromHalfway = Land(graph, new RoomKey(7, road / 2));
+        Assert.Equal(road / 2 + 1 + ring, fromHalfway.Count);
+        Assert.DoesNotContain(new RoomKey(7, road / 2 - 1), fromHalfway);
+        // The walk that crosses maps agrees, the map having no way off it.
+        Assert.Equal(fromHalfway, new HashSet<RoomKey>(WalkReach.From(graph, new RoomKey(7, road / 2))));
+    }
+
+    // What the arrival learner asks before taking a typed line for a move: is it
+    // an exit command of any room at all.
+    [Theory]
+    [InlineData("go gap", true)]
+    [InlineData("ENTER GAP", true)]
+    [InlineData("  go gap ", true)]
+    [InlineData("go portal", true)]
+    [InlineData("go", false)]
+    [InlineData("stat", false)]
+    [InlineData("", false)]
+    public void ALineIsKnownForAnExitCommand_WhenSomeRoomHasIt(string line, bool known)
+    {
+        Assert.Equal(known, NewGraph().IsExitCommandSomewhere(line));
     }
 
     [Fact]

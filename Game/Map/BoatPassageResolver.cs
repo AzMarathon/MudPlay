@@ -49,21 +49,22 @@ public static class BoatPassageResolver
     // lists. Lines whose arrival room can't be resolved (a broken random table /
     // transit chain, or a cast that never reaches a fixed teleport) are skipped
     // rather than offered — a passage we can't land is not routable.
+    //
+    // loopedBlocks, when given, collects the number of every text block at which a
+    // chain of empty blocks came back on itself (see BlockWithLines). The caller
+    // asks this of every room with a command, and many rooms share one, so it
+    // gathers them to report once rather than hearing of each walk.
     public static IEnumerable<BoatPassage> EnumerateBoatPassages(
-        TBInfoStore store, RoomKey dockRoom, int dockCmd, KnownSpellCatalog catalog)
+        TBInfoStore store, RoomKey dockRoom, int dockCmd, KnownSpellCatalog catalog,
+        ISet<int>? loopedBlocks = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(catalog);
         if (dockCmd <= 0) yield break;
 
-        TBInfoEntry? entry = store.GetEntry(dockCmd);
-        // A dialogue-only block continues at its LinkTo (mirrors the other
-        // TBInfo resolvers / the greet decoder).
-        while (entry is not null && string.IsNullOrWhiteSpace(entry.Action) && entry.LinkTo > 0)
-            entry = store.GetEntry(entry.LinkTo);
-        if (entry is null || string.IsNullOrWhiteSpace(entry.Action)) yield break;
+        if (BlockWithLines(store, dockCmd, loopedBlocks) is not { Action: { } action }) yield break;
 
-        foreach (string raw in entry.Action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        foreach (string raw in action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             string line = raw.Trim();
             if (line.Length == 0) continue;
@@ -96,7 +97,7 @@ public static class BoatPassageResolver
             }
 
             if (randomTbId <= 0) continue;
-            if (!TryResolveArrivalRoom(store, catalog, randomTbId, dockRoom.Map,
+            if (!TryResolveArrivalRoom(store, catalog, randomTbId, dockRoom.Map, loopedBlocks,
                     out RoomKey arrival, out int voyageRounds))
                 continue;
 
@@ -106,23 +107,48 @@ public static class BoatPassageResolver
         }
     }
 
+    // The block a number stands for: itself, or, when it has no lines of its own,
+    // the first block with lines down its LinkTo chain (a dialogue-only block
+    // continues there, as in the other TBInfo resolvers and the greet decoder).
+    // Null when the chain runs out, and when it comes back on itself: a damaged
+    // set can link an empty block to itself or to an earlier one, and followed
+    // blindly that walk never ends, at every room command of every set load. The
+    // block the chain came back to goes into looped.
+    //
+    // Not GuardDoorCommandResolver.ResolveGreetBlock: that one stops at a block
+    // holding only blanks, which a sailing skips, and can't tell a loop from a
+    // chain that simply ran out.
+    private static TBInfoEntry? BlockWithLines(TBInfoStore store, int number, ISet<int>? looped)
+    {
+        TBInfoEntry? entry = store.GetEntry(number);
+        HashSet<int>? visited = null;
+        while (entry is not null && string.IsNullOrWhiteSpace(entry.Action) && entry.LinkTo > 0)
+        {
+            visited ??= new HashSet<int> { number };
+            if (!visited.Add(entry.LinkTo))
+            {
+                looped?.Add(entry.LinkTo);
+                return null;
+            }
+            entry = store.GetEntry(entry.LinkTo);
+        }
+        return entry is null || string.IsNullOrWhiteSpace(entry.Action) ? null : entry;
+    }
+
     // Follow `random <tbId>` → weighted-random table `<roll>:cast <board>:cast
     // <trip>` → the transit spell chain to the disembark room. Returns the first
     // arrival room any cast on any table line resolves to; false when none does.
     // voyageRounds carries the summed transit-spell duration of the winning chain
     // (spell rounds — see TryResolveDisembark) so the walker can time the sail.
     private static bool TryResolveArrivalRoom(
-        TBInfoStore store, KnownSpellCatalog catalog, int randomTbId, int sourceMap,
+        TBInfoStore store, KnownSpellCatalog catalog, int randomTbId, int sourceMap, ISet<int>? loopedBlocks,
         out RoomKey arrival, out int voyageRounds)
     {
         arrival = default;
         voyageRounds = 0;
-        TBInfoEntry? table = store.GetEntry(randomTbId);
-        while (table is not null && string.IsNullOrWhiteSpace(table.Action) && table.LinkTo > 0)
-            table = store.GetEntry(table.LinkTo);
-        if (table is null || string.IsNullOrWhiteSpace(table.Action)) return false;
+        if (BlockWithLines(store, randomTbId, loopedBlocks) is not { Action: { } table }) return false;
 
-        foreach (string raw in table.Action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        foreach (string raw in table.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             string line = raw.Trim();
             if (line.Length == 0) continue;

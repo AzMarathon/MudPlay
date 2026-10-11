@@ -385,6 +385,8 @@ To put a party member back on the **last loop they ran this session** without an
 
 Or build it off the map: **Navigation Management → New Loop** opens an editor where you add rooms by name or key, name and annotate the loop, and set per-waypoint options. While that editor is open, you can also **left-click rooms on the Navigation map** to append them to the waypoint list — the same way the on-map builder works, without typing keys.
 
+**A loop belongs to the game data its rooms are from.** Room numbers mean other rooms under another game-data set, and saved loops are shared by every character on a set. So when the active game data changes to another set while you are building a loop on the map, the loop being built is **dropped**, with a notice in the terminal, and the builder carries on empty on the new game data; the same set imported again or picked again keeps it. The Loop mode chip's pre-load likewise skips a loop last run on other game data. The **Edit Loop** window stays open through a switch, but will not **Save** or take a new room until the game data it was opened on is active again, and says so.
+
 **Run a saved loop** from the **LOOPS + AUTO-LAIRS** rail (or the Management dialog) — each has **Load** (stage it) and **Go** (start now; right-click, or the ▾ in Management, for **Run** / **Sprint**). Queue one and MudPlay joins the circuit at whichever of its rooms is nearest — a room partway along a leg as readily as a waypoint, and right where you stand if you're already on it — then carries on round from there (a lap begun partway along a leg isn't counted as a lap); combat, healing, and pickup keep running throughout. While it runs the badge reads **LOOPING** with "step X of Y on lap Z", and the **CURRENT NAV** rail shows the loop's rooms in **green** — click any room to tune it live without stopping (see *Live-editing a running loop* below). **Stop** ends the loop.
 
 **Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Go**, **Run**, **Sprint**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to *both* right-click Favorites flyouts (the terminal's and the map's, green for loops, amber for lairs) for this character only alongside your starred GOTO rooms, so you can start it from anywhere.
@@ -524,13 +526,15 @@ Another level is simulated by moving **today's** character there: max HP, mana a
 - **areas where you died** (or hung up) after them, however high their number — a run that dies only counts the minutes before it did.
 - **your own saved loops**, ranked right alongside the areas and marked ★, each simulated at that level too — with what **you actually made** on it from your program logs (your record at that level, and your biggest sample a few levels either side). A loop you've played for hours **at the ranked level or below** without dying counts as safe even if a simulated run died; a record from a higher level is shown but doesn't vouch for it.
 
-Each option gets the Simulator's **Runs** and **Hours per run** settings (runs × hours of simulated play), so a ranking takes longer the higher those are. Mapping the areas and simulating them can take a while on a big map: the status line shows how far it has got, the client stays usable meanwhile, and **Cancel** beside the button stops it (switching character, or closing the Navigation window, stops it too).
+Each option gets the Simulator's **Runs** and **Hours per run** settings (runs × hours of simulated play), so a ranking takes longer the higher those are. Mapping the areas and simulating them can take a while on a big map: the status line shows how far it has got, the client stays usable meanwhile, and **Cancel** beside the button stops it (switching game data or character, or closing the Navigation window, stops it too).
 
 **Reach is judged at the chosen level.** A level-gated way in — a `(Level 50+)` exit, a boat or portal with a minimum level — only counts once the ranked level clears it, so ranking below that level leaves the areas behind it out and ranking at or above it brings them in. Reach is judged for you alone: a party's level window isn't considered. Every other gate (doors, keys and items, tolls and fares, class, alignment) and your avoided rooms count as they do for your walks right now. The status line says how many areas were left out as unreachable, and how many were skipped because they have only one lair you can reach or no walkable lap (the same for a saved loop that no longer walks). A few runs is few: an area on the edge (lowest HP in the teens) can land on either side of "died".
 
 Pick a row to see its full result under the table and its route on the map. The route goes on the map as the Exp/Hr Estimator's sketch. If you weren't estimating, the estimator opens for it, unless you're building a loop or a walk, loop or Auto-Lair is running; stop that first. It **replaces whatever you'd sketched**, without asking, so save a sketch you want to keep first. The Simulator's route switches to that sketch, so from there you can trim it and **Save as loop**, or **Simulate** it. Simulate plays it at **your current level and today's gates**, not the level you ranked at.
 
-The detail under the table shows **how the row was tested**: its **Route** (how many rooms a lap takes and the rooms the run walked between, in order; a long tour lists its first 20 and says how many more there are) and **Tested** (the level, runs × hours, walk pace, realm, and the room you ranked from — the settings the ranking ran with, even if you've changed them since). An area row has a **Save as loop** button beside its headline: it saves that exact tour, every room of it, as one of your loops, named after the area and level (for example `Hills - Caves (L40 sim)`; when a different loop already has that name, it is saved as `Hills - Caves (L40 sim) 2` and that loop is left alone), with the simulated result and how it was tested in the loop's **notes**. The new loop appears in the Navigation window's Loops list, ready to run, and becomes the Simulator's **Route**. It is saved the way it was simulated, fighting in every room it walks and going straight into lairs: **Only attack in lair rooms** and **Wait to enter lairs until I can debuff** are both off, and the simulated figures stop holding if you turn either on. If the tour is already one of your loops (the same rooms in the same order, run the same way), nothing is saved; the status line names that loop and it becomes the Route. It works whatever the map is doing, building a loop or running one included. The loop walks between its rooms with your gates as they are when you start it, so run it at the level you ranked; ranked above your level, a level-gated way in may still be shut to you, and when you save, the status line says how many of the loop's legs you can't walk yet. A ranking made before you switched game data can't be saved, since its room numbers belong to the other set: rank again. A ★ row is already one of your loops, so it has no button.
+The detail under the table shows **how the row was tested**: its **Route** (how many rooms a lap takes and the rooms the run walked between, in order; a long tour lists its first 20 and says how many more there are) and **Tested** (the level, runs × hours, walk pace, realm, and the room you ranked from — the settings the ranking ran with, even if you've changed them since). An area row has a **Save as loop** button beside its headline: it saves that exact tour, every room of it, as one of your loops, named after the area and level (for example `Hills - Caves (L40 sim)`; when a different loop already has that name, it is saved as `Hills - Caves (L40 sim) 2` and that loop is left alone), with the simulated result and how it was tested in the loop's **notes**. The new loop appears in the Navigation window's Loops list, ready to run, and becomes the Simulator's **Route**. It is saved the way it was simulated, fighting in every room it walks and going straight into lairs: **Only attack in lair rooms** and **Wait to enter lairs until I can debuff** are both off, and the simulated figures stop holding if you turn either on. If the tour is already one of your loops (the same rooms in the same order, run the same way), nothing is saved; the status line names that loop and it becomes the Route. It works whatever the map is doing, building a loop or running one included. The loop walks between its rooms with your gates as they are when you start it, so run it at the level you ranked; ranked above your level, a level-gated way in may still be shut to you, and when you save, the status line says how many of the loop's legs you can't walk yet. A ★ row is already one of your loops, so it has no button.
+
+**A ranking belongs to the game data and the character it was made on.** Its rooms are that game data's and its figures are that character's stats and gear, so it is listed only while both are the ones loaded. Switch game data or character and the table shows the ranking you made for that pairing, or is empty if you haven't ranked there yet; switch back and the first ranking is listed again with nothing picked (pick a row to put its route back on the map). Nothing made on one game data can be picked, drawn on the map or saved as a loop under another. Either switch also cancels a ranking in progress and drops the **Simulation** result and the check against your play; a switch of game data clears the Exp/Hr Estimator's sketch as well, since it is the other game data's rooms. Rankings are kept for as long as the client runs, through closing the Navigation window too, but not across a restart, and only the eight most recently made or shown are kept. A character that is renamed, moved to another BBS, or first named with **Save as** keeps its rankings under the new name. Importing a game-data set again drops the rankings made on it, whichever set is active when you import, since its tables may have changed. So does deleting the set, copying or moving message edits or Game Data Browser edits into it or moving them out of it in **Manage Sets** (the loop library alone doesn't count), and picking the active set again from the menu. A ranking listed again from those kept says so: its status line starts with when it was made and at what level, and when you have changed level since, your level now (`Made 14:32 at L42; you are L43 now.`), with the table shown muted. It is still the ranking of the character as it was and is not redone for you. A change of gear, spells or settings, or an edit to game data, is not noticed at all: the **Tested** line says what it was made with, so rank again when that no longer matches.
 
 A whole-area tour walks *every* lair in the area, including the rooms a hand-built loop would skip — so a loop you've tuned inside a good area will usually beat its area's number (your loops in the list show it), and an area whose tour dies may still hold a safe corner. Use an area row to find where to look, then build the loop there. Another level moves today's character there, the same way **Check against my play** does.
 
@@ -980,7 +984,7 @@ Type the command as the whole message, with `@` as its first character. Three ch
 - **Gangpath:** `bg @timer dragon`. Every MudPlay client in the gang that grants you the command answers, on gangpath, where the whole gang reads it.
 - **Say:** `.@party rest`. Every MudPlay client in the room that grants you the command acts on it. An answer comes back as a say directed at you (`>Leader {reply}`), so in a full room you can tell it is yours.
 
-Gossip, auction, yell and broadcast lines are never read as commands.
+Gossip, auction and yell lines are never read as commands. Neither are lines on the broadcast channel (the numbered one you `join`), with one exception you have to switch on: the client-to-client transfers, see *Sharing data between clients*.
 
 How the line is read:
 
@@ -1022,11 +1026,13 @@ Your client goes through these checks in this order. The first one that stops a 
 | Move player | `@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@rego` |
 | Execute commands | `@do`, `@kill`, `@heal`, `@trap`, `@train`, `@equip`, `@get-all`, `@get-stash`, `@drop-all`, `@hide-all`, `@deposit-all`, and relaying a `&@` command |
 | Hangup/disconnect | `@hangup`, `@relog` |
-| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@reset` |
+| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@events`, `@event`, `@reset` |
 | Divert conversations | `@divert` |
 | Elevated Commands | `@suicide`, `@dupe` |
 
 A player your client has never seen has no box ticked, so every command in the table is refused. The Players batch editor's **Set all permissions** ticks or clears all sixteen for the selected players.
+
+**What Alter settings allows through your events.** A player who holds **Alter settings** can switch your events on and off with `@event`, and an event switched on does whatever you defined it to do: walk somewhere, run a loop or Auto-Lair, make a bank trip, send a command. Sent as commands of their own, those would need **Move player** or **Execute commands**. The holder can't define an event or change what one does, only switch on and off the ones you made. See **@events and @event**.
 
 **Party members get some commands with no box ticked.** Anyone on your party roster (matched by first name) may send:
 
@@ -1072,7 +1078,7 @@ In the reply tables of the command topics, a row that begins **Refusal:** is sen
 
 **Plain characters only.** Every reply is sent in plain ASCII, which is all the game's line carries safely. Where a reply has to carry a name with something else in it (a loop you named with a long dash, say), that character is spelled plainly (`-`) or, failing that, sent as `?`.
 
-**On the receiving side** nothing pops up. A plain query leaves no trace but the reply itself, which shows in your terminal as the telepath or say your client sent. A command that makes your client act shows there too, as whatever it sent to the game. Commands that change something are written to the program log with the sender's name (`@do`, `@kill`, the `@auto-…` toggles, `@atkprio`, `@atkorder`, `@reset`, `@dupe`, `@get-stash`, a loop send, a `&@` relay). A refused command is logged only with Debug diagnostics on.
+**On the receiving side** nothing pops up. A plain query leaves no trace but the reply itself, which shows in your terminal as the telepath or say your client sent. A command that makes your client act shows there too, as whatever it sent to the game. Commands that change something are written to the program log with the sender's name (`@do`, `@kill`, the `@auto-…` toggles, `@atkprio`, `@atkorder`, `@event` switching an event, `@reset`, `@dupe`, `@get-stash`, a loop send, a `&@` relay). A refused command is logged only with Debug diagnostics on.
 
 ### Commands that never answer
 
@@ -1164,6 +1170,8 @@ One row per command. **Needs** is the box the sender must have ticked on your Pl
 | `@roomba` | `@roomba <item>` · `@roomba sync` | Query Roomba | Where an item was last seen; `sync` hands over your whole log. |
 | `@auto-all` | `@auto-all` · `@auto-all on` · `@auto-all off` | Alter settings | The master switch. |
 | `@auto-combat` `@auto-nuke` `@auto-heal` `@auto-rest` `@auto-bless` `@auto-light` `@auto-cash` `@auto-get` `@auto-sneak` `@auto-hide` `@auto-search` | each one bare, or with `on` or `off` | Alter settings | Flips or sets that one auto toggle. |
+| `@events` | `@events` | Alter settings | Your Events by number and name, each on or off. |
+| `@event` | `@event <name>` · `@event <name> on` · `@event <name> off` · the same with a number from `@events` for the name | Alter settings | One of your Events: its state, or switches it on or off. |
 | `@reset` | `@reset` | Alter settings, or party member | Zeroes your session statistics. |
 | `@divert` | `@divert <player>` · `@divert` | Divert conversations | Forwards your incoming telepaths to that player; bare stops it. |
 | `@do` | `@do <command>` | Execute commands | Sends the command to the game as if you typed it. |
@@ -1307,6 +1315,8 @@ Only the loops in your own Loops list (for the game data set you have loaded) ar
 
 Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clients are needed: yours hands the loop out, theirs puts it back together and saves it. It rides the **Move player** permission: a player you trust to run your loops may also have a copy of one.
 
+**By telepath only.** Every step goes by telepath: the ask, the offer, the yes or no, the loop, and the answer back. A loop goes to the one player who asked for it. Asked on gangpath, say or the broadcast channel, the client asked answers `@loop send works by telepath only` and offers nothing; a `yes` typed there opens nothing on your side, and your client tells you so in the terminal.
+
 **Forms:**
 
 - `@loop send kings road`: ask for a saved loop by name. The name is matched exactly as `@loop` matches it.
@@ -1316,14 +1326,17 @@ Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clien
 
 **From asking to saved**, with Leader asking Scout for a loop:
 
-1. Leader sends `/Scout @loop send kings road`. Scout's client finds the loop and answers `{preparing to send: King's Road, yes to confirm, no to deny}`. Nothing has been sent yet. The offer is Leader's alone, and a new ask from Leader replaces it.
+1. Leader sends `/Scout @loop send kings road`. Scout's client finds the loop and answers `{preparing to send: King's Road, yes to confirm, no to deny (code 9da659db)}`. Nothing has been sent yet. The offer is Leader's alone, and a new ask from Leader replaces it. The **code** is the loop's, as Scout runs it (see *The code, and "verified"* below); Leader's client keeps it.
 2. Leader answers `/Scout @loop send yes` within two minutes. After that the offer has lapsed and a `yes` is answered `no loop send pending - use @loop send <name> first`.
 3. Scout's client answers `{sending loop 'King's Road' (42 rooms, 3 lines)}` and then sends the loop as that many `{@loopdata <id> <i>/<k> <data>}` lines, 0.8 seconds apart.
-4. Leader's client collects the lines. When the last one is in, it rebuilds the loop, saves it to Leader's Loops list, and prints a notice in Leader's terminal.
+4. Leader's client collects the lines. When the last one is in, it rebuilds the loop, checks it against the code from the offer, saves it to Leader's Loops list (or turns it away, see below), and prints a notice in Leader's terminal.
+5. Leader's client tells Scout what became of it, in one telepath: `{@loopresult 9da659db saved as 'King's Road'}`. Scout's client shows that as a notice, with whether the code is the one it sent.
 
 | Reply from the client asked | When |
 |---|---|
-| `preparing to send: <loop name>, yes to confirm, no to deny` | A loop was found by name, or you are running one and the bare form was sent. |
+| `@loop send works by telepath only` | **Refusal:** any form of the command, on gangpath, say or the broadcast channel. |
+| `preparing to send: <loop name>, yes to confirm, no to deny (code <code>)` | A loop was found by name, or you are running one and the bare form was sent. |
+| `loop send of '<name>' stopped: it changed since it was offered - ask for it again` | **Refusal:** `yes`, but the loop was edited, or its two loop settings changed, after the offer. The asker said yes to the loop as it was. |
 | `not running a loop - @loop send <name> for a saved one` | **Refusal:** the bare form, and no loop is running. |
 | `no saved loop named '<text>'` | **Refusal:** the name matched nothing. |
 | `'<text>' matches <n> loops: '<name>', '<name>'` | **Refusal:** the name matched several loops. |
@@ -1336,32 +1349,66 @@ Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clien
 
 | Notice in the asker's terminal | When |
 |---|---|
-| `[Received loop '<name>' <n> rooms from <player>]` | Saved under its own name. |
-| `[Received loop '<name>' <n> rooms from <player>, already have it (<code>)]` | **Rejected.** You have a loop of that name and it is the same loop. Nothing is saved and nothing of yours changes. |
-| `[Received loop '<name>' <n> rooms from <player>, saved as '<name> 2' (<code>): your '<name>' is a different loop (<code>)]` | You have a loop of that name and it is a different loop. Yours is left exactly as it is; the new one is saved beside it with a number after the name (`2`, or the next number no loop has). The first code is the new loop's, the second your own loop's. |
+| `[Received loop '<name>' <n> rooms from <player> (<code>, verified)]` | Saved under its own name. `(<code>, verified)` follows the player's name in every notice for a loop that was read; in place of `verified` it can say `not verified: …` (see *The code, and "verified"* below). |
+| `[Received loop '<name>' <n> rooms from <player> (<code>, verified), already have it as '<name 2>']` | **Rejected.** You already have this loop, under the name shown: the name it was sent under, or a numbered copy of it. Nothing is saved and nothing of yours changes. |
+| `[Received loop '<name>' <n> rooms from <player> (<code>, verified), saved as '<name> 2': your '<name>' is a different loop (<code>)]` | You have a loop of that name and it is a different loop, and so is every numbered copy. Yours is left exactly as it is; the new one is saved beside it with a number after the name (`2`, or the next number no loop has). The last code is your own loop's. |
+| `[Received loop '<name>' <n> rooms from <player> does not match the loop offered (received <code>, offered <code>), not saved]` | What arrived is not the loop that was offered: the transfer was damaged, or lines of two transfers were mixed. Ask for it again. |
 | `[Received loop '<name>' <n> rooms from <player>, not saved: no game data set is loaded]` | There was nowhere to save it. |
 | `[Loop from <player> arrived damaged, not saved]` | The lines could not be put back together. |
+| `[@loop send works by telepath only]` | You typed `@loop send …` on gangpath, say or the broadcast channel. Nothing will be taken from it; telepath the player instead. |
 
-**What your client accepts.** Loop lines are taken only within two minutes of your own `@loop send yes` (or `y`) going out, and one loop per `yes`. When you said yes by telepath, only lines from that player are taken. A loop needs no permission on the receiving side: you asked for it.
+| What the asker's client tells the sender | When |
+|---|---|
+| `@loopresult <code> saved as '<name>'` | The loop was saved, under the name shown (numbered when the name was taken by a different loop). |
+| `@loopresult <code> already have it as '<name>'` | Rejected: the asker already has this loop, under that name. |
+| `@loopresult <code> not saved: it is not the loop offered (<code>) - send it again` | **Failure:** what arrived did not match the offer. |
+| `@loopresult - not saved: it arrived damaged - send it again` | **Failure:** the lines could not be put back together, so there is no code. |
+| `@loopresult <code> not saved: no game data set is loaded here` | **Failure:** the asker had nowhere to save it. |
+
+| Notice in the sender's terminal | When |
+|---|---|
+| `[<player> on loop '<name>': saved as '<name 2>' (code <code>, the same as sent)]` | The asker's answer came back and its code is the code of the loop you sent: both ends hold the same loop. |
+| `[<player> on loop '<name>': … (code <code>, NOT the code sent, <code>)]` | The asker's client read a different loop from the one you sent. It will also have said it was not saved. Send it again. |
+
+**What your client accepts.** Loop lines are taken only **by telepath**, only from the player you telepathed `@loop send yes` (or `y`) to, within two minutes of that yes, and one loop per `yes`. Lines from anyone else, or on any other channel, are passed over, and the loop you asked for is still let in. A loop whose name, or a room's command, holds a control character (an escape sequence, a line break) is refused as damaged. A loop needs no permission on the receiving side: you asked for it.
 
 **What travels:** the route itself. Every room, its command and delay, its no-rest, no-attack and rest-here marks, and the loop's notes. With it go the **sending character's** two loop settings, *Only attack in lair rooms* and the lair wait, as that character has them. The loop file your client saves is shared by every character on your game data and holds neither; the two settings become the **receiving character's own** for the loop that is saved, since that is what was offered and what you said yes to. Your other characters start the loop with both off. Whether it is a favourite, and which folder it sits in, stay your own choice.
 
-**When you already have a loop of that name.** Your client works out whether the two are the same loop. What makes a loop itself is its rooms in order, each room's command, delay and four marks (no rest, no attack, rest HP, rest mana), and the two loop settings: the sender's as sent, yours as *this character* has them. Its name, folder, notes and favourite don't count. Names are matched without regard to capitals.
+**When you already have a loop of that name.** Your client works out whether the loop that arrived is one you hold. What makes a loop itself is its rooms in order, each room's command, delay and four marks (no rest, no attack, rest HP, rest mana), and the two loop settings: the sender's as sent, yours as *this character* has them. Its name, folder, notes and favourite don't count. Names are matched without regard to capitals.
 
-- **The same loop: it is rejected.** Nothing is saved, and no setting of yours is touched.
-- **A different loop** (other rooms, other room settings, or a different *Only attack in lair rooms* or lair wait): **it is saved as new**, as `<name> 2`, or `<name> 3` and so on if that is taken too. The sender's two loop settings become this character's for the *new* loop only. The loop you had, and your settings for it, stay as they were, so a loop you are running at that moment carries on unchanged. Nothing of the sender's name goes into the loop's name.
+It is compared with your loop of that name **and with every numbered copy of it**: `Dragons`, `Dragons 2`, `Dragons 3` and so on. A numbered copy is a name a numbered save writes: the name, one space, and a whole number of 2 or more. A loop you named yourself, such as `Dragons 2a`, `Dragons2` or `Dragons (old)`, is not one and is never looked at. Each copy is compared the way this character runs *that* copy, with its own two loop settings for it.
 
-The **code** in the notices is the first eight characters of the loop's signature, a fingerprint of everything listed above. Two loops with the same code are the same loop, whatever they are called, so it lets you compare two loops: your `Dragons 2` and a friend's `Dragons` are the same loop if the codes match. A loop saved under a name you didn't have is saved even when another of your loops, under a different name, is the same; the rule goes by name. The code also appears in the program log's send and receive lines (source `LoopShare`) on both clients and in a bug report's running-loop lines. It is worked out when needed and not stored in the loop file.
+- **The same as any of them: it is rejected.** Nothing is saved, no setting of yours is touched, and the notice names the one it matches (`already have it as 'Dragons 2'`). So a loop sent to you twice is saved once.
+- **Different from all of them** (other rooms, other room settings, or a different *Only attack in lair rooms* or lair wait): **it is saved as new**, as `<name> 2`, or the next number no loop has. The sender's two loop settings become this character's for the *new* loop only. The loops you had, and your settings for them, stay as they were, so a loop you are running at that moment carries on unchanged. Nothing of the sender's name goes into the loop's name.
 
-Clients on an older version: one that **sends** you a loop sends the two settings its loop file holds (it has no per-character settings), and the rule above is applied to what arrives. One that **receives** your loop keeps the old behaviour: it compares rooms, room settings and the two settings it reads from its own file, and saves a different loop as `<name> (from <player>)`.
+**The code, and "verified".** The **code** is the first eight characters of the loop's signature, a fingerprint of everything listed above. Two loops with the same code are the same loop, whatever they are called, so it lets you compare two loops: your `Dragons 2` and a friend's `Dragons` are the same loop if the codes match. A loop saved under a name you didn't have is saved even when another of your loops, under a different name, is the same; the rule goes by name.
+
+The sender's client puts the code of the loop it is about to send on its offer. Your client keeps it, works out the code of the loop it put back together, and compares the two:
+
+- **`verified`**: they are the same. The loop you have is the loop that was offered.
+- **does not match the loop offered**: they differ, so the loop was damaged on the way or lines of another transfer got in. It is **not saved**; ask again.
+- **`not verified: no code came with the offer`**: the sender's client is older than the code. The loop is taken as it always was, unchecked.
+- **`not verified: it uses a setting this version does not know`**: the sender's client is newer than yours and the loop's lair wait is a way of waiting yours doesn't have. It is saved with the lair wait off, as before, and can't be checked because of that one difference.
+
+When the transfer is over **your client tells the sender what became of it**, once, by telepath: saved (and under which name), already held (and as which loop), or not saved and why. The sender's client shows that in the sender's terminal with whether your code is the code it sent, so both of you can see the two ends hold the same loop. What holds the answer back: with **your master switch off** nothing is sent (the loop is still taken, since you typed the yes); and a **not saved** answer is a failure answer, so it goes only when **Warn sender on invalid / denied remote command** (Settings → Talk) is on. Saved and already-held answers go whatever that setting says. The answer is sent like any remote reply, in braces.
+
+Eight characters guard one transfer against damage and mix-ups; they are not proof against someone building a loop to match a code. Whether two loops are the same is always decided on the whole signature, never on the code. The code also appears in the program log's send and receive lines (source `LoopShare`) on both clients and in a bug report's running-loop lines. It is worked out when needed and not stored in the loop file.
+
+Clients on an older version:
+
+- **An older client sends you a loop.** Its offer has no code, so the loop is `not verified`. It sends the two settings its loop file holds (it has no per-character settings), and the rules above are applied to what arrives. Your client's answer reaches it and is only shown there.
+- **An older client receives your loop.** It shows your offer, code and all, and does nothing with the code. It keeps its old behaviour: it compares rooms, room settings and the two settings it reads from its own file, saves a different loop as `<name> (from <player>)`, and tells you nothing back, so no notice appears on your side.
+- **Other channels.** An older client still offers and sends a loop on gangpath or say when asked there. Your client takes none of it there. Asked there by an older client, yours answers that it works by telepath only.
 
 **Situations:**
 
-- **On gangpath or say:** every MudPlay client there that grants you Move player offers its own match, and after a `yes` on those channels your client takes lines from any of them. Use telepath.
+- **You asked for a second loop while the first was still arriving:** each offer is remembered for five minutes, and each loop is verified against the offer made for it.
 - **`yes`, `y`, `no` and `n` are read as answers**, so a loop with one of those names can't be asked for by name.
 - **The game says the sender is typing too quickly:** the sending client waits three seconds and sends the last line again.
 - **Master switch off on the client asked:** ignored, no answer.
-- **On the sending client's screen:** nothing but the outgoing lines. Its program log notes who asked for which loop, the answer, and the send.
+- **Master switch off on the asking client:** the loop is still taken and saved (you typed the yes), but the sender is not told what became of it. The program log says so.
+- **The loop was changed between the offer and your yes:** it is not sent, and you are told to ask again (when the sender's Warn setting is on).
+- **On the sending client's screen:** the outgoing lines, then the notice with the asker's answer. Its program log notes who asked for which loop, the yes or no, the send, and the answer with both codes.
 
 #### @lair
 
@@ -2374,6 +2421,26 @@ Three commands hand whole data sets from one MudPlay client to another over chat
 - **Boss timers:** `@timer sync`, below.
 - **The Roomba item log:** `@roomba sync`, below.
 
+**Each goes by its own channels, and no others:**
+
+| Transfer | Channels |
+|---|---|
+| `@loop send` | telepath |
+| `@roomba sync` | telepath, gangpath |
+| `@timer sync` | say, telepath, gangpath, broadcast (with the broadcast box unticked on both clients, see below) |
+
+*Broadcast* is the game's numbered channel: the one you `join <n>` and speak on with `br`, `'` or `-`, heard as `Broadcast from <name> "…"`. It is not gossip or auction.
+
+Both ends keep to the table. The client asked refuses a request that comes by another channel, saying where the transfer does work (a refusal, so it follows the **Warn** setting, and goes back on the channel the request came by). The client asking takes no data that comes by another channel, and when you type the request on one, it opens nothing and tells you so in the terminal. A channel you switched off for remote commands on Settings → Talk stays off whatever the table allows.
+
+**The broadcast channel starts switched off.** It is public: anyone can join a numbered channel. Settings → Talk → **Disallow @commands from broadcast** is ticked by default, and while it is, your client reads nothing on that channel: no request, and no answer to a request of your own. For a timer sync on broadcast the box must be unticked on **both** clients, the one asking and the one answering. With it unticked:
+
+- `@timer sync` is followed there, and answered on the channel.
+- `@roomba sync` and `@loop send` are refused there with where they do work.
+- A player without the permission for one of those three gets the Failure message there.
+- **No other remote command is read on that channel.** It is not followed, answered, refused or relayed.
+- **Your client says little there.** Each player gets one answer a minute on that channel (a set of timers, a refusal or the Failure message), and all players together get four a minute. Anything past that is passed over without a word, so nobody on the channel can make your client flood it, or use up the lines the game lets you send.
+
 #### @timer
 
 Reports the boss respawn timers you are tracking, or hands them to the sender's client.
@@ -2384,7 +2451,7 @@ Reports the boss respawn timers you are tracking, or hands them to the sender's 
 - `@timer dragon`: the timers of bosses whose name contains the text, ignoring case.
 - `@timer sync`: send the timers as data, for another MudPlay client to merge.
 
-**Who may send it:** a player with **Query boss timers**, on any of the three channels.
+**Who may send it:** a player with **Query boss timers**, by telepath, gangpath or say. `@timer sync` may also be asked on the **broadcast channel** (the numbered channel spoken on with `br`), and is answered there, once you have unticked **Disallow @commands from broadcast** on Settings → Talk; the readable `@timer` report is not read there.
 
 | Reply | When |
 |---|---|
@@ -2403,7 +2470,13 @@ Times read `2h14m`, or `45m` under an hour.
 **Situations:**
 
 - **The asking side of `@timer sync`:** sending it, by hand or with **Request Timers** on the Bosses tab, opens the merge window that collects the answers. See **Bosses** under *Quests, Bosses, and Deaths*.
-- **On gangpath or say** every client that grants you the permission answers, each with its own set.
+- **On gangpath, say or the broadcast channel** every client that grants you the permission answers, each with its own set, and everyone on the channel sees the lines. The merge window keeps one set per player and folds them together, so several answers are what you want; each is a handful of lines (sixty timers at most).
+- **On the broadcast channel each client answers a player once a minute, and four players a minute in all.** A whole set of timers is one answer, however many lines it takes. Asked again sooner, or once the minute's four answers are given, the client says nothing; ask again a minute later. The other channels have no such limit.
+- **Answers are taken on the channel you asked on, and on no other.** Asked on gangpath, only gangpath answers are read; by telepath, only telepaths; on broadcast, only broadcast (and only while **Disallow @commands from broadcast** is unticked). The one exception: after a request you **said**, a telepathed answer is read too, because a client that is sneaking answers a said request by telepath rather than speak aloud. A second request typed on another channel while the window is open adds that channel.
+- **Timers heard on the broadcast channel are never adopted without a pick.** On the other channels a timer for a boss you track and hold no timer for is adopted as it arrives. Anyone can join a numbered channel, so there the same timer becomes a row to choose, marked `heard on broadcast` under the sender's name, with **Keep ours** selected until you pick it.
+- **Your own data is never read back as an answer.** A shared channel echoes your lines to you; if your client answered someone else's `@timer sync` while your own merge window was open, that echo is passed over.- **Request Timers with Broadcast chosen and that box ticked** asks nothing and says which box to untick. Typed by hand with the box ticked, your client shows `[the broadcast channel is switched off for @commands: …]` and opens no window.
+- **On the broadcast channel the game does not show you your own line on Stock**, so a `br @timer sync` typed by hand there does not open the merge window; use **Request Timers**, which opens it before asking. On Paradigm your own broadcast is echoed and the window opens either way.
+- **Not on a channel**, `br` is not a command to the game and the words may be said aloud instead. `join <n>` first.
 
 #### @roomba
 
@@ -2416,7 +2489,7 @@ Reports where an item was last seen in your gang house, from the Roomba item log
 
 **How the item is matched.** First the text is looked up as an item name in the game data, so any wording the game data knows finds that one item. Failing that, an item logged under exactly that name. Failing that, **every** logged item whose name contains the text, so a loose word such as `head` can bring back several items.
 
-**Who may send it:** a player with **Query Roomba**, on any of the three channels.
+**Who may send it:** a player with **Query Roomba**, on any of the three channels for `@roomba <item>`. **`@roomba sync` works by telepath or gangpath only**: the gang house's whole log goes to one player or to the gang, and is not said aloud in a room.
 
 | Reply | When |
 |---|---|
@@ -2425,11 +2498,13 @@ Reports where an item was last seen in your gang house, from the Roomba item log
 | `no record of "<text>"` | Nothing in the log matches. |
 | `usage: @roomba <item name>` | **Refusal:** nothing followed `@roomba`. |
 | `@roombadata <data>` | `@roomba sync`: room labels first, then the sightings, then a last line reading `@roombadata Sync Complete`. One line every 0.8 seconds. |
+| `@roomba sync works by telepath or gangpath only` | **Refusal:** `@roomba sync` said aloud or on the broadcast channel. Nothing of the log is sent. |
 | the Failure message | **Refusal:** the sender doesn't hold Query Roomba. |
 
 **Situations:**
 
-- **The asking side of `@roomba sync`:** the lines are merged as they arrive, the newer sighting winning, with no review window. A line the game drops costs only the rooms it carried.
+- **The asking side of `@roomba sync`:** the lines are merged as they arrive, the newer sighting winning, with no review window. A line the game drops costs only the rooms it carried. They are taken by telepath or gangpath only; typed as a say, your client opens nothing and shows `[@roomba sync works by telepath or gangpath only]`.
+- **An older client** still answers a said `@roomba sync` with its log, said aloud. Your client takes none of it.
 - **More:** **Roomba (Player Workshop)** has the log, the sync and what each side must grant.
 
 ### Session and profile
@@ -2485,6 +2560,80 @@ Eleven commands, one for each auto toggle on your toolbar and in Settings → Ge
 - **It is saved** to your character, like ticking the box yourself.
 - **Master switch off:** ignored, no answer. Only `@auto-all` is followed then.
 - **On your own screen:** a change is written to the program log with the sender's name.
+
+#### @events and @event
+
+`@events` lists the events you defined under Settings → Events. `@event` reports one of them, or switches it on or off. Switching an event is the same as ticking or clearing the **Disabled** box in its editor: it takes effect at once and is saved to your character.
+
+**Forms:**
+
+- `@events`: every event's number and name, and whether it is on.
+- `@event bank run`: that one event: on or off, when it fires, and what kind of thing it does.
+- `@event bank run off`: switch it off. `disable` is taken for `off`.
+- `@event bank run on`: switch it on. `enable` is taken for `on`.
+- `@event 3`, `@event 3 off`, `@event 3 on`: the same, for the third event in the list.
+
+**How a name finds an event.** The same way `@loop` finds a loop. A name that equals what was typed (ignoring case) wins outright. Otherwise an event matches when its name holds **every typed word, in any order**: `@event run bank off` finds *Evening bank run*. If nothing matches, it is tried once more without apostrophes. Exactly one match is used; none, or more than one, is refused. An event with no name is listed as `(unnamed)` and can't be named: use its number.
+
+Two events with the same name (or names that differ only in capitals) can't be told apart by name: every `@event` naming them is refused, and the refusal gives their numbers. Use a number, or rename one in its editor.
+
+**By number.** `@events` numbers the events in the order of the Events tab, and `@event` takes that number in place of a name. It is the way to an event with no name, and to one of two that share a name.
+
+- **The number is the event's place in the list now.** If you added, removed or reordered events after the sender read the list, the number points at a different event. So every answer to a numbered request says the number and the name it found: `event 3 'Bank run' switched off`, or `event 3 (unnamed) switched off`.
+- **A name comes first.** If one of your events is itself named `3`, `@event 3` means that event, and the list shows both (`2 3 on` is the second event, named *3*). `@event #3` always means the third event, whatever anything is named. An event named `Farm 3` doesn't get in the way: only a whole name counts.
+- **A number with no event** is refused with how many there are: `no event number 9: there are 4`. Zero and negative numbers are refused the same way.
+
+A name longer than 40 characters is shown cut short, as its first 37 characters and `...`, in every reply. The event is still found by its words, the cut ones included, and by the name typed as it was shown.
+
+The last word is read as the switch (`on`, `off`, `enable`, `disable`), unless everything after `@event` is itself an event's whole name. So an event called *Lights on* is asked about with `@event lights on` and switched with `@event lights on on`. With both a *Lights* and a *Lights on* defined, `@event lights on` asks about *Lights on*; switch *Lights* on with `@event lights enable`.
+
+**Who may send it:** a player with **Alter settings**, on any of the three channels. It is the permission `@settings`, `@profile` and the `@auto-…` toggles need: seeing how your client is set up needs the same grant as changing it. A player without it gets the Failure message whatever they typed, and so can't learn whether an event of some name exists.
+
+**What granting it allows here.** A player who holds Alter settings can switch your events on and off, and an event switched on does whatever you defined it to do: walk somewhere, run a loop or Auto-Lair, make a bank trip, send a command. They can't define an event or change what one does.
+
+**What an answer may say.** An event's number and name, and whether it is on. The one-event answer adds the *kind* of its trigger and action in fixed words (`fires on logon`, `sends a command`), and for an event on a clock the schedule it runs on: its period (`fires every 30 minutes`) or its time of day (`fires at 21:30 daily`), worded as the Events tab's **When** column words them. The list doesn't give the schedule. No answer says what an event sends, or names its loop, its Auto-Lair setup, its rooms or its boss: an event's command can hold anything you typed, and a boss-timer event is only said to follow a boss timer.
+
+| Reply | When |
+|---|---|
+| `events: 1 Night stats on, 2 Bank run on, 3 Sell junk off` | `@events`. The events in the order of the Events tab, each with its number. |
+| `events (1/3): …` and so on | Too long for one line: the whole list is sent over several replies. The numbering runs on from one reply to the next. |
+| `events (all disabled): …` | **Disable all events** is ticked on the Events tab. Each event's own state is still shown; none fires until the box is cleared. |
+| any of the above, with `<name> off (target missing)` | That event is off because its saved loop or Auto-Lair setup no longer exists. It can't be switched on from here. |
+| `no events defined` | `@events`, and you have none. |
+| `event '<name>' is on: fires at 21:30 daily, makes a bank trip` | `@event <name>`. It reads `is off`, or `is off (target missing)`, for one that is. It ends `; all events are disabled` while **Disable all events** is ticked. |
+| `event '<name>' switched off` | It was on. It fires no more. |
+| `event '<name>' switched off; the run it has under way finishes` | The same, switched off in the middle of its own run. |
+| `event '<name>' switched on` | It was off. It ends `; all events are disabled, so it won't fire yet` while **Disable all events** is ticked. |
+| `event '<name>' is already on` (or `already off`) | Nothing needed changing, and nothing was saved. |
+| `event '<name>' can't be switched on: its loop is missing` (or `its Auto-Lair setup is missing`) | **Refusal:** the event names a saved loop or Auto-Lair setup that no longer exists. |
+| any `event '<name>' …` reply above, as `event 3 '<name>' …` or `event 3 (unnamed) …` | The event was asked for by number. |
+| `no event named '<text>'` | **Refusal:** no event's name fits. |
+| `no event number 9: there are 4` | **Refusal:** there is no event at that place in the list. It ends `there is 1`, or `no events defined`, when that is so. |
+| `event name '<text>' matches 2: '<name>' (number 1), '<name>' (number 4)` | **Refusal:** the name fits more than one. Each name is said once, with the number of the event. Up to four names are given, fewer when they are long, then `+3 more` for the rest. Nothing is switched. |
+| `event name '<text>' matches 3: '<name>' (numbers 2, 5), '<name>' (number 7); use a number in place of the name` | **Refusal:** the same, where two or more of the events share a name. Up to four numbers are given for a name, then `and 3 more`. |
+| the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
+
+Two more refusals carry a usage line. `@event` with nothing after it, or with only `on` or `off`, is refused with `usage: @event <name or number> [on|off]`. `@events` with anything after it is refused with `usage: @events lists them; @event <name or number> on|off switches one`, and nothing is switched: `@events off` does not disable your events.
+
+What the one-event answer describes an event by:
+
+| Part | Reads |
+|---|---|
+| Trigger | `fires on logon`, `fires on logoff`, `fires on re-log`, `fires at 21:30 daily` (its own time), `fires every 30 minutes` (its own period, in seconds, minutes or hours), `fires on a condition`, `fires on a boss timer`. An event whose saved time or period can't be read says `fires at a set time` or `fires on a timer`. |
+| Action | `walks to a room`, `runs a loop`, `runs Auto-Lair`, `sends a command`, `runs a Roomba sweep`, `waits`, `rests up`, `makes a bank trip`, `moves a stash to the bank` |
+
+**Situations:**
+
+- **An event that is running when it is switched off** finishes that run, its Then step included. What stops is every later firing; a firing of it that was waiting its turn behind another event is dropped when its turn comes. To stop the run itself, stop what it is doing (`@stop`, or Stop in the client).
+- **An event the client switched off for a missing target** can't be switched on by `@event`. Put the loop or Auto-Lair setup back, or point the event at another one in its editor, and clear its **Disabled** box there.
+- **Disable all events** is not changed by either command. There is no remote command for that box.
+- **The Settings window open on the Events tab** shows the change at once: a disabled event carries an `off` badge in the list.
+- **The event's editor open when it is switched.** The editor's **Disabled** box moves with the switch as you watch, and everything else you changed there stays as you left it. **Save** then saves your changes with the event in its switched state, unless you set the box yourself first: the box is yours, and Save saves what it shows. **Cancel** saves nothing, so the switch stands.
+- **Timers.** Switching an **Every** event on starts its countdown from that moment; switching it off stops it. The countdowns of your other events run on untouched. (Saving an event from its editor still starts every **Every** countdown over.)
+- **A condition event (When …) switched off and on again** can fire again though its condition never stopped holding. Such an event fires once when its condition turns true, then waits for the condition to stop holding. While it is off it counts as not holding, so once your money, encumbrance, experience or level has changed while it was off, switching it on with the condition still true fires it at the next such change. Switched off and on with no change between, it stays as it was.
+- **Through the Local control API** (`POST /command`) both work the same, with no permission check, and a refusal's reason is always returned.
+- **Master switch off:** ignored, no answer.
+- **On your own screen:** a switch is written to the program log with the sender's name, and the bug report's event list says who last switched an event. A list request is logged only with Debug diagnostics on.
 
 #### @reset
 
@@ -3177,12 +3326,14 @@ Tick **Grab All** (default off) to blindly grab a boss's loot the instant it's a
 - an **item** that just sits in the room (a box, e.g. a bogwood box or Pastor Lander's box) — `get` it every time you **walk into** the room.
 - **neither** (an unresolvable name — a touch-to-awaken mechanic like Iceforge) — Grab All doesn't apply, so its cell shows a muted dash reading *"Cannot resolve to a specific monster or item"*.
 
-**Sync Timers…** shares respawn timers with other MudPlay users. Pick a channel (Gang, Telepath to a named player, or Local say) and click **Request Timers**; the client sends `@timer sync` on that channel, and any other MudPlay user who receives it (and grants the `@timer` remote command) replies with their active timers. Most arrivals need no action from you:
+**Sync Timers…** shares respawn timers with other MudPlay users. Pick a channel (Gang, Telepath to a named player, Local say, or Broadcast: the numbered channel you have joined, spoken on with `br`, which works once **Disallow @commands from broadcast** is unticked on Settings → Talk, on your client and on theirs) and click **Request Timers**; the client sends `@timer sync` on that channel, and any other MudPlay user who receives it (and grants the `@timer` remote command) replies with their active timers. Most arrivals need no action from you:
 
-- a timer for a boss you track but have **no** timer for is **adopted automatically**.
+- a timer for a boss you track but have **no** timer for is **adopted automatically**, unless it was heard on the **broadcast** channel: anyone can join that channel, so there it is a row to pick, marked `heard on broadcast`, and nothing is written until you choose it and **Apply Selected**.
 - one that matches what you already hold is left alone (co-kills marked seconds apart count as the same timer).
 - a genuine **conflict** — a boss where someone's timer disagrees with one you hold — shows your timer beside a **Keep ours** default plus a pick button per differing responder; choose whose to keep, then **Apply Selected**.
 - a boss a responder tracks that **you don't** also asks — adopting it **adds the boss back to your list** (recovering a catalog boss you'd removed).
+
+Answers are read only on the channel you asked on (after a say, a telepathed answer too, which is how a sneaking client replies).
 
 Bosses are matched by the monster itself (not by room), so it works even if you and they pinned different rooms. You don't have to open the tab first: sending `@timer sync` by hand — a telepath (`/name @timer sync`), a gang broadcast (`bg @timer sync`), or a say (`.@timer sync`) — **auto-opens this merge window** and starts collecting.
 
@@ -4838,7 +4989,12 @@ Where the record shows up:
 - **When it looks.** Only when the list it keeps (the one described above, which also holds your HP and max HP, lives, coins, what you wore and whether you were in a fight) says the hang-up **could have killed**, by this realm's settings. That takes two things. First, the settings penalise that hang-up: the master switch is ticked and you were in a fight with a player (one under way, or a player attacked you in the last 30 seconds); or **Also penalised in combat with monsters (PvE)** is ticked and you were in a fight with a monster (in combat, or a hostile one in the room); or **Also penalised outside a fight (every hang-up)** is ticked too. Second, you were **dropped**, or your HP was no more than the top **HP lost (%)** figure of that side, taken of your max HP (at 50% and 500 max HP: 250 HP or less); with that figure at 0, only a dropped character counts. It needs no **Items dropped** figure, so it runs on a realm that takes HP only. **Only a dropped link counts as a hang-up.** Leaving by the game's own exit command (`x`, the meditation, *Your character has been saved.*) is not one: the board takes nothing for it, and MudPlay looks into nothing afterwards, whatever your HP was. One case is looked into on any realm, whatever these settings say: a hang-up while dropped in an arena room (**Dropped in an arena room**, below).
 - **What counts as a death: a life lost, and the room you come back in.** Exactly one life fewer than you left the game with is a death, when the room you come back in doesn't say otherwise (next point). The same number, or more, is not. Your HP and what is in your pack never count as one, and neither does a room you have walked to since: all of them change just by playing on. Both counts have to come from the game. The one "before" is on the list only if a `stat` was read on the connection you left on (the login sends one); the one "now" comes from a `stat` read on this connection. When something changes your lives with no screen saying so (a life asked back by **Sysop god lives**, a level trained), MudPlay sends a `stat` a few seconds later to read them again, under Auto-All; until one is read the count is treated as not known.
 - **The room you come back in.** A death moves you to where the dead of that room wake: hang up low in Darkwood Forest and die of it, and you log back in standing in the *Temple, Halls of the Dead*. MudPlay takes the **first room its map is sure of on the way in, before any move has gone out** (not a room you reached afterwards), and reads it like this. **Where the dead of the room you hung up in wake, and you hung up somewhere else:** that is where a death by this hang-up puts you. **The room you left the game in:** no death moved you, so a life that is gone was lost somewhere else. **Any other room:** the same, where the list of those rooms is that world's own (next point); elsewhere it says nothing. It says nothing either when the map wasn't sure of the room before you moved (on this connection, or on an earlier one that came and went without the check running), or when you hung up in the very room your dead wake in (or one of two rooms on map 17 that leave the game through it).
-  - **How far the list goes.** The list of where the dead wake is read off the Stock game files, so it depends on your game data. On an **unmodified Stock set** (the one whose Info says Legit 1 and Custom *Default*) it is trusted in full. On **Paradigm** it is trusted in full for the zones Paradigm shares with Stock. Paradigm's own rooms aren't on it: map 18, the rooms it added to the other maps, and the Stock room numbers it uses for other places (all of maps 5 and 14, and a few rooms elsewhere). For those only one waking room is known, the *Burial Vault* (14/1077), where the dead of **Albion** wake, and Albion is every room you can walk to from the Burial Vault without taking a boat. Hang up in one of those and come back in the Burial Vault, and that is a yes; no other room says anything for them, the room you left included. Paradigm's own rooms outside Albion (Port Blackwater, Terra Ista, Terra Fuego, Tal'kiran, Shadowmere and the rest) have no known waking room, so there the room you come back in says nothing and your lives decide alone. On **any other game data** (a Stock board whose sysop may have edited its rooms, or no set loaded) the list says "yes, that is the room" and "you never moved", and never "that is the wrong room".
+  - **How far the list goes.** The list of where the dead wake is read off the Stock game files, so it depends on your game data. On an **unmodified Stock set** (the one whose Info says Legit 1 and Custom *Default*) it is trusted in full. On **Paradigm** it is trusted in full for the zones Paradigm shares with Stock. One correction is built in: the sixteen dungeon rooms of map 1 that are blank placeholders on Stock (1/2171 to 1/2188) wake their dead at *Newhaven, Healer* (1/2190) on Paradigm, like the rooms next to them, and not in the Temple. Paradigm's own rooms aren't on it: map 18, the rooms it added to the other maps, and the Stock room numbers it uses for other places (all of maps 5 and 14, and a few rooms elsewhere). For those only one waking room is known, the *Burial Vault* (14/1077), where the dead of **Albion** wake, and Albion is every room you can walk to from the Burial Vault without taking a boat. Hang up in one of those and come back in the Burial Vault, and that is a yes; no other room says anything for them, the room you left included. Paradigm's own rooms outside Albion (Port Blackwater, Terra Ista, Terra Fuego, Tal'kiran, Shadowmere and the rest) have no known waking room, so there the room you come back in says nothing and your lives decide alone. On **any other game data** (a Stock board whose sysop may have edited its rooms, or no set loaded) the list says "yes, that is the room" and "you never moved", and never "that is the wrong room". **What MudPlay learns by watching.** For the rooms no list covers, MudPlay learns the waking room from a death it sees: the room you died in (when the map was sure of it) and the room the first display afterwards shows (when the map is sure of that too). It keeps that pair with the game-data set, shared by every character and client on it, and from then on a hang-up in that room that brings you back in the learned room counts as a yes. It is never set against the list where the list is trusted, and an arena death teaches nothing.
+    - **What it waits for.** A room display that still shows the room you died in (one asked for while the death was happening) is not the waking room: MudPlay skips it and waits for the next. It stops waiting after a minute, or the moment anything goes out that could move you: a direction, or any line that is a text exit or room command of some room. And it only learns from a display the map was still waiting on the death for. If the map followed a move in between (your party leader dragging you a room on, a step of your own), the room that display shows is where the move led, and nothing is learned. One thing it can't tell apart: being summoned away in that moment looks the same as the death moving you; a room misread that way corrects itself as below.
+    - **One death stands for its land.** The rooms you can walk to from the room you died in, without leaving its map and without a boat, are taken to wake their dead in the same place, so one death seen in Port Blackwater speaks for the rest of Port Blackwater. A land can be large: Shadowmere's is nearly all of its map. A landing room whose only way on leads onto another map is a land of one room, so a death on such a pier teaches the pier only. A room's **own** reading always wins: if a death in a room of that land ends somewhere else, that is recorded as that room's own, the program log says so in a warning, and the land keeps its reading for its other rooms. The same goes for a room of Albion seen to end somewhere other than the Burial Vault. A death that ends as its land already has it is counted towards the land's reading and makes no entry of its own. While a land has two readings and neither is borne out by more deaths, coming back in either counts as a yes.
+    - **A learned room says yes, never no, and its yes is a little weaker.** What was seen is where a *death* ends; a hang-up can leave you somewhere else, and in a few rooms a character that hangs up and **lives** comes back in the very room a death ends in. So with no lives count from before the hang-up, a learned room records a death only if your HP was **read at the first prompt**: above what you left with where the room alone would decide (you owned nothing a death takes), and simply not saying otherwise where you came back stripped. Otherwise you are told and nothing is recorded. With a life seen lost it counts like a listed room.
+    - **Two readings of one room.** A room sends its dead to one place, so two different readings mean one was misread. Both are kept as *disputed* and neither is used until one of them is seen a second time; that one then stands and the other is dropped. After that, a different sighting doesn't unsettle the reading in use, but it is kept beside it with its own count, and **takes over once it has been seen as often**. So a room learned wrong, or a waking room the board has since moved, puts itself right as you see the real one; nothing is ever edited by hand.
+    - **A Stock board with edited rooms.** If you play a board whose sysop edited its rooms but use the standard Stock game data, the list can be wrong for that board, and nothing in the game data says so. A death MudPlay sees there that ends in a room the list doesn't allow is taken as a sign of it, and the program log warns with the rooms each time. **One is not enough** (the map can have had the wrong room for it): the first changes nothing, and the second marks the board. From then on, **for that board on that game data only**, the list is read as on any other edited board (it says yes, never "wrong room") and learned rooms are used. The mark is kept against the game-data set it was seen on: point the realm at another set (the board's own data, imported, is the better fix) and the board starts afresh.
   - **Rooms the map can't tell apart.** The map knows a room by its name and the exits it shows, and two waking rooms have a look-alike. The *Portal Room* the dead of map 11's arena wake in shows only its south exit, exactly like another *Portal Room* beside it, and the map puts you in that one: coming back there counts as coming back where your dead wake, and the notice names both rooms. A *Dark Cave* on map 15 looks like the *Dark Cave* its dead wake in, so the map never sees you move: there the room says nothing.
   - **With both lives counts read**, the lives decide and the room has to agree: a life gone, but back where you left, is not recorded and you are told.
   - **With no count from before the hang-up**, the room can say it: back where your dead wake **with nothing left of what a death takes** (and nothing worn; on Stock, the board's hang-up line printed), the death is recorded, with the lives a `stat` on this connection gives. A character walked to the temple from another client and left there stands in the same room, still holding its gear, which is why the pack has to agree. **If you owned nothing a death takes** when you left (no item but those that stay with you, and no coin) there is nothing to come back stripped of, and the room is enough. If what you held isn't known, it stays "can't tell".
@@ -4849,7 +5005,7 @@ Where the record shows up:
 - **When it can't tell.** MudPlay records **nothing**, and says so once on the terminal with what it saw, when: no `stat` was read on the connection you left on, so there is no count to compare with, and the room you came back in with what you hold doesn't settle it either; two or more lives are gone, more than one hang-up costs; or a life is gone but not to this hang-up (above). A death is never guessed. If you are still in the room you left, the item pickup then runs as usual; anywhere else it stands down, since what is missing may be a deathpile. The same holds while the question is still open. **One thing it can't tell apart at all:** if you played the character from another client in between and that session itself ended in a death by a hang-up, you come back stripped with a life less exactly as if this client's hang-up had done it. The record is then made where MudPlay last had you, which is why it says so in its own words and the notice adds that the pile is where you died if you played elsewhere since.
 - **Dropped in an arena room.** A hang-up while you are dropped (0 HP or less) in an arena room (the Training Grounds, the Arena Practice Rooms, the Dwarven Arena, the arena passages of map 11) is an **arena death**: the game puts your HP back and moves you to where that arena's dead wake, and takes no life, no item and no coin. MudPlay looks into it on **any** realm, penalty settings or none, holding movement at the login as for the other check. Your lives can't say it, since none is lost, so **the room you come back in decides**: the first room the map is sure of on the way in, before any move has gone out, is where the dead of that arena room wake (and isn't the room you hung up in), and you aren't still dropped. It needs a `stat` read on this connection for the record's lives, and asks for one as above; it does **not** need a lives count from before the hang-up, since an arena death costs no life. Paradigm is treated as Stock here. It is then recorded as an arena death: in the history with **nothing lost**, marked **Recovered**, no pile, nothing for **Recover Now** to do, and no life asked back by **Sysop god lives**. Its line begins *Died in an arena room after the link went down (not seen: worked out on entering the game).* and names the room you came back in. Loops, walks and Auto-Lair are stopped and your buff timers cleared when it is found at the login, as for any death; gear waiting to go back on is kept, being still in your pack. **When it isn't taken for one:** a life is gone, or nothing is left of what a death takes. That is an ordinary death (on Stock the board can have its arenas switched off, and an arena room is then a room like any other), and it goes by the rule above, pile and all. You come back in the room you left, or still dropped: no death at all. **When it can't tell:** the room you came back in wasn't confirmed before you moved, or you hung up in the very room that arena's dead wake in (the Training Grounds' Halls of the Dead, and one Arena Practice Room on map 17); nothing is recorded then. And one case is **told, not recorded**: this realm's settings penalise that hang-up (so with the board's arenas off it would have been an ordinary death), your lives weren't read before it, and what you held can't say either. One thing it can't tell apart: a character healed and walked to that room from another client, and left there.
 - **What it can't know.** Whether you were in a fight is MudPlay's own reading when the link dropped; if the board saw you attacked and MudPlay didn't, a realm without the **every hang-up** box ticked is not checked. A protected room, which the board treats as free when you aren't being attacked, costs nothing: you come back with the HP you left with, no death, and nothing is recorded. The board's death threshold is its own setting and MudPlay relies on no figure for it, which is why a low HP only makes it look, and your lives and the room you come back in decide. On Stock a room can name another room that a character who hangs up there is put in, and the death then happens in that other room; the record still names the room you were in, since nothing tells MudPlay of the move.
-- **Where to see it.** The terminal notice; the program log's `[HangupItems]` lines (HP and lives then, HP at the first prompt, lives now, what was worn, the board's lines, the room you came back in and what it says, what is gone, and the verdict); and a bug report's Session section, where **Held list on file** shows the list's HP, lives and fight, whether it was an arena room, where its dead arrive by the Stock files and how far that is trusted for your game data, and the room an earlier connection came back in (or that it moved before the room was known), **Hang-up death check** the last verdict and what it went by, and **Hang-up item check** says while a death is still to be judged.
+- **Where to see it.** The terminal notice; the program log's `[HangupItems]` lines (HP and lives then, HP at the first prompt, lives now, what was worn, the board's lines, the room you came back in and what it says, what is gone, and the verdict); and a bug report's Session section, where **Held list on file** shows the list's HP, lives and fight, whether it was an arena room, where its dead arrive by the Stock files and how far that is trusted for your game data, and the room an earlier connection came back in (or that it moved before the room was known), **Hang-up death check** the last verdict and what it went by, **Learned arrival rooms** how many waking rooms the set has learned, which are disputed, which have another reading seen beside the one in use (with how often each was seen), which rooms' own reading differs from their land's, which lands have two readings, the learned pair the last check used, and **how many of this board's deaths have contradicted the standard list** (0, 1, or 2 and marked; the line says when the board is being read as one with edited rooms, and that pointing the realm at another game-data set starts the count afresh), and **Hang-up item check** says while a death is still to be judged. The program log's `[LearnedArrivals]` lines say when a pair is learned (*learned: the dead of 14/1813 arrive in 14/1900*), when a death was counted towards its land's reading, when one is disputed or settled, when another reading takes over (*changed: …*), when a room's own reading differs from what its land or Albion said, each death that contradicts the standard list, and when the learned file can't be read or written (it is kept in memory and tried again; a file that can't be read is set aside as `learned-arrival-rooms.json.bad`, never written over).
 
 ### Boss cleanup time / Boss cleanup zone
 
@@ -5910,7 +6066,14 @@ Settings → Talk.
 ### Disallow @commands from telepaths / pages, gangpaths, or say (local)
 
 **Default:** all Off
-**What it does:** Three separate switches to drop `@`-commands arriving via each specific channel (telepaths and pages, guild/gang chat, local room speech). These are the only three channels MudPlay listens for `@`-commands on at all.
+**What it does:** Three separate switches to drop `@`-commands arriving via each specific channel (telepaths and pages, guild/gang chat, local room speech). With the broadcast channel below, these are the only channels MudPlay listens for `@`-commands on at all.
+
+### Disallow @commands from broadcast
+
+**Default:** On (ticked). A profile saved before this setting existed also reads as ticked.
+**What it does:** Drops everything arriving on the **broadcast channel**: the game's numbered channel, the one you `join <n>` and speak on with `br`. It is ticked by default because that channel is public: anyone can join one. While it is ticked your client reads nothing there, neither another player's request nor the answers to a request of your own.
+**Unticked:** only the three client-to-client transfers are read on that channel. `@timer sync` is followed and answered there; `@roomba sync` and `@loop send` are refused there with where they do work; a player without the permission gets the Failure message. **No other `@`-command is read on the broadcast channel**, whatever permissions the sender holds. See *Sharing data between clients* under Remote @-commands.
+**Important notes:** For a timer sync on broadcast the box must be unticked on both clients. Refusals there follow **Warn sender on invalid / denied remote command** like any other, and are seen by everyone on the channel. Your client answers each player there once a minute at most, and four players a minute in all (a whole set of timers counts as one answer); anything more is passed over in silence. Timers that arrive on this channel are never adopted without your pick.
 
 ### Warn sender on invalid / denied remote command
 
@@ -6480,7 +6643,7 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 ### Event list (New… / Modify… / Remove)
 
 **What it does:** Shows every scheduled event you've defined, with its **Name**, its trigger (**When**), a live countdown to its next fire (**Next**), and its action, its stop rule and its Then step (**What**, e.g. `Loop "Sewer" (until 3 laps) → go back`). **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
-**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time**, **Every** and timed **Boss** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
+**Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A disabled event shows an **off** badge in the list. A player you grant **Alter settings** can list your events and switch one on or off, by its name or by its number in the list, with the remote commands `@events` and `@event` (see *Remote @-commands*); an event they switch on does whatever you defined it to do. The list shows the change at once, and so does the event's editor if it is open: its **Disabled** box moves with the switch. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time**, **Every** and timed **Boss** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
 
 ### Event editor — Sound
 
@@ -6816,7 +6979,7 @@ That per-player permission is the only gate — there's no separate on/off check
 
 **`@roomba sync`** — the no-hassle way to hand your item-location log to a gang member starting fresh on their own MudPlay install, no file/Discord/import-export needed.
 
-They gangpath (or telepath) `@roomba sync`; your client (with them granted the **Query Roomba** permission) replies with your whole log — **both the labeled gang-house rooms and the item sightings** — compressed into chat lines that merge straight into theirs, so their Roomba tab fills with the same rooms (ready to sweep) and their `@roomba` / Master List has all your item locations. A room they've already labeled themselves is left as-is.
+They gangpath or telepath `@roomba sync` (those two channels only: said aloud it is refused, and nothing said aloud is taken); your client (with them granted the **Query Roomba** permission) replies with your whole log — **both the labeled gang-house rooms and the item sightings** — compressed into chat lines that merge straight into theirs, so their Roomba tab fills with the same rooms (ready to sweep) and their `@roomba` / Master List has all your item locations. A room they've already labeled themselves is left as-is.
 
 - **Paced out** — a big gang house is a couple dozen lines, so the reply is released about 0.8s per line in the background: it never floods the channel or stalls your own combat/healing/movement, and a line dropped to the typing-rate limit is automatically re-sent.
 - **No review window** — unlike `@timer sync`'s boss-timer merge, a room-contents sighting has no "conflict" to weigh, so whichever side saw an item more recently just wins, silently. The reply finishes with a `Sync Complete` marker so you can see it landed in full.

@@ -250,6 +250,10 @@ public sealed class PartyProbeManager : IDisposable
         string inner = p[1..^1].Trim();
         if (inner.Length is 0 or > 60) return false;
         if (!char.IsLetter(inner[0])) return false;
+        // A `@loop send` line names a loop and an @events one an event: "sending
+        // loop 'x' (3 rooms, 1 line)" and "events: Farm 2 on" are letters and a
+        // digit, and no client's version.
+        if (UserNamedReply.IsLine(inner)) return false;
         // "Level" covers both @level shapes — MudPlay's "Level 12, …" and MegaMUD's
         // "Level: 12  Needed: …", which the letter + digit rule would otherwise
         // accept as a client version.

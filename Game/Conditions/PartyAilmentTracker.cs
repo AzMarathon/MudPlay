@@ -258,6 +258,9 @@ public sealed class PartyAilmentTracker : IDisposable
     {
         string msg = entry.Message.Trim();
         if (msg.StartsWith('{') && msg.EndsWith('}')) msg = msg[1..^1].Trim();
+        // A `@loop send` line names a loop and an @events one an event, and either
+        // can be named "no ailments".
+        if (UserNamedReply.IsLine(msg)) return;
 
         int listAt = msg.IndexOf("ailments:", StringComparison.OrdinalIgnoreCase);
         bool none = msg.Contains("no ailments", StringComparison.OrdinalIgnoreCase);

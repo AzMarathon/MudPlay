@@ -31,7 +31,7 @@
 
         <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource ChromeFgMutedBrush}"
-                       Text="Request boss timers from other clients on a channel. A timer for a boss you're not tracking yet is folded in automatically, and one that matches yours is left alone — only a boss where someone's timer conflicts with one you already hold needs a pick. Nothing overwrites a timer you hold unless you choose it."/>
+                       Text="Request boss timers from other clients on a channel. A timer for a boss you're not tracking yet is folded in automatically, and one that matches yours is left alone — only a boss where someone's timer conflicts with one you already hold needs a pick. Nothing overwrites a timer you hold unless you choose it. Timers heard on the broadcast channel are always a pick, since anyone can join that channel."/>
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <ComboBox ItemsSource="{Binding Channels}" SelectedIndex="{Binding ChannelIndex}" Width="150"/>
                 <TextBox Text="{Binding TelepathTarget}" PlaceholderText="player" Width="120"

@@ -174,22 +174,45 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
         Simulator = new SimulatorViewModel(
             _services.ExpResolver, _services.Loops, _services.GameData, _services.Movement,
-            _services.LoopSimulationSource, _services.Log, () => ExpEstimator, ShowSimulatedRouteOnMap);
+            _services.LoopSimulationSource, _services.Log, () => ExpEstimator, ShowSimulatedRouteOnMap,
+            _services.SimulatorRankings, SimulatorCharacter);
         _services.SimulatorSnapshotProvider = () => Simulator.ToSnapshot();
         _services.NavigationModeProvider = DescribeModeForReport;
-        // A character simulation was played with the old character / game data.
-        _services.Profile.ProfileLoaded += OnProfileLoadedDropSimulation;
-        _services.GameData.ActiveSetChanged += OnActiveSetDropSimulation;
+        // The Simulator's results are one character's on one game-data set: it is
+        // told when either changes, and shows that pairing's own or nothing.
+        _services.Profile.ProfileLoaded += OnSimulatorCharacterLoaded;
+        _services.Profile.ProfileClosed += OnSimulatorCharacterClosed;
+        _services.Profile.ProfileRenamed += OnSimulatorCharacterRenamed;
+        _services.GameData.ActiveSetChanged += OnSimulatorGameDataChanged;
     }
 
-    // A ranking is for the character it started with, so a swap stops it too (a set
-    // switch already does, through the graph reload).
-    private void OnProfileLoadedDropSimulation(Models.Profile.CharacterProfile _)
+    // The loaded character as the Simulator keys its results.
+    private string? SimulatorCharacter() => Game.Simulation.SimulatorOwner.CharacterKey(
+        _services.Profile.CurrentBbsName, _services.Profile.CurrentProfileName);
+
+    private void OnSimulatorCharacterLoaded(Models.Profile.CharacterProfile _) => Simulator.CharacterChanged();
+    private void OnSimulatorCharacterClosed() => Simulator.CharacterChanged();
+    private void OnSimulatorCharacterRenamed(string? oldBbs, string? oldName) => Simulator.CharacterRenamed();
+    private void OnSimulatorGameDataChanged(string? set)
     {
-        Simulator.CancelRanking();
-        Simulator.ClearSimulation(alsoCheck: true);
+        Simulator.GameDataChanged(set);
+        DropLoopBuiltOnOtherGameData(set);
     }
-    private void OnActiveSetDropSimulation(string? _) => Simulator.ClearSimulation(alsoCheck: true);
+
+    // Nothing made of one game data's room numbers is saved under another: a loop
+    // being built when the set changes is dropped, with a notice, since it was the
+    // user's work. The loop catalogue is on the new set by now (the app's own
+    // handler ran first), which is what the session measures itself against.
+    private void DropLoopBuiltOnOtherGameData(string? set)
+    {
+        if (LoopBuilder is not { } builder || !builder.DropIfBuiltOnOtherGameData(out string? builtOn)) return;
+        _services.Log.Info("Navigation",
+            $"loop being built dropped: its rooms were game data '{builtOn}''s and '{set ?? "(none)"}' is active now");
+        // Posted: a set change can come from inside the line pump, where writing to
+        // the terminal re-enters it.
+        Dispatcher.UIThread.Post(() => _services.WriteTerminalNotice(
+            $"[Loop being built was dropped: its rooms belonged to game data '{builtOn}', and '{set ?? "(none)"}' is active now]"));
+    }
 
     // The Simulator window's state: it plays saved loops or the estimator's sketch,
     // so it lives here with the Navigation window rather than with the estimator.
@@ -318,8 +341,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Lairs.SetupsChanged    -= OnSetupsChanged;
         _services.NavFolders.FoldersChanged -= OnNavFoldersChanged;
         _services.Macros.Macros.CollectionChanged -= OnMacrosCollectionChanged;
-        _services.Profile.ProfileLoaded -= OnProfileLoadedDropSimulation;
-        _services.GameData.ActiveSetChanged -= OnActiveSetDropSimulation;
+        _services.Profile.ProfileLoaded -= OnSimulatorCharacterLoaded;
+        _services.Profile.ProfileClosed -= OnSimulatorCharacterClosed;
+        _services.Profile.ProfileRenamed -= OnSimulatorCharacterRenamed;
+        _services.GameData.ActiveSetChanged -= OnSimulatorGameDataChanged;
     }
 
     // Loops + lairs share the on-disk folder tree; a folder add / rename /
@@ -3370,9 +3395,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // Gated on Settings → General "Load last ran loop" (on by default); off
             // restores the old empty-builder behavior. The @loop last remote command is
             // independent of this — it re-runs the last loop regardless.
+            // A loop last run on other game data is not pre-loaded: its rooms are
+            // that set's, and here it would be two clicks from saved under this one.
             bool preloadLast = _services.Resolver
                 .Resolve<Models.Profile.GeneralSettings>("General").LoadLastRanLoop;
-            if (preloadLast && _services.LoopRunner.LastRunLoop is { Waypoints.Count: >= 2 } last)
+            if (preloadLast && _services.LoopRunner.LastRunLoop is { Waypoints.Count: >= 2 } last
+                && string.Equals(_services.LoopRunner.LastRunLoopGameData, _services.RoomGraph.ActiveSet,
+                    StringComparison.OrdinalIgnoreCase))
                 SeedBuilderFromLoop(builder, last);
 
             LoopBuilder = builder;

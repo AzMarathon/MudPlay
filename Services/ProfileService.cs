@@ -119,6 +119,24 @@ public sealed class ProfileService
         if (Current is not null) BbsPinApplied?.Invoke(Current);
     }
 
+    // Fired after the loaded profile comes to be known by another BBS / profile name
+    // without being closed and loaded: a rename or re-home, its BBS renamed, the
+    // default profile named by Save As. Carries the BBS and profile name it had
+    // (name null for the default profile); CurrentBbsName / CurrentProfileName are
+    // the new ones. For whatever is kept outside the profile under that pair: it is
+    // the same character, and the old pair may be given to another.
+    public event Action<string?, string?>? ProfileRenamed;
+
+    private void RaiseRenamedFrom(string? oldBbs, string? oldName)
+    {
+        bool sameBbs = string.Equals(oldBbs, CurrentBbsName, StringComparison.OrdinalIgnoreCase);
+        bool sameName = string.Equals(oldName, CurrentProfileName, StringComparison.OrdinalIgnoreCase);
+        // The default profile has no name on any BBS: one it was started on is not
+        // part of who it is.
+        if (sameName && (sameBbs || oldName is null)) return;
+        ProfileRenamed?.Invoke(oldBbs, oldName);
+    }
+
     // Load the profile stored at
     // Data/BBS/{bbsName}/profiles/{profileName}/profile.json and fire
     // ProfileLoaded. If a different profile is already loaded it is closed
@@ -370,6 +388,7 @@ public sealed class ProfileService
         CurrentBbsName = newBbs;
         Log?.Info(LogCategory,
             $"Re-homed profile '{fromName}' ({fromBbs}) → '{targetName}' ({newBbs}).");
+        RaiseRenamedFrom(fromBbs, fromName);
     }
 
     // Cascade a BBS rename across the character profiles stored under it. The
@@ -412,6 +431,7 @@ public sealed class ProfileService
         {
             RekeyBbsCredentials(Current, oldBbs, newBbs);
             Save();
+            RaiseRenamedFrom(oldBbs, CurrentProfileName);
         }
     }
 
@@ -629,6 +649,7 @@ public sealed class ProfileService
         // Naming the default profile makes a new character: one that starts from
         // the starters it holds, not from the lists older characters shared.
         if (CurrentProfileName is null) Current.PredatesOwnLists = false;
+        string? fromBbs = CurrentBbsName, fromName = CurrentProfileName;
         Current.Name = profileName;
         CurrentProfileName = profileName;
         CurrentBbsName = bbsName;
@@ -636,6 +657,7 @@ public sealed class ProfileService
         Directory.CreateDirectory(AppPaths.ProfileFolder(bbsName, profileName));
         JsonStore.Save(AppPaths.CharacterProfileFile(bbsName, profileName), Current);
         _savedRealm = Current.Realm;
+        RaiseRenamedFrom(fromBbs, fromName);
     }
 
     // Create a new named character on a BBS from the Global default template,

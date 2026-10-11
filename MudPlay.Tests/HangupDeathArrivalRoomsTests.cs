@@ -180,9 +180,8 @@ public sealed class HangupDeathArrivalRoomsTests
         Assert.Null(OnParadigm(left, new RoomKey(1, 110)).Says);
     }
 
-    // Which Stock numbers are another place on Paradigm: maps 5 and 14 whole, four
-    // rooms with another name and no neighbour in common, and the `Blank`
-    // placeholders of map 1 that Paradigm made a dungeon of.
+    // Which Stock numbers are another place on Paradigm: maps 5 and 14 whole, and
+    // four rooms with another name and no neighbour in common.
     [Theory]
     [InlineData(5, 1)]
     [InlineData(5, 25)]
@@ -192,8 +191,6 @@ public sealed class HangupDeathArrivalRoomsTests
     [InlineData(6, 1338)]
     [InlineData(12, 2383)]
     [InlineData(16, 2272)]
-    [InlineData(1, 2171)]
-    [InlineData(1, 2188)]
     public void AStockNumberThatIsAnotherPlaceOnParadigm_IsNotCoveredThere(int map, int room)
     {
         RoomKey key = new(map, room);
@@ -224,6 +221,64 @@ public sealed class HangupDeathArrivalRoomsTests
         Assert.False(OnParadigm(left, Vault).Says);
     }
 
+    // Sixteen rooms of map 1 are `Blank` placeholders on Stock, with no graveyard
+    // named, and a dungeon on Paradigm, joined to rooms whose dead arrive in
+    // 1/2190, Newhaven, Healer. Theirs arrive there too on Paradigm (the owner,
+    // 2026-10-11), and that is trusted like the list is for a shared zone: the
+    // Temple, where the Stock file's empty field would send them, is the wrong
+    // room. On Stock data the file's own entry stands.
+    [Theory]
+    [InlineData(2171)]
+    [InlineData(2174)]
+    [InlineData(2176)]
+    [InlineData(2181)]
+    [InlineData(2183)]
+    [InlineData(2188)]
+    public void TheDungeonRoomsOfMap1_ArriveAtTheNewhavenHealer_OnParadigm(int room)
+    {
+        RoomKey left = new(1, room);
+        RoomKey healer = new(1, 2190);
+        Assert.Equal(new[] { healer }, HangupDeathArrivalRooms.ListedOn(left, Paradigm));
+
+        Assert.True(OnParadigm(left, healer).Says);
+        Assert.False(OnParadigm(left, healer).Learned);
+        Assert.False(OnParadigm(left, Temple).Says);
+        Assert.False(OnParadigm(left, EarthenTomb).Says);
+        Assert.False(OnParadigm(left, left).Says);
+        Assert.False(OnParadigm(left, Vault).Says);
+
+        Assert.Equal(new[] { Temple, EarthenTomb }, HangupDeathArrivalRooms.ListedOn(left, Vanilla));
+        Assert.True(Says(left, Temple, Vanilla));
+        Assert.False(Says(left, healer, Vanilla));
+    }
+
+    // The placeholders between them that Paradigm didn't make rooms of are not
+    // among the sixteen.
+    [Theory]
+    [InlineData(2175)]
+    [InlineData(2182)]
+    public void TheNumbersBetweenThem_StillGoByTheStockFile(int room) =>
+        Assert.Equal(new[] { Temple, EarthenTomb }, HangupDeathArrivalRooms.ListedOn(new RoomKey(1, room), Paradigm));
+
+    // Where a death that is seen ends, by the list: the room's own graveyard. For
+    // the 101 rooms with a leave-the-game room that changes it, that is not where
+    // a hang-up's dead arrive.
+    [Fact]
+    public void ADeathSeen_EndsInTheRoomsOwnGraveyard_NotWhereAHangUpsDeadArrive()
+    {
+        RoomKey room = new(17, 3250);
+        Assert.Equal(new[] { Temple, EarthenTomb }, HangupDeathArrivalRooms.ListedOn(room, Vanilla));
+        Assert.Equal(new[] { new RoomKey(17, 3247) }, HangupDeathArrivalRooms.DeathArrivalsOn(room, Vanilla));
+        Assert.Equal(new[] { new RoomKey(12, 1) }, HangupDeathArrivalRooms.DeathArrivalsOn(new RoomKey(12, 2381), Vanilla));
+        Assert.Equal(new[] { new RoomKey(17, 2514) }, HangupDeathArrivalRooms.DeathArrivalsOn(new RoomKey(17, 2020), Paradigm));
+        // 17/3253 sits among them with a graveyard of its own and no leave room.
+        Assert.Equal(new[] { new RoomKey(17, 35) }, HangupDeathArrivalRooms.DeathArrivalsOn(new RoomKey(17, 3253), Vanilla));
+        // Everywhere else the two are the same.
+        Assert.Equal(new[] { Temple, EarthenTomb }, HangupDeathArrivalRooms.DeathArrivalsOn(Darkwood, Vanilla));
+        Assert.Equal(new[] { new RoomKey(1, 2190) }, HangupDeathArrivalRooms.DeathArrivalsOn(new RoomKey(1, 2171), Paradigm));
+        Assert.Null(HangupDeathArrivalRooms.DeathArrivalsOn(Kingsport, Paradigm));
+    }
+
     // What the bug report and the judgement both go by.
     [Fact]
     public void ArrivalsOn_SaysWhichRoomsAndWhatTheyRestOn()
@@ -239,6 +294,120 @@ public sealed class HangupDeathArrivalRoomsTests
         Assert.Null(HangupDeathArrivalRooms.ArrivalsOn(Kingsport, Vanilla, InAlbion).Rooms);
 
         static (bool, bool) Rests((IReadOnlyList<RoomKey>? Rooms, bool AllKnown, bool Albion) on) => (on.AllKnown, on.Albion);
+    }
+
+    // ----- Rooms whose arrival room was learned -------------------------------
+    //
+    // For a room no list covers, what the client saw is all there is: a death in
+    // Terra Ista (14/1813) ended in 14/1900, and the set remembers it. That is a
+    // room to say yes in, and nothing more.
+
+    private static readonly RoomKey IsleShrine = new(14, 1900);
+
+    // A death seen in each of these rooms ended in the shrine.
+    private static IReadOnlyList<LearnedArrival>? Learned(RoomKey room) =>
+        room == TerraIsta || room == Darkwood || room == Kingsport ? new[] { new LearnedArrival(IsleShrine, room) } : null;
+
+    private static HangupEntryRoomReading WithLearned(RoomKey hungUpIn, RoomKey enteredIn, HangupArrivalListTrust trust) =>
+        HangupDeathArrivalRooms.Read(hungUpIn, enteredIn, trust, couldBeTakenFor: null, InAlbion, Learned);
+
+    [Fact]
+    public void AParadigmRoomOutsideAlbion_SaysYesInItsLearnedRoom_AndNothingElsewhere()
+    {
+        HangupEntryRoomReading reading = WithLearned(TerraIsta, IsleShrine, Paradigm);
+
+        Assert.True(reading.Says);
+        Assert.Equal(TerraIsta, reading.LearnedFrom);
+        Assert.False(reading.Albion);
+        // A hang-up leaves through the room's leave-the-game room first, which the
+        // data doesn't carry for these rooms: nothing is the wrong room, the room
+        // it left and Albion's vault included.
+        Assert.Null(WithLearned(TerraIsta, TerraIsta, Paradigm).Says);
+        Assert.Null(WithLearned(TerraIsta, new RoomKey(14, 1950), Paradigm).Says);
+        Assert.Null(WithLearned(TerraIsta, Vault, Paradigm).Says);
+        Assert.Null(WithLearned(TerraIsta, Temple, Paradigm).Says);
+        // A room nothing is known for, by its own reading or its land's, says nothing.
+        Assert.Null(WithLearned(new RoomKey(14, 1814), IsleShrine, Paradigm).Says);
+    }
+
+    // A room with no reading of its own takes its land's: the room a death seen
+    // elsewhere in the land ended in, and the reading says which room that was.
+    [Fact]
+    public void ARoomOfTheSameLand_TakesTheReadingOfTheRoomADeathWasSeenIn()
+    {
+        RoomKey path = new(14, 1814);
+        IReadOnlyList<LearnedArrival>? Land(RoomKey room) =>
+            room == path || room == TerraIsta ? new[] { new LearnedArrival(IsleShrine, TerraIsta) } : null;
+
+        HangupEntryRoomReading reading = HangupDeathArrivalRooms.Read(path, IsleShrine, Paradigm, null, InAlbion, Land);
+
+        Assert.True(reading.Says);
+        Assert.Equal(TerraIsta, reading.LearnedFrom);
+        Assert.Null(HangupDeathArrivalRooms.Read(path, path, Paradigm, null, InAlbion, Land).Says);
+        Assert.Null(HangupDeathArrivalRooms.Read(path, Temple, Paradigm, null, InAlbion, Land).Says);
+    }
+
+    // Where the list is the world's own, a pair on file is not read at all.
+    [Theory]
+    [InlineData(Vanilla)]
+    [InlineData(Paradigm)]
+    public void WhatWasLearned_IsNeverSetAgainstTheList_WhereTheListIsTheWorldsOwn(HangupArrivalListTrust trust)
+    {
+        Assert.Null(HangupDeathArrivalRooms.LearnedFor(Darkwood, trust, InAlbion, Learned));
+        Assert.False(WithLearned(Darkwood, IsleShrine, trust).Says);
+        Assert.True(WithLearned(Darkwood, Temple, trust).Says);
+        Assert.False(WithLearned(Darkwood, Temple, trust).Learned);
+        Assert.Equal(new[] { Temple, EarthenTomb },
+            HangupDeathArrivalRooms.ArrivalsOn(Darkwood, trust, InAlbion, Learned).Rooms);
+    }
+
+    // A Stock board whose rooms may have been edited: the list is Stock's word,
+    // and the room a death was seen to end in is one more to say yes in. The
+    // list's own rooms still say yes, and "it never moved" still says no.
+    [Fact]
+    public void OnAnEditedBoard_TheLearnedRoom_IsOneMoreRoomToSayYesIn()
+    {
+        Assert.Equal(new[] { new LearnedArrival(IsleShrine, Darkwood) },
+            HangupDeathArrivalRooms.LearnedFor(Darkwood, Edited, InAlbion, Learned));
+        HangupEntryRoomReading reading = WithLearned(Darkwood, IsleShrine, Edited);
+        Assert.True(reading.Says);
+        Assert.True(reading.Learned);
+        Assert.True(WithLearned(Darkwood, Temple, Edited).Says);
+        Assert.False(WithLearned(Darkwood, Temple, Edited).Learned);
+        Assert.False(WithLearned(Darkwood, Darkwood, Edited).Says);
+        Assert.Null(WithLearned(Darkwood, new RoomKey(1, 110), Edited).Says);
+    }
+
+    // A room's own reading always wins for that room, Albion included: an Albion
+    // room seen to send its dead somewhere else than the Burial Vault says yes
+    // there and no longer in the vault. What some other room of its land showed
+    // doesn't stand against Albion's known room.
+    [Fact]
+    public void AnAlbionRoom_GoesByItsOwnReading_AndNotByItsLands()
+    {
+        Assert.Equal(new[] { IsleShrine }, HangupDeathArrivalRooms.ArrivalsOn(Kingsport, Paradigm, InAlbion, Learned).Rooms);
+        HangupEntryRoomReading own = WithLearned(Kingsport, IsleShrine, Paradigm);
+        Assert.Equal((true, false, Kingsport), (own.Says == true, own.Albion, own.LearnedFrom!.Value));
+        Assert.Null(WithLearned(Kingsport, Vault, Paradigm).Says);
+        Assert.Null(WithLearned(Kingsport, Kingsport, Paradigm).Says);
+
+        // The Bank of Albion has no reading of its own; its land has one.
+        IReadOnlyList<LearnedArrival>? Land(RoomKey room) => new[] { new LearnedArrival(IsleShrine, Kingsport) };
+        Assert.Equal(new[] { Vault }, HangupDeathArrivalRooms.ArrivalsOn(BankOfAlbion, Paradigm, InAlbion, Land).Rooms);
+        HangupEntryRoomReading vault = HangupDeathArrivalRooms.Read(BankOfAlbion, Vault, Paradigm, null, InAlbion, Land);
+        Assert.Equal((true, true, false), (vault.Says == true, vault.Albion, vault.Learned));
+        Assert.Null(HangupDeathArrivalRooms.Read(BankOfAlbion, IsleShrine, Paradigm, null, InAlbion, Land).Says);
+    }
+
+    // A room seen to send its dead to itself: being there says nothing either way.
+    [Fact]
+    public void ARoomLearnedAsItsOwnArrivalRoom_SaysNothing()
+    {
+        static IReadOnlyList<LearnedArrival>? Own(RoomKey room) => new[] { new LearnedArrival(room, room) };
+
+        Assert.Null(HangupDeathArrivalRooms.Read(TerraIsta, TerraIsta, Paradigm, null, InAlbion, Own).Says);
+        // On an edited board that takes "it never moved" away too.
+        Assert.Null(HangupDeathArrivalRooms.Read(Darkwood, Darkwood, Edited, null, InAlbion, Own).Says);
     }
 
     // Hung up in the very room its dead arrive in: being there says nothing.

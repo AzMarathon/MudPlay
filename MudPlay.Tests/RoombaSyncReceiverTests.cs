@@ -101,6 +101,40 @@ public sealed class RoombaSyncReceiverTests : IDisposable
         Assert.Equal(4, sighting.Quantity);
     }
 
+    // The log is taken by telepath or gangpath, the two channels a sync goes by.
+    [Theory]
+    [InlineData(ChatChannel.TelepathIncoming)]
+    [InlineData(ChatChannel.Gangpath)]
+    public void Ingest_ByTelepathOrGangpath_Merges(ChatChannel channel)
+    {
+        var (_, chat, locations, labels) = Setup();
+        RoombaSyncReceiver receiver = new(chat, locations, labels);
+        receiver.NoteSyncRequested();
+
+        receiver.Ingest(new ChatLogEntry(Now, channel, "Buddy", SyncLine(OneLine()), "raw"));
+
+        Assert.Single(locations.FindSightings("torch"));
+    }
+
+    // Said aloud or on the broadcast channel it is not taken, window open or not:
+    // an older client still answers a said request that way, and anyone in the room
+    // could say such a line.
+    [Theory]
+    [InlineData(ChatChannel.Local)]
+    [InlineData(ChatChannel.Broadcast)]
+    [InlineData(ChatChannel.Gossip)]
+    [InlineData(ChatChannel.TelepathOutgoing)]
+    public void Ingest_OnAnyOtherChannel_IsPassedOver(ChatChannel channel)
+    {
+        var (_, chat, locations, labels) = Setup();
+        RoombaSyncReceiver receiver = new(chat, locations, labels);
+        receiver.NoteSyncRequested();
+
+        receiver.Ingest(new ChatLogEntry(Now, channel, "Buddy", SyncLine(OneLine()), "raw"));
+
+        Assert.Empty(locations.FindSightings("torch"));
+    }
+
     [Fact]
     public void Ingest_EachLineMergesIndependently_NoWaiting()
     {

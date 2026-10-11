@@ -966,6 +966,9 @@ public sealed partial class ComebackRequester : IDisposable
         string body = result.Groups[1].Trim();
         if (body.Length < 3 || body[0] != '{' || body[^1] != '}') return;
         string answer = body[1..^1].Trim();
+        // A `@loop send` line names a loop and an @events one an event, and either
+        // can be named "I can't come": never an answer to a @comeback.
+        if (UserNamedReply.IsLine(answer)) return;
         // "found you": they stand in the room with us. Read whether or not the
         // wait on them has lapsed; TryJoin checks they are the leader we asked.
         if (answer.StartsWith(PartyComebackManager.FoundYou, StringComparison.OrdinalIgnoreCase))

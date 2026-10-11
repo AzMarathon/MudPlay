@@ -443,6 +443,21 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("ab", h.Runner.LastRunLoop!.Name);
     }
 
+    [Fact]
+    public void LastRunLoop_IsRememberedWithTheGameDataItWasRunOn()
+    {
+        // What the Loop-chip pre-load checks before putting the snapshot in the
+        // builder, where it could be saved: its rooms are this set's.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.Null(h.Runner.LastRunLoopGameData);
+
+        h.Runner.Start(AbCycle());
+        h.Runner.Stop();
+
+        Assert.Equal("alpha", h.Runner.LastRunLoopGameData);
+    }
+
     // The two loop-wide settings a run started with are the character's, and the
     // snapshot "@loop last" re-runs carries them. Every loop the runner holds is
     // offered up so a later change to the character's settings can reach it.

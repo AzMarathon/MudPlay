@@ -217,6 +217,48 @@ public sealed class PartyAilmentTrackerTests
         Assert.False(mage.Blinded);
     }
 
+    // A `@loop send` line names a loop, and a loop can be named anything: it is no
+    // @status reply, on any channel.
+    [Theory]
+    [InlineData(@"Mage telepaths: {@loopresult 9da659db saved as 'no ailments'}")]
+    [InlineData(@"Mage telepaths: {@loopresult 9da659db already have it as 'no ailments 2'}")]
+    [InlineData(@"Mage telepaths: {sending loop 'no ailments' (3 rooms, 1 line)}")]
+    [InlineData(@"Mage telepaths: {preparing to send: no ailments, yes to confirm, no to deny (code 9da659db)}")]
+    [InlineData(@"Mage says ""{@loopresult 9da659db saved as 'no ailments'}""")]
+    public void LoopSendLineNamingALoop_IsNoStatusReply(string line)
+    {
+        using Harness h = new();
+        PartyMember mage = h.AddMember("Mage");
+        h.Say(@"Mage says ""@blind on""");
+
+        h.Say(line);
+
+        Assert.True(mage.Blinded);
+    }
+
+    // An @events or @event reply names an event, and an event can be named
+    // anything as well: it is no @status reply, on any channel.
+    [Theory]
+    [InlineData(@"Mage telepaths: {events: no ailments check on}")]
+    [InlineData(@"Mage telepaths: {events (2/3): no ailments off, Bank on}")]
+    [InlineData(@"Mage telepaths: {event 'no ailments' switched off}")]
+    [InlineData(@"Mage telepaths: {event 'no ailments' is on: fires on a timer, sends a command}")]
+    [InlineData(@"Mage telepaths: {no event named 'no ailments'}")]
+    [InlineData(@"Mage telepaths: {event name 'ailments' matches 2: 'no ailments', 'no ailments 2'}")]
+    [InlineData(@"Mage telepaths: {events: 1 no ailments on, 2 Bank off}")]
+    [InlineData(@"Mage telepaths: {event 2 'no ailments' switched off}")]
+    [InlineData(@"Mage says ""{events: no ailments check on}""")]
+    public void EventReplyNamingAnEvent_IsNoStatusReply(string line)
+    {
+        using Harness h = new();
+        PartyMember mage = h.AddMember("Mage");
+        h.Say(@"Mage says ""@blind on""");
+
+        h.Say(line);
+
+        Assert.True(mage.Blinded);
+    }
+
     [Fact]
     public void StatusReply_NoAilments_LeavesHeldChipUntouched()
     {
