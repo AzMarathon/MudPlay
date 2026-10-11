@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using MudPlay.Game.Spells;
 using MudPlay.Services;
@@ -41,6 +42,7 @@ public static class ItemUseTeleportResolver
         foreach (JsonElement row in itemsDoc.RootElement.EnumerateArray())
         {
             if (row.ValueKind != JsonValueKind.Object) continue;
+            if (!MayCastASpell(row)) continue;
             if (!TryReadInt(row, "Number", out int itemNumber) || itemNumber <= 0) continue;
 
             for (int i = 0; i < AbilitySlots; i++)
@@ -83,6 +85,33 @@ public static class ItemUseTeleportResolver
                 else if (part.StartsWith("minlevel", StringComparison.OrdinalIgnoreCase)) min = FirstInt(part);
             }
             if (found is { } dv) { dest = dv; gateItemId = gate; minLevel = min; return true; }
+        }
+        return false;
+    }
+
+    // Whether the row's text could hold the casts-spell code as a column's value:
+    // a `43` written straight after a colon. An item row has some ninety columns
+    // and asking for a slot by name walks them all, twenty times over for the
+    // ability slots; one scan of the row's bytes settles the usual case, an item
+    // that casts nothing. It may say yes for a row that doesn't cast (the 43 is
+    // another column's, or sits inside a text), never no for one that does, and
+    // a row it lets through is still read slot by slot.
+    private static bool MayCastASpell(JsonElement row)
+    {
+        ReadOnlySpan<byte> text = JsonMarshal.GetRawUtf8Value(row);
+        ReadOnlySpan<byte> code = "43"u8;
+        for (int from = 0; from < text.Length;)
+        {
+            int at = text[from..].IndexOf(code);
+            if (at < 0) return false;
+            at += from;
+            from = at + 1;
+
+            int after = at + code.Length;
+            if (after < text.Length && text[after] is >= (byte)'0' and <= (byte)'9') continue;   // 430, 43x…
+            int before = at - 1;
+            while (before >= 0 && text[before] is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\r') before--;
+            if (before >= 0 && text[before] == (byte)':') return true;
         }
         return false;
     }
