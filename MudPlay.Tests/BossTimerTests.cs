@@ -1064,6 +1064,39 @@ public sealed class BossTimerTests : IDisposable
         }
     }
 
+    // With a timer of ours held, on each channel: an answer with the same timer is
+    // left alone; asked again, an answer that differs syncs from the one player
+    // telepathed and is listed everywhere else, with ours untouched.
+    [Theory]
+    [InlineData(1, ChatChannel.TelepathIncoming, true)]
+    [InlineData(0, ChatChannel.Gangpath, false)]
+    [InlineData(2, ChatChannel.Local, false)]
+    [InlineData(2, ChatChannel.TelepathIncoming, false)]
+    [InlineData(3, ChatChannel.Broadcast, false)]
+    public void SyncWindow_WithATimerHeld_TheSameIsLeftAlone_AndWhatDiffersSyncsOrIsListed(
+        int button, ChatChannel answeredOn, bool syncs)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            timers.MarkKilled("ogre king", Held);
+            Requests(window, button, "Bob");
+            if (button == 1) GameConfirms("Bob");
+
+            Hears(window, answeredOn, "Bob", hoursLater: -10 + 20.0 / 3600);   // ours, marked 20 s later
+            Assert.Equal(Held, timers.KilledAt("ogre king"));
+            Assert.Contains("0 to pick, 0 merged in, 0 synced, 1 already in sync", window.Status);
+
+            Requests(window, button, "Bob");
+            if (button == 1) GameConfirms("Bob");
+            Hears(window, answeredOn, "Bob");
+
+            Assert.Equal(syncs ? Killed : Held, timers.KilledAt("ogre king"));
+            Assert.Contains(syncs ? "0 to pick, 0 merged in, 1 synced" : "1 to pick, 0 merged in, 0 synced", window.Status);
+            Assert.Equal(!syncs, Assert.Single(window.Rows).HasConflict);
+        }
+    }
+
     // More than one player asked by telepath in one window: each is asked, so a
     // timer we hold none for is merged in, but several did answer: one that differs
     // from ours is listed, not synced.
