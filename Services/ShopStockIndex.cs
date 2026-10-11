@@ -26,6 +26,7 @@ namespace MudPlay.Services;
 public sealed class ShopStockIndex
 {
     private const int StockSlots = 20;
+    private static readonly string[] ItemFields = NumberedFields.Of("Item-", StockSlots);
 
     private readonly GameDataCache _cache;
     private readonly LogService? _log;
@@ -92,7 +93,7 @@ public sealed class ShopStockIndex
             bool stockedAny = false;
             for (int slot = 0; slot < StockSlots; slot++)
             {
-                if (!TryReadInt(row, $"Item-{slot}", out int itemId) || itemId <= 0)
+                if (!TryReadInt(row, ItemFields[slot], out int itemId) || itemId <= 0)
                     continue;
                 if (!_shopsByItem.TryGetValue(itemId, out HashSet<int>? set))
                     _shopsByItem[itemId] = set = new HashSet<int>();

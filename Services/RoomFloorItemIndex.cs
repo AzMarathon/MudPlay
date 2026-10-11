@@ -13,19 +13,26 @@ namespace MudPlay.Services;
 //      common case and mirrors the item's own "Obtained From: Room {map}/{room}".
 //   2. The TBInfo `roomitem` directive fired by a room's CMD chain (e.g. a "make
 //      emblem" command that scatter-drops the dragon emblem).
-// Backs the Navigation Room Info panel's floor-item links. Builds on first query
-// and self-invalidates by comparing the cache's ActiveSet to the set it last
-// built from — same lifetime contract as ItemSourceIndex.
+// Backs the Navigation Room Info panel's floor-item links and the map's room
+// tooltip. Self-invalidates by comparing the cache's ActiveSet to the set it last
+// built from, and is warmed on a worker thread as a set loads — same lifetime
+// contract as ItemSourceIndex. Left to the first room hovered it stalled the map:
+// the room graph has let the Rooms table go by then, and the build read all of it
+// back on the UI thread.
 public sealed class RoomFloorItemIndex
 {
     private readonly GameDataCache _cache;
     private readonly TBInfoStore _tb;
     private readonly LogService? _log;
 
-    private readonly Dictionary<RoomKey, List<int>> _itemsByRoom = new();
+    // One immutable build, published by a single reference assignment: a reader
+    // takes the current one and never sees a map the warm-up is still filling.
+    private sealed record Snapshot(string? Set, Dictionary<RoomKey, List<int>> ItemsByRoom);
 
-    private string? _loadedSet;
-    private bool _built;
+    // Serialises builders so a query racing the warm-up waits for it rather than
+    // building a second time.
+    private readonly object _buildGate = new();
+    private volatile Snapshot? _snapshot;
 
     // Provenance-walk safety cap, mirroring ItemSourceIndex: a Called-From chain
     // is a small acyclic tree in practice, but the visited-set plus this bound
@@ -44,32 +51,53 @@ public sealed class RoomFloorItemIndex
     // Item record numbers placed on the floor of this room, or an empty list when
     // none. Live view — read, don't mutate.
     public IReadOnlyList<int> FloorItemsOf(RoomKey key)
+        => EnsureBuilt().ItemsByRoom.TryGetValue(key, out List<int>? list) ? list : Array.Empty<int>();
+
+    // Build the index for the active set ahead of anyone asking for it. Safe on a
+    // worker thread: the build fills a map of its own and publishes it whole, and
+    // GameDataCache guards its own tables. A query that beats the warm-up builds it
+    // itself; the gate makes one of them wait rather than doing the work twice.
+    public void Warm()
     {
-        EnsureBuilt();
-        return _itemsByRoom.TryGetValue(key, out List<int>? list) ? list : Array.Empty<int>();
+        try
+        {
+            EnsureBuilt();
+        }
+        catch (Exception ex)
+        {
+            // A warm-up is an optimisation; a failure here must not take down the
+            // thread it runs on. The next query rebuilds and surfaces the fault.
+            _log?.Warn("RoomFloorItemIndex", $"Warm-up failed ({ex.GetType().Name}: {ex.Message}).");
+        }
     }
 
-    private void EnsureBuilt()
+    private Snapshot EnsureBuilt()
     {
         string? active = _cache.ActiveSet;
-        if (_built && _loadedSet == active) return;
-        Rebuild(active);
+        if (_snapshot is { } current && current.Set == active) return current;
+
+        lock (_buildGate)
+        {
+            // Another thread may have published while we waited for the gate.
+            if (_snapshot is { } published && published.Set == active) return published;
+            Snapshot built = new(active, Build(active));
+            _snapshot = built;
+            return built;
+        }
     }
 
-    private void Rebuild(string? active)
+    private Dictionary<RoomKey, List<int>> Build(string? active)
     {
-        _itemsByRoom.Clear();
-        _loadedSet = active;
-        _built = true;
+        var itemsByRoom = new Dictionary<RoomKey, List<int>>();
 
         if (string.IsNullOrWhiteSpace(active))
         {
             _log?.Info("RoomFloorItemIndex", "No active set; cleared.");
-            return;
+            return itemsByRoom;
         }
 
         // Source 1: the static `Placed` column on each room record.
-        IndexPlacedColumn();
+        IndexPlacedColumn(itemsByRoom);
 
         // Source 2: TBInfo `roomitem` directives fired by room CMD chains.
         var itemIds = new List<int>();
@@ -105,15 +133,16 @@ public sealed class RoomFloorItemIndex
             foreach ((int map, int room) in rooms)
             {
                 RoomKey key = new(map, room);
-                if (!_itemsByRoom.TryGetValue(key, out List<int>? list))
-                    _itemsByRoom[key] = list = new List<int>();
+                if (!itemsByRoom.TryGetValue(key, out List<int>? list))
+                    itemsByRoom[key] = list = new List<int>();
                 foreach (int id in itemIds)
                     if (!list.Contains(id)) list.Add(id);
             }
         }
 
         _log?.Info("RoomFloorItemIndex",
-            $"Indexed floor items for {_itemsByRoom.Count} room(s) from '{active}'.");
+            $"Indexed floor items for {itemsByRoom.Count} room(s) from '{active}'.");
+        return itemsByRoom;
     }
 
     // Index every room's static `Placed` column: a comma-separated list of item
@@ -121,7 +150,7 @@ public sealed class RoomFloorItemIndex
     // distinct set). Reads the Rooms table off the cache — the same rows the
     // item view reads for its "Obtained From: Room" cross-reference — so the two
     // directions stay in sync. A malformed / empty column is skipped silently.
-    private void IndexPlacedColumn()
+    private void IndexPlacedColumn(Dictionary<RoomKey, List<int>> itemsByRoom)
     {
         GameTable? rooms = _cache.GetTable("Rooms");
         if (rooms is null) return;
@@ -137,15 +166,15 @@ public sealed class RoomFloorItemIndex
             foreach (string tok in placed.Split(','))
             {
                 int id = LeadingInt(tok.Trim());   // tolerates the trailing NUL the MDB pads with
-                if (id > 0) AddFloorItem(key, id);
+                if (id > 0) AddFloorItem(itemsByRoom, key, id);
             }
         }
     }
 
-    private void AddFloorItem(RoomKey key, int itemId)
+    private static void AddFloorItem(Dictionary<RoomKey, List<int>> itemsByRoom, RoomKey key, int itemId)
     {
-        if (!_itemsByRoom.TryGetValue(key, out List<int>? list))
-            _itemsByRoom[key] = list = new List<int>();
+        if (!itemsByRoom.TryGetValue(key, out List<int>? list))
+            itemsByRoom[key] = list = new List<int>();
         if (!list.Contains(itemId)) list.Add(itemId);
     }
 

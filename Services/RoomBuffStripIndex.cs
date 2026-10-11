@@ -30,6 +30,8 @@ namespace MudPlay.Services;
 public sealed class RoomBuffStripIndex
 {
     private const int SpellAbilSlots = 10;   // Spells: Abil-0..9
+    private static readonly string[] AbilFields = NumberedFields.Of("Abil-", SpellAbilSlots);
+    private static readonly string[] AbilValFields = NumberedFields.Of("AbilVal-", SpellAbilSlots);
     private const int AbilDispelMagic = 73;
     private const int AbilRemovesSpell = 122;
     private const int AbilEndCast = 151;
@@ -336,8 +338,8 @@ public sealed class RoomBuffStripIndex
             int[] slots = new int[SpellAbilSlots * 2 + 2];
             for (int k = 0; k < SpellAbilSlots; k++)
             {
-                TryReadInt(row, $"Abil-{k}", out slots[k * 2]);
-                TryReadInt(row, $"AbilVal-{k}", out slots[k * 2 + 1]);
+                TryReadInt(row, AbilFields[k], out slots[k * 2]);
+                TryReadInt(row, AbilValFields[k], out slots[k * 2 + 1]);
             }
             TryReadInt(row, "MinBase", out slots[MinBaseSlot]);
             TryReadInt(row, "MaxBase", out slots[MaxBaseSlot]);

@@ -342,6 +342,11 @@ public sealed class KnownSpellCatalog
     // each a Classes.Number that may use the item.
     private const int ItemClassRestSlots = 10;
 
+    // Long enough for an item's slots, so for a spell's ten too.
+    private static readonly string[] AbilFields = NumberedFields.Of("Abil-", ItemAbilSlots);
+    private static readonly string[] AbilValFields = NumberedFields.Of("AbilVal-", ItemAbilSlots);
+    private static readonly string[] ClassRestFields = NumberedFields.Of("ClassRest-", ItemClassRestSlots);
+
     // A spellbook cast-on-use item must be equippable in one of the player's
     // equipment slots (MegaMUD's Hold panel). Weapons (ItemType 1) ready into the
     // Weapon slot; everything else is gated on a real Worn slot. Worn 0 (Nowhere)
@@ -397,7 +402,7 @@ public sealed class KnownSpellCatalog
             bool pendingProc = false;
             for (int i = 0; i < ItemAbilSlots; i++)
             {
-                int code = ReadInt(row, $"Abil-{i}");
+                int code = ReadInt(row, AbilFields[i]);
                 if (code == PctSpellAbilityCode || code == CastOnKillAbilityCode)
                 {
                     pendingProc = true;
@@ -406,11 +411,11 @@ public sealed class KnownSpellCatalog
                 if (code == CastsSpAbilityCode)
                 {
                     if (pendingProc) { pendingProc = false; continue; } // proc, not on-use
-                    if (spellNumber <= 0) spellNumber = ReadInt(row, $"AbilVal-{i}");
+                    if (spellNumber <= 0) spellNumber = ReadInt(row, AbilValFields[i]);
                     continue;
                 }
                 if (code == MinLevelAbilityCode)
-                    minLevel = ReadInt(row, $"AbilVal-{i}");
+                    minLevel = ReadInt(row, AbilValFields[i]);
             }
             if (spellNumber <= 0) continue;
 
@@ -504,8 +509,8 @@ public sealed class KnownSpellCatalog
             if (name.Length == 0) continue;
             for (int i = 0; i < ItemAbilSlots; i++)
             {
-                if (ReadInt(row, $"Abil-{i}") != LearnSpAbilityCode) continue;
-                int spell = ReadInt(row, $"AbilVal-{i}");
+                if (ReadInt(row, AbilFields[i]) != LearnSpAbilityCode) continue;
+                int spell = ReadInt(row, AbilValFields[i]);
                 if (spell > 0) results.Add(new TeachingItem(ReadInt(row, "Number"), name, spell));
             }
         }
@@ -515,8 +520,8 @@ public sealed class KnownSpellCatalog
     private static bool TeachesSpell(GameRow item, int spellNumber)
     {
         for (int i = 0; i < ItemAbilSlots; i++)
-            if (ReadInt(item, $"Abil-{i}") == LearnSpAbilityCode
-                && ReadInt(item, $"AbilVal-{i}") == spellNumber)
+            if (ReadInt(item, AbilFields[i]) == LearnSpAbilityCode
+                && ReadInt(item, AbilValFields[i]) == spellNumber)
                 return true;
         return false;
     }
@@ -632,7 +637,7 @@ public sealed class KnownSpellCatalog
         if (_cache.FindRowByNumber("Spells", spellNumber) is not { } spell) return System.Array.Empty<CastOutcome>();
         int textblock = 0;
         for (int i = 0; i < SpellAbilSlots && textblock == 0; i++)
-            if (ReadInt(spell, $"Abil-{i}") == TextblockAbilityCode) textblock = ReadInt(spell, $"AbilVal-{i}");
+            if (ReadInt(spell, AbilFields[i]) == TextblockAbilityCode) textblock = ReadInt(spell, AbilValFields[i]);
         if (textblock <= 0 || TextblockAction(textblock) is not { } action) return System.Array.Empty<CastOutcome>();
 
         List<CastOutcome> outcomes = new();
@@ -661,7 +666,7 @@ public sealed class KnownSpellCatalog
         if (_cache.FindRowByNumber("Spells", spellNumber) is not { } spell) return true;
         int textblock = 0;
         for (int i = 0; i < SpellAbilSlots && textblock == 0; i++)
-            if (ReadInt(spell, $"Abil-{i}") == TextblockAbilityCode) textblock = ReadInt(spell, $"AbilVal-{i}");
+            if (ReadInt(spell, AbilFields[i]) == TextblockAbilityCode) textblock = ReadInt(spell, AbilValFields[i]);
         if (textblock <= 0 || TextblockAction(textblock) is not { } action) return true;
 
         Match table = RandomTableStep.Match(action);
@@ -678,14 +683,14 @@ public sealed class KnownSpellCatalog
             {
                 if (_cache.FindRowByNumber("Spells", n) is not { } cast) continue;
                 for (int i = 0; i < SpellAbilSlots; i++)
-                    if (ReadInt(cast, $"Abil-{i}") == RemovesSpellAbilityCode) removed.Add(ReadInt(cast, $"AbilVal-{i}"));
+                    if (ReadInt(cast, AbilFields[i]) == RemovesSpellAbilityCode) removed.Add(ReadInt(cast, AbilValFields[i]));
                 continue;
             }
             foreach (GameRow outcome in outcomes)
             {
                 if (removed.Contains(ReadInt(outcome, "Number"))) continue;
                 for (int i = 0; i < SpellAbilSlots; i++)
-                    if (ReadInt(outcome, $"Abil-{i}") == n) return false;
+                    if (ReadInt(outcome, AbilFields[i]) == n) return false;
             }
         }
         return true;
@@ -747,7 +752,7 @@ public sealed class KnownSpellCatalog
         bool anyRestriction = false;
         for (int i = 0; i < ItemClassRestSlots; i++)
         {
-            int c = ReadInt(row, $"ClassRest-{i}");
+            int c = ReadInt(row, ClassRestFields[i]);
             if (c == 0) continue;
             anyRestriction = true;
             if (c == classNumber) return true;
@@ -763,7 +768,7 @@ public sealed class KnownSpellCatalog
     private static bool ItemClassRestricted(GameRow row, int classNumber)
     {
         for (int i = 0; i < ItemClassRestSlots; i++)
-            if (ReadInt(row, $"ClassRest-{i}") == classNumber) return true;
+            if (ReadInt(row, ClassRestFields[i]) == classNumber) return true;
         return false;
     }
 
@@ -880,7 +885,7 @@ public sealed class KnownSpellCatalog
         {
             for (int x = 0; x < 10; x++)
             {
-                int code = ReadInt(row, $"Abil-{x}");
+                int code = ReadInt(row, AbilFields[x]);
                 switch (code)
                 {
                     case 97 or 98 or 112: // requires good / evil / neutral

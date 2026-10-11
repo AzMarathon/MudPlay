@@ -41,10 +41,11 @@ public readonly record struct ActionUse(
 // reads `of room M/R`) and the `(Item: N)` the step asks the crosser to hold. No
 // second reading of either text lives here.
 //
-// Both come from one pass over Rooms, built once per set on first use
-// (GameDataCache.Derived, dropped when the set is switched or reloaded). Rooms is
-// the biggest table, so a build that had to load it hands it back to the idle sweep
-// rather than keep it parsed for this.
+// Both come from one pass over Rooms, built once per set (GameDataCache.Derived,
+// dropped when the set is switched or reloaded): by Warm as the set loads, or by
+// the first question when that comes sooner. Rooms is the biggest table, so a build
+// that had to load it hands it back to the idle sweep rather than keep it parsed
+// for this.
 public static class ItemUsedOnIndex
 {
     private sealed record Index(
@@ -59,6 +60,11 @@ public static class ItemUsedOnIndex
     // item no action cell asks for.
     public static IReadOnlyList<ActionUse> ActionsOf(GameDataCache gameData, int item) =>
         For(gameData).Actions.TryGetValue(item, out IReadOnlyList<ActionUse>? uses) ? uses : Array.Empty<ActionUse>();
+
+    // Build the index ahead of the first item window that asks. Left to that window it
+    // was a pause on opening: the room graph has let the Rooms table go by then, so
+    // the build read all of it back first.
+    public static void Warm(GameDataCache gameData) => For(gameData);
 
     private static Index For(GameDataCache gameData)
     {
@@ -94,8 +100,9 @@ public static class ItemUsedOnIndex
 
                 for (int i = 0; i < columns.Length; i++)
                 {
+                    // Three cells in four are "0", no exit: told apart without making a string of each.
                     if (!row.TryGetProperty(columns[i], out GameValue cell) || cell.ValueKind != JsonValueKind.String
-                        || cell.GetString() is not { } wire)
+                        || cell.ValueEquals("0"u8) || cell.GetString() is not { } wire)
                         continue;
 
                     if (wire.StartsWith("Action", StringComparison.Ordinal))
