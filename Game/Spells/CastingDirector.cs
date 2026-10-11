@@ -701,14 +701,14 @@ public sealed class CastingDirector : IDisposable
     // sneak is being kept, and followed by the fight's resume and the re-sneak
     // (CastFired). So the provisioner keeps the clock and this pass does the sending.
     private Func<(string What, bool MustGoNow)?>? _clientUseDue;
-    private Func<bool, bool>? _fireClientUse;
+    private Func<bool>? _fireClientUse;
     private Action? _clientUseHeld;
 
     // due: the command a use would send and whether it can wait, null when none is
-    // due. fire: send it, told whether a sneak was being kept; true when it went out.
-    // heldForSneak: the pass held it to keep a sneak.
+    // due. fire: send it; true when it went out. heldForSneak: the pass held it to
+    // keep a sneak.
     public void SetClientUseSource(
-        Func<(string What, bool MustGoNow)?> due, Func<bool, bool> fire, Action heldForSneak)
+        Func<(string What, bool MustGoNow)?> due, Func<bool> fire, Action heldForSneak)
     {
         ArgumentNullException.ThrowIfNull(due);
         ArgumentNullException.ThrowIfNull(fire);
@@ -2059,7 +2059,7 @@ public sealed class CastingDirector : IDisposable
                 _clientUseHeldForSneak = true;
                 _clientUseHeld?.Invoke();
             }
-            else if (_fireClientUse?.Invoke(deferSneakMaintenance) == true)
+            else if (_fireClientUse?.Invoke() == true)
             {
                 _log?.Combat(LogCategory,
                     $"hazard buff fired {own.What} hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");

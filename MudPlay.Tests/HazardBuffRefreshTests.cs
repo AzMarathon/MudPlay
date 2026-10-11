@@ -205,7 +205,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
         f.Engine.Pause();
 
         f.Engine.OnApproachingRoom(Dunes);
-        Assert.False(f.Engine.FireDue(sneakKept: false));
+        Assert.False(f.Engine.FireDue());
         Assert.Empty(f.Wire);
 
         f.Engine.Resume();
@@ -386,7 +386,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Field f = new() { AutoSneak = false, RoomsAhead = new() { Oasis, Dunes } };
 
         Assert.Null(f.Engine.DueNow());
-        Assert.False(f.Engine.FireDue(sneakKept: false));
+        Assert.False(f.Engine.FireDue());
         Assert.Empty(f.Wire);
 
         f.Engine.OnApproachingRoom(Dunes);
@@ -485,11 +485,11 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Field f = new() { WalkActive = false };
 
         f.Switch.TurnOff();
-        Assert.False(f.Engine.FireDue(sneakKept: false));
+        Assert.False(f.Engine.FireDue());
         Assert.Empty(f.Wire);
 
         f.Switch.TurnOn();
-        Assert.True(f.Engine.FireDue(sneakKept: false));
+        Assert.True(f.Engine.FireDue());
         Assert.Equal(new[] { "use waterskin" }, f.Wire);
 
         f.Engine.Forget("test");
@@ -523,9 +523,9 @@ public sealed class HazardBuffRefreshTests : IDisposable
         f.Engine.OnServerLine(SwigLine);
         f.Advance(1750);
 
-        Assert.True(f.Engine.FireDue(sneakKept: false));
+        Assert.True(f.Engine.FireDue());
         Assert.Null(f.Engine.DueNow());
-        Assert.False(f.Engine.FireDue(sneakKept: false));
+        Assert.False(f.Engine.FireDue());
         f.Engine.OnApproachingRoom(DeepDesert);
 
         Assert.Equal(new[] { "use waterskin" }, f.Wire);
@@ -560,13 +560,13 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Field f = new();
         f.Engine.OnServerLine(SwigLine);
         f.Advance(1750);
-        Assert.True(f.Engine.FireDue(sneakKept: false));
+        Assert.True(f.Engine.FireDue());
 
         f.Engine.OnServerLine("You have already cast a spell this round!");
 
         Assert.NotNull(f.Engine.DueNow());
         Assert.Contains(f.LogLines, l => l.Contains("refused: `use waterskin` for buff 300 — already cast this round"));
-        Assert.True(f.Engine.FireDue(sneakKept: false));
+        Assert.True(f.Engine.FireDue());
         Assert.Equal(2, f.Wire.Count);
     }
 
@@ -589,7 +589,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Assert.Contains(f.Engine.DescribeTracking(), l => l.Contains("the cast pass sends it with the next one, and the step waits for it"));
 
         Assert.Equal(("use waterskin", true), f.Engine.DueNow());
-        Assert.True(f.Engine.FireDue(sneakKept: false));
+        Assert.True(f.Engine.FireDue());
         Assert.Equal(2, f.Wire.Count);
         Assert.True(f.Engine.HoldingStep);          // now for that one's answer
 
@@ -742,7 +742,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Field f = new() { Charges = 0 };
 
         f.Engine.OnApproachingRoom(Dunes);
-        Assert.False(f.Engine.FireDue(sneakKept: false));
+        Assert.False(f.Engine.FireDue());
 
         Assert.Empty(f.Wire);
         Assert.Single(f.LogLines, l => l.Contains("has no charges left for buff 300"));
@@ -850,7 +850,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
 
         f.Switch.TurnOn();
         Assert.Equal(("use waterskin", true), f.Engine.DueNow());
-        Assert.True(f.Engine.FireDue(sneakKept: false));
+        Assert.True(f.Engine.FireDue());
         Assert.Equal(2, f.Wire.Count);
     }
 
@@ -912,12 +912,12 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Field f = new();
         f.Switch.TurnOff();
 
-        Assert.False(f.Engine.FireDue(sneakKept: false));
+        Assert.False(f.Engine.FireDue());
         Assert.Empty(f.Wire);
         Assert.Equal(1, f.Switch.SkippedSinceOff["Hazard counter item"]);
 
         f.Switch.TurnOn();
-        Assert.True(f.Engine.FireDue(sneakKept: false));
+        Assert.True(f.Engine.FireDue());
         Assert.Single(f.Wire);
     }
 
@@ -1042,6 +1042,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
     public void Pass_SneakKept_AtTheLastCall_SendsItAnyway()
     {
         using Pass p = new() { SneakKept = true };
+        p.Field.SneakKept = true;
         p.Field.Engine.OnServerLine(SwigLine);
         p.Field.Advance(1790);
 
@@ -1050,6 +1051,33 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Assert.Equal(new[] { "use waterskin" }, p.Field.Wire);
         Assert.Equal(1, p.Field.SneakSpent);
         Assert.Contains(p.Field.LogLines, l => l.StartsWith("forced: `use waterskin` for buff 300 1/2 (Scorching Desert)"));
+    }
+
+    // The sneak guard holds for any move in flight with Auto-Sneak on, sneaking or
+    // not. A forced `use` by a character whose sneak had already failed spends no
+    // sneak, and must not arm what reacts to a sneak lost here: the app asks the
+    // guard and the stealth state together.
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 0)]
+    public void AForcedUse_ReportsASneakSpent_OnlyWhenTheCharacterWasSneaking(bool stealthed, int spent)
+    {
+        SneakGuard guard = new(
+            autoSneak: () => true, backstabOwed: () => false, moveInFlight: () => true,
+            npcHere: () => false, fightingHere: () => false, inCombat: () => false, stealthed: () => stealthed);
+        Assert.True(guard.Holds);
+
+        using Pass p = new() { SneakKept = guard.Holds };
+        p.Field.SneakKept = guard.Holds && stealthed;    // as AppServices wires it
+        p.Field.Engine.OnServerLine(SwigLine);
+        p.Field.Advance(1790);
+
+        Assert.Equal("use waterskin", p.Director.Evaluate());
+        Assert.Equal(spent, p.Field.SneakSpent);
+
+        Field f = new() { SneakKept = guard.Holds && stealthed };
+        f.Engine.OnApproachingRoom(Dunes);
+        Assert.Equal(spent, f.SneakSpent);
     }
 
     // A held `use` that stops being due without the pass sending it (the route turned
@@ -1254,7 +1282,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
         }
         Assert.Equal(new[] { "use waterskin", "sn" }, c.Wire);
 
-        Assert.True(c.Field.Engine.FireDue(sneakKept: false));   // the pass, with the next round's cast
+        Assert.True(c.Field.Engine.FireDue());   // the pass, with the next round's cast
         c.Feed(SwigLine);
         c.Feed("Attempting to sneak...");
 
@@ -1284,7 +1312,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
         c.Feed(RoundRefusal);
         Assert.Equal(new[] { "use waterskin" }, c.Wire);         // not walked in with the buff off
 
-        Assert.True(c.Field.Engine.FireDue(sneakKept: false));
+        Assert.True(c.Field.Engine.FireDue());
         Assert.Equal(new[] { "use waterskin", "use waterskin" }, c.Wire);
         c.Feed(SwigLine);
 

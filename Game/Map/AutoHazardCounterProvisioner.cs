@@ -129,7 +129,10 @@ public sealed class AutoHazardCounterProvisioner
     // Every buff counter the active game-data set knows, so the buff's line is read
     // wherever it shows. Null → only the counter last approached is watched.
     private readonly Func<IEnumerable<RoomHazardIndex.BuffCounter>>? _allCounters;
-    // SneakGuard.Holds: a sneak is being kept that a `use` would end.
+    // The character is sneaking or hidden, and that is being kept (SneakGuard.Holds):
+    // a `use` now spends it. Both halves: the guard also holds for any move in flight
+    // with Auto-Sneak on, sneaking or not, and a sneak that had already failed is not
+    // one this `use` lost.
     private readonly Func<bool>? _sneakKept;
     // Auto-Sneak is on: the refresh gets its window and its look ahead, to find a
     // room with no NPCs in. Null → off.
@@ -608,9 +611,9 @@ public sealed class AutoHazardCounterProvisioner
         _log?.Info(LogCategory, "waiting for a room with no NPCs before the `use`, so the sneak isn't spent beside one");
     }
 
-    // The scheduler has the round's cast for us: send the due `use`. sneakKept says a
-    // sneak was being kept that this ends. False when nothing was sent.
-    public bool FireDue(bool sneakKept)
+    // The scheduler has the round's cast for us: send the due `use`. False when
+    // nothing was sent.
+    public bool FireDue()
     {
         if (DueUse(out RoomHazardIndex.BuffCounter counter, out int pick, out bool mustGoNow, out _, out Room? where) is null)
             return false;
@@ -619,12 +622,14 @@ public sealed class AutoHazardCounterProvisioner
         Arm(counter);
         // A step still waiting on this `use` waits on for its answer.
         Room? stepInto = _holdingStep ? _roundWait?.StepInto : null;
+        // Read before the send: the `use` itself ends the sneak being kept.
+        bool overSneak = _sneakKept?.Invoke() == true;
         if (SendUse(counter, pick, _now(), couldNotWait: mustGoNow, stepInto) is not { } name) return false;
         string place = where is null ? "" : $" {Describe(where)}";
-        _log?.Info(LogCategory, sneakKept
+        _log?.Info(LogCategory, overSneak
             ? $"forced: `use {name}` for buff {counter.BuffSpell}{place} — no room with no NPCs turned up in time, and the sneak is spent here"
             : $"used `use {name}` for buff {counter.BuffSpell}{place}{(mustGoNow ? ", at the last call" : "")} ({Lasts(counter)})");
-        if (sneakKept) SneakSpentHere?.Invoke();
+        if (overSneak) SneakSpentHere?.Invoke();
         return true;
     }
 

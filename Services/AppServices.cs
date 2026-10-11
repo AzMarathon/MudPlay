@@ -7888,7 +7888,9 @@ public sealed class AppServices
             followingLeader: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
             roomsAhead:     HazardRoomsAhead,
             allCounters:    () => RoomHazards.Hazards.SelectMany(h => h.BuffCounters),
-            sneakKept:      () => SneakGuard.Holds,
+            // Asked at the send, for "this `use` spent a sneak". The guard alone holds
+            // for a move in flight whether or not the character is sneaking.
+            sneakKept:      () => SneakGuard.Holds && Stealth.IsStealthed,
             chargesLeft:    id => ItemNames.GetName(id) is { } name ? CarriedCharges.RemainingForName(name) : null,
             sendBlocked:    () => EngineGate.IsLocked,
             // The early window and the look ahead are for finding a room with no
