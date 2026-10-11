@@ -3961,8 +3961,10 @@ public sealed class AppServices
         // Game data read in afresh stops whatever is walking by the old data's room
         // numbers: another set become the active one, or the active one imported again
         // or rewritten in Manage Sets, which may have changed its rooms (owner,
-        // 2026-10-11). Told by the cache's load, which moves on both; picking the set
-        // already active raises nothing. Subscribed ahead of the room graph's own
+        // 2026-10-11). Told by the cache's load, which moves on both. The Game Data
+        // menu's pick of the set already active reads it in again (ReloadActiveSet),
+        // so it stops like an import; only a SwitchSet to the active name, which the
+        // cache answers without a new load, raises nothing. Subscribed ahead of the room graph's own
         // handler below, so the stop comes before the graph is rebuilt and nothing
         // re-plans those numbers on the new rooms first. The movement controller is
         // built further down: before it exists nothing is running.

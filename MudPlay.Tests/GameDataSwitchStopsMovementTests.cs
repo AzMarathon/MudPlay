@@ -13,7 +13,8 @@ namespace MudPlay.Tests;
 // The engines walk by room numbers, which are other rooms under another game-data
 // set and may be after the active one is imported again. Either stops a loop,
 // Auto-Lair and a walk-to in progress, drops what was held to start by itself, and
-// starts nothing again; picking the set already active does nothing. And the set a
+// starts nothing again; a SwitchSet to the name already active, which the cache
+// answers with no new load, does nothing. And the set a
 // running loop is stamped with is the one it was started on, through every re-plan
 // of the same run, and the snapshot of the last run is not run under another set.
 public sealed class GameDataSwitchStopsMovementTests : IDisposable
@@ -260,10 +261,11 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         Assert.True(h.Idle);
     }
 
-    // The set already active picked again: the cache raises nothing, and the stop
-    // asked with the same name and no fresh load does nothing either.
+    // A SwitchSet to the name already active: the cache raises nothing, and the stop
+    // asked with the same name and no fresh load does nothing either. (The Game Data
+    // menu's pick of the ticked set is a reload, covered by the reload tests.)
     [Fact]
-    public void PickingTheSetAlreadyActive_IsANoOp()
+    public void SwitchingToTheSetAlreadyActive_IsANoOp()
     {
         Harness h = OnAlpha();
         h.Tracker.SetLocated(new RoomKey(1, 1));
