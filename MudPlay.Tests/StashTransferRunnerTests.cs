@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using MudPlay.Game.Cash;
 using MudPlay.Game.GameData;
 using MudPlay.Game.Map;
+using MudPlay.Game.Remote;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -483,6 +484,31 @@ public sealed class StashTransferRunnerTests
         h.Runner.NoteMemberReply("Raijin", "{already at keep-on-hand (0 copper)}");
         Assert.False(h.Runner.IsBusy);
         Assert.Equal(40_000, h.BankHolds);
+    }
+
+    // A member who was not in the bank says so (InventoryActionHandler.NotInBank),
+    // and that is its answer to the deposit order: the leader doesn't wait it out.
+    [Fact]
+    public void PartyShare_AMemberNotInTheBank_HasAnswered()
+    {
+        Harness h = new()
+        {
+            StashHolds = 100_000, CarryPerTrip = 40_000, PartyTakes = 60_000,
+            Party = { "Raijin" },
+        };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Runner.NoteMemberReply("Raijin", "{ok - took 3 platinum}");
+        h.FireTimers();
+        h.Arrive();
+        h.FireTimers();
+        Assert.Equal("/Raijin @deposit-all", h.Sent[^1]);
+        Assert.True(h.Runner.IsBusy);
+
+        h.Runner.NoteMemberReply("Raijin", "{" + InventoryActionHandler.NotInBank + "}");
+
+        Assert.False(h.Runner.IsBusy);
     }
 
     // A member who never answers (an older client, replies switched off) costs the

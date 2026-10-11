@@ -122,8 +122,13 @@ public sealed class LoopShareTests : IDisposable
 
     // ----- Sender (LoopShareHandler) ---------------------------------
 
+    // Refusals land in the same list, as they do from an engine with the Warn
+    // setting on.
     private static RemoteCommandContext Ctx(string sender, List<string> replies) =>
-        new(sender, "@loop", Array.Empty<string>(), "@loop send", RemoteChannel.Telepath, replies.Add);
+        new(sender, "@loop", Array.Empty<string>(), "@loop send", RemoteChannel.Telepath, replies.Add)
+        {
+            Refusal = why => replies.Add(why ?? "command invalid or not allowed"),
+        };
 
     [Fact]
     public void Send_OffersTheBestMatch_ThenSendsOnYes()

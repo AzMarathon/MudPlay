@@ -237,7 +237,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
             Assert.NotEmpty(sent);
             Assert.All(sent, line => Assert.StartsWith(prefix, line));
             // And in ASCII: a long dash can't be encoded on the wire at all.
-            Assert.All(sent, line => Assert.True(WireText.IsAscii(line.TrimEnd('\r')), line));
+            Assert.All(sent, line => Assert.All(line.TrimEnd('\r'), c => Assert.InRange(c, ' ', '~')));
         }
     }
 

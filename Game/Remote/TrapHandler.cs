@@ -12,7 +12,7 @@ namespace MudPlay.Game.Remote;
 //      (n / north / ne / northeast / ...) into the canonical short form before
 //      queueing.
 //   2. Channel-aware soft-gate on TrapDisarmManager.CanDisarm:
-//        - Telepath / Gangpath + no skill → reply {can't disarm — no Traps
+//        - Telepath / Gangpath + no skill → reply {can't disarm - no Traps
 //          skill} so the sender knows we're not the right target. A refusal,
 //          so the Warn setting silences it.
 //        - Local (Say) + no skill → silent. Broadcast channels reach every

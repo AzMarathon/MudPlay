@@ -36,13 +36,6 @@ public static class WireText
         return sb.ToString();
     }
 
-    public static bool IsAscii(string text)
-    {
-        foreach (char c in text)
-            if (!IsPlain(c)) return false;
-        return true;
-    }
-
     private static bool IsPlain(char c) => c is >= ' ' and <= '~';
 
     private static string Spell(char c) => c switch

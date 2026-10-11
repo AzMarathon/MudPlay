@@ -26,7 +26,7 @@ public sealed class WireTextTests
     public void Ascii_SpellsOutWhatTheWireCannotCarry(string text, string expected)
     {
         Assert.Equal(expected, WireText.Ascii(text));
-        Assert.True(WireText.IsAscii(WireText.Ascii(text)));
+        Assert.All(WireText.Ascii(text), c => Assert.InRange(c, ' ', '~'));
     }
 
     [Fact]
@@ -76,8 +76,9 @@ public sealed class WireTextTests
     {
         foreach ((string command, RemoteCommandHelp help) in RemoteCommandCatalog.Help)
         {
-            Assert.True(WireText.IsAscii(help.Syntax), $"{command} syntax: {help.Syntax}");
-            Assert.True(WireText.IsAscii(help.Description), $"{command} description: {help.Description}");
+            // Text that is already ASCII comes back from the sanitiser unchanged.
+            Assert.Equal(help.Syntax, WireText.Ascii(help.Syntax));
+            Assert.Equal(help.Description, WireText.Ascii(help.Description));
         }
     }
 
@@ -101,6 +102,6 @@ public sealed class WireTextTests
             TrapReply.CouldNotDisarm("n", 5),
         };
 
-        Assert.All(answers, a => Assert.True(WireText.IsAscii(a), a));
+        Assert.All(answers, a => Assert.Equal(a, WireText.Ascii(a)));
     }
 }

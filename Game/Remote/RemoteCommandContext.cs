@@ -36,8 +36,8 @@ public readonly record struct RemoteCommandContext(
     // Where a failure answer goes. The engine binds it to its denial path, which
     // sends nothing while Settings → Talk "Warn sender on invalid / denied remote
     // command" is off and falls back to the configured failure message for a
-    // null reason. Unbound (a context built by hand in a test), it is Reply.
-    public Action<string?>? Refusal { get; init; }
+    // null reason. Required, so no context can answer a failure around it.
+    public required Action<string?> Refusal { get; init; }
 
     // Answer that the command was not carried out, and why. This is the one way a
     // handler says no: every invalid / denied reply obeys the Warn setting, so no
@@ -59,9 +59,5 @@ public readonly record struct RemoteCommandContext(
     //     wealth and level probes count that member as having answered.
     //   - @get-stash's "ok - …" and "busy …" lines, and every @deposit-all answer:
     //     a leader's stash transfer waits for one from each member.
-    public void Refuse(string? reason = null)
-    {
-        if (Refusal is { } refuse) refuse(reason);
-        else if (!string.IsNullOrEmpty(reason)) Reply(reason);
-    }
+    public void Refuse(string? reason = null) => Refusal(reason);
 }
