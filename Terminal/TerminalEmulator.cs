@@ -168,6 +168,7 @@ public sealed class TerminalEmulator
 
         // A printable byte: if we deferred wrapping from the previous cell,
         // commit that now before placing this glyph.
+        bool carriesOn = _wrapPending && _autoWrap;
         if (_wrapPending)
         {
             if (_autoWrap)
@@ -181,6 +182,10 @@ public sealed class TerminalEmulator
         // Translate raw 8-bit byte through CP437 to a Unicode glyph and
         // place it under the cursor with the current attributes.
         char ch = Cp437.ToUnicode(b);
+        // A row written from its first column, and not as the row above carrying
+        // on, is a new line (a CR and an overwrite, with no erase): the row above
+        // no longer wraps onto it.
+        if (Screen.CursorX == 0 && !carriesOn) Screen.SetRowSoftWrapped(Screen.CursorY - 1, false);
         Screen.Put(Screen.CursorX, Screen.CursorY, new Cell(ch, _attr));
         _rowWritten = true;
 
