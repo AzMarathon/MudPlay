@@ -13,7 +13,8 @@ namespace MudPlay.Game.Remote;
 // check: a (Toll: N) exit is per-crosser — every member needs N*100 copper-value
 // on hand — so before stepping the party through one the leader asks what every
 // follower holds. What is done about a member who is short or doesn't reply is
-// PartyTollGate's: paid for when we can spare it, the toll not taken otherwise.
+// PartyTollGate's: paid for when the Cash setting allows it and we can spare it,
+// the toll not taken otherwise. An NPC's fare and a sailing are asked about the same way.
 //
 // Same round-trip plumbing as PartyLevelProbe: the query goes out through
 // PartyBroadcaster.Broadcast (one /<given> @wealth per member) and each member's

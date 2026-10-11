@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.175.22**
+> **Version 3.176.4**
 > - The client learns where a room's dead arrive from a death it sees, and keeps it with the game-data set for every client on it
 > - Hang-up death check: back in a learned room counts as where the dead arrive, for rooms no list covers (never as "the wrong room", never over the Stock list)
 > - A room seen to send its dead to two rooms is kept as disputed, and neither is used

@@ -290,4 +290,53 @@ public sealed class AutoWalkManagerBoatTests : IDisposable
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
         Assert.DoesNotContain("secure passage", h.Wire);
     }
+
+    // The party's purses are checked at the dock before the verb goes out
+    // (PartyTollGate.BeforeSailing): held under its gate, the verb waits, and goes
+    // when the check lets the sailing through.
+    [Fact]
+    public void BoatStep_WaitsForThePartysCheck_AndSailsWhenItIsLetThrough()
+    {
+        Harness h = NewHarness();
+        bool held = true;
+        List<long> faresAsked = new();
+        h.Walker.SetSailingCheck((passage, _) =>
+        {
+            faresAsked.Add(passage.FareCopper);
+            if (!held) return PartyTollGate.StepVerdict.Go;
+            h.Coordinator.AssertGate(MovementCoordinator.PartyTollGate, "test", "asking the party's purses");
+            return PartyTollGate.StepVerdict.Hold;
+        });
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 11)));
+        h.Tracker.NoteRoomObserved(Obs("Pier", Direction.S));
+
+        Assert.Equal(new long[] { 100 }, faresAsked);
+        Assert.DoesNotContain("secure passage", h.Wire);
+
+        held = false;
+        h.Coordinator.ClearGate(MovementCoordinator.PartyTollGate, "test", "the party's purses are read");
+
+        Assert.EndsWith("secure passage to islea\r", h.Wire);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+    }
+
+    // A sailing the party can't all pay is not boarded: the verb never goes out,
+    // and with no other way the walk ends naming the sailing.
+    [Fact]
+    public void BoatStep_ClosedToTheParty_IsNeverBoarded_AndTheWalkEndsNamingTheSailing()
+    {
+        Harness h = NewHarness();
+        h.Walker.SetSailingCheck((_, _) => PartyTollGate.StepVerdict.Closed);
+        List<string> notices = new();
+        h.Walker.SetUnpaidCrossingHandler((_, reason) => notices.Add(reason));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 11)));
+        h.Tracker.NoteRoomObserved(Obs("Pier", Direction.S));
+
+        Assert.DoesNotContain("secure passage", h.Wire);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Contains("the boat 'secure passage to islea'", Assert.Single(notices));
+        Assert.EndsWith("the party can't all pay it", notices[0]);
+    }
 }
