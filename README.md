@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.177.2**
-> - Simulator area ranking: **Save as loop** turns a ranked area's tour into a saved loop you can run, with how it was tested in the loop's notes
-> - A picked ranking now shows its route (the first 20 rooms in order, and how many more) and what it was tested at (level, runs × hours, walk pace, start room)
-> - A tour that is already one of your saved loops is not saved again; a name that is taken gets a number
+> **Version 3.177.5**
+> - `@loop send`: a loop you already hold as a numbered copy (`<name> 2`, `<name> 3`) is rejected too, and the notice names which one it matches
+> - `@loop send`: the offer carries the loop's code; the loop that arrives is checked against it and not saved when it doesn't match
+> - `@loop send`: the asking client tells the sender whether the loop was saved (and under which name), already held, or has to be sent again
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

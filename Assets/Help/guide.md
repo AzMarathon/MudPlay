@@ -1318,14 +1318,16 @@ Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clien
 
 **From asking to saved**, with Leader asking Scout for a loop:
 
-1. Leader sends `/Scout @loop send kings road`. Scout's client finds the loop and answers `{preparing to send: King's Road, yes to confirm, no to deny}`. Nothing has been sent yet. The offer is Leader's alone, and a new ask from Leader replaces it.
+1. Leader sends `/Scout @loop send kings road`. Scout's client finds the loop and answers `{preparing to send: King's Road, yes to confirm, no to deny (code 9da659db)}`. Nothing has been sent yet. The offer is Leader's alone, and a new ask from Leader replaces it. The **code** is the loop's, as Scout runs it (see *The code, and "verified"* below); Leader's client keeps it.
 2. Leader answers `/Scout @loop send yes` within two minutes. After that the offer has lapsed and a `yes` is answered `no loop send pending - use @loop send <name> first`.
 3. Scout's client answers `{sending loop 'King's Road' (42 rooms, 3 lines)}` and then sends the loop as that many `{@loopdata <id> <i>/<k> <data>}` lines, 0.8 seconds apart.
-4. Leader's client collects the lines. When the last one is in, it rebuilds the loop, saves it to Leader's Loops list, and prints a notice in Leader's terminal.
+4. Leader's client collects the lines. When the last one is in, it rebuilds the loop, checks it against the code from the offer, saves it to Leader's Loops list (or turns it away, see below), and prints a notice in Leader's terminal.
+5. Leader's client tells Scout what became of it, in one line on the same channel: `{@loopresult 9da659db saved as 'King's Road'}`. Scout's client shows that as a notice, with whether the code is the one it sent.
 
 | Reply from the client asked | When |
 |---|---|
-| `preparing to send: <loop name>, yes to confirm, no to deny` | A loop was found by name, or you are running one and the bare form was sent. |
+| `preparing to send: <loop name>, yes to confirm, no to deny (code <code>)` | A loop was found by name, or you are running one and the bare form was sent. |
+| `loop send of '<name>' stopped: it changed since it was offered - ask for it again` | **Refusal:** `yes`, but the loop was edited, or its two loop settings changed, after the offer. The asker said yes to the loop as it was. |
 | `not running a loop - @loop send <name> for a saved one` | **Refusal:** the bare form, and no loop is running. |
 | `no saved loop named '<text>'` | **Refusal:** the name matched nothing. |
 | `'<text>' matches <n> loops: '<name>', '<name>'` | **Refusal:** the name matched several loops. |
@@ -1338,32 +1340,67 @@ Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clien
 
 | Notice in the asker's terminal | When |
 |---|---|
-| `[Received loop '<name>' <n> rooms from <player>]` | Saved under its own name. |
-| `[Received loop '<name>' <n> rooms from <player>, already have it (<code>)]` | **Rejected.** You have a loop of that name and it is the same loop. Nothing is saved and nothing of yours changes. |
-| `[Received loop '<name>' <n> rooms from <player>, saved as '<name> 2' (<code>): your '<name>' is a different loop (<code>)]` | You have a loop of that name and it is a different loop. Yours is left exactly as it is; the new one is saved beside it with a number after the name (`2`, or the next number no loop has). The first code is the new loop's, the second your own loop's. |
+| `[Received loop '<name>' <n> rooms from <player> (<code>, verified)]` | Saved under its own name. `(<code>, verified)` follows the player's name in every notice for a loop that was read; in place of `verified` it can say `not verified: …` (see *The code, and "verified"* below). |
+| `[Received loop '<name>' <n> rooms from <player> (<code>, verified), already have it as '<name 2>']` | **Rejected.** You already have this loop, under the name shown: the name it was sent under, or a numbered copy of it. Nothing is saved and nothing of yours changes. |
+| `[Received loop '<name>' <n> rooms from <player> (<code>, verified), saved as '<name> 2': your '<name>' is a different loop (<code>)]` | You have a loop of that name and it is a different loop, and so is every numbered copy. Yours is left exactly as it is; the new one is saved beside it with a number after the name (`2`, or the next number no loop has). The last code is your own loop's. |
+| `[Received loop '<name>' <n> rooms from <player> does not match the loop offered (received <code>, offered <code>), not saved]` | What arrived is not the loop that was offered: the transfer was damaged, or lines of two transfers were mixed. Ask for it again. |
 | `[Received loop '<name>' <n> rooms from <player>, not saved: no game data set is loaded]` | There was nowhere to save it. |
 | `[Loop from <player> arrived damaged, not saved]` | The lines could not be put back together. |
 
-**What your client accepts.** Loop lines are taken only within two minutes of your own `@loop send yes` (or `y`) going out, and one loop per `yes`. When you said yes by telepath, only lines from that player are taken. A loop needs no permission on the receiving side: you asked for it.
+| What the asker's client tells the sender | When |
+|---|---|
+| `@loopresult <code> saved as '<name>'` | The loop was saved, under the name shown (numbered when the name was taken by a different loop). |
+| `@loopresult <code> already have it as '<name>'` | Rejected: the asker already has this loop, under that name. |
+| `@loopresult <code> not saved: it is not the loop offered (<code>) - send it again` | **Failure:** what arrived did not match the offer. |
+| `@loopresult - not saved: it arrived damaged - send it again` | **Failure:** the lines could not be put back together, so there is no code. |
+| `@loopresult <code> not saved: no game data set is loaded here` | **Failure:** the asker had nowhere to save it. |
+
+| Notice in the sender's terminal | When |
+|---|---|
+| `[<player> on loop '<name>': saved as '<name 2>' (code <code>, the same as sent)]` | The asker's answer came back and its code is the code of the loop you sent: both ends hold the same loop. |
+| `[<player> on loop '<name>': … (code <code>, NOT the code sent, <code>)]` | The asker's client read a different loop from the one you sent. It will also have said it was not saved. Send it again. |
+
+**What your client accepts.** Loop lines are taken only within two minutes of your own `@loop send yes` (or `y`) going out, one loop per `yes`, and **only on the channel the yes went by**. When you said yes by telepath, only lines from that player are taken. A yes on gangpath or say names nobody, so there lines are taken only from a player whose **offer** your client heard on that channel; anyone else's are passed over, and the loop you asked for is still let in. A loop whose name, or a room's command, holds a control character (an escape sequence, a line break) is refused as damaged. A loop needs no permission on the receiving side: you asked for it.
 
 **What travels:** the route itself. Every room, its command and delay, its no-rest, no-attack and rest-here marks, and the loop's notes. With it go the **sending character's** two loop settings, *Only attack in lair rooms* and the lair wait, as that character has them. The loop file your client saves is shared by every character on your game data and holds neither; the two settings become the **receiving character's own** for the loop that is saved, since that is what was offered and what you said yes to. Your other characters start the loop with both off. Whether it is a favourite, and which folder it sits in, stay your own choice.
 
-**When you already have a loop of that name.** Your client works out whether the two are the same loop. What makes a loop itself is its rooms in order, each room's command, delay and four marks (no rest, no attack, rest HP, rest mana), and the two loop settings: the sender's as sent, yours as *this character* has them. Its name, folder, notes and favourite don't count. Names are matched without regard to capitals.
+**When you already have a loop of that name.** Your client works out whether the loop that arrived is one you hold. What makes a loop itself is its rooms in order, each room's command, delay and four marks (no rest, no attack, rest HP, rest mana), and the two loop settings: the sender's as sent, yours as *this character* has them. Its name, folder, notes and favourite don't count. Names are matched without regard to capitals.
 
-- **The same loop: it is rejected.** Nothing is saved, and no setting of yours is touched.
-- **A different loop** (other rooms, other room settings, or a different *Only attack in lair rooms* or lair wait): **it is saved as new**, as `<name> 2`, or `<name> 3` and so on if that is taken too. The sender's two loop settings become this character's for the *new* loop only. The loop you had, and your settings for it, stay as they were, so a loop you are running at that moment carries on unchanged. Nothing of the sender's name goes into the loop's name.
+It is compared with your loop of that name **and with every numbered copy of it**: `Dragons`, `Dragons 2`, `Dragons 3` and so on. A numbered copy is a name a numbered save writes: the name, one space, and a whole number of 2 or more. A loop you named yourself, such as `Dragons 2a`, `Dragons2` or `Dragons (old)`, is not one and is never looked at. Each copy is compared the way this character runs *that* copy, with its own two loop settings for it.
 
-The **code** in the notices is the first eight characters of the loop's signature, a fingerprint of everything listed above. Two loops with the same code are the same loop, whatever they are called, so it lets you compare two loops: your `Dragons 2` and a friend's `Dragons` are the same loop if the codes match. A loop saved under a name you didn't have is saved even when another of your loops, under a different name, is the same; the rule goes by name. The code also appears in the program log's send and receive lines (source `LoopShare`) on both clients and in a bug report's running-loop lines. It is worked out when needed and not stored in the loop file.
+- **The same as any of them: it is rejected.** Nothing is saved, no setting of yours is touched, and the notice names the one it matches (`already have it as 'Dragons 2'`). So a loop sent to you twice is saved once.
+- **Different from all of them** (other rooms, other room settings, or a different *Only attack in lair rooms* or lair wait): **it is saved as new**, as `<name> 2`, or the next number no loop has. The sender's two loop settings become this character's for the *new* loop only. The loops you had, and your settings for them, stay as they were, so a loop you are running at that moment carries on unchanged. Nothing of the sender's name goes into the loop's name.
 
-Clients on an older version: one that **sends** you a loop sends the two settings its loop file holds (it has no per-character settings), and the rule above is applied to what arrives. One that **receives** your loop keeps the old behaviour: it compares rooms, room settings and the two settings it reads from its own file, and saves a different loop as `<name> (from <player>)`.
+**The code, and "verified".** The **code** is the first eight characters of the loop's signature, a fingerprint of everything listed above. Two loops with the same code are the same loop, whatever they are called, so it lets you compare two loops: your `Dragons 2` and a friend's `Dragons` are the same loop if the codes match. A loop saved under a name you didn't have is saved even when another of your loops, under a different name, is the same; the rule goes by name.
+
+The sender's client puts the code of the loop it is about to send on its offer. Your client keeps it, works out the code of the loop it put back together, and compares the two:
+
+- **`verified`**: they are the same. The loop you have is the loop that was offered.
+- **does not match the loop offered**: they differ, so the loop was damaged on the way or lines of another transfer got in. It is **not saved**; ask again.
+- **`not verified: no code came with the offer`**: the sender's client is older than the code. The loop is taken as it always was, unchecked.
+- **`not verified: it uses a setting this version does not know`**: the sender's client is newer than yours and the loop's lair wait is a way of waiting yours doesn't have. It is saved with the lair wait off, as before, and can't be checked because of that one difference.
+
+When the transfer is over **your client tells the sender what became of it**, once, on the channel the loop came by: saved (and under which name), already held (and as which loop), or not saved and why. The sender's client shows that in the sender's terminal with whether your code is the code it sent, so both of you can see the two ends hold the same loop. What holds the answer back: with **your master switch off** nothing is sent (the loop is still taken, since you typed the yes); and a **not saved** answer is a failure answer, so it goes only when **Warn sender on invalid / denied remote command** (Settings → Talk) is on. Saved and already-held answers go whatever that setting says. The answer is sent like any remote reply: in braces, and by telepath in place of a say while you are sneaking.
+
+Eight characters guard one transfer against damage and mix-ups; they are not proof against someone building a loop to match a code. Whether two loops are the same is always decided on the whole signature, never on the code. The code also appears in the program log's send and receive lines (source `LoopShare`) on both clients and in a bug report's running-loop lines. It is worked out when needed and not stored in the loop file.
+
+Clients on an older version:
+
+- **An older client sends you a loop.** Its offer has no code, so the loop is `not verified`. It sends the two settings its loop file holds (it has no per-character settings), and the rules above are applied to what arrives. Your client's answer reaches it and is only shown there.
+- **An older client receives your loop.** It shows your offer, code and all, and does nothing with the code. It keeps its old behaviour: it compares rooms, room settings and the two settings it reads from its own file, saves a different loop as `<name> (from <player>)`, and tells you nothing back, so no notice appears on your side.
 
 **Situations:**
 
-- **On gangpath or say:** every MudPlay client there that grants you Move player offers its own match, and after a `yes` on those channels your client takes lines from any of them. Use telepath.
+- **On gangpath or say:** every MudPlay client there that grants you Move player offers its own match, and after a `yes` on those channels your client takes lines from any of the players who offered, on that channel. Use telepath.
+- **You asked aloud (say) and the sender is sneaking:** its client answers by telepath, since it won't speak aloud, so its loop does not come on the channel of a yes you said and is not taken. Ask by telepath.
+- **The sender offers other loops meanwhile**, to you or to anyone your client can hear: every offer it made in the last five minutes is remembered, and the loop that arrives is verified against whichever one it is.
 - **`yes`, `y`, `no` and `n` are read as answers**, so a loop with one of those names can't be asked for by name.
 - **The game says the sender is typing too quickly:** the sending client waits three seconds and sends the last line again.
 - **Master switch off on the client asked:** ignored, no answer.
-- **On the sending client's screen:** nothing but the outgoing lines. Its program log notes who asked for which loop, the answer, and the send.
+- **Master switch off on the asking client:** the loop is still taken and saved (you typed the yes), but the sender is not told what became of it. The program log says so.
+- **The loop was changed between the offer and your yes:** it is not sent, and you are told to ask again (when the sender's Warn setting is on).
+- **On gangpath or say, the answer goes to that channel too**, where every client hears it. A sending client there takes it as its own only when the code in it is the code of the loop it sent that player; an answer with any other code, or with none, is somebody else's and is passed over. So on those channels the sender's notice appears for a loop that arrived as sent, and a *not saved* answer shows only as the line itself. By telepath every answer is shown, a differing code as the mismatch it is. Use telepath.
+- **On the sending client's screen:** the outgoing lines, then the notice with the asker's answer. Its program log notes who asked for which loop, the yes or no, the send, and the answer with both codes.
 
 #### @lair
 
