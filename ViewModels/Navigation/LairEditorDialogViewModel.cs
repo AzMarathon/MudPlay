@@ -99,7 +99,8 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
         LairTimerStore timers,
         ConfirmService? confirm = null,
         bool isNew = false,
-        LogService? log = null)
+        LogService? log = null,
+        string? roomsOf = null)
     {
         ArgumentNullException.ThrowIfNull(setup);
         ArgumentNullException.ThrowIfNull(setups);
@@ -107,7 +108,9 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
         ArgumentNullException.ThrowIfNull(timers);
         _original = setup;
         _setups = setups;
-        _openedOn = setups.SetName;
+        // roomsOf names the set for a setup that didn't come off the active one's
+        // catalogue: marks on the map can be kept through a switch of game data.
+        _openedOn = roomsOf ?? setups.SetName;
         _graph = graph;
         _timers = timers;
         _confirm = confirm;
@@ -145,6 +148,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
     {
         if (OtherGameDataRefusal() is { } refusal)
         {
+            DropSearchResults();
             AddMarkerError = refusal;
             return;
         }
@@ -196,8 +200,16 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
     // Rebuild SearchResults from the supplied query. Same two-dialect
     // parser as the Loop editor: coordinate (1/297, 1,297, 1 297, or bare
     // 297 across all maps) and room-name substring.
-    private void RebuildSearchResults(string query)
+    internal void RebuildSearchResults(string query)
     {
+        // The rows listed are the active game data's rooms. Under another set than
+        // the setup's none are, so a row of that set can't be taken once back on it.
+        if (OtherGameDataRefusal() is { } refusal)
+        {
+            DropSearchResults();
+            AddMarkerError = refusal;
+            return;
+        }
         SearchResults.Clear();
         string needle = (query ?? string.Empty).Trim();
         if (needle.Length == 0)
@@ -241,6 +253,15 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
                      .OrderBy(rr => rr.PrimaryLine, StringComparer.OrdinalIgnoreCase)
                      .Take(50))
             SearchResults.Add(rr);
+        OnPropertyChanged(nameof(HasSearchResults));
+    }
+
+    // Nothing listed or highlighted is kept through a refusal: whatever is held may
+    // have been picked while another game data's rooms were on show.
+    private void DropSearchResults()
+    {
+        SearchResults.Clear();
+        SelectedSearchResult = null;
         OnPropertyChanged(nameof(HasSearchResults));
     }
 
@@ -288,7 +309,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
     }
 
     // Inline message for the Save row: why a Save click didn't persist. Empty until
-    // a Save is refused, and cleared by the next one that goes through.
+    // a Save is refused, and cleared by the next one the checks let through.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSaveError))]
     private string _saveError = string.Empty;
@@ -299,7 +320,11 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
     // set is active than the one the setup was opened on.
     private bool SaveRefusedForOtherGameData()
     {
-        if (OtherGameDataRefusal() is not { } refusal) return false;
+        if (OtherGameDataRefusal() is not { } refusal)
+        {
+            SaveError = string.Empty;
+            return false;
+        }
         SaveError = refusal;
         _log?.Info("Lairs",
             $"setup '{Name.Trim()}' not saved: {OpenedOnGameData.LogReason(_openedOn, _setups.SetName)}");
@@ -310,6 +335,13 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
     private async Task SaveAsync()
     {
         if (!CanSave) return;
+        if (_setups.SetName is null)
+        {
+            // LairManager.Save writes nothing with no game-data set active: say so
+            // rather than close as if the setup had been saved.
+            SaveError = "No active game-data set — select one before saving lair setups.";
+            return;
+        }
         if (SaveRefusedForOtherGameData()) return;
 
         // Renaming an existing setup to a name that's already taken
@@ -328,7 +360,6 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
             // The prompt is modeless too: the game data can have changed under it.
             if (SaveRefusedForOtherGameData()) return;
         }
-        SaveError = string.Empty;
 
         // Persist a fresh LairSetup. We don't mutate _original — the
         // rail rows hold references to it via LairSetupRowViewModel,

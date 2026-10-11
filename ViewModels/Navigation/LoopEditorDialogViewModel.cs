@@ -113,14 +113,17 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         RoomGraphManager graph,
         LoopRunner? runner = null,
         ConfirmService? confirm = null,
-        bool isNew = false)
+        bool isNew = false,
+        string? roomsOf = null)
     {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(loops);
         ArgumentNullException.ThrowIfNull(graph);
         _original = loop;
         _loops = loops;
-        _openedOn = loops.SetName;
+        // roomsOf names the set for a loop that didn't come off the active one's
+        // catalogue or map: the running loop is kept through a switch of game data.
+        _openedOn = roomsOf ?? loops.SetName;
         _graph = graph;
         _runner = runner;
         _confirm = confirm;
@@ -198,8 +201,16 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // the Navigation search box: coordinate ("1/297", "1,297", "1 297", or
     // bare "297" across all maps) and room-name substring. Monster matches
     // are intentionally omitted.
-    private void RebuildSearchResults(string query)
+    internal void RebuildSearchResults(string query)
     {
+        // The rows listed are the active game data's rooms. Under another set than
+        // the loop's none are, so a row of that set can't be taken once back on it.
+        if (OtherGameDataRefusal() is { } refusal)
+        {
+            DropSearchResults();
+            AddWaypointError = refusal;
+            return;
+        }
         SearchResults.Clear();
         string needle = (query ?? string.Empty).Trim();
         if (needle.Length == 0)
@@ -250,6 +261,15 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         OnPropertyChanged(nameof(HasSearchResults));
     }
 
+    // Nothing listed or highlighted is kept through a refusal: whatever is held may
+    // have been picked while another game data's rooms were on show.
+    private void DropSearchResults()
+    {
+        SearchResults.Clear();
+        SelectedSearchResult = null;
+        OnPropertyChanged(nameof(HasSearchResults));
+    }
+
     // Parse a coordinate token. Returns (map, room) when both numbers were
     // supplied (separator: /, ,, or whitespace), (null, room) for a bare
     // single number, or (null, null) for non-numeric input.
@@ -275,6 +295,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     {
         if (OtherGameDataRefusal() is { } refusal)
         {
+            DropSearchResults();
             AddWaypointError = refusal;
             return;
         }

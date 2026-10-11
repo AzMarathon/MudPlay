@@ -133,22 +133,67 @@ public sealed class LairEditorOtherGameDataTests : IDisposable
         Assert.Empty(setups.Setups);
     }
 
+    // The row highlighted when the add is refused is not kept: it may have been
+    // picked from the other game data's rooms.
     [Fact]
-    public void ARoomIsNotAddedUnderOtherGameData()
+    public void ARoomIsNotAddedUnderOtherGameData_NorTheSameRowOnceBack()
     {
         (LairEditorDialogViewModel editor, LairManager setups) = Open(NewSetup("Camp"));
-        editor.SelectedSearchResult = new RoomSearchResult(new RoomKey(1, 101), "Sewer B", null);
 
         setups.LoadAll(Other);
+        editor.SelectedSearchResult = new RoomSearchResult(new RoomKey(1, 101), "Sewer B", null);
         editor.AddMarkerCommand.Execute(null);
 
         Assert.Equal(RefusalText, editor.AddMarkerError);
         Assert.Single(editor.Markers);
+        Assert.Null(editor.SelectedSearchResult);
 
         setups.LoadAll(_opened);
         editor.AddMarkerCommand.Execute(null);
 
+        Assert.Equal("Enter a room key (1/297) or room name.", editor.AddMarkerError);
+        Assert.Single(editor.Markers);
+
+        // A row picked on its own game data is taken as before.
+        editor.SelectedSearchResult = new RoomSearchResult(new RoomKey(1, 101), "Sewer B", null);
+        editor.AddMarkerCommand.Execute(null);
+
         Assert.False(editor.HasAddMarkerError);
         Assert.Equal(2, editor.Markers.Count);
+    }
+
+    // Marks kept on the map through a switch of game data are opened as the set's
+    // they were placed on, whatever set is active when the editor opens.
+    [Fact]
+    public async Task ASetupOpenedAsAnotherGameDatas_IsNotSaved()
+    {
+        (_, LairManager setups) = Open(NewSetup("Camp"));
+        LairEditorDialogViewModel editor = new(
+            NewSetup("From marks"), setups, new RoomGraphManager(new GameDataCache()), _timers!,
+            isNew: true, log: _log, roomsOf: Other);
+
+        await editor.SaveCommand.ExecuteAsync(null);
+
+        Assert.Equal(
+            $"This setup's rooms belong to game data '{Other}', and '{_opened}' is active now — "
+            + "switch back to that game data to change or save it.",
+            editor.SaveError);
+        Assert.Null(setups.Get("From marks"));
+    }
+
+    [Fact]
+    public async Task WithNoGameDataActive_SaveIsRefusedAndTheWindowStaysOpen()
+    {
+        RoomGraphManager graph = new(new GameDataCache());
+        _timers = new LairTimerStore(new GameDataCache(), graph, new RoomTracker(graph));
+        LairManager setups = new();
+        LairEditorDialogViewModel editor = new(NewSetup("Camp"), setups, graph, _timers, isNew: true);
+
+        bool closed = false;
+        editor.CloseRequested += _ => closed = true;
+        await editor.SaveCommand.ExecuteAsync(null);
+
+        Assert.False(closed);
+        Assert.Equal("No active game-data set — select one before saving lair setups.", editor.SaveError);
     }
 }
