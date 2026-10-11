@@ -693,21 +693,29 @@ public sealed class CastingDirector : IDisposable
         bool blessEnabled = _autoBlessEnabled?.Invoke() ?? true;
         if (!healEnabled && !blessEnabled) return false;
 
-        SpellsSettings spells = _readSpells();
         HealthSettings health = _readHealth();
-        PartySettings? party = _readPartySettings?.Invoke();
-        if (healEnabled
-            && (PickEmergencySelfHeal(spells, health) is not null
-                || PickDownedAllyHeal(party, spells) is not null
-                || PickMinorPartyHeal(party) is not null
-                || PickMajorPartyHeal(party) is not null
-                || PickMinorSelfHeal(spells, health) is not null
-                || PickMajorSelfHeal(spells, health) is not null
-                || PickCure(spells) is not null))
-            return true;
+        if (healEnabled && DueHealOrCure(health) is not null) return true;
         return blessEnabled
             && (PickBuff(health, priority: true, peek: true) is not null
                 || PickBuff(health, priority: false, peek: true) is not null);
+    }
+
+    // The heal or cure that is due and would take the round's between-round cast, by
+    // its cast code; null when none is. For a caller that says what it waited on.
+    public string? HealOrCureDue() =>
+        CanDecide && _isEnabled() ? DueHealOrCure(_readHealth()) : null;
+
+    private string? DueHealOrCure(HealthSettings health)
+    {
+        SpellsSettings spells = _readSpells();
+        PartySettings? party = _readPartySettings?.Invoke();
+        return PickEmergencySelfHeal(spells, health)
+            ?? PickDownedAllyHeal(party, spells)?.Spell
+            ?? PickMinorPartyHeal(party)?.Spell
+            ?? PickMajorPartyHeal(party)?.Spell
+            ?? PickMinorSelfHeal(spells, health)
+            ?? PickMajorSelfHeal(spells, health)
+            ?? PickCure(spells)?.Spell;
     }
 
     // The buffs of one kind (ticked "Priority buff", or the rest) that are due now, in

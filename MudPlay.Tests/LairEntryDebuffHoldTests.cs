@@ -457,7 +457,9 @@ public sealed class LairEntryDebuffHoldTests
         h.Poll();
 
         Assert.Contains("no priority buff is due and the between-round cast is free — entering the lair", h.LoopLog);
-        Assert.StartsWith("stepping in, buffs held; last wait: 12:00:07 no priority buff is due", h.Hold.Describe());
+        // Stamped in local time, as the program log beside it in a bug report is.
+        Assert.StartsWith($"stepping in, buffs held; last wait: {h.Now.ToLocalTime():HH:mm:ss} no priority buff is due",
+            h.Hold.Describe());
     }
 
     // The other two modes keep what they held: nothing while Wait for spells lets
@@ -484,7 +486,8 @@ public sealed class LairEntryDebuffHoldTests
 
         Assert.False(h.Held);
         Assert.False(h.Hold.BlockingOrdinaryBuffs);
-        Assert.Equal("not waiting; last wait: 12:00:00 no longer entering a lair", h.Hold.Describe());
+        Assert.Equal($"not waiting; last wait: {h.Now.ToLocalTime():HH:mm:ss} no longer entering a lair",
+            h.Hold.Describe());
     }
 
     [Fact]

@@ -69,7 +69,8 @@ public sealed class LairEntryPriorityBuffWaitTests
                 now: () => new DateTimeOffset(Now),
                 log: Log,
                 buffsDue: Director.BuffsDue,
-                stillWanted: () => LoopStillAtTheDoor);
+                stillWanted: () => LoopStillAtTheDoor,
+                healOrCureDue: Director.HealOrCureDue);
             Director.SetLairEntryBuffHold(
                 () => Hold.BlockingBuffs, () => Hold.BlockingOrdinaryBuffs,
                 Hold.NotePriorityBuffCast, Hold.HoldsPriorityBuff);
@@ -438,7 +439,7 @@ public sealed class LairEntryPriorityBuffWaitTests
         Assert.False(h.Held);
         Assert.Equal(new[] { "sta1", "sta2", "sta3" }, h.CastsSent);
         Assert.Contains(h.InfoLog("Loop"),
-            m => m.StartsWith("waited the limit of 3 rounds of casts with buffs still due (sta4, sta5)"));
+            m => m.StartsWith("waited the limit of 3 rounds of casts (buffs still due: sta4, sta5)"));
     }
 
     // What the scheduler isn't casting right now isn't "due", so it isn't waited for.
@@ -485,6 +486,32 @@ public sealed class LairEntryPriorityBuffWaitTests
 
         Assert.False(h.Held);
         Assert.Equal(new[] { "heal" }, h.CastsSent);
+    }
+
+    // A heal that is due round after round (the wound doesn't close) with no priority
+    // buff going out: the 18 seconds end the wait, and the log names the heal it ran
+    // out on rather than "none".
+    [Fact]
+    public void HealDueEveryRound_EndsTheWaitAfterEighteenSeconds_AndTheLogNamesTheHeal()
+    {
+        using Harness h = new();
+        h.Spells.MajorHealSpell = "heal";
+        h.AutoHeal = false;
+        h.State.Hp = 70;
+        h.AutoHeal = true;
+
+        Assert.False(h.AskToEnter());
+        for (int round = 0; round < 10 && h.Held; round++)
+        {
+            h.Director.Evaluate();                          // the heal goes out; HP stays low
+            h.Poll();
+            h.NextRound();
+            h.Poll();
+        }
+
+        Assert.False(h.Held);
+        Assert.Contains(h.InfoLog("Loop"), m => m.StartsWith(
+            "no priority buff went out for 18 seconds (a heal or cure still due: heal)"));
     }
 
     // An item-cast buff ticked priority is a priority buff to the scheduler, so it is

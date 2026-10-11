@@ -8223,7 +8223,8 @@ public sealed class AppServices
             },
             log: Log,
             buffsDue: priority => CastDirector.BuffsDue(priority),
-            stillWanted: () => LairEntryDebuffModeForNextStep(out _) != Game.Map.LairEntryDebuffMode.Off);
+            stillWanted: () => LairEntryDebuffModeForNextStep(out _) != Game.Map.LairEntryDebuffMode.Off,
+            healOrCureDue: () => CastDirector.HealOrCureDue());
         CastDirector.SetLairEntryBuffHold(
             () => LairDebuffHold.BlockingBuffs, () => LairDebuffHold.BlockingOrdinaryBuffs,
             buff => LairDebuffHold.NotePriorityBuffCast(buff),

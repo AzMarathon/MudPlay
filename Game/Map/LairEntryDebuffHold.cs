@@ -44,6 +44,7 @@ public sealed class LairEntryDebuffHold
     private readonly LogService? _log;
     private readonly Func<bool, IReadOnlyList<string>>? _buffsDue;
     private readonly Func<bool>? _stillWanted;
+    private readonly Func<string?>? _healOrCureDue;
 
     private LairEntryDebuffMode _mode;
     private bool _waiting;
@@ -71,12 +72,14 @@ public sealed class LairEntryDebuffHold
     // slotUsed: this round's between-round cast is spent. castDue: a heal, cure or
     // buff that isn't being held back is due and would take it. buffsDue: the names of
     // the buffs due, those ticked "Priority buff" (true) or the rest (false), held
-    // back or not; only read to say what a wait is for. stillWanted: the loop is still
+    // back or not, and healOrCureDue the heal or cure that is; both only read to say
+    // what a wait is for. stillWanted: the loop is still
     // about to step into a lair it waits outside (asked while a wait stands, since a
     // loop that was stopped or switched off never asks ReadyToEnter again).
     public LairEntryDebuffHold(MovementCoordinator coordinator, Func<bool> slotUsed, Func<bool> castDue,
         Action<TimeSpan, Action> scheduleAfter, Func<DateTimeOffset>? now = null, LogService? log = null,
-        Func<bool, IReadOnlyList<string>>? buffsDue = null, Func<bool>? stillWanted = null)
+        Func<bool, IReadOnlyList<string>>? buffsDue = null, Func<bool>? stillWanted = null,
+        Func<string?>? healOrCureDue = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(slotUsed);
@@ -90,6 +93,7 @@ public sealed class LairEntryDebuffHold
         _log = log;
         _buffsDue = buffsDue;
         _stillWanted = stillWanted;
+        _healOrCureDue = healOrCureDue;
     }
 
     // Every buff waits: the loop is at a lair's doorstep with no more casts allowed
@@ -174,7 +178,7 @@ public sealed class LairEntryDebuffHold
         _limitReached = WaitLimit.None;
         if (!_waiting) return;
         _waiting = false;
-        _lastOutcome = $"{_now():HH:mm:ss} {why}";
+        _lastOutcome = $"{LocalTime()} {why}";
         _log?.Info("Loop", $"the wait outside the lair is over, buffs released — {why}");
         _coordinator.ClearGate(MovementCoordinator.LairDebuffGate, Asserter, why);
     }
@@ -262,7 +266,7 @@ public sealed class LairEntryDebuffHold
         _limitReached = WaitLimit.None;
         if (!_waiting) return;
         _waiting = false;
-        _lastOutcome = $"{_now():HH:mm:ss} {reason}";
+        _lastOutcome = $"{LocalTime()} {reason}";
         _log?.Info("Loop", reason);
         _coordinator.ClearGate(MovementCoordinator.LairDebuffGate, Asserter, "the between-round cast is free");
     }
@@ -278,25 +282,25 @@ public sealed class LairEntryDebuffHold
     };
 
     // Why the step is going now. A wait that ran into a limit says which, and names
-    // the buffs it was waiting for that are still due: those could not be cast in time.
+    // what it was waiting for that is still due: that could not be cast in time.
     private string EntryReason()
     {
-        const string Entering = "and entering the lair on a free between-round cast";
+        const string Entering = "holding the buffs back and entering the lair on a free between-round cast";
         switch (_limitReached)
         {
             case WaitLimit.NothingWentOut:
                 return $"no priority buff went out for {MaxWait.TotalSeconds:0} seconds "
-                    + $"(priority buffs still due: {JoinOrNone(WaitedFor())}) — holding them back {Entering}";
+                    + $"({StillDue(WaitedFor(), "priority buffs") ?? "nothing still due"}) — {Entering}";
             case WaitLimit.RanOutBefore:
                 return $"the wait outside this lair already ran out its {MaxWait.TotalSeconds:0} seconds "
-                    + $"(priority buffs still due: {JoinOrNone(WaitedFor())}) — holding them back {Entering}";
+                    + $"({StillDue(WaitedFor(), "priority buffs") ?? "nothing still due"}) — {Entering}";
             case WaitLimit.Rounds or WaitLimit.Time:
-                string stillDue = string.Join(", ", DueBuffs(priority: true).Concat(DueBuffs(priority: false)));
-                if (stillDue.Length == 0) break;
+                if (StillDue(DueBuffs(priority: true).Concat(DueBuffs(priority: false)), "buffs") is not { } stillDue)
+                    break;
                 string limit = _limitReached == WaitLimit.Rounds
                     ? $"{MaxRoundsWaited} rounds of casts"
                     : $"{MaxWait.TotalSeconds:0} seconds";
-                return $"waited the limit of {limit} with buffs still due ({stillDue}) — holding them back {Entering}";
+                return $"waited the limit of {limit} ({stillDue}) — {Entering}";
         }
         if (_mode != LairEntryDebuffMode.WaitForPriorityBuffs)
             return "the between-round cast is free — entering the lair";
@@ -304,6 +308,19 @@ public sealed class LairEntryDebuffHold
             : $" (held back after {MaxSendsOfOnePriorityBuff} sends: {JoinOrNone(_givenUpOn)})";
         return $"no priority buff is due{givenUpOn} and the between-round cast is free — entering the lair";
     }
+
+    // What a wait that ran out was still waiting for: the buffs named, and the heal
+    // or cure that was due (a wait can run out on one of those alone). Null for nothing.
+    private string? StillDue(IEnumerable<string> buffs, string what)
+    {
+        List<string> due = [];
+        if (string.Join(", ", buffs) is { Length: > 0 } names) due.Add($"{what} still due: {names}");
+        if (_healOrCureDue?.Invoke() is { Length: > 0 } heal) due.Add($"a heal or cure still due: {heal}");
+        return due.Count == 0 ? null : string.Join("; ", due);
+    }
+
+    // The bug report prints this beside the program log, whose times are local.
+    private string LocalTime() => $"{_now().ToLocalTime():HH:mm:ss}";
 
     private string PrioritySends() => _prioritySends.Count == 0
         ? "none"
