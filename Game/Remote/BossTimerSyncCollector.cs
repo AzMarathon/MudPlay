@@ -50,23 +50,16 @@ public sealed class BossTimerSyncCollector : IDisposable
     // isOurName: whether a speaker is our own character. A shared channel can echo
     // our own lines back under our name: a request we typed, or data we sent in
     // answer to someone else's request while this window is open.
-    // telepathWasUsers: whether a telepathed request of ours, seen going out, was the
-    // user's own and not one the client sent for another player (a relay-back, a
-    // `@do`). Only the user's asks a player whose answer is then taken as theirs.
     public BossTimerSyncCollector(
-        ChatRouter chat, LogService? log = null, Func<bool>? broadcastOff = null, Func<string, bool>? isOurName = null,
-        Func<ChatLogEntry, bool>? telepathWasUsers = null)
+        ChatRouter chat, LogService? log = null, Func<bool>? broadcastOff = null, Func<string, bool>? isOurName = null)
     {
         ArgumentNullException.ThrowIfNull(chat);
         _chat = chat;
         _log = log;
         _broadcastOff = broadcastOff ?? (static () => false);
         _isOurName = isOurName ?? (static _ => false);
-        _telepathWasUsers = telepathWasUsers ?? (static _ => true);
         _chat.EntryClassified += Ingest;
     }
-
-    private readonly Func<ChatLogEntry, bool> _telepathWasUsers;
 
     // A request of ours went out on askedOn. Its answers are taken from here on,
     // with those of every request made before it while collecting: a second
@@ -131,10 +124,14 @@ public sealed class BossTimerSyncCollector : IDisposable
         if (TransferChannels.OwnRequest(e, _isOurName) is { Transfer: Transfer.TimerSync } own)
         {
             if (!TransferChannels.Allows(Transfer.TimerSync, own.Channel)) return;
-            // A telepath the client sent for another player asks nobody on the
+            // The player a telepathed request reached was asked only when the
+            // confirmation is that request's own and the request was the user's
+            // (ChatRouter.OutgoingTelepathWasUsers, which pairs a confirmation with
+            // the send addressed to the player it names). A telepath the client
+            // sent for another player (a relay-back, a `@do`) asks nobody on the
             // user's behalf: its channel is listened on, its answer is a pick.
-            bool users = own.Channel != RemoteChannel.Telepath || _telepathWasUsers(e);
-            Begin(own.Channel, users ? e.Speaker : null);
+            bool asked = own.Channel == RemoteChannel.Telepath && _chat.OutgoingTelepathWasUsers;
+            Begin(own.Channel, asked ? e.Speaker : null);
             return;
         }
 

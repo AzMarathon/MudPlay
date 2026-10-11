@@ -649,29 +649,49 @@ public sealed class BossTimerTests : IDisposable
     // asked, and is a pick when several could answer.
     // askedOn: the channel the request that opened the window was typed on (null:
     // opened from the Bosses tab, nothing asked yet); to: who a telepathed one went to.
-    // telepathWasUsers: whether a telepathed request of ours seen going out was the
-    // user's own (null: every one is).
+    // What the window sends goes out as a line of the user's, as it does in the app.
     private (BossTimerSyncViewModel window, BossTimerStore timers) NewSyncWindow(
-        RemoteChannel? askedOn = RemoteChannel.Broadcast, string? to = null, Func<ChatLogEntry, bool>? telepathWasUsers = null)
+        RemoteChannel? askedOn = RemoteChannel.Broadcast, string? to = null)
     {
         // The golem is in the game data and not on our list.
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1), ("guardian golem", 51, 24, 1));
         SeedBosses(Boss("ogre king", number: 50, rooms: "1/1"));
         var (bosses, timers, cache) = NewStores();
         _syncBosses = bosses;
-        MessageRouter router = new();
-        DefaultPatterns.Seed(router);
+        _syncRouter = new MessageRouter();
+        DefaultPatterns.Seed(_syncRouter);
+        _syncChat = new ChatRouter(_syncRouter);
         _syncSent.Clear();
-        BossTimerSyncViewModel window = new(bosses, timers, cache, new ChatRouter(router), send: _syncSent.Add,
+        BossTimerSyncViewModel window = new(bosses, timers, cache, _syncChat,
+            send: line =>
+            {
+                _syncSent.Add(line);
+                _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
+            },
             preArmedOn: askedOn, new LogService(), broadcastOff: () => false,
-            isOurName: name => name == "Us", windowActive: _ => { }, preArmedTo: to, onUiThread: act => act(),
-            telepathWasUsers: telepathWasUsers);
+            isOurName: name => name == "Us", windowActive: _ => { }, preArmedTo: to, onUiThread: act => act());
         return (window, timers);
     }
 
-    // What the merge window put on the wire, and the boss list it works on.
+    // What the merge window put on the wire, the boss list it works on, and the
+    // chat log it reads.
     private readonly List<string> _syncSent = new();
-    private BossStore _syncBosses = null!;   // set by NewSyncWindow
+    private BossStore _syncBosses = null!;      // these three set by NewSyncWindow
+    private MessageRouter _syncRouter = null!;
+    private ChatRouter _syncChat = null!;
+
+    private static MudPlay.Terminal.LineExtractor.EmittedLine Shown(string text) =>
+        new(text, new MudPlay.Terminal.CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
+
+    // What the user types at the terminal is seen as the line the game shows back.
+    private void UserTypes(string line) => _syncRouter.Dispatch(Shown(line));
+
+    // A line the client put on the wire by itself or for another player.
+    private void ClientSends(string line) =>
+        _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: false);
+
+    // The game's `--- Telepath Sent to <name> ---`.
+    private void GameConfirms(string name) => _syncRouter.Dispatch(Shown($"--- Telepath sent to {name} ---"));
 
     // One responder's timer for the boss. alone: it is the answer of the one player
     // a telepath asked, with nothing asked where others listen.
@@ -889,7 +909,7 @@ public sealed class BossTimerTests : IDisposable
         {
             Requests(window, 1, "bo");
             Assert.Equal("/bo @timer sync", _syncSent.Single());
-            SeesUsAsk(window, ChatChannel.TelepathOutgoing, "Bob");   // --- Telepath Sent to Bob ---
+            GameConfirms("Bob");
 
             Hears(window, ChatChannel.TelepathIncoming, "Bo", hoursLater: 2);
             Hears(window, ChatChannel.TelepathIncoming, "Sue", hoursLater: 3);
@@ -953,7 +973,7 @@ public sealed class BossTimerTests : IDisposable
     public void SyncWindow_ATelepathTheClientSentForAnotherPlayer_AdoptsNothing(bool windowAlreadyOpen)
     {
         var (window, timers) = windowAlreadyOpen
-            ? NewSyncWindow(askedOn: null, telepathWasUsers: echo => echo.Speaker != "Friend")
+            ? NewSyncWindow(askedOn: null)
             // Opened by the echo: the app passes no player for one that was not the user's.
             : NewSyncWindow(RemoteChannel.Telepath, to: null);
         using (window)
@@ -962,8 +982,9 @@ public sealed class BossTimerTests : IDisposable
             {
                 // The user asked Bob; then the client telepathed Friend for Friend.
                 Requests(window, 1, "Bob");
-                SeesUsAsk(window, ChatChannel.TelepathOutgoing, "Bob");
-                SeesUsAsk(window, ChatChannel.TelepathOutgoing, "Friend");
+                GameConfirms("Bob");
+                ClientSends("/Friend @timer sync");
+                GameConfirms("Friend");
             }
 
             Hears(window, ChatChannel.TelepathIncoming, "Friend", hoursLater: 3);
@@ -1064,6 +1085,122 @@ public sealed class BossTimerTests : IDisposable
         }
     }
 
+    // A responder that sent only the monster's number for a boss off our list shows
+    // as "Monster #N". Once the boss is on our list the row and the status line
+    // name it as the list does.
+    [Fact]
+    public void SyncWindow_ARowForABossAddedSince_IsNamedAsOurListNamesIt()
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Gangpath);
+        using (window)
+        {
+            window.Fold(new BossTimerSyncResponse("Bob",
+                new[] { new BossTimerSyncRecord(51, null, Killed) }, RemoteChannel.Gangpath, false));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.Equal("Monster #51", row.BossName);
+
+            _syncBosses.Save(_syncBosses.Resolve().Append(Boss("guardian golem", number: 51, rooms: "1/2")).ToList());
+            timers.MarkKilled("guardian golem", Killed.AddHours(8));
+            row.Responders[0].AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal("guardian golem", row.BossName);
+            Assert.Contains("Not written: guardian golem", window.Status);
+        }
+    }
+
+    // ----- the merge window: whose confirmation a "Telepath Sent" line is -----
+
+    // The user's request reached nobody (its letters fitted two players, or the
+    // telepath was not sent) and drew no confirmation. A confirmation that then
+    // comes for a telepath to someone else, the user's own or the client's, is not
+    // that request's: that player was not asked and is not adopted from.
+    [Theory]
+    [InlineData("/bo @timer sync", "/Sue hello", true)]
+    [InlineData("/Bob @timer sync", "/Sue @health", false)]
+    public void SyncWindow_AConfirmationForAnotherTelepath_AsksNobody(string request, string other, bool othersIsUsers)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, request.Split(' ')[0][1..]);
+            Assert.Equal(request, _syncSent.Single());
+
+            if (othersIsUsers) UserTypes(other); else ClientSends(other);
+            GameConfirms("Sue");
+            Hears(window, ChatChannel.TelepathIncoming, "Sue");
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal("Sue", Assert.Single(Assert.Single(window.Rows).Responders).Responder);
+        }
+    }
+
+    // A player holding Execute commands has the client telepath the request to a
+    // name the game does not take (`@do /qq @timer sync`); the client's own reply
+    // to her is then confirmed. That confirmation is the reply's: she was not
+    // asked, with the window already open for a request of the user's as without.
+    [Fact]
+    public void SyncWindow_ARequestSentForAnotherPlayerToNobody_IsNotCreditedToTheirNextConfirmation()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, "Bob");
+            GameConfirms("Bob");
+
+            ClientSends("/qq @timer sync");
+            ClientSends("/Mallory {ok}");
+            GameConfirms("Mallory");
+            Hears(window, ChatChannel.TelepathIncoming, "Mallory", hoursLater: 3);
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal("Mallory", Assert.Single(Assert.Single(window.Rows).Responders).Responder);
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+        }
+    }
+
+    // Another player's confirmation arriving between the request and its own does
+    // not take the request's place: the player the request reached is still the
+    // one asked.
+    [Fact]
+    public void SyncWindow_AConfirmationForAnotherPlayerInBetween_DoesNotTakeTheRequestsPlace()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, "bo");
+            ClientSends("/Sue @health");
+            GameConfirms("Sue");
+            GameConfirms("Bob");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Sue", hoursLater: 3);
+            Assert.Null(timers.KilledAt("ogre king"));
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+        }
+    }
+
+    // Two players asked one after the other, before either confirmation: each is
+    // confirmed by name, and each is adopted from.
+    [Fact]
+    public void SyncWindow_TwoPlayersAskedInQuickSuccession_AreBothAsked()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, "Bob");
+            Requests(window, 1, "Sue");
+            GameConfirms("Bob");
+            GameConfirms("Sue");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Sue");
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Contains("0 to pick, 1 adopted", window.Status);
+        }
+    }
+
     // Added to our list with no timer yet, the boss is a tracked one we hold none
     // for: the pick is written, as the user chose.
     [Fact]
@@ -1119,7 +1256,7 @@ public sealed class BossTimerTests : IDisposable
             Requests(window, first, "Bob");
             Requests(window, second, "Bob");
             Assert.Equal(2, _syncSent.Count);
-            SeesUsAsk(window, ChatChannel.TelepathOutgoing, "Bob");   // the game shows the telepath reached Bob
+            GameConfirms("Bob");
 
             Hears(window, ChatChannel.TelepathIncoming, "Sue", hoursLater: 3);
             Hears(window, ChatChannel.TelepathIncoming, "Bob");
@@ -1139,7 +1276,7 @@ public sealed class BossTimerTests : IDisposable
         using (window)
         {
             Requests(window, 1, "Bob");
-            SeesUsAsk(window, ChatChannel.TelepathOutgoing, "Bob");
+            GameConfirms("Bob");
             SeesUsAsk(window, ChatChannel.Gangpath, "Us");
 
             Hears(window, ChatChannel.Gangpath, "Sue", hoursLater: 3);

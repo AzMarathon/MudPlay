@@ -338,11 +338,6 @@ public sealed class AppServices
     // doesn't spawn a second window when one is already collecting.
     public bool TimerSyncWindowActive { get; set; }
 
-    // Tells a `@timer sync` telepath the user asked for from one this client sent
-    // for another player (a relay-back, a `@do`), when its echo comes back: only
-    // the user's names a player whose timers the merge window takes without a pick.
-    public Game.Remote.TimerSyncRequestOrigin TimerSyncOrigin { get; } = new();
-
     // App-singleton chat history. Survives profile swap / connect /
     // disconnect; cleared only on app exit or explicit
     // Game.ChatHistoryStore.Clear.

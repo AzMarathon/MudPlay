@@ -16,11 +16,28 @@ public sealed class BossTimerSyncCollectorTests
     // Our own character in these tests, as a shared channel names it in an echo.
     private const string Us = "Ourself";
 
-    private static BossTimerSyncCollector NewCollector(out List<BossTimerSyncResponse> got)
+    // The router and chat log the latest collector listens to, for the tests that
+    // send a telepath and have the game confirm it.
+    private MessageRouter _router = null!;   // set by NewCollector
+    private ChatRouter _chat = null!;
+
+    private static MudPlay.Terminal.LineExtractor.EmittedLine Shown(string text) =>
+        new(text, new MudPlay.Terminal.CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
+
+    // What the user types at the terminal is seen as the line the game shows back.
+    private void UserTypes(string line) => _router.Dispatch(Shown(line));
+
+    // A line the client put on the wire by itself or for another player.
+    private void ClientSends(string line) =>
+        _chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes(line + "\r"), usersOwn: false);
+
+    private void GameConfirms(string name) => _router.Dispatch(Shown($"--- Telepath sent to {name} ---"));
+
+    private BossTimerSyncCollector NewCollector(out List<BossTimerSyncResponse> got)
     {
-        MessageRouter router = new();
+        MessageRouter router = _router = new();
         DefaultPatterns.Seed(router);
-        BossTimerSyncCollector c = new(new ChatRouter(router),
+        BossTimerSyncCollector c = new(_chat = new ChatRouter(router),
             isOurName: name => name.Equals(Us, StringComparison.OrdinalIgnoreCase));
         List<BossTimerSyncResponse> received = new();
         c.ResponseReceived += r => received.Add(r);
@@ -187,7 +204,8 @@ public sealed class BossTimerSyncCollectorTests
     {
         BossTimerSyncCollector c = NewCollector(out var got);
         c.Begin(RemoteChannel.Telepath, "Bob");
-        c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, ChatChannel.TelepathOutgoing, "Sue", "@timer sync", "raw"));
+        UserTypes("/su @timer sync");
+        GameConfirms("Sue");
 
         FeedResponse(c, "Sue", OneTimer, 6, ChatChannel.TelepathIncoming);
         FeedResponse(c, "Mallory", OneTimer, 6, ChatChannel.TelepathIncoming);
@@ -201,15 +219,13 @@ public sealed class BossTimerSyncCollectorTests
     [Fact]
     public void ATelepathTheClientSentForAnotherPlayer_AsksNobody()
     {
-        MessageRouter router = new();
-        DefaultPatterns.Seed(router);
-        BossTimerSyncCollector c = new(new ChatRouter(router), telepathWasUsers: echo => echo.Speaker == "Bob");
-        List<BossTimerSyncResponse> got = new();
-        c.ResponseReceived += got.Add;
+        BossTimerSyncCollector c = NewCollector(out var got);
         c.Begin(RemoteChannel.Telepath);
 
-        c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, ChatChannel.TelepathOutgoing, "Friend", "@timer sync", "raw"));
-        c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, ChatChannel.TelepathOutgoing, "Bob", "@timer sync", "raw"));
+        ClientSends("/Friend @timer sync");
+        GameConfirms("Friend");
+        UserTypes("/Bob @timer sync");
+        GameConfirms("Bob");
         FeedResponse(c, "Friend", OneTimer, 6, ChatChannel.TelepathIncoming);
         FeedResponse(c, "Bob", OneTimer, 6, ChatChannel.TelepathIncoming);
 
@@ -224,13 +240,52 @@ public sealed class BossTimerSyncCollectorTests
         BossTimerSyncCollector c = NewCollector(out var got);
         c.Begin(RemoteChannel.Telepath);
         Assert.True(c.OnlyTelepathsAsked);
+        UserTypes("/Bob @timer sync");
 
         FeedResponse(c, "Bob", OneTimer, 6, ChatChannel.TelepathIncoming);
         Assert.False(Assert.Single(got).AskedOfSenderAlone);
 
-        c.Ingest(new ChatLogEntry(DateTimeOffset.UtcNow, ChatChannel.TelepathOutgoing, "Bob", "@timer sync", "raw"));
+        GameConfirms("Bob");
         FeedResponse(c, "Bob", OneTimer, 6, ChatChannel.TelepathIncoming);
         Assert.True(got[1].AskedOfSenderAlone);
+    }
+
+    // The confirmation of some other telepath asks nobody for timers. The user's
+    // request drew no confirmation (its letters fitted two players, or it was not
+    // sent); then a telepath to another player is confirmed, the user's own or one
+    // the client sent. That player was not asked, and neither was anyone.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TheConfirmationOfAnotherTelepath_AsksNobody(bool usersOwn)
+    {
+        BossTimerSyncCollector c = NewCollector(out var got);
+        c.Begin(RemoteChannel.Telepath);
+        UserTypes("/bo @timer sync");
+
+        if (usersOwn) UserTypes("/Sue hello"); else ClientSends("/Sue @health");
+        GameConfirms("Sue");
+        FeedResponse(c, "Sue", OneTimer, 6, ChatChannel.TelepathIncoming);
+
+        Assert.False(Assert.Single(got).AskedOfSenderAlone);
+    }
+
+    // A request the client telepathed for another player to a name the game did
+    // not take (`@do /qq @timer sync`), followed by the client's reply to that
+    // player, which the game confirms: the confirmation is the reply's, and the
+    // player is not asked.
+    [Fact]
+    public void ARequestSentForAnotherPlayerThatReachedNobody_IsNotCreditedToTheNextConfirmation()
+    {
+        BossTimerSyncCollector c = NewCollector(out var got);
+        c.Begin(RemoteChannel.Telepath);
+
+        ClientSends("/qq @timer sync");
+        ClientSends("/Mallory {ok}");
+        GameConfirms("Mallory");
+        FeedResponse(c, "Mallory", OneTimer, 6, ChatChannel.TelepathIncoming);
+
+        Assert.False(Assert.Single(got).AskedOfSenderAlone);
     }
 
     // A set is as public as its most public piece: with one line of it heard on the

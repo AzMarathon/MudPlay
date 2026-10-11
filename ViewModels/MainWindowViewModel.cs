@@ -3965,10 +3965,10 @@ public partial class MainWindowViewModel : ObservableObject
         // bursts (party @-command broadcasts / nags) so the outgoing
         // conversation entry is attributed. Typed telepaths render on-screen
         // and are caught by the router's line sniff instead.
-        AppServices.Current.Chat.ObserveOutbound(data);
-        // Timer sync — a `@timer sync` telepath the client sends for another player
-        // (a relay-back, a `@do`) is told from the user's own when its echo comes.
-        AppServices.Current.TimerSyncOrigin.ObserveOutbound(data,
+        // Whose send it is goes with it: a telepath the client sends by itself or
+        // for another player (a relay-back, a `@do`, a `@party` relay) is told from
+        // the user's own when its confirmation comes.
+        AppServices.Current.Chat.ObserveOutbound(data,
             usersOwn: AppServices.Current.EngineGate.SendingUsersOwnCommand
                 && AppServices.Current.Do.SendingFor is null
                 && AppServices.Current.PartyEssentials.RelayingFor is null);
@@ -4114,12 +4114,14 @@ public partial class MainWindowViewModel : ObservableObject
         switch (asked.Transfer)
         {
             case Game.Remote.Transfer.TimerSync:
-                // A telepath's echo names the player it reached: the one whose
-                // answer is an answer to that request, when the request was the
-                // user's. One the client sent for another player (a relay-back, a
-                // `@do`) still opens the window, and its answer is a pick.
+                // A telepath's confirmation names the player it reached: the one
+                // whose answer is an answer to that request, when the request was
+                // the user's (ChatRouter pairs the confirmation with the send
+                // addressed to that player, and says whose it was). One the client
+                // sent for another player (a relay-back, a `@do`) still opens the
+                // window, and its answer is a pick.
                 OpenTimerSyncWindow(asked.Channel,
-                    asked.Channel == Game.Remote.RemoteChannel.Telepath && AppServices.Current.TimerSyncOrigin.MadeByUser(e)
+                    asked.Channel == Game.Remote.RemoteChannel.Telepath && AppServices.Current.Chat.OutgoingTelepathWasUsers
                         ? e.Speaker
                         : null);
                 break;

@@ -79,8 +79,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             () => AppServices.Current.RemoteCommands.DisableBroadcastChannel,
             AppServices.Current.RemoteCommands.IsSelfEcho,
             active => AppServices.Current.TimerSyncWindowActive = active,
-            preArmedTo,
-            telepathWasUsers: AppServices.Current.TimerSyncOrigin.MadeByUser)
+            preArmedTo)
     {
     }
 
@@ -89,8 +88,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     internal BossTimerSyncViewModel(
         BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send,
         RemoteChannel? preArmedOn, LogService log, Func<bool> broadcastOff, Func<string, bool> isOurName,
-        Action<bool> windowActive, string? preArmedTo = null, Action<Action>? onUiThread = null,
-        Func<ChatLogEntry, bool>? telepathWasUsers = null)
+        Action<bool> windowActive, string? preArmedTo = null, Action<Action>? onUiThread = null)
     {
         ArgumentNullException.ThrowIfNull(bosses);
         ArgumentNullException.ThrowIfNull(timers);
@@ -113,7 +111,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             else Dispatcher.UIThread.Post(act);
         });
 
-        _collector = new BossTimerSyncCollector(chat, log, broadcastOff, isOurName, telepathWasUsers);
+        _collector = new BossTimerSyncCollector(chat, log, broadcastOff, isOurName);
         _collector.ResponseReceived += OnResponse;
         _windowActive(true);   // suppress a duplicate auto-open
 

@@ -15,7 +15,8 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 // SelectedKilledAt is what the Apply button writes for them (null = keep ours).
 public sealed partial class BossTimerSyncRowViewModel : ObservableObject
 {
-    public string BossName { get; }
+    // The boss as our list names it, or as the responder did while it is not on it.
+    [ObservableProperty] private string _bossName;
     public int? MonsterNumber { get; }
     public string? MatchName { get; private set; }   // our BossStore name (null = untracked by us)
     // The name a responder sent (may be null for a number-only record) — the adoption
@@ -54,7 +55,7 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
         string bossName, int? monsterNumber, string? matchName, string? sentName,
         DateTimeOffset? oursKilledAt, string oursText)
     {
-        BossName = bossName;
+        _bossName = bossName;
         MonsterNumber = monsterNumber;
         MatchName = matchName;
         SentName = sentName;
@@ -94,6 +95,7 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
     public void Track(string matchName, string noTimerText)
     {
         MatchName = matchName;
+        BossName = matchName;
         if (OursKilledAt is null) OursText = noTimerText;
     }
 

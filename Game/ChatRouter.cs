@@ -24,16 +24,16 @@ public sealed class ChatRouter : IDisposable
     private readonly List<IDisposable> _subs = new();
     private bool _disposed;
 
-    // FIFO of `/recipient message` lines sent but not yet confirmed, each stamped
-    // with when it was captured. Outgoing telepath confirmations from the server
-    // don't echo the message text, so we have to correlate with the typed/sent
-    // command. A queue (not a single slot) because an engine can fire several
-    // sends back-to-back before any confirmation arrives — e.g. a @roomba reply
-    // answering with one telepath per item — and the server's generic "---
-    // Telepath Sent to X ---" lines then arrive as their own burst with no way to
-    // tell them apart; each confirmation dequeues the next pending message in
-    // send order (see TryDequeueFresh for the staleness check applied first).
-    private readonly Queue<(string Message, DateTimeOffset EnqueuedAt)> _pendingTelepathMessages = new();
+    // The `/recipient message` lines sent but not yet confirmed, oldest first, each
+    // with the name it was addressed to and when it was captured. Outgoing telepath
+    // confirmations from the server don't echo the message text, so we have to
+    // correlate with the typed/sent command. A list (not a single slot) because an
+    // engine can fire several sends back-to-back before any confirmation arrives —
+    // e.g. a @roomba reply answering with one telepath per item — and the server's
+    // "--- Telepath Sent to X ---" lines then arrive as their own burst; each takes
+    // the oldest pending send addressed to the player it names
+    // (TakeTelepathConfirmed, which applies the staleness check first).
+    private readonly List<PendingTelepath> _pendingTelepaths = new();
     // Same pairing for an outgoing directed say: the typed `>Target message` carries
     // the message, the server's `--- Message Directed to X ---` confirmation the target.
     private readonly Queue<(string Message, DateTimeOffset EnqueuedAt)> _pendingDirectedMessages = new();
@@ -157,15 +157,20 @@ public sealed class ChatRouter : IDisposable
         _subs.Add(_router.Subscribe(KnownPatterns.ConversationTelepathOut, result =>
         {
             string? recipient = SafeGroup(result, 0);
-            string message = TryDequeueFresh(_pendingTelepathMessages, "telepath");
+            PendingTelepath? sent = TakeTelepathConfirmed(recipient);
             _lastEnqueuedTelepath = null;
 
-            EntryClassified?.Invoke(new ChatLogEntry(
-                result.Line.Timestamp,
-                ChatChannel.TelepathOutgoing,
-                NullIfEmpty(recipient),
-                message,
-                result.Line.Text));
+            OutgoingTelepathWasUsers = sent is { UsersOwn: true };
+            try
+            {
+                EntryClassified?.Invoke(new ChatLogEntry(
+                    result.Line.Timestamp,
+                    ChatChannel.TelepathOutgoing,
+                    NullIfEmpty(recipient),
+                    sent?.Message ?? string.Empty,
+                    result.Line.Text));
+            }
+            finally { OutgoingTelepathWasUsers = false; }
         }));
         Subscribe(router, KnownPatterns.ConversationGangpath,
                   ChatChannel.Gangpath,       groupPlayer: 0, groupMessage: 1);
@@ -205,7 +210,10 @@ public sealed class ChatRouter : IDisposable
 
     private void OnLineDispatched(Terminal.LineExtractor.EmittedLine line)
     {
-        TryCaptureTelepath(line.Text);
+        // What the user types at the terminal goes out key by key and is only ever
+        // seen here, as the line the game shows back: a telepath read off the
+        // screen is theirs unless ObserveOutbound caught the same send first.
+        TryCaptureTelepath(line.Text, usersOwn: true);
         TryCaptureDirectedSay(line.Text);
         TryCustomDisconnectLine(line);
         TryActionEmote(line);
@@ -304,14 +312,19 @@ public sealed class ChatRouter : IDisposable
     // / _lastEnqueuedDirected exist to drop that redundant second capture;
     // without them every engine reply left one extra stale entry in the queue,
     // permanently drifting every later pairing for the rest of the session.
-    public void ObserveOutbound(byte[] data)
+    //
+    // usersOwn: the send is the user's own doing (a window's button, a macro, a
+    // trigger, an event of theirs), as against one the client makes by itself or
+    // for another player's remote command. Carried with the pending telepath to
+    // its confirmation (OutgoingTelepathWasUsers). Nobody vouching, it is not.
+    public void ObserveOutbound(byte[] data, bool usersOwn = false)
     {
         if (data.Length == 0) return;
         string text = System.Text.Encoding.Latin1.GetString(data);
         foreach (string outLine in text.Split(LineBreaks,
                      StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            TryCaptureTelepath(outLine);
+            TryCaptureTelepath(outLine, usersOwn);
             TryCaptureDirectedSay(outLine);
         }
     }
@@ -320,24 +333,65 @@ public sealed class ChatRouter : IDisposable
 
     // Form is "/<prefix> <message>" — the slash-shortcut for sending a telepath.
     // Match conservatively: leading slash + at least one word char, then space,
-    // then any message text. Anything that looks like that gets queued as a
-    // pending message, consumed FIFO by the next confirmation(s) — see
-    // _pendingTelepathMessages. The game has other slash-commands, so a /-line
-    // that turns out not to produce a telepath (or one whose own confirmation
-    // the server never sends / this client never recognizes) leaves a stale
-    // queued entry — TryDequeueFresh discards it once it's too old to plausibly
-    // be the real match, rather than letting some arbitrarily later confirmation
-    // wrongly consume it and drift every pairing after that.
-    private void TryCaptureTelepath(string text)
+    // then any message text. Anything that looks like that is kept as a pending
+    // send, with the name it was addressed to, until a confirmation naming that
+    // player takes it — see _pendingTelepaths. The game has other slash-commands,
+    // so a /-line that turns out not to produce a telepath (or one whose own
+    // confirmation the server never sends / this client never recognizes) leaves
+    // a stale entry, discarded once it's too old to plausibly be the real match.
+    //
+    // usersOwn: the line is the user's own doing (typed, or sent by something they
+    // set up), not one the client sent by itself or for another player.
+    private void TryCaptureTelepath(string text, bool usersOwn)
     {
         if (text.Length < 3 || text[0] != '/') return;
         int sp = text.IndexOf(' ');
         if (sp <= 1 || sp == text.Length - 1) return;
-        string message = text[(sp + 1)..];
-        if (message == _lastEnqueuedTelepath) return; // duplicate capture of the same send — see _lastEnqueuedTelepath
-        EnqueueBounded(_pendingTelepathMessages, message);
-        _lastEnqueuedTelepath = message;
+        if (text == _lastEnqueuedTelepath) return; // duplicate capture of the same send — see _lastEnqueuedTelepath
+        if (_pendingTelepaths.Count >= MaxPendingChatCaptures) _pendingTelepaths.RemoveAt(0);
+        _pendingTelepaths.Add(new PendingTelepath(text[1..sp], text[(sp + 1)..], _now(), usersOwn));
+        _lastEnqueuedTelepath = text;
     }
+
+    // The pending send a "--- Telepath Sent to <name> ---" confirmation is for: the
+    // oldest one still fresh whose addressed name begins the name confirmed. The
+    // game takes the first letters of a name for a player and confirms with the
+    // name in full ("/raij" reaches Raijin), which is the rule TelepathPacer pairs
+    // its own telepaths by. A send addressed to anyone else is never the one
+    // confirmed, however long it has waited: its own reply was something other
+    // than a confirmation (no such player, letters that fit two players, the
+    // telepath not sent), and handing it to this one would say the player named
+    // here was sent a message they never were. Null when no pending send fits.
+    private PendingTelepath? TakeTelepathConfirmed(string? name)
+    {
+        DateTimeOffset now = _now();
+        for (int i = _pendingTelepaths.Count - 1; i >= 0; i--)
+        {
+            PendingTelepath old = _pendingTelepaths[i];
+            if (now - old.EnqueuedAt <= PendingCaptureStaleAfter) continue;
+            _pendingTelepaths.RemoveAt(i);
+            _log?.Warn("ChatRouter",
+                $"discarding stale unconfirmed telepath capture (queued {(now - old.EnqueuedAt).TotalSeconds:F0}s ago, "
+                + $"never confirmed): \"{old.Message}\" — its own confirmation never arrived, so it can't be the "
+                + "match for this one.");
+        }
+        if (string.IsNullOrEmpty(name)) return null;
+        int at = _pendingTelepaths.FindIndex(p => name.StartsWith(p.Target, StringComparison.OrdinalIgnoreCase));
+        if (at < 0) return null;
+        PendingTelepath sent = _pendingTelepaths[at];
+        _pendingTelepaths.RemoveAt(at);
+        return sent;
+    }
+
+    private readonly record struct PendingTelepath(string Target, string Message, DateTimeOffset EnqueuedAt, bool UsersOwn);
+
+    // True while EntryClassified is being raised for an outgoing telepath that the
+    // confirmation was paired with and that was the user's own. A subscriber that
+    // acts on a request the user telepathed (the boss-timer merge window, which
+    // takes a timer without a pick only from a player the user asked) reads it
+    // there: a telepath the client sent for another player's remote command, and a
+    // confirmation paired with nothing, are neither.
+    public bool OutgoingTelepathWasUsers { get; private set; }
 
     // Form is ">Target message" — the directed-say verb. Same pairing rationale as
     // TryCaptureTelepath: the typed line carries the message, the server's later
