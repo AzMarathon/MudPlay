@@ -724,6 +724,7 @@ public sealed class CastingDirector : IDisposable
     // draws and the sneak is taken again.
     public void NoteClientUseSent()
     {
+        _clientUseHeldForSneak = false;
         _cast.NotifyExternalCastSent();
         _betweenRoundSlotUsedAt = _now();
         CastFired?.Invoke();
@@ -1876,6 +1877,8 @@ public sealed class CastingDirector : IDisposable
         bool blessEnabled = _autoBlessEnabled?.Invoke() ?? true;
         // The client's own use answers to neither toggle (see SetClientUseSource).
         (string What, bool MustGoNow)? ownUse = _clientUseDue?.Invoke();
+        // Nothing due is nothing held, whatever keeps the pass below from running.
+        if (ownUse is null) _clientUseHeldForSneak = false;
         if (!healEnabled && !blessEnabled && ownUse is null) return null;
         // A full-screen menu owns the keyboard (train-stats box): any cast text
         // would corrupt its form, so suppress every category until it closes.
@@ -2036,7 +2039,8 @@ public sealed class CastingDirector : IDisposable
         // heal through; StealthManager holds its re-sneak until the heal has gone out.
         bool deferSneakMaintenance = _deferMaintenanceWhileStealthed?.Invoke() == true;
         bool emergencyHealBypass = _emergencyHealBypass?.Invoke() == true;
-        HasSneakHeldCast = false;
+        _slotCastHeldForSneak = false;
+        _clientUseHeldForSneak = false;
         SneakHeldCategory = null;
 
         // The client's own use (a hazard counter's buff) goes ahead of the user's
@@ -2052,7 +2056,7 @@ public sealed class CastingDirector : IDisposable
             {
                 _log?.Combat(LogCategory,
                     $"sneak kept: {own.What} (hazard buff) held — the backstab is still owed, our sneaked move is landing, or we're sneaking past hostiles.");
-                HasSneakHeldCast = true;
+                _clientUseHeldForSneak = true;
                 _clientUseHeld?.Invoke();
             }
             else if (_fireClientUse?.Invoke(deferSneakMaintenance) == true)
@@ -2102,7 +2106,7 @@ public sealed class CastingDirector : IDisposable
                 // Only one we could pay for stops the walk in the next clear room.
                 if (!(_manaCostLookup?.Invoke(cand.Spell) is { } heldCost && _state.Ma < heldCost))
                 {
-                    HasSneakHeldCast = true;
+                    _slotCastHeldForSneak = true;
                     SneakHeldCategory ??= category;
                 }
                 continue;
@@ -2360,7 +2364,16 @@ public sealed class CastingDirector : IDisposable
     // True when the last decision pass held a due cast (not a debuff) only because the
     // sneak was being kept. StealthManager stops the walk for it in the next NPC-free
     // room, where the cast can go out and we re-sneak.
-    public bool HasSneakHeldCast { get; private set; }
+    public bool HasSneakHeldCast => _slotCastHeldForSneak || _clientUseHeldForSneak;
+
+    // The two things that can be held, kept apart because they stop being due by
+    // different roads. A slot's cast is re-judged by every decision pass. The client's
+    // own use can stop being due with no pass run at all (both toggles off, the
+    // round's cast spent): the step sent it, it was drunk by hand, the route turned
+    // away, the master switch went off. Left set then, the walk was held in every
+    // room with no NPCs for a cast that was never coming.
+    private bool _slotCastHeldForSneak;
+    private bool _clientUseHeldForSneak;
 
     // What the first such held cast is — heal, cure or buff — for the Navigation
     // top bar's chip while the walk stops to cast it.

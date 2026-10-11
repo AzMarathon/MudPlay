@@ -788,6 +788,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
         public HealthSettings Health { get; } = new();
         public List<string> SpellsCast { get; } = new();
         public bool AutoHeal;
+        public bool AutoBless;
         public bool SneakKept;
         public int CastFired;
 
@@ -799,7 +800,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
             Cast.CastSent += SpellsCast.Add;
             Director = new CastingDirector(State, Cast,
                 readSpells: () => Spells, readHealth: () => Health, isEnabled: () => AutoHeal, log: new LogService());
-            Director.SetAutoBlessGate(() => false);
+            Director.SetAutoBlessGate(() => AutoBless);
             Director.SetStealthMaintenanceDeferGate(() => SneakKept);
             Director.CastFired += () => CastFired++;
             Field.Engine.UseSent += Director.NoteClientUseSent;
@@ -879,6 +880,59 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Assert.Equal(new[] { "use waterskin" }, p.Field.Wire);
         Assert.Equal(1, p.Field.SneakSpent);
         Assert.Contains(p.Field.LogLines, l => l.StartsWith("forced: `use waterskin` for buff 300 1/2 (Scorching Desert)"));
+    }
+
+    // A held `use` that stops being due without the pass sending it (the route turned
+    // away from the desert, the master switch went off, a drink by hand) is no longer
+    // held, with Auto-Heal and Auto-Bless both off as much as with one on. Left
+    // standing, it stopped the walk in every room with no NPCs until the next
+    // refresh window.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Pass_AHeldUseNoLongerDue_IsNoLongerHeld(bool autoBless)
+    {
+        using Pass p = new() { SneakKept = true, AutoBless = autoBless };
+        p.Field.Engine.OnServerLine(SwigLine);
+        p.Field.Advance(1750);
+        Assert.Null(p.Director.Evaluate());
+        Assert.True(p.Director.HasSneakHeldCast);
+
+        p.Field.RoomsAhead = new() { Oasis };       // no countered room here or ahead any more
+        p.SneakKept = false;
+        p.Field.Advance(5);
+        Assert.Null(p.Director.Evaluate());
+        Assert.False(p.Director.HasSneakHeldCast);
+
+        // So a sneaking walk is not held for a cast in a room with no NPCs.
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        using StealthManager stealth = new(router, new PlayerState(), new LogService());
+        stealth.SetAutoToggles(() => true, () => false);
+        stealth.SetMovementCoordinator(new MovementCoordinator());
+        stealth.SetHeldCastCheck(() => p.Director.HasSneakHeldCast);
+        router.Dispatch(new LineExtractor.EmittedLine(
+            "Sneaking...", Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+        Assert.True(stealth.ReadyToMoveSneaking());
+        Assert.False(stealth.IsHoldingForCast);
+    }
+
+    // Nor once the step's own last call has sent it: the round's cast is spent, so no
+    // pass would run to say so.
+    [Fact]
+    public void Pass_AHeldUseSentAtTheStep_IsNoLongerHeld()
+    {
+        using Pass p = new() { SneakKept = true, AutoBless = true };
+        p.Field.Engine.OnServerLine(SwigLine);
+        p.Field.Advance(1750);
+        p.Director.Evaluate();
+        Assert.True(p.Director.HasSneakHeldCast);
+
+        p.Field.Advance(40);                        // the last call
+        p.Field.Engine.OnApproachingRoom(Dunes);
+
+        Assert.Equal(new[] { "use waterskin" }, p.Field.Wire);
+        Assert.False(p.Director.HasSneakHeldCast);
     }
 
     // An emergency heal that is due takes the round ahead of it.
