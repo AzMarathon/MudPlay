@@ -2365,20 +2365,63 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.False(Sent(h, "/Tank @join"));
     }
 
-    // The pickup gave up waiting for the follow: nobody is invited afterwards from
-    // wherever we have walked on to.
+    // The invite has to be out before the pickup stops waiting: with "If leading,
+    // wait only" at 3 s the join gets half of it, not the usual 5 s, which would
+    // have let the pickup time out with no invite ever sent.
     [Fact]
-    public void Stock_AskedToJoin_ThePickupTimesOut_NoLateInvite()
+    public void Stock_AShortFollowWait_InvitesHalfwayThroughIt_BeforeThePickupGivesUp()
     {
         using Harness h = NewHarness();
         h.Comeback.OnStock = () => true;
-        h.Comeback.JoinFirstWait = TimeSpan.FromMinutes(10);     // longer than the follow wait
+        h.Comeback.FollowWaitWindow = TimeSpan.FromSeconds(3);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        h.Comeback.NowProvider = () => now;
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+        Assert.True(Sent(h, "/Tank @join"));
+
+        now += TimeSpan.FromSeconds(1);
+        h.Comeback.FireJoinFallbackForTests();
+        Assert.Empty(partyWire);
+
+        now += TimeSpan.FromSeconds(0.6);
+        h.Comeback.FireJoinFallbackForTests();
+        Assert.Single(partyWire, w => w == "invite Tank");
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);       // still inside the 3 s
+
+        h.Comeback.FireFollowTimeoutForTests();
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Single(partyWire);
+    }
+
+    // "If leading, wait only" at 0: nothing is waited for, so the invite goes with
+    // the @join, as it always went on its own.
+    [Fact]
+    public void Stock_NoFollowWaitSet_InvitesWithTheJoin()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
+        h.Comeback.FollowWaitWindow = TimeSpan.Zero;
+
+        List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+
+        Assert.True(Sent(h, "/Tank @join"));
+        Assert.Single(partyWire, w => w == "invite Tank");
+        Assert.Empty(h.Comeback.AskedToJoin);
+    }
+
+    // A pickup the member calls off ends what it owed: nobody is invited
+    // afterwards from wherever we have walked on to.
+    [Fact]
+    public void Stock_AskedToJoin_ThePickupIsCalledOff_NoLateInvite()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.OnStock = () => true;
         DateTimeOffset now = DateTimeOffset.UtcNow;
         h.Comeback.NowProvider = () => now;
         List<string> partyWire = ReachAMemberStillOnOurRoster(h);
 
-        h.Comeback.FireFollowTimeoutForTests();
-        now += TimeSpan.FromMinutes(11);
+        h.Engine.DispatchForTests(Telepath("Tank", "@forget"));
+        now += TimeSpan.FromSeconds(30);
         h.Comeback.FireJoinFallbackForTests();
 
         Assert.Null(h.Comeback.RecoveringMember);
