@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.177.2**
-> - Simulator area ranking: **Save as loop** turns a ranked area's tour into a saved loop you can run, with how it was tested in the loop's notes
-> - A picked ranking now shows its route (the first 20 rooms in order, and how many more) and what it was tested at (level, runs × hours, walk pace, start room)
-> - A tour that is already one of your saved loops is not saved again; a name that is taken gets a number
+> **Version 3.177.8**
+> - Simulator: an area ranking belongs to the game data and character it was made on; a switch lists that pairing's own ranking or none, and switching back lists the first again
+> - Nothing ranked on one game data can be picked, drawn on the map or saved as a loop under another; a game-data switch also clears the estimator's sketch
+> - Rankings are kept while the client runs (the last eight), through closing the Navigation window; importing or re-picking a set drops the ones made on it
+> - Bug report: the Simulator section names the game data and character its results are for
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
