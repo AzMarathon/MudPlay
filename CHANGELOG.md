@@ -1,5 +1,11 @@
 # Version history
 
+## 3.179.3
+
+- `@loop send` now works by telepath only; asked or confirmed on another channel it says so and sends nothing
+- `@roomba sync` now works by telepath or gangpath only, no longer by say
+- `@timer sync` also works on the broadcast channel (`br`), as a fourth choice in Sync Timers
+
 ## 3.178.1
 
 - A game-data set whose empty text blocks link round in a circle no longer freezes the client as it loads; the program log names the blocks
