@@ -107,9 +107,9 @@ public sealed class RoomBuffStripIndex
     }
 
     // A DispellMagic is read as taking everything. In the Stock engine one with a
-    // value takes only the spells that carry that ability (GAME_MECHANICS "Cures and
-    // dispels — which ability removes what"); every one a room spell or a room
-    // command reaches in the two sets has value 0, which takes them all.
+    // value takes only the spells that carry that ability (GAME_MECHANICS "Cure-spell
+    // identification — which spells REMOVE each ailment"); every one a room spell or
+    // a room command reaches in the two sets has value 0, which takes them all.
     private static bool Takes((bool Dispels, HashSet<int> Removes) strip, int buffSpell)
         => strip.Dispels || strip.Removes.Contains(buffSpell);
 
