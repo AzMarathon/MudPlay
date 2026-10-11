@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.174.2**
+> **Version 3.174.3**
 > - Used on also lists the rooms where a command needs the item held to work an exit (lever, rubbed orb, titanium fork), naming the exit it opens
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

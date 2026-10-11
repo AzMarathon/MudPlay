@@ -370,23 +370,140 @@ public sealed partial class CombatManager : IDisposable
     // room ("Your command had no effect."; report paradigm-20260927-095328, a rat
     // coming down as we went up). The new room's display decides instead; a refused
     // move (NoteMoveRefused) means we're still here, and the held arrival engages.
+    //
+    // The same goes for a monster that swings at us in that gap: it is in the room
+    // we're leaving, and fighting back sent `aslt brute zombie` into the lair being
+    // entered, which then read as a fight already under way and opened with the room
+    // attack, its debuff never cast (report paradigm-20261010-231540). No fight is
+    // opened on that swing, and the attacker is not marked engaged either: the mark is
+    // kept by name, so it would pass to a Friend or neutral of that name in the room
+    // we land in. The attackers wait in _attackersHeldForMove and are marked only if
+    // the move is refused or never lands.
+    //
+    // The tracker's Pending has no end of its own: a step the game swallowed, or a
+    // refusal in words nobody reads, leaves it standing, and a hold with it. So a move
+    // counts as in flight for MoveInFlightBound only, measured from when it went out
+    // (moveSentAt; where nobody says, from when the first thing was held for it). That
+    // bounds every hold here, the arrival's included, and when it runs out with
+    // something held the room we're still in is engaged as after a refusal.
     private Func<bool>? _isMoveInFlight;
+    private Func<DateTimeOffset?>? _moveSentAt;
     private bool _arrivalHeldForMove;
-    public void SetMoveInFlightProbe(Func<bool> isMoveInFlight)
+    private readonly HashSet<string> _attackersHeldForMove = new(StringComparer.OrdinalIgnoreCase);
+    // When the hold now standing began; null with nothing held.
+    private DateTimeOffset? _moveHoldSince;
+    private int _moveHoldGeneration;
+
+    // A landing shows within a second of the step; three allow for a slow link, and
+    // leave a swallowed step at most one combat round with nothing sent back.
+    public static readonly TimeSpan MoveInFlightBound = TimeSpan.FromSeconds(3);
+
+    public void SetMoveInFlightProbe(Func<bool> isMoveInFlight, Func<DateTimeOffset?>? moveSentAt = null)
     {
         ArgumentNullException.ThrowIfNull(isMoveInFlight);
         _isMoveInFlight = isMoveInFlight;
+        _moveSentAt = moveSentAt;
+    }
+
+    private bool MoveInFlight() =>
+        _isMoveInFlight?.Invoke() == true && MoveInFlightLeft() > TimeSpan.Zero;
+
+    private TimeSpan MoveInFlightLeft()
+    {
+        DateTimeOffset now = _now();
+        return MoveInFlightBound - (now - (_moveSentAt?.Invoke() ?? _moveHoldSince ?? now));
+    }
+
+    // Something is held for our move. The first thing held starts the clock that ends
+    // the hold if neither a landing nor a refusal does.
+    private void HoldForOurMove()
+    {
+        _arrivalHeldForMove = true;
+        if (_moveHoldSince is not null) return;
+        _moveHoldSince = _now();
+        ScheduleMoveHoldEnd(++_moveHoldGeneration);
+    }
+
+    private void ScheduleMoveHoldEnd(int generation)
+    {
+        TimeSpan left = MoveInFlightLeft();
+        _scheduleArrivalSettle?.Invoke(
+            left > MoveHoldMinWait ? left : MoveHoldMinWait, () => OnMoveHoldTimeUp(generation));
+    }
+    private static readonly TimeSpan MoveHoldMinWait = TimeSpan.FromMilliseconds(50);
+
+    // A quiet attacker sends no further line to end its own hold on, so a timer does.
+    private void OnMoveHoldTimeUp(int generation)
+    {
+        if (_disposed || generation != _moveHoldGeneration || _moveHoldSince is null) return;
+        // Another step went out since: the clock runs from that one.
+        if (MoveInFlightLeft() > TimeSpan.Zero)
+        {
+            ScheduleMoveHoldEnd(generation);
+            return;
+        }
+        EndMoveHoldInThisRoom(MoveNeverLanded);
+    }
+
+    // The same end on the next combat line, for a client with no timer wired and for
+    // a line that beats the timer to it.
+    private void EndMoveHoldIfTimeIsUp()
+    {
+        if (_moveHoldSince is null || MoveInFlightLeft() > TimeSpan.Zero) return;
+        EndMoveHoldInThisRoom(MoveNeverLanded);
+    }
+
+    private static readonly string MoveNeverLanded =
+        $"no landing and no refusal within {MoveInFlightBound.TotalSeconds:0} seconds of the step";
+
+    // We landed (a room read anew, or the room-change wipe): whoever swung at us as we
+    // left stayed behind or is listed here, and nothing is owed to the old room.
+    private void DropMoveHold()
+    {
+        _attackersHeldForMove.Clear();
+        _moveHoldSince = null;
+        _moveHoldGeneration++;
+    }
+
+    // We never left: the attackers held are marked engaged and the room is engaged.
+    private void EndMoveHoldInThisRoom(string why)
+    {
+        _arrivalHeldForMove = false;
+        _userEngagedInstances.UnionWith(_attackersHeldForMove);
+        DropMoveHold();
+        if (_classifier.Current is not { } cur) return;
+        _log?.Combat(LogCategory, $"engage held for our move: {why} — engaging the room we're still in");
+        _arrivalSettleBypass = true;
+        try { OnEntitiesObserved(cur); }
+        finally { _arrivalSettleBypass = false; }
+    }
+
+    // For the bug report: whether an engage is held for our move, for how long, and
+    // which attackers wait on it.
+    public string MoveHoldSummary => _moveHoldSince is not { } since
+        ? "no"
+        : $"yes, for {(_now() - since).TotalSeconds:0.0}s; {_attackersHeldForMove.Count} attacker(s) waiting"
+            + (_attackersHeldForMove.Count == 0 ? string.Empty : $": {string.Join(", ", _attackersHeldForMove)}");
+
+    // With no fight of ours on and our move in flight, a combat line is no reason to
+    // open one: the *Combat Off* left standing from the last fight would otherwise
+    // re-attack on the first swing, or on a party member's hit, in the room we're
+    // leaving. A fight already under way is not held; its re-attack is the round's own.
+    private bool HoldsNewFightForOurMove()
+    {
+        if (_currentTarget is not null || !MoveInFlight()) return false;
+        if (!_arrivalHeldForMove)
+            _log?.Combat(LogCategory,
+                "combat line while our move is in flight and no fight of ours is on — no attack sent from "
+                + "the room we're leaving; the room we land in decides");
+        HoldForOurMove();
+        return true;
     }
 
     public void NoteMoveRefused()
     {
-        if (_disposed || !_arrivalHeldForMove) return;
-        _arrivalHeldForMove = false;
-        if (_classifier.Current is not { } cur) return;
-        _log?.Combat(LogCategory, "arrival held for our move: the move was refused — engaging the room we're still in");
-        _arrivalSettleBypass = true;
-        try { OnEntitiesObserved(cur); }
-        finally { _arrivalSettleBypass = false; }
+        if (_disposed || (!_arrivalHeldForMove && _moveHoldSince is null)) return;
+        EndMoveHoldInThisRoom("the move was refused");
     }
 
     // Surprise-round resolution watch. Armed the instant a `bs` goes out
@@ -1594,9 +1711,9 @@ public sealed partial class CombatManager : IDisposable
             TrySendRoomRefresh("kill during arrival-settle");
             return;
         }
-        if (_isMoveInFlight?.Invoke() == true)
+        if (MoveInFlight())
         {
-            _arrivalHeldForMove = true;
+            HoldForOurMove();
             _log?.Combat(LogCategory,
                 "arrival-settle: our move is in flight — that arrival is in the room we're leaving; "
                 + "the new room's display decides");
@@ -1627,6 +1744,10 @@ public sealed partial class CombatManager : IDisposable
             _expGainsSinceRosterRead = 0;
             _heldRoomLookPending = false;
         }
+        // Only a room read anew says we've landed: the old roster is dispatched again
+        // by several paths while the move is still in flight.
+        bool landed = freshRead || obs.Source == RoomObservationSource.RoomChange;
+        if (landed) DropMoveHold();
 
         // The roster says whether the monster a break holds the attack on has died
         // or gone. When the hold ends here the rest of this pass engages whatever
@@ -1817,6 +1938,23 @@ public sealed partial class CombatManager : IDisposable
             // fire a spurious CR into an empty room).
             _awaitingEngageSince = null;
             OnRoomCleared(settings);
+            return;
+        }
+
+        // A roster we already had, handed back while our move is in flight, is the
+        // room we're leaving: opening a fight on it sends the attack into the room we
+        // land in. Whatever hands it back (a switch re-running the room, a rest that
+        // wants the room cleared, a recovery resuming) waits as a swing does. An
+        // arrival has its own hold, behind the settle below; the dispatch that ends a
+        // hold (the settle bypass) is the room we stayed in and goes through.
+        if (_currentTarget is null && !landed && !_arrivalSettleBypass
+            && obs.Source != RoomObservationSource.Arrival && MoveInFlight())
+        {
+            if (!_arrivalHeldForMove)
+                _log?.Combat(LogCategory,
+                    $"our move is in flight and this roster is the room we're leaving ({obs.Source}, read before) — "
+                    + "no fight opened on it; the room we land in decides");
+            HoldForOurMove();
             return;
         }
 
@@ -3311,6 +3449,7 @@ public sealed partial class CombatManager : IDisposable
         // unseen monster to re-display the room for (CombatStateTracker's probe, the
         // round clock's test).
         if (_isNotCombatLine?.Invoke(match.Text) == true) return;
+        EndMoveHoldIfTimeIsUp();
 
         // Resume-after-interrupt: a combat line arrived while our
         // auto-attack is off (we cast a buff/heal mid-round, got
@@ -3327,6 +3466,7 @@ public sealed partial class CombatManager : IDisposable
             && _classifier.Current is { } live
             && HasEngageable(live))
         {
+            if (HoldsNewFightForOurMove()) return;
             TryResumeEngage(live);
             return;
         }
@@ -4016,6 +4156,7 @@ public sealed partial class CombatManager : IDisposable
                     "resume skipped — an attack fired during the deferral (the round's action already went out)");
                 return;
             }
+            if (HoldsNewFightForOurMove()) return;
             if (target is not null
                 && (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase)
                     || _classifier.Current is not { } fresh
@@ -4659,6 +4800,7 @@ public sealed partial class CombatManager : IDisposable
         // city): keep running rather than turning to fight. Looping / Auto-Lair / idle
         // still defend.
         if (_selfDefenseSuppressedByTravel?.Invoke() == true) return;
+        EndMoveHoldIfTimeIsUp();
         if (match.Groups.Count == 0) return;
         if (ResolveManualTarget(match.Groups[0]) is not { } cand) return;
 
@@ -4667,7 +4809,17 @@ public sealed partial class CombatManager : IDisposable
         if ((rel is MonsterRelationship.Flee or MonsterRelationship.Hangup)
             && _noAnswerComing?.Invoke(rel) != true) return;
 
-        if (!_userEngagedInstances.Add(cand.RawName)) return;   // already engaged — nothing new
+        if (_userEngagedInstances.Contains(cand.RawName)) return;   // already engaged — nothing new
+        if (MoveInFlight())
+        {
+            HoldForOurMove();
+            if (_attackersHeldForMove.Add(cand.RawName))
+                _log?.Combat(LogCategory,
+                    $"self-defense: '{cand.RawName}' ({rel}) swung at us while our move is in flight — not answered "
+                    + "from the room we're leaving; the room we land in decides");
+            return;
+        }
+        _userEngagedInstances.Add(cand.RawName);
         _log?.Combat(LogCategory,
             $"self-defense: '{cand.RawName}' ({rel}) is attacking us — marking engaged so the engine fights back");
         if (_classifier.Current is { } obs) OnEntitiesObserved(obs);   // re-decide now; unstick an idle engine
