@@ -157,7 +157,7 @@ public sealed class LoopShareReceiver : IDisposable
         // for it, and theirs is saved beside it under a numbered name. Taking their
         // two settings for the loop we have would change a run already under way.
         string original = loop.Name;
-        loop.Name = NumberedName(original);
+        loop.Name = _loops.NumberedName(original);
         _loops.Save(loop);
         string ourCode = LoopSignature.Short(ours);
         _log?.Info("LoopShare",
@@ -165,17 +165,6 @@ public sealed class LoopShareReceiver : IDisposable
             + $"'{existing.Name}' here is a different loop [{ourCode}] and is left as it is.");
         _notice($"[Received loop '{original}' {rooms} rooms from {sender}, saved as '{loop.Name}' ({theirCode}): "
             + $"your '{existing.Name}' is a different loop ({ourCode})]");
-    }
-
-    // "<name> 2", or the next number up that no loop has. Loop names are matched
-    // without case, as the catalogue matches them.
-    private string NumberedName(string name)
-    {
-        for (int n = 2; ; n++)
-        {
-            string candidate = $"{name} {n}";
-            if (_loops.Get(candidate) is null) return candidate;
-        }
     }
 
     // Parse "@loopdata <id> <i>/<n> <chunk>", tolerating the {} a remote reply is

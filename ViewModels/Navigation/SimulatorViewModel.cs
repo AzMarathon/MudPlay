@@ -659,7 +659,10 @@ public sealed partial class SimulatorViewModel : ObservableObject
             RankStatus = "No game-data set is active, so there's nowhere to save a loop.";
             return;
         }
-        string name = FreeLoopName($"{rank.Area.Replace('/', '-')} (L{rank.Level} sim)");
+        // Saving under a taken name would overwrite that loop, so a second save of the
+        // same area gets a number.
+        string wanted = $"{rank.Area.Replace('/', '-')} (L{rank.Level} sim)";
+        string name = _loops.Get(wanted) is null ? wanted : _loops.NumberedName(wanted);
         var loop = new Loop(name, rank.Tour) { Notes = LoopNotes(rank, _rankRun) };
         try
         {
@@ -684,15 +687,6 @@ public sealed partial class SimulatorViewModel : ObservableObject
     public bool RankIsArea => SelectedRanking is { IsLoop: false };
 
     private bool CanSaveRankingAsLoop() => SelectedRanking is { IsLoop: false } && !IsRanking;
-
-    // Saving under a taken name would overwrite that loop, so a second save of the
-    // same area gets a number.
-    private string FreeLoopName(string baseName)
-    {
-        string name = baseName;
-        for (int n = 2; _loops.Get(name) is not null; n++) name = $"{baseName} {n}";
-        return name;
-    }
 
     private static string LoopNotes(AreaRank r, RankRun? run)
     {
