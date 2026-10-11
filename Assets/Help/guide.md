@@ -2019,13 +2019,13 @@ Levels the coin you carry to your keep-on-hand amount (Settings → Cash + Items
 | `depositing <n> copper (keeping <k>)` | You carry more than the amount. `dep <n>` was sent. |
 | `withdrawing <n> copper (up to <k> on hand)` | You carry less. `with <n>` was sent. |
 | `already at keep-on-hand (<k> copper)` | You carry exactly the amount. Nothing was sent. |
-| `not in a bank - nothing deposited` | Your client knows what room you are in, and it is not a bank. Nothing was sent. |
+| `not in a bank - nothing deposited` | Your client is sure of the room you are in, and it is not a bank. Nothing was sent. |
 | `wealth unknown - parse inventory first (type i)` | Your inventory has not been read yet. Nothing was sent. |
 | the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
 
 **Situations:**
 
-- **Not in a bank:** `depositing …` and `withdrawing …` are said only when the command was really sent. In a room your client knows is not a bank, nothing is sent and the answer is `not in a bank - nothing deposited`. When your client doesn't know what room you are in, it can't tell, so it sends the command as before; what the game makes of it is not reported back.
+- **Not in a bank:** `depositing …` and `withdrawing …` are said only when the command was really sent. In a room your client is sure is not a bank, nothing is sent and the answer is `not in a bank - nothing deposited`. When it can't be sure (it doesn't know your room, it is still working out which room you are in, or the game data lists no banks at all), it sends the command as before; what the game makes of it is not reported back.
 - **Every answer but the Failure message is sent whatever the Warn setting says.** A leader's stash transfer waits on each member's answer and moves on only when it has one.
 - **The sending side:** a MudPlay leader's stash transfer telepaths this to each member at the bank (see **Moving a stash into a bank**).
 - **Master switch off:** ignored, no answer.

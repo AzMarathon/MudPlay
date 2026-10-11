@@ -77,6 +77,19 @@ public static class BankCatalog
         return false;
     }
 
+    // Whether we stand in a bank, for a caller that turns a request down on "no"
+    // (a remote @deposit-all). "No" is said only when it is sure: the room is
+    // confirmed and the set lists banks at all. A room the tracker is unsure of
+    // may be the bank it failed to match, and a set with no bank rows (a partial
+    // import, a board whose banks aren't in the data) says nothing about any
+    // room, so both are unknown and the caller acts as if it couldn't tell.
+    public static bool? StandingInBank(GameDataCache gameData, RoomKey? room, RoomConfidence confidence)
+    {
+        if (room is not { } here) return null;
+        if (IsBankRoom(gameData, here)) return true;
+        return confidence == RoomConfidence.Confirmed && Enumerate(gameData).Count > 0 ? false : null;
+    }
+
     private static IEnumerable<(int Number, string Name, int Map, int Room)> EnumerateRaw(GameDataCache gameData)
     {
         ArgumentNullException.ThrowIfNull(gameData);

@@ -6369,9 +6369,10 @@ public sealed class AppServices
             log: Log)
         {
             // @deposit-all answers "depositing" only where a deposit can start. The
-            // tracker is built later; a room it can't place is unknown, not "no bank".
-            InBank = () => RoomTracker?.State.CurrentRoom?.Key is { } here
-                ? Game.GameData.BankCatalog.IsBankRoom(GameData, here)
+            // tracker is built later; a room it can't place or isn't sure of is
+            // unknown, not "no bank" (BankCatalog.StandingInBank).
+            InBank = () => RoomTracker?.State is { } at
+                ? Game.GameData.BankCatalog.StandingInBank(GameData, at.CurrentRoom?.Key, at.Confidence)
                 : null,
         };
         PromptScanner.PromptObserved += _ => InventoryAction.NotePrompt();
