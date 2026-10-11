@@ -1,5 +1,11 @@
 # Version history
 
+## 3.176.6
+
+- `@loop send`: a loop you already hold as a numbered copy (`<name> 2`, `<name> 3`) is rejected too, and the notice names which one it matches
+- `@loop send`: the offer carries the loop's code; the loop that arrives is checked against it and not saved when it doesn't match
+- `@loop send`: the asking client tells the sender whether the loop was saved (and under which name), already held, or has to be sent again
+
 ## 3.176.3
 
 - A loop's Only attack in lair rooms and Wait to enter lairs settings are now each character's own; a loop a character hasn't set them for runs with what the loop file holds

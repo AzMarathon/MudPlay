@@ -14,6 +14,9 @@ namespace MudPlay.Game.Remote;
 //   @loop send yes      → we send the offered loop as `@loopdata` lines (see
 //                         LoopShareCodec), paced like an @roomba sync reply
 //   @loop send no       → we drop the offer
+//   {@loopresult …}     ← the requester's client, once the loop has arrived: what
+//                         became of it and its code for it (NoteChat). We show it
+//                         and send nothing back.
 //
 // The offer is per requester and lapses after OfferLifetime, so a stale "yes" long
 // after the question can't send anything. It rides @loop's MovePlayer grant — a
