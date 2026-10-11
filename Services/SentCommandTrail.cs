@@ -37,7 +37,10 @@ public sealed class SentCommandTrail
     public readonly record struct Entry(
         DateTimeOffset At, string Text, Origin Origin, string? Sender, Outcome Outcome, string? Why);
 
-    private readonly object _gate = new();
+    // Guards the ring (_ring, _head, _count), the run of repeated drops and the
+    // withheld count: commands are recorded from whichever thread sends them. The
+    // typed line being put together is the UI thread's alone and isn't under it.
+    private readonly object _ringLock = new();
     private readonly Entry[] _ring = new Entry[Capacity];
     private int _head;
     private int _count;
@@ -48,14 +51,14 @@ public sealed class SentCommandTrail
     public Func<bool>? Withhold { get; set; }
 
     // Lines that went by while Withhold was true.
-    public int Withheld { get { lock (_gate) { return _withheld; } } }
+    public int Withheld { get { lock (_ringLock) { return _withheld; } } }
 
     public void Record(string text, Origin origin, string? sender, Outcome outcome, string? why = null)
     {
         if (string.IsNullOrEmpty(text)) return;
         if (Withhold?.Invoke() == true)
         {
-            lock (_gate) { _withheld++; }
+            lock (_ringLock) { _withheld++; }
             return;
         }
         if (text.Length > MaxTextLength) text = text[..MaxTextLength] + "…";
@@ -63,7 +66,7 @@ public sealed class SentCommandTrail
         // a count, not a page of them.
         if (outcome == Outcome.Dropped)
         {
-            lock (_gate)
+            lock (_ringLock)
             {
                 if (_count > 0)
                 {
@@ -152,7 +155,7 @@ public sealed class SentCommandTrail
         {
             // Part of this line was typed while nothing is kept.
             _pendingWithheld = false;
-            lock (_gate) { _withheld++; }
+            lock (_ringLock) { _withheld++; }
             return;
         }
         if (Withhold?.Invoke() != true && TypedAtGamePrompt is { } atGamePrompt && !atGamePrompt(line))
@@ -165,7 +168,7 @@ public sealed class SentCommandTrail
 
     private void Store(Entry entry)
     {
-        lock (_gate)
+        lock (_ringLock)
         {
             _ring[_head] = entry;
             _head = (_head + 1) % Capacity;
@@ -190,7 +193,7 @@ public sealed class SentCommandTrail
     // Oldest first.
     public Entry[] Snapshot()
     {
-        lock (_gate)
+        lock (_ringLock)
         {
             Entry[] result = new Entry[_count];
             int start = (_head - _count + Capacity) % Capacity;

@@ -142,9 +142,6 @@ public sealed class EngineSendGate
         finally { SendingClientCommand = outer; }
     }
 
-    // A wrapped sender for a source whose commands are the user's own, relayed by the
-    // client: a macro, a trigger's response, an event's Command action. They hold and
-    // drop like any wrapped send; the mark only says whose command it is.
     // ----- Who sent it, for the sent-command trail ------------------------
 
     // Where every command through a wrapped sender is recorded. Null until
@@ -181,6 +178,9 @@ public sealed class EngineSendGate
         };
     }
 
+    // A wrapped sender for a source whose commands are the user's own, relayed by the
+    // client: a macro, a trigger's response, an event's Command action. They hold and
+    // drop like any wrapped send; the mark only says whose command it is.
     public Action<byte[]> MarkUserCommands(Action<byte[]> wrappedSender)
     {
         ArgumentNullException.ThrowIfNull(wrappedSender);
