@@ -214,9 +214,12 @@ public sealed class AreaRankingStore
     // or not. The loaded one has told of itself already (RenameCharacter) and is
     // under the new name by now, which is why nothing found there is dropped: a BBS
     // is only renamed to a name no BBS has.
+    //
+    // A name that only changes its capitals still moves the files, as it does for a
+    // character (RenameCharacter).
     public void RenameBbs(string oldBbs, string newBbs)
     {
-        if (string.Equals(oldBbs, newBbs, StringComparison.OrdinalIgnoreCase)) return;
+        if (string.Equals(oldBbs, newBbs, StringComparison.Ordinal)) return;
         _epoch++;
         string under = oldBbs + "/";
         for (int i = 0; i < _kept.Count; i++)

@@ -299,7 +299,10 @@ public sealed class AreaRankingFiles
                 if (!Directory.Exists(source)) continue;
                 foreach (string file in Directory.GetFiles(source, "*" + Suffix))
                     MoveCharacter(SimulatorOwner.CharacterKey(oldBbs, ProfileOf(file)), SimulatorOwner.CharacterKey(newBbs, ProfileOf(file)), set);
-                PathGuard.DeleteTree(source, simulator, operation);
+                // Where the file system ignores capitals, the old spelling's folder is
+                // the new one's, and the files just moved are still in it.
+                if (string.Equals(oldBbs, newBbs, StringComparison.OrdinalIgnoreCase)) RemoveIfEmpty(source);
+                else PathGuard.DeleteTree(source, simulator, operation);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* a file left under the old name says inside whose it was, and is dropped if ever read as another's */ }
         }
