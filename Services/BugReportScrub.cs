@@ -109,6 +109,59 @@ public static class BugReportScrub
         return result;
     }
 
+    // The same echo where a narrow terminal wrapped it: the prompt, or the run of
+    // stars, carried on onto the next row. Row by row neither half is known for
+    // what it is, so the rows the terminal recorded as one line
+    // (wrappedOntoNext, as TranscriptSnapshot gives it) are read as one. A row
+    // that merely follows a prompt and starts with a star (`*Combat Off*`) was
+    // not wrapped onto, and is left. The mask is written once, where the run
+    // starts; the stars on the rows after it are taken out.
+    // columns: the terminal's width, which a wrapped row is as wide as before
+    // its trailing blanks were dropped.
+    public static void MaskWrappedPasswordEchoes(IList<string> rows, IReadOnlyList<bool> wrappedOntoNext, int columns)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        ArgumentNullException.ThrowIfNull(wrappedOntoNext);
+        for (int first = 0; first < rows.Count; first++)
+        {
+            int last = first;
+            while (last < rows.Count - 1 && last < wrappedOntoNext.Count && wrappedOntoNext[last]) last++;
+            if (last == first) continue;
+
+            StringBuilder line = new();
+            int[] startOf = new int[last - first + 2];
+            for (int r = first; r <= last; r++)
+            {
+                startOf[r - first] = line.Length;
+                line.Append(r < last ? rows[r].PadRight(columns) : rows[r]);
+            }
+            startOf[^1] = line.Length;
+            string joined = line.ToString();
+            if (joined.Contains('*'))
+            {
+                MatchCollection echoes = PasswordEcho.Matches(joined);
+                // Back to front, so an edit doesn't move what is still to be edited.
+                for (int e = echoes.Count - 1; e >= 0; e--)
+                {
+                    int runStart = echoes[e].Index + echoes[e].Groups["before"].Length;
+                    int runEnd = echoes[e].Index + echoes[e].Length;
+                    for (int r = last; r >= first; r--)
+                    {
+                        int from = Math.Max(runStart, startOf[r - first]) - startOf[r - first];
+                        int to = Math.Min(runEnd, startOf[r - first + 1]) - startOf[r - first];
+                        if (to <= from) continue;
+                        string row = r < last ? rows[r].PadRight(columns) : rows[r];
+                        // The row the run's first star is on (the next one, when
+                        // the prompt ended at the margin).
+                        bool runStartsHere = startOf[r - first] + from == runStart;
+                        rows[r] = (row[..from] + (runStartsHere ? Mask : string.Empty) + row[to..]).TrimEnd(' ');
+                    }
+                }
+            }
+            first = last;
+        }
+    }
+
     public sealed class Scrubber
     {
         public static readonly Scrubber None = new(Array.Empty<Regex>(), Array.Empty<string>(), Array.Empty<string>());

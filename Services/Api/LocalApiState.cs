@@ -192,9 +192,13 @@ public static class LocalApiState
         ArgumentNullException.ThrowIfNull(only);
         ArgumentNullException.ThrowIfNull(scrubber);
         IReadOnlyList<TranscriptSnapshot.Line> tail = TranscriptSnapshot.Tail(emulator, lines, only: only);
+        List<string> unmasked = tail.Select(l => l.Text).ToList();
+        // A password's echo that a narrow terminal wrapped, as in the report.
+        BugReportScrub.MaskWrappedPasswordEchoes(
+            unmasked, tail.Select(l => l.SoftWrapped).ToList(), emulator.Screen.Cols);
         // Masked as one text, so a value the terminal wrapped onto the next row is
         // still found. The scrubber gives back as many rows as it was given.
-        string[] texts = scrubber.Apply(string.Join('\n', tail.Select(l => l.Text))).Split('\n');
+        string[] texts = scrubber.Apply(string.Join('\n', unmasked)).Split('\n');
         // Timestamps come through as their own field rather than baked into the
         // text: a consumer correlating a screen line with a log entry needs to
         // compare them, not parse them back out of a rendered string.

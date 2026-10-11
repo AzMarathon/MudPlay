@@ -2902,10 +2902,15 @@ public static class BugReportBuilder
             + "each prefixed with its write time (blank spacing rows have none). "
             + (inGame.InGame ? "In the game now." : "Not in the game now.");
         List<string> texts = lines.Select(l => l.Text).ToList();
+        List<bool> wrapped = lines.Select(l => l.SoftWrapped).ToList();
+        // A password's echo a narrow terminal wrapped is only recognisable with
+        // the rows read as the one line they are; the masking of the whole
+        // document, later, sees rows.
+        BugReportScrub.MaskWrappedPasswordEchoes(texts, wrapped, emulator.Screen.Cols);
         // A wrapped chat line is followed onto its next row by the terminal's own
         // record of the wrap, never by how full the row is: the row after a chat
         // line that merely reached the margin is the game's and stays as it is.
-        Censor.CensorRows(texts, lines.Select(l => l.SoftWrapped).ToList());
+        Censor.CensorRows(texts, wrapped);
         List<string> entries = new(lines.Count);
         for (int i = 0; i < lines.Count; i++)
             entries.Add((lines[i].Timestamp is { } t ? t.ToLocalTime().ToString("HH:mm:ss") : "        ") + " " + texts[i]);

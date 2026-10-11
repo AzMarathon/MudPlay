@@ -232,6 +232,55 @@ public sealed class BugReportScrubTests
     public void StarsThatAreNotAPasswordsEcho_AreLeft(string text) =>
         Assert.Equal(text, MakeScrubber().Apply(text));
 
+    // At 40 columns the statline and the prompt don't fit a row, and neither does
+    // a prompt with a long echo: the terminal wraps, and the echo (or the prompt
+    // it follows) is split over two rows. Read as the one line the terminal
+    // recorded them to be, the echo is found and masked; no star is left, and
+    // the row count stays.
+    [Theory]
+    [InlineData("[HP=100/MA=50]:Enter your suicide password:", 20)]   // the prompt itself wraps
+    [InlineData("Enter your suicide password:", 20)]                  // the echo wraps
+    [InlineData("Enter your suicide password:", 60)]                  // onto a third row
+    [InlineData("xxxxxxxxxxxxEnter your suicide password:", 9)]       // the prompt ends at the margin
+    [InlineData("Enter New Password:", 30)]
+    public void TheEchoOfASuicidePassword_WrappedAtFortyColumns_IsMasked(string prompt, int stars)
+    {
+        MudPlay.Terminal.TerminalEmulator emulator = new(40, 12);
+        static byte[] B(string s) => System.Text.Encoding.Latin1.GetBytes(s);
+        emulator.Feed(B("Town Square\r\n"));
+        emulator.Feed(B(prompt + new string('*', stars) + "\r\n"));
+        emulator.Feed(B("Invalid password specified.\r\n"));
+        emulator.Feed(B("*Combat Off*\r\n"));
+
+        IReadOnlyList<MudPlay.Terminal.TranscriptSnapshot.Line> lines = MudPlay.Terminal.TranscriptSnapshot.Tail(emulator, 0);
+        List<string> rows = lines.Select(l => l.Text).ToList();
+        int before = rows.Count;
+        Assert.Contains(lines, l => l.SoftWrapped);
+
+        BugReportScrub.MaskWrappedPasswordEchoes(rows, lines.Select(l => l.SoftWrapped).ToList(), 40);
+        string text = BugReportScrub.Build([], []).Apply(string.Join('\n', rows));
+
+        Assert.Equal(before, rows.Count);
+        Assert.Equal(1, CountOf(text, BugReportScrub.Mask));
+        Assert.Equal(2, text.Count(c => c == '*'));   // the game's own *Combat Off*
+        Assert.Contains("Town Square", text);
+        Assert.Contains("Invalid password specified.\n*Combat Off*", text);
+        // The prompt's words are all still there, across the rows they were on.
+        Assert.Contains(prompt.Replace(" ", string.Empty), string.Concat(rows).Replace(" ", string.Empty));
+    }
+
+    // A row that only follows a prompt was not wrapped onto: its stars are the
+    // game's.
+    [Fact]
+    public void AStarredRowAfterAPromptRow_ThatWasNotWrappedOnto_IsLeft()
+    {
+        List<string> rows = ["Enter your suicide password:", "*Combat Off*", "xxxxxxxxxx", "*Combat Engaged*"];
+
+        BugReportScrub.MaskWrappedPasswordEchoes(rows, [false, false, true, false], 10);
+
+        Assert.Equal(new[] { "Enter your suicide password:", "*Combat Off*", "xxxxxxxxxx", "*Combat Engaged*" }, rows);
+    }
+
     [Fact]
     public void Render_ShowsNoPasswordLength_FromItsEcho()
     {
