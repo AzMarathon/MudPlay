@@ -15,8 +15,9 @@ public static class BugReportSentCommands
         SentCommandTrail.Entry[] entries = trail.Snapshot();
         StringBuilder body = new();
         body.Append("Every command the client put on the wire, or meant to, with where it came from: ")
-            .Append("`typed` for anything sent as the user's own line (typed at the terminal, an alias's expansion, ")
-            .Append("a button in one of the client's windows, the local API's send), an `engine` by name, ")
+            .Append("`typed` at the terminal, `alias` for a step of an alias's expansion, ")
+            .Append("`window` for a button, link or input box in one of the client's windows (the Conversation input, ")
+            .Append("the toolbar, the Party window), `api` for the local API's send, an `engine` by name, ")
             .Append("`user` for a macro, trigger or event, ")
             .Append("`route` for a walk or loop step. A command the send gate dropped or sneak keeping held back ")
             .Append("never reached the game and has no echo in the scrollback. The last ")
@@ -52,6 +53,9 @@ public static class BugReportSentCommands
     private static string Who(SentCommandTrail.Entry e) => e.Origin switch
     {
         SentCommandTrail.Origin.Typed => "typed",
+        SentCommandTrail.Origin.Alias => "alias",
+        SentCommandTrail.Origin.Api => "api",
+        SentCommandTrail.Origin.Window => "window",
         SentCommandTrail.Origin.RouteStep => "route " + (e.Sender ?? "(unnamed)"),
         SentCommandTrail.Origin.UserRelayed => "user " + (e.Sender ?? "(unnamed)"),
         _ => "engine " + (e.Sender ?? "(unnamed)"),

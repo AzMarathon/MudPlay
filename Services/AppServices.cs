@@ -115,11 +115,15 @@ public sealed class AppServices
     // it. Distinct from SendGameCommand, which rides the raw wire-sender with none of
     // that. Used by the quest guide's clickable `'command'` links. No-op until the
     // main VM binds it.
-    private Action<string>? _typedInputSender;
-    public void SetTypedInputSender(Action<string> sender) => _typedInputSender = sender;
-    public void SendTypedInput(string text)
+    // The origin is for the sent-command trail only, which names where a line of
+    // the user's came from: a link or button in a window unless the caller says
+    // otherwise (the local API does).
+    private Action<string, SentCommandTrail.Origin>? _typedInputSender;
+    public void SetTypedInputSender(Action<string, SentCommandTrail.Origin> sender) => _typedInputSender = sender;
+    public void SendTypedInput(string text) => SendTypedInput(text, SentCommandTrail.Origin.Window);
+    public void SendTypedInput(string text, SentCommandTrail.Origin origin)
     {
-        if (!string.IsNullOrWhiteSpace(text)) _typedInputSender?.Invoke(text);
+        if (!string.IsNullOrWhiteSpace(text)) _typedInputSender?.Invoke(text, origin);
     }
 
     // Drop a bracketed yellow status line into the terminal scrollback — the same

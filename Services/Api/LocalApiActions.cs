@@ -158,7 +158,9 @@ public static class LocalApiActions
         // wire with none of that — a `/send n` through it would move the character
         // without the room tracker ever observing the move, desyncing position and
         // handing the recovery ladder a problem it didn't need.
-        svc.SendTypedInput(line);
+        // The trail of commands sent names it as the API's, so a line nobody at
+        // the keyboard typed isn't read as one they did.
+        svc.SendTypedInput(line, SentCommandTrail.Origin.Api);
         return new CommandOutcome("(send)", true, "sent", [line]);
     }
 }

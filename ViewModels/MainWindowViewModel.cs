@@ -3843,6 +3843,22 @@ public partial class MainWindowViewModel : ObservableObject
         return sb.ToString();
     }
 
+    // Where the line SendUserInput is carrying came from, when it is the user's
+    // but not from the terminal's keyboard: an alias's step, a window, the local
+    // API. Null for the keyboard. Only the sent-command trail reads it; to every
+    // other observer these lines are the user's own, as before.
+    private SentCommandTrail.Origin? _userLineOrigin;
+
+    // SendUserInput for a line the user sent some other way than by typing it at
+    // the terminal, so the trail can say which.
+    private void SendUserInputAs(SentCommandTrail.Origin origin, byte[] data)
+    {
+        SentCommandTrail.Origin? outer = _userLineOrigin;
+        _userLineOrigin = origin;
+        try { SendUserInput(data); }
+        finally { _userLineOrigin = outer; }
+    }
+
     // Send raw key bytes from the terminal control to the server. Called
     // by the view's UserInput handler; no-op if not connected.
     public void SendUserInput(byte[] data)
@@ -3869,6 +3885,8 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.SentCommands.Record(
                     System.Text.Encoding.Latin1.GetString(data).TrimEnd('\r', '\n', '\0'),
                     SentCommandTrail.Origin.Engine, pastGate, SentCommandTrail.Outcome.Sent, "goes round the send gate");
+            else if (_userLineOrigin is { } origin)
+                AppServices.Current.SentCommands.ObserveUserLine(data, origin);
             else
                 AppServices.Current.SentCommands.ObserveTyped(data);
         }
@@ -4111,7 +4129,9 @@ public partial class MainWindowViewModel : ObservableObject
     // the chat panel feeds the game the same way as typing in the terminal
     // does. Also scans the typed verb for heal-shaped commands so the regen
     // tracker can gate any HP / MA upticks during the artifact grace window.
-    public void SendUserText(string text)
+    // origin is where the text came from (a window, the local API), for the
+    // sent-command trail: nothing typed at the terminal comes this way.
+    public void SendUserText(string text, SentCommandTrail.Origin origin)
     {
         if (string.IsNullOrEmpty(text)) return;
 
@@ -4122,10 +4142,10 @@ public partial class MainWindowViewModel : ObservableObject
         // (untrimmed), preserving prior behavior. Each resulting line is
         // then alias-expanded + sent on its own.
         foreach (string line in MacroStore.SplitTypedInput(text))
-            SendOneUserLine(line);
+            SendOneUserLine(line, origin);
     }
 
-    private void SendOneUserLine(string text)
+    private void SendOneUserLine(string text, SentCommandTrail.Origin origin)
     {
         // Alias check first — first-word match, case-insensitive. When
         // an enabled alias's name matches, the engine returns the
@@ -4138,7 +4158,9 @@ public partial class MainWindowViewModel : ObservableObject
                 if (LooksLikeHealShapedCommand(step))
                     AppServices.Current.Regen.RecordArtifact();
                 byte[] stepBytes = System.Text.Encoding.Latin1.GetBytes(step + "\r\n");
-                SendUserInput(stepBytes);
+                // What goes out is the alias's text, not what was entered: the
+                // trail names it so, wherever the alias was entered.
+                SendUserInputAs(SentCommandTrail.Origin.Alias, stepBytes);
             }
             return;
         }
@@ -4149,14 +4171,14 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         byte[] bytes = System.Text.Encoding.Latin1.GetBytes(text + "\r\n");
-        SendUserInput(bytes);
+        SendUserInputAs(origin, bytes);
     }
 
     // Toolbar "EXP" button — send the in-game "exp" command exactly as if the
     // player typed it (alias expansion + wire send). No-ops harmlessly when
     // disconnected (SendUserInput drops it with no socket).
     [RelayCommand]
-    private void SendExp() => SendOneUserLine("exp");
+    private void SendExp() => SendOneUserLine("exp", SentCommandTrail.Origin.Window);
 
     // Heuristic: does line start with a verb that usually moves HP or MA
     // upward? Conservative — false positives just waste a few seconds of
@@ -4442,7 +4464,7 @@ public partial class MainWindowViewModel : ObservableObject
             DataContext = new ConversationViewModel(
                 AppServices.Current.ChatHistory,
                 AppServices.Current.CommandHistory,
-                SendUserText,
+                text => SendUserText(text, SentCommandTrail.Origin.Window),
                 ClearChatlog,
                 Application.Current,
                 AppServices.Current.Resolver.Resolve<Models.Profile.TalkSettings>("Talk"),
@@ -4469,7 +4491,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             DataContext = new PartyViewModel(
                 AppServices.Current.PartyState,
-                SendUserInput),
+                data => SendUserInputAs(SentCommandTrail.Origin.Window, data)),
         };
         window.Closed += (_, _) => _partyWindow = null;
         _partyWindow = window;
@@ -6307,10 +6329,10 @@ public partial class MainWindowViewModel : ObservableObject
         // re-latches to the authoritative value (a stale max is what strands a rest).
         Game.Inventory.EquipResult equip =
             AppServices.Current.Equipment.ApplyByTrigger(Models.Profile.EquipTriggerType.Default);
-        SendUserText("health");
+        SendUserText("health", SentCommandTrail.Origin.Window);
         // Re-observe the room so the trackers and the post-force-clear rest hold
         // settle on what's actually here.
-        SendUserInput(System.Text.Encoding.Latin1.GetBytes("\r"));
+        SendUserInputAs(SentCommandTrail.Origin.Window, System.Text.Encoding.Latin1.GetBytes("\r"));
         AppServices.Current.Health.Evaluate();
 
         AppServices.Current.Log.Info(Game.Conditions.ConditionTracker.LogCategory,

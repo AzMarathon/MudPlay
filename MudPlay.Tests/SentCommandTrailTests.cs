@@ -186,6 +186,85 @@ public sealed class SentCommandTrailTests
             trail.Snapshot().Select(e => e.Text));
     }
 
+    // A line of the user's that didn't come from the terminal's keyboard says
+    // where it did come from, and is not joined to a line still being typed.
+    [Fact]
+    public void LinesFromAnAliasAWindowAndTheApi_CarryTheirOwnOrigin_ApartFromTheLineBeingTyped()
+    {
+        SentCommandTrail trail = new();
+
+        trail.ObserveTyped("lo"u8);                                              // half a line at the keyboard
+        trail.ObserveUserLine("exp\r\n"u8, SentCommandTrail.Origin.Window);
+        trail.ObserveUserLine("c 'heal' bob\r\n"u8, SentCommandTrail.Origin.Alias);
+        trail.ObserveUserLine("gos hi\r"u8, SentCommandTrail.Origin.Api);
+        trail.ObserveUserLine("\r"u8, SentCommandTrail.Origin.Window);           // a bare Enter is no command
+        trail.ObserveTyped("ok\r"u8);
+
+        Assert.Equal(new[]
+        {
+            (SentCommandTrail.Origin.Window, "exp"),
+            (SentCommandTrail.Origin.Alias, "c 'heal' bob"),
+            (SentCommandTrail.Origin.Api, "gos hi"),
+            (SentCommandTrail.Origin.Typed, "look"),
+        }, trail.Snapshot().Select(e => (e.Origin, e.Text)));
+        Assert.All(trail.Snapshot(), e => Assert.Null(e.Sender));
+    }
+
+    // The game reads a window's or the API's line at whatever prompt is up, so
+    // the rule for a typed line holds for them all: not at the game's own prompt,
+    // not kept.
+    [Theory]
+    [InlineData(SentCommandTrail.Origin.Alias)]
+    [InlineData(SentCommandTrail.Origin.Api)]
+    [InlineData(SentCommandTrail.Origin.Window)]
+    public void ALineFromAnyOrigin_IsWithheld_AtAPromptThatIsNotTheGames(SentCommandTrail.Origin origin)
+    {
+        string row = "[HP=100/MA=50]:";
+        SentCommandTrail trail = new() { TypedAtGamePrompt = line => SentCommandTrail.RowIsGamePrompt(row, line) };
+
+        trail.ObserveUserLine("set suicide\r\n"u8, origin);
+        row = "Enter New Password:";
+        trail.ObserveUserLine("s3cretpw\r\n"u8, origin);
+
+        Assert.Equal(new[] { (origin, "set suicide"), (origin, SentCommandTrail.WithheldAtPrompt) },
+            trail.Snapshot().Select(e => (e.Origin, e.Text)));
+    }
+
+    [Theory]
+    [InlineData(SentCommandTrail.Origin.Alias)]
+    [InlineData(SentCommandTrail.Origin.Api)]
+    [InlineData(SentCommandTrail.Origin.Window)]
+    public void ALineFromAnyOrigin_IsOnlyCounted_WhileNothingIsKept(SentCommandTrail.Origin origin)
+    {
+        SentCommandTrail trail = new() { Withhold = () => true };
+
+        trail.ObserveUserLine("my-login-name\r\n"u8, origin);
+
+        Assert.Empty(trail.Snapshot());
+        Assert.Equal(1, trail.Withheld);
+    }
+
+    [Fact]
+    public void ReportSection_NamesAnAliasAWindowAndTheApi()
+    {
+        SentCommandTrail trail = new();
+        trail.ObserveUserLine("exp\r\n"u8, SentCommandTrail.Origin.Window);
+        trail.ObserveUserLine("sneak\r\n"u8, SentCommandTrail.Origin.Alias);
+        trail.ObserveUserLine("look\r\n"u8, SentCommandTrail.Origin.Api);
+        trail.ObserveTyped("n\r"u8);
+
+        BugReportBuilder.Section section = BugReportSentCommands.Build(
+            trail, new BugReportChatCensor(Array.Empty<ulong>()));
+
+        Assert.Matches(@"  window +sent     exp$", section.Entries![0]);
+        Assert.Matches(@"  alias +sent     sneak$", section.Entries[1]);
+        Assert.Matches(@"  api +sent     look$", section.Entries[2]);
+        Assert.Matches(@"  typed +sent     n$", section.Entries[3]);
+        Assert.Contains("`alias`", section.Body);
+        Assert.Contains("`window`", section.Body);
+        Assert.Contains("`api`", section.Body);
+    }
+
     [Fact]
     public void KeysPressedWhileNothingIsKept_DoNotHeadTheFirstLineTypedInTheGame()
     {

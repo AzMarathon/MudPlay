@@ -10,7 +10,8 @@ namespace MudPlay.Services;
 // dropped.
 //
 // Filled at the places every command already passes: EngineSendGate's wrapper
-// for what the client sends, MainWindowViewModel.SendUserInput for what is typed.
+// for what the client sends, MainWindowViewModel.SendUserInput for what the user
+// sends (typed, or as a line from an alias, a window or the local API).
 //
 // Nothing is recorded while Withhold says so: outside the game (a login is typed
 // there) and while a suicide password may be going out. Those lines are counted,
@@ -26,10 +27,13 @@ public sealed class SentCommandTrail
 
     public enum Origin
     {
-        Typed,          // the user, at the terminal
+        Typed,          // the user, at the terminal's keyboard
         Engine,         // an engine decided it
-        UserRelayed,    // a macro, alias, trigger or event of the user's
+        UserRelayed,    // a macro, trigger or event of the user's
         RouteStep,      // a walk or loop step
+        Alias,          // a step of an alias's expansion
+        Api,            // the local API's send
+        Window,         // a button, link or input box in one of the client's windows
     }
 
     public enum Outcome { Sent, HeldForLater, Dropped }
@@ -140,6 +144,20 @@ public sealed class SentCommandTrail
     private bool _inEscape;
     private bool _pendingWithheld;
 
+    // A whole line of the user's that didn't come from the terminal's keyboard:
+    // an alias's step, a window's button or input box, the local API's send. It
+    // is named for where it came from and held to the same rule as a typed line
+    // (the game reads it at whatever prompt is up, a password prompt included).
+    // Kept apart from the line being typed, which it must not be joined to.
+    public void ObserveUserLine(ReadOnlySpan<byte> data, Origin origin)
+    {
+        string text = Encoding.Latin1.GetString(data);
+        foreach (string line in text.Split(LineEnds, StringSplitOptions.RemoveEmptyEntries))
+            UserLineSent(line, origin);
+    }
+
+    private static readonly char[] LineEnds = ['\r', '\n'];
+
     // Whether the terminal's cursor row is the game's own prompt as the typed
     // line's Enter goes out; the argument is the line. Anything else on that row
     // (a password prompt, a menu, a question, a prompt we don't know) means the
@@ -158,12 +176,17 @@ public sealed class SentCommandTrail
             lock (_ringLock) { _withheld++; }
             return;
         }
+        UserLineSent(line, Origin.Typed);
+    }
+
+    private void UserLineSent(string line, Origin origin)
+    {
         if (Withhold?.Invoke() != true && TypedAtGamePrompt is { } atGamePrompt && !atGamePrompt(line))
         {
-            Store(new Entry(DateTimeOffset.Now, WithheldAtPrompt, Origin.Typed, null, Outcome.Sent, null));
+            Store(new Entry(DateTimeOffset.Now, WithheldAtPrompt, origin, null, Outcome.Sent, null));
             return;
         }
-        Record(line, Origin.Typed, sender: null, Outcome.Sent);
+        Record(line, origin, sender: null, Outcome.Sent);
     }
 
     private void Store(Entry entry)
