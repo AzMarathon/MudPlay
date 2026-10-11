@@ -4004,7 +4004,7 @@ public sealed class AppServices
         if (GameData.ActiveSet is not null)
             RoomSpellDamage.OnActiveSetChanged(GameData.ActiveSet);
         // After the last of the per-set indexes timed above.
-        GameData.ActiveSetChanged += LogSetIndexTimes;
+        GameData.ActiveSetChanged += SetIndexTimes.LogLoad;
 
         // Room tracker. Resets to Unknown on every
         // graph reload because per-room references are invalidated
@@ -10633,31 +10633,12 @@ public sealed class AppServices
         }
     }
 
-    // What each per-set index took to rebuild in the set load under way. The
-    // rebuilds run one after another on the thread that switches the set, so the
-    // list needs no lock; the last of them logs the list and empties it.
-    private readonly List<(string Name, double Ms)> _setIndexTimes = new();
+    // Times the per-set index rebuilds of each set load for the program log. Made on
+    // first use: the first of those rebuilds is wired midway through the constructor.
+    private SetIndexTimings? _setIndexTimings;
+    private SetIndexTimings SetIndexTimes => _setIndexTimings ??= new SetIndexTimings(GameData, Log);
 
-    private Action<string?> TimedSetIndex(string name, Action<string?> rebuild) => set =>
-    {
-        long started = System.Diagnostics.Stopwatch.GetTimestamp();
-        rebuild(set);
-        _setIndexTimes.Add((name, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
-    };
-
-    // One line per set load: a "the switch froze the window" report can tell from it
-    // whether these indexes were the time, and which of them.
-    private void LogSetIndexTimes(string? set)
-    {
-        if (set is not null && _setIndexTimes.Count > 0)
-        {
-            static string Ms(double ms) => ms.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
-            Log.Info("GameData",
-                $"Per-set indexes for '{set}' rebuilt in {Ms(_setIndexTimes.Sum(t => t.Ms))} ms on the switching thread: "
-                + string.Join(", ", _setIndexTimes.OrderByDescending(t => t.Ms).Select(t => $"{t.Name} {Ms(t.Ms)}")) + ".");
-        }
-        _setIndexTimes.Clear();
-    }
+    private Action<string?> TimedSetIndex(string name, Action<string?> rebuild) => SetIndexTimes.Timed(name, rebuild);
 
     private void WarmGameDataLists()
     {

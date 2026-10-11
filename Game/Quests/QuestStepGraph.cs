@@ -52,9 +52,10 @@ public static class QuestStepGraph
 
         // A chain is a step only through a directive whose first number is the flag,
         // so a chain that doesn't hold the flag's digits anywhere is none, and neither
-        // is any chain of a block that doesn't. The draft is built for every quest in
-        // turn, each walking every block: making a string of each block's script and
-        // taking every chain apart to find that out was all of what a set's drafts cost.
+        // is any chain of a block that doesn't. Both are passed over before anything
+        // is made of them (the block's script is searched as stored, not as a
+        // string): a draft is built for every quest in turn, each walking every block
+        // of the set, and nearly none of those blocks is about the quest in hand.
         string flagDigits = Math.Abs((long)flag).ToString(System.Globalization.CultureInfo.InvariantCulture);
         byte[] flagDigitsUtf8 = System.Text.Encoding.ASCII.GetBytes(flagDigits);
 

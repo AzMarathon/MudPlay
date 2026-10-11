@@ -4,9 +4,9 @@ namespace MudPlay.Services;
 // Summoned By ("Group(lair): 1/547, Room 9/12"), read in place.
 //
 // A set's Monsters table carries a couple of hundred thousand of them, and every
-// index built from that field walks them all. Finding them with a regex made an
-// object per reference and a string per number, which was most of what those builds
-// cost in time and nearly all they allocated.
+// index built from that field walks them all, some inside the set switch. So the
+// scan allocates nothing: no match object per reference and no string per number,
+// only the two ints handed back.
 internal static class RoomTokens
 {
     // The next reference at or after position, which is left just past it. Finds what
