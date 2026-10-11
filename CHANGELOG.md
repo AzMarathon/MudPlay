@@ -6,6 +6,11 @@
 - Loading a set's tables allocates a third of the memory it did
 - Program log shows what each game-data table holds when a set loads
 
+## 3.176.1
+
+- Switching game data sets is quicker: the room map's doors, teleports, boats and lookups build about three times faster, with far less memory churned
+- Program log: the room map's load line says how long the build took
+
 ## 3.176.0
 
 - New Cash + Items setting, off by default: Fund party members' tolls / rides if short

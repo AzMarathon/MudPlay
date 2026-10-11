@@ -25,6 +25,10 @@ public readonly struct GameValue
     // The text of a string, or null for a JSON null.
     public string? GetString() => Table.GetString(_cell);
 
+    // Whether a string's text is exactly these UTF-8 bytes, without making a string
+    // of it: for telling a common cell ("0") apart in a loop over a whole table.
+    public bool ValueEquals(ReadOnlySpan<byte> utf8Text) => Table.ValueEquals(_cell, utf8Text);
+
     public bool TryGetInt32(out int value) => Table.TryGetInt32(_cell, out value);
 
     public int GetInt32() => TryGetInt32(out int value) ? value : throw new FormatException("The number is not a 32-bit whole number.");

@@ -1,5 +1,7 @@
 using System.Buffers.Text;
 using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -171,7 +173,17 @@ public sealed class GameTable
         _ => throw WrongKind(cell, "String"),
     };
 
-    // A number is whole only when its text is: "7.0" and "7e0" are not, as before.
+    // Whether a string's text is exactly these UTF-8 bytes, compared in place: no
+    // string is made. A null equals only the default span (not an empty text),
+    // which is JsonElement.ValueEquals's rule too.
+    internal bool ValueEquals(int cell, ReadOnlySpan<byte> utf8) => _kinds[cell] switch
+    {
+        StringCell => Utf8(_values[cell]).SequenceEqual(utf8),
+        NullCell => Unsafe.IsNullRef(ref MemoryMarshal.GetReference(utf8)),
+        _ => throw WrongKind(cell, "String"),
+    };
+
+    // A number is whole only when its text is: "7.0" and "7e0" are not.
     // A failed read leaves 0 in value, never the digits it got through.
     internal bool TryGetInt32(int cell, out int value)
     {

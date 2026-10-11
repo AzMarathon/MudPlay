@@ -23,7 +23,13 @@ public sealed class GameTableTests
             sb.Append('|').Append(v.TryGetDouble(out double d)).Append(d.ToString("R", CultureInfo.InvariantCulture));
         }
         else if (v.ValueKind is JsonValueKind.String or JsonValueKind.Null)
+        {
             sb.Append('|').Append(v.GetString() ?? "<null>");
+            // The in-place compare: a common cell, the value's own bytes, an empty
+            // text, and the default span (which only a null equals).
+            sb.Append('|').Append(v.ValueEquals("0"u8)).Append(v.ValueEquals(Encoding.UTF8.GetBytes(v.GetString() ?? "x")))
+                .Append(v.ValueEquals(""u8)).Append(v.ValueEquals(default(ReadOnlySpan<byte>)));
+        }
         else
             sb.Append('|').Append(v.GetRawText());
         return sb.ToString();
@@ -40,7 +46,11 @@ public sealed class GameTableTests
             sb.Append('|').Append(v.TryGetDouble(out double d)).Append(d.ToString("R", CultureInfo.InvariantCulture));
         }
         else if (v.ValueKind is JsonValueKind.String or JsonValueKind.Null)
+        {
             sb.Append('|').Append(v.GetString() ?? "<null>");
+            sb.Append('|').Append(v.ValueEquals("0"u8)).Append(v.ValueEquals(Encoding.UTF8.GetBytes(v.GetString() ?? "x")))
+                .Append(v.ValueEquals(""u8)).Append(v.ValueEquals(default(ReadOnlySpan<byte>)));
+        }
         else
             sb.Append('|').Append(v.GetRawText());
         return sb.ToString();
@@ -83,7 +93,7 @@ public sealed class GameTableTests
             [
               { "Number": 1, "Name": "plain", "Big": 2147483647, "Bigger": 2147483648, "Huge": 9223372036854775808,
                 "Negative": -17, "MinInt": -2147483648, "Decimal": 7.8, "Trailing": 7.0, "Exponent": 1e3, "Signed": 1E+3,
-                "NegativeZero": -0, "Zero": 0, "Tiny": 0.000001, "Long": 123456789012 },
+                "NegativeZero": -0, "Zero": 0, "Tiny": 0.000001, "Long": 123456789012, "NoExit": "0" },
               { "Number": 2, "Name": "", "Null": null, "Yes": true, "No": false,
                 "Accent": "café – naïve", "Astral": "😀 and 😀", "Nul": "\u0000", "Escapes": "a\"b\\c\/d\n\r\t\u001b",
                 "Spaces": "  two  spaces  " },
@@ -182,6 +192,11 @@ public sealed class GameTableTests
         Assert.Throws<InvalidOperationException>(() => Field("Null").GetInt32());
         Assert.Throws<InvalidOperationException>(() => Field("Flag").TryGetInt32(out _));
         Assert.Throws<InvalidOperationException>(() => Field("Whole").GetString());
+        Assert.Throws<InvalidOperationException>(() => Field("Whole").ValueEquals("12"u8));
+        Assert.Throws<InvalidOperationException>(() => Field("Flag").ValueEquals("true"u8));
+        Assert.True(Field("Text").ValueEquals("12"u8));
+        Assert.False(Field("Text").ValueEquals("1"u8));
+        Assert.False(Field("Null").ValueEquals("null"u8));
         Assert.Throws<FormatException>(() => Field("Fraction").GetInt32());
         Assert.False(Field("Fraction").TryGetInt32(out int left));
         Assert.Equal(0, left);                       // not the digits it got through

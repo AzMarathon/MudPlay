@@ -1881,4 +1881,118 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.Equal(1, bfs.ComputeDistancesFrom(new RoomKey(9, 1291), viaBoats: true)[new RoomKey(9, 1424)]);
         Assert.False(bfs.ComputeDistancesFrom(new RoomKey(9, 1291)).ContainsKey(new RoomKey(9, 1424)));
     }
+
+    // ----- the build's shared work between passes ---------------------------
+
+    // One map-1 Rooms row; exits as "N=1/2" pairs, every other direction "0".
+    private static string RoomRow(int number, int cmd, params string[] exits)
+    {
+        var cells = new[] { "N", "S", "E", "W", "NE", "NW", "SE", "SW", "U", "D" }
+            .Select(dir => exits.FirstOrDefault(e => e.StartsWith(dir + "=", StringComparison.Ordinal)) is { } exit
+                ? $"\"{dir}\": \"{exit[(dir.Length + 1)..]}\""
+                : $"\"{dir}\": \"0\"");
+        return $"{{ \"Map Number\": 1, \"Room Number\": {number}, \"Name\": \"Room {number}\", "
+            + $"\"Light\": 0, \"Shop\": 0, \"NPC\": 0, \"CMD\": {cmd}, \"Lair\": \"\", \"Delay\": 0, "
+            + string.Join(", ", cells) + " }";
+    }
+
+    private const string Cast = " (Cast: pre-0, post-5)";
+
+    // The pocket-entrance searches lean on what earlier ones proved: a search that
+    // ran out leaves behind a region nothing leads out of, and a later search stops
+    // at its edge. Rooms 1-5 are a loop every one of them can walk round; 10, 11
+    // and 12 drop into it one way; 20-21 is a sink off it with two mouths. The row
+    // order puts the searches that run out first, so the two that must still be
+    // walked (3 → 4, which comes back round the loop, and the sink's second mouth)
+    // meet regions already proven closed.
+    [Fact]
+    public void CastPocketEntrances_MatchPlainReachability_WhenSearchesShareWhatTheyProved()
+    {
+        string rooms = "[" + string.Join(",\n",
+            RoomRow(10, 0, "E=1/1" + Cast),
+            RoomRow(11, 0, "E=1/10" + Cast),
+            RoomRow(12, 0, "E=1/2" + Cast),
+            RoomRow(1, 0, "N=1/2"),
+            RoomRow(2, 0, "S=1/1", "N=1/3", "W=1/20" + Cast),
+            RoomRow(3, 0, "S=1/2", "E=1/4" + Cast),
+            RoomRow(4, 0, "N=1/5"),
+            RoomRow(5, 0, "W=1/1", "E=1/21" + Cast),
+            RoomRow(20, 0, "E=1/21"),
+            RoomRow(21, 0, "W=1/20")) + "]";
+        SeedRooms("alpha", rooms);
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+
+        // Every cast exit, checked against a walk of the finished graph.
+        bool Reaches(RoomKey from, RoomKey goal)
+        {
+            HashSet<RoomKey> seen = new() { from };
+            Stack<RoomKey> open = new();
+            open.Push(from);
+            while (open.Count > 0)
+            {
+                if (graph.GetRoom(open.Pop()) is not { } room) continue;
+                foreach (RoomExit exit in room.Exits.Values)
+                {
+                    if (exit.Target == goal) return true;
+                    if (seen.Add(exit.Target)) open.Push(exit.Target);
+                }
+            }
+            return false;
+        }
+        List<(RoomKey Source, Direction Direction)> oneWay = new();
+        foreach (Room room in graph.Rooms)
+            foreach ((Direction dir, RoomExit exit) in room.Exits)
+            {
+                if (!exit.CastsOnWalk) continue;
+                Assert.Equal(!Reaches(exit.Target, room.Key), exit.CastPocketEntrance);
+                if (exit.CastPocketEntrance) oneWay.Add((room.Key, dir));
+            }
+
+        Assert.Equal(
+            new[]
+            {
+                (new RoomKey(1, 10), Direction.E),
+                (new RoomKey(1, 11), Direction.E),
+                (new RoomKey(1, 12), Direction.E),
+                (new RoomKey(1, 2), Direction.W),
+                (new RoomKey(1, 5), Direction.E),
+            },
+            oneWay);
+        Assert.False(graph.GetRoom(new RoomKey(1, 3))!.Exits[Direction.E].CastPocketEntrance);
+
+        // The list the maze index starts from is the same exits in the same order.
+        Assert.Equal(oneWay, graph.CastPocketEntrances.ToList());
+    }
+
+    // Two rows for one room: the later row is the room, in the earlier row's
+    // place. The passes work from lists of rooms found once up front, so those
+    // lists have to describe the rooms that ended up in the graph.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LaterRowForTheSameRoom_IsTheOneThePassesSee(bool laterRowHasTheCommand)
+    {
+        const string tbinfo = """
+            [ { "Number": 100, "LinkTo": 0, "Action": "go hole:teleport 9 1\n", "Called From": "" } ]
+            """;
+        string rooms = "[" + string.Join(",\n",
+            RoomRow(1, laterRowHasTheCommand ? 0 : 100, "N=1/2", "E=1/3" + Cast),
+            RoomRow(2, 0, "S=1/1"),
+            RoomRow(1, laterRowHasTheCommand ? 100 : 0, "N=1/2"),
+            RoomRow(9, 0, "N=1/2")) + "]";
+        (RoomGraphManager graph, _) = BuildWithTbInfo("alpha", rooms, tbinfo);
+
+        Assert.Equal(new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 9) },
+            graph.Rooms.Select(r => r.Key));
+        Room room = graph.GetRoom(new RoomKey(1, 1))!;
+        Assert.Equal(laterRowHasTheCommand ? 100 : 0, room.Cmd);
+        Assert.False(room.Exits.ContainsKey(Direction.E));                // the earlier row's cast exit is gone
+        Assert.Empty(graph.CastPocketEntrances);
+        Assert.Equal(laterRowHasTheCommand, room.Exits.ContainsKey(Direction.Teleport));
+        if (laterRowHasTheCommand)
+            Assert.Equal(new RoomKey(1, 9), room.Exits[Direction.Teleport].Target);
+    }
 }

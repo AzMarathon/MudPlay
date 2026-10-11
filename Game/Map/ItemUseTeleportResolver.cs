@@ -24,6 +24,13 @@ public static class ItemUseTeleportResolver
     private const int TextBlockAbility = 148; // spell points at a TBInfo chain
     private const int AbilitySlots = 20;
 
+    // The slot column names, made once: every item row is asked for all twenty
+    // pairs, and building the names per read was most of a pass over the table.
+    private static readonly string[] s_abilNames =
+        Enumerable.Range(0, AbilitySlots).Select(i => $"Abil-{i}").ToArray();
+    private static readonly string[] s_abilValNames =
+        Enumerable.Range(0, AbilitySlots).Select(i => $"AbilVal-{i}").ToArray();
+
     // One item-use teleport: the item you carry + use (HolderItemId / Name), the
     // room-fixture item the teleport TBInfo gates on (GateItemId — the anchor the
     // caller resolves to a source room), the fixed destination, and any minlevel
@@ -44,8 +51,8 @@ public static class ItemUseTeleportResolver
 
             for (int i = 0; i < AbilitySlots; i++)
             {
-                if (!TryReadInt(row, $"Abil-{i}", out int code) || code != CastsSpAbility) continue;
-                if (!TryReadInt(row, $"AbilVal-{i}", out int spellNumber) || spellNumber <= 0) continue;
+                if (!TryReadInt(row, s_abilNames[i], out int code) || code != CastsSpAbility) continue;
+                if (!TryReadInt(row, s_abilValNames[i], out int spellNumber) || spellNumber <= 0) continue;
                 if (catalog.GetFormulaByNumber(spellNumber) is not { } formula) continue;
 
                 foreach (SpellAbility ab in formula.Abilities)
