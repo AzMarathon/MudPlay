@@ -71,6 +71,37 @@ public sealed class BossTimerSyncCollectorTests
         Assert.Contains(got, r => r.Sender == "Sue");
     }
 
+    // A response is taken on every channel a timer sync may go by, whichever the
+    // request went out on: a sneaking responder answers a said request by telepath.
+    [Theory]
+    [InlineData(ChatChannel.Local)]
+    [InlineData(ChatChannel.TelepathIncoming)]
+    [InlineData(ChatChannel.Gangpath)]
+    [InlineData(ChatChannel.Broadcast)]
+    public void TakesAResponseOnEveryChannelTimersMayUse(ChatChannel channel)
+    {
+        BossTimerSyncCollector c = NewCollector(out var got);
+        c.Begin();
+
+        FeedResponse(c, "Bob", new[] { new BossTimerSyncRecord(1, "a", T("2026-08-22T01:00:00Z")) }, 6, channel);
+
+        Assert.Equal("Bob", Assert.Single(got).Sender);
+    }
+
+    [Theory]
+    [InlineData(ChatChannel.Gossip)]
+    [InlineData(ChatChannel.Yell)]
+    [InlineData(ChatChannel.TelepathOutgoing)]
+    public void PassesOverAResponseOnAnyOtherChannel(ChatChannel channel)
+    {
+        BossTimerSyncCollector c = NewCollector(out var got);
+        c.Begin();
+
+        FeedResponse(c, "Bob", new[] { new BossTimerSyncRecord(1, "a", T("2026-08-22T01:00:00Z")) }, 6, channel);
+
+        Assert.Empty(got);
+    }
+
     [Fact]
     public void IgnoresChunksBeforeBeginAndAfterStop()
     {

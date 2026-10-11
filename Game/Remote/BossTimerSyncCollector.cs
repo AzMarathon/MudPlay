@@ -64,9 +64,10 @@ public sealed class BossTimerSyncCollector : IDisposable
     internal void Ingest(ChatLogEntry e)
     {
         if (!_collecting) return;
-        // Responses arrive on whichever channel the request went out on.
-        if (e.Channel is not (ChatChannel.TelepathIncoming or ChatChannel.Gangpath or ChatChannel.Local))
-            return;
+        // A response is taken on any channel a timer sync may go by, not only the
+        // one the request went out on: a responder who is sneaking answers a said
+        // request by telepath.
+        if (!TransferChannels.Allows(Transfer.TimerSync, e.Channel)) return;
         if (e.Speaker is not { Length: > 0 } sender) return;
         if (!TryParse(e.Message, out int index, out int count, out string blob)) return;
 

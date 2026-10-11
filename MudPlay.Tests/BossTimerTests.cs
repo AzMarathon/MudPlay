@@ -522,6 +522,57 @@ public sealed class BossTimerTests : IDisposable
         return open >= 0 && close > open ? s[(open + 1)..close] : s;
     }
 
+    // A timer sync may be asked for wherever players talk: said, telepathed, on the
+    // gang channel or on the broadcast channel. It is answered on that channel, and
+    // what is answered decodes back to the timer.
+    [Theory]
+    [InlineData(ChatChannel.TelepathIncoming, "/Bob {@timerdata ")]
+    [InlineData(ChatChannel.Gangpath, "bg {@timerdata ")]
+    [InlineData(ChatChannel.Local, ">Bob {@timerdata ")]
+    [InlineData(ChatChannel.Broadcast, "br {@timerdata ")]
+    public void TimerSync_OnEveryChannelItMayUse_IsAnsweredThere(ChatChannel channel, string opening)
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+
+        engine.DispatchForTests(new ChatLogEntry(Now, channel, "Bob", "@timer sync", "raw"));
+
+        string[] wire = engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToArray();
+        Assert.NotEmpty(wire);
+        Assert.All(wire, line => Assert.StartsWith(opening, line));
+        string blob = string.Concat(Replies(engine).Select(r => r.Split(' ', 3)[2]));
+        Assert.Equal(50, Assert.Single(BossTimerSyncCodec.Decode(blob)).MonsterNumber);
+    }
+
+    // Sneaking, the answer to a said request goes by telepath; the asker takes it
+    // there (BossTimerSyncCollectorTests), since telepath is a channel timers use.
+    [Fact]
+    public void TimerSync_SaidToASneakingClient_IsAnsweredByTelepath()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+        engine.StealthedProvider = () => true;
+
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Local, "Bob", "@timer sync", "raw"));
+
+        Assert.All(engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)),
+            line => Assert.StartsWith("/Bob {@timerdata ", line));
+    }
+
+    // On the broadcast channel only the sync is followed: the readable report is an
+    // ordinary remote command, and none of those is taken there.
+    [Fact]
+    public void TimerReport_OnTheBroadcastChannel_IsNotAnswered()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer", "raw"));
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer ogre", "raw"));
+
+        Assert.Empty(engine.LastSentForTests);
+    }
+
     [Fact]
     public void Timer_NoneActive_ReportsEmptySet()
     {

@@ -38,9 +38,12 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
 
     public ObservableCollection<BossTimerSyncRowViewModel> Rows { get; } = new();
 
-    // Channel to broadcast the request on. Gang is the common case (whole gang syncs
-    // at once); Telepath targets one player; Local hits everyone in the room.
-    public IReadOnlyList<string> Channels { get; } = new[] { "Gang", "Telepath (to…)", "Local (say)" };
+    // Channel to send the request on: the four a timer sync may go by
+    // (TransferChannels). Gang is the common case (whole gang syncs at once);
+    // Telepath targets one player; Local hits everyone in the room; Broadcast the
+    // players on the numbered channel you have joined.
+    public IReadOnlyList<string> Channels { get; } =
+        new[] { "Gang", "Telepath (to…)", "Local (say)", "Broadcast (br)" };
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TelepathTargetEnabled))]
     private int _channelIndex;
@@ -94,6 +97,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         {
             1 => $"/{TelepathTarget.Trim()} {request}",   // telepath to a named player
             2 => $".{request}",                            // local say
+            3 => $"br {request}",                          // the numbered channel's speak verb
             _ => $"bg {request}",                          // gang (default)
         };
         _send(wire);
