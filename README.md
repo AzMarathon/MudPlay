@@ -1,11 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.172.0**
-> - Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay
-> - Members who are short are handed exactly what they lack when you can spare it and your coins make the amount; the step waits for the game to confirm it
-> - Otherwise the route goes round the toll, or the walk or loop ends naming the toll and who can't pay
-> - A member paid for at a toll that still turned them away is not paid for twice there
+> **Version 3.172.3**
+> - New Cash + Items setting, off by default: Fund party members' tolls / rides if short. Off, a member who can't pay closes the toll to the party
+> - The leader keeps the larger of its own crossing and Minimum cash to keep on hand; only coin above that is handed over
+> - No exact change: the smallest larger amount your coins make is handed over, if you still hold what you keep
+> - Paid NPC transports and sailings are checked and funded like tolls
+> - A training trip's bank stop also draws what the party is short of the trip's tolls
+> - A hidden member can't be given coin and counts as not funded; coin give refusals are read on every realm
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
