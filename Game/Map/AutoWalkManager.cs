@@ -1574,7 +1574,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
             && !RemoteActionPathExpander.ReachesDestination(expanded, destination))
         {
             string reason = DescribeUnroutableLever(unroutable[0]);
-            _log?.Info("Walker", $"walk to {destination}: {reason}");
             Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
             return false;
         }
@@ -2168,12 +2167,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     }
 
     // A walk with no route for want of a toll or fare says so where the user is
-    // looking, not only on the Navigation window's chip, and in the log from here:
-    // that window writes a failed walk's reason, and it may be shut.
+    // looking, not only on the Navigation window's chip. (The log line is
+    // Raise's, as for every failed walk.)
     private void FailUnpaid(RoomKey destination, string reason)
     {
         LastUnpaidFailure = destination;
-        _log?.Info("Walker", $"walk to {destination}: {reason}");
         _unpaidCrossingHandler?.Invoke(destination, reason);
         Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
     }
@@ -3061,7 +3059,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
             round = _bfs.FindPath(here.Key, dest, roundIt, ignoreAvoids: _activeIgnoreAvoids);
         if (round is null)
         {
-            _log?.Info("Walker", $"walk to {dest}: gave up on {door} ({reason}), and there is no other way");
             Raise(new WalkEvent(WalkEventKind.Failed,
                 $"couldn't open {door} ({reason}), and there is no other way to {dest}", _destination));
             Reset();
@@ -4121,6 +4118,26 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // as a force-clear, so the room is fought with Auto-Combat off.
     public bool AwaitingEmptyRoom => _emptyRoom.Active;
 
+    // What the walk is standing on right now, for a bug report: each answer it
+    // has sent for and not had. A walk that "just sits there" is in one of these.
+    public IReadOnlyList<string> DescribeWaits()
+    {
+        List<string> waits = new();
+        if (_stepInFlight) waits.Add("a step is in flight (sent, its room not seen yet)");
+        if (_awaitingPromptForCommand) waits.Add("the prompt after a command step");
+        if (_awaitingDoorOpen) waits.Add("the door handler");
+        if (_awaitingHiddenReveal) waits.Add("the hidden-exit search");
+        if (_awaitingWinch) waits.Add("the winch handler");
+        if (_awaitingTrapDisarm) waits.Add("the trap disarm");
+        if (_awaitingBoatArrival) waits.Add("a boat's arrival");
+        if (_awaitingSysGotoArrival) waits.Add("a sys goto landing");
+        if (_awaitingGreetTeleport) waits.Add("a greet teleport");
+        if (_emptyRoom.Active) waits.Add("an empty room for a room command");
+        if (_abandonHold) waits.Add("holds the AbandonedCombat gate");
+        if (_retryCount > 0) waits.Add($"{_retryCount} retry(ies) of the step");
+        return waits;
+    }
+
     // See EmptyRoomCommandHold.SetHooks.
     public void SetRoomClearHooks(Func<bool> roomHasMonster, Action requestRoomClear, Action abortPartyReform,
         Func<Room, string, bool> commandNeedsEmptyRoom)
@@ -4663,6 +4680,29 @@ public sealed class AutoWalkManager : IRecoverableEngine
         State = WalkState.Idle;
     }
 
+    // How a walk began and ended goes in the program log from here, whoever is
+    // listening. It used to be logged by the Navigation window's view-model, so
+    // with that window closed a walk that failed left no line saying why.
+    private void LogLifecycle(WalkEvent evt)
+    {
+        string verb;
+        switch (evt.Kind)
+        {
+            case WalkEventKind.Started: verb = "started"; break;
+            case WalkEventKind.Resumed: verb = "resumed"; break;
+            case WalkEventKind.Paused: verb = "paused"; break;
+            case WalkEventKind.Stopped: verb = "stopped"; break;
+            case WalkEventKind.Finished: verb = "arrived"; break;
+            case WalkEventKind.Failed: verb = "FAILED"; break;
+            default: return;   // per-step events are the listeners' to report
+        }
+        _log?.Info("Walker", $"walk {verb}"
+            + (evt.Destination is { } to
+                ? $" (to {to}{(_graph.GetRoom(to)?.Name is { Length: > 0 } name ? " - " + name : string.Empty)})"
+                : string.Empty)
+            + (string.IsNullOrWhiteSpace(evt.Detail) ? string.Empty : $": {evt.Detail}"));
+    }
+
     private void Raise(WalkEvent evt)
     {
         // A stop ends the journey whichever leg it catches. Arriving or failing ends
@@ -4673,6 +4713,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             || (evt.Kind is WalkEventKind.Finished or WalkEventKind.Failed && _legToJourneyGoal);
         if (endsJourney) EndJourney();
         LastEvent = evt;
+        LogLifecycle(evt);
         Event?.Invoke(evt);
         // The doors this trip gave up on go with it, after the listeners had their
         // look at them: a Shortcut journey's silent legs, begun with no walk of the

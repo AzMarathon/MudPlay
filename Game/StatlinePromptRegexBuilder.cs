@@ -103,6 +103,22 @@ public static class StatlinePromptRegexBuilder
         return new Regex(pattern.ToString(), RegexOptions.Compiled);
     }
 
+    // Whether a terminal row starts with the prompt a pattern from Build reads,
+    // and what follows it on the row. The patterns are unanchored for the wire
+    // scanner, so the start is checked here: a prompt quoted further along the
+    // row is somebody's text. A statline that prints over two rows (%n) is never
+    // found on one, so its rows read as "not the prompt".
+    public static bool TrySplitPromptRow(Regex statline, string? row, out string rest)
+    {
+        ArgumentNullException.ThrowIfNull(statline);
+        rest = string.Empty;
+        if (string.IsNullOrEmpty(row)) return false;
+        Match m = statline.Match(row);
+        if (!m.Success || m.Index != 0 || m.Length == 0) return false;
+        rest = row[m.Length..];
+        return true;
+    }
+
     private static bool IsWildcard(char code) => code switch
     {
         'h' or 'H' or 'm' or 'M' or 'r' or 'c' or 'x' or 'X' or 'w' or 'n' => true,

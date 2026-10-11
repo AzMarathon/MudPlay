@@ -14,7 +14,9 @@ public static class TranscriptSnapshot
     // order across the boundary. Null only for a blank row (no content was ever
     // written, so there is no meaningful time). Cells is the row's coloured cells,
     // trimmed like Text, when the caller asked for them; null otherwise.
-    public readonly record struct Line(DateTimeOffset? Timestamp, string Text, Cell[]? Cells = null);
+    // SoftWrapped: the terminal left this row by wrapping at the right margin, so
+    // the next line is the same line of the game's carrying on.
+    public readonly record struct Line(DateTimeOffset? Timestamp, string Text, Cell[]? Cells = null, bool SoftWrapped = false);
 
     // The last maxLines transcript lines, oldest → newest: every scrolled-off
     // scrollback row followed by the current live screen, with trailing blank
@@ -33,9 +35,9 @@ public static class TranscriptSnapshot
         List<Line> lines = new();
         foreach (ScrollbackBuffer.Row row in emulator.Screen.Scrollback.Enumerate())
         {
-            if (only is not null && !only.Covers(row.Timestamp)) continue;
+            if (only is not null && !only.Covers(row.Timestamp)) { EndsHere(lines); continue; }
             string text = RowText(row.Cells);
-            lines.Add(new Line(row.Timestamp, text, withCells ? row.Cells[..text.Length] : null));
+            lines.Add(new Line(row.Timestamp, text, withCells ? row.Cells[..text.Length] : null, row.SoftWrapped));
         }
 
         TerminalScreen screen = emulator.Screen;
@@ -49,8 +51,8 @@ public static class TranscriptSnapshot
             // per-row write stamp.
             DateTimeOffset? written = text.Length == 0 ? null : screen.RowTimestamp(y);
             if (only is not null && written is { } at) kept = only.Covers(at);
-            if (!kept) continue;
-            lines.Add(new Line(written, text, withCells ? cells[..text.Length].ToArray() : null));
+            if (!kept) { EndsHere(lines); continue; }
+            lines.Add(new Line(written, text, withCells ? cells[..text.Length].ToArray() : null, screen.RowSoftWrapped(y)));
         }
 
         // Trim only trailing blank padding from the live screen; interior blanks
@@ -61,6 +63,13 @@ public static class TranscriptSnapshot
             lines.RemoveRange(0, lines.Count - maxLines);
 
         return lines;
+    }
+
+    // A row is being left out after the last one kept: whatever comes next in the
+    // list is not that row's continuation, wrapped or not.
+    private static void EndsHere(List<Line> lines)
+    {
+        if (lines.Count > 0 && lines[^1].SoftWrapped) lines[^1] = lines[^1] with { SoftWrapped = false };
     }
 
     // Collapse a cell row to its text, dropping trailing spaces so the grid's

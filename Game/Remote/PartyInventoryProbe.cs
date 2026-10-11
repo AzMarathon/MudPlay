@@ -76,6 +76,10 @@ public sealed partial class PartyInventoryProbe : IDisposable
     private readonly Action<Action> _armWindow;
     private readonly LogService? _log;
     private readonly List<PendingQuery> _pending = new();
+
+    // For a bug report: what is asked and not yet answered, or null.
+    public string? DescribePending() =>
+        _pending.Count == 0 ? null : $"{_pending.Count} inventory query(ies) asked of party members, not yet answered";
     private bool _disposed;
 
     // How long to wait for replies before completing a query with whatever

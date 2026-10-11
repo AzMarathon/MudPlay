@@ -1,6 +1,6 @@
 # Version history
 
-## 3.175.0
+## 3.176.0
 
 - New Cash + Items setting, off by default: Fund party members' tolls / rides if short
 - Changed from 3.172.0, which paid tolls for members unasked: with the setting off, a short or silent member closes tolls, NPC rides and sailings to the party for the trip
@@ -9,6 +9,25 @@
 - Paid NPC transports and sailings are checked and funded like tolls
 - A bank stop already being made (training trip, item purchase, a stash room set as the Bank) also draws what the party is short of the tolls ahead
 - A hidden member can't be given coin and counts as not funded; coin give refusals are read on every realm
+
+## 3.175.0
+
+- Bug report: your login name, login password and suicide password are masked everywhere in it, and in a crash report
+- Bug report: the `*` the game echoes for a suicide password is masked too, so its length isn't shown
+- Bug report: racist and other offensive words on chat lines are masked, in the report only
+- Bug report: a list of every command sent, held or dropped, with who sent it (typed, an alias, a window, the Local API, an engine, a macro / trigger / event, a route step)
+- Bug report: Holds and waits near the top: the send gate, each movement gate with who raised it and since when, time in state for every engine, what each is waiting on
+- Bug report: the whole program log with millisecond times; warnings and errors kept apart so routine lines can't push them out; 3,000 lines of scrollback
+- Bug report: the build, when the client started, your system, the connection, open windows, pending work, triggers / aliases / macros, remote-command permissions, death history
+- Bug report: state first, settings after, histories last and oldest first; under 1 MB without the wire sections
+- The wire sections follow the Wire Inspector's tick boxes and show when each read arrived
+- The last 3 to 6 minutes of the program log are always on disk, for a hang or a forced kill (Logs folder, `…-recent-a.log` / `-b.log`)
+- Program log: a startup block, a status line every 3 minutes, and how a walk ended even with the Navigation window closed
+- `@suicide` sends the stored password only when the game asks for it
+- A custom statline counts as the game prompt, for `@suicide` and for the list of commands sent
+- Local API: `/log`, `/scrollback` and `/events` mask the same account details; `/scrollback` sends only rows from inside the game
+- Chat masking follows a chat line onto its next row only where the terminal wrapped it; game text is never changed
+- The last-minutes log never holds the client on a stalled disk, and says what it dropped
 
 ## 3.174.6
 

@@ -128,6 +128,10 @@ public sealed class AutoDepositManager : IDisposable
     private int _lightBaseCount;
 
     private DepositPhase _phase = DepositPhase.Idle;
+
+    // For a bug report: the bank trip in progress, or null.
+    public string? DescribePending() =>
+        _phase == DepositPhase.Idle && !_busy ? null : $"phase {_phase}" + (_busy ? ", busy" : string.Empty);
     private DetourResume _resume;
     private RoomKey _destination;
     private RoomKey _origin;
