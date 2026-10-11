@@ -1096,18 +1096,30 @@ public static class BugReportBuilder
         // it declines to recast a buff that's actually long gone).
         IReadOnlyList<Game.Spells.ActiveBuffTimer> buffs = svc.CastDirector.SnapshotActiveBuffs();
         sb.Append("\n**Active buff timers (CastingDirector)**\n\n");
+        // Running or standing still (out of the game), and what a profile load put
+        // back: a timer that reads long after its cast is explained by one of these.
+        foreach (string line in svc.BuffTimers.Describe())
+            sb.Append($"- {line}\n");
+        sb.Append('\n');
         if (buffs.Count == 0)
         {
             sb.Append("(none)\n");
         }
         else
         {
+            // Standing still, time left is as of the moment they stopped.
+            System.DateTime asOf = svc.CastDirector.PausedAtUtc ?? System.DateTime.UtcNow;
             foreach (Game.Spells.ActiveBuffTimer b in buffs)
             {
                 string target = string.IsNullOrEmpty(b.Target) ? "self" : b.Target;
-                System.TimeSpan remaining = b.Until - System.DateTime.UtcNow;
+                System.TimeSpan remaining = b.Until - asOf;
                 string what = b.Outcome is { Length: > 0 } drawn ? $"{b.Short} ({drawn})" : b.Short;
-                sb.Append($"- {what} on {target}: {(remaining > System.TimeSpan.Zero ? $"{remaining.TotalSeconds:F0}s remaining" : "expired, not yet cleared")} (of {b.TotalSec}s)\n");
+                // Carried over time out of the game: the clock a whole-party buff is
+                // recast by in a party, which reads earlier than the bar on ourselves.
+                string carried = b.RanOnUntil is { } ranOn
+                    ? $"; carried over time out of the game{(b.Restored ? ", from the saved profile" : "")}, ran on for anyone else it covered until {ranOn:HH:mm:ss} UTC"
+                    : "";
+                sb.Append($"- {what} on {target}: {(remaining > System.TimeSpan.Zero ? $"{remaining.TotalSeconds:F0}s remaining" : "expired, not yet cleared")} (of {b.TotalSec}s){carried}\n");
             }
         }
         sb.Append('\n');
@@ -1651,7 +1663,11 @@ public static class BugReportBuilder
             // Loop combat-suppression state — answers "why didn't it fight
             // here?" for a do-not-attack / only-attack-in-lair report.
             Kv(sb, "Loop only-attack-in-lair", curLoop.OnlyAttackInLairRooms.ToString());
-            Kv(sb, "Loop wait-to-debuff before lairs", curLoop.LairEntryDebuff.ToString());
+            Kv(sb, "Loop wait-to-debuff before lairs",
+                $"{curLoop.LairEntryDebuff} ({Game.Map.LairEntryDebuffModes.Label(curLoop.LairEntryDebuff)})");
+            // Whether it stands outside a lair now, on which buffs, and how the last
+            // such wait ended: answers "why did it stand there / go in without buffing".
+            Kv(sb, "Lair-entry debuff wait", svc.LairDebuffHold.Describe());
             Kv(sb, "Loop do-not-attack waypoints",
                 curLoop.Waypoints.Count(w => w.DoNotAttack).ToString());
             Kv(sb, "Loop do-not-rest waypoints",

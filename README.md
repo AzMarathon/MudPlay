@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.172.2**
+> **Version 3.174.2**
 > - Loops and Auto-Lair setups saved, edited, renamed, moved or deleted in one running client now appear in the others within a few seconds, without a restart
 > - A loop already running, paused or staged keeps going from the copy it started with
 > - A loop is now written before its old copy is removed, so a client reading at that moment never sees it missing

@@ -91,8 +91,9 @@ public sealed partial class CombatManager
     private Func<string?>? _inBetweenEvaluator;
     // Spends the CastingDirector's one-between-round-cast slot when the pre-attack
     // debuff fires directly (bypassing Evaluate), so the director can't queue a
-    // second between-round cast the same round. Optional — no-ops until set.
-    private Action? _markBetweenRoundSlotUsed;
+    // second between-round cast the same round. Told which debuff it was, for a
+    // listener that waits on that send. Optional — no-ops until set.
+    private Action<string>? _markBetweenRoundSlotUsed;
     // Reads whether the director's one-between-round-cast slot is ALREADY spent this
     // round, so the pre-attack debuff can stand down instead of firing a doomed cast
     // into a spent slot (which draws "already cast this round" and latches the block
@@ -358,11 +359,29 @@ public sealed partial class CombatManager
     // Wire the callback that spends the CastingDirector's one-between-round-cast
     // slot when the pre-attack debuff fires directly (bypassing Evaluate).
     // Optional — the pre-attack debuff still fires without it, but the director
-    // won't know the slot is used.
-    public void SetBetweenRoundSlotMarker(Action marker)
+    // won't know the slot is used. It is given the debuff's cast code.
+    public void SetBetweenRoundSlotMarker(Action<string> marker)
     {
         ArgumentNullException.ThrowIfNull(marker);
         _markBetweenRoundSlotUsed = marker;
+    }
+
+    // Told when a fresh engage has no debuff to cast: none set, none allowed on this
+    // target, its mana or cast cap not met. The attack goes out with nothing ahead of
+    // it, and a listener keeping the round's cast for that debuff has nothing to keep
+    // it for. Not told when the debuff is only put off a round (behind a backstab, or
+    // a cast already spent): it is still coming. Optional.
+    public void SetNoDebuffOnEngageSink(Action sink)
+    {
+        ArgumentNullException.ThrowIfNull(sink);
+        _noDebuffOnEngage = sink;
+    }
+    private Action? _noDebuffOnEngage;
+
+    private bool NoDebuffOnThisEngage()
+    {
+        _noDebuffOnEngage?.Invoke();
+        return false;
     }
 
     // Wire the read-side of the one-between-round-cast slot (CastingDirector's
@@ -1215,13 +1234,13 @@ public sealed partial class CombatManager
         // .TryDebuffing); without this, the see-hidden force-clear override — which
         // engages hostiles with Auto-Combat OFF and reaches here — would leak the
         // debuff now that the Auto-Nuke gate no longer blocks the single rung.
-        if (!CombatSpellsWired || _cast is null || !Fighting()) return false;
+        if (!CombatSpellsWired || _cast is null || !Fighting()) return NoDebuffOnThisEngage();
 
         CombatSpellContext ctx = BuildContext(
             settings, obs, picked.RawName, CountEngageable(obs), picked.MonsterNumber);
-        if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return false;
-        if (!DebuffDecisionAllowed(decision, ctx, picked.MonsterNumber)) return false;
-        if (AreaDebuffPastFirstRound(settings, decision)) return false;
+        if (_spellChooser.ChooseDebuff(settings, ctx) is not { } decision) return NoDebuffOnThisEngage();
+        if (!DebuffDecisionAllowed(decision, ctx, picked.MonsterNumber)) return NoDebuffOnThisEngage();
+        if (AreaDebuffPastFirstRound(settings, decision)) return NoDebuffOnThisEngage();
         // A cast at the monster before the backstab spends the surprise (reports
         // paradigm-20260928-030642 / -031828), so the debuff waits for the round after
         // the backstab; the chooser then offers it again.
@@ -1300,7 +1319,7 @@ public sealed partial class CombatManager
         // fired directly (not via Evaluate), so without this the director could
         // queue a SECOND between-round cast this round and draw the "already cast
         // this round" rejection.
-        _markBetweenRoundSlotUsed?.Invoke();
+        _markBetweenRoundSlotUsed?.Invoke(decision.Spell!);
         // Fire the combat attack in the SAME round, right behind the debuff, instead
         // of waiting for the debuff's *Combat Off* (a whole wasted combat round —
         // report paradigm-20260825-103417). The between-round debuff and the combat

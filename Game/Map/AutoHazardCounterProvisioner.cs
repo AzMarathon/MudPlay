@@ -25,8 +25,11 @@ namespace MudPlay.Game.Map;
 //    when a hazard room is next. A dropped link does not: "buffs survive
 //    disconnects, relogs", and "as soon as we've disconnected all timers need to be
 //    paused until we're back in the game, then they all resume" (user, 2026-10-10),
-//    so the clock stops at the drop and runs on from the first prompt back in the
-//    game with the time it had left (Pause / Resume).
+//    so the clock stops when the game is left and runs on from the first prompt back
+//    in it with the time it had left (Pause / Resume). What it had left is kept in
+//    the character's profile meanwhile and put back by a client started later
+//    (SnapshotForSave / Restore, driven with the cast pass's timers by
+//    Game.Spells.BuffTimerKeeper).
 //  • The window — with Auto-Sneak on, inside RefreshWindowSeconds of the end, and
 //    with a countered room here or a few planned steps ahead, the refresh is offered
 //    to the between-round cast scheduler (CastingDirector.SetClientUseSource), which
@@ -194,6 +197,14 @@ public sealed class AutoHazardCounterProvisioner
     // When the link dropped, null while it is up and we are back in the game. The
     // buffs' clocks stand still from then, and nothing is sent.
     private DateTimeOffset? _pausedAt;
+    // What stopped them, for the bug report.
+    private string _pausedWhy = string.Empty;
+
+    // The buffs carried over time out of the game (across a pause, or from a saved
+    // profile), each with the start its clock had when it was last carried. A `use`
+    // or the buff's own line sets a new start, which is how a carried buff is told
+    // from one raised since.
+    private readonly Dictionary<int, DateTimeOffset> _carried = new();
 
     // Buff-line watchers for every known counter, built on first use and dropped by
     // Forget so a new game-data set rebuilds them.
@@ -356,19 +367,82 @@ public sealed class AutoHazardCounterProvisioner
     // The moment the buffs' clocks are read at: the drop, while the link is down.
     private DateTimeOffset Clock() => _pausedAt ?? _now();
 
-    // The link dropped. The character's buffs stay on it and stop running down until
-    // it is back in the game, so the clocks stop here. The answer to a `use` still
-    // in flight went with the link.
-    public void Pause()
+    // The character is out of the game: the link dropped, or it left for the board's
+    // menu. Its buffs stay on it and stop running down until it is back, so the
+    // clocks stop here. The answer to a `use` still in flight went with it.
+    public void Pause(string why = "the link dropped")
     {
         if (_pausedAt is not null) return;
         _pausedAt = _now();
+        _pausedWhy = why;
+        foreach ((int buffSpell, (DateTimeOffset onSince, bool _)) in _on) _carried[buffSpell] = onSince;
         _pending = null;
         _awaitingSwig = false;
         _roundWait = null;
-        ReleaseStep("the link dropped");
+        ReleaseStep(why);
         if (_on.Count > 0)
-            _log?.Info(LogCategory, $"buff clock paused (the link dropped) — {TimeLeftText()}, held until back in the game");
+            _log?.Info(LogCategory, $"buff clock paused ({why}) — {TimeLeftText()}, held until back in the game");
+    }
+
+    // What each tracked buff has left, for the profile (Game.Spells.BuffTimerKeeper).
+    // One whose length the game data doesn't give has no time left to tell.
+    public List<Models.Profile.SavedHazardBuff> SnapshotForSave()
+    {
+        DateTimeOffset now = Clock();
+        List<Models.Profile.SavedHazardBuff> saved = new();
+        foreach ((int buffSpell, (DateTimeOffset onSince, bool confirmed)) in _on)
+        {
+            if (CounterOf(buffSpell) is not { DurationSeconds: > 0 } counter) continue;
+            int left = (int)Math.Round((onSince + DurationOf(counter) - now).TotalSeconds);
+            if (left <= 0) continue;
+            saved.Add(new Models.Profile.SavedHazardBuff { BuffSpell = buffSpell, RemainingSec = left, Confirmed = confirmed });
+        }
+        return saved;
+    }
+
+    // Put back the buffs a profile was saved with, their clocks standing still until
+    // Resume. Called on a profile load, after Forget and with that profile's game
+    // data already the active set: a buff the set doesn't know as a hazard counter
+    // is left out. Returns how many were put back.
+    public int Restore(IReadOnlyList<Models.Profile.SavedHazardBuff> saved)
+    {
+        ArgumentNullException.ThrowIfNull(saved);
+        DateTimeOffset now = _now();
+        int restored = 0;
+        foreach (Models.Profile.SavedHazardBuff buff in saved)
+        {
+            if (buff.RemainingSec <= 0 || CounterOf(buff.BuffSpell) is not { DurationSeconds: > 0 } counter) continue;
+            DateTimeOffset onSince = now - (DurationOf(counter) - TimeSpan.FromSeconds(buff.RemainingSec));
+            _on[buff.BuffSpell] = (onSince, buff.Confirmed);
+            _carried[buff.BuffSpell] = onSince;
+            restored++;
+        }
+        // From now, not from an earlier drop: the time left is as of this moment.
+        if (restored > 0)
+        {
+            _pausedAt = now;
+            _pausedWhy = "put back from the saved profile";
+        }
+        return restored;
+    }
+
+    // Forget the buffs that were carried over time out of the game and have not been
+    // raised again since (no `use` of ours, no line of theirs). For a death the client
+    // did not see and learns of after it is back in the game: it wiped what was on
+    // then, and a buff raised since is not its business.
+    // Returns how many went.
+    public int ForgetCarried(string why)
+    {
+        List<int> gone = new();
+        foreach ((int buffSpell, DateTimeOffset onSince) in _carried)
+            if (_on.TryGetValue(buffSpell, out (DateTimeOffset OnSince, bool Confirmed) on) && on.OnSince == onSince)
+                gone.Add(buffSpell);
+        _carried.Clear();
+        if (gone.Count == 0) return 0;
+        DropTracked(gone);
+        _log?.Info(LogCategory,
+            $"buff {string.Join(", ", gone)} dropped ({why}): carried over time out of the game, and not raised since");
+        return gone.Count;
     }
 
     // The first prompt back in the game: the clocks run on with what they had left.
@@ -380,8 +454,14 @@ public sealed class AutoHazardCounterProvisioner
         // Only what was running when the link dropped stood still. A buff whose line
         // showed on the way back in, ahead of the first prompt, started then.
         foreach (int buffSpell in _on.Keys.ToList())
-            if (_on[buffSpell].OnSince <= since)
-                _on[buffSpell] = (_on[buffSpell].OnSince + away, _on[buffSpell].Confirmed);
+        {
+            DateTimeOffset onSince = _on[buffSpell].OnSince;
+            if (onSince > since) continue;
+            _on[buffSpell] = (onSince + away, _on[buffSpell].Confirmed);
+            // The mark of a carried buff moves with it.
+            if (_carried.TryGetValue(buffSpell, out DateTimeOffset carried) && carried == onSince)
+                _carried[buffSpell] = onSince + away;
+        }
         if (_on.Count > 0)
             _log?.Info(LogCategory, $"buff clock resumed after {(int)away.TotalSeconds} s away — {TimeLeftText()}");
     }
@@ -401,6 +481,7 @@ public sealed class AutoHazardCounterProvisioner
     {
         bool known = _on.Count > 0;
         _on.Clear();
+        _carried.Clear();
         _pending = null;
         _roundWait = null;
         ReleaseStep(why);
@@ -1004,7 +1085,7 @@ public sealed class AutoHazardCounterProvisioner
         DateTimeOffset now = Clock();
         List<string> lines = new();
         if (_pausedAt is { } since && _on.Count > 0)
-            lines.Add($"clocks paused since {since.ToLocalTime():HH:mm:ss} (the link dropped); they run on from the first prompt back in the game");
+            lines.Add($"clocks paused since {since.ToLocalTime():HH:mm:ss} ({_pausedWhy}); they run on from the first prompt back in the game");
         foreach ((int buffSpell, (DateTimeOffset onSince, bool confirmed)) in _on)
         {
             RoomHazardIndex.BuffCounter? counter = CounterOf(buffSpell);
