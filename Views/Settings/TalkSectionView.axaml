@@ -68,7 +68,7 @@
             <TextBlock Classes="SectionHeader" Text="Per-channel disable"/>
             <TextBlock Classes="HelpText"
                        Margin="0,0,0,4"
-                       Text="Only the three channels the engine listens on. Gossip / Auction / Broadcast / Yell are hard-excluded engine-wide and don't need a toggle."/>
+                       Text="The channels the engine listens on. Broadcast (the numbered channel you join) carries only the client-to-client transfers, and only when its box is unticked. Gossip / Auction / Yell are hard-excluded engine-wide and don't need a toggle."/>
 
             <CheckBox Content="Disallow @commands from telepaths / pages"
                       IsChecked="{Binding DisallowRemoteFromTelepaths, Mode=TwoWay}"
@@ -79,6 +79,9 @@
             <CheckBox Content="Disallow @commands from say (local)"
                       IsChecked="{Binding DisallowRemoteFromLocal, Mode=TwoWay}"
                       ToolTip.Tip="Drop @commands arriving via local-room say."/>
+            <CheckBox Content="Disallow @commands from broadcast"
+                      IsChecked="{Binding DisallowRemoteFromBroadcast, Mode=TwoWay}"
+                      ToolTip.Tip="Drop @commands arriving on the broadcast channel (the numbered channel you join and speak on with br). Ticked by default: it is a public channel anyone can join. Unticked, @timer sync works there; no other @command is followed on it."/>
 
             <!-- ============ Denial reply (wired) ============ -->
             <TextBlock Classes="SectionHeader" Text="Denial reply"/>

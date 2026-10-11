@@ -31,6 +31,12 @@ public sealed class TalkSettings
     // Drop @-commands arriving on the local say channel.
     public bool DisallowRemoteFromLocal { get; set; }
 
+    // Drop @-commands arriving on the numbered broadcast channel (`join <n>`, `br`).
+    // Unlike its three neighbours it defaults to true, and a profile saved before
+    // the setting existed reads as true: the channel is public, so it is listened
+    // to only once the user unticks this (user, 2026-10-11).
+    public bool DisallowRemoteFromBroadcast { get; set; } = true;
+
     // When true, the engine sends RemoteCommandFailureMessage back to the
     // originator on per-player denial / unknown-command / party-whitelist
     // denial. Hard-blocks (reroll / suicide) and the user-disabled paths

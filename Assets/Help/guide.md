@@ -997,7 +997,7 @@ Type the command as the whole message, with `@` as its first character. Three ch
 - **Gangpath:** `bg @timer dragon`. Every MudPlay client in the gang that grants you the command answers, on gangpath, where the whole gang reads it.
 - **Say:** `.@party rest`. Every MudPlay client in the room that grants you the command acts on it. An answer comes back as a say directed at you (`>Leader {reply}`), so in a full room you can tell it is yours.
 
-Gossip, auction, yell and broadcast lines are never read as commands.
+Gossip, auction and yell lines are never read as commands. Neither are lines on the broadcast channel (the numbered one you `join`), with one exception you have to switch on: the client-to-client transfers, see *Sharing data between clients*.
 
 How the line is read:
 
@@ -1328,6 +1328,8 @@ Only the loops in your own Loops list (for the game data set you have loaded) ar
 
 Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clients are needed: yours hands the loop out, theirs puts it back together and saves it. It rides the **Move player** permission: a player you trust to run your loops may also have a copy of one.
 
+**By telepath only.** Every step goes by telepath: the ask, the offer, the yes or no, the loop, and the answer back. A loop goes to the one player who asked for it. Asked on gangpath, say or the broadcast channel, the client asked answers `@loop send works by telepath only` and offers nothing; a `yes` typed there opens nothing on your side, and your client tells you so in the terminal.
+
 **Forms:**
 
 - `@loop send kings road`: ask for a saved loop by name. The name is matched exactly as `@loop` matches it.
@@ -1341,10 +1343,11 @@ Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clien
 2. Leader answers `/Scout @loop send yes` within two minutes. After that the offer has lapsed and a `yes` is answered `no loop send pending - use @loop send <name> first`.
 3. Scout's client answers `{sending loop 'King's Road' (42 rooms, 3 lines)}` and then sends the loop as that many `{@loopdata <id> <i>/<k> <data>}` lines, 0.8 seconds apart.
 4. Leader's client collects the lines. When the last one is in, it rebuilds the loop, checks it against the code from the offer, saves it to Leader's Loops list (or turns it away, see below), and prints a notice in Leader's terminal.
-5. Leader's client tells Scout what became of it, in one line on the same channel: `{@loopresult 9da659db saved as 'King's Road'}`. Scout's client shows that as a notice, with whether the code is the one it sent.
+5. Leader's client tells Scout what became of it, in one telepath: `{@loopresult 9da659db saved as 'King's Road'}`. Scout's client shows that as a notice, with whether the code is the one it sent.
 
 | Reply from the client asked | When |
 |---|---|
+| `@loop send works by telepath only` | **Refusal:** any form of the command, on gangpath, say or the broadcast channel. |
 | `preparing to send: <loop name>, yes to confirm, no to deny (code <code>)` | A loop was found by name, or you are running one and the bare form was sent. |
 | `loop send of '<name>' stopped: it changed since it was offered - ask for it again` | **Refusal:** `yes`, but the loop was edited, or its two loop settings changed, after the offer. The asker said yes to the loop as it was. |
 | `not running a loop - @loop send <name> for a saved one` | **Refusal:** the bare form, and no loop is running. |
@@ -1365,6 +1368,7 @@ Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clien
 | `[Received loop '<name>' <n> rooms from <player> does not match the loop offered (received <code>, offered <code>), not saved]` | What arrived is not the loop that was offered: the transfer was damaged, or lines of two transfers were mixed. Ask for it again. |
 | `[Received loop '<name>' <n> rooms from <player>, not saved: no game data set is loaded]` | There was nowhere to save it. |
 | `[Loop from <player> arrived damaged, not saved]` | The lines could not be put back together. |
+| `[@loop send works by telepath only]` | You typed `@loop send …` on gangpath, say or the broadcast channel. Nothing will be taken from it; telepath the player instead. |
 
 | What the asker's client tells the sender | When |
 |---|---|
@@ -1379,7 +1383,7 @@ Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clien
 | `[<player> on loop '<name>': saved as '<name 2>' (code <code>, the same as sent)]` | The asker's answer came back and its code is the code of the loop you sent: both ends hold the same loop. |
 | `[<player> on loop '<name>': … (code <code>, NOT the code sent, <code>)]` | The asker's client read a different loop from the one you sent. It will also have said it was not saved. Send it again. |
 
-**What your client accepts.** Loop lines are taken only within two minutes of your own `@loop send yes` (or `y`) going out, one loop per `yes`, and **only on the channel the yes went by**. When you said yes by telepath, only lines from that player are taken. A yes on gangpath or say names nobody, so there lines are taken only from a player whose **offer** your client heard on that channel; anyone else's are passed over, and the loop you asked for is still let in. A loop whose name, or a room's command, holds a control character (an escape sequence, a line break) is refused as damaged. A loop needs no permission on the receiving side: you asked for it.
+**What your client accepts.** Loop lines are taken only **by telepath**, only from the player you telepathed `@loop send yes` (or `y`) to, within two minutes of that yes, and one loop per `yes`. Lines from anyone else, or on any other channel, are passed over, and the loop you asked for is still let in. A loop whose name, or a room's command, holds a control character (an escape sequence, a line break) is refused as damaged. A loop needs no permission on the receiving side: you asked for it.
 
 **What travels:** the route itself. Every room, its command and delay, its no-rest, no-attack and rest-here marks, and the loop's notes. With it go the **sending character's** two loop settings, *Only attack in lair rooms* and the lair wait, as that character has them. The loop file your client saves is shared by every character on your game data and holds neither; the two settings become the **receiving character's own** for the loop that is saved, since that is what was offered and what you said yes to. Your other characters start the loop with both off. Whether it is a favourite, and which folder it sits in, stay your own choice.
 
@@ -1399,7 +1403,7 @@ The sender's client puts the code of the loop it is about to send on its offer. 
 - **`not verified: no code came with the offer`**: the sender's client is older than the code. The loop is taken as it always was, unchecked.
 - **`not verified: it uses a setting this version does not know`**: the sender's client is newer than yours and the loop's lair wait is a way of waiting yours doesn't have. It is saved with the lair wait off, as before, and can't be checked because of that one difference.
 
-When the transfer is over **your client tells the sender what became of it**, once, on the channel the loop came by: saved (and under which name), already held (and as which loop), or not saved and why. The sender's client shows that in the sender's terminal with whether your code is the code it sent, so both of you can see the two ends hold the same loop. What holds the answer back: with **your master switch off** nothing is sent (the loop is still taken, since you typed the yes); and a **not saved** answer is a failure answer, so it goes only when **Warn sender on invalid / denied remote command** (Settings → Talk) is on. Saved and already-held answers go whatever that setting says. The answer is sent like any remote reply: in braces, and by telepath in place of a say while you are sneaking.
+When the transfer is over **your client tells the sender what became of it**, once, by telepath: saved (and under which name), already held (and as which loop), or not saved and why. The sender's client shows that in the sender's terminal with whether your code is the code it sent, so both of you can see the two ends hold the same loop. What holds the answer back: with **your master switch off** nothing is sent (the loop is still taken, since you typed the yes); and a **not saved** answer is a failure answer, so it goes only when **Warn sender on invalid / denied remote command** (Settings → Talk) is on. Saved and already-held answers go whatever that setting says. The answer is sent like any remote reply, in braces.
 
 Eight characters guard one transfer against damage and mix-ups; they are not proof against someone building a loop to match a code. Whether two loops are the same is always decided on the whole signature, never on the code. The code also appears in the program log's send and receive lines (source `LoopShare`) on both clients and in a bug report's running-loop lines. It is worked out when needed and not stored in the loop file.
 
@@ -1407,18 +1411,16 @@ Clients on an older version:
 
 - **An older client sends you a loop.** Its offer has no code, so the loop is `not verified`. It sends the two settings its loop file holds (it has no per-character settings), and the rules above are applied to what arrives. Your client's answer reaches it and is only shown there.
 - **An older client receives your loop.** It shows your offer, code and all, and does nothing with the code. It keeps its old behaviour: it compares rooms, room settings and the two settings it reads from its own file, saves a different loop as `<name> (from <player>)`, and tells you nothing back, so no notice appears on your side.
+- **Other channels.** An older client still offers and sends a loop on gangpath or say when asked there. Your client takes none of it there. Asked there by an older client, yours answers that it works by telepath only.
 
 **Situations:**
 
-- **On gangpath or say:** every MudPlay client there that grants you Move player offers its own match, and after a `yes` on those channels your client takes lines from any of the players who offered, on that channel. Use telepath.
-- **You asked aloud (say) and the sender is sneaking:** its client answers by telepath, since it won't speak aloud, so its loop does not come on the channel of a yes you said and is not taken. Ask by telepath.
-- **The sender offers other loops meanwhile**, to you or to anyone your client can hear: every offer it made in the last five minutes is remembered, and the loop that arrives is verified against whichever one it is.
+- **You asked for a second loop while the first was still arriving:** each offer is remembered for five minutes, and each loop is verified against the offer made for it.
 - **`yes`, `y`, `no` and `n` are read as answers**, so a loop with one of those names can't be asked for by name.
 - **The game says the sender is typing too quickly:** the sending client waits three seconds and sends the last line again.
 - **Master switch off on the client asked:** ignored, no answer.
 - **Master switch off on the asking client:** the loop is still taken and saved (you typed the yes), but the sender is not told what became of it. The program log says so.
 - **The loop was changed between the offer and your yes:** it is not sent, and you are told to ask again (when the sender's Warn setting is on).
-- **On gangpath or say, the answer goes to that channel too**, where every client hears it. A sending client there takes it as its own only when the code in it is the code of the loop it sent that player; an answer with any other code, or with none, is somebody else's and is passed over. So on those channels the sender's notice appears for a loop that arrived as sent, and a *not saved* answer shows only as the line itself. By telepath every answer is shown, a differing code as the mismatch it is. Use telepath.
 - **On the sending client's screen:** the outgoing lines, then the notice with the asker's answer. Its program log notes who asked for which loop, the yes or no, the send, and the answer with both codes.
 
 #### @lair
@@ -2432,6 +2434,26 @@ Three commands hand whole data sets from one MudPlay client to another over chat
 - **Boss timers:** `@timer sync`, below.
 - **The Roomba item log:** `@roomba sync`, below.
 
+**Each goes by its own channels, and no others:**
+
+| Transfer | Channels |
+|---|---|
+| `@loop send` | telepath |
+| `@roomba sync` | telepath, gangpath |
+| `@timer sync` | say, telepath, gangpath, broadcast (with the broadcast box unticked on both clients, see below) |
+
+*Broadcast* is the game's numbered channel: the one you `join <n>` and speak on with `br`, `'` or `-`, heard as `Broadcast from <name> "…"`. It is not gossip or auction.
+
+Both ends keep to the table. The client asked refuses a request that comes by another channel, saying where the transfer does work (a refusal, so it follows the **Warn** setting, and goes back on the channel the request came by). The client asking takes no data that comes by another channel, and when you type the request on one, it opens nothing and tells you so in the terminal. A channel you switched off for remote commands on Settings → Talk stays off whatever the table allows.
+
+**The broadcast channel starts switched off.** It is public: anyone can join a numbered channel. Settings → Talk → **Disallow @commands from broadcast** is ticked by default, and while it is, your client reads nothing on that channel: no request, and no answer to a request of your own. For a timer sync on broadcast the box must be unticked on **both** clients, the one asking and the one answering. With it unticked:
+
+- `@timer sync` is followed there, and answered on the channel.
+- `@roomba sync` and `@loop send` are refused there with where they do work.
+- A player without the permission for one of those three gets the Failure message there.
+- **No other remote command is read on that channel.** It is not followed, answered, refused or relayed.
+- **Your client says little there.** Each player gets one answer a minute on that channel (a set of timers, a refusal or the Failure message), and all players together get four a minute. Anything past that is passed over without a word, so nobody on the channel can make your client flood it, or use up the lines the game lets you send.
+
 #### @timer
 
 Reports the boss respawn timers you are tracking, or hands them to the sender's client.
@@ -2442,7 +2464,7 @@ Reports the boss respawn timers you are tracking, or hands them to the sender's 
 - `@timer dragon`: the timers of bosses whose name contains the text, ignoring case.
 - `@timer sync`: send the timers as data, for another MudPlay client to merge.
 
-**Who may send it:** a player with **Query boss timers**, on any of the three channels.
+**Who may send it:** a player with **Query boss timers**, by telepath, gangpath or say. `@timer sync` may also be asked on the **broadcast channel** (the numbered channel spoken on with `br`), and is answered there, once you have unticked **Disallow @commands from broadcast** on Settings → Talk; the readable `@timer` report is not read there.
 
 | Reply | When |
 |---|---|
@@ -2461,7 +2483,13 @@ Times read `2h14m`, or `45m` under an hour.
 **Situations:**
 
 - **The asking side of `@timer sync`:** sending it, by hand or with **Request Timers** on the Bosses tab, opens the merge window that collects the answers. See **Bosses** under *Quests, Bosses, and Deaths*.
-- **On gangpath or say** every client that grants you the permission answers, each with its own set.
+- **On gangpath, say or the broadcast channel** every client that grants you the permission answers, each with its own set, and everyone on the channel sees the lines. The merge window keeps one set per player and folds them together, so several answers are what you want; each is a handful of lines (sixty timers at most).
+- **On the broadcast channel each client answers a player once a minute, and four players a minute in all.** A whole set of timers is one answer, however many lines it takes. Asked again sooner, or once the minute's four answers are given, the client says nothing; ask again a minute later. The other channels have no such limit.
+- **Answers are taken on the channel you asked on, and on no other.** Asked on gangpath, only gangpath answers are read; by telepath, only telepaths; on broadcast, only broadcast (and only while **Disallow @commands from broadcast** is unticked). The one exception: after a request you **said**, a telepathed answer is read too, because a client that is sneaking answers a said request by telepath rather than speak aloud. A second request typed on another channel while the window is open adds that channel.
+- **Timers heard on the broadcast channel are never adopted without a pick.** On the other channels a timer for a boss you track and hold no timer for is adopted as it arrives. Anyone can join a numbered channel, so there the same timer becomes a row to choose, marked `heard on broadcast` under the sender's name, with **Keep ours** selected until you pick it.
+- **Your own data is never read back as an answer.** A shared channel echoes your lines to you; if your client answered someone else's `@timer sync` while your own merge window was open, that echo is passed over.- **Request Timers with Broadcast chosen and that box ticked** asks nothing and says which box to untick. Typed by hand with the box ticked, your client shows `[the broadcast channel is switched off for @commands: …]` and opens no window.
+- **On the broadcast channel the game does not show you your own line on Stock**, so a `br @timer sync` typed by hand there does not open the merge window; use **Request Timers**, which opens it before asking. On Paradigm your own broadcast is echoed and the window opens either way.
+- **Not on a channel**, `br` is not a command to the game and the words may be said aloud instead. `join <n>` first.
 
 #### @roomba
 
@@ -2474,7 +2502,7 @@ Reports where an item was last seen in your gang house, from the Roomba item log
 
 **How the item is matched.** First the text is looked up as an item name in the game data, so any wording the game data knows finds that one item. Failing that, an item logged under exactly that name. Failing that, **every** logged item whose name contains the text, so a loose word such as `head` can bring back several items.
 
-**Who may send it:** a player with **Query Roomba**, on any of the three channels.
+**Who may send it:** a player with **Query Roomba**, on any of the three channels for `@roomba <item>`. **`@roomba sync` works by telepath or gangpath only**: the gang house's whole log goes to one player or to the gang, and is not said aloud in a room.
 
 | Reply | When |
 |---|---|
@@ -2483,11 +2511,13 @@ Reports where an item was last seen in your gang house, from the Roomba item log
 | `no record of "<text>"` | Nothing in the log matches. |
 | `usage: @roomba <item name>` | **Refusal:** nothing followed `@roomba`. |
 | `@roombadata <data>` | `@roomba sync`: room labels first, then the sightings, then a last line reading `@roombadata Sync Complete`. One line every 0.8 seconds. |
+| `@roomba sync works by telepath or gangpath only` | **Refusal:** `@roomba sync` said aloud or on the broadcast channel. Nothing of the log is sent. |
 | the Failure message | **Refusal:** the sender doesn't hold Query Roomba. |
 
 **Situations:**
 
-- **The asking side of `@roomba sync`:** the lines are merged as they arrive, the newer sighting winning, with no review window. A line the game drops costs only the rooms it carried.
+- **The asking side of `@roomba sync`:** the lines are merged as they arrive, the newer sighting winning, with no review window. A line the game drops costs only the rooms it carried. They are taken by telepath or gangpath only; typed as a say, your client opens nothing and shows `[@roomba sync works by telepath or gangpath only]`.
+- **An older client** still answers a said `@roomba sync` with its log, said aloud. Your client takes none of it.
 - **More:** **Roomba (Player Workshop)** has the log, the sync and what each side must grant.
 
 ### Session and profile
@@ -3309,12 +3339,14 @@ Tick **Grab All** (default off) to blindly grab a boss's loot the instant it's a
 - an **item** that just sits in the room (a box, e.g. a bogwood box or Pastor Lander's box) — `get` it every time you **walk into** the room.
 - **neither** (an unresolvable name — a touch-to-awaken mechanic like Iceforge) — Grab All doesn't apply, so its cell shows a muted dash reading *"Cannot resolve to a specific monster or item"*.
 
-**Sync Timers…** shares respawn timers with other MudPlay users. Pick a channel (Gang, Telepath to a named player, or Local say) and click **Request Timers**; the client sends `@timer sync` on that channel, and any other MudPlay user who receives it (and grants the `@timer` remote command) replies with their active timers. Most arrivals need no action from you:
+**Sync Timers…** shares respawn timers with other MudPlay users. Pick a channel (Gang, Telepath to a named player, Local say, or Broadcast: the numbered channel you have joined, spoken on with `br`, which works once **Disallow @commands from broadcast** is unticked on Settings → Talk, on your client and on theirs) and click **Request Timers**; the client sends `@timer sync` on that channel, and any other MudPlay user who receives it (and grants the `@timer` remote command) replies with their active timers. Most arrivals need no action from you:
 
-- a timer for a boss you track but have **no** timer for is **adopted automatically**.
+- a timer for a boss you track but have **no** timer for is **adopted automatically**, unless it was heard on the **broadcast** channel: anyone can join that channel, so there it is a row to pick, marked `heard on broadcast`, and nothing is written until you choose it and **Apply Selected**.
 - one that matches what you already hold is left alone (co-kills marked seconds apart count as the same timer).
 - a genuine **conflict** — a boss where someone's timer disagrees with one you hold — shows your timer beside a **Keep ours** default plus a pick button per differing responder; choose whose to keep, then **Apply Selected**.
 - a boss a responder tracks that **you don't** also asks — adopting it **adds the boss back to your list** (recovering a catalog boss you'd removed).
+
+Answers are read only on the channel you asked on (after a say, a telepathed answer too, which is how a sneaking client replies).
 
 Bosses are matched by the monster itself (not by room), so it works even if you and they pinned different rooms. You don't have to open the tab first: sending `@timer sync` by hand — a telepath (`/name @timer sync`), a gang broadcast (`bg @timer sync`), or a say (`.@timer sync`) — **auto-opens this merge window** and starts collecting.
 
@@ -6047,7 +6079,14 @@ Settings → Talk.
 ### Disallow @commands from telepaths / pages, gangpaths, or say (local)
 
 **Default:** all Off
-**What it does:** Three separate switches to drop `@`-commands arriving via each specific channel (telepaths and pages, guild/gang chat, local room speech). These are the only three channels MudPlay listens for `@`-commands on at all.
+**What it does:** Three separate switches to drop `@`-commands arriving via each specific channel (telepaths and pages, guild/gang chat, local room speech). With the broadcast channel below, these are the only channels MudPlay listens for `@`-commands on at all.
+
+### Disallow @commands from broadcast
+
+**Default:** On (ticked). A profile saved before this setting existed also reads as ticked.
+**What it does:** Drops everything arriving on the **broadcast channel**: the game's numbered channel, the one you `join <n>` and speak on with `br`. It is ticked by default because that channel is public: anyone can join one. While it is ticked your client reads nothing there, neither another player's request nor the answers to a request of your own.
+**Unticked:** only the three client-to-client transfers are read on that channel. `@timer sync` is followed and answered there; `@roomba sync` and `@loop send` are refused there with where they do work; a player without the permission gets the Failure message. **No other `@`-command is read on the broadcast channel**, whatever permissions the sender holds. See *Sharing data between clients* under Remote @-commands.
+**Important notes:** For a timer sync on broadcast the box must be unticked on both clients. Refusals there follow **Warn sender on invalid / denied remote command** like any other, and are seen by everyone on the channel. Your client answers each player there once a minute at most, and four players a minute in all (a whole set of timers counts as one answer); anything more is passed over in silence. Timers that arrive on this channel are never adopted without your pick.
 
 ### Warn sender on invalid / denied remote command
 
@@ -6953,7 +6992,7 @@ That per-player permission is the only gate — there's no separate on/off check
 
 **`@roomba sync`** — the no-hassle way to hand your item-location log to a gang member starting fresh on their own MudPlay install, no file/Discord/import-export needed.
 
-They gangpath (or telepath) `@roomba sync`; your client (with them granted the **Query Roomba** permission) replies with your whole log — **both the labeled gang-house rooms and the item sightings** — compressed into chat lines that merge straight into theirs, so their Roomba tab fills with the same rooms (ready to sweep) and their `@roomba` / Master List has all your item locations. A room they've already labeled themselves is left as-is.
+They gangpath or telepath `@roomba sync` (those two channels only: said aloud it is refused, and nothing said aloud is taken); your client (with them granted the **Query Roomba** permission) replies with your whole log — **both the labeled gang-house rooms and the item sightings** — compressed into chat lines that merge straight into theirs, so their Roomba tab fills with the same rooms (ready to sweep) and their `@roomba` / Master List has all your item locations. A room they've already labeled themselves is left as-is.
 
 - **Paced out** — a big gang house is a couple dozen lines, so the reply is released about 0.8s per line in the background: it never floods the channel or stalls your own combat/healing/movement, and a line dropped to the typing-rate limit is automatically re-sent.
 - **No review window** — unlike `@timer sync`'s boss-timer merge, a room-contents sighting has no "conflict" to weigh, so whichever side saw an item more recently just wins, silently. The reply finishes with a `Sync Complete` marker so you can see it landed in full.

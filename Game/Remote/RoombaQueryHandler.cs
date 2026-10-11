@@ -177,6 +177,16 @@ public sealed class RoombaQueryHandler : IDisposable
     // responder, same as @timer sync.
     private void OnSyncRequest(RemoteCommandContext ctx)
     {
+        // The gang house's whole log goes to one player or to the gang, and is not
+        // said aloud in a room or on the broadcast channel (TransferChannels).
+        if (!TransferChannels.Allows(Transfer.RoombaSync, ctx.Channel))
+        {
+            _log?.Info("RoombaSync",
+                $"refused @roomba sync from {ctx.Sender} on {ctx.Channel}: {TransferChannels.Refusal(Transfer.RoombaSync)}.");
+            ctx.Refuse(TransferChannels.Refusal(Transfer.RoombaSync));
+            return;
+        }
+
         // Hand over BOTH the labeled gang-house rooms and the item sightings, so a
         // fresh receiver gets the whole gang house (rooms populate their Roomba tab,
         // items back @roomba / the Master List). Labels first — they're few, and the

@@ -88,7 +88,8 @@ public sealed record Room
 
     // Parsed exits keyed by Direction. Only real exits appear — "0" cells from
     // the MDB are dropped on the way in, so a missing key means "no exit that
-    // way".
+    // way". A room the graph built holds them as a RoomExitSet, which lists them
+    // in Direction order.
     public required IReadOnlyDictionary<Direction, RoomExit> Exits { get; init; }
 
     // Bit field of the directions present in Exits — (1u << (int)dir) per

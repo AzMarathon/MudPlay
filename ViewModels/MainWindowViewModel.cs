@@ -1480,14 +1480,10 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SysStatus.SetWireSender(Named("SysStatus"));
         // A user-typed `@timer sync` (instead of the Bosses-tab "Sync Timers…" button)
         // should still surface the responses — auto-open the merge window when we see
-        // our own request go out on chat. See OnChatForTimerSync.
-        AppServices.Current.Chat.EntryClassified += OnChatForTimerSync;
-        // Same idea for `@roomba sync`: seeing our own request go out opens the
-        // receiver's adopt window so the replies aren't ignored. See OnChatForRoombaSync.
-        AppServices.Current.Chat.EntryClassified += OnChatForRoombaSync;
-        // And `@loop send yes`: confirming a player's loop offer opens the window in
-        // which their @loopdata lines are saved. See OnChatForLoopShare.
-        AppServices.Current.Chat.EntryClassified += OnChatForLoopShare;
+        // our own request go out on chat. Same idea for `@roomba sync` (the receiver's
+        // adopt window) and for `@loop send yes` (the window in which that player's
+        // loop is saved). See OnChatForTransfers.
+        AppServices.Current.Chat.EntryClassified += OnChatForTransfers;
         // Poller needs the same wire-sender to send @health round-trip
         // requests and the periodic par poll.
         AppServices.Current.PartyPoller.SetWireSender(Named("PartyPoller"));
@@ -4070,20 +4066,55 @@ public partial class MainWindowViewModel : ObservableObject
     // (the self-say form), so an inbound request we're merely responding to is excluded.
     // A hand-typed gang request ("You gangpath:" — unclassified) isn't caught; that path
     // uses the button.
-    private void OnChatForTimerSync(MudPlay.Game.ChatLogEntry e)
+    //
+    // The same watcher serves the other two transfers. Our own `@roomba sync` opens
+    // the receiver's adopt window, so the responders' `@roombadata` replies are
+    // accepted (the reply proves they've granted us; the receiver only needs to
+    // know we asked). Our own telepathed `@loop send yes` (or `y`) opens the window
+    // in which that player's loop is saved: the telepath's echo names them.
+    //
+    // Each transfer goes by its own channels only (TransferChannels). A request or
+    // a yes typed on another one opens nothing, since the data would not be taken
+    // there, and the user is told where it does work.
+    private void OnChatForTransfers(MudPlay.Game.ChatLogEntry e)
     {
         // Our own outbound request looks different per channel: a directed telepath is its
         // own TelepathOutgoing echo, a say echoes as "You say" (null speaker), and a gang
-        // (or say) line on some boards echoes tagged with our character name — so treat a
-        // self-named Gangpath / Local line as outgoing too. An inbound request we'd merely
-        // respond to has someone else's name and is excluded.
-        bool selfSpoke = e.Speaker is null || IsSelfName(e.Speaker);
-        bool outgoing = e.Channel == MudPlay.Game.ChatChannel.TelepathOutgoing
-                     || ((e.Channel == MudPlay.Game.ChatChannel.Gangpath
-                          || e.Channel == MudPlay.Game.ChatChannel.Local) && selfSpoke);
-        if (!outgoing) return;
-        if (!e.Message.TrimStart().StartsWith("@timer sync", StringComparison.OrdinalIgnoreCase)) return;
-        OpenTimerSyncWindow();
+        // (or say, or broadcast) line on some boards echoes tagged with our character
+        // name. An inbound request we'd merely respond to has someone else's name and is
+        // excluded.
+        if (Game.Remote.TransferChannels.OwnRequest(e, IsSelfName) is not { } asked) return;
+        if (!Game.Remote.TransferChannels.Allows(asked.Transfer, asked.Channel))
+        {
+            string where = Game.Remote.TransferChannels.Refusal(asked.Transfer);
+            AppServices.Current.Log.Info("Transfers", $"our own {e.Message.Trim()} went out on {asked.Channel}: {where}; nothing will be taken from it.");
+            // Posted: this runs inside the chat pump, and a notice feeds the terminal.
+            Dispatcher.UIThread.Post(() => AppServices.Current.WriteTerminalNotice($"[{where}]"));
+            return;
+        }
+        // The broadcast channel is not listened to while its Talk-tab box is ticked,
+        // whatever a transfer allows: the answers would not be read.
+        if (asked.Channel == Game.Remote.RemoteChannel.Broadcast && AppServices.Current.RemoteCommands.DisableBroadcastChannel)
+        {
+            AppServices.Current.Log.Info("Transfers", $"our own {e.Message.Trim()} went out on the broadcast channel, which is switched off on the Talk tab; nothing will be taken from it.");
+            Dispatcher.UIThread.Post(() => AppServices.Current.WriteTerminalNotice(
+                "[the broadcast channel is switched off for @commands: Settings → Talk → Disallow @commands from broadcast]"));
+            return;
+        }
+        switch (asked.Transfer)
+        {
+            case Game.Remote.Transfer.TimerSync:
+                OpenTimerSyncWindow(asked.Channel);
+                break;
+            case Game.Remote.Transfer.RoombaSync:
+                AppServices.Current.RoombaSync.NoteSyncRequested();
+                break;
+            case Game.Remote.Transfer.LoopSend:
+                string[] words = e.Message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (words.Length == 3 && Game.Remote.LoopShareHandler.IsConfirm(words[2]) && e.Speaker is { Length: > 0 } to)
+                    AppServices.Current.LoopShareInbox.NoteSendConfirmed(to);
+                break;
+        }
     }
 
     private static bool IsSelfName(string speaker)
@@ -4094,56 +4125,19 @@ public partial class MainWindowViewModel : ObservableObject
         return Given(self).Equals(Given(speaker), StringComparison.OrdinalIgnoreCase);
     }
 
-    // Our own outbound `@roomba sync` opens the receiver's adopt window, so the
-    // responders' `@roombadata` replies are accepted (the reply proves they've
-    // granted us — the receiver only needs to know we asked). Same self-outgoing
-    // detection as OnChatForTimerSync.
-    private void OnChatForRoombaSync(MudPlay.Game.ChatLogEntry e)
+    // askedOn: the channel our request went out on, the one its answers are taken on.
+    private async void OpenTimerSyncWindow(Game.Remote.RemoteChannel askedOn)
     {
-        bool selfSpoke = e.Speaker is null || IsSelfName(e.Speaker);
-        bool outgoing = e.Channel == MudPlay.Game.ChatChannel.TelepathOutgoing
-                     || ((e.Channel == MudPlay.Game.ChatChannel.Gangpath
-                          || e.Channel == MudPlay.Game.ChatChannel.Local) && selfSpoke);
-        if (!outgoing) return;
-        if (!e.Message.TrimStart().StartsWith("@roomba sync", StringComparison.OrdinalIgnoreCase)) return;
-        AppServices.Current.RoombaSync.NoteSyncRequested();
-    }
-
-    // Our own outbound `@loop send yes` (or `y`) — the player we said it to may now
-    // send their loop. A telepath names that player (the outgoing entry's Speaker is
-    // the recipient), so only their lines are adopted; gangpath / say can't, so any
-    // player there may answer. Same self-outgoing detection as OnChatForRoombaSync.
-    private void OnChatForLoopShare(MudPlay.Game.ChatLogEntry e)
-    {
-        bool telepath = e.Channel == MudPlay.Game.ChatChannel.TelepathOutgoing;
-        bool selfSpoke = e.Speaker is null || IsSelfName(e.Speaker);
-        bool outgoing = telepath
-                     || ((e.Channel == MudPlay.Game.ChatChannel.Gangpath
-                          || e.Channel == MudPlay.Game.ChatChannel.Local) && selfSpoke);
-        if (!outgoing) return;
-        string[] words = e.Message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length != 3
-            || !words[0].Equals("@loop", StringComparison.OrdinalIgnoreCase)
-            || !words[1].Equals(Game.Remote.LoopShareHandler.SendVerb, StringComparison.OrdinalIgnoreCase)
-            || !Game.Remote.LoopShareHandler.IsConfirm(words[2]))
-            return;
-        // The channel the yes went by is the only one the loop is then taken on.
-        AppServices.Current.LoopShareInbox.NoteSendConfirmed(telepath ? e.Speaker : null,
-            telepath ? Game.Remote.RemoteChannel.Telepath
-            : e.Channel == MudPlay.Game.ChatChannel.Gangpath ? Game.Remote.RemoteChannel.Gangpath
-            : Game.Remote.RemoteChannel.Local);
-    }
-
-    private async void OpenTimerSyncWindow()
-    {
-        if (AppServices.Current.TimerSyncWindowActive) return;   // already collecting
+        // Already collecting: the open window's collector sees the request go out
+        // too, and takes answers on its channel as well.
+        if (AppServices.Current.TimerSyncWindowActive) return;
         var vm = new ViewModels.CharacterWorkshop.BossTimerSyncViewModel(
             AppServices.Current.Bosses,
             AppServices.Current.BossTimers,
             AppServices.Current.GameData,
             AppServices.Current.Chat,
             AppServices.Current.SendTypedInput,
-            preArmed: true);
+            preArmedOn: askedOn);
         await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.CharacterWorkshop.BossTimerSyncViewModel, bool>(vm);
     }
