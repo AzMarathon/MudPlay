@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -382,13 +383,23 @@ public sealed class RoomGraphManager
         var actionCells = new List<(RoomKey Source, MultiActionExitData.ActionCell Cell)>();
         var perRoomModifiers = new Dictionary<RoomKey, Dictionary<Direction, string>>();
 
-        // Each row is read on its own (ReadRow touches nothing shared), so the
-        // 57,000 of a full realm are spread over every core: read on one thread they
-        // were over a second of the launch freeze. The results are folded in below in
-        // row order, as a plain loop would have.
+        // Each row is read on its own, so the 57,000 of a full realm are spread over
+        // every core: read on one thread they were over a second of the launch
+        // freeze. The results are folded in below in row order, as a plain loop would
+        // have. All the readers share is the text they keep: a realm has fifteen
+        // rooms to a name, and lair tags and exit hints repeat as much, so each is
+        // kept once for the build.
         GameRow[] rows = doc.Rows.ToArray();
         RowRead[] read = new RowRead[rows.Length];
-        Parallel.For(0, rows.Length, i => read[i] = ReadRow(rows[i]));
+        ConcurrentDictionary<string, string> texts = new();
+        Parallel.For(0, rows.Length,
+            static () => new RoomExitSet.Builder(),
+            (i, _, exits) =>
+            {
+                read[i] = ReadRow(rows[i], exits, texts);
+                return exits;
+            },
+            static _ => { });
         foreach (RowRead row in read)
         {
             if (row.Room is not { } room)
@@ -483,11 +494,7 @@ public sealed class RoomGraphManager
             RoomExit patched = leverDoor
                 ? exit with { Hint = RoomExitHint.MultiActionHidden, MultiAction = data }
                 : exit with { MultiAction = data };
-            var rebuilt = new Dictionary<Direction, RoomExit>(room.Exits)
-            {
-                [dir] = patched
-            };
-            _rooms[roomKey] = room with { Exits = rebuilt };
+            _rooms[roomKey] = room with { Exits = ExitsOf(room).With(dir, patched) };
 
             // Index each remote-sourced action so the room the lever physically
             // sits in can name the exit it governs (see LeversControlledFrom).
@@ -555,7 +562,7 @@ public sealed class RoomGraphManager
         {
             if (room.Cmd > 0) found.WithCmd.Add(room.Key);
 
-            foreach (RoomExit exit in ExitsOf(room).Values)
+            foreach ((Direction _, RoomExit exit) in ExitsOf(room))
             {
                 if (!exit.CastsOnWalk) continue;
                 found.WithCastExit.Add(room.Key);
@@ -586,24 +593,19 @@ public sealed class RoomGraphManager
         if (!greeter.Doors.IsEmpty || greeter.Ports.Length > 0) into.Add((room, greeter));
     }
 
-    // The graph builds every room's exits as a Dictionary. Read as one, a pass
+    // The graph builds every room's exits as a RoomExitSet. Read as one, a pass
     // walks them without the boxed enumerator the read-only interface hands out:
-    // an allocation for every room walked, on walks that cover half the realm.
-    private static Dictionary<Direction, RoomExit> ExitsOf(Room room) =>
-        (Dictionary<Direction, RoomExit>)room.Exits;
+    // an allocation for every room walked, on walks that cover half the realm. A
+    // room made with any other kind of exits is read through a set made of them.
+    private static RoomExitSet ExitsOf(Room room) => RoomExitSet.From(room.Exits);
 
     // The same for a room looked up by key, for the maze index: it walks out from
     // each pocket entrance over up to a few thousand rooms. Null when the key
     // isn't in the graph.
-    internal Dictionary<Direction, RoomExit>? ExitsAt(RoomKey key) =>
+    internal RoomExitSet? ExitsAt(RoomKey key) =>
         _rooms.TryGetValue(key, out Room? room) ? ExitsOf(room) : null;
 
-    private static bool HasExitTo(Dictionary<Direction, RoomExit> exits, RoomKey target)
-    {
-        foreach (RoomExit exit in exits.Values)
-            if (exit.Target == target) return true;
-        return false;
-    }
+    private static bool HasExitTo(RoomExitSet exits, RoomKey target) => exits.Targets.Contains(target);
 
     // Newhaven's Arena (1/2150) admits only levels 1-3. That block lives on the
     // ROOM and is tested when you try to ENTER it — an early-engine construct the
@@ -625,11 +627,10 @@ public sealed class RoomGraphManager
         if (!approach.Exits.TryGetValue(Direction.D, out RoomExit down)) return;
         if (down.Target != Arena || down.HasLevelGate) return;
 
-        Dictionary<Direction, RoomExit> exits = new(approach.Exits)
+        _rooms[ArenaApproach] = approach with
         {
-            [Direction.D] = down with { MinLevel = 1, MaxLevel = 3 },
+            Exits = ExitsOf(approach).With(Direction.D, down with { MinLevel = 1, MaxLevel = 3 }),
         };
-        _rooms[ArenaApproach] = approach with { Exits = exits };
 
         _log?.Log(LogSeverity.Info, "RoomGraph",
             $"Room {ArenaApproach} D → {Arena}: applied the Arena's level-1-3 entry block "
@@ -722,7 +723,7 @@ public sealed class RoomGraphManager
         {
             if (greeter.Doors is not { IsEmpty: false } doors) continue;
 
-            Dictionary<Direction, RoomExit> exits = ExitsOf(_rooms[key]);
+            RoomExitSet exits = ExitsOf(_rooms[key]);
             foreach (GuardDoorCommandResolver.GuardDoorCommand cmd in doors.For(key.Room))
             {
                 // Only a pick/bash-proof door needs the promotion; a normal
@@ -907,8 +908,9 @@ public sealed class RoomGraphManager
             (string Keyword, RoomKey Destination, int MinLevel)[] teleports = TeleportsOf(room.Cmd, cmdTeleports);
             if (teleports.Length == 0) continue;
 
-            Dictionary<Direction, RoomExit>? rebuilt = null;
-            foreach ((Direction dir, RoomExit exit) in ExitsOf(room))
+            RoomExitSet exits = ExitsOf(room);
+            RoomExitSet? rebuilt = null;
+            foreach ((Direction dir, RoomExit exit) in exits)
             {
                 if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked or RoomExitHint.Item)) continue;
                 if (!TeleportsTo(teleports, exit.Target)) continue;
@@ -918,8 +920,8 @@ public sealed class RoomGraphManager
                 // Without this, the Teleport possession-gate in MovementFilter would
                 // wrongly block a chime/emblem teleport on the bypassed door's key.
                 int keyItemId = exit.Hint == RoomExitHint.Item ? exit.KeyItemId : 0;
-                (rebuilt ??= new(room.Exits))[dir] =
-                    exit with { Hint = RoomExitHint.Teleport, KeyItemId = keyItemId };
+                rebuilt = (rebuilt ?? exits).With(dir,
+                    exit with { Hint = RoomExitHint.Teleport, KeyItemId = keyItemId });
                 _log?.Log(LogSeverity.Debug, "RoomGraph",
                     $"Room {key} {dir} → {exit.Target}: {exit.Hint} re-hinted Teleport (CMD {room.Cmd} teleport bypass).");
             }
@@ -970,8 +972,9 @@ public sealed class RoomGraphManager
         {
             Room room = _rooms[key];
 
-            Dictionary<Direction, RoomExit>? rebuilt = null;
-            foreach ((Direction dir, RoomExit exit) in ExitsOf(room))
+            RoomExitSet exits = ExitsOf(room);
+            RoomExitSet? rebuilt = null;
+            foreach ((Direction dir, RoomExit exit) in exits)
             {
                 if (exit.PostCastSpell <= 0) continue;
                 if (!spells.TryGetValue(exit.PostCastSpell, out SpellFormulaInput? read))
@@ -980,8 +983,8 @@ public sealed class RoomGraphManager
                 if (TBInfoCastTeleportResolver.IsRandomTeleport(spell))
                 {
                     IReadOnlyList<RoomKey>? pool = TBInfoCastTeleportResolver.RandomTeleportTargets(spell, key.Map);
-                    (rebuilt ??= new(room.Exits))[dir] =
-                        exit with { CastTeleportRandom = true, CastTeleportTargets = pool };
+                    rebuilt = (rebuilt ?? exits).With(dir,
+                        exit with { CastTeleportRandom = true, CastTeleportTargets = pool });
                     _log?.Log(LogSeverity.Debug, "RoomGraph",
                         $"Room {key} {dir} → {exit.Target}: cast-on-walk spell {exit.PostCastSpell} is a random teleport "
                         + $"(pool of {pool?.Count ?? 0}) — marked non-routable.");
@@ -991,7 +994,7 @@ public sealed class RoomGraphManager
                 if (_tbinfo is null) continue;
                 if (TBInfoCastTeleportResolver.TextblockLandings(spell, _tbinfo) is not { } landings) continue;
                 if (landings.Any(l => !_rooms.ContainsKey(l.Room))) continue;
-                (rebuilt ??= new(room.Exits))[dir] = exit with { CastLandings = landings };
+                rebuilt = (rebuilt ?? exits).With(dir, exit with { CastLandings = landings });
                 _log?.Log(LogSeverity.Debug, "RoomGraph",
                     $"Room {key} {dir} → {exit.Target}: cast-on-walk spell {exit.PostCastSpell} teleports on to "
                     + string.Join(", ", landings.Select(l => l.ItemId > 0 ? $"{l.Room} (with item {l.ItemId})" : l.Room.ToString()))
@@ -1020,13 +1023,14 @@ public sealed class RoomGraphManager
         {
             Room room = _rooms[key];
 
-            Dictionary<Direction, RoomExit>? rebuilt = null;
-            foreach ((Direction dir, RoomExit exit) in ExitsOf(room))
+            RoomExitSet exits = ExitsOf(room);
+            RoomExitSet? rebuilt = null;
+            foreach ((Direction dir, RoomExit exit) in exits)
             {
                 if (!exit.CastsOnWalk) continue;
                 if (CanReach(exit.Target, key, search)) continue;
 
-                (rebuilt ??= new(room.Exits))[dir] = exit with { CastPocketEntrance = true };
+                rebuilt = (rebuilt ?? exits).With(dir, exit with { CastPocketEntrance = true });
                 _castPocketEntrances.Add((key, dir));
                 _log?.Log(LogSeverity.Debug, "RoomGraph",
                     $"Room {key} {dir} → {exit.Target}: one-way cast pocket entrance (no walk-back) — layout stops here from outside.");
@@ -1093,9 +1097,8 @@ public sealed class RoomGraphManager
 
             if (!_rooms.TryGetValue(cur, out Room? room)) continue;
             walked = true;
-            foreach (RoomExit exit in ExitsOf(room).Values)
+            foreach (RoomKey next in ExitsOf(room).Targets)
             {
-                RoomKey next = exit.Target;
                 if (next == goal) return true;
                 if (seen.Add(next)) queue.Enqueue(next);
             }
@@ -1161,7 +1164,7 @@ public sealed class RoomGraphManager
         foreach (RoomKey key in cmdRooms)
         {
             Room room = _rooms[key];
-            Dictionary<Direction, RoomExit> exits = ExitsOf(room);
+            RoomExitSet exits = ExitsOf(room);
             if (exits.ContainsKey(Direction.Teleport)) continue;        // already has one
             if (key == ParadigmAsylumLeverRoom) continue;               // pocket-dimension: lever ignored
 
@@ -1181,11 +1184,7 @@ public sealed class RoomGraphManager
                     MinLevel: minLevel,
                     GatewayTeleport: isGateway,
                     MovesWholeParty: wholeParty);
-                var rebuilt = new Dictionary<Direction, RoomExit>(room.Exits)
-                {
-                    [Direction.Teleport] = tele
-                };
-                _rooms[key] = room with { Exits = rebuilt };
+                _rooms[key] = room with { Exits = exits.With(Direction.Teleport, tele) };
                 _log?.Log(LogSeverity.Debug, "RoomGraph",
                     $"Room {key}: synthesised {(isGateway ? "gateway " : string.Empty)}Teleport edge "
                     + $"'{keyword}' → {dest}"
@@ -1255,10 +1254,7 @@ public sealed class RoomGraphManager
                     KeyItemId: t.HolderItemId,
                     TextCommands: new[] { cmd },
                     MinLevel: t.MinLevel);
-                _rooms[source] = room with
-                {
-                    Exits = new Dictionary<Direction, RoomExit>(room.Exits) { [Direction.Teleport] = tele }
-                };
+                _rooms[source] = room with { Exits = ExitsOf(room).With(Direction.Teleport, tele) };
                 _log?.Log(LogSeverity.Info, "RoomGraph",
                     $"Room {source}: synthesised item-use Teleport edge '{cmd}' → {t.Destination} "
                     + $"(gated on carrying item #{t.HolderItemId})"
@@ -1309,7 +1305,7 @@ public sealed class RoomGraphManager
             if (ports.Length == 0) continue;
 
             Room room = _rooms[key];
-            Dictionary<Direction, RoomExit> exits = ExitsOf(room);
+            RoomExitSet exits = ExitsOf(room);
             if (exits.ContainsKey(Direction.Teleport)) continue; // CMD teleport already claimed the slot
 
             foreach (GreetTeleportResolver.GreetTeleport t in ports)
@@ -1332,11 +1328,7 @@ public sealed class RoomGraphManager
                     // Every person who asks pays the fare, so MovementFilter
                     // gates the edge on the poorest party member's wallet.
                     FareCopper: t.FareCopper);
-                var rebuilt = new Dictionary<Direction, RoomExit>(room.Exits)
-                {
-                    [Direction.Teleport] = tele
-                };
-                _rooms[key] = room with { Exits = rebuilt };
+                _rooms[key] = room with { Exits = exits.With(Direction.Teleport, tele) };
 
                 _log?.Log(LogSeverity.Info, "RoomGraph",
                     $"Room {key}: synthesised NPC ask-transport Teleport edge "
@@ -1354,7 +1346,7 @@ public sealed class RoomGraphManager
     // isn't already an exit target — literal teleports first, then cast teleports
     // (which need the spell catalog). Returns false when the room has no routable
     // single-dest teleport to a new room.
-    private bool TryFirstRoutableTeleport(Room room, Dictionary<Direction, RoomExit> exits,
+    private bool TryFirstRoutableTeleport(Room room, RoomExitSet exits,
         Dictionary<int, (string Keyword, RoomKey Destination, int MinLevel)[]> cmdTeleports,
         out RoomKey dest, out string keyword, out int minLevel, out bool isGateway, out bool wholeParty)
     {
@@ -1519,7 +1511,9 @@ public sealed class RoomGraphManager
     private readonly record struct RowRead(
         Room? Room, List<MultiActionExitData.ActionCell>? Actions, Dictionary<Direction, string>? Modifiers);
 
-    private static RowRead ReadRow(GameRow row)
+    // exits is the reading thread's own and comes back empty; texts is the one
+    // thing the readers share (see Shared).
+    private static RowRead ReadRow(GameRow row, RoomExitSet.Builder exits, ConcurrentDictionary<string, string> texts)
     {
         if (!TryReadInt(row, "Map Number", out int map)) return default;
         if (!TryReadInt(row, "Room Number", out int roomNumber)) return default;
@@ -1531,14 +1525,13 @@ public sealed class RoomGraphManager
         // those — keep them in the graph as null-name so the tracker
         // can learn the real name on first observation. Render through
         // Room.DisplayName for any user-facing label.
-        string name = TryReadString(row, "Name") ?? string.Empty;
+        string name = Shared(texts, TryReadString(row, "Name") ?? string.Empty);
 
         int cmd = TryReadIntOrZero(row, "CMD");
 
         // Each exit cell is read once and looked at twice: as an exit, and as the
         // Action#N cell or "Needs N Actions" modifier of a multi-action exit. An
         // Action cell has no RoomKey prefix, so it never parses as an exit.
-        var exits = new Dictionary<Direction, RoomExit>();
         uint mask = 0;
         List<MultiActionExitData.ActionCell>? actions = null;
         Dictionary<Direction, string>? modBucket = null;
@@ -1563,7 +1556,8 @@ public sealed class RoomGraphManager
                 // paradigm-20260729-221044). The real promotion runs in the instance
                 // pass PromoteCmdTeleportExits, which can see _tbinfo and only promotes
                 // exits whose CMD chain genuinely teleports to the exit's target.
-                exits[dir] = exit;
+                if (exit.RawHint is { } hint) exit = exit with { RawHint = Shared(texts, hint) };
+                exits.Set(dir, exit);
                 mask |= 1u << (int)dir;
             }
 
@@ -1587,7 +1581,7 @@ public sealed class RoomGraphManager
         }
 
         string? lairRaw = TryReadString(row, "Lair");
-        if (IsLairSentinel(lairRaw)) lairRaw = null;
+        lairRaw = lairRaw is null || IsLairSentinel(lairRaw) ? null : Shared(texts, lairRaw);
 
         Room room = new()
         {
@@ -1600,11 +1594,16 @@ public sealed class RoomGraphManager
             Delay = TryReadIntOrZero(row, "Delay"),
             Cmd   = cmd,
             RawLairTag = lairRaw,
-            Exits = exits,
+            Exits = exits.Build(),
             ExitMask = mask,
         };
         return new RowRead(room, actions, modBucket);
     }
+
+    // The one string the build keeps for this text. Which reader's copy that is
+    // depends on who got there first; the copies read the same.
+    private static string Shared(ConcurrentDictionary<string, string> texts, string text) =>
+        texts.GetOrAdd(text, text);
 
     // MDB exports the empty cell as either a NUL, a literal blank, or
     // whitespace. Treat any of those as "no lair".
