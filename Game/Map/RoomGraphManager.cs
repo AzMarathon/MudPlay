@@ -308,8 +308,9 @@ public sealed class RoomGraphManager
 
     // Whether a room the data names bears this name and has every exit shown: the
     // display may then be that room's, seen with an exit of its own left out (a
-    // closed door, an unsearched hidden exit), and is not taken for a room the
-    // data leaves unnamed. Rooms the data leaves unnamed don't count, whatever
+    // closed door, an unsearched hidden exit), and is not taken for a renamed
+    // room the data leaves unnamed (the tracker asks this of a room that bears a
+    // name, never of one with none). Rooms the data leaves unnamed don't count, whatever
     // they are called by now: the rooms of one house can share a name, and would
     // each stand in the way of the next. Unreachable rooms don't either (see
     // ConfigureUnreachable): the character can't be in one.

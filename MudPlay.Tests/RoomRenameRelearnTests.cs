@@ -272,16 +272,19 @@ public sealed class RoomRenameRelearnTests : IDisposable
 
     // The display is of a room the data names, seen with its hidden exit left
     // out, so no exact (name, exits) search finds it; its exits fit the house
-    // room the move was heading for. It is that named room's display: the house
-    // room keeps its name, and the tracker is anchored at the named room, where
-    // it was before rooms could be re-learned.
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ANamedRoomsDisplayWithAnExitLeftOut_IsNotTakenForTheRoomAhead(bool houseSeenBefore)
+    // room the move was heading for, which bears a stored name. It is that
+    // named room's display: the house room keeps its name, and the tracker is
+    // anchored at the named room, where it was before rooms could be re-learned.
+    //
+    // Only for a room that bears a name. A room with no name is deliberately
+    // left to the rule it has always had, exits alone (the next test): this
+    // same display, met on the way into a house never seen, still names that
+    // room after the named one, as it did before any of this. No test asserts
+    // that outcome, since it is not a wanted one.
+    [Fact]
+    public void ANamedRoomsDisplayWithAnExitLeftOut_IsNotTakenForTheRenamedRoomAhead()
     {
-        RoomGraphManager graph = houseSeenBefore ? Map(stored: OwnName) : Map();
-        string before = graph.GetRoom(Entrance)!.Name;
+        RoomGraphManager graph = Map(stored: OwnName);
         Assert.Empty(graph.FindCandidates("Guard Post", X(Direction.E)));
         (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, Street);
 
@@ -289,26 +292,52 @@ public sealed class RoomRenameRelearnTests : IDisposable
         tracker.NoteRoomObserved(new RoomObservation("Guard Post", X(Direction.E)));
 
         Assert.Empty(learned);
-        Assert.Equal(before, graph.GetRoom(Entrance)!.Name);
+        Assert.Equal(OwnName(Entrance), graph.GetRoom(Entrance)!.Name);
         Assert.Equal((RoomConfidence.Confirmed, Post), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
     }
 
-    // The same display with no move in flight, standing beside the house or in
-    // it: nothing is learned or re-learned from it.
+    // A room with no name is learned on its exits alone, whatever it prints. Its
+    // name is the sysop's own text and is often one the data has for a room
+    // elsewhere; here the shop prints the street's name, and the street's exits
+    // cover the ones shown. Walked into, or stood beside with no move in flight,
+    // the shop is adopted and takes the name, and the tracker is not sent to the
+    // street. (Holding the name against the room confirmed the tracker in the
+    // wrong room on every visit to a house with such a name.)
     [Theory]
-    [InlineData(true, true)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public void ANamedRoomsDisplayWithAnExitLeftOut_WithNoMoveInFlight_NamesNoHouseRoom(bool houseSeenBefore, bool beside)
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARoomWithNoName_PrintingANameTheDataHasElsewhere_IsStillLearned(bool moveInFlight)
     {
-        RoomGraphManager graph = houseSeenBefore ? Map(stored: OwnName) : Map();
-        string before = graph.GetRoom(Entrance)!.Name;
+        RoomGraphManager graph = Map();
+        Assert.True(graph.DataNamesRoomShowing("Lantern Row", X(Direction.W)));
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, Entrance);
+
+        if (moveInFlight)
+        {
+            tracker.NoteMoveSent(Direction.E);
+            tracker.NoteInboundMoveEcho("e");
+        }
+        tracker.NoteRoomObserved(new RoomObservation("Lantern Row", X(Direction.W)));
+
+        Assert.Equal(new[] { new NameLearnedEvent(Shop, "Lantern Row") }, learned);
+        Assert.Equal("Lantern Row", graph.GetRoom(Shop)!.Name);
+        Assert.Equal((RoomConfidence.Confirmed, Shop), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
+    }
+
+    // The same named room's display with no move in flight, standing beside a
+    // house whose rooms bear stored names or in it: nothing is re-learned.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ANamedRoomsDisplayWithAnExitLeftOut_WithNoMoveInFlight_RenamesNoHouseRoom(bool beside)
+    {
+        RoomGraphManager graph = Map(stored: OwnName);
         (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, beside ? Street : Entrance);
 
         tracker.NoteRoomObserved(new RoomObservation("Guard Post", X(Direction.E)));
 
         Assert.Empty(learned);
-        Assert.Equal(before, graph.GetRoom(Entrance)!.Name);
+        Assert.Equal(OwnName(Entrance), graph.GetRoom(Entrance)!.Name);
         Assert.Equal((RoomConfidence.Confirmed, Post), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
     }
 

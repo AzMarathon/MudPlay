@@ -2681,14 +2681,22 @@ public sealed class RoomTracker
     // adopted and named from it: a room with no name, or one bearing a learned
     // name the display doesn't have, whose exits cover the ones shown.
     //
-    // Not when a room the data names bears the printed name and has those exits.
-    // That room's own display, with an exit of its own left out, fits no exact
-    // (name, exits) search and would otherwise be read here as the unnamed room
-    // under a new name; left alone, it is re-anchored by name further down.
+    // A room with no name is matched as it always has been, on its exits alone:
+    // its name is the sysop's own text and is often one the data has elsewhere
+    // (a "Kitchen", a "Hallway"), so no name printed there counts against it.
+    //
+    // A room that bears a name is held to more. It is not re-learned when a room
+    // the data names bears the printed name and has those exits: that room's own
+    // display, with an exit of its own left out, fits no exact (name, exits)
+    // search and would otherwise be read here as this room under a new name;
+    // left alone, it is re-anchored by name further down. The cost is a room
+    // renamed to a name the data also has, which keeps its old name, as every
+    // renamed room did before there was a re-learn.
     private bool ArrivesInRoomTheDataLeavesUnnamed(Room target, RoomObservation observation) =>
         !string.IsNullOrWhiteSpace(observation.Name)
-        && (MatchesPredictedNameless(target, observation) || MatchesPredictedRenamed(target, observation))
-        && !_graph.DataNamesRoomShowing(observation.Name, observation.Exits);
+        && (MatchesPredictedNameless(target, observation)
+            || (MatchesPredictedRenamed(target, observation)
+                && !_graph.DataNamesRoomShowing(observation.Name, observation.Exits)));
 
     // Search the source room's cardinal neighbours for a null-name room whose
     // ExitMask covers the observation. If exactly one neighbour qualifies, learn
@@ -2703,9 +2711,6 @@ public sealed class RoomTracker
     {
         learned = null;
         if (string.IsNullOrWhiteSpace(observation.Name)) return false;
-        // A room the data names, seen with an exit of its own left out: not a
-        // nameless neighbour's display (see ArrivesInRoomTheDataLeavesUnnamed).
-        if (_graph.DataNamesRoomShowing(observation.Name, observation.Exits)) return false;
 
         Room? match = null;
         foreach ((Direction _, RoomExit exit) in source.Exits)
