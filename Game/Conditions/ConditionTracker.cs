@@ -672,6 +672,28 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         _log?.Info(LogCategory, $"applied-latch released for {drop.Count} record(s) (clobber-cleared)");
     }
 
+    // Latch as applied every record the predicate picks, with no applied event. For
+    // a buff known to be on from before this log could have seen its applied line:
+    // the link dropped and the log was cleared with it (ClearAll, which is right for
+    // ailments and wrong for a buff, since buffs stay on the character while it is
+    // out of the game), or the client was started since. The game prints no line for
+    // a buff that is merely still on, so nothing would ever latch it again, and a
+    // wear-off line ends only a latched record (several buffs share one wear-off
+    // text): unlatched, the buff's own wear-off would end nothing and its timer would
+    // run to the end over a buff that is gone.
+    public void LatchApplied(Func<MessageRecord, bool> match)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        List<string>? latched = null;
+        foreach ((_, MessageRecord r) in _appliedIndex)
+            if (match(r) && _active.Add(r.Id))
+                (latched ??= new()).Add(r.Name);
+        if (latched is null) return;
+        RecomputeFlags();
+        _log?.Info(LogCategory,
+            $"latched as applied, carried over time out of the game: {string.Join(", ", latched.Distinct())}");
+    }
+
     private void RecomputeFlags()
     {
         MessageFlags flags = MessageFlags.None;
