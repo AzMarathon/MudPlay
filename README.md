@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.174.1**
-> - Item records show a Used on section listing every exit that names the item as the one needed to pass (a key on a locked door, an item to carry, a ticket): room, map/room and direction, one line per exit
+> **Version 3.174.2**
+> - No fight is opened from a room you are stepping out of (a swing at you, a hit line, a room re-run); the attack used to land in the next room
+> - A lair entered that way opens with its debuff, then the room attack
+> - A step with no landing or refusal within 3 s counts as not taken: the attacker is fought back where you stand
+> - Bug report shows an engage held for a move in flight
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

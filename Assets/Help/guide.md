@@ -244,6 +244,8 @@ Exemptions: monsters whose Game Data relationship is **Flee** or **Hangup**, and
 
 Self-defense is also suppressed while you're on a **walk-to** — an evil character crossing a guarded town, say, keeps running to their destination rather than stopping to fight the guards (a losing trade at low levels). It stays active when you're **idle, looping, or Auto-Lairing** (all farming/holding, where fighting back is what you want).
 
+**A swing as you leave the room is not answered from there.** Once your own move has been sent, an attack sent after it would run in the room you land in, at whatever is there. So a monster that swings at you in that moment is left to the next room: if it follows you in, that room's fight opens as any other does (the pre-attack debuff first, then the attack); if your move is refused, it is fought back where you stand. A move counts as on its way for three seconds: if neither the next room nor a refusal has shown by then, the game never took the step, and whatever attacked you is fought back where you stand.
+
 **Monsters that pass you in a doorway.** A monster can enter the room you're just leaving after you've sent your move but before the next room appears. That monster is in the room behind you, so MudPlay doesn't attack it, and the room you arrive in decides what you fight. If your move is refused and you stay put, it attacks the arrival as normal.
 
 ## Targeting
