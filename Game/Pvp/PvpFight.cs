@@ -260,7 +260,7 @@ public sealed class PvpFight : IDisposable
         ArgumentNullException.ThrowIfNull(retargetMonster);
         if (EngageOnOrder(name)) return null;
         string given = PlayerObservation.SplitName(name).Given;
-        if (!IsHere(given))
+        if (!NamesPlayerHere(name, given))
         {
             retargetMonster(name);
             return null;
@@ -268,6 +268,23 @@ public sealed class PvpFight : IDisposable
         string why = WhyNotFought(given);
         _log?.Info(LogCategory, $"@kill {given} not taken: {why}");
         return $"not attacking {given}: {why}";
+    }
+
+    // Whether an order's name is a player standing here. A name of several words is
+    // one only when it is that player's whole name: "bob cat" is a monster's name
+    // though Bob stands in the room, and refusing it for Bob's sake would leave the
+    // monster unattacked.
+    private bool NamesPlayerHere(string name, string given)
+    {
+        if (!IsHere(given)) return false;
+        string whole = name.Trim();
+        if (!whole.Contains(' ')) return true;
+        if (_classifier.Current is not { } obs) return false;
+        foreach (RoomEntity e in obs.Entities)
+            if (e.Kind == EntityKind.Player
+                && string.Equals(e.ResolvedName, whole, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     // Why Engage turned a player down, in its own order of checks.

@@ -197,6 +197,22 @@ public sealed class PvpFightTests
         Assert.Equal(new[] { "giant rat" }, monsters);
     }
 
+    // A monster whose name starts with the given name of a player standing here is
+    // still a monster: the order goes to the combat engine and is not refused for
+    // the player's sake.
+    [Fact]
+    public void AtKill_NamingAMonsterThatSharesAPlayersFirstWord_WithPvpOff_GoesToTheCombatEngine()
+    {
+        using Harness h = new() { PvpEnabled = false };
+        h.Feed("Also here: Bob.");
+        List<string> monsters = new();
+
+        Assert.Null(h.Fight.TakeKillOrder("bob cat", monsters.Add));
+
+        Assert.Equal(new[] { "bob cat" }, monsters);
+        Assert.Empty(h.Sent);
+    }
+
     // A player in the room we won't fight is NOT handed to the combat engine,
     // which would attack by that name all the same. The sender is told why.
     [Fact]
