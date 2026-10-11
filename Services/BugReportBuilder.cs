@@ -28,6 +28,10 @@ public static class BugReportBuilder
     // How many trailing program-log entries to include.
     private const int LogLines = 750;
 
+    // Masks offensive words in the chat lines a report copies; nothing else in the
+    // client is censored. Replaced in tests with a table of stand-in words.
+    internal static BugReportChatCensor Censor { get; set; } = BugReportChatCensor.Default;
+
     // One captured section of the report — a heading and its pre-rendered Markdown body.
     public readonly record struct Section(string Heading, string Body);
 
@@ -2665,7 +2669,7 @@ public static class BugReportBuilder
         {
             LogEntry e = entries[i];
             sb.Append(e.Timestamp.ToString("HH:mm:ss")).Append("  [").Append(e.Severity).Append("]  ")
-              .Append(e.Source).Append(": ").Append(e.Message).Append('\n');
+              .Append(e.Source).Append(": ").Append(Censor.CensorLogMessage(e.Message)).Append('\n');
         }
         sb.Append("```");
         return sb.ToString();
@@ -2686,7 +2690,7 @@ public static class BugReportBuilder
         string raw = WireFormatter.RenderRaw(bytes);
         string tail = LastLines(raw, ScrollbackLines);
         if (tail.Length == 0) return "_(no wire captured)_";
-        return "```\n" + tail + "\n```";
+        return "```\n" + string.Join('\n', tail.Split('\n').Select(Censor.CensorRawWireLine)) + "\n```";
     }
 
     // The classified combat trace, last ScrollbackLines combat-window lines each
@@ -2696,7 +2700,7 @@ public static class BugReportBuilder
     {
         string log = svc.CombatClassifier.RenderLog(ScrollbackLines).TrimEnd('\n');
         if (log.Length == 0) return "_(no combat lines classified yet)_";
-        return "```\n" + log + "\n```";
+        return "```\n" + string.Join('\n', log.Split('\n').Select(Censor.CensorIfChat)) + "\n```";
     }
 
     // The last n newline-delimited lines of s (trailing blank line ignored).
@@ -2731,10 +2735,12 @@ public static class BugReportBuilder
           .Append(" line(s) written while in the game, each prefixed with its write time (blank spacing rows have none). ")
           .Append(inGame.InGame ? "In the game now." : "Not in the game now.")
           .Append("\n\n```\n");
-        foreach (TranscriptSnapshot.Line line in lines)
+        List<string> texts = lines.Select(l => l.Text).ToList();
+        Censor.CensorRows(texts, emulator.Screen.Cols);
+        for (int i = 0; i < lines.Count; i++)
         {
-            sb.Append(line.Timestamp is { } t ? t.ToLocalTime().ToString("HH:mm:ss") : "        ")
-              .Append(' ').Append(line.Text).Append('\n');
+            sb.Append(lines[i].Timestamp is { } t ? t.ToLocalTime().ToString("HH:mm:ss") : "        ")
+              .Append(' ').Append(texts[i]).Append('\n');
         }
         sb.Append("```");
         return sb.ToString();
