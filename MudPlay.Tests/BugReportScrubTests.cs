@@ -124,6 +124,84 @@ public sealed class BugReportScrubTests
         Assert.DoesNotContain(Suicide[2..], uncompiled.Apply(text));
     }
 
+    // The continuation row of a wrapped line can have no time of its own: the
+    // report pads it with blanks instead.
+    [Fact]
+    public void Apply_MasksAValueWrappedOntoARowWithNoTimeOfItsOwn()
+    {
+        string text = $"12:00:01 xxxxxxxxxxxxxxxx {Suicide[..4]}\n         {Suicide[4..]} tail";
+
+        Assert.Equal($"12:00:01 xxxxxxxxxxxxxxxx {BugReportScrub.Mask}\n tail", MakeScrubber().Apply(text));
+    }
+
+    // A value with a space in it, wrapped at the space. The terminal's row has
+    // no trailing blank, so in rows joined bare (the local API's scrollback) the
+    // space is simply gone.
+    [Theory]
+    [InlineData("12:00:01 xxx my\n12:00:01 pass tail", "12:00:01 xxx [redacted]\n tail")]
+    [InlineData("12:00:01 xxx my\n         pass tail", "12:00:01 xxx [redacted]\n tail")]
+    [InlineData("xxx my\npass tail", "xxx [redacted]\n tail")]
+    [InlineData("xxx my pass tail", "xxx [redacted] tail")]
+    [InlineData("xxx mypass tail", "xxx mypass tail")]            // not the value: no row break stood for the space
+    public void Apply_MasksAValueWithASpaceInIt_WrappedAtTheSpace(string text, string expected)
+    {
+        BugReportScrub.Scrubber scrubber = BugReportScrub.Build([new(BugReportScrub.LoginPasswordLabel, "my pass")], []);
+
+        Assert.Equal(expected, scrubber.Apply(text));
+    }
+
+    // The program log prints a line break inside a message as ⏎.
+    [Theory]
+    [InlineData("12:00:01.123  [Info]  X: sent endg⏎ame77")]
+    [InlineData("12:00:01.123  [Info]  X: sent endg ⏎ ame77")]
+    public void Apply_MasksAValueBrokenByALineBreakInALogMessage(string line) =>
+        Assert.Equal($"12:00:01.123  [Info]  X: sent {BugReportScrub.Mask}", MakeScrubber().Apply(line));
+
+    // A value that is part of the word "redacted" must not be found again inside
+    // the masks: it would mark itself out in every one of them.
+    [Fact]
+    public void AMaskIsNeverReadAgainForAnotherValue_AndMaskingTwiceChangesNothing()
+    {
+        BugReportScrub.Scrubber scrubber = BugReportScrub.Build(
+        [
+            new(BugReportScrub.LoginNameLabel, Login),
+            new(BugReportScrub.SuicidePasswordLabel, "act"),
+        ], []);
+
+        string once = scrubber.Apply($"user {Login} did an action");
+
+        Assert.Equal($"user {BugReportScrub.Mask} did an {BugReportScrub.Mask}ion", once);
+        Assert.Equal(once, scrubber.Apply(once));
+    }
+
+    // One value's end is the other's start, and the text runs them together:
+    // neither is left with its tail showing.
+    [Fact]
+    public void ValuesThatOverlapInTheText_AreMaskedAsOne()
+    {
+        BugReportScrub.Scrubber scrubber = BugReportScrub.Build(
+        [
+            new(BugReportScrub.LoginNameLabel, "abcd"),
+            new(BugReportScrub.SuicidePasswordLabel, "defg"),
+        ], []);
+
+        Assert.Equal($"x {BugReportScrub.Mask} y", scrubber.Apply("x abcdefg y"));
+        // Side by side they are two.
+        Assert.Equal($"{BugReportScrub.Mask}{BugReportScrub.Mask}", scrubber.Apply("abcddefg"));
+    }
+
+    // Only the name the game shows everywhere (the full name, or the first name)
+    // exempts a login name. A login that is the surname alone is masked.
+    [Fact]
+    public void LoginNameEqualToTheSurnameAlone_IsMasked()
+    {
+        BugReportScrub.Scrubber scrubber = BugReportScrub.Build(
+            [new(BugReportScrub.LoginNameLabel, "Ironhand")], ["Thorgrim Ironhand"]);
+
+        Assert.Equal($"id {BugReportScrub.Mask}", scrubber.Apply("id Ironhand"));
+        Assert.Empty(scrubber.Notes);
+    }
+
     [Fact]
     public void Apply_IsCaseInsensitive()
     {

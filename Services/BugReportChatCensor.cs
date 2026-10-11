@@ -115,18 +115,24 @@ public sealed partial class BugReportChatCensor
         return WordChunk().Replace(text, m =>
         {
             string chunk = m.Value;
-            // A word split by a hyphen or slash is judged part by part as well.
             if (IsListed(chunk)) return Mask;
             if (chunk.IndexOfAny(Joiners) < 0) return chunk;
-            string[] parts = chunk.Split(Joiners);
-            bool any = false;
-            for (int i = 0; i < parts.Length; i++)
+            // A word split by a hyphen, slash or underscore is judged part by
+            // part as well. The marks between the parts stay as they were
+            // written: only a listed word is ever changed.
+            StringBuilder? masked = null;
+            int partStart = 0;
+            for (int i = 0; i <= chunk.Length; i++)
             {
-                if (!IsListed(parts[i])) continue;
-                parts[i] = Mask;
-                any = true;
+                if (i < chunk.Length && Array.IndexOf(Joiners, chunk[i]) < 0) continue;
+                if (IsListed(chunk[partStart..i]))
+                    (masked ??= new StringBuilder(chunk.Length).Append(chunk, 0, partStart)).Append(Mask);
+                else
+                    masked?.Append(chunk, partStart, i - partStart);
+                if (i < chunk.Length) masked?.Append(chunk[i]);
+                partStart = i + 1;
             }
-            return any ? string.Join('-', parts) : chunk;
+            return masked?.ToString() ?? chunk;
         });
     }
 
@@ -199,6 +205,9 @@ public sealed partial class BugReportChatCensor
         string verb = c[..space];
         return verb.Equals("say", StringComparison.OrdinalIgnoreCase)
             || verb.Equals("yell", StringComparison.OrdinalIgnoreCase)
+            // The telepath's word form, `whi` to `whisper`
+            // (GAME_MECHANICS "Telepath throttle and per-telepath acknowledgement").
+            || (verb.Length >= 3 && "whisper".StartsWith(verb, StringComparison.OrdinalIgnoreCase))
             || AliasEngine.NameConflictReason(verb) is not null;
     }
 
@@ -251,8 +260,12 @@ public sealed partial class BugReportChatCensor
     private static bool IsQuotedChatCommand(string text)
     {
         if (text.Length < 2) return false;
-        if (text[0] == '/' && char.IsLetter(text[1])) return true;
         int space = text.IndexOf(' ');
+        // "/name hello" is a name, a space and a message. A file path a log
+        // line quotes starts the same way: it has more marks in its first part,
+        // or no message after it, and is the client's own text.
+        if (text[0] == '/' && char.IsLetter(text[1]))
+            return space > 1 && text.AsSpan(1, space - 1).IndexOfAny('/', '\\', '.') < 0;
         return space > 0 && AliasEngine.NameConflictReason(text[..space]) is not null;
     }
 }

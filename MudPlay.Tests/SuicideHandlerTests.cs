@@ -184,6 +184,25 @@ public sealed class SuicideHandlerTests
         Assert.True(h.Handler.AwaitingPasswordPrompt);
     }
 
+    // More of the same: a statline with a player's line after it, a bracketed
+    // word standing in for one, and our own say quoting the prompt.
+    [Theory]
+    [InlineData("Bob gossips: [x]: Enter your suicide password: lol")]
+    [InlineData("[HP=100/MA=50]:Bob telepaths: ]:Enter your suicide password:")]
+    [InlineData("You say \"]: Enter your suicide password:\"")]
+    public void StoredPassword_ThePromptQuotedAfterAStatlineOrInOurOwnSay_SendsNothing(string row)
+    {
+        using Harness h = new();
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Handler.ObserveCursorRow(row);
+
+        Assert.DoesNotContain(h.Wire, b => Encoding.Latin1.GetString(b).Contains("hunter2"));
+        Assert.True(h.Handler.AwaitingPasswordPrompt);
+    }
+
     [Fact]
     public void StoredPassword_TheSendGateIsHeldFromTheCommandUntilThePasswordIsSent()
     {

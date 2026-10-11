@@ -34,9 +34,11 @@ public static class BugReportScrub
     // What may sit between two characters of a value: a row the terminal wrapped
     // (the line break, then the next row's time stamp or its blank padding), and
     // in the raw wire the control runs the Wire Inspector prints in caret
-    // notation (a colour change mid-word, an arrival marker's row).
+    // notation (a colour change mid-word, an arrival marker's row). In the
+    // program log a line break inside a message is printed as ⏎
+    // (BugReportLogSections), which breaks a value the same way.
     private const string RowBreak =
-        @"(?:(?:\^\[\[[0-9;?]*[A-Za-z]|\^[@A-GI-Z\\\]^_])*(?:\r?\n(?:--- \d\d:\d\d:\d\d\.\d{3} ---\n)?(?:\d\d:\d\d:\d\d(?:\.\d{3})?)?[ ]{0,10})?)";
+        @"(?:(?:\^\[\[[0-9;?]*[A-Za-z]|\^[@A-GI-Z\\\]^_])*(?:[ ]?⏎[ ]?|\r?\n(?:--- \d\d:\d\d:\d\d\.\d{3} ---\n)?(?:\d\d:\d\d:\d\d(?:\.\d{3})?)?[ ]{0,10})?)";
 
     // A non-ASCII value as CP437 draws its Latin-1 bytes, or null when it is all
     // ASCII (drawn the same) or holds a character Latin-1 can't carry.
@@ -135,20 +137,59 @@ public static class BugReportScrub
                 }
                 if (changed) text = string.Join('\n', lines);
             }
+            // Every value is looked for in the text as it stands, and what was
+            // found is masked in one go. Masking value by value let the second
+            // value be found inside the mask written for the first: a password
+            // that is part of the word "redacted" showed itself in every mask.
+            // Text that is already a mask is passed over for the same reason, so
+            // masking a text twice changes nothing the second time.
+            List<int>? masks = null;
+            for (int at = text.IndexOf(Mask, StringComparison.Ordinal); at >= 0;
+                 at = text.IndexOf(Mask, at + Mask.Length, StringComparison.Ordinal))
+                (masks ??= new()).Add(at);
+
+            List<(int Start, int End)> found = new();
             foreach (Regex pattern in _patterns)
             {
-                text = pattern.Replace(text, m =>
+                foreach (Match m in pattern.Matches(text))
                 {
-                    count++;
-                    // A match that swallowed row breaks keeps every one of them,
-                    // so the rows after it stay rows and a caller that masks rows
-                    // as one text gets as many back as it gave.
-                    int breaks = m.ValueSpan.Count('\n');
-                    return breaks == 0 ? Mask : Mask + new string('\n', breaks);
-                });
+                    if (m.Length == 0 || InsideAMask(masks, m.Index, m.Index + m.Length)) continue;
+                    found.Add((m.Index, m.Index + m.Length));
+                }
             }
+            if (found.Count == 0) return text;
+            found.Sort();
+
+            StringBuilder sb = new(text.Length);
+            int copied = 0;
+            for (int i = 0; i < found.Count;)
+            {
+                (int start, int end) = found[i++];
+                // Two values that overlap (one's end is the other's start) are
+                // one mask: neither leaves its tail showing.
+                while (i < found.Count && found[i].Start < end) end = Math.Max(end, found[i++].End);
+                sb.Append(text, copied, start - copied).Append(Mask);
+                // A match that swallowed row breaks keeps every one of them, so
+                // the rows after it stay rows and a caller that masks rows as
+                // one text gets as many back as it gave.
+                int breaks = text.AsSpan(start, end - start).Count('\n');
+                if (breaks > 0) sb.Append('\n', breaks);
+                copied = end;
+                count++;
+            }
+            sb.Append(text, copied, text.Length - copied);
             replaced = count;
-            return text;
+            return sb.ToString();
+        }
+
+        // Whether [start, end) lies within one of the masks already in the text
+        // (their start offsets, ascending).
+        private static bool InsideAMask(List<int>? masks, int start, int end)
+        {
+            if (masks is null) return false;
+            int at = masks.BinarySearch(start);
+            if (at < 0) at = ~at - 1;
+            return at >= 0 && end <= masks[at] + Mask.Length;
         }
 
         // Whether the text holds one of the values, for a definition that is left
@@ -218,10 +259,7 @@ public static class BugReportScrub
             if (value.Length >= MinLength && Cp437Rendering(value) is { } shownAs && seen.Add(shownAs))
                 patterns.Add(new Regex(SplitTolerant(shownAs), options));
         }
-        // Longest first: a password that contains the login name is masked whole,
-        // not left with its tail showing.
-        Regex[] ordered = patterns.OrderByDescending(p => p.ToString().Length).ToArray();
-        return new Scrubber(ordered, values.ToArray(), notes) { UnreadableValues = unreadable };
+        return new Scrubber(patterns.ToArray(), values.ToArray(), notes) { UnreadableValues = unreadable };
     }
 
     public const string LoginNameLabel = "login name";
@@ -234,7 +272,10 @@ public static class BugReportScrub
         for (int i = 0; i < value.Length; i++)
         {
             if (i > 0) sb.Append(RowBreak);
-            sb.Append(Regex.Escape(value[i].ToString()));
+            // A space that fell at the end of a terminal row is not in the
+            // transcript at all (a row's trailing blanks are dropped): the row
+            // break stands for it.
+            sb.Append(value[i] == ' ' ? @"(?:[ ]|(?<=\n))" : Regex.Escape(value[i].ToString()));
         }
         return sb.ToString();
     }

@@ -124,6 +124,43 @@ public sealed class SentCommandTrailTests
         Assert.Equal(new[] { command, SentCommandTrail.WithheldAtPrompt, "look" }, texts);
     }
 
+    // The same flows by the other cover: the suicide tracker says a password may
+    // be going out from the command on, in every spelling the game takes, and
+    // the trail keeps nothing while it does. Typed in the order SendUserInput
+    // hands a line on: the tracker first, then the trail.
+    [Theory]
+    [InlineData("set suicide")]
+    [InlineData("set sui")]
+    [InlineData("SET  SUICIDE")]
+    [InlineData("reroll")]
+    [InlineData("suicide")]
+    public void ATypedPassword_IsNotKept_UnderTheSuicideTrackersCoverAlone(string command)
+    {
+        MessageRouter router = new();
+        MudPlay.Services.Patterns.DefaultPatterns.Seed(router);
+        ProfileService profile = new();
+        profile.LoadBlank();
+        string tmp = Path.Combine(Path.GetTempPath(), "mudplay-trail-cover-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tmp);
+        try
+        {
+            MudPlay.Game.SuicidePasswordTracker tracker =
+                new(router, new EngineSendGate(), profile, new PasswordProtector(Path.Combine(tmp, ".credkey")));
+            SentCommandTrail trail = new() { Withhold = () => tracker.PasswordEntryLikely };
+
+            foreach (string line in new[] { command, "s3cretpw" })
+            {
+                byte[] data = Encoding.Latin1.GetBytes(line + "\r");
+                tracker.ObserveOutbound(data);
+                trail.ObserveTyped(data);
+            }
+
+            Assert.DoesNotContain(trail.Snapshot(), e => e.Text.Contains("s3cretpw"));
+            Assert.Equal(2, trail.Withheld);
+        }
+        finally { Directory.Delete(tmp, recursive: true); }
+    }
+
     [Fact]
     public void ATypedPassword_IsWithheld_WhenAnEngineCommandWentOutBetween()
     {

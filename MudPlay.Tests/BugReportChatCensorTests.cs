@@ -188,6 +188,40 @@ public sealed class BugReportChatCensorTests
     public void CensorSentCommand_MasksOnlyChannelCommands(string command, string expected) =>
         Assert.Equal(expected, Censor.CensorSentCommand(command));
 
+    // The telepath's word form is chat; a verb the game doesn't have is not.
+    [Theory]
+    [InlineData("whisper Somebody flibber", "whisper Somebody [censored]")]
+    [InlineData("whi Somebody flibber", "whi Somebody [censored]")]
+    [InlineData("tel Somebody flibber", "tel Somebody flibber")]
+    [InlineData("wh flibber", "wh flibber")]
+    public void CensorSentCommand_TakesTheTelepathsWordForm(string command, string expected) =>
+        Assert.Equal(expected, Censor.CensorSentCommand(command));
+
+    // Only a listed word changes: the marks that join the parts of a word stay.
+    [Fact]
+    public void CensorText_KeepsTheMarksBetweenThePartsOfAWord()
+    {
+        Assert.Equal("Somebody gossips: ok/[censored]_fine",
+            Censor.CensorIfChat("Somebody gossips: ok/flibber_fine"));
+        Assert.Equal("Somebody gossips: [censored]/[censored]-x_y",
+            Censor.CensorIfChat("Somebody gossips: flibber/zorptang-x_y"));
+        Assert.Equal("Somebody gossips: a/b_c-d", Censor.CensorIfChat("Somebody gossips: a/b_c-d"));
+    }
+
+    // A program-log message is the client's own text unless it quotes chat: a
+    // file path is no telepath, and a quoted game command is no channel.
+    [Theory]
+    [InlineData("path: /flibber/file")]
+    [InlineData("wrote /home/zorptang/.local/share/MudPlay/Logs/flibber.log")]
+    [InlineData("AutoGet: 'get flibber'")]
+    [InlineData("RoomClassifier: unknown entity: zorptang warrior")]
+    public void CensorLogMessage_LeavesPathsAndGameCommandsAlone(string message) =>
+        Assert.Equal(message, Censor.CensorLogMessage(message));
+
+    [Fact]
+    public void CensorLogMessage_StillMasksAQuotedTelepath() =>
+        Assert.Equal("sent '/Somebody you [censored]'", Censor.CensorLogMessage("sent '/Somebody you flibber'"));
+
     [Fact]
     public void CensorRawWireLine_MasksBetweenColourCodes()
     {

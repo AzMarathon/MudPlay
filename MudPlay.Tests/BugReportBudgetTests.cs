@@ -114,6 +114,47 @@ public sealed class BugReportBudgetTests
         Assert.Matches(@"_Shown: the newest \d+ of 30000; the first line below is the oldest kept", md);
     }
 
+    // The budget is in bytes as the file is written: rows of box-drawing
+    // characters are three bytes a character.
+    [Fact]
+    public void Render_MultiByteEntries_AreBudgetedByTheirBytes()
+    {
+        List<string> Rows(int count) =>
+            Enumerable.Range(0, count).Select(i => $"{i:D6} " + new string('═', 200)).ToList();
+        BugReportBuilder.BugReportCapture capture = new(
+            new DateTimeOffset(2026, 10, 10, 14, 0, 0, TimeSpan.Zero), RealmType.Stock,
+            [
+                new BugReportBuilder.Section("Scrollback (oldest first)", "intro", Rows(3_000)),
+                new BugReportBuilder.Section("Program log (oldest first)", "intro", Rows(4_000), BudgetWeight: 3),
+            ]);
+
+        string md = BugReportBuilder.Render(capture, "x");
+
+        Assert.True(md.Length < BugReportBudget.MaxBytes / 2);
+        Assert.InRange(Encoding.UTF8.GetByteCount(md), BugReportBudget.MaxBytes * 9 / 10, BugReportBudget.MaxBytes);
+    }
+
+    // A mask is longer than a short value. A password that is also a common word
+    // is masked hundreds of thousands of times: the budget is fitted to the
+    // report as masked, so it still holds.
+    [Fact]
+    public void Render_APasswordThatIsACommonWord_StillFitsTheBudgetAfterMasking()
+    {
+        BugReportScrub.Scrubber common = BugReportScrub.Build([new(BugReportScrub.LoginPasswordLabel, "the")], []);
+        List<string> entries = Enumerable.Range(0, 20_000)
+            .Select(i => $"{i:D6} the cat sat on the mat by the door of the inn, the end").ToList();
+        BugReportBuilder.BugReportCapture capture = new(
+            new DateTimeOffset(2026, 10, 10, 14, 0, 0, TimeSpan.Zero), RealmType.Stock,
+            [new BugReportBuilder.Section("Program log (oldest first)", "body", entries, BudgetWeight: 3)], common);
+
+        string md = BugReportBuilder.Render(capture, "x");
+
+        Assert.InRange(Encoding.UTF8.GetByteCount(md), BugReportBudget.MaxBytes * 9 / 10, BugReportBudget.MaxBytes);
+        Assert.DoesNotContain(" the ", md);
+        // The newest entry is there, masked.
+        Assert.Contains($"019999 {BugReportScrub.Mask} cat sat on {BugReportScrub.Mask} mat", md);
+    }
+
     [Fact]
     public void Render_OversizedCapture_StaysUnderTheBudgetWithoutTheWireAndSaysWhatWasLeftOut()
     {

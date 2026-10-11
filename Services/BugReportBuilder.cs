@@ -241,7 +241,9 @@ public static class BugReportBuilder
     }
 
     // The last step of every render: the scrub sees the whole document, the
-    // user's own description included.
+    // user's own description included. The sections were masked before the
+    // budget fitted them (MaskedSections); a second masking changes nothing in
+    // them.
     private static string Scrubbed(BugReportCapture capture, string document) =>
         capture.Scrubber is { } scrubber ? scrubber.Apply(document) : document;
 
@@ -263,7 +265,16 @@ public static class BugReportBuilder
     public static BugReportCapture Prescrubbed(BugReportCapture capture)
     {
         ArgumentNullException.ThrowIfNull(capture);
-        if (capture.Scrubber is not { } scrubber) return capture;
+        return capture.Scrubber is null ? capture : capture with { Sections = MaskedSections(capture), Scrubber = null };
+    }
+
+    // The capture's sections with the account details masked. The size budget is
+    // fitted to these, not to the sections as captured: a mask is longer than a
+    // short value, and a password that is also a common word could otherwise grow
+    // a report half as large again after the budget had fitted it.
+    private static IReadOnlyList<Section> MaskedSections(BugReportCapture capture)
+    {
+        if (capture.Scrubber is not { } scrubber) return capture.Sections;
         List<Section> sections = new(capture.Sections.Count);
         foreach (Section s in capture.Sections)
         {
@@ -273,7 +284,7 @@ public static class BugReportBuilder
             string[] masked = scrubber.Apply(string.Join('\n', entries)).Split('\n');
             sections.Add(s with { Body = scrubber.Apply(s.Body), Entries = masked });
         }
-        return capture with { Sections = sections, Scrubber = null };
+        return sections;
     }
 
     // Each section's whole text by heading, for a caller that wants the sections
@@ -283,7 +294,7 @@ public static class BugReportBuilder
     {
         ArgumentNullException.ThrowIfNull(capture);
         Dictionary<string, string> texts = new(StringComparer.Ordinal);
-        foreach (Section section in BugReportBudget.Fit(capture.Sections).Sections)
+        foreach (Section section in BugReportBudget.Fit(MaskedSections(capture)).Sections)
         {
             string text = section.Body.TrimEnd();
             if (section.Entries is { } entries)
@@ -297,7 +308,7 @@ public static class BugReportBuilder
     // sections (BugReportBudget).
     private static void AppendSections(StringBuilder sb, BugReportCapture capture, int overheadBytes)
     {
-        BugReportBudget.Result fitted = BugReportBudget.Fit(capture.Sections, BugReportBudget.MaxBytes, overheadBytes);
+        BugReportBudget.Result fitted = BugReportBudget.Fit(MaskedSections(capture), BugReportBudget.MaxBytes, overheadBytes);
         if (fitted.OverBudget)
             sb.Append("_This report is over its ").Append(BugReportBudget.MaxBytes / 1000)
               .Append(" KB budget: the sections that can't be shortened are that large on their own._\n\n");
