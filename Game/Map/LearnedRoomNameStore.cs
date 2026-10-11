@@ -9,22 +9,64 @@ namespace MudPlay.Game.Map;
 // not again every session. The imported tables are a read-only base, so the names
 // go in a file of the client's own, in the realm's folder: what such a room is
 // called is only known from what that board printed, and a name seen on one board
-// is not assumed on another. Room numbers belong to a game-data set, so inside
-// the file each name is filed under the set it was seen on.
+// is not assumed on another (the owner, 2026-10-11: "learned room names are per
+// realm on a BBS"). Room numbers belong to a game-data set, so inside the file
+// each name is filed under the set it was seen on.
 //
 // The names are put on the room map each time it is built and each time the realm
 // changes (RoomGraphManager.ApplyStoredNames), quietly: a stored name is not
 // learned again, so it raises no prompt. Only a room the data still gives no name
 // takes one. Once a later import names the room, the data stands and the stored
-// name is dropped.
+// name is dropped. On a change of realm the names the tracker learned this
+// session come off the map as well, kept or not: they were the other board's.
 //
 // Every client on the realm shares the file. Another client's names are taken in
 // the way the realm's other shared files are followed (SharedFileStamp, on the
 // heartbeat and before a change), and a write is this client's changes made to
-// what is on file, never a copy of what it happened to hold.
+// what is on file, never a copy of what it happened to hold. So a name in the
+// file is text someone else supplied, and is checked before it is used (Usable).
 public sealed class LearnedRoomNameStore
 {
     public const string LogCategory = "LearnedRoomNames";
+
+    // The longest a stored or kept name may be. The longest room name in the two
+    // imported sets is 53 characters; this leaves a board's own rooms well over
+    // twice that, and keeps a file someone else wrote from putting a wall of text
+    // on the map and in every log line that names the room.
+    public const int MaxNameLength = 120;
+
+    // What became of a name the user chose to keep.
+    public enum KeepResult
+    {
+        // On file.
+        Stored,
+        // On the map and held; written when the file can be (see the log).
+        HeldUnwritten,
+        HeldUnread,
+        // On the map for this session; the file is a later client's and is left alone.
+        HeldLaterFormat,
+        // Not kept at all.
+        NoRealmOrSet,
+        OtherRealm,
+        OtherSet,
+        NotOnTheMap,
+        NotARoomName,
+    }
+
+    // In a few words, why a name was not stored, for the user who pressed Save;
+    // null when it was.
+    public static string? WhyNotStored(KeepResult result) => result switch
+    {
+        KeepResult.Stored          => null,
+        KeepResult.HeldUnwritten   => "this realm's file can't be written; it is tried again while the client runs",
+        KeepResult.HeldUnread      => "this realm's file can't be opened; it is tried again while the client runs",
+        KeepResult.HeldLaterFormat => "this realm's file is from a later version of the client",
+        KeepResult.NoRealmOrSet    => "there is no realm or game data set to keep it under",
+        KeepResult.OtherRealm      => "it was seen on another realm",
+        KeepResult.OtherSet        => "the game data set has changed since it was seen",
+        KeepResult.NotOnTheMap     => "the map no longer has the room under that name",
+        _                          => "it is too long or has characters a room name can't have",
+    };
 
     // The format this client writes. A file with a higher number is a later
     // client's: it is neither read nor written over.
@@ -44,10 +86,13 @@ public sealed class LearnedRoomNameStore
     // whatever another client has written since. A null Name is a name dropped.
     private readonly List<(string Set, RoomKey Room, string? Name)> _unwritten = new();
     // How the file on disk stands. Each is said once, when it becomes so.
-    //   _unparsed   — it can't be read: set aside before anything is written.
+    //   _unparsed   — it was read and doesn't parse: set aside before anything is
+    //                 written.
+    //   _unread     — it couldn't be opened: nothing is known of what it holds, so
+    //                 nothing is written until it has been read.
     //   _newer      — a later client's format: neither read nor written.
     //   _unwritable — the last write failed.
-    private bool _unparsed, _newer, _unwritable;
+    private bool _unparsed, _unread, _newer, _unwritable;
 
     //   activeRealmFolder — the realm being played (AppServices.ActiveRealmFolder),
     //                       asked each time rather than handed over, so a room map
@@ -83,6 +128,23 @@ public sealed class LearnedRoomNameStore
     // A profile was loaded or closed, or a BBS pinned: the realm may be another.
     public void OnRealmChanged() => Apply(announce: FollowRealm());
 
+    // Profile.BbsRenamed: a folder above the realm's was renamed. Under it, the
+    // realm is the same one at another path: its file went with the folder, and
+    // what is held and still to be written goes on to the new path. Without this
+    // the next heartbeat finds no file where the folder was and takes the names
+    // off the map.
+    public void OnFolderRenamed(string from, string to)
+    {
+        ArgumentNullException.ThrowIfNull(from);
+        ArgumentNullException.ThrowIfNull(to);
+        if (_realmFolder is { } held && held.Length > from.Length
+            && held.StartsWith(from, StringComparison.Ordinal)
+            && held[from.Length] is char next
+            && (next == Path.DirectorySeparatorChar || next == Path.AltDirectorySeparatorChar))
+            _realmFolder = to + held[from.Length..];
+        OnRealmChanged();
+    }
+
     // Re-read the file when another client on the realm has written it, and write
     // what an earlier write couldn't. Called on the heartbeat. A file that can't be
     // read is left for the next call, what is held kept. True when what is held
@@ -96,50 +158,65 @@ public sealed class LearnedRoomNameStore
         return changed;
     }
 
-    // The user chose to keep the name the tracker learned for a room. False when
-    // it isn't kept, with the reason logged.
+    // The user chose to keep the name the tracker learned for a room.
     //
     // The answer can come long after the question (the prompt doesn't block the
     // game), so the name is only filed where it was seen:
     //   seenOnRealm — the realm's folder when the name was learned. On another
     //                 realm by now, the name says nothing of this board's room.
-    // and the room must still bear that name on the map: a room map rebuilt for
-    // another set since has lost it.
-    public bool Keep(RoomKey room, string name, string? seenOnRealm)
+    //   seenOnSet   — the game-data set the room map was built from then. Under
+    //                 another by now, the number is another room's.
+    // and the room must still bear that name on the map.
+    public KeepResult Keep(RoomKey room, string name, string? seenOnRealm, string? seenOnSet)
     {
-        if (string.IsNullOrWhiteSpace(name)) return false;
         if (FollowRealm()) Apply(announce: true);
-        if (_realmFolder is null || _graph.ActiveSet is not { Length: > 0 } set)
-        {
-            _log?.Warn(LogCategory,
-                $"'{name}' for room {room} is not kept: there is no realm or no game-data set to file it under. "
-                + "The map has it for this session.");
-            return false;
-        }
-        if (!string.Equals(seenOnRealm, _realmFolder, StringComparison.Ordinal))
-        {
-            _log?.Warn(LogCategory,
-                $"'{name}' for room {room} is not kept: it was seen on another realm than the one being played now.");
-            return false;
-        }
+        KeepResult result = TryKeep(room, name, seenOnRealm, seenOnSet);
+        // A name held but not on file was already explained by the warning about
+        // the file; one refused outright is explained here.
+        bool held = result is KeepResult.Stored or KeepResult.HeldUnwritten or KeepResult.HeldUnread
+            or KeepResult.HeldLaterFormat;
+        if (!held) _log?.Warn(LogCategory, $"The name seen for room {room} is not kept: {WhyNotStored(result)}.");
+        return result;
+    }
+
+    private KeepResult TryKeep(RoomKey room, string name, string? seenOnRealm, string? seenOnSet)
+    {
+        // The text is not echoed where it is refused: it may be what is wrong with it.
+        if (!Usable(name, out string clean)) return KeepResult.NotARoomName;
+        if (_realmFolder is null || _graph.ActiveSet is not { Length: > 0 } set) return KeepResult.NoRealmOrSet;
+        if (!string.Equals(seenOnRealm, _realmFolder, StringComparison.Ordinal)) return KeepResult.OtherRealm;
+        if (!string.Equals(seenOnSet, set, StringComparison.OrdinalIgnoreCase)) return KeepResult.OtherSet;
         if (_graph.GetRoom(room) is not { } onMap || !string.Equals(onMap.Name, name, StringComparison.Ordinal))
-        {
-            _log?.Warn(LogCategory,
-                $"'{name}' for room {room} is not kept: the room map no longer has the room under that name "
-                + "(the game-data set changed, or another client named it since).");
-            return false;
-        }
+            return KeepResult.NotOnTheMap;
 
         if (!_bySet.TryGetValue(set, out Dictionary<RoomKey, string>? held)) _bySet[set] = held = new();
-        held[room] = name;
-        _unwritten.Add((set, room, name));
+        held[room] = clean;
+        _unwritten.Add((set, room, clean));
         // Apply re-reads the file first when another client has written it, and
         // lays this name over what it finds.
         Apply(announce: false);
         TryWrite();
+        KeepResult result = _unwritten.Count == 0 ? KeepResult.Stored
+            : _newer ? KeepResult.HeldLaterFormat
+            : _unread ? KeepResult.HeldUnread
+            : KeepResult.HeldUnwritten;
         _log?.Info(LogCategory,
-            $"kept: room {room} of '{set}' is '{name}'"
-            + (_unwritten.Count > 0 ? " (on the map, not on file: see the warning about the file)" : ""));
+            $"kept: room {room} of '{set}' is '{clean}'"
+            + (result == KeepResult.Stored ? "" : " (on the map, not on file: see the warning about the file)"));
+        return result;
+    }
+
+    // Whether text someone supplied can be a room's name, and the name as it is
+    // kept: trimmed, not empty, no longer than MaxNameLength and free of control
+    // characters. The name ends up on the map, in the logs, the bug report and
+    // terminal notices fed to the emulator, where an escape sequence would be
+    // carried out rather than shown.
+    internal static bool Usable(string? text, out string name)
+    {
+        name = text?.Trim() ?? string.Empty;
+        if (name.Length == 0 || name.Length > MaxNameLength) return false;
+        foreach (char c in name)
+            if (char.IsControl(c)) return false;
         return true;
     }
 
@@ -155,8 +232,10 @@ public sealed class LearnedRoomNameStore
         if (string.IsNullOrWhiteSpace(folder)) folder = null;
         if (string.Equals(folder, _realmFolder, StringComparison.Ordinal)) return false;
 
-        // What the realm being left is still owed, laid over its file as it is now.
-        if (_unwritten.Count > 0)
+        // What the realm being left is still owed, laid over its file as it is
+        // now. Not when its folder is gone (removed, or renamed with no word of
+        // it): writing would make the folder again under the old name.
+        if (_unwritten.Count > 0 && _realmFolder is not null && Directory.Exists(_realmFolder))
         {
             RereadIfChangedOutside();
             TryWrite();
@@ -164,7 +243,9 @@ public sealed class LearnedRoomNameStore
         _realmFolder = folder;
         _bySet.Clear();
         _unwritten.Clear();
-        _unparsed = _newer = _unwritable = false;
+        _unparsed = _unread = _newer = _unwritable = false;
+        // What the tracker learned on the board being left is not this board's.
+        _graph.WithdrawLearnedNames();
         if (folder is not null && TryRead(out Dictionary<string, Dictionary<RoomKey, string>> onFile)) Take(onFile);
         return true;
     }
@@ -203,12 +284,13 @@ public sealed class LearnedRoomNameStore
     }
 
     // Replace what is held with the file when another client has written it, this
-    // client's unwritten changes laid over it. False when the file hasn't changed
-    // or can't be read.
+    // client's unwritten changes laid over it. A file that couldn't be opened last
+    // time is tried again whether or not it has changed. False when there was
+    // nothing new to read, or it can't be read.
     private bool RereadIfChangedOutside()
     {
         if (_realmFolder is null) return false;
-        if (!_stamp.ChangedOutside(AppPaths.RealmLearnedRoomNamesFile(_realmFolder))) return false;
+        if (!_unread && !_stamp.ChangedOutside(AppPaths.RealmLearnedRoomNamesFile(_realmFolder))) return false;
         if (!TryRead(out Dictionary<string, Dictionary<RoomKey, string>> onFile)) return false;
 
         _bySet.Clear();
@@ -223,7 +305,7 @@ public sealed class LearnedRoomNameStore
             if (!_bySet.TryGetValue(set, out Dictionary<RoomKey, string>? into)) _bySet[set] = into = new();
             into[room] = name;
         }
-        _log?.Debug(LogCategory, "re-read: another client on this realm changed it");
+        _log?.Debug(LogCategory, "re-read: the realm's file changed, or could be opened again");
         return true;
     }
 
@@ -233,6 +315,11 @@ public sealed class LearnedRoomNameStore
     }
 
     // ----- the file ------------------------------------------------------
+    //
+    // TryRead, TryWrite and the flags follow LearnedArrivalRoomStore's. They are a
+    // copy and not a shared helper because the two differ where it matters: this
+    // one holds a file it couldn't open back from being written at all (that one
+    // sets it aside), and each reads its own shape entry by entry.
 
     // Every member can come back null from a file put together by hand.
     private sealed class FileShape
@@ -256,9 +343,13 @@ public sealed class LearnedRoomNameStore
         public string? Name { get; set; }
     }
 
-    // Read the realm's file. False when it is there but can't be read, doesn't
-    // parse, or is a later client's. The stamp is marked either way, so a file
-    // that stays bad is looked at, and said, once.
+    // Read the realm's file. False when it is there but couldn't be opened,
+    // doesn't parse, or is a later client's.
+    //   - One that doesn't parse is damaged: the stamp is marked, so it is looked
+    //     at, and said, once, and it is set aside before the next write.
+    //   - One that couldn't be opened (held by another program, no permission) may
+    //     be whole. Nothing is known of it: it is tried again on every call, and
+    //     nothing is written over it meanwhile.
     private bool TryRead(out Dictionary<string, Dictionary<RoomKey, string>> onFile)
     {
         onFile = new Dictionary<string, Dictionary<RoomKey, string>>(StringComparer.OrdinalIgnoreCase);
@@ -269,10 +360,13 @@ public sealed class LearnedRoomNameStore
             {
                 _stamp.Mark(path);
                 _unparsed = _newer = false;
+                Opened(path);
                 return true;
             }
-            FileShape? file = JsonSerializer.Deserialize<FileShape>(File.ReadAllText(path));
+            string text = File.ReadAllText(path);
             _stamp.Mark(path);
+            Opened(path);
+            FileShape? file = JsonSerializer.Deserialize<FileShape>(text);
             if (file is null || file.Version < 1) throw new JsonException("no version");
             if (file.Version > FileVersion)
             {
@@ -283,31 +377,62 @@ public sealed class LearnedRoomNameStore
                 _newer = true;
                 return false;
             }
+
+            List<string>? refused = null;
             foreach (SetShape? set in file.Sets ?? new())
             {
                 if (set is null || string.IsNullOrWhiteSpace(set.Set)) continue;
                 if (!onFile.TryGetValue(set.Set, out Dictionary<RoomKey, string>? names)) onFile[set.Set] = names = new();
                 foreach (RoomShape? room in set.Rooms ?? new())
                 {
-                    if (room is null || string.IsNullOrWhiteSpace(room.Name)) continue;
-                    if (!RoomKey.TryParseWire(room.Room, out RoomKey key)) continue;
-                    names[key] = room.Name;
+                    // The key as this client writes it, and nothing looser: "15/863
+                    // (Door)" is an exit cell, not a room of this file.
+                    if (room is null || !RoomKey.TryParseWire(room.Room, out RoomKey key)
+                        || !string.Equals(key.ToString(), room.Room, StringComparison.Ordinal))
+                        continue;
+                    if (string.IsNullOrWhiteSpace(room.Name)) continue;
+                    if (!Usable(room.Name, out string name))
+                    {
+                        (refused ??= new()).Add($"{key} of '{(Usable(set.Set, out string setName) ? setName : "?")}'");
+                        continue;
+                    }
+                    names[key] = name;
                 }
             }
+            if (refused is not null)
+                _log?.Warn(LogCategory,
+                    $"'{path}' holds {refused.Count} name(s) that can't be a room's name (longer than {MaxNameLength} "
+                    + $"characters, or with control characters in them). They are not used: {string.Join(", ", refused)}.");
             _unparsed = _newer = false;
             return true;
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        catch (JsonException ex)
         {
-            _stamp.Mark(path);
             if (!_unparsed)
                 _log?.Warn(LogCategory,
-                    $"'{path}' can't be read ({ex.Message}), so no learned room name is put on the map. It is left as it "
-                    + "is; if a name is kept before it reads again, it is set aside under another name first, never "
-                    + "written over.");
+                    $"'{path}' doesn't read as a list of room names ({ex.Message}), so none is put on the map. It is left "
+                    + "as it is; if a name is kept before it reads again, it is set aside under another name first, "
+                    + "never written over.");
             _unparsed = true;
             return false;
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            if (!_unread)
+                _log?.Warn(LogCategory,
+                    $"'{path}' can't be opened ({ex.Message}), so its names are not on the map yet. It is tried again "
+                    + "each second, and nothing is written to it until it has been read: a name kept meanwhile is "
+                    + "held and written then.");
+            _unread = true;
+            return false;
+        }
+    }
+
+    private void Opened(string path)
+    {
+        if (!_unread) return;
+        _unread = false;
+        _log?.Info(LogCategory, $"'{path}' could be opened again.");
     }
 
     // Write what is held, when there is something the disk doesn't have. A failure
@@ -315,7 +440,7 @@ public sealed class LearnedRoomNameStore
     // in memory meanwhile.
     private void TryWrite()
     {
-        if (_realmFolder is null || _unwritten.Count == 0 || _newer) return;
+        if (_realmFolder is null || _unwritten.Count == 0 || _newer || _unread) return;
         string path = AppPaths.RealmLearnedRoomNamesFile(_realmFolder);
         try
         {

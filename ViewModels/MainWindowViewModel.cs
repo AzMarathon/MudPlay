@@ -952,8 +952,8 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.MovementControl.StateChanged += OnMovementControlStateChanged;
         // Name-learned prompt: fires when the tracker adopts a name
         // for a previously-unnamed room (typical of map-15 ganghouse
-        // rooms in 1.x exports). Modeless yes/no asks whether to write
-        // the new name back to Rooms.json; session-deduped so a single
+        // rooms in 1.x exports). Modeless yes/no asks whether to keep
+        // the new name with the realm's data; session-deduped so a single
         // walk doesn't re-prompt the same room on every observation.
         AppServices.Current.RoomTracker.NameLearned += OnRoomNameLearned;
 
@@ -2348,29 +2348,38 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Rooms we've already prompted about this session, each with the realm it
-    // was seen on: a name is kept per realm, so the same room is asked about
-    // again on another. Prevents asking the same yes/no twice when the player
-    // re-enters or the tracker re-observes the same null-name room.
-    private readonly HashSet<(string Realm, Game.Map.RoomKey Room)> _nameLearnedPrompted = new();
+    // Rooms we've already prompted about this session, each with the realm and
+    // the game-data set it was seen on: a name is kept per realm and filed under
+    // its set, so the same room number is asked about again on another of either.
+    // Prevents asking the same yes/no twice when the player re-enters or the
+    // tracker re-observes the same null-name room.
+    private readonly HashSet<(string Realm, string Set, Game.Map.RoomKey Room)> _nameLearnedPrompted = new();
 
     private void OnRoomNameLearned(Game.Map.NameLearnedEvent e)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() => PromptForLearnedNameAsync(e));
 
     private async void PromptForLearnedNameAsync(Game.Map.NameLearnedEvent e)
     {
-        // A kept name goes in the realm's folder. With no realm there is nowhere
-        // to keep it and so nothing to ask: the map has the name for the session.
+        // A kept name goes in the realm's folder, under the set the map was built
+        // from. With neither there is nowhere to keep it and so nothing to ask:
+        // the map has the name for the session.
         if (AppServices.Current.ActiveRealmFolder() is not { } realm) return;
-        if (!_nameLearnedPrompted.Add((realm, e.Key))) return;
+        if (AppServices.Current.RoomGraph.ActiveSet is not { Length: > 0 } set) return;
+        if (!_nameLearnedPrompted.Add((realm, set.ToUpperInvariant(), e.Key))) return;
 
         var vm = new ViewModels.RoomNameLearnedDialogViewModel(e.Key, e.ObservedName);
         bool keep = await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.RoomNameLearnedDialogViewModel, bool>(vm);
         if (!keep) return;
 
-        // The store says in the program log why, when it doesn't keep one.
-        AppServices.Current.LearnedRoomNames.Keep(e.Key, e.ObservedName, seenOnRealm: realm);
+        Game.Map.LearnedRoomNameStore.KeepResult result =
+            AppServices.Current.LearnedRoomNames.Keep(e.Key, e.ObservedName, seenOnRealm: realm, seenOnSet: set);
+        // Save was pressed and nothing reached the file: say so where the user is
+        // looking, the program log having the detail. Posted, as every status line
+        // is that may be written while the emulator is being fed.
+        if (Game.Map.LearnedRoomNameStore.WhyNotStored(result) is { } why)
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalStatus(
+                $"[Room name for {e.Key} not saved: {why}]", TerminalStatusKind.Notice));
     }
 
     private void RefreshLocationSlot()

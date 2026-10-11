@@ -147,10 +147,13 @@ public sealed class RoomGraphManager
         if (string.Equals(existing.Name, name, StringComparison.Ordinal)) return null;
 
         Room replaced = Rename(existing, name);
+        bool unnamedInData = _unnamedInData.Contains(key);
+        if (unnamedInData) _learnedThisSession.Add(key);
 
         _log?.Log(LogSeverity.Info, "RoomGraph",
             $"Learned name '{name}' for {key} (was '{existing.Name}').");
         RoomNameLearned?.Invoke(key, name);
+        if (unnamedInData) LearnedNamesMoved(tellKeptLists: false);
         return replaced;
     }
 
@@ -160,9 +163,9 @@ public sealed class RoomGraphManager
 
     // Make the rooms the data gives no name bear exactly the names the client's own
     // store holds for this set (LearnedRoomNameStore), and no other name from it: a
-    // name put here by an earlier call and absent from this one is taken off again,
-    // which is how a change of realm swaps one board's names for another's. A name
-    // the tracker learned this session and the store never took is left alone.
+    // name put here by an earlier call and absent from this one is taken off again.
+    // A name the tracker learned this session and the store never took is not this
+    // call's to touch; a change of realm takes those off (WithdrawLearnedNames).
     //
     // The quiet side of LearnRoomName: nothing is learned here, so RoomNameLearned
     // is not raised and no line is logged per room; the caller says the count.
@@ -173,6 +176,7 @@ public sealed class RoomGraphManager
     {
         ArgumentNullException.ThrowIfNull(names);
 
+        bool moved = false;
         List<RoomKey>? withdrawn = null;
         foreach (RoomKey key in _namedFromStore)
             if (!names.ContainsKey(key)) (withdrawn ??= new()).Add(key);
@@ -181,7 +185,9 @@ public sealed class RoomGraphManager
             foreach (RoomKey key in withdrawn)
             {
                 _namedFromStore.Remove(key);
-                if (_rooms.TryGetValue(key, out Room? room)) Rename(room, string.Empty);
+                if (!_rooms.TryGetValue(key, out Room? room)) continue;
+                Rename(room, string.Empty);
+                moved = true;
             }
         }
 
@@ -195,11 +201,63 @@ public sealed class RoomGraphManager
                 (namedByData ??= new()).Add(key);
                 continue;
             }
-            if (!string.Equals(room.Name, name, StringComparison.Ordinal)) Rename(room, name);
+            if (!string.Equals(room.Name, name, StringComparison.Ordinal))
+            {
+                Rename(room, name);
+                moved = true;
+            }
             _namedFromStore.Add(key);
             applied++;
         }
+        if (moved) LearnedNamesMoved(tellKeptLists: true);
         return new StoredNames(applied, namedByData is null ? Array.Empty<RoomKey>() : namedByData);
+    }
+
+    // Take off every name the tracker learned this session for a room the data
+    // leaves unnamed, kept or not. For a change of realm: what such a room was
+    // called on the board being left says nothing of this one, and a room still
+    // bearing that name could never be learned here (it is no longer nameless), so
+    // it would never be asked about or kept for this realm. The names the new
+    // realm's store holds go back on with ApplyStoredNames.
+    public void WithdrawLearnedNames()
+    {
+        if (_learnedThisSession.Count == 0) return;
+        bool moved = false;
+        foreach (RoomKey key in _learnedThisSession)
+        {
+            _namedFromStore.Remove(key);
+            if (!_rooms.TryGetValue(key, out Room? room) || room.HasUnknownName) continue;
+            Rename(room, string.Empty);
+            moved = true;
+        }
+        _learnedThisSession.Clear();
+        if (moved) LearnedNamesMoved(tellKeptLists: true);
+    }
+
+    // The names the map has for rooms the data leaves unnamed, stored or learned
+    // this session: what a list built from the Rooms table asks for when the table
+    // has no name (RoomNameIndex.NameOf). A new dictionary each time one of them
+    // changes and never altered after, so a list built off the UI thread reads it
+    // without a lock.
+    public IReadOnlyDictionary<RoomKey, string> LearnedNames => _learnedNames;
+
+    // A stored name went on a room or a learned one came off (the map was built,
+    // the realm changed, another client wrote): a list that kept names out of
+    // LearnedNames is out of date. Not raised for a name the tracker learns. A
+    // list built before shows that one when it is next built, as it always did,
+    // and none has to be rebuilt in the middle of a walk for it.
+    public event Action? LearnedNamesChanged;
+
+    private static readonly IReadOnlyDictionary<RoomKey, string> NoLearnedNames = new Dictionary<RoomKey, string>();
+    private volatile IReadOnlyDictionary<RoomKey, string> _learnedNames = NoLearnedNames;
+
+    private void LearnedNamesMoved(bool tellKeptLists)
+    {
+        Dictionary<RoomKey, string> names = new();
+        foreach (RoomKey key in _unnamedInData)
+            if (_rooms.TryGetValue(key, out Room? room) && !room.HasUnknownName) names[key] = room.Name;
+        _learnedNames = names;
+        if (tellKeptLists) LearnedNamesChanged?.Invoke();
     }
 
     // The rooms the data gives no name: the only ones a stored name may be put on.
@@ -209,6 +267,10 @@ public sealed class RoomGraphManager
 
     // Of those, the ones bearing a name ApplyStoredNames put there.
     private readonly HashSet<RoomKey> _namedFromStore = new();
+
+    // Of those, the ones LearnRoomName named since the graph was built or the
+    // realm last changed.
+    private readonly HashSet<RoomKey> _learnedThisSession = new();
 
     private Room Rename(Room existing, string name)
     {
@@ -784,6 +846,8 @@ public sealed class RoomGraphManager
         _rooms.Clear();
         _unnamedInData.Clear();
         _namedFromStore.Clear();
+        _learnedThisSession.Clear();
+        _learnedNames = NoLearnedNames;
         _byName.Clear();
         _byNameAndExits.Clear();
         _leversByRoom.Clear();

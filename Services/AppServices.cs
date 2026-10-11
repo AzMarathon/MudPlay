@@ -3907,11 +3907,31 @@ public sealed class AppServices
         // layout, the maze index, room search) is handed rooms already named. The
         // profile handlers sit here too, ahead of the tracker's, so a loaded
         // character's last room is looked up under the name its realm has for it.
+        //
+        // The lists that label rooms from the Rooms table (item, spell and quest
+        // records, the trainer and bank lists, item givers) ask the map for a room
+        // the table leaves unnamed, and the ones that keep the answer are told when
+        // a realm's names go on or come off. Both are set before the store is
+        // built, so its first apply already reaches them; ItemSources exists above.
+        GameData.RoomNameWhenDataHasNone = (map, room) =>
+            RoomGraph.LearnedNames.GetValueOrDefault(new Game.Map.RoomKey(map, room));
+        RoomGraph.LearnedNamesChanged += () =>
+        {
+            GameData.LearnedRoomNamesChanged(
+                Game.GameData.TrainerCatalog.DerivedKey, Game.GameData.BankCatalog.DerivedKey);
+            // Rebuilt off the UI thread, as at a set switch, so the next walk that
+            // asks who gives an item doesn't pay for it.
+            Task.Run(ItemSources.Warm);
+        };
         LearnedRoomNames = new Game.Map.LearnedRoomNameStore(RoomGraph, ActiveRealmFolder, Log);
         RoomGraph.GraphReloaded += LearnedRoomNames.OnGraphReloaded;
         Profile.ProfileLoaded += _ => LearnedRoomNames.OnRealmChanged();
         Profile.BbsPinApplied += _ => LearnedRoomNames.OnRealmChanged();
         Profile.ProfileClosed += LearnedRoomNames.OnRealmChanged;
+        // A BBS renamed from Profile Management raises no pin: the realm's folder
+        // moved under the new name, and the store goes with it.
+        Profile.BbsRenamed += (from, to) =>
+            LearnedRoomNames.OnFolderRenamed(AppPaths.BbsFolder(from), AppPaths.BbsFolder(to));
         LearnedRoomNames.OnRealmChanged();
         Tick.HeartbeatElapsed += () => LearnedRoomNames.TakeInOutsideChanges();
         // Once a set's graph is loaded, build the lists Navigation, Settings and the

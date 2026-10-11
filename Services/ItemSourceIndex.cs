@@ -95,9 +95,14 @@ public sealed class ItemSourceIndex
     // Load is the load of the set it was built from, name and count: a set imported
     // again over itself keeps its name, and the name alone left the old build
     // answering until a real switch.
+    //
+    // RoomNames is the cache's learned-room-names count at the build: a room
+    // giver is labelled with its room's name, and for a room the data leaves
+    // unnamed that is a name the client learned, which changes with the realm.
     private sealed class Snapshot
     {
         public required GameDataCache.Load Load { get; init; }
+        public required long RoomNames { get; init; }
         public required Dictionary<int, List<ItemSource>> Containers { get; init; }
         public required Dictionary<int, List<ItemGiver>> Givers { get; init; }
         public required Dictionary<int, List<RoomKey>> GiverRooms { get; init; }
@@ -192,26 +197,30 @@ public sealed class ItemSourceIndex
 
     private Snapshot EnsureBuilt()
     {
-        if (_snapshot is { } current && current.Load == _cache.ActiveLoad) return current;
+        if (_snapshot is { } current && current.Load == _cache.ActiveLoad
+            && current.RoomNames == _cache.LearnedRoomNamesVersion)
+            return current;
 
         lock (_buildGate)
         {
             // Read once the gate is ours and before the build: another thread may
             // have published while we waited, and the set may have been loaded again.
             GameDataCache.Load load = _cache.ActiveLoad;
-            if (_snapshot is { } published && published.Load == load) return published;
+            long roomNames = _cache.LearnedRoomNamesVersion;
+            if (_snapshot is { } published && published.Load == load && published.RoomNames == roomNames)
+                return published;
             // The cache's load moves before the textblock store reloads. A build that
             // begins in between reads this load's tables and the last load's
             // textblocks: it answers the caller and is not kept, so the next ask
             // builds again from the store once it is this load's.
             bool textblocksAreThisLoads = _tb.LoadedFor == load;
-            Snapshot built = Build(load);
+            Snapshot built = Build(load, roomNames);
             if (textblocksAreThisLoads) _snapshot = built;
             return built;
         }
     }
 
-    private Snapshot Build(GameDataCache.Load load)
+    private Snapshot Build(GameDataCache.Load load, long roomNames)
     {
         string? active = load.Set;
         var containers = new Dictionary<int, List<ItemSource>>();
@@ -246,6 +255,7 @@ public sealed class ItemSourceIndex
         return new Snapshot
         {
             Load = load,
+            RoomNames = roomNames,
             Containers = containers,
             Givers = givers,
             GiverRooms = giverRooms,
@@ -282,7 +292,6 @@ public sealed class ItemSourceIndex
     {
         Dictionary<int, string> itemNames = BuildNameMap("Items");
         Dictionary<int, string> monsterNames = BuildNameMap("Monsters");
-        Dictionary<(int Map, int Room), string> roomNames = BuildRoomNameMap();
 
         var roots = new List<GiverRoot>();
         var giveItems = new List<int>();
@@ -370,9 +379,7 @@ public sealed class ItemSourceIndex
                     {
                         string name = root.Kind == ItemGiverKind.Monster
                             ? ResolveName(monsterNames, root.Number, $"Monster #{root.Number}")
-                            : (roomNames.TryGetValue((root.Map, root.Room), out string? rn) && rn.Length > 0
-                                ? rn
-                                : $"Room {root.Map}/{root.Room}");
+                            : RoomLabel(root.Map, root.Room);
                         // A single-block give supplies its own trigger on the award
                         // line; only fall back to the parent-menu keyword when this
                         // line leads with a directive.
@@ -400,7 +407,6 @@ public sealed class ItemSourceIndex
         GameTable? items = _cache.GetTable("Items");
         if (items is null) return 0;
 
-        Dictionary<(int Map, int Room), string>? roomNames = null;
         int withSources = 0;
         foreach (GameRow row in items.Rows)
         {
@@ -429,11 +435,7 @@ public sealed class ItemSourceIndex
                         if (givers.Exists(g => g.Kind == ItemGiverKind.Room && g.Map == map && g.Room == room
                                 && string.Equals(g.Keyword, command, StringComparison.OrdinalIgnoreCase)))
                             continue;
-                        roomNames ??= BuildRoomNameMap();
-                        string name = roomNames.TryGetValue((map, room), out string? rn) && rn.Length > 0
-                            ? rn
-                            : $"Room {map}/{room}";
-                        givers.Add(template with { Map = map, Room = room, Name = name });
+                        givers.Add(template with { Map = map, Room = room, Name = RoomLabel(map, room) });
                     }
                 }
             }
@@ -734,19 +736,10 @@ public sealed class ItemSourceIndex
         return map;
     }
 
-    private Dictionary<(int Map, int Room), string> BuildRoomNameMap()
-    {
-        var map = new Dictionary<(int, int), string>();
-        GameTable? doc = _cache.GetTable("Rooms");
-        if (doc is null) return map;
-        foreach (GameRow row in doc.Rows)
-        {
-            if (!TryInt(row, "Map Number", out int m) || !TryInt(row, "Room Number", out int r)) continue;
-            if (row.TryGetProperty("Name", out GameValue nm) && nm.ValueKind == JsonValueKind.String)
-                map[(m, r)] = nm.GetString() ?? string.Empty;
-        }
-        return map;
-    }
+    // A room giver's label: the room's name (the table's, or the one learned for a
+    // room the table leaves unnamed), else its number.
+    private string RoomLabel(int map, int room) =>
+        RoomNameIndex.NameOf(_cache, map, room) is { Length: > 0 } name ? name : $"Room {map}/{room}";
 
     private static string ResolveName(Dictionary<int, string> names, int number, string fallback)
         => names.TryGetValue(number, out string? n) && n.Length > 0 ? n : fallback;

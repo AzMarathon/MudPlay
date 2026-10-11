@@ -9,13 +9,11 @@ namespace MudPlay.Game.Quests;
 public sealed class QuestScriptNames
 {
     private readonly GameDataCache _cache;
-    private readonly IReadOnlyDictionary<(int Map, int Room), string> _rooms;
 
     public QuestScriptNames(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
         _cache = cache;
-        _rooms = RoomNameIndex.For(cache);
     }
 
     public string Item(int number) => TBInfoActionDecoder.Named(_cache, "Items", number, "Item");
@@ -25,7 +23,9 @@ public sealed class QuestScriptNames
     public string Race(int number) => TBInfoActionDecoder.Named(_cache, "Races", number, "Race");
     public static string Ability(int number) => AbilityNames.FormatId(number);
 
+    // Asked each time and not kept: a room the data leaves unnamed answers to the
+    // name the client learned for it, which changes with the realm.
     public string Room(int map, int room)
-        => _rooms.TryGetValue((map, room), out string? name) && name.Length > 0
+        => RoomNameIndex.NameOf(_cache, map, room) is { Length: > 0 } name
             ? name : $"Room {map}/{room}";
 }

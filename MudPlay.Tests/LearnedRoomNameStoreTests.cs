@@ -96,9 +96,15 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         // The tracker learning a name: what puts it on the map for the session.
         public void See(RoomKey room, string name) => Assert.NotNull(Graph.LearnRoomName(room, name));
 
-        public bool Keep(RoomKey room, string name) => Store.Keep(room, name, Realm);
+        // Save pressed at once: the realm and set are the ones the name was seen on.
+        public LearnedRoomNameStore.KeepResult KeepHow(RoomKey room, string name) =>
+            Store.Keep(room, name, Realm, Graph.ActiveSet);
+
+        public bool Keep(RoomKey room, string name) => KeepHow(room, name) == LearnedRoomNameStore.KeepResult.Stored;
 
         public string NameOf(RoomKey room) => Graph.GetRoom(room)!.Name;
+
+        public bool Unnamed(RoomKey room) => Graph.GetRoom(room)!.HasUnknownName;
     }
 
     private Client Start(string? realm, string? set = "alpha")
@@ -265,7 +271,7 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Client client = Start(_realmA);
         client.See(House, HouseName);
         Assert.True(client.Keep(House, HouseName));
-        // Learned this session and never kept: the map's until it is rebuilt.
+        // Learned this session and never kept (Skip, or the prompt still open).
         client.See(Cellar, CellarName);
         _log.Clear();
 
@@ -276,7 +282,9 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Assert.Empty(client.Graph.FindCandidates(HouseName, HouseExits));
         Assert.Empty(client.Graph.FindByName(HouseName));
         Assert.Equal((0, 0), (client.Store.CountForActiveSet, client.Store.OnRoomMap));
-        Assert.Equal(CellarName, client.NameOf(Cellar));
+        // The unsaved one was that board's too: it comes off with the saved one.
+        Assert.True(client.Unnamed(Cellar));
+        Assert.Empty(client.Graph.FindByName(CellarName));
         Assert.False(File.Exists(NamesFile(_realmB)));
 
         // Seen there under another name, and kept for that realm.
@@ -301,31 +309,76 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
     [Fact]
     public void AnAnswerThatComesTooLate_OrForNothing_KeepsNothing()
     {
-        SeedSet("beta");
         Client client = Start(_realmA);
         client.See(House, HouseName);
 
         // No name.
-        Assert.False(client.Keep(House, ""));
-        Assert.False(client.Keep(House, "   "));
+        Assert.Equal(LearnedRoomNameStore.KeepResult.NotARoomName, client.KeepHow(House, ""));
+        Assert.Equal(LearnedRoomNameStore.KeepResult.NotARoomName, client.KeepHow(House, "   "));
         // A room the map doesn't have, and one it has under no such name.
-        Assert.False(client.Keep(new RoomKey(99, 99), "Phantom Room"));
-        Assert.False(client.Keep(Cellar, CellarName));
+        Assert.Equal(LearnedRoomNameStore.KeepResult.NotOnTheMap, client.KeepHow(new RoomKey(99, 99), "Phantom Room"));
+        Assert.Equal(LearnedRoomNameStore.KeepResult.NotOnTheMap, client.KeepHow(Cellar, CellarName));
         // Seen on another realm than the one played when the answer came.
-        Assert.False(client.Store.Keep(House, HouseName, seenOnRealm: _realmB));
-        // The set changed while the question stood: the map lost the name, and
-        // 15/861 of the new set is another room.
-        client.Cache.SwitchSet("beta");
-        Assert.False(client.Keep(House, HouseName));
+        Assert.Equal(LearnedRoomNameStore.KeepResult.OtherRealm,
+            client.Store.Keep(House, HouseName, seenOnRealm: _realmB, seenOnSet: "alpha"));
+        // Seen under another set than the map is built from now.
+        Assert.Equal(LearnedRoomNameStore.KeepResult.OtherSet,
+            client.Store.Keep(House, HouseName, seenOnRealm: _realmA, seenOnSet: "beta"));
+        Assert.Equal(LearnedRoomNameStore.KeepResult.OtherSet,
+            client.Store.Keep(House, HouseName, seenOnRealm: _realmA, seenOnSet: null));
         // No realm to keep it in.
-        client.Cache.SwitchSet("alpha");
-        client.See(House, HouseName);
         client.Realm = null;
-        Assert.False(client.Keep(House, HouseName));
+        Assert.Equal(LearnedRoomNameStore.KeepResult.NoRealmOrSet, client.KeepHow(House, HouseName));
 
+        Assert.Equal(8, Said("is not kept: "));
+        Assert.Equal(0, Said("kept: room"));
         Assert.False(File.Exists(NamesFile(_realmA)));
         Assert.False(File.Exists(NamesFile(_realmB)));
         Assert.True(Start(_realmA).Graph.GetRoom(House)!.HasUnknownName);
+    }
+
+    // The prompt stood open while the Game Data menu switched the set, and the
+    // new set's data happens to give that room that very name. Save is refused:
+    // the name was seen on the other set, and nothing is said to be kept.
+    [Fact]
+    public void ASaveThatArrivesUnderAnotherSet_IsRefused_EvenWhenThatSetsDataHasTheSameName()
+    {
+        SeedSet("beta", houseName: HouseName);
+        Client client = Start(_realmA);
+        client.See(House, HouseName);
+        string seenOnSet = client.Graph.ActiveSet!;
+
+        client.Cache.SwitchSet("beta");
+        _log.Clear();
+        Assert.Equal(LearnedRoomNameStore.KeepResult.OtherSet,
+            client.Store.Keep(House, HouseName, seenOnRealm: _realmA, seenOnSet: seenOnSet));
+
+        Assert.Equal(0, Said("kept: room"));
+        Assert.Equal(0, Said("dropped"));
+        Assert.Equal(1, Said("is not kept: the game data set has changed since it was seen"));
+        Assert.False(File.Exists(NamesFile(_realmA)));
+        client.Cache.SwitchSet("alpha");
+        Assert.True(client.Unnamed(House));
+    }
+
+    // Every outcome but "stored" has a few words for the user who pressed Save.
+    [Fact]
+    public void EveryOutcomeButStored_HasWordsForTheUser()
+    {
+        foreach (LearnedRoomNameStore.KeepResult result in Enum.GetValues<LearnedRoomNameStore.KeepResult>())
+        {
+            string? why = LearnedRoomNameStore.WhyNotStored(result);
+            if (result == LearnedRoomNameStore.KeepResult.Stored) Assert.Null(why);
+            else
+            {
+                Assert.False(string.IsNullOrWhiteSpace(why));
+                // It goes into a terminal status line, written as Latin-1.
+                Assert.All(why!, c => Assert.InRange(c, ' ', '~'));
+            }
+        }
+        Assert.Equal(Enum.GetValues<LearnedRoomNameStore.KeepResult>().Length - 1,
+            Enum.GetValues<LearnedRoomNameStore.KeepResult>()
+                .Select(LearnedRoomNameStore.WhyNotStored).Where(w => w is not null).Distinct().Count());
     }
 
     // ----- the data comes to name the room ----------------------------
@@ -441,7 +494,7 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
 
         // Kept for the session, and said to be held only.
         client.See(House, HouseName);
-        Assert.True(client.Keep(House, HouseName));
+        Assert.Equal(LearnedRoomNameStore.KeepResult.HeldLaterFormat, client.KeepHow(House, HouseName));
         client.Store.TakeInOutsideChanges();
 
         Assert.Equal(HouseName, client.NameOf(House));
@@ -462,9 +515,9 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Client client = Start(blocked);
 
         client.See(House, HouseName);
-        Assert.True(client.Keep(House, HouseName));
+        Assert.Equal(LearnedRoomNameStore.KeepResult.HeldUnwritten, client.KeepHow(House, HouseName));
         client.See(Cellar, CellarName);
-        Assert.True(client.Keep(Cellar, CellarName));
+        Assert.Equal(LearnedRoomNameStore.KeepResult.HeldUnwritten, client.KeepHow(Cellar, CellarName));
 
         Assert.Equal(1, Warnings);
         Assert.Equal(1, Said("can't be written"));
@@ -543,12 +596,220 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Assert.Empty(graph.FindByName(HouseName));
         Assert.Equal(new[] { House }, graph.FindCandidates("Other", HouseExits));
 
-        // A name the tracker learned is not the store's to take back.
+        // A name the tracker learned is not this call's to take back.
         client.See(Cellar, CellarName);
         Assert.Equal(0, graph.ApplyStoredNames(new Dictionary<RoomKey, string>()).Applied);
         Assert.True(graph.GetRoom(House)!.HasUnknownName);
         Assert.Empty(graph.FindCandidates("Other", HouseExits));
         Assert.Empty(graph.FindByName("Other"));
         Assert.Equal(CellarName, client.NameOf(Cellar));
+
+        // A change of realm takes those off, a learned name the store then took
+        // included, and leaves every name the data gives.
+        client.See(Attic, AtticName);
+        graph.ApplyStoredNames(new Dictionary<RoomKey, string> { [Attic] = AtticName });
+        graph.WithdrawLearnedNames();
+        Assert.True(client.Unnamed(Cellar));
+        Assert.True(client.Unnamed(Attic));
+        Assert.Empty(graph.FindByName(CellarName));
+        Assert.Empty(graph.FindByName(AtticName));
+        Assert.Equal("Oak Street", client.NameOf(Street));
+        Assert.Empty(graph.LearnedNames);
+        // Nothing left to take off: the store's own names are untouched by it.
+        graph.ApplyStoredNames(new Dictionary<RoomKey, string> { [House] = HouseName });
+        graph.WithdrawLearnedNames();
+        Assert.Equal(HouseName, client.NameOf(House));
+        Assert.Equal(new[] { House }, graph.LearnedNames.Keys);
+    }
+
+    // ----- a change of realm takes the session's names off (the owner, 2026-10-11:
+    //       "learned room names are per realm on a BBS") ------------------
+
+    // Skip, or a prompt still open, on one realm; then a character of another
+    // realm on the same set, so the map is not rebuilt. The room is nameless
+    // there again: whatever that board prints is learned, asked about and kept
+    // for it, whether it is another name or the same one.
+    [Theory]
+    [InlineData("Their House")]
+    [InlineData(HouseName)]
+    public void ANameLearnedAndNotSaved_ComesOffTheMapOnAnotherRealm_AndIsLearnedThereAfresh(string printedThere)
+    {
+        Client client = Start(_realmA);
+        RoomTracker tracker = new(client.Graph);
+        tracker.SetLocated(Street);
+        tracker.NoteRoomObserved(new RoomObservation(HouseName, HouseExits));
+        Assert.Equal(HouseName, client.NameOf(House));
+
+        client.Realm = _realmB;
+        client.Store.OnRealmChanged();
+        Assert.True(client.Unnamed(House));
+
+        RoomTracker there = new(client.Graph);
+        NameLearnedEvent? asked = null;
+        there.NameLearned += e => asked = e;
+        there.SetLocated(Street);
+        there.NoteRoomObserved(new RoomObservation(printedThere, HouseExits));
+
+        Assert.Equal(RoomConfidence.Confirmed, there.State.Confidence);
+        Assert.Equal(House, there.State.CurrentRoom!.Key);
+        Assert.Equal(new NameLearnedEvent(House, printedThere), asked);
+        Assert.True(client.Keep(House, printedThere));
+        Assert.Contains(printedThere, File.ReadAllText(NamesFile(_realmB)));
+        Assert.False(File.Exists(NamesFile(_realmA)));
+    }
+
+    // ----- a name is text someone supplied -------------------------------
+
+    // A stored name is another client's or a hand edit's. One that could not be a
+    // room's name is not put on the map, and the warning names the room without
+    // repeating the text.
+    [Fact]
+    public void AStoredNameThatCouldNotBeARoomsName_IsNotUsed_AndNotEchoed()
+    {
+        Directory.CreateDirectory(_realmA);
+        string huge = new('X', LearnedRoomNameStore.MaxNameLength + 1);
+        string longest = new('Y', LearnedRoomNameStore.MaxNameLength);
+        File.WriteAllText(NamesFile(_realmA),
+            "{ \"Version\": 1, \"Sets\": [ { \"Set\": \"alpha\", \"Rooms\": ["
+            + "{ \"Room\": \"15/861\", \"Name\": \"\\u001b[2J\\u001b[31mEvil\\r\\nsuicide\\u0000\" },"
+            + "{ \"Room\": \"15/862\", \"Name\": \"" + huge + "\" },"
+            + "{ \"Room\": \"15/863 (Door)\", \"Name\": \"An Exit Cell\" },"
+            + "{ \"Room\": \" 15/863 \", \"Name\": \"A Padded Key\" } ] } ] }");
+
+        Client client = Start(_realmA);
+
+        Assert.True(client.Unnamed(House));
+        Assert.True(client.Unnamed(Cellar));
+        Assert.True(client.Unnamed(Attic));
+        Assert.Equal(0, client.Store.CountForActiveSet);
+        LogEntry warned = Assert.Single(_log, e => e.Severity == LogSeverity.Warn);
+        Assert.Contains("15/861 of 'alpha', 15/862 of 'alpha'", warned.Message);
+        Assert.DoesNotContain("Evil", warned.Message);
+        Assert.DoesNotContain("XXXX", warned.Message);
+        Assert.DoesNotContain(_log, e => e.Message.Contains('\u001b') || e.Message.Contains("suicide"));
+
+        // At the cap and padded: used, trimmed.
+        File.WriteAllText(NamesFile(_realmA),
+            "{ \"Version\": 1, \"Sets\": [ { \"Set\": \"alpha\", \"Rooms\": ["
+            + "{ \"Room\": \"15/861\", \"Name\": \"  " + longest + "  \" },"
+            + "{ \"Room\": \"15/862\", \"Name\": \"\\tPadded Cellar \" } ] } ] }");
+        File.SetLastWriteTimeUtc(NamesFile(_realmA), DateTime.UtcNow.AddSeconds(5));
+        Assert.True(client.Store.TakeInOutsideChanges());
+        Assert.Equal((longest, "Padded Cellar"), (client.NameOf(House), client.NameOf(Cellar)));
+    }
+
+    // The same check before a name is kept: the game's own text, but a name that
+    // long or with such characters in it is no room name.
+    [Fact]
+    public void ANameThatCouldNotBeARoomsName_IsNotKept()
+    {
+        Client client = Start(_realmA);
+        string huge = new('X', LearnedRoomNameStore.MaxNameLength + 1);
+        client.See(House, huge);
+        client.See(Cellar, "Cellar\u001b[31m");
+
+        Assert.Equal(LearnedRoomNameStore.KeepResult.NotARoomName, client.KeepHow(House, huge));
+        Assert.Equal(LearnedRoomNameStore.KeepResult.NotARoomName, client.KeepHow(Cellar, "Cellar\u001b[31m"));
+
+        Assert.False(File.Exists(NamesFile(_realmA)));
+        Assert.DoesNotContain(_log, e => e.Source == LearnedRoomNameStore.LogCategory
+            && (e.Message.Contains("XXXX") || e.Message.Contains('\u001b')));
+        Assert.Equal(2, Said("is not kept: it is too long or has characters a room name can't have"));
+    }
+
+    // ----- a file that can't be opened is not a damaged one ----------------
+
+    // Another program holds the file: it may be whole. Nothing is put on the
+    // map, nothing is set aside, and a name kept meanwhile is not written over
+    // it. Once it opens, what it holds and what was kept are both on file.
+    [Fact]
+    public void AFileThatCantBeOpened_IsNotDamaged_AndIsNotWrittenUntilItHasBeenRead()
+    {
+        Client first = Start(_realmA);
+        first.See(House, HouseName);
+        Assert.True(first.Keep(House, HouseName));
+        byte[] whole = File.ReadAllBytes(NamesFile(_realmA));
+        _log.Clear();
+
+        Client client;
+        using (new FileStream(NamesFile(_realmA), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            client = Start(_realmA);
+            Assert.True(client.Unnamed(House));
+            Assert.Equal(1, Said("can't be opened"));
+
+            client.See(Cellar, CellarName);
+            Assert.Equal(LearnedRoomNameStore.KeepResult.HeldUnread, client.KeepHow(Cellar, CellarName));
+            for (int i = 0; i < 5; i++) Assert.False(client.Store.TakeInOutsideChanges());
+
+            Assert.Equal(CellarName, client.NameOf(Cellar));
+            Assert.Equal(1, Warnings);
+            Assert.False(File.Exists(NamesFile(_realmA) + ".bad"));
+            Assert.Empty(Directory.GetFiles(_realmA, "*.tmp"));
+        }
+        Assert.Equal(whole, File.ReadAllBytes(NamesFile(_realmA)));
+
+        // The next heartbeat reads it: its name goes on the map, the kept one on file.
+        Assert.True(client.Store.TakeInOutsideChanges());
+        Assert.Equal((HouseName, CellarName), (client.NameOf(House), client.NameOf(Cellar)));
+        Assert.Equal(1, Said("could be opened again"));
+        Assert.False(File.Exists(NamesFile(_realmA) + ".bad"));
+        Client next = Start(_realmA);
+        Assert.Equal((HouseName, CellarName), (next.NameOf(House), next.NameOf(Cellar)));
+    }
+
+    // ----- the realm's folder renamed --------------------------------------
+
+    // A BBS renamed from Profile Management: the folder moves and no pin is
+    // raised. The names stay on the map, an unsaved one too, and a later keep
+    // goes to the file where it now is; the old folder is not made again.
+    [Fact]
+    public void ABbsRenamed_TakesTheStoreWithItsFolder_AndNothingComesOffTheMap()
+    {
+        Client client = Start(_realmA);
+        client.See(House, HouseName);
+        Assert.True(client.Keep(House, HouseName));
+        client.See(Cellar, CellarName);
+
+        string board = Path.Combine(_root, "BBS", "board"), renamed = Path.Combine(_root, "BBS", "renamed");
+        Directory.Move(board, renamed);
+        client.Realm = Path.Combine(renamed, "Realms", "one");
+        client.Store.OnFolderRenamed(board, renamed);
+
+        Assert.Equal(client.Realm, client.Store.RealmFolder);
+        Assert.False(client.Store.TakeInOutsideChanges());
+        Assert.Equal((HouseName, CellarName), (client.NameOf(House), client.NameOf(Cellar)));
+        Assert.Equal(1, client.Store.CountForActiveSet);
+
+        Assert.True(client.Keep(Cellar, CellarName));
+        string file = File.ReadAllText(NamesFile(client.Realm));
+        Assert.Contains("15/861", file);
+        Assert.Contains("15/862", file);
+        Assert.False(Directory.Exists(board));
+
+        // Another BBS renamed: nothing of this realm's moves.
+        client.Store.OnFolderRenamed(Path.Combine(_root, "BBS", "other"), Path.Combine(_root, "BBS", "another"));
+        Assert.Equal(client.Realm, client.Store.RealmFolder);
+        Assert.Equal((HouseName, CellarName), (client.NameOf(House), client.NameOf(Cellar)));
+    }
+
+    // A realm left with a name still to be written, its folder gone meanwhile
+    // (removed, or renamed with no word of it): the folder is not made again.
+    [Fact]
+    public void LeavingARealmWhoseFolderIsGone_DoesNotMakeItAgain()
+    {
+        string blocked = Path.Combine(_root, "BBS", "gone", "Realms", "one");
+        Directory.CreateDirectory(Path.GetDirectoryName(blocked)!);
+        File.WriteAllText(blocked, "not a folder");
+        Client client = Start(blocked);
+        client.See(House, HouseName);
+        Assert.Equal(LearnedRoomNameStore.KeepResult.HeldUnwritten, client.KeepHow(House, HouseName));
+        Directory.Delete(Path.Combine(_root, "BBS", "gone"), recursive: true);
+
+        client.Realm = _realmB;
+        client.Store.OnRealmChanged();
+
+        Assert.False(Directory.Exists(Path.Combine(_root, "BBS", "gone")));
+        Assert.True(client.Unnamed(House));
     }
 }

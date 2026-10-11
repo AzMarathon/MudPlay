@@ -122,6 +122,7 @@ public sealed partial class GameDataCache
     // the old ones is never kept. Guarded by the _tables lock.
     private readonly Dictionary<string, object> _derived = new(StringComparer.Ordinal);
     private long _generation;
+    private long _derivedForgets;
 
     // The load the cache is serving (see Load, in GameDataCache.Load.cs). Whatever keeps something built from the tables
     // and decides for itself when it is out of date reads this BEFORE building and
@@ -655,19 +656,49 @@ public sealed partial class GameDataCache
     public T Derived<T>(string key, Func<T> build) where T : class
     {
         ArgumentNullException.ThrowIfNull(build);
-        long generation;
+        long generation, forgets;
         lock (_tables)
         {
             if (_derived.TryGetValue(key, out object? hit)) return (T)hit;
             generation = _generation;
+            forgets = _derivedForgets;
         }
         T value = build();
         lock (_tables)
         {
-            if (generation != _generation) return value;
+            if (generation != _generation || forgets != _derivedForgets) return value;
             if (_derived.TryGetValue(key, out object? won)) return (T)won;
             _derived[key] = value;
             return value;
+        }
+    }
+
+    // The name the client has for a room the active set's Rooms table leaves
+    // unnamed, or null. The tables are a read-only base and learned names are
+    // never written into them, so whatever labels a room from the table asks here
+    // when the table has nothing (Game.GameData.RoomNameIndex.NameOf). Set once by
+    // AppServices to the room map's learned names; unset, a nameless room stays
+    // nameless. May be called from any thread.
+    public Func<int, int, string?>? RoomNameWhenDataHasNone { get; set; }
+
+    // Moves each time those names change in a way a kept list must follow (see
+    // LearnedRoomNamesChanged). An index that keeps room names and decides for
+    // itself when it is out of date keeps this beside ActiveLoad.
+    public long LearnedRoomNamesVersion => Interlocked.Read(ref _learnedRoomNamesVersion);
+    private long _learnedRoomNamesVersion;
+
+    // The learned names changed: one realm's came off the map, or another's went
+    // on. The Derived results named here kept some of them and are dropped; the
+    // tables are untouched, so the load does not move. A Derived build in flight
+    // is answered and not kept, whichever key it was for.
+    public void LearnedRoomNamesChanged(params string[] derivedKeepingThem)
+    {
+        ArgumentNullException.ThrowIfNull(derivedKeepingThem);
+        lock (_tables)
+        {
+            foreach (string key in derivedKeepingThem) _derived.Remove(key);
+            _derivedForgets++;
+            Interlocked.Increment(ref _learnedRoomNamesVersion);
         }
     }
 

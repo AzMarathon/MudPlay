@@ -330,8 +330,12 @@ public sealed class ItemMdbViewBuilder
     // which have no use for it. Only the item record asks.
     public IReadOnlyList<PlacedInRow> ExitUsesOf(int itemNumber)
     {
-        static string Where(RoomKey room, string name) =>
-            string.IsNullOrEmpty(name) ? $"Room {room.Map}/{room.Room}" : $"{name} - {room.Map}/{room.Room}";
+        // The index keeps the table's names. A room the table leaves unnamed is asked
+        // for here, each time: the name learned for it changes with the realm.
+        string Where(RoomKey room, string name) =>
+            (string.IsNullOrEmpty(name) ? ResolveRoomName(room.Map, room.Room) : name) is { } known
+                ? $"{known} - {room.Map}/{room.Room}"
+                : $"Room {room.Map}/{room.Room}";
 
         List<PlacedInRow> rows = new();
         foreach (Game.GameData.ExitKeyUse use in Game.GameData.ItemUsedOnIndex.UsesOf(_cache, itemNumber))
@@ -682,9 +686,7 @@ public sealed class ItemMdbViewBuilder
     // From the per-set name index: a room-command item lists a few hundred rooms,
     // and scanning the Rooms table once per room took seconds.
     private string? ResolveRoomName(int mapNo, int roomNo) =>
-        Game.GameData.RoomNameIndex.For(_cache).TryGetValue((mapNo, roomNo), out string? name) && name.Length > 0
-            ? name
-            : null;
+        Game.GameData.RoomNameIndex.NameOf(_cache, mapNo, roomNo) is { Length: > 0 } name ? name : null;
 
     // One clickable DroppedByRow per "Monster #N(X%)" token in Obtained From,
     // resolved to its Monsters.Name (+ drop-rate suffix), de-duplicated by label.
