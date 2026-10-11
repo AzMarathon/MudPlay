@@ -63,14 +63,35 @@ public sealed partial class DeathDetector : IDisposable
             text, [], when ?? DateTimeOffset.UtcNow, false));
     }
 
+    // The Stock engine's line for a death in a Colliseum room with arenas in normal
+    // mode, printed in place of the miracle line and ahead of the lives readout:
+    // that death took no life, item, coin or key (GAME_MECHANICS "Death threshold &
+    // consequences").
+    public const string ColliseumSaveLine = "But, because you were in a colliseum, you have been saved.";
+
+    private bool _colliseumLineSeen;
+
+    // Whether the death just told to the tracker followed the colliseum line. Read
+    // by RoomTracker.PlayerDeathObserved's listeners, which are raised from inside
+    // NoteDeath below.
+    public bool LastDeathSavedInColliseum { get; private set; }
+
     private void OnLine(LineExtractor.EmittedLine line)
     {
         if (line.IsPromptLine) return;
+        if (line.Text.Trim() == ColliseumSaveLine)
+        {
+            _colliseumLineSeen = true;
+            return;
+        }
         Match m = DeathRx().Match(line.Text);
         if (!m.Success) return;
         if (!int.TryParse(m.Groups[1].ValueSpan, out int lives)) return;
+        LastDeathSavedInColliseum = _colliseumLineSeen;
+        _colliseumLineSeen = false;
         _log?.Info("DeathDetector",
-            $"Death observed: '{line.Text.Trim()}' → {lives} lives left.");
+            $"Death observed: '{line.Text.Trim()}' → {lives} lives left."
+            + (LastDeathSavedInColliseum ? " A colliseum death: nothing was lost." : string.Empty));
         _tracker.NoteDeath(lives, line.Text.Trim(), line.Timestamp);
     }
 

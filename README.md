@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.168.0**
+> **Version 3.169.0**
 > - A carried item that negates a room's spell is worn for you (phoenix feather, else magma amulet, against magma heat)
 > - On when you come next to such a room, on inside it, off one room clear
 > - Sneaking past things (Auto-Sneak on, Auto-Combat off), it goes on and comes off in a room with no NPC

@@ -36,11 +36,17 @@ public sealed class PostDeathInventoryRefresh
     // the first known room after the switch is back on.
     public Func<bool>? MasterSwitchOff { get; set; }
 
+    // Whether a command sent now would be dropped (the engine send gate is held).
+    // The read stays owed then, and OnRoomKnown is called again when the hold
+    // lifts: sent into a hold it was lost, and the record stayed stale with nothing
+    // left to ask for it.
+    public Func<bool>? SendHeld { get; set; }
+
     // The character's room is known again (the graveyard, on the way back in).
     public void OnRoomKnown()
     {
         if (!_due) return;
-        if (MasterSwitchOff?.Invoke() == true) return;
+        if (MasterSwitchOff?.Invoke() == true || SendHeld?.Invoke() == true) return;
         _due = false;
         _requestInventory();
     }

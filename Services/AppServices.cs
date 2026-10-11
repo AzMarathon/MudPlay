@@ -620,12 +620,14 @@ public sealed class AppServices
 
     // Sends one `i` after a death, when the character stands in a room again.
     public Game.Inventory.PostDeathInventoryRefresh InventoryAfterDeath { get; private set; } = null!;
+
+    // The `i` a refused toll or fare asks for, kept owed while it can't be sent.
+    public Game.Inventory.OwedPurseRead PurseRead { get; private set; } = null!;
     public Game.Remote.PathReplyTracker PathReply { get; private set; } = null!;
     public Game.Remote.LeaderBossTravelProbe LeaderBossTravel { get; private set; } = null!;
 
-    // Follower-side @comeback sender. Detects being left
-    // behind (a movement-failure line just before "You are no longer
-    // following X.") and telepaths @comeback to the leader.
+    // Follower-side @comeback sender: telepaths @comeback to the leader once
+    // when the party walks off without us.
     // Game.Remote.ComebackRequester.Enabled is pushed from
     // Settings → Other.
     public Game.Remote.ComebackRequester ComebackRequest { get; private set; } = null!;
@@ -8539,7 +8541,8 @@ public sealed class AppServices
             sendGang: text => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes($"bg {text}\r")),
             roomName: () => RoomTracker.State.CurrentRoom?.Name,
             schedule: pacedReplyScheduler,
-            log: Log)
+            log: Log,
+            isPartyFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader)
         {
             IsMasterSwitchOff = () => AutoModeController.KillSwitchEngaged,
             SkippedForMasterSwitch = why => AutoModeController.Blocks("PvP response", why),
@@ -8741,6 +8744,79 @@ public sealed class AppServices
             if (RoomTracker.State.CurrentRoom is not null) InventoryAfterDeath.OnRoomKnown();
         };
         Profile.ProfileLoaded += _ => InventoryAfterDeath.Reset();
+        // Sent into a held send gate, or with the character out of the game (a link
+        // dropped from the board's menu lets the gate go), the `i` was lost and
+        // never asked again.
+        InventoryAfterDeath.SendHeld = () => EngineGate.IsLocked || !InGameCapture.InGame;
+
+        // The toll gate hears of the death too, with the room died in (an arena
+        // death takes nothing). The stale record above reads as "purse unknown",
+        // which a toll is not refused on, and the coin is known gone: until the
+        // re-read lands a walk from the graveyard would head for a toll it can't pay
+        // (report paradigm-20261010-145529).
+        RoomTracker.PlayerDeathObserved += () => Movement.NoteDeath(
+            RoomTracker.LastDeathRoom,
+            tookNothing: Game.Recovery.ArenaDeathRooms.DeathTookNothing(
+                RoomTracker.LastDeathRoom, Death.LastDeathSavedInColliseum,
+                paradigm: GameData.ActiveRealm == Game.RealmType.ParaMud));
+        Movement.TripUnderWayProbe = () => MovementControl.IsActive;
+        MovementControl.StateChanged += () =>
+        {
+            if (MovementControl.IsIdle) Movement.NoteTripEnded();
+        };
+        GameData.ActiveSetChanged += _ => Movement.ForgetRefusedCrossings();
+
+        // The read a refused toll asks for: owed while the master switch is off,
+        // the character is out of the game or the send gate is held, and sent when
+        // that ends (SendOwedInventoryReads).
+        PurseRead = new Game.Inventory.OwedPurseRead(
+            held: () => AutoModeController.Blocks("Info polls") || EngineGate.IsLocked || !InGameCapture.InGame,
+            send: () =>
+            {
+                Log.Info(Game.Inventory.InventoryManager.LogCategory,
+                    "Re-reading the inventory: the game refused a toll or fare the purse on record covered.");
+                SendGameCommand("i");
+            },
+            schedule: uiOneShot);
+        // In this order: the gate believes the record again before a re-plan held
+        // for the read (below) is let go by it.
+        Inventory.FullInventoryParsed += () =>
+        {
+            Movement.NotePurseRead();
+            PurseRead.Settle();
+        };
+        Profile.ProfileLoaded += _ => PurseRead.Settle();
+        EngineGate.Released += SendOwedInventoryReads;
+        InGameCapture.InGameChanged += inGame =>
+        {
+            if (inGame) SendOwedInventoryReads();
+        };
+        // A walk's or a loop's re-plan after a refused toll waits for that read.
+        Walker.SetPurseReadWait(PurseRead.WaitForAnswer);
+        LoopRunner.SetPurseReadWait(PurseRead.WaitForAnswer);
+
+        // A walk or loop with no route for want of a toll or fare says so on the
+        // terminal. Once per reason until a walk gets going: an engine that keeps
+        // asking for the same trip would otherwise repeat it.
+        string? lastUnpaidNotice = null;
+        void NoticeUnpaid(string notice)
+        {
+            if (notice == lastUnpaidNotice) return;
+            lastUnpaidNotice = notice;
+            // Posted: a re-plan can fail from inside the emulator's message pump.
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(notice));
+        }
+        Walker.SetUnpaidCrossingHandler((destination, reason) =>
+        {
+            string where = RoomGraph.GetRoom(destination)?.Name is { Length: > 0 } name
+                ? $"{destination} ({name})" : destination.ToString();
+            NoticeUnpaid($"[Navigation: no walk to {where} - {reason}]");
+        });
+        LoopRunner.SetUnpaidCrossingHandler(reason => NoticeUnpaid($"[Navigation: {reason}]"));
+        Walker.Event += e =>
+        {
+            if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;
+        };
 
         // A held or knocked-down character can't walk and isn't dragged by a leader,
         // so a move that lands proves a latched hold is stale (its wear-off line was
@@ -8826,6 +8902,32 @@ public sealed class AppServices
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
+        // A loop doesn't go back for a member an exit of its circuit turned away.
+        // What tells that from a hold: a wait or hold the member has out with us,
+        // and what we hold of them against the exit's own conditions (the @level
+        // probe, their class and race from `who`, the last purse they reported, the
+        // items handed to them or counted).
+        PartyComeback.MemberSignalledHold = given => PartyEssentials.WaitingMembers.Contains(given);
+        // Their pending @wait would park the walk back to them behind the party-wait
+        // gate. Let go by the manager itself, after it has read what the wait says.
+        PartyComeback.ReleaseMemberWait = PartyEssentials.ReleaseWait;
+        PartyComeback.Notice = text =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(text));
+        PartyComeback.MemberCanPass = (given, exit) =>
+        {
+            Models.GameData.PlayerRecord? known = Players.Find(given);
+            return Game.Remote.MemberGateJudge.CanPass(in exit, new Game.Remote.MemberGateJudge.Facts(
+                Level: known?.Level is > 0 and int level ? level : null,
+                ClassNumber: TableNumberByName("Classes", known?.Class),
+                RaceNumber: TableNumberByName("Races", known?.Race),
+                PurseCopper: PartyWealth.LastReading(given),
+                CopiesHeld: itemId => PartyHandOvers.CopiesRememberedFor(given, itemId)));
+        };
+        // During a train trip nobody is gone back for; they are fetched at its end.
+        // A party train trip, or the leader's own train or spell run with the
+        // party in tow (both are built further down, and read only when asked).
+        PartyComeback.TrainTripRunning = () =>
+            PartyTrain?.TripRunning == true || TrainerWalk?.OwnRunActive == true;
         // A dropped member's reconnect hold (or their @wait) would park the walk to
         // pick them up — the leader never moves while they wait on it.
         PartyComeback.ReleaseHolds = (given, reason) =>
@@ -8833,8 +8935,6 @@ public sealed class AppServices
             PartyDisconnectMovement.Release(given, reason);
             PartyEssentials.ReleaseWait(given);
         };
-        // Their pending @wait would park the walk back to them behind the party-wait gate.
-        Party.MemberLeftBehind += PartyEssentials.ReleaseWait;
 
         // @where reply → nav-map flash. Recognises the wrapped location reply an
         // @where'd MudPlay client telepaths back and routes it to the (open) map;
@@ -9069,7 +9169,13 @@ public sealed class AppServices
             recordedLevel: name => Players.Find(name)?.Level,
             selfTimeToLevel: () => SelfTimeToLevel().Remaining,
             telepathsPending: () => Telepaths.Queued + Telepaths.InFlight > 0,
-            log: Log);
+            log: Log,
+            // The trip is over: whoever it came back without is gone back for, or
+            // left to the player when the player took the trip over.
+            tripEnded: (setOut, byItself) => PartyComeback.TrainTripEnded(byItself, setOut));
+        // The same for a train or spell run of the leader's own with the party in
+        // tow, which keeps no roll.
+        TrainerWalk.OwnRunOver = byItself => PartyComeback.TrainTripEnded(byItself, []);
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
         PartyLevelProbe.ProgressObserved += PartyTrain.NoteLevelProgress;
@@ -9554,13 +9660,30 @@ public sealed class AppServices
                 TokenRoute.OnRoomChanged(t.NewRoom?.Key);
         };
 
-        // Follower-side @comeback. Watches for a movement-failure
-        // line (prevents-movement flag / over-encumbered) immediately
-        // before "You are no longer following X." — the signature of being
-        // left behind — and telepaths @comeback to the leader. Enabled is
-        // pushed from Settings → Other by ApplyOtherFromActiveProfile.
+        // Follower-side @comeback: one telepath to the leader when the party walks
+        // off without us (the triggers and what is never one are on the class).
+        // Enabled is pushed from Settings → Other by ApplyOtherFromActiveProfile,
+        // and the master switch is set with every other system's
+        // (ComebackRequest.MasterSwitchOff).
         ComebackRequest = new Game.Remote.ComebackRequester(Router, RoomTracker, Log,
-            isMovementPrevented: () => Conditions.IsMovementPrevented);
+            isMovementPrevented: () => Conditions.IsMovementPrevented,
+            party: PartyState,
+            isSelfDown: () => PlayerState.IsMortallyWounded,
+            sendBlocked: () => InGameCapture.AtBoardMenu ? "we are at the board's menu"
+                : EngineGate.IsLocked ? "the client's sends are held (a trainer screen or a password prompt)"
+                : null,
+            // During the leader's party train trip the request waits for the trip to
+            // end (PartyTrain is built before this).
+            inTrainTrip: leader => PartyTrain.InTripOf(leader));
+        // A leader who refused, or never came: the follow the game ended without a
+        // line is ended on our side too.
+        ComebackRequest.FollowGivenUp = (leader, _) => Party.NoteFollowGivenUp(leader);
+        // The trip's leader may tell us it is over after an exit has turned us out
+        // of the party on our own side.
+        RemoteCommands.PartyTrainEligibility = sender => PartyTrain.InTripOf(sender);
+        // The leader's relay of a teleport keyword is the leader's own split.
+        PartyEssentials.PartyDirectiveRelayed += (sender, command) => ComebackRequest.NotePartyRelay(sender, command);
+        Party.LeaderListedAsInvited += leader => ComebackRequest.NoteLeaderListedAsInvited(leader);
 
         // Follower-side reconnect auto-rejoin. Mirrors live follower membership
         // into the profile (crash-survivable) and, on the first in-game prompt
@@ -9608,7 +9731,10 @@ public sealed class AppServices
         //     authorised even though neither is a live party member any more.
         //   - When we receive @forget from a leader we remembered, clear the
         //     crash-rejoin memory so a later reconnect stops telepathing them.
-        AutoParty.ForceAcceptFrom = PartyRejoin.IsRememberedLeader;
+        // The same holds for the leader we asked to come back for us: a member an
+        // exit turned away is out of the party and needs that invite to rejoin.
+        AutoParty.ForceAcceptFrom = name =>
+            PartyRejoin.IsRememberedLeader(name) || ComebackRequest.IsLeaderWeAsked(name);
         RemoteCommands.ForgetEligibility = s =>
             Party.WasRecentlyPartied(s) || PartyRejoin.IsRememberedLeader(s);
         PartyComeback.ForgetLeaderCallback = PartyRejoin.ForgetRememberedLeader;
@@ -10408,6 +10534,9 @@ public sealed class AppServices
         // A loop the last reconnect set aside, not restarted while the switch was
         // off. Behind the freeze still, so its first step waits for the holds.
         LoopRunner.ResumeAfterMasterSwitch();
+        // Ahead of the release: the walk it frees plans on a purse that is being
+        // read, with its tolls closed, not on one known to be wrong.
+        SendOwedInventoryReads();
         MovementControl.ReleaseFromAutoAll();
         DeathRecovery.OnAutoAllRestored();
     }
@@ -11794,6 +11923,30 @@ public sealed class AppServices
         return true;
     }
 
+    // MovementRefusalDetector.PaidCrossingRefused. The exit is closed to routes from
+    // here on, and when the purse on record covered the price the record is wrong
+    // (coin can go with nothing printed, as a room script's price does:
+    // GAME_MECHANICS "How a charge takes coins, and when the purse is re-bucketed"):
+    // the toll gate stops believing it at once and the inventory is read again, one
+    // `i` for the refusal. With Auto-All off the move was the user's own and nothing
+    // is sent (user, 2026-10-10); the read is owed until the switch is back on.
+    public void OnPaidCrossingRefused(Game.Map.RoomExit? crossing, long? namedCopper)
+    {
+        if (!Movement.NoteCrossingRefused(crossing, namedCopper)) return;
+        PurseRead.Ask();
+    }
+
+    // The inventory reads still owed (after a death, after a refused toll) go out
+    // now if they may: the master switch is back on, or the send gate has let go.
+    // One `i` serves both.
+    private void SendOwedInventoryReads()
+    {
+        bool deathReadDue = InventoryAfterDeath.Due;
+        if (deathReadDue && RoomTracker.State.CurrentRoom is not null) InventoryAfterDeath.OnRoomKnown();
+        if (deathReadDue && !InventoryAfterDeath.Due) PurseRead.CoveredByAnotherRead();
+        else PurseRead.Retry();
+    }
+
     // A Grab-All boss's loot just hit the floor: fire a blind `get <item>` for every
     // item in the dead monster's game-data drop table (no room re-parse). Gated here
     // on the per-boss flag; the event fires for every matched boss regardless. The
@@ -12028,9 +12181,14 @@ public sealed class AppServices
 
     // The Monsters-table Number for a boss whose BossDef didn't carry one — resolved
     // by its game-data name. Null when the active set has no such monster.
-    private int? ResolveMonsterNumberByName(string name)
+    private int? ResolveMonsterNumberByName(string name) => TableNumberByName("Monsters", name);
+
+    // The Number of a game-data table's row, found by its name (a monster, a
+    // class, a race). Null when the active set has no such row.
+    private int? TableNumberByName(string table, string? name)
     {
-        if (GameData.FindRowByName("Monsters", name) is not System.Text.Json.JsonElement row) return null;
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        if (GameData.FindRowByName(table, name) is not System.Text.Json.JsonElement row) return null;
         return row.TryGetProperty("Number", out System.Text.Json.JsonElement el)
                && el.TryGetInt32(out int n) ? n : null;
     }
@@ -14637,6 +14795,7 @@ public sealed class AppServices
         Party.ComebackWindow = window;
         PartyComeback.ComebackWindow = window;
         PartyRejoin.ComebackWindow = window;
+        ComebackRequest.RetryWindow = window;
         RemoteCommands.ComebackWindow = window;
     }
 

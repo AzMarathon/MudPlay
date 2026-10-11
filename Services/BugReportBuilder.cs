@@ -416,6 +416,29 @@ public static class BugReportBuilder
         Kv(sb, "Reconnect rejoin leader", svc.PartyRejoin.RememberedLeader ?? "(none remembered)");
         if (svc.PartyRejoin.WaitingForRoomToRejoin is { } waitLeader)
             Kv(sb, "Reconnect rejoin — waiting on our room", $"@comeback to {waitLeader} once our room confirms");
+        // The last time the party went on without us: what showed it, whether a
+        // @comeback went out or why none did, and the leader's answer. A "my
+        // follower never asked me back" report is answered here.
+        Kv(sb, "Last left-behind incident", svc.ComebackRequest.LastIncidentSummary);
+        if (svc.ComebackRequest.PendingCheckFor is { } pendingLeader)
+            Kv(sb, "Left-behind check pending", $"judging whether {pendingLeader} left without us");
+        if (svc.ComebackRequest.HeldBack is { } heldBack)
+            Kv(sb, "Left-behind @comeback held back", heldBack);
+        if (svc.PartyComeback.QueuedRecoveries is { Count: > 0 } queued)
+            Kv(sb, "Recoveries waiting their turn", string.Join(", ", queued));
+        if (svc.PartyComeback.LeftAtLoopGates is { Count: > 0 } atGates)
+            Kv(sb, "Left at an exit our loop goes through (not fetched)", string.Join(", ", atGates));
+        if (svc.PartyComeback.LeftOnTrainTrip is { Count: > 0 } onTrip)
+            Kv(sb, "Left on the train trip (fetched when it ends)", string.Join(", ", onTrip));
+        if (svc.PartyComeback.AwaitedAfterTrainTrip is { Count: > 0 } awaited)
+            Kv(sb, "Left by a train trip, room not known (fetched on their @comeback)", string.Join(", ", awaited));
+        if (svc.PartyComeback.TripFetchOwed is { Count: > 0 } owed)
+            Kv(sb, "Train trip fetch held for the master switch", string.Join(", ", owed));
+        if (svc.PartyComeback.InviteOnSight is { Count: > 0 } onSight)
+            Kv(sb, "Left at an exit by Auto-Lair (invited when a pass finds them)", string.Join(", ", onSight));
+        if (svc.PartyComeback.FetchedAtGates is { Count: > 0 } fetched)
+            Kv(sb, "Fetched once from an exit that may turn them away", string.Join(", ", fetched));
+        Kv(sb, "Party train trip we set out on", svc.PartyTrain.TripWeSetOutOn ?? "(none)");
         // Leader-side reconnect reform state — the followers we snapshotted at the
         // last drop and will wait for on reconnect. A "leader sprinted off / didn't
         // wait after a nightly-cleanup reconnect" report hinges on whether they
@@ -1577,6 +1600,10 @@ public static class BugReportBuilder
             ? (teleports.Count == 0 ? "no teleports" : $"{teleports.Count} teleport(s): "
                 + string.Join(", ", teleports.Take(12).Select(t => $"{t.From}>{t.To}")) + (teleports.Count > 12 ? ", …" : string.Empty))
             : "any teleport (not wired)");
+        // What a toll or fare is allowed or refused on: a walk through a toll the
+        // character couldn't pay turns on what the client took the purse to be.
+        Kv(sb, "Purse for tolls and fares", svc.Movement.DescribePurse()
+            + (svc.PurseRead.Owed ? "; its re-read is owed and not yet sent (master switch off, or the send gate held)" : string.Empty));
         // Whether the Auto-All kill switch is the one holding navigation — it
         // suspends an in-flight nav on engage and resumes it on restore.
         Kv(sb, "Auto-All suspended nav", svc.MovementControl.IsAutoAllSuspended.ToString());

@@ -427,6 +427,7 @@ public static class KnownPatterns
     // as `WhoListParser`), not by a one-line regex.
     public const string PartyFollowsYou     = "party.follows-you";       // "X started to follow you."
     public const string PartyYouFollowing   = "party.you-following";     // "You are now following X."  (we joined someone's party)
+    public const string PartyParFollowing   = "party.par-following";     // "You are following X."      (first line of a follower's `par`)
     // " -- Following your Party leader <dir> --" — the game dragging us one room
     // in the leader's wake. A follower sends no movement bytes, so this line is
     // the ONLY movement signal for a dragged follower; FollowMoveObserver turns it

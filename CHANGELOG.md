@@ -1,6 +1,6 @@
 # Version history
 
-## 3.168.0
+## 3.169.0
 
 - A carried item that negates a room's spell is worn for you (phoenix feather, else magma amulet, against magma heat)
 - On when you come next to such a room, on inside it, off one room clear
@@ -15,6 +15,29 @@
 - Bug report lists what was put on this way and what was set aside
 - Periodic Damage Room Spells: Paradigm's desert rows show desert damage, 5–20, cast without the waterskin buff
 - Periodic Damage Room Spells: chaos storm and the drowning spells show their set damage, no "more with level"
+
+## 3.168.0
+
+- A follower left behind sends `@comeback`: a follow that failed at an exit, the leader seen leaving without it, or (Stock) its own `par` showing the leader `[Invited]`
+- No `@comeback` after an uninvite, a typed `leave`, a move of your own, a death or a teleport split
+- One request per split; it waits out Auto-All off or a party train trip, then goes out
+- The leader asked back is rejoined on its invite, whatever Join party if invited says
+- A party follower never flees: low HP or mana, Hit and Run, a failed backstab, PvP, a Flee monster
+- `[Invited]` rows in `par` no longer make a follower's client think it leads
+- Leader: followers left behind together are fetched one after the other
+- At an exit that turns a member away: a loop refuses, Auto-Lair invites on its next pass, a walk-to goes back once then ends; a Stock follower whose leader refuses or never comes stops following
+- Party train: nothing stops the trip, members hold their request, and the leader fetches everyone it left when the training is done (not after a trip you ended yourself)
+
+## 3.167.21
+
+- After a death, walks and loops avoid tolls, fares and sailings until the inventory is re-read; an arena death takes nothing
+- A toll or fare the game refuses isn't sent twice; it reopens once you carry the price
+- A walk with no way round an unpayable toll says so on the terminal
+- A loop over an unpayable toll isn't started, and stops if refused mid-lap (it could crash the client)
+- A sailing you can't pay for isn't walked to
+- The purse re-read after a refusal or a death stays owed until it goes out
+- Program log and bug report show the purse a toll was judged on
+- bug reports addressed: paradigm-20261010-145529
 
 ## 3.167.17
 

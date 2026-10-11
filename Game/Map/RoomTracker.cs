@@ -135,6 +135,19 @@ public sealed class RoomTracker
     // happen to be under at the time.
     public bool LastMoveWasManual { get; private set; }
 
+    // A move this client sent, typed or an engine's, has had no answer yet. A
+    // party leader's drag waits in the same queue but nobody here asked for it, so
+    // a refusal that arrives with only drags queued answers none of ours.
+    public bool OwnMoveInFlight
+    {
+        get
+        {
+            foreach (PendingMove move in _pending)
+                if (!move.IsFollowDrag) return true;
+            return false;
+        }
+    }
+
     // Diagnostics: the most recent server move-echo the tracker recorded (the
     // command + when), or null if none this session. The echo gate confirms a
     // move's landing only once its command has been echoed, so a bug report of a
@@ -192,6 +205,21 @@ public sealed class RoomTracker
     // subscribe here. Raised synchronously inside NoteDeath, before the respawn
     // room confirms, so a loop-stop lands ahead of the graveyard's recovery-reroute.
     public event Action? PlayerDeathObserved;
+
+    // The room the last witnessed death happened in, for PlayerDeathObserved's
+    // listeners: by the time it is raised the tracker holds no room. Null when the
+    // room wasn't known.
+    public RoomKey? LastDeathRoom { get; private set; }
+
+    // The exit the one move in flight is crossing: what a refusal of that move is a
+    // refusal of. Null with no move in flight, with more than one queued (the one
+    // refused isn't then the one out of this room), or when it maps to no exit.
+    public (RoomKey From, RoomExit Exit)? ExitInFlight()
+    {
+        if (State.Confidence != RoomConfidence.Pending || State.CurrentRoom is not { } source) return null;
+        if (_pending.Count != 1 || !_pending.TryPeek(out PendingMove head)) return null;
+        return TryResolvePendingExit(source, head, out RoomExit exit) ? (source.Key, exit) : null;
+    }
 
     // Fired from NoteUnwitnessedDeath: a death found out on the way back into the
     // game, long after it happened. Its own event because most of what
@@ -1323,6 +1351,7 @@ public sealed class RoomTracker
     {
         DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
         Room? died = State.CurrentRoom;
+        LastDeathRoom = died?.Key;
 
         if (_profile is not null)
         {
@@ -1420,6 +1449,18 @@ public sealed class RoomTracker
             SetConfidence(target, when, "move blocked");
         }
         MoveBlocked?.Invoke();
+    }
+
+    // The follow move a party leader's drag promised was refused: the game printed
+    // the follow line, then the exit's own refusal in words the refusal detector
+    // doesn't know, and the follow ended. Un-counts that drag, and only a drag: a
+    // move of our own queued behind it has its own answer coming. False when the
+    // newest queued move isn't a drag.
+    public bool NoteFollowDragRefused(DateTimeOffset? whenUtc = null)
+    {
+        if (MostRecentPending() is not { IsFollowDrag: true }) return false;
+        NoteMoveBlocked(whenUtc);
+        return true;
     }
 
     // How recently the most-recent move must have been sent for a "command
