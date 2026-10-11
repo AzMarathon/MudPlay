@@ -330,7 +330,7 @@ You can start building a loop **while a walk-to is running** — building only c
 
 The builder closes by itself when the loop it holds (or an empty builder) is started from somewhere else: the toolbar's Start, the Manage dialog's Run, or a remote `@loop`. The map then shows the running loop, not the red build line. A different loop you were in the middle of building is kept.
 
-To put yourself (or a party member) back on the **last loop run this session** without reopening the builder, use the **`@loop last`** remote command — it re-runs it even if it was an ad-hoc loop that was never saved. This works regardless of the "Load last ran loop" setting above.
+To put a party member back on the **last loop they ran this session** without anyone reopening the builder, send them the **`@loop last`** remote command (and they can send it to you) — it re-runs that loop even if it was an ad-hoc one that was never saved. This works regardless of the "Load last ran loop" setting above. How `@loop` reads names and room lists, and what it answers, is under **@loop** in *Remote @-commands*.
 
 Or build it off the map: **Navigation Management → New Loop** opens an editor where you add rooms by name or key, name and annotate the loop, and set per-waypoint options. While that editor is open, you can also **left-click rooms on the Navigation map** to append them to the waypoint list — the same way the on-map builder works, without typing keys.
 
@@ -565,7 +565,7 @@ The panel lists clickable links to everything attached to the room:
 
 **-150 is the cut-off**: at -150 or above you can make out a room's contents; below it (very dark / pitch black) the game hides them, so you need enough carried light to lift `Your Illu` to -150 or better.
 
-**`@where` on the map.** When you `@where` another MudPlay user and their client answers with its location (a telepath like `Fujin telepaths: {Adventurer's Guild, Universal Trainer (map 1, room 1376); exit s: west}`), the map — if it's open — **flashes that room green and centres on it** for about 15 seconds, then drifts back to following you.
+**`@where` on the map.** When you `@where` another MudPlay user and their client answers with its location (a telepath like `Fujin telepaths: {Adventurer's Guild, Universal Trainer (map 1, room 1376); exits: west}`), the map — if it's open — **flashes that room green and centres on it** for about 15 seconds, then drifts back to following you.
 
 `@where` several people and **each answered square lights up at once**, fading out on its own 15-second timer; the map re-centres on the **newest** reply as it lands, leaving the earlier flashes where they are. It only reacts while the Navigation window is open; a reply that lands with the map closed is ignored.
 
@@ -884,158 +884,1622 @@ With party heal spells configured (Settings → Party), members watch each other
 
 ## Remote @-commands
 
-Party members can drive each other with `@`-commands sent over chat. Commands are accepted on three channels — **telepath**, **gangpath**, and **say (local)** — and the reply always comes back on the same channel it arrived on. A reply to a **say**-channel command is a **directed say** (`>Name <reply>`) aimed at whoever sent it, so in a room with several players that person knows the answer is for them. (Gossip — which also carries auctions — yell, and broadcast are ignored for `@`-commands; there's no separate "page" channel — pages count as telepaths. `@dupe` is stricter still: telepath and gangpath only, never say.)
+A remote command is a line of chat that starts with `@`. Another player sends it to your character; MudPlay reads it, checks that this player may ask for it, does it, and answers on the channel it came in on. It is how a leader steers followers, how a party asks its healer for a heal, and how two MudPlay clients hand each other loops, boss timers and Roomba logs.
 
-**What's allowed** is gated per character. Every remote command belongs to a permission *category* (query health, move me, alter settings, execute commands, and so on), and you grant those categories per player in **Game Data Browser → Players** — the edit dialog's permission grid, where the high-trust ones sit under "Elevated Commands." A never-seen player has no grants, so their commands are refused.
+Everything here is written from the side of the character that **receives** the command: "you" are the one being asked, and "the sender" is the player who typed it.
 
-On top of that, **Settings → Talk** has master and per-channel kill switches (disallow all remote control, or mute telepath / gangpath / say), a separate gate for `@party` directives, and a "warn on invalid/denied command" toggle that decides whether a refused command replies or stays silent. An @-word that matches no command at all — someone just typing "@because" in chat — is always ignored silently regardless of that toggle; it only governs a *recognized* command that's denied (a permission the sender lacks, the `@party` whitelist, the suicide policy).
+To learn how one command works, open its own topic in the groups below this one. Each topic lists the forms you can type, how names are matched, who may send it, every reply it can give, and what changes its behaviour. **Quick reference** has every command on one page.
 
-Active party members get a few things for free regardless of the grid: the party-coordination signals, the health queries (`@health` / `@status` / `@lives`), `@reset`, and a bare `@party` status check.
+### Sending a command
 
-### Recursive remote commands (`&@`) — sending a command back to yourself
+Type the command as the whole message, with `@` as its first character. Three channels carry remote commands:
 
-Put **`&`** in front of any remote command — `&@invite`, `&@where`, `&@wealth` — and the player you send it to **sends that `@`-command back to you**, on the same channel it arrived on (telepath, gangpath, or a directed say). Your own client then runs it as if they had sent it, under the permissions *you* grant *them*. It's the way to make another player ask something of you: telling a party member `&@invite` makes them send you `@invite`, and your client invites them.
+- **Telepath:** `/Healer @health`. Only that player's client reads it, and the answer comes back to you by telepath. Use this unless you mean to ask several players at once.
+- **Gangpath:** `bg @timer dragon`. Every MudPlay client in the gang that grants you the command answers, on gangpath, where the whole gang reads it.
+- **Say:** `.@party rest`. Every MudPlay client in the room that grants you the command acts on it. An answer comes back as a say directed at you (`>Leader {reply}`), so in a full room you can tell it is yours.
 
-The player relaying it needs to grant you **Execute commands** (the `@do` tier) — relaying a line on your behalf is something `@do` could already do. The relayed command must be one their client knows; anything else (or a bare `&@`) is ignored, and the reroll / `set suicide` blocks apply to it as well. Bare `@help` lists `&@<command>` when you hold that grant, and `@help &@` describes it. On **gangpath** or **say** everyone on that channel sees both lines: every MudPlay client there that grants you Execute commands relays the command back, and any that grants the relaying player the command runs it too. Use **telepath** when you want exactly one player to relay it, and only to you.
+Gossip, auction, yell and broadcast lines are never read as commands.
 
-### Syntax examples
+How the line is read:
 
-Every remote command is the `@`-word typed into **telepath, gangpath, or say**. A **bare** command (no argument) is just the word — `@health`, `@where`, `@inv`, `@wealth`, `@stop`, `@version`. The commands that take an argument follow the **Args** column in the tables below; here's one valid example of each shape:
+- **The command word ignores case.** `@Reset` and `@reset` are the same command.
+- **Words are split at spaces.** Extra spaces are dropped; a name of several words is put back together with single spaces.
+- **Your own lines don't count.** Your client never obeys something you said, telepathed or gangpathed yourself.
+- **An `@` word that is no command is left alone.** Someone saying `@because` in gang chat gets no answer from anyone.
 
-- `@help goto` — one command's syntax and description (the `@` on the argument is optional — `@help @goto` works too)
-- `@goto arlysia` · `@goto 3/599` · `@goto ogre king` — a GOTO favorite, a `map/room` coordinate, or a boss / room by name or acronym. A coordinate can separate the map and room with a **slash, comma, or space** — `3/599`, `3,599`, and `3 599` are all read the same. A **bare** room number is rejected (`@goto 599` → "needs a map"), because the same number is a different room on every map
-- `@loop Black Fortress` — start a saved loop by name
-- `@loop 5/10 5/11 5/12` — an ad-hoc loop from two or more `map/room` coordinates
-- `@loop last` — re-run the last loop run this session
-- `@loop send kings road` — ask the player for a copy of their saved loop (they offer it; answer `@loop send yes` or `@loop send no`)
-- `@loop send` — the same, for the loop they're running right now
-- `@lair mud men` — start an Auto-Lair (a setup name or coordinates)
-- `@timer dragon` — boss timers whose name matches "dragon" (bare `@timer` lists them all). Each line gives the full respawn plus every un-passed early-spawn window — on Paradigm all three (`-20%` / `-10%` / `-5%`), on Stock the single `87.5%`
-- `@death all` — every unrecovered death (bare `@death` gives just the latest)
-- `@have rope and grapple` · `@uses silvery skullcap` · `@token arlysia` — an item / limited-use item / transport token by name (shorthand and best-match are fine)
-- `@roomba severed head` — Roomba sightings of matching items
-- `@quest good align` — quest progress: marked-complete bands, plus the live flag step on Paradigm / sys-god (bare `@quest` lists all your completed quests)
-- `@quest update` — have a party member re-read their quest flags and mark every quest those flags show they've finished; a quest they're part-way through has its checklist ticked up to the step the flag shows
-- `@auto-combat off` — force an engine off (bare toggles it; `on` forces it on)
-- `@atkprio 3 Fujin` — Target Priority: attack-what-player Fujin (`1` = Default, `2` = follow-leader)
-- `@atkorder 4 Suijin` — Attack Order: attack after Suijin (`1`–`3` and `5` are the fixed orders)
-- `@divert Raijin` — forward your incoming telepaths to Raijin (bare `@divert` stops)
-- `@dupe Moron` — copy the sender's query, roomba, and quest permissions onto Moron (Elevated; once per player; telepath / gangpath only)
-- `@profile 2` · `@profile backstab` — swap combat profile by number or name
-- `@kill goblin shaman` — retarget your combat onto that monster this round
-- `@trap north` — disarm a trap that way (`@trap stop` aborts)
-- `@equip backstab` — wear the saved gear set whose keyword is "backstab"
-- `@equip restma update` — save what you're wearing right now into your Pre-rest Mana set
-- `@do rest` — send `rest` to the game verbatim (highest-trust)
-- `&@invite` — have the player send `@invite` back to you (any command works after `&`; needs their Execute commands grant)
-- `@party use chime` — relay `use chime` to the whole party (say channel only)
-- `@comeback 3/599` — ask the party to recover you (the coordinate is optional)
+You can't telepath a command to yourself. To run one on your own client, use `POST /command` of the **Local control API** (under *Settings Menu*): it skips the permission check and hands you the replies. To make another player's client send a command to you, put `&` in front of it: see **Sending a command back to yourself (`&@`)**.
 
-### Query commands — they report; nothing changes
+### Who is obeyed
 
-| Command | Args | Replies with |
-|---|---|---|
-| `@version` | — | the app name + version |
-| `@help` | — or `<command>` | bare, the commands *that sender* is allowed to use; with a command name (`@help goto` — the name is accepted with or without the `@`) it replies with that command's syntax + a one-line description. Requires the `@` like every remote command — a plain `help` in chat won't trigger it. |
-| `@health` | — | HP / MA / Kai and resting-or-meditating state |
-| `@status` | — | what you're doing (walking / looping / fighting / resting), your room, and any ailments |
-| `@lives` | — | lives remaining |
-| `@exp` | — | a session-progress line: exp **made** this session (zeroed by `@reset` / loop-start auto-reset), exp **needed** for the next level and which level that is (with the banked-levels ratio the status-bar TNL shows), the exp/hour rate, and the time to that level at the current rate (e.g. `Made: 474,216,179  Needed: 545,045,125 (L72, +2.14 lvls)  Rate: 14.3 m/hr  Will level in: 1d 14h 12m`) |
-| `@level` | — | level, current exp, and exp to next |
-| `@where` | — | room name, map/room, and exits |
-| `@path` | — | the movement engine's activity and step progress; when stopped/idle, names the last loop or auto-lair that was run (so you can help a dead player resume their circuit). The asker's map draws the route (see **`@path` on the map**) |
-| `@who` | — | other players / monsters in your room |
-| `@timer` | — or `<name>` | boss respawn timers (all, or matching a name) |
-| `@timer sync` | — | (client-to-client) replies with your active timers, compressed, for another MudPlay user's merge table — see "Sync boss timers" under the Bosses tab; same `@timer` permission |
-| `@death` | — or `all` | unrecovered deaths from the recovery log — the most recent one, or `all` of them (each with when, status, room, and lives left) so you can help a dead player recover; own permission ("Query deaths") |
-| `@roomba` | `<item name>` | one line per matching item — total quantity across every gang-house room it was seen in during a Roomba sweep, EACH room's own quantity, and when the freshest of those sightings was scanned, in the sending client's own timezone (e.g. `total: 5x rope and grapple - seen in 15/12 (3), 15/13 (2) - last scanned 2026-08-30 09:22 MST`) — a loose query matching several similarly-named items (e.g. "head" matching every "severed head of ___") gets one line each, capped at 5 with an overflow tail — or "no record" when nothing matches at all; gated by the **Query Roomba** per-player permission (grant it on the Players tab) — a sender you haven't granted it to gets no reply. See Roomba (Player Workshop) below |
-| `@roomba sync` | — | (client-to-client) replies with your entire item-sighting log **and** labeled gang-house rooms, compressed, so the requester's client merges it straight in — no file, no Discord, no import/export; the requester adopts the reply because they asked for it, so only the *responder* needs the grant; see Roomba (Player Workshop) below; same **Query Roomba** permission |
-| `@quest` | — or `<name\|flag>` | quest progress. Bare lists every quest with a marked-complete band, grouped by flag. With a **name** (a quest's name, the ability name like `goodquest`, or a built-in alias like `good align` / `neutral` / `evil`) or a **flag number** (e.g. `126`), it reports that quest's marked bands by ordinal (`Good align 1, 2, 3 marked complete`) and — on **Paradigm**, or a **stock** board where you've granted this character **sys-god** access — appends the live flag step read off the game (`Abil: 126 step 16`). The live read also **marks** what it proves: a flag that has reached a quest band's complete value means that band is done, so it's ticked on the answering character's Quests tab and the reply shows the updated marks (plus how many were newly marked). **`@quest update`** reads every flag the answering character's current-level quests use (Paradigm: `abil`; stock: the one `sys god <name> abil`, which needs **Settings → BBS → "Sysop god lives"**), marks every completed one, and replies with the count and the full marked list. It isn't held to the login sync's once-a-day limit, since someone asked. On stock without sys-god it reports the marked state only (and `@quest update` says it can't read the flags, if failure replies are on); gated by the **Query quests** per-player permission |
-| `@what` | — | items on the room floor |
-| `@wealth` | — | your coins and total value |
-| `@enc` | — | encumbrance |
-| `@have` | `<item>` | whether you carry, wear, or hold a matching item on the key ring |
-| `@inv` | — | your carried pack and keys |
-| `@token` | — or `<name>` | remaining daily charges of your held transport tokens — bare lists them all, a name reports just that one (Paradigm) |
-| `@uses` | — or `<item>` | remaining charges of a carried limited-use item — bare lists every charged item you carry, a name (shorthand ok, best-match) reports just that one |
+Your client goes through these checks in this order. The first one that stops a command ends it.
 
-### Move me around
+1. **Disallow all remote control commands** (Settings → Talk). While it is on, no command is read and nothing is answered.
+2. **The channel.** Settings → Talk has one switch each for telepaths, gangpaths and say. A command on a switched-off channel is dropped without an answer.
+3. **The master switch (Auto-All).** While it is off, `@auto-all` is the only remote command followed. Every other one is dropped without an answer, whoever sent it. A follower's `@wait` and `@ok` are still noted, and a party member's `@comeback` is kept and answered when the switch comes back on. See **The master switch (Auto-All)** under *Automation*.
+4. **The words that are always refused.** See **Always refused** below.
+5. **The permission.** The sender must hold the permission the command needs, or the command must be one any party member may send.
 
-| Command | Args | Does |
-|---|---|---|
-| `@goto` | `<destination>` | walks you to a saved GOTO favorite, a searched room (coords / name / acronym), or a boss. When a party follower asks their leader, the follower's map draws the leader's route (see **`@path` on the map**) |
-| `@loop` | `<name>`, ≥2 coords, `last`, or `send [name]` / `send yes` / `send no` | starts a saved loop, an ad-hoc coordinate loop, or (`@loop last`) re-runs the last loop run this session — including an ad-hoc one that was never saved. `@loop send` asks for a copy of one of their loops instead (see *Getting a loop from another player* below) |
-| `@lair` | `<name>` or coords | starts an Auto-Lair setup |
-| `@stop` | — | pauses your movement, and puts your auto toggles back to their base modes (see *Base modes*) |
-| `@rego` | — | resumes it |
+**Permissions** are granted per player, and saved with your character. Open **Game Data Browser → Players**, open the player, and tick boxes in the remote-control grid. There are sixteen:
 
-A new movement command overrides an `@stop`: after `@stop`, an `@goto` / `@loop` / `@lair` abandons the pause and starts the new movement straight away — you don't need `@rego` first (use `@rego` only to resume the *same* thing you paused).
+| Permission | Commands it allows |
+|---|---|
+| Query version | `@version`, `@help` |
+| Query experience | `@exp`, `@level` |
+| Query health/status | `@health`, `@status`, `@lives`, a bare `@party` |
+| Query location | `@where`, `@path`, `@who` |
+| Query inventory | `@inv`, `@have`, `@what`, `@wealth`, `@enc`, `@uses`, `@token` |
+| Query boss timers | `@timer`, `@timer sync` |
+| Query deaths | `@death` |
+| Query Roomba | `@roomba`, `@roomba sync` |
+| Query quests | `@quest` |
+| Request invite | `@invite`, `@join` |
+| Move player | `@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@rego` |
+| Execute commands | `@do`, `@kill`, `@heal`, `@trap`, `@train`, `@equip`, `@get-all`, `@get-stash`, `@drop-all`, `@hide-all`, `@deposit-all`, and relaying a `&@` command |
+| Hangup/disconnect | `@hangup`, `@relog` |
+| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@reset` |
+| Divert conversations | `@divert` |
+| Elevated Commands | `@suicide`, `@dupe` |
 
-#### Getting a loop from another player (`@loop send`)
+A player your client has never seen has no box ticked, so every command in the table is refused. The Players batch editor's **Set all permissions** ticks or clears all sixteen for the selected players.
 
-Another MudPlay player who grants you **Move player** (the same grant `@loop` needs) can send you a copy of one of their saved loops over chat:
+**Party members get some commands with no box ticked.** Anyone on your party roster (matched by first name) may send:
 
-1. Send them **`@loop send <name>`** — the name matches the same way `@loop` does (exact name first, otherwise every word you type, in any order; apostrophes are optional, so `kings road` finds *King's Road*). They reply **`{preparing to send: King's Road, yes to confirm, no to deny}`**, or tell you the name matched nothing or several loops. A bare **`@loop send`** offers the loop they're running right now (or says they aren't running one).
-2. Answer **`@loop send yes`** to receive it, or **`@loop send no`** to call it off (they reply that it was cancelled). The offer lapses after two minutes.
-3. On yes they reply how many rooms and lines are coming, then send the loop as a few encoded `@loopdata` lines, paced so they don't crowd out anything else. Your client puts it back together and saves it to your Loops list, with a note in the terminal.
+- `@health`, `@status` and `@lives`;
+- `@reset`;
+- `@party`, unless **Disallow @party commands** is on (Settings → Talk);
+- the party signals `@wait`, `@ok`, `@waiting`, `@comeback`, `@forget`, `@share` and `@ptrain`. These have no box at all: only party membership allows them, so a player outside your party can't be granted them. (A member who has just fallen out of the party can still send `@comeback`, `@forget` and `@ptrain` in the cases their topics describe.)
 
-What arrives is the route itself — every waypoint's room, command, delay, *Don't rest here* and *Don't attack here*, the loop's notes and its *Only attack in lair rooms* setting. Whether it's a favourite, and which folder it sits in, stay your own choice. A loop never overwrites one of yours: if you already have the identical loop you're told so and nothing is saved, and if you have a *different* loop by that name it's saved as **`<name> (from <player>)`**.
+Everything else a party member sends needs its box, like anyone else's. In particular `@heal`, `@kill` and `@do` need **Execute commands**, and `@goto`, `@loop` and `@stop` need **Move player**.
 
-Your client only accepts loop lines within two minutes of your own `@loop send yes`, and — when you answered by telepath — only from the player you said yes to. Use telepath: on gangpath or say, every MudPlay player there who grants you Move player would offer their own match.
+### When you get an answer
 
-### Change my settings
+**Every answer is wrapped in braces**, like `{HP=120/150,MA=40/60}`, so it reads as a client's answer and not as something the player typed.
 
-- The auto-engine toggles — `@auto-combat`, `@auto-nuke`, `@auto-heal`, `@auto-rest`, `@auto-bless`, `@auto-light`, `@auto-cash`, `@auto-get`, `@auto-sneak`, `@auto-hide`, `@auto-search` — each flips that engine (bare toggles it; add `on` or `off` to force it).
-- `@auto-all` — the master switch: `off` switches it off (even when every toggle was already unticked), `on` switches it on and gives back what was ticked when it went off; sent when the switch is already on with no toggle ticked, it switches on your base modes. **While it is off, `@auto-all` is the only remote command that is followed**; every other one is ignored without a reply. See **Automation → The master switch (Auto-All)**. `@settings` — reports every engine's on/off state.
-- `@atkprio` — Target Priority: bare reports it; `1` Default, `2` follow-leader, `3 <name>` attack-what-player.
-- `@atkorder` — Attack Order: bare reports it; `1` Default, `2` last-party, `3` last-room, `4 <name>` attack-after, `5` not-last.
-- `@divert <player>` — forwards your incoming telepaths to another player; bare `@divert` stops.
-- `@profile <n|name>` — swaps your active combat profile (every group with **Include in combat profile** checked); bare `@profile` reports the roster (see **Combat profiles** under Settings → Combat).
-- `@reset` — zeroes your Session Stats counters.
+**It comes back on the channel the command came in on:**
 
-### Do something on my behalf
+- a telepath is answered by telepath;
+- a gangpath is answered on gangpath, for the whole gang to read;
+- a say is answered with a say directed at the sender. A character that is sneaking or hidden answers by telepath instead, because saying anything would end the sneak.
 
-- `@do <command>` — sends the command verbatim to the game (the highest-trust command).
-- `@kill <target>` — retargets your combat onto the named monster this round. On a PvP realm, naming a player who is in your room starts a fight with that player instead (Settings → PvP).
-- `@heal` — asks a configured party healer to heal whoever's low (only a healer responds).
-- `@trap <dir>` — disarm a trap in that direction; `@trap stop` aborts. Your client answers `{Attempting to disarm trap <dir>.}` when it takes the job, then the result when it's done.
-- `@train` — trains (and applies your CP plan, if Auto-train-stats is on) — assumes you're already at a trainer.
-- `@equip <set>` — wears one of your saved gear sets. Name it by its keyword, its name, or the short names **default**, **backstab**, **resthp**, **restma**, **moving** and **bossing** (e.g. `@equip backstab`). `@equip-all` wears the Default set. (The older dashed `@equip-backstab` still works, for party members on earlier versions.)
-- `@equip <set> update` — rewrites that set to **exactly what you're wearing right now**: every worn piece fills its slot (a second ring or bracelet takes slot 2), every unworn slot goes back to *no change*, and the set's alternate-weapon entries are left as they were. It's saved to your character at once, and an open Equipment Manager tab refreshes to show it. It won't run mid gear-swap, or before your inventory has been read once (an `i`) — an unread inventory would empty the set.
-- `@get-stash` — search the room you're in and take the coin the search shows, up to your own coin weight limits (Settings → Cash); your per-coin Collect / Ignore / Discard choices don't decide what is taken. It replies `ok - took …` only once the coin is picked up (or `ok - found no coin here` / `ok - at my coin weight limit, took nothing`). A party leader's stash transfer sends this to each member, because a search shows hidden coin only to the one who searched. Gated by the same permission as `@get-all`.
-- `@get-all` / `@drop-all` / `@deposit-all` — pick up everything on the ground / drop everything unworn / bank all excess coin. `@drop-all full` drops **everything** held (worn gear, the readied light, keys and coins); `@drop-all coins` and `@drop-all keys` drop just those.
-- `@hide-all [full|coins|keys]` — the same four sweeps as `@drop-all`, but **hidden** in the room with `hide <item>` instead of dropped: only someone who searches the room will find it. Like drop, it takes worn gear directly, and a stack goes in one counted `hide` on Paradigm, one per item on Stock. (It always names the item — a bare `hide` would hide you instead.)
-- `@invite` / `@join` — ask you to invite the sender into your party, or to join theirs.
-- `@hangup` — drops your connection and stays down (no auto-reconnect), so you can read the screen and log back in by hand. `@relog` — the opposite: cleanly exits, then reconnects and auto-logs back in. Both need the **Hangup/disconnect** grant. A player you gave that grant is always obeyed: the toolbar's *Disable hangups* toggle stops the client hanging up on its own, not these two commands.
+**Refusals follow one setting.** Settings → Talk → **Warn sender on invalid / denied remote command** (on by default) decides whether a refused command is answered at all:
 
-### Hand out permissions
+- On: the sender gets the reason when the client has a specific one, otherwise the **Failure message** from the same tab (default `command invalid or not allowed`). An empty Failure message sends nothing.
+- Off: no refusal is sent.
 
-- `@dupe <player>` — copies **the sender's query, roomba, and quest permissions** onto that player, so a trusted player can bring an alt up to speed without you ticking every box. It hands out trust, so it needs the **Elevated Commands** grant — the same top tier as `@suicide`. A player you've granted "All" has it; a player with every category *except* Elevated does not.
-  - **Only queries move.** The categories it can copy are Query version, experience, health/status, location, inventory, boss timers, deaths, Query Roomba, and Query quests. Nothing that acts on your character (move, execute, alter settings, request invite, hangup, divert) and **never Elevated Commands** — so a duplicated player can't `@dupe` onward, and gaining anything beyond queries stays a manual step you take in the Players tab.
-  - **One use per player.** Each Elevated player can `@dupe` once. After that it's refused ("your @dupe has already been used") until **you** re-arm it: open that player in **Game Data Browser → Players**, and under **Elevated Commands** press **Reset @dupe**. The dialog shows when it was spent and who it went to. Nothing sent over chat can reset it. A refused or no-op attempt (unknown name, the target already holds everything) doesn't spend the use.
-  - **Telepath and gangpath only.** Said aloud in a room, or sent as a gossip, auction, broadcast, or yell, it's ignored outright (no reply), and the Local control API can't run it.
-  - **Additive.** The target keeps anything they already have and only gains; it never takes a permission away, and it only moves the permission grid, not the target's party behaviours or notes.
-  - **Refused:** your own character, the sender themselves, and any name your client has never seen (so a typo can't pre-grant trust to a name someone registers later). The sender is told which; the reply follows the "warn on invalid/denied command" toggle.
-  - **Logged.** Every use — and every refusal — is written to the program log at Info (who, onto whom, exactly what was granted), and the sender's record keeps who they duplicated onto and when.
+In the reply tables of the command topics, a row that begins **Refusal:** is sent only while that setting is on. Every other row is sent whatever it is set to. The usual refusal, "the sender doesn't hold the permission", gets the Failure message.
 
-### Party coordination — any active party member, no grant needed
+**Some commands answer later, not at once:**
 
-- `@wait` — hold: automation pauses until you `@ok` (which releases it). When your own client sends it to your leader it always adds the reason, in MegaMUD's wording where MegaMUD has one — `@wait (HP's too low)`, `(blinded)`, `(confused)`, `(can't move)`, `(waiting on message condition)` for poison or disease — and in MudPlay's own where it doesn't: `(mana's too low)` and `(too heavy to move)`. The reason is for the leader to read: it doesn't change what their client does.
-- `@waiting` — sent by your leader after going back for you: it's holding for your `@ok`, which your client sends once nothing holds you.
-- `@comeback` (optionally `<map/room>`) — a stranded member asks the party to come recover them; `@forget` calls that recovery off.
-- `@share` — splits your held coin evenly across the party.
-- `@ptrain` — the **Auto-train party** handshake between MudPlay clients (readiness reports, and the leader's give / withdraw / train orders during a party training trip). You never type it; a client only acts on it while its own *Auto-train party* box is on, and only on orders from its current leader. See **Auto-train party** under Settings → Auto-Trainer.
-- `@party` — bare, it reports whether you're solo / following / leading. Sent on **say** *with* arguments, it relays whatever follows verbatim to your character as if you typed it (the party version of `@do`) — `@party rest`, `@party use chime`, and so on. The directive form only works on the say channel, and Settings → Talk can disallow it.
-- `@panic` — the party-wide bail-out (MegaMUD parity). A **leader** whose HP crosses its **"hang if below"** floor says a bare `@panic` on say and then escapes (hangs up, or breaks + `sys goto <wimpy>` per the Health tab) — warning the whole party to get out. It's opt-in on both sides via two **Settings → Party** checkboxes: **Use @panic while leading** (whether you send it) and **Ignore @panics** (whether a received one makes *you* bail). Both default off. A received `@panic` makes you escape exactly as your own low-HP emergency would; it still respects the *Disable hangups* master switch for the carrier-drop (you'll `sys goto` wimpy if configured, but never be force-disconnected by someone else's panic). With the **master switch (Auto-All) off** a received `@panic` does nothing at all unless General → **Allow hangup in all-off mode** is ticked.
+- `@train` answers when the training run has finished.
+- `@trap` answers twice: when it takes the job, and with the result.
+- `@get-stash` answers a few seconds later, once the coin is picked up.
+- `@quest` with a quest name answers after the flag has been read from the game.
+- `@where` on Paradigm, with your room unknown, answers after your client has asked the game.
+- `@comeback` sends several answers as the pickup goes on.
 
-**Telepath pacing.** The server throttles telepaths — fire several at once and the later ones come back `--- Telepath Not Sent ---`. MudPlay sends every telepath (its own @-command traffic and replies, and the ones you type) at least 100 ms apart, and resends any the server refuses, up to three tries. Other commands — movement, attacks, casts — are never held behind a telepath.
+**Pacing.** The server throttles telepaths: fire several at once and the later ones come back `--- Telepath Not Sent ---`. MudPlay sends every telepath (its own command traffic and replies, and the ones you type) at least 100 ms apart, and resends any the server refuses, up to three tries. Other commands (movement, attacks, casts) are never held behind a telepath. A long list (`@inv`, `@help`, `@timer`) is split over several replies. The big data replies (`@loop send`, `@roomba sync`) go out one line every 0.8 seconds; if the game says you are typing too quickly, the client waits three seconds and sends the last line again.
 
-### Irreversible and always-blocked
+**The long dash.** Some replies are written with a long dash (—). The game's character set has none, so on your screen it arrives as `?`: `room 599 needs a map ? try e.g. 1/599`.
 
-- `@suicide` — forces your character's death, using the suicide password MudPlay captured from your in-game `set suicide`. It's an **Elevated Command**, and Settings → Other blocks it when your remaining lives are at or below your threshold.
-- A few things are **always refused, silently, no matter what's granted**: anything containing `reroll`, and `@party set suicide` — these can't be leaked or overridden.
+**On the receiving side** nothing pops up. A plain query leaves no trace but the reply itself, which shows in your terminal as the telepath or say your client sent. A command that makes your client act shows there too, as whatever it sent to the game. Commands that change something are written to the program log with the sender's name (`@do`, `@kill`, the `@auto-…` toggles, `@atkprio`, `@atkorder`, `@reset`, `@dupe`, `@get-stash`, a loop send, a `&@` relay). A refused command is logged only with Debug diagnostics on.
 
-**Not commands:** the ailment broadcasts `@blind` / `@confused` / `@diseased` / `@held` look like `@`-commands but aren't — they're state announcements the party window reads to mirror a member's condition, governed by your cure/ailment settings rather than the remote-control grid. (Poison isn't broadcast — a member's **poison** chip is read from the `par` party screen's `P` flag, so it lights even for a partymate on another client.)
+### Commands that never answer
+
+- `@hangup` and `@relog`: the connection is on its way down.
+- `@kill`, `@invite`, `@join` and `@suicide`, when they work: the action is the answer.
+- `@party <command>` on say: the command your client sends to the game is the answer.
+- `@wait`, `@ok`, `@waiting` and `@ptrain`: signals between clients.
+- `@heal`, sent to a character with no party heal spell set up: only healers answer.
+- An `@` word that is no command, a `@dupe` said aloud, any command while the master switch is off, while **Disallow all remote control commands** is on, or on a switched-off channel.
+
+### Always refused
+
+These are checked before the permission, so no grant gets around them.
+
+- **`reroll`.** A command with `reroll` anywhere in it, in the command word or in what follows, is dropped. No answer is sent, whatever the Warn setting says, so nobody can probe for it.
+- **`@party set suicide`** is dropped the same way.
+- **`@do` with `suicide` anywhere after it** is answered `@do suicide is not allowed, use @suicide` (a **Refusal**) and nothing is sent to the game.
+- **Any other command with `suicide` in it**, apart from `@help` and `@party`, is held to the lives rule of `@suicide` before anything else is looked at: see **@suicide**.
+
+### Sending a command back to yourself (`&@`)
+
+Put `&` in front of a remote command (`&@invite`, `&@where`, `&@wealth`) and the player you send it to **sends that command back to you**, on the channel it arrived on: a telepath, a gangpath line or a say directed at you. Your own client then takes it as a command from them, under the permissions *you* grant *them*. It is the way to make another player ask something of you: telling a party member `&@invite` makes them send you `@invite`, and your client invites them.
+
+- **Who may ask:** the player relaying it must grant you **Execute commands**, the box `@do` needs. A `@do` could already put the same line on the wire.
+- **What is relayed:** only a command their client knows, with whatever follows it, sent bare (no braces). Anything else, or a bare `&@`, is ignored without an answer. `reroll` and `@party set suicide` are dropped here too.
+- **Replies:** none when it works: the relayed command is the answer, and your client's reply to it goes to them. Without the grant: the Failure message (a **Refusal**). With their master switch off: nothing, `&@auto-all` included, since it asks their client to send something.
+- **On gangpath or say** everyone there sees both lines: every MudPlay client that grants you Execute commands relays the command, and any client that grants the relaying player that command runs it too. Use telepath when you want one player to relay it, and only to you.
+- A bare `@help` lists `&@<command>` when you hold that grant, and `@help &@` describes it.
+
+### Quick reference
+
+One row per command. **Needs** is the box the sender must have ticked on your Players record; "party member" means anyone on your party roster, with no box. Each command has its own topic in the groups that follow.
+
+| Command | Forms | Needs | What it does |
+|---|---|---|---|
+| `@goto` | `@goto <place>` | Move player | Walks you to a GOTO favourite, a room or a boss. |
+| `@loop` | `@loop <name>` · `@loop <map/room>, <map/room>, …` · `@loop last` | Move player | Starts a saved loop, a loop through the rooms listed, or the last loop again. |
+| `@loop send` | `@loop send` · `@loop send <name>` · `@loop send yes` · `@loop send no` | Move player | Gives the sender a copy of one of your loops. |
+| `@lair` | `@lair <setup>` · `@lair <map/room>, <map/room>, …` | Move player | Starts Auto-Lair on a saved setup or on the rooms listed. |
+| `@stop` | `@stop` | Move player | Pauses your movement. |
+| `@rego` | `@rego` | Move player | Lifts that pause. |
+| `@where` | `@where` | Query location | Your room, its map/room and its exits. |
+| `@path` | `@path` | Query location | What is moving you, where you are, how far along. |
+| `@who` | `@who` | Query location | Who else is in your room. |
+| `@trap` | `@trap <direction>` · `@trap stop` | Execute commands | Disarms a trap that way; `stop` calls it off. |
+| `@party` | `@party` · on say: `@party <command>` | Party member; the bare form also with Query health/status | Bare: solo, following or leading. On say with a command: sends that command to the game. |
+| `@invite` | `@invite` | Request invite | You invite the sender to your party. |
+| `@join` | `@join` | Request invite | You join the sender's party. |
+| `@wait` | `@wait` | Party member | Your movement holds for the sender. |
+| `@ok` | `@ok` | Party member | Releases that hold. |
+| `@waiting` | `@waiting` | The leader you follow | Your client answers `@ok` once nothing holds you. |
+| `@comeback` | `@comeback` · `@comeback <map/room>` | Party member, or one who just dropped | You go back for the sender. |
+| `@forget` | `@forget` | Party member, one who just dropped, or the leader you were following | Calls a pickup off. |
+| `@kill` | `@kill <target>` | Execute commands | You attack that target now. |
+| `@atkprio` | `@atkprio` · `@atkprio 1` · `@atkprio 2` · `@atkprio 3 <player>` | Alter settings | Reports or sets your Target Priority. |
+| `@atkorder` | `@atkorder` · `@atkorder 1` to `@atkorder 5` · `@atkorder 4 <player>` | Alter settings | Reports or sets your Attack Order. |
+| `@profile` | `@profile` · `@profile <number>` · `@profile <name>` | Alter settings | Reports your combat profiles, or switches to one. |
+| `@health` | `@health` | Query health/status, or party member | HP, mana, and whether you are resting. |
+| `@status` | `@status` | Query health/status, or party member | What you are doing, where, and your ailments. |
+| `@lives` | `@lives` | Query health/status, or party member | Lives left. |
+| `@heal` | `@heal` | Execute commands | A healer re-reads the party's health and heals whoever is low. |
+| `@hangup` | `@hangup` | Hangup/disconnect | Logs you off; you stay off. |
+| `@relog` | `@relog` | Hangup/disconnect | Logs you off and straight back in. |
+| `@inv` | `@inv` | Query inventory | Your pack and your keys. |
+| `@have` | `@have <item>` | Query inventory | Whether you hold a matching item, and how many. |
+| `@what` | `@what` | Query inventory | The items on the floor of your room. |
+| `@wealth` | `@wealth` | Query inventory | Your coins. |
+| `@enc` | `@enc` | Query inventory | Your encumbrance. |
+| `@uses` | `@uses` · `@uses <item>` | Query inventory | Charges left on your limited-use items. |
+| `@token` | `@token` · `@token <place>` | Query inventory | Charges left on your transport tokens (Paradigm). |
+| `@get-all` | `@get-all` | Execute commands | Picks up what is on the floor. |
+| `@drop-all` | `@drop-all` · `@drop-all full` · `@drop-all coins` · `@drop-all keys` | Execute commands | Drops your unworn pack, everything, your coins, or your keys. |
+| `@hide-all` | `@hide-all` · `@hide-all full` · `@hide-all coins` · `@hide-all keys` | Execute commands | The same, hidden in the room instead of dropped. |
+| `@deposit-all` | `@deposit-all` | Execute commands | Banks down (or withdraws up) to your keep-on-hand amount. |
+| `@get-stash` | `@get-stash` | Execute commands | Searches the room and takes the coin it shows. |
+| `@equip` | `@equip <set>` · `@equip <set> update` · `@equip-all` | Execute commands | Wears a gear set, or saves what you are wearing into it. |
+| `@share` | `@share` | Party member | Splits your coins across the party. |
+| `@train` | `@train` | Execute commands | Trains where you stand. |
+| `@ptrain` | sent by clients, not typed | Party member | The Auto-train party handshake. |
+| `@version` | `@version` | Query version | The client's name and version. |
+| `@help` | `@help` · `@help <command>` | Query version | The commands the sender may use, or one command's form. |
+| `@exp` | `@exp` | Query experience | Exp made this session, exp needed, rate, time to level. |
+| `@level` | `@level` | Query experience | Level, exp, and exp to the next level. |
+| `@death` | `@death` · `@death all` | Query deaths | Your deaths that are not yet recovered. |
+| `@quest` | `@quest` · `@quest <name or flag>` · `@quest update` | Query quests | Quest progress. |
+| `@settings` | `@settings` | Alter settings | Your eleven auto toggles, on or off. |
+| `@timer` | `@timer` · `@timer <name>` · `@timer sync` | Query boss timers | Your boss timers; `sync` hands them to the sender's client. |
+| `@roomba` | `@roomba <item>` · `@roomba sync` | Query Roomba | Where an item was last seen; `sync` hands over your whole log. |
+| `@auto-all` | `@auto-all` · `@auto-all on` · `@auto-all off` | Alter settings | The master switch. |
+| `@auto-combat` `@auto-nuke` `@auto-heal` `@auto-rest` `@auto-bless` `@auto-light` `@auto-cash` `@auto-get` `@auto-sneak` `@auto-hide` `@auto-search` | each one bare, or with `on` or `off` | Alter settings | Flips or sets that one auto toggle. |
+| `@reset` | `@reset` | Alter settings, or party member | Zeroes your session statistics. |
+| `@divert` | `@divert <player>` · `@divert` | Divert conversations | Forwards your incoming telepaths to that player; bare stops it. |
+| `@do` | `@do <command>` | Execute commands | Sends the command to the game as if you typed it. |
+| `@suicide` | `@suicide` | Elevated Commands | Kills your character. |
+| `@dupe` | `@dupe <player>` | Elevated Commands | Copies the sender's query permissions onto that player. |
+
+`@panic` and the ailment words (`@held`, `@blind` and the rest) look like commands but are party signals with rules of their own: see **@panic** and **Not commands: the ailment words**.
+
+### Movement and position
+
+The six movement commands (`@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@rego`) need **Move player**. The three position queries (`@where`, `@path`, `@who`) need **Query location**. `@trap` needs **Execute commands**. All are taken on telepath, gangpath and say.
+
+Three rules hold for `@goto`, `@loop` and `@lair` alike:
+
+- **A new movement command replaces what is running.** A loop, an Auto-Lair run or a walk-to already under way is stopped for it, and the program log names the sender (`superseded by remote @ from <sender>`).
+- **It overrides an `@stop`.** After `@stop`, an `@goto`, `@loop` or `@lair` drops the pause and starts moving at once. Use `@rego` only to carry on with the same thing you paused.
+- **The reply says the movement was started, not that it arrived.** Ask `@path` or `@status` to follow it.
+
+#### @goto
+
+Walks you to a place: one of your GOTO favourites, a room, or a boss.
+
+**Forms:**
+
+- `@goto arlysia`: a GOTO favourite, by its label.
+- `@goto 3/599`: a room by map and room number. `3,599` and `3 599` read the same.
+- `@goto town square`: a room by its name. `@goto fcco` finds it by its initials (*Frozen Cavern, Cave Opening*).
+- `@goto ogre king`: a boss from your boss list.
+
+**How the place is found.** Your client tries these in order and stops at the first that answers:
+
+1. **A bare number is refused.** `@goto 599` can't pick a room, because room 599 exists on every map.
+2. **A full map/room** is that room and nothing else. A favourite or boss is never looked up for it.
+3. **A GOTO favourite.** A label that equals what was typed (ignoring case) wins. Otherwise a favourite matches when every typed word appears in its label. One match is walked to; several are listed and nothing moves.
+4. **A room.** By map/room, by initials (the first letter of every word of the room name, typed as one word), or by name: every typed word must appear in the room's name. One match is walked to. Two or three are offered back as a question. More than three is refused.
+5. **A boss.** A name that equals what was typed wins; otherwise the only boss whose name holds every typed word. Your client walks to the nearest of that boss's rooms, and stops one room short when the boss is marked to stop before its room.
+
+Words are split at spaces and at `, / - ' . ; : ( ) [ ]`. A word matches as part of a longer one (`squ` finds *Square*), in any order, ignoring case.
+
+**Who may send it:** a player with **Move player**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `walking to GOTO '<label>' (<map>/<room>)` | A favourite matched and the walk started. |
+| `walking to <room name> (<map>/<room>)` | One room matched and the walk started. |
+| `walking to boss <name> (<map>/<room>)` | A boss matched and the walk started. |
+| `walking to boss <name>, stopping just outside (<map>/<room>)` | The same, for a boss marked to stop before its room. |
+| `did you mean: <room> (<map>/<room>), <room> (<map>/<room>)?` | Two or three rooms matched. Send again with the map/room. |
+| `too many room matches (<n>) for '<text>'` | More than three rooms matched. |
+| `'<text>' matches <n> GOTO locations: '<label>', '<label>'` | Several favourites matched. Up to four are named. |
+| `'<text>' matches <n> bosses: <name>, <name>` | Several bosses matched. Up to four are named. |
+| `no path to GOTO '<label>'` · `no path to <room name>` · `no path to <boss>` | The place was found but no route could be planned. |
+| `<boss> has no known room on this map` | None of the boss's rooms is in your map data. |
+| `room <n> needs a map — try e.g. 1/<n>` | A bare room number was sent. |
+| `no match for '<text>'` | Nothing matched. |
+| `@goto requires a destination` | Nothing followed `@goto`. |
+| the Failure message | **Refusal:** the sender doesn't hold Move player. |
+
+**Situations:**
+
+- **Already walking somewhere:** the new destination replaces the old one.
+- **Looping or in Auto-Lair:** that run is stopped, then the walk starts. It is not put back afterwards.
+- **Paused by `@stop`:** the pause is dropped.
+- **No route picker.** The walk is planned like the client's own automatic walks; nobody is asked to choose a route.
+- **A follower asking their leader:** the follower's map draws the leader's route from the reply (see **`@path` on the map** under *Navigation & Looping*).
+- **Master switch off:** ignored, no answer.
+
+#### @loop
+
+Starts one of your saved loops, a loop through a list of rooms, or the last loop again. (`@loop send`, which copies a loop to the sender, has its own topic next.)
+
+**Forms:**
+
+- `@loop black fortress`: a saved loop, by name.
+- `@loop 5/10, 5/11, 5/12`: a loop through two or more rooms, given as map/room and separated by **commas or semicolons**. It is run under the name `@loop from <sender>` and is not saved.
+- `@loop last`: the last loop that was started on your client this session, however it was started, including a room-list loop that was never saved.
+
+**How what you typed is read**, in this order:
+
+1. First word `send`: it is a `@loop send`.
+2. The whole text is `last`: the last loop.
+3. **A room list.** The text is cut at commas and semicolons. If every piece is a full map/room (`5/10` or `5 10`) and there are at least two, it is a room list.
+4. Anything else is a **name**.
+
+So a list written with spaces only, `@loop 5/10 5/11 5/12`, is not a room list: it is looked up as a loop name and answered `no saved loop named '5/10 5/11 5/12'`. A single room is not a list either.
+
+**How a name finds a loop.** This is the rule, in full:
+
+1. **An exact name wins.** If a saved loop is called exactly what you typed (ignoring case), that loop is taken, even when other loops also contain those words.
+2. **Otherwise every typed word must appear in the loop's name.** The text is split into words at spaces and at `, / - ' . ; : ( ) [ ]`. A loop matches when each word is found somewhere in its name: in any order, ignoring case, and as part of a longer word.
+3. **If that finds nothing, apostrophes are dropped** from what you typed and from the loop names, and step 2 is tried once more.
+4. **Exactly one loop must match.** One match starts. No match and several matches both start nothing, and say so.
+
+Worked examples, with these loops saved: *Bank of Godfrey Loop*, *Godfrey Sewers*, *King's Road*, *Black Fortress*, *Black Fortress East*.
+
+| You send | What happens |
+|---|---|
+| `@loop godfrey sewers` | Exact name: *Godfrey Sewers* starts. |
+| `@loop godfrey bank` | Only *Bank of Godfrey Loop* holds both words, in either order: it starts. |
+| `@loop godfrey` | Two loops hold the word. Nothing starts: `'godfrey' matches 2 loops: 'Bank of Godfrey Loop', 'Godfrey Sewers'`. |
+| `@loop black fortress` | Exact name: *Black Fortress* starts, although *Black Fortress East* holds both words too. |
+| `@loop fort east` | Parts of words are enough, and only *Black Fortress East* holds both: it starts. |
+| `@loop kings road` | No loop holds `kings`. With apostrophes dropped, *King's Road* reads *Kings Road*: it starts. |
+| `@loop dragon` | Nothing holds the word: `no saved loop named 'dragon'`. |
+
+Only the loops in your own Loops list (for the game data set you have loaded) are searched. A loop named exactly `last`, or one whose name begins with the word `send`, can't be started by that name, because those words are read first.
+
+**Who may send it:** a player with **Move player**, on any of the three channels. On gangpath or say, every client there that grants you Move player and has a matching loop starts it.
+
+| Reply | When |
+|---|---|
+| `starting loop '<name>' (<n> rooms)` | One saved loop matched. `<n>` is the number of rooms saved in the loop. |
+| `looping <n> rooms` | A room list was given. |
+| `restarting last loop '<name>' (<n> rooms)` | `@loop last`, and a loop has run this session. |
+| `no loop has run yet this session` | `@loop last`, and none has. |
+| `no saved loop named '<text>'` | No loop matched the name. |
+| `'<text>' matches <n> loops: '<name>', '<name>'` | Several loops matched. Up to four are named; nothing starts. |
+| `@loop requires a name, coordinate list, or 'last'` | Nothing followed `@loop`. |
+| the Failure message | **Refusal:** the sender doesn't hold Move player. |
+
+**The reply is sent as soon as the loop is found.** It does not wait to see whether the loop could really begin, and nothing more is sent if it couldn't. A loop is not run when it has fewer than two rooms, when one of its rooms can't be entered by any route, when one of its legs can only be crossed by paying a toll or fare you can't pay, or when none of it can be reached from where you stand. The receiver's program log says which. To check, send `@path` a moment later: a loop that started answers `running loop '<name>'; …`, one that didn't answers `not moving`, with or without a `last ran` tail.
+
+**When something is already running:**
+
+- **Another loop, or the same one:** it is stopped and the new one starts fresh. Its lap count starts over, and your session statistics are reset again if **Reset statistics on loop start** is on.
+- **Auto-Lair or a walk-to:** stopped, and not put back afterwards.
+- **Paused by `@stop` or the Pause button:** the pause is dropped and the loop moves at once.
+- **A fight, a rest, a party wait:** these still hold the new loop, as they hold any loop. It starts when they clear.
+
+**Where it starts.** Standing on the loop, it starts from that room. Anywhere else, your client first walks to the nearest room of the loop, through a door or hidden exit it can open on the way if there is no free way in.
+
+**Other situations:**
+
+- **Master switch off:** ignored, no answer.
+- **On your own screen:** the Navigation window shows the loop as running. The loop builder closes if it held that loop or was empty; a different loop you were building is kept.
+
+#### @loop send
+
+Gives the sender a copy of one of your saved loops, over chat. Two MudPlay clients are needed: yours hands the loop out, theirs puts it back together and saves it. It rides the **Move player** permission: a player you trust to run your loops may also have a copy of one.
+
+**Forms:**
+
+- `@loop send kings road`: ask for a saved loop by name. The name is matched exactly as `@loop` matches it.
+- `@loop send`: ask for the loop you are running right now (running, paused or still walking to it).
+- `@loop send yes` (or `y`): take the loop just offered.
+- `@loop send no` (or `n`): turn it down.
+
+**From asking to saved**, with Leader asking Scout for a loop:
+
+1. Leader sends `/Scout @loop send kings road`. Scout's client finds the loop and answers `{preparing to send: King's Road, yes to confirm, no to deny}`. Nothing has been sent yet. The offer is Leader's alone, and a new ask from Leader replaces it.
+2. Leader answers `/Scout @loop send yes` within two minutes. After that the offer has lapsed and a `yes` is answered `no loop send pending — use @loop send <name> first`.
+3. Scout's client answers `{sending loop 'King's Road' (42 rooms, 3 lines)}` and then sends the loop as that many `{@loopdata <id> <i>/<k> <data>}` lines, 0.8 seconds apart.
+4. Leader's client collects the lines. When the last one is in, it rebuilds the loop, saves it to Leader's Loops list, and prints a notice in Leader's terminal.
+
+| Reply from the client asked | When |
+|---|---|
+| `preparing to send: <loop name>, yes to confirm, no to deny` | A loop was found by name, or you are running one and the bare form was sent. |
+| `not running a loop — @loop send <name> for a saved one` | The bare form, and no loop is running. |
+| `no saved loop named '<text>'` | The name matched nothing. |
+| `'<text>' matches <n> loops: '<name>', '<name>'` | The name matched several loops. |
+| `sending loop '<name>' (<n> rooms, <k> lines)` | `yes`, with an offer still open. `1 line` when the loop fits one. |
+| `@loopdata <id> <i>/<k> <data>` | The loop itself, line `<i>` of `<k>`. |
+| `no loop send pending — use @loop send <name> first` | `yes`, with no offer open or one older than two minutes. |
+| `loop send of '<name>' cancelled` | `no`, with an offer open. |
+| `no loop send pending` | `no`, with none open. |
+| the Failure message | **Refusal:** the sender doesn't hold Move player. |
+
+| Notice in the asker's terminal | When |
+|---|---|
+| `[Received loop '<name>' <n> rooms from <player>]` | Saved under its own name. |
+| `[Received loop '<name>' <n> rooms from <player>, saved as '<name> (from <player>)']` | You already had a different loop by that name. Yours is kept; the new one gets the longer name (and a number after it if that name is taken too). |
+| `[Received loop '<name>' <n> rooms from <player>, already have it]` | You have the identical loop under that name. Nothing is saved. |
+| `[Received loop '<name>' <n> rooms from <player>, not saved: no game data set is loaded]` | There was nowhere to save it. |
+| `[Loop from <player> arrived damaged, not saved]` | The lines could not be put back together. |
+
+**What your client accepts.** Loop lines are taken only within two minutes of your own `@loop send yes` (or `y`) going out, and one loop per `yes`. When you said yes by telepath, only lines from that player are taken. A loop needs no permission on the receiving side: you asked for it.
+
+**What travels:** the route itself. Every room, its command and delay, its no-rest, no-attack and rest-here marks, the loop's notes, its *Only attack in lair rooms* setting and its lair-entry debuff setting. Whether it is a favourite, and which folder it sits in, stay your own choice.
+
+**Situations:**
+
+- **On gangpath or say:** every MudPlay client there that grants you Move player offers its own match, and after a `yes` on those channels your client takes lines from any of them. Use telepath.
+- **`yes`, `y`, `no` and `n` are read as answers**, so a loop with one of those names can't be asked for by name.
+- **The game says the sender is typing too quickly:** the sending client waits three seconds and sends the last line again.
+- **Master switch off on the client asked:** ignored, no answer.
+- **On the sending client's screen:** nothing but the outgoing lines. Its program log notes who asked for which loop, the answer, and the send.
+
+#### @lair
+
+Starts Auto-Lair on one of your saved lair setups, or on a list of rooms.
+
+**Forms:**
+
+- `@lair mud men`: a saved lair setup. The name must be the setup's **whole name** (ignoring case). There is no partial match here.
+- `@lair 5/10, 5/11, 5/12`: two or more rooms as map/room, separated by commas or semicolons, read the way `@loop` reads a room list.
+
+**Who may send it:** a player with **Move player**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `auto-lair '<name>': <n> lairs` | The saved setup was found and Auto-Lair started. |
+| `auto-lair: <n> lairs` | A room list was given and Auto-Lair started. |
+| `auto-lair failed to start` | The rooms were marked but Auto-Lair would not start on them. |
+| `no saved lair setup named '<text>'` | No setup has exactly that name. A single map/room, or a list written with spaces only, ends here too. |
+| `@lair requires a name or coordinate list` | Nothing followed `@lair`. |
+| the Failure message | **Refusal:** the sender doesn't hold Move player. |
+
+**Situations:**
+
+- **Your marked lairs are replaced.** The lairs you had marked are cleared and the new ones marked in their place. A saved setup brings its own respawn times with it.
+- **Looping, walking, or in another Auto-Lair run:** that is stopped first.
+- **Paused by `@stop`:** the pause is dropped.
+- **Master switch off:** ignored, no answer.
+
+#### @stop
+
+Pauses your movement, exactly as the toolbar's Pause button does. Fighting, healing and the other engines go on.
+
+**Who may send it:** a player with **Move player**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `movement paused, I'm in <room name> (<map>/<room>)` | The pause was set. |
+| `movement paused` | The pause was set and your room isn't known. |
+| `already @stopped` | A pause of yours was already in place, from an earlier `@stop` or from the Pause button. |
+| the Failure message | **Refusal:** the sender doesn't hold Move player. |
+
+**Situations:**
+
+- **In a fight or resting:** the pause is added on top. When the fight or rest ends, you stay paused.
+- **Nothing running:** the pause is set all the same, so `@rego` has something to lift.
+- **Your auto toggles go back to their base modes** when the pause takes hold (see **Base modes** under *Automation*). A repeated `@stop` that answers `already @stopped` changes nothing.
+- **A later `@goto`, `@loop` or `@lair`** drops the pause and starts the new movement.
+- **Master switch off:** ignored, no answer.
+
+#### @rego
+
+Lifts the pause that `@stop` or the Pause button set, and carries on with what was paused.
+
+**Who may send it:** a player with **Move player**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `resuming loop '<name>'` | A paused loop carries on. |
+| `resuming walking to <room name> (<map>/<room>)` | A paused walk-to carries on. |
+| `resuming auto-lair (<n> lairs)` | A paused Auto-Lair run carries on. |
+| `resuming movement` | The pause was lifted and neither a loop nor a walk was waiting behind it. |
+| `loop '<name>' already running` | No pause of yours was in place, and a loop is running. |
+| `auto-lair already running (<n> lairs)` | The same, in Auto-Lair. |
+| `already walking to <room name> (<map>/<room>)` | The same, on a walk-to. |
+| `nothing to resume` | No pause, and nothing running. |
+| the Failure message | **Refusal:** the sender doesn't hold Move player. |
+
+**Situations:**
+
+- **Only your own pause is lifted.** A fight, a rest or a party wait still holds the movement, and it carries on by itself when that clears.
+- **Auto-Lair** picks its next lair afresh on resume, since respawn timers kept running while you stood.
+- **Master switch off:** ignored, no answer.
+
+#### @where
+
+Reports the room you are in.
+
+**Who may send it:** a player with **Query location**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `<room name> (map <m>, room <r>); exits: <exit>, <exit>` | Your room is known. Exits are spelled out (`north`, `southeast`, `up`). |
+| `<room name> (map <m>, room <r>); exits: none` | The room has no exits in your map data. |
+| `map <m>, room <r> (not in map data)` | Paradigm: the game gave your position, and that room isn't in your map data. |
+| `Location unknown` | Your client doesn't know where you are. |
+| the Failure message | **Refusal:** the sender doesn't hold Query location. |
+
+**Situations:**
+
+- **Paradigm, room unknown:** your client asks the game for your position (`rm`) and answers once it has it, so the reply comes a moment later. If the game doesn't answer, the reply is `Location unknown`.
+- **Stock, room unknown:** `Location unknown` at once.
+- **The asker's client** flashes the room on its map when the reply lands (see **`@where` on the map** under *Navigation & Looping*).
+
+#### @path
+
+Reports what is moving you, where you are, and how far along you are.
+
+**Who may send it:** a player with **Query location**, on any of the three channels.
+
+The reply has up to three parts, separated by semicolons: what is moving you, your room, and the step count.
+
+| First part | When |
+|---|---|
+| `walking to <map>/<room>` | A walk-to is under way. |
+| `running loop '<name>'` | A loop is running. |
+| `auto-lair` | Auto-Lair is running. |
+| `sailing to <port>` (or `sailing`) | You are on a boat, whichever of the three put you there. |
+| `<reason> en route to <map>/<room>` · `<reason> on loop '<name>'` · `<reason> (auto-lair)` | The movement is standing still. `<reason>` is `paused` (your Pause, or an `@stop`), `fighting`, or the hold the Navigation window names: `Low HP`, `Low MANA`, `Held`, `@Wait`, `Too heavy`, `Searching Room` and so on. |
+
+| Whole reply | When |
+|---|---|
+| `running loop 'Black Fortress'; Dark Hall (map 5, room 10); step 12/40` | Something is moving you. The room part reads `location unknown` when your room isn't known, and the step part is left out when no route is loaded. |
+| `not moving; last ran loop '<name>'` | Nothing is moving you now; a loop was the last thing run this session. |
+| `not moving; last ran auto-lair '<name>'` (or `not moving; last ran auto-lair`) | The same, when Auto-Lair was the last thing run. |
+| `not moving` | Nothing is moving you, and neither a loop nor Auto-Lair has run this session. |
+| the Failure message | **Refusal:** the sender doesn't hold Query location. |
+
+**Situations:**
+
+- **After a death or an `@stop`** the `last ran` form tells a party member which loop to put you back on (`@loop last` does it).
+- **The asker's client** draws your route on its map from the reply (see **`@path` on the map** under *Navigation & Looping*). A follower's client also asks its leader `@path` by itself when it leaves a boss room wearing the Bossing gear set.
+
+#### @who
+
+Lists the other players and monsters in your room, from the room's last *Also here* line.
+
+**Who may send it:** a player with **Query location**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `<name>, <name>, <name>` | Someone or something is in the room with you. You are not in the list. |
+| `no one` | Nobody else is there, or the room has not been read yet. |
+| the Failure message | **Refusal:** the sender doesn't hold Query location. |
+
+#### @trap
+
+Has you disarm a trap in one direction, for the sender.
+
+**Forms:**
+
+- `@trap n`: disarm the trap to the north. The directions are `n`, `s`, `e`, `w`, `ne`, `nw`, `se`, `sw`, `u` and `d`, or the full words (`north`, `northeast`, `up`).
+- `@trap stop`: drop the disarm in hand and every request waiting behind it.
+
+**Who may send it:** a player with **Execute commands**, on any of the three channels. Anyone with that permission may send `stop`, not only the player who asked for the disarm.
+
+| Reply | When |
+|---|---|
+| `Attempting to disarm trap <dir>.` | Your client took the job. The result follows in one of the next rows. `<dir>` is the short form (`n`, `ne`). |
+| `Trap to the <dir> disarmed.` | Disarmed. |
+| `Trap to the <dir> disarmed <n>s ago.` | You disarmed that exit a moment ago and it has not re-armed (two minutes on Paradigm, five on Stock). Nothing is sent to the game. |
+| `Trap to the <dir> already disarmed.` | The game says it is already down. |
+| `No trap to the <dir> to disarm.` | The game says there is no trap that way. |
+| `No trap to the <dir> to disarm (failed <n> times; taking it as clear).` | Every try got the answer that can mean either a failed disarm or no trap, so it is taken as clear. |
+| `Couldn't disarm the trap to the <dir> (<n> attempts).` | The tries ran out. |
+| `Trap flow stopped.` | Someone sent `@trap stop` while your request was in hand or waiting. |
+| `ok` | The answer to `@trap stop`. |
+| `missing direction (e.g. @trap n)` | **Refusal:** nothing followed `@trap`. |
+| `unknown direction '<text>'` | **Refusal:** the word is not a direction. |
+| `can't disarm — no Traps skill` | **Refusal:** you have no Traps skill. Sent on telepath and gangpath only. |
+| the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
+
+**Situations:**
+
+- **Asked on say with no Traps skill:** no answer at all, so a room full of clients doesn't answer in chorus. Only a character that can disarm speaks up.
+- **Several requests:** they are taken one at a time, in the order they came.
+- **Resting:** the disarm waits until the rest is over, then goes on.
+- **How many tries:** Settings → Other → **@trap max disarms**.
+- **Master switch off:** ignored, no answer.
+- **The asking side:** a MudPlay leader sends `@trap <direction>` by itself when its walk meets a trap it can't disarm. See **Utilize self or party members to disarm traps** under Settings → Other.
+
+### Party and following
+
+These are the commands a party runs on. Most of them need no box ticked: being on the receiver's party roster is enough.
+
+#### @party
+
+Two commands under one name. Bare, it asks what your party standing is. Said aloud with a command after it, it makes your character send that command to the game: the party's version of `@do`.
+
+**Forms:**
+
+- `@party`: are you solo, following or leading?
+- `.@party rest` (on **say** only): your client sends `rest` to the game. Whatever follows `@party` is sent as typed, so `.@party use chime` sends `use chime`.
+
+Two rewrites are made before sending. `@party meditate` sends `medi`. `@party go <direction>` sends the direction alone (`@party go n` sends `n`); `@party go hole` keeps its `go` and sends `go hole`.
+
+**Who may send it:**
+
+- **The bare form:** anyone on your party roster, or a player with **Query health/status**. On any of the three channels.
+- **With a command:** only on say, and only from someone on your party roster. Sent by telepath or gangpath, the words after `@party` are ignored and you get the bare form's answer.
+- **Disallow @party commands** (Settings → Talk) stops the relay for everyone, with no answer. It also takes away the party member's free pass to the bare form: a member then needs Query health/status to get an answer.
+
+| Reply | When |
+|---|---|
+| `no active party` | You are not in a party. |
+| `I'm following <leader>` | You follow someone. |
+| `I'm following an unknown leader` | You follow someone and your client doesn't know the leader's name. |
+| `I'm leading: <name>, <name>` | You lead. The followers are listed by first name. |
+| `I'm leading: (no followers)` | You lead and nobody else is on the roster. |
+| nothing | A command was relayed. What your client sent to the game is the answer. |
+| nothing | A command said by someone who isn't on your party roster, or while Disallow @party commands is on. |
+| the Failure message | **Refusal:** the bare form, from a player who is neither on your roster nor holds Query health/status. |
+
+**Situations:**
+
+- **Always refused, without an answer:** `@party set suicide`, and any `@party` line with `reroll` in it. Everything else is relayed, a plain `suicide` included.
+- **Master switch off:** ignored, no answer.
+- **The sending side:** a MudPlay leader says `.@party <command>` by itself to bring the party through a gate or a teleport that only takes the one who uses it. See *Navigation & Looping*.
+
+#### @invite and @join
+
+`@invite` asks you to invite the sender into your party. `@join` asks you to join theirs. When it works there is no reply: your client sends `invite <sender>` or `join <sender>` to the game, and that is the answer.
+
+**Who may send it:** a player with **Request invite**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| nothing | The `invite` or `join` was sent to the game. |
+| `Can't invite — I'm mortally wounded; being dragged by <name>.` | `@invite`, and you are down. Sent whatever the Warn setting says. |
+| `Can't invite — I'm mortally wounded; nobody is dragging me.` | The same, when nobody is dragging you. |
+| `Can't join — I'm mortally wounded; being dragged by <name>.` (or `…; nobody is dragging me.`) | `@join`, and you are down. |
+| `My Party is full, <name>, <name> are following me.` | `@invite`, and your roster already holds six. |
+| `I'm following <leader>; denied.` | **Refusal:** you are following someone. |
+| `I'm following someone; denied.` | **Refusal:** the same, when the leader's name isn't known. |
+| the Failure message | **Refusal:** the sender doesn't hold Request invite. |
+
+**Situations:**
+
+- **`@join` from the leader you already follow** is not refused: your client sends `join` again. A leader never asks a current follower to join, so the request means your client's idea of the party is out of date.
+- **Not checked:** whether the sender is in your room. The game answers the `invite` or `join` itself.
+- **Master switch off:** ignored, no answer.
+
+#### @wait, @ok and @waiting
+
+The hold signals. A member who can't move sends `@wait`; `@ok` says they can again; `@waiting` is a leader telling a follower it is standing by for that `@ok`. MudPlay sends all three by itself, and none of them is answered with a reply.
+
+**Forms:**
+
+- `@wait`: hold for me. A MudPlay follower adds its reason for the leader to read, in MegaMUD's wording where MegaMUD has one: `@wait (HP's too low)`, `(blinded)`, `(confused)`, `(can't move)`, `(waiting on message condition)` for poison or disease, and MudPlay's own `(mana's too low)` and `(too heavy to move)`. The reason changes nothing in what the receiving client does.
+- `@ok`: I can move again.
+- `@waiting`: sent by a leader that went back for a follower and is now holding for their `@ok`.
+
+**Who may send it:** anyone on your party roster, on any of the three channels. `@waiting` is acted on only when it comes from the leader you follow.
+
+**What each one does:**
+
+- **`@wait`** puts the sender on your waiting list. Your movement holds, and their row in the Party window shows **WAIT**, until every waiting member has sent `@ok` or the time in **If leading, wait only (s)** (Settings → Party) runs out.
+- **`@ok`** takes the sender off the list. When the list is empty, your movement carries on.
+- **`@waiting`** makes your client telepath `@ok` to that leader at once if nothing holds you. If something still does, the `@ok` goes when it clears.
+
+| Reply | When |
+|---|---|
+| nothing | Always. These are signals, not questions. |
+| the Failure message | **Refusal:** the sender is not on your party roster. |
+
+**Situations:**
+
+- **Ignore @wait when leading** (Settings → Party): while you lead, a follower's `@wait` is dropped.
+- **An `@ok` that came too early.** If a follower was left behind a moment after sending `@ok`, your client stops trusting their `@ok` for that wait and sits out the whole wait time.
+- **Master switch off:** `@wait` and `@ok` are still noted, but no hold is raised. When the switch comes back on you hold for whoever last asked. `@waiting` is ignored.
+
+#### @comeback and @forget
+
+`@comeback` is a member who was left behind asking you, the leader, to come back for them. `@forget` calls a pickup off, from either side. A MudPlay follower sends `@comeback` by itself (see **Reconnecting** and, under Settings → Other, **Auto-request @comeback when left behind**).
+
+**Forms:**
+
+- `@comeback 9/1012`: come to this room. The room is written `map/room`, with a slash.
+- `@comeback`: I don't know where I am. You walk back along the way you came, looking for them.
+- `@forget`: stop coming for me (from the member), or I am not coming (from the leader).
+
+**Who may send it:**
+
+- **`@comeback`:** anyone on your party roster, and a member who dropped out of your party within the time in **If leading, accept @comeback for (min)** (Settings → Party) and whom you did not uninvite.
+- **`@forget`:** the same, and also the leader you were following when you dropped.
+
+Both are taken on any of the three channels.
+
+| Reply to `@comeback` | When |
+|---|---|
+| `coming to your location for pickup` | A room was named, it is within reach, and the walk has started. Also when you were already backtracking for them and they now name their room. |
+| `backtracking up to <n> room(s) to find you` | No room was named. You walk back along your own path, up to **Return distance (rooms)**. |
+| `found you — re-inviting <name>` | You reached them and sent the invite. |
+| `got you — resuming` | They follow you again. What you were doing is put back. |
+| `got you — waiting for your @ok` | They follow again, and they were left behind because they couldn't move. Your client also telepaths them `@waiting`. |
+| `got you — your last @ok was too early, waiting the full <n>s` | The same, when their last `@ok` came just before they failed to move. |
+| `follow timed out — resuming anyway` | They never followed after the invite. |
+| `comeback already in progress` | You are already on your way to them. |
+| `comeback already in progress — fetching <name> first, then you` | You are fetching someone else. They are next. |
+| `I can't I'm idle` | You have no walk, loop or Auto-Lair running to come back from. |
+| `my party is full — can't take you back` | Your roster holds six. Your client also telepaths them `@forget`. |
+| `you're <n> rooms off (limit <m>) — can't come, forget me` | The room they named is farther than **Return distance (rooms)**. `@forget` follows. |
+| `can't find a path to you — you're on your own` | No route to the room they named. `@forget` follows. |
+| `tried reaching you 2x and couldn't — forget me` | Two walks to them failed already. `@forget` follows. |
+| `can't reach <map>/<room> — resuming` | The walk to them could not be started. |
+| `path failed — resuming` | The walk to them failed on the way. |
+| `no path history to backtrack — going idle` | No room was named and your client has no trail to walk back along. |
+| `backtrack path failed — going idle` | The walk back failed on the way. |
+| `couldn't find you after backtracking — going idle` | You walked the whole trail back and did not see them. |
+| `didn't find you where the trip left you — @comeback with your room and I'll come` | After a train trip, they were not in the room it left them in. |
+| `I can't, my loop goes through an exit you can't pass` | **Refusal:** your loop goes through an exit that turned them away. The loop carries on. |
+| `I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you` | **Refusal:** the same in Auto-Lair. Said once. |
+| `I can't yet, I'm on a train trip. I'll come for you when the training is done` | **Refusal:** you are on a train trip. Said once; they are fetched when it ends. |
+| the Failure message | **Refusal:** the sender is not one of the players listed above. |
+
+| Reply to `@forget` | When |
+|---|---|
+| `forgetting <name> — resuming` | You were on your way to them. The walk is dropped and what you were doing is put back. |
+| `forgetting <name>` | You were not. |
+| the Failure message | **Refusal:** the sender is not one of the players listed above. |
+
+**Situations:**
+
+- **What the pickup does to your own movement.** Your loop, Auto-Lair or walk-to is stopped for the walk back and started again afterwards. An `I can't yet` is a wait, not a no: a MudPlay follower's client keeps waiting on it.
+- **`@forget` clears both sides.** Each drops the other from its roster memory, so the leader stops inviting them on sight and the follower stops asking.
+- **Answers to a pickup the leader started by itself** (a member the game dropped, or one who came back into the game) go by telepath. Answers to a `@comeback` go on the channel it came in on.
+- **Master switch off:** a `@comeback` from someone you would go back for is kept, and answered when the switch comes back on if it is no older than **If leading, accept @comeback for (min)**. `@forget` is ignored.
+- **The rules a leader follows** (how far, how long, train trips, exits that turn a member away) are under Settings → Party: **If leading, wait only (s)**, **Return distance (rooms)** and **If leading, accept @comeback for (min)**.
+
+### Combat and targeting
+
+#### @kill
+
+Has you attack a named target now, for the sender.
+
+**Forms:**
+
+- `@kill goblin shaman`: everything after `@kill` is the target's name.
+
+**How the target is found:**
+
+- **A player who is in your room:** on a realm with PvP switched on, a fight with that player starts, by your Settings → PvP rules. It doesn't start when PvP is off, when that player is in your party, or when you are already in a fight with another player.
+- **Anything else** goes to your combat engine. If a monster in your room has exactly that name (ignoring case), it becomes your target and this round is fought the way your combat settings would fight any single target (weapon, attack spell or backstab). If no monster in the room, as your client last read it, has that full name (a shortened name counts as no match), your normal attack command is sent with the text as typed, and the game decides what it means.
+
+**Who may send it:** a player with **Execute commands**, on any of the three channels. Party membership alone is not enough.
+
+| Reply | When |
+|---|---|
+| nothing | The target was taken. The attack is the answer. |
+| the Failure message | **Refusal:** nothing followed `@kill`. |
+| the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
+
+**Situations:**
+
+- **Auto-Combat off:** the attack is made all the same. An order to attack doesn't wait for the toggle.
+- **Master switch off:** ignored, no answer.
+- **The sending side:** a MudPlay leader who starts a fight with a player says `.@kill <player>` by itself when that is set under Settings → PvP. A fight your client starts on such an order can also switch your evil warnings off first, if you set it to.
+- **On your own screen:** the program log records the order with the sender's name.
+
+#### @atkprio and @atkorder
+
+Report or set the two targeting dropdowns of Settings → Combat: **Target Priority** (`@atkprio`, whom you attack) and **Attack Order** (`@atkorder`, when you attack).
+
+**Forms:**
+
+- `@atkprio` or `@atkorder`, bare: report the current choice and list the options.
+- `@atkprio 1`: Default. `@atkprio 2`: attack what the party leader attacks. `@atkprio 3 Tank`: attack what the player Tank attacks.
+- `@atkorder 1`: Default. `@atkorder 2`: attack last in the party. `@atkorder 3`: attack last in the room. `@atkorder 4 Tank`: attack after Tank. `@atkorder 5`: attack, but not last.
+
+The number must be one of the options. Options `@atkprio 3` and `@atkorder 4` need exactly one more word, a player's name; the others take none. The name is saved as typed and is not checked against anything.
+
+**Who may send it:** a player with **Alter settings**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `@atkprio: <n> <option>. Options: 1=Default, 2=Attack what party leader attacks, 3=Attack what player attacks <name>` | Bare `@atkprio`. With option 3 chosen, the player follows in brackets: `3 Attack what player attacks (Tank)`. |
+| `@atkprio: <n> <option>` | The option was set. Option 3 reads `@atkprio: 3 Attack what player attacks (Tank)`. |
+| `@atkorder: <n> <option>. Options: 1=Default, 2=Attack Last Party, 3=Attack Last Room, 4=Attack After <name>, 5=Attack Not Last` | Bare `@atkorder`. |
+| `@atkorder: <n> <option>` | The option was set. Option 4 reads `@atkorder: 4 Attack After (Tank)`. |
+| `@atkprio: command failed. Options: …` (or `@atkorder: command failed. Options: …`) | **Refusal:** not a number, a number that is no option, a missing or extra word, or no character loaded. Nothing is changed. |
+| the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
+
+**Situations:**
+
+- **It is saved** to your character at once, the same as changing the dropdown in Settings → Combat, and your combat engine uses it from the next round.
+- **Master switch off:** ignored, no answer.
+
+#### @profile
+
+Reports your combat profiles, or switches to one. See **Combat profiles (quick-swap loadouts)** under Settings → Combat for what a profile holds.
+
+**Forms:**
+
+- `@profile`: report which profile is active and which are on standby. Nothing changes.
+- `@profile 2`: switch to profile number 2, the number shown on its chip in Settings.
+- `@profile fire`: switch to the profile whose name fits best.
+
+**How a name finds a profile.** A number from 1 to the number of profiles is always the profile in that position. Anything else is matched against the profile names, and the closest one wins: a name that equals what you typed, then a name that starts with it, then a name that contains it, then a name that holds every typed word. Between equally good matches the shorter name wins. There is never an "ambiguous" answer: if any name fits at all, one profile is picked.
+
+**Who may send it:** a player with **Alter settings**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `{Current: 1)Fire, On Standby: 2)Cold, 3)Lightning}` | Bare `@profile`. A profile with no name reads `unnamed`. This one reply arrives inside a second pair of braces. |
+| `Combat profile <n> (<name>) — multi: <code> · debuff: <code> · normal: <code>` | The switch was made. Each spell slot that is set is shown by its cast code, from `multi`, `multi2`, `AoE-debuff`, `debuff`, `normal`, `alt` and `drain`. With no slot set it ends `no spells set`; a profile with no name reads `Combat profile <n> — …`. |
+| `no combat profiles configured` | **Refusal:** bare `@profile`, and you have none. |
+| `no combat profile matches '<text>'` | **Refusal:** no profile name holds what was typed. |
+| the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
+
+**Situations:**
+
+- **On your own screen:** every switch prints the same one-line summary in your terminal.
+- **Master switch off:** ignored, no answer.
+
+### Health, rest and escape
+
+`@health`, `@status` and `@lives` are open to anyone on your party roster with no box ticked, and to any other player with **Query health/status**. All three are taken on telepath, gangpath and say.
+
+#### @health
+
+Reports your hit points and mana as your statline last showed them.
+
+| Reply | When |
+|---|---|
+| `HP=<now>/<max>,MA=<now>/<max>` | A character with mana, standing. |
+| `HP=<now>/<max>,KAI=<now>/<max>` | A kai user. |
+| `HP=<now>/<max>` | A character with neither. |
+| the same, ending `, Resting` or `, Meditating` | You are resting or meditating. |
+| `HP unknown — no prompt observed yet` | Your client hasn't read a statline yet this session. |
+| the Failure message | **Refusal:** the sender is neither on your party roster nor holds Query health/status. |
+
+**Situations:**
+
+- **The asking side:** MudPlay telepaths `@health` to each member who joins the party. The answer gives it that member's maximum HP, which the Party window needs to keep their bar moving between `par` readings (see **HP between `par` polls**).
+
+#### @status
+
+Reports what you are doing, where you are, and your ailments, in one line. The parts are separated by semicolons.
+
+| Part | Reads |
+|---|---|
+| What you are doing | The first part of an `@path` reply (`walking to 6/1249`, `running loop '<name>'`, `auto-lair`, `sailing to <port>`, or a hold such as `Low HP on loop '<name>'`), then `, fleeing`, `, fighting`, `, resting` or `, meditating` when one of them applies and the movement isn't standing still. `idle` when nothing applies. |
+| Where | `<room name> (map <m>, room <r>)`, or `location unknown`. |
+| How far to go | Only while travelling: `ETA ~<n>s` on a boat, `<n> steps left` (or `1 step left`) on a walk-to. Left out otherwise. |
+| Ailments | `no ailments`, or `ailments:` and any of `poisoned`, `blind`, `confused`, `diseased`. |
+
+| Reply | When |
+|---|---|
+| `idle; Town Square (map 1, room 1); no ailments` | Standing about. |
+| `running loop 'Black Fortress', fighting; Dark Hall (map 5, room 10); ailments: poisoned` | In a fight on a loop, poisoned. |
+| `walking to 6/1249; Rocky Path (map 9, room 747); 72 steps left; no ailments` | On a walk-to. |
+| `Status unknown` | Your client hasn't read a statline yet this session. |
+| the Failure message | **Refusal:** the sender is neither on your party roster nor holds Query health/status. |
+
+**Situations:**
+
+- **The asking side:** a MudPlay client that asks sets the sender's ailment chips in its Party window from the last part, so a chip it missed is put right the next time someone asks. Being held is not reported here; that chip follows `@held` and `@ok`.
+
+#### @lives
+
+Reports how many lives you have left.
+
+| Reply | When |
+|---|---|
+| `<n> lives remaining` | Your stat screen has been read this session. `1 life remaining` for one. |
+| `lives unknown` | It hasn't, so there is no number your client would vouch for. |
+| the Failure message | **Refusal:** the sender is neither on your party roster nor holds Query health/status. |
+
+#### @heal
+
+Asks a party healer to look at the party's health now and heal whoever is low.
+
+**What it does.** A character with a party heal spell set up sends `par` at once and answers `healing`. The fresh `par` gives your healing engine everyone's current HP, and it then heals by your own thresholds, as it would have at the next poll. The command brings that poll forward; it does not force a cast, and it does not pick the sender as the target.
+
+**Who may send it:** a player with **Execute commands**, on any of the three channels. Being in the party is not enough: a healer has to tick that box for the members who should be able to ask.
+
+| Reply | When |
+|---|---|
+| `healing` | You have a party heal spell set up and `par` was sent. |
+| nothing | You have none of the four party heal spells set (Settings → Party: minor or major, single-target or party). Only healers answer, so a `@heal` said aloud doesn't draw a "can't" from everyone else. |
+| nothing | You are on a trainer's or character-creation screen, where a `par` would be typed into the form. |
+| the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
+
+**Situations:**
+
+- **The cast is your healing engine's, not this command's.** `par` is sent and `healing` is answered whatever your toggles say; whether a heal is then cast follows Auto-Heal and your party heal thresholds.
+- **Master switch off:** ignored, no answer.
+- **The sending side:** a MudPlay follower at low HP asks the party with `@heal` in place of running off alone (see **Health: rest, heal, flee**).
+
+#### @hangup and @relog
+
+Both log your character off by sending your **Game exit command** (Settings → BBS + Display, default `=x`). They differ in what happens next:
+
+- **`@hangup`:** you stay off. MudPlay does not reconnect, and when you connect again by hand it does not enter the game for you, so you can read the screen first.
+- **`@relog`:** MudPlay dials straight back in and logs the character in again, whatever your reconnect settings say.
+
+**Who may send it:** a player with **Hangup/disconnect**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| nothing | Always: the connection is going down. |
+| the Failure message | **Refusal:** the sender doesn't hold Hangup/disconnect. |
+
+**Situations:**
+
+- **Disable hangups** (the toolbar toggle) does not stop these two. It stops the client hanging up by itself; a player you gave the grant is obeyed.
+- **No Game exit command set:** nothing happens.
+- **A realm with a hang-up penalty recorded** (Settings → BBS + Display): the program log notes what the penalty makes of it.
+- **Master switch off:** ignored, no answer.
+
+#### @panic
+
+The party-wide bail-out (MegaMUD parity). It is not one of the remote commands: no box in the Players grid covers it and the Talk tab's switches don't touch it. It has two switches of its own under Settings → Party, both off by default.
+
+- **Sending it.** With **Use @panic while leading** on, a leader whose HP crosses its *hang if below* floor says a bare `@panic` on say and then escapes (hangs up, or breaks and uses `sys goto <wimpy>`, as the Health tab says).
+- **Receiving it.** A `@panic` said by someone on your party roster makes you escape exactly as your own low-HP emergency would, unless **Ignore @panics** is on. A `@panic` from anyone else is ignored.
+- **Disable hangups** still holds: you will `sys goto` wimpy if that is set up, but you are never disconnected by someone else's panic.
+- **Master switch off:** a received `@panic` does nothing unless General → **Allow hangup in all-off mode** is ticked.
+
+### Inventory, gear and money
+
+The seven queries (`@inv`, `@have`, `@what`, `@wealth`, `@enc`, `@uses`, `@token`) need **Query inventory**. The actions (`@get-all`, `@drop-all`, `@hide-all`, `@deposit-all`, `@get-stash`, `@equip`) need **Execute commands**. `@share` is for party members. All are taken on telepath, gangpath and say.
+
+Most of them read your client's last copy of your inventory. Until your inventory has been listed once this session (an `i`), they answer that it has not been read.
+
+#### @inv
+
+Lists what you carry that someone looking at you can't see: your pack and your key ring. Worn and wielded gear, your readied light and your coins are left out.
+
+| Reply | When |
+|---|---|
+| `carrying: <item>, <item>; keys: <key>, <key>` | It all fits one line. With no keys the `keys:` part is left out, and the other way round. |
+| `carrying (1/3): <item>, <item>` and so on, then `keys: <key>, <key>` | Too long for one line: the full list is sent over several replies, the pack first and then the keys. |
+| `carrying nothing` | An empty pack and no keys. |
+| `inventory not parsed yet (type i)` | Your inventory has not been read yet. |
+| the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
+
+#### @have
+
+Says whether you hold an item, and how many.
+
+**Forms:**
+
+- `@have rope and grapple`: everything after `@have` is the text to look for.
+
+**How the item is matched.** An item counts when the text appears anywhere in its name, ignoring case: `@have dagger` finds *a rusty dagger*. Your pack, your worn and wielded gear and your key ring are all searched, and every match is added up. A stack counts as its number (25 black diamonds are 25, not 1).
+
+| Reply | When |
+|---|---|
+| `yes - <n>x '<text>'` | At least one match. `<n>` is the total across everything that matched. |
+| `no - nothing matching '<text>'` | No match. |
+| `usage: @have <item name>` | Nothing followed `@have`. |
+| `inventory not parsed yet (type i)` | Your inventory has not been read yet. |
+| the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
+
+**Situations:**
+
+- **The asking side:** a MudPlay leader whose route needs an item asks the party `@have <item>` by itself and has a member with a spare hand it over.
+
+#### @what
+
+Lists the items on the floor of your room, as the room's last *You notice* line showed them. Coins are not listed.
+
+| Reply | When |
+|---|---|
+| `on the ground: <item>, <item>` | Items were noticed here. This is what `@get-all` would pick up. |
+| `nothing on the ground here` | None were. The list is emptied each time you move. |
+| the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
+
+#### @wealth
+
+Reports the coins you carry.
+
+| Reply | When |
+|---|---|
+| `<n> platinum, <n> gold, <n> silver, <n> copper (= <total> copper)` | You carry coins. Only the kinds you hold are named, largest first (runic first of all, under your board's name for it). The total is their worth in copper. |
+| `no coins on hand` | You carry none. |
+| `wealth unknown - parse inventory first (type i)` | Your inventory has not been read yet. |
+| the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
+
+**Situations:**
+
+- **The asking side:** a MudPlay leader about to take the party through a toll asks every member `@wealth` by itself, and routes around the toll when a member can't pay.
+
+#### @enc
+
+Reports your encumbrance.
+
+| Reply | When |
+|---|---|
+| `Encumbrance <now>/<max> (<n>%) - <bracket>` | Your inventory has been read. `<bracket>` is the game's word for how loaded you are. |
+| `encumbrance unknown - parse inventory first (type i)` | It has not. |
+| the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
+
+#### @uses
+
+Reports the charges left on your limited-use items.
+
+**Forms:**
+
+- `@uses`: every limited-use item you hold.
+- `@uses silvery skullcap`: one item.
+
+**How the item is matched.** Against everything you hold (pack, worn gear, keys): a name that equals the text, otherwise the first name that starts with it, otherwise the first that contains it. Case is ignored.
+
+| Reply | When |
+|---|---|
+| `item uses - <item>: <n>, <item>: ?` | Bare. A `?` is an item known to be limited-use whose charges have not been read yet. |
+| `no limited-use items carried` | Bare, and you hold none. |
+| `<item>: <n> use(s) remaining` | The named item, with its charges known. |
+| `<item>: charges not read yet` | A limited-use item whose charges have not been read. |
+| `<item> isn't a limited-use item` | The item matched but has no charges to count. |
+| `no carried item matches '<text>'` | Nothing you hold matches. |
+| the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
+
+**Situations:**
+
+- **Paradigm:** the count is the one the game shows when the item is looked at, so an item never looked at reads `charges not read yet`.
+- **Stock:** the count is the item's full charges less the uses your client has counted.
+
+#### @token
+
+Reports the daily charges left on your transport tokens (Paradigm).
+
+**Forms:**
+
+- `@token`: every token whose charges your client has read this session.
+- `@token arlysia` or `@token token of arlysia`: one token, by the place it goes to.
+
+**How the place is matched.** The whole place name, ignoring case and a leading `the`. There is no partial match: `@token arly` finds nothing.
+
+| Reply | When |
+|---|---|
+| `token charges — <place>: <n>, <place>: <n>` | Bare. |
+| `no token charges read yet (hold transport tokens and log in on Paradigm)` | Bare, and none has been read. |
+| `token of <place>: <n> use(s) remaining` | The named token's charges are known. |
+| `no charge count for a token of <place> — not held, or not read yet` | They are not. The place is echoed as typed. |
+| the Failure message | **Refusal:** the sender doesn't hold Query inventory. |
+
+#### @get-all
+
+Picks up everything on the floor of your room.
+
+**What it does.** One `get <item>` is sent for each item in the room's last *You notice* line, paced so the game takes them all. Coins are left to your cash settings. A cursed item is left where it lies.
+
+| Reply | When |
+|---|---|
+| `getting <n> ground items` | The pickups were sent. `1 ground item` for one. |
+| `getting <n> ground items (leaving <k> cursed: <item>, <item>)` | The same, with cursed items skipped. |
+| `re-surveying the floor for get-all` | Your client knew of nothing on the floor, so it shows the room again. Whatever that fresh look notices is picked up, with no second reply. |
+| `nothing on the ground to get` | Asked again while that fresh look is still awaited. |
+| the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
+
+**Situations:**
+
+- **Too heavy:** your client doesn't check your weight. The game refuses what you can't carry.
+- **Master switch off:** ignored, no answer.
+
+#### @drop-all and @hide-all
+
+Empty your character out. `@drop-all` drops things on the floor; `@hide-all` hides them in the room, where only someone who searches will find them. Both take the same four forms.
+
+**Forms:**
+
+- `@drop-all`: everything in your pack that you are not wearing.
+- `@drop-all full`: everything you hold: the pack, worn and wielded gear, your readied light, your keys and every coin.
+- `@drop-all coins`: your coins only.
+- `@drop-all keys`: your key ring only.
+- `@hide-all`, `@hide-all full`, `@hide-all coins`, `@hide-all keys`: the same, hidden.
+
+| Reply | When |
+|---|---|
+| `dropping <n> carried items` | Bare. `<n>` counts every copy in a stack. |
+| `dropping everything: <n> items and all coins (<k> denominations)` | `full`. The coin part is left out when you carry none. |
+| `dropping all coins (<k> denominations)` | `coins`. |
+| `dropping <n> keys` | `keys`. |
+| any of the above, ending `(keeping <k> that can't be dropped: <item>, <item>)` | Some items were left out because the game won't let go of them. |
+| `nothing to drop` | There was nothing of that kind to drop. |
+| `inventory not parsed yet (type i)` | Your inventory has not been read yet. |
+| the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
+
+`@hide-all` answers with the same lines, reading `hiding` for `dropping` and `nothing to hide` for `nothing to drop`. Its "keeping" tail reads `can't be hideped`. A word after the command that is not `full`, `coins` or `keys`, or more than one word, is answered with the usage line: `usage: @drop-all [full|coins|keys] (bare = unworn items)`, or the same for `@hide-all`.
+
+**Situations:**
+
+- **Worn gear** is dropped or hidden directly; it is not removed first.
+- **A stack** goes in one counted command on Paradigm (`drop 3 black star key`) and one command per copy on Stock.
+- **Items the game won't release** (no-drop, loyal, or a cursed item you are wearing) are not sent at all, and are named in the reply.
+- **`hide` always names the item.** A bare `hide` would hide you, so it is never sent.
+- **Master switch off:** ignored, no answer.
+
+#### @deposit-all
+
+Levels the coin you carry to your keep-on-hand amount (Settings → Cash + Items → **Minimum cash to keep on hand (deposit)**): the excess is deposited, or the shortfall withdrawn.
+
+| Reply | When |
+|---|---|
+| `depositing <n> copper (keeping <k>)` | You carry more than the amount. `dep <n>` was sent. |
+| `withdrawing <n> copper (up to <k> on hand)` | You carry less. `with <n>` was sent. |
+| `already at keep-on-hand (<k> copper)` | You carry exactly the amount. Nothing was sent. |
+| `wealth unknown - parse inventory first (type i)` | Your inventory has not been read yet. |
+| the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
+
+**Situations:**
+
+- **Not in a bank:** your client doesn't check where you are. It sends the command and answers `depositing …` or `withdrawing …` all the same; what the game makes of it is not reported back.
+- **The sending side:** a MudPlay leader's stash transfer telepaths this to each member at the bank (see **Moving a stash into a bank**).
+- **Master switch off:** ignored, no answer.
+
+#### @get-stash
+
+Searches the room you are in and takes the coin the search shows, up to your own coin weight limits (Settings → Cash + Items). Your per-coin Collect, Ignore and Discard choices don't decide what is taken.
+
+**What it does.** Your client sends `sea`, waits a second and a half for the search to show its coin, picks up as much as your limits allow, and answers about three seconds later with what it took. The reply comes only once the coin is in hand, because the leader that asked moves on when every member has answered.
+
+| Reply | When |
+|---|---|
+| `ok - took <amount>` | Coin was taken. The amount is spelled out by coin (`3 platinum 20 gold`). |
+| `ok - took <amount>, left <amount>` | Some was taken and some left behind. |
+| `ok - found no coin here` | The search showed none. |
+| `ok - at my coin weight limit, took nothing` | Coin was shown but your limits allowed none of it. |
+| `busy with a coin errand of my own - try again shortly` | **Refusal:** you are already on a `@get-stash`, a stash transfer or a train-funding stop of your own. |
+| the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
+
+**Situations:**
+
+- **The sending side:** a MudPlay leader's stash transfer sends this to each member, because a search shows hidden coin only to the one who searched (see **Moving a stash into a bank**).
+- **Master switch off:** ignored, no answer.
+
+#### @equip
+
+Wears one of your saved gear sets, or saves what you are wearing into one. Gear sets are made in Player Workshop → Equipment Sets.
+
+**Forms:**
+
+- `@equip backstab`: wear that set.
+- `@equip restma update`: rewrite that set to exactly what you are wearing now.
+- `@equip-all` (or `@equip all`): wear your Default set.
+- `@equip-backstab`: the older dashed form, still taken for party members on earlier versions. `@equip-backstab update` works too.
+
+**How a set is found.** The set is named by **one word**, tried in this order: a set whose **keyword** equals it, then a set whose **name** equals it, then the short names `default`, `backstab`, `resthp`, `restma`, `moving` and `bossing`, each standing for the set tied to that trigger. Case is ignored. There is no partial match, and a set whose name is two words can only be reached by its keyword or short name.
+
+**Who may send it:** a player with **Execute commands**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `equipping gear set '<word>'` | The set was found and the swap started. |
+| `gear set '<word>' already worn` | The set was found and nothing needed changing. |
+| `equipping all (default gear set)` | `@equip-all`, and the swap started. |
+| `default gear set already worn` | `@equip-all`, and nothing needed changing. |
+| `gear set '<set name>' updated to what I'm wearing (<n> slots)` | `update` worked. `1 slot` for one. |
+| `no gear set '<word>'` | **Refusal:** no set answers to that word. |
+| `no default gear set configured` | **Refusal:** `@equip-all`, and you have no Default set. |
+| `busy equipping` | **Refusal:** a gear swap is already running. |
+| `busy equipping — try again when the swap finishes` | **Refusal:** `update`, in the middle of a swap. |
+| `haven't read my inventory yet — try again after an 'i'` | **Refusal:** `update`, before your inventory has been read. An unread inventory would empty the set. |
+| `usage: @equip <set> [update]` | **Refusal:** nothing followed `@equip`. |
+| the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
+
+**Situations:**
+
+- **`update` writes every slot.** Each piece you wear fills its slot (a second ring or bracelet takes slot 2), every slot you wear nothing in goes back to *no change*, and the set's alternate-weapon entries are left as they were. It is saved to your character at once, and an open Equipment tab shows it.
+- **Wearing a set this way is a manual gear-up:** it ends a set held from the Equip menu, like using that menu yourself.
+- **Master switch off:** ignored, no answer.
+
+#### @share
+
+Splits the coins you carry evenly across your party.
+
+**What it does.** For each kind of coin, the share is your count divided by the number of party members, you included, rounded down. Your client sends `give <n> <coin> to <member>` to every other member on your roster. You keep your own share and whatever doesn't divide.
+
+**Who may send it:** anyone on your party roster, on any of the three channels. No box grants it to anyone else.
+
+| Reply | When |
+|---|---|
+| `sharing coins among <n> party members` | At least one kind of coin was shared out. |
+| `nothing to share (too few coins to split)` | You hold fewer coins of every kind than there are members. |
+| `no party members to share with` | Nobody else is on your roster. |
+| `wealth unknown - parse inventory first (type i)` | Your inventory has not been read yet. |
+| the Failure message | **Refusal:** the sender is not on your party roster. |
+
+**Situations:**
+
+- **Master switch off:** ignored, no answer.
+
+### Training
+
+#### @train
+
+Has you train where you stand. It never walks: it takes for granted that you are already at a trainer. What it trains follows your own Settings → Auto-Trainer boxes:
+
+- **Neither box ticked:** one `train`.
+- **Auto-train ticked:** it trains level after level until the trainer turns you away, the money runs out or you have no banked level left.
+- **Auto-train stats ticked:** your saved CP plan is applied for the level reached, with or without the box above.
+
+**Who may send it:** a player with **Execute commands**, on any of the three channels.
+
+The reply is sent when the run has finished, not when it starts.
+
+| Reply | When |
+|---|---|
+| `Trained to level <n>.` | One `train`, and it worked. |
+| `Can't train — you've progressed too far for this trainer.` | One `train`, refused by this trainer. |
+| `Can't train — not enough money for training.` | One `train`, and you can't pay. |
+| `Nothing to train.` | One `train`, and no level was gained. |
+| `I've trained <n> levels.` | Auto-train, with at least one level gained. `1 level` for one. |
+| `Couldn't train any levels.` | Auto-train, with none gained. |
+| either of the two above, with `, unable to train further`, `, out of money` or `, training stalled` before the full stop | Why the run ended. |
+| either, with `, <n> remain` | You still have that many banked levels. |
+| either, with `, CP allocated through level <n>` | Your CP plan was applied. |
+| `busy training` | **Refusal:** a training run of yours is already under way. |
+| the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
+
+**Situations:**
+
+- **Not at a trainer:** your client doesn't check. It sends `train` and reports what came of it.
+- **No shopping:** a remote `@train` never goes on to the spell shops, as your own training trip can.
+- **Master switch off:** ignored, no answer.
+
+#### @ptrain
+
+The **Auto-train party** handshake between MudPlay clients. You never type it. A client acts on it only while its own **Auto-train party** box is on, and takes orders only from its current leader. See **Auto-train party** under Settings → Auto-Trainer for what the trip does.
+
+**Forms**, as the clients send them:
+
+- `@ptrain st <report>`: a member reports its readiness to the leader.
+- `@ptrain ask`: the leader asks a member for that report.
+- `@ptrain train <level> <map/room>`: the leader orders a member to train up to that level, at the trainer in that room (the room is optional).
+- `@ptrain give <copper> <name>`: the leader orders a member to cover that much of another member's fee.
+- `@ptrain with <copper>`: the leader orders a member to withdraw its fee at this bank.
+- `@ptrain done <levels>`: a member reports it has trained and is back.
+- `@ptrain trip on` and `@ptrain trip off`: the leader says a party train trip has set out, or is over.
+
+**Who may send it:** anyone on your party roster, and the leader whose train trip you set out on, even after an exit on the way dropped you from that party. Taken on any of the three channels.
+
+| Reply | When |
+|---|---|
+| nothing | Always. An order your client can't read is dropped without a word. |
+| the Failure message | **Refusal:** the sender is neither on your roster nor the leader of the trip you are on. |
+
+**Situations:**
+
+- **Master switch off:** ignored, no answer.
+
+### Information queries
+
+#### @version
+
+Reports the client's name and version.
+
+**Who may send it:** a player with **Query version**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `MudPlay <version>` | Always. |
+| the Failure message | **Refusal:** the sender doesn't hold Query version. |
+
+**Situations:**
+
+- **The asking side:** MudPlay asks each member `@version` and `@level` the first time it parties with them on a given day, to learn whether they run MudPlay and what level they are.
+
+#### @help
+
+Lists the commands the sender may use on you, or describes one command.
+
+**Forms:**
+
+- `@help`: the commands this sender is allowed.
+- `@help goto` or `@help @goto`: one command's form and a one-line description. The `@` on the command asked about is optional.
+- `@help &@`: describes the relay-back form.
+
+The `@` on `@help` itself is needed, like on every remote command: a plain `help` in chat does nothing.
+
+**Who may send it:** a player with **Query version**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `@version, @health, @status, @lives, @help, …` | Bare. Only the commands this sender would be obeyed on are listed. A long list is sent as several replies of up to 200 characters. `&@<command>` is added when the sender holds Execute commands. |
+| `(type @help <command> for its syntax)` | Bare, after the list. |
+| `<form> — <description>` | A command was named. |
+| `&@<command> — sends @<command> back to you, so your client runs it as if I'd sent it (e.g. &@invite makes me ask you for a party invite)` | `@help &@`. |
+| `no such command '<text>' — try @help for the list` | The word is not a command. |
+| the Failure message | **Refusal:** the sender doesn't hold Query version. |
+
+**Situations:**
+
+- **The party signals are never in the list.** `@wait`, `@ok`, `@waiting`, `@comeback`, `@forget`, `@share` and `@ptrain` have no box, so the bare list leaves them out. `@help wait` still describes them.
+- **The list is the sender's own.** A party member who holds nothing but Query version still sees `@health`, `@status`, `@lives`, `@party` and `@reset` in it, because a party member is obeyed on those.
+- **Describing is not doing.** `@help suicide` is answered like any other; the always-refused words apply to commands, not to questions about them.
+
+#### @exp
+
+Reports how the session is going: exp made, exp needed, the rate, and the time to the next level at that rate.
+
+**Who may send it:** a player with **Query experience**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `Made: 474,216,179  Needed: 545,045,125 (L72, +2.14 lvls)  Rate: 14.3 m/hr  Will level in: 1d 14h 12m` | Everything is known. `Made` is the exp earned since the session counters were last reset. `L72` is the level you are working toward, and `+2.14 lvls` is how many levels your exp already covers. |
+| the same, ending `Will level in: ready to level` | You already have the exp for the level. |
+| `Made: <n>  Needed: <n> (L<level>, +<x> lvls)  Rate: unknown` | There is no rate yet. |
+| `Made: <n>  Rate: <rate>/hr (type exp for needed + time to level)` | Your client has not read the game's `exp` line yet. The rate reads `unknown` when there is none. |
+| the Failure message | **Refusal:** the sender doesn't hold Query experience. |
+
+The rate is written exactly below 100,000 an hour, in thousands up to a million (`853 k`) and in millions above (`14.3 m`).
+
+**Situations:**
+
+- **`Made` goes back to zero** on `@reset`, on your own Reset session, and at a loop start when **Reset statistics on loop start** is on.
+
+#### @level
+
+Reports your level and experience.
+
+**Who may send it:** a player with **Query experience**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `Level <n>, <exp> exp, <n> to next level` | Your stat screen and the `exp` line have both been read. |
+| `Level <n>, <exp> exp, exp-to-next unknown (type exp)` | The `exp` line has not. |
+| `level unknown - parse a stat screen first (type stat)` | Your stat screen has not been read yet. |
+| the Failure message | **Refusal:** the sender doesn't hold Query experience. |
+
+**Situations:**
+
+- **The asking side:** a MudPlay leader asks the party `@level` by itself before a route through a level gate, and the answer is kept as that player's level on your Players list.
+
+#### @death
+
+Reports your deaths that are not fully recovered, so a party member can help you get your things back.
+
+**Forms:**
+
+- `@death`: the most recent one.
+- `@death all`: every one, newest first, up to five lines.
+
+**Who may send it:** a player with **Query deaths**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `death #<n> <date and time>: <status> at <room name> (<map>/<room>), <n> lives left` | One line per death. `<status>` is `active`, `partial` or `missing`. The time is your computer's local time. |
+| `<n> more unrecovered deaths` | `@death all`, after the fifth line. |
+| `no unrecovered deaths` | Every death on record is recovered, or there are none. |
+| the Failure message | **Refusal:** the sender doesn't hold Query deaths. |
+
+#### @quest
+
+Reports quest progress: which quests are marked complete on your Quests tab and, where the game can be asked, how far a quest's flag has got.
+
+**Forms:**
+
+- `@quest`: every quest with something marked complete.
+- `@quest good align`, `@quest goodquest`, `@quest 126`: one quest, by name or by flag number.
+- `@quest update`: read every flag your current quests use, mark what the flags prove, and report.
+
+**How a name finds a quest.** Tried in this order: a number is taken as the flag number; then the built-in names for the three alignment quests (`good`, `good align`, `good alignment`, `good quest`, `goodquest`, and the same for `neutral` and `evil`); then a quest whose name equals the text; then the first quest whose name contains the text, or is contained in it. Case and extra spaces are ignored.
+
+**Who may send it:** a player with **Query quests**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `Good align 1, 2, 3; <quest> 1` | Bare. Each quest is followed by the numbers of its parts that are marked complete. After twelve quests the rest are counted: `; +<n> more`. |
+| `no quests marked complete` | Bare, with nothing marked. |
+| `<quest> 1, 2, 3 marked complete` | One quest, where the game can't be asked. |
+| `<quest>: none marked complete` | The same, with nothing marked. |
+| `<quest> 1, 2, 3 marked complete. Abil: <flag> step <n>` | One quest, with the flag read from the game. |
+| the same, ending `(<k> newly marked)` | That reading proved more parts done, and they were marked. |
+| `<quest> 1, 2 marked complete. Abil: <flag> unavailable` | The game was asked and gave no value for that flag. |
+| `no quest matches "<text>"` | The name matched nothing. |
+| `<n> flag(s) read, <k> newly marked — <list>` | `@quest update` worked. `, <j> in progress advanced` is added when part-finished quests moved on. The list is the bare form's. |
+| `nothing to check — <list>` | `@quest update`, with no flag left to read. |
+| `can't read quest flags here (stock needs sys-god access)` | **Refusal:** `@quest update` on Stock without sys-god access. |
+| `a quest flag read is already running` | **Refusal:** `@quest update` while another read is under way. |
+| `quest flag read failed` | **Refusal:** `@quest update`, and the read broke off. |
+| the Failure message | **Refusal:** the sender doesn't hold Query quests. |
+
+**Situations:**
+
+- **Paradigm:** a named quest's flag is read with `abil`, so the reply comes a moment later and carries the `Abil:` part.
+- **Stock:** the flag can be read only with sys-god access for this board (tick Settings → BBS + Display → **Sysop god lives**); it uses `sys god <name> abil`. Without it the reply is the marked state alone.
+- **A reading marks what it proves.** A flag that has reached the value a part completes at means that part is done: it is ticked on your Quests tab and the reply shows the updated marks.
+- **`@quest update` is not held to once a day**, unlike the login sync, since someone asked.
+
+#### @settings
+
+Reports your eleven auto toggles in one line. It changes nothing.
+
+**Who may send it:** a player with **Alter settings**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `Auto-Combat: On, Auto-Nuke: Off, Auto-Heal: On, Auto-Rest: On, Auto-Bless: Off, Auto-Light: On, Auto-Cash: On, Auto-Get: On, Auto-Sneak: Off, Auto-Hide: Off, Auto-Search: Off` | Always, in this order. With no character loaded, every toggle reads `Off`. |
+| the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
+
+**Situations:**
+
+- **It reports the toggles, not the master switch.** There is no remote query for the master switch. While it is off, this command gets no answer, like every other.
+
+### Sharing data between clients
+
+Three commands hand whole data sets from one MudPlay client to another over chat. In each, the client that **gives** checks the permission; the client that **asks** takes the answer because it asked, and only for a short while after its own request went out. So to receive from someone, they must grant you; you don't need to grant them.
+
+- **Loops:** `@loop send`, under **Movement and position**.
+- **Boss timers:** `@timer sync`, below.
+- **The Roomba item log:** `@roomba sync`, below.
+
+#### @timer
+
+Reports the boss respawn timers you are tracking, or hands them to the sender's client.
+
+**Forms:**
+
+- `@timer`: every running timer.
+- `@timer dragon`: the timers of bosses whose name contains the text, ignoring case.
+- `@timer sync`: send the timers as data, for another MudPlay client to merge.
+
+**Who may send it:** a player with **Query boss timers**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `<boss> - full 2h14m, next -20% 1h47m, -10% 2h01m, -5% 2h08m` | One line per boss, up to five. `full` is the time to the full respawn; `next` lists each early-spawn window still ahead, soonest first. Paradigm has three windows (`-20%`, `-10%`, `-5%`), Stock one (`87.5%`). |
+| `<boss> - full <time>` | Every early window has passed. |
+| `<boss> - dead, cleanup in <time>` | A boss that comes back at cleanup. |
+| `<n> more active timers - add a keyword to filter` | Bare, with more than five running. |
+| `<n> more timers matching '<text>' - refine your search` | A name, with more than five matching. |
+| `no boss timers active` | Bare, and none is running. |
+| `expired` | A name was given and no running timer matches it. |
+| `@timerdata <i>/<k> <data>` | `@timer sync`: up to sixty timers, packed into as many lines as it takes. |
+| the Failure message | **Refusal:** the sender doesn't hold Query boss timers. |
+
+Times read `2h14m`, or `45m` under an hour.
+
+**Situations:**
+
+- **The asking side of `@timer sync`:** sending it, by hand or with **Request Timers** on the Bosses tab, opens the merge window that collects the answers. See **Bosses** under *Quests, Bosses, and Deaths*.
+- **On gangpath or say** every client that grants you the permission answers, each with its own set.
+
+#### @roomba
+
+Reports where an item was last seen in your gang house, from the Roomba item log, or hands the whole log to the sender's client.
+
+**Forms:**
+
+- `@roomba severed head`: where that item is.
+- `@roomba sync`: send the whole log and your labelled gang-house rooms as data.
+
+**How the item is matched.** First the text is looked up as an item name in the game data, so any wording the game data knows finds that one item. Failing that, an item logged under exactly that name. Failing that, **every** logged item whose name contains the text, so a loose word such as `head` can bring back several items.
+
+**Who may send it:** a player with **Query Roomba**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `total: 5x rope and grapple - seen in 15/12 (3), 15/13 (2) - last scanned 2026-08-30 09:22 MST` | One line per matching item, up to five. Each room is followed by the number seen there; after ten rooms the rest are counted (`, +<n> more`). The time is that of the newest sighting, in your own time zone. |
+| `<n> more matching item(s) — refine your search` | More than five items matched. |
+| `no record of "<text>"` | Nothing in the log matches. |
+| `usage: @roomba <item name>` | Nothing followed `@roomba`. |
+| `@roombadata <data>` | `@roomba sync`: room labels first, then the sightings, then a last line reading `@roombadata Sync Complete`. One line every 0.8 seconds. |
+| the Failure message | **Refusal:** the sender doesn't hold Query Roomba. |
+
+**Situations:**
+
+- **The asking side of `@roomba sync`:** the lines are merged as they arrive, the newer sighting winning, with no review window. A line the game drops costs only the rooms it carried.
+- **More:** **Roomba (Player Workshop)** has the log, the sync and what each side must grant.
+
+### Session and profile
+
+#### @auto-all
+
+Works the master switch: the same switch as the **All auto-responses** toggle in the Action menu and its toolbar button. It is the one remote command still followed while the switch is off, which is how a party member switches you back on.
+
+**Forms:**
+
+- `@auto-all off`: switch it off, even when every toggle was already unticked by hand.
+- `@auto-all on`: switch it on, giving back the toggles that were ticked when it went off.
+- `@auto-all`: flip it.
+
+**Who may send it:** a player with **Alter settings**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `@auto-all: on` | The switch is on after the command. |
+| `@auto-all: off` | The switch is off after the command. |
+| `?` | **Refusal:** the word after `@auto-all` is neither `on` nor `off`, or no character is loaded. |
+| the Failure message | **Refusal:** the sender doesn't hold Alter settings, and the switch is on. |
+| nothing | The sender doesn't hold Alter settings, and the switch is off. |
+
+**Situations:**
+
+- **The reply names the switch, not the toggles.** `@auto-all: on` with every toggle unticked is still on.
+- **`@auto-all on` with the switch already on and no toggle ticked** switches on your base modes. The button can't do that.
+- **Everything the switch stops and starts** is under **The master switch (Auto-All)** in *Automation*.
+
+#### The @auto-… toggles
+
+Eleven commands, one for each auto toggle on your toolbar and in Settings → General: `@auto-combat`, `@auto-nuke`, `@auto-heal`, `@auto-rest`, `@auto-bless`, `@auto-light`, `@auto-cash`, `@auto-get`, `@auto-sneak`, `@auto-hide` and `@auto-search`. Each works the same way.
+
+**Forms:**
+
+- `@auto-combat`: flip the toggle.
+- `@auto-combat on`: tick it.
+- `@auto-combat off`: untick it.
+
+**Who may send it:** a player with **Alter settings**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `@auto-combat: on` | The toggle is ticked after the command, whether or not it changed. The reply names the command that was sent. |
+| `@auto-combat: off` | The toggle is unticked after the command. |
+| `?` | **Refusal:** the word after the command is neither `on` nor `off`, or no character is loaded. |
+| the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
+
+**Situations:**
+
+- **`@auto-heal` and `@auto-rest` are two toggles.** One works your heal and cure casts, the other your resting. `@auto-cash` is the get-cash toggle and `@auto-get` the get-items toggle.
+- **It is saved** to your character, like ticking the box yourself.
+- **Master switch off:** ignored, no answer. Only `@auto-all` is followed then.
+- **On your own screen:** a change is written to the program log with the sender's name.
+
+#### @reset
+
+Zeroes your session statistics: the same wipe as **Reset session** in the Session Stats window. Your transaction history is left alone.
+
+**Who may send it:** anyone on your party roster, or a player with **Alter settings**. On any of the three channels.
+
+| Reply | When |
+|---|---|
+| `session counters reset` | Always. |
+| the Failure message | **Refusal:** the sender is neither on your party roster nor holds Alter settings. |
+
+**Situations:**
+
+- **The sending side:** a MudPlay leader telepaths `@Reset` to every member when its loop reaches its first room or Auto-Lair starts, if **Reset statistics on loop start** is on, so the whole party's rates count from the same moment.
+- **Master switch off:** ignored, no answer.
+
+#### @divert
+
+Forwards your incoming telepaths to another player, so someone else can read your mail while you are away.
+
+**Forms:**
+
+- `@divert Healer`: start forwarding to Healer. Only the first word is used.
+- `@divert`: stop.
+
+**Who may send it:** a player with **Divert conversations**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `Now diverting telepaths to: <player>` | Forwarding started, or moved to a new player. |
+| `No longer diverting telepaths` | Bare `@divert`, whether or not anything was being forwarded. |
+| the Failure message | **Refusal:** the sender doesn't hold Divert conversations. |
+
+**Situations:**
+
+- **What is forwarded:** every telepath that reaches you, sent on as `/<player> <sender> telepathed: <message>`. A remote command that arrives by telepath is forwarded too, and still obeyed.
+- **What is not:** telepaths from the player you forward to, and `@divert` lines themselves.
+- **The name is not checked.** It is used as typed for every forward.
+- **It is not saved:** it ends with a bare `@divert`, or when the client closes.
+- **Master switch off:** `@divert` itself is ignored, and a divert already set forwards nothing until the switch is back on. Telepaths that arrive meanwhile are not forwarded later.
+
+### Safety and destructive commands
+
+Three commands can do real harm, and each has its own fences.
+
+#### @do
+
+Sends a command to the game as if you had typed it. This is the highest-trust command: whoever holds **Execute commands** can make your character do nearly anything.
+
+**Forms:**
+
+- `@do rest`: your client sends `rest`. Everything after `@do` is sent, with single spaces between the words.
+
+**Who may send it:** a player with **Execute commands**, on any of the three channels.
+
+| Reply | When |
+|---|---|
+| `ok` | The command was sent to the game. It says nothing about what the game made of it. |
+| nothing | A bare `@do`. |
+| `@do suicide is not allowed, use @suicide` | **Refusal:** `suicide` appears anywhere after `@do`. Nothing is sent to the game. |
+| nothing | `reroll` appears anywhere in the line. Nothing is sent, and nothing is answered. |
+| the Failure message | **Refusal:** the sender doesn't hold Execute commands. |
+
+**Situations:**
+
+- **The two refusals come before the permission check,** so they apply to anyone, with or without the box.
+- **Master switch off:** ignored, no answer.
+- **On your own screen:** each `@do` is written to the program log with the sender's name and the command.
+
+#### @suicide
+
+Kills your character, using the suicide password MudPlay captured from your own `set suicide` (Settings → BBS + Display shows it under **Suicide password**).
+
+**Who may send it:** a player with **Elevated Commands**, on any of the three channels.
+
+**The lives rule comes first.** Settings → Other → **Block @suicide commands when lives ≤** (default 5) is checked before anything else, the permission included:
+
+| Reply | When |
+|---|---|
+| `suicide blocked, <n> lives <= threshold <m>` | **Refusal:** your lives are at or below the number set. |
+| `suicide blocked, lives unknown to client` | **Refusal:** your stat screen has not been read this session, so your client can't tell. |
+
+Past that rule, and with the permission held:
+
+| Reply | When |
+|---|---|
+| nothing | It worked. Your client sent `suicide` and your stored password. |
+| `invalid suicide password is stored, unable` | **Refusal:** the game turned the stored password down. |
+| nothing | No password is stored and the game confirms none is set: `suicide` is sent. |
+| `Suicide failed, password set in game but not stored.` | **Refusal:** no password is stored, but the game has one. Run `set suicide` yourself so MudPlay can capture it. |
+| `@suicide already in-flight, try again shortly` | **Refusal:** a second `@suicide` arrived while the first was still checking for a password. |
+| the Failure message | **Refusal:** the sender doesn't hold Elevated Commands. |
+
+**Situations:**
+
+- **With no password stored,** your client sends `pro` first and reads the answer up to the next statline to learn whether the game has a suicide password set.
+- **The lives rule answers anyone.** Because it is checked first, a player with no permission at all who sends `@suicide` while you are at or below the number is told your lives count, if the Warn setting is on. With the number at `0`, the rule stops only a character whose stat screen has not been read yet.
+- **The same rule covers any command with `suicide` in it,** other than `@help` and `@party`: `@have suicide note` is refused the same way while your lives are low or unknown.
+- **Master switch off:** ignored, no answer.
+
+#### @dupe
+
+Copies **the sender's own query, Roomba and quest permissions** onto another player, so a trusted player can bring an alt up to speed without you ticking every box.
+
+**Forms:**
+
+- `@dupe Scout`: give Scout the query permissions the sender holds. Exactly one name.
+
+**Who may send it:** a player with **Elevated Commands**, on **telepath or gangpath only**. Said aloud it is dropped without an answer, and the Local control API can't run it.
+
+| Reply | When |
+|---|---|
+| `<player> now has your query, roomba, and quest permissions` | The copy was made. The sender's one use is spent. |
+| `<player> already has all your query, roomba, and quest permissions` | Nothing to add. The use is not spent. |
+| `usage: @dupe <player>` | **Refusal:** no name, or more than one word. |
+| `your @dupe has already been used` | **Refusal:** the sender has used it before. |
+| `you already have your own permissions` | **Refusal:** the sender named themselves. |
+| `can't change my own permissions` | **Refusal:** the sender named your character. |
+| `unknown player <name>` | **Refusal:** your client has never seen that player. |
+| `you have no query, roomba, or quest permissions to copy` | **Refusal:** the sender holds none of the permissions that can be copied. |
+| `your player record wasn't found` | **Refusal:** the sender is not on your Players list. |
+| the Failure message | **Refusal:** the sender doesn't hold Elevated Commands. |
+
+**Situations:**
+
+- **Only queries move.** What can be copied: Query version, experience, health/status, location, inventory, boss timers, deaths, Query Roomba and Query quests. Nothing that acts on your character (move, execute, alter settings, request invite, hangup, divert) and **never Elevated Commands**, so a player who was duplicated onto can't `@dupe` onward.
+- **One use per player.** Each player with Elevated Commands can `@dupe` once. After that it is refused until **you** re-arm it: open that player in Game Data Browser → Players and press **Reset @dupe** under Elevated Commands. The dialog shows when it was spent and on whom. Nothing sent over chat can reset it, and a refused attempt doesn't spend it.
+- **It only adds.** The target keeps what they had and gains the rest. Only the permission grid moves, not their party behaviours or notes.
+- **An unknown name is refused** so that a typo can't grant trust to whoever later takes that name.
+- **It is logged.** Every use and every refusal is written to the program log (who, onto whom, what was granted), and the sender's record keeps who they duplicated onto and when.
+- **Master switch off:** ignored, no answer.
+
+### Not commands: the ailment words
+
+The ailment broadcasts `@blind` / `@confused` / `@diseased` / `@held` look like `@`-commands but aren't — they're state announcements the party window reads to mirror a member's condition, governed by your cure/ailment settings rather than the remote-control grid. (Poison isn't broadcast — a member's **poison** chip is read from the `par` party screen's `P` flag, so it lights even for a partymate on another client.)
 
 A member's chip clears on the first of:
 
@@ -2693,7 +4157,7 @@ curl -H "Authorization: Bearer $(cat ~/.local/share/MudPlay/.apitoken)" \
 
 | Endpoint | What it does |
 |---|---|
-| `POST /command` | Runs any `@`-command — `{"command":"@goto","args":["Newhaven"]}`. Replies the command would have telepathed back come to you in the response instead of going out on chat. |
+| `POST /command` | Runs any `@`-command but `@dupe` (which is taken by telepath or gangpath only) — `{"command":"@goto","args":["Newhaven"]}`. Replies the command would have telepathed back come to you in the response instead of going out on chat. What each command does and answers is under *Remote @-commands*. |
 | `POST /send` | Types one line at the game exactly as if you'd typed it in the terminal. |
 | `GET /commands` | Lists every dispatchable command with its permission category and whether it counts as destructive. |
 
@@ -2710,7 +4174,7 @@ The status line under the checkbox says whether the socket actually came up — 
 
 **Notes.** Requests are logged at Debug, so they only appear in the program log while Debug diagnostics are on. `/state/full` and `/scrollback` answer *503* until a terminal session exists.
 
-Endpoints that read live state do so on the UI thread and give up after five seconds, answering *504 ui thread unresponsive* — which is itself worth knowing: if a client looks frozen and the API says 504, the freeze is the UI thread, not the connection. The status line under the checkbox says whether the socket actually came up — if the port is already taken, that's where it tells you. This release is **read-only**; issuing commands through the API is a separate feature.
+Endpoints that read live state do so on the UI thread and give up after five seconds, answering *504 ui thread unresponsive* — which is itself worth knowing: if a client looks frozen and the API says 504, the freeze is the UI thread, not the connection. The status line under the checkbox says whether the socket actually came up — if the port is already taken, that's where it tells you.
 
 
 ---
@@ -3541,10 +5005,7 @@ This editor is **staged** — nothing is saved or used until you press **Apply**
 **Switching during play** (these act on your *saved* profiles right away, without opening Settings):
 - **Action menu → Combat Profiles** — a fly-out listing every profile; click one to switch.
 - **Toolbar buttons** (add them under Settings → Toolbar + Shortcuts) — a **Combat Profile (cycle)** button that shows the active number (`P1`, `P2`, …) and steps through them (left-click = next, right-click = previous), or a **Combat Profile (menu)** button that shows the active number the same way and pops the same fly-out when clicked.
-- **`@profile`** — lets a trusted party member switch your profile remotely from chat (needs the **Alter my settings** permission). It accepts either:
-  - the profile's **number** — the same chip number you see in Settings, so `@profile 2` selects the second profile; or
-  - any part of the **name you gave it** in the name box — if you named a profile "Fire", then `@profile fire` (or even `@profile fi`) selects it. When the text could fit more than one name, it picks the closest match.
-  - **no argument** — `@profile` on its own doesn't switch; it **reports the roster**: the active profile plus the others on standby, e.g. `{Current: 1)Fire, On Standby: 2)Cold, 3)Lightning}`.
+- **`@profile`** — lets a trusted party member switch your profile remotely from chat (needs the **Alter settings** permission): `@profile 2` by number, `@profile fire` by name, or a bare `@profile` to report the roster without switching. Its forms, how a name is matched and every reply are under **@profile** in *Remote @-commands*.
 
 **Every switch prints a one-line summary** to your terminal (and to the requester, for `@profile`) naming the profile now active and the spell in each slot, shown by its short **cast code** — the same code you would type to cast that spell. For example:
 
@@ -4250,7 +5711,7 @@ Settings → Talk.
 ### Disallow @party commands (from any party member)
 
 **Default:** Off
-**What it does:** Blocks the normal rule that any active party member can send you steering directives (`@party attack`, `@party rest`, etc.) that get relayed to your character.
+**What it does:** Blocks the normal rule that any active party member can send you steering directives (`@party attack`, `@party rest`, etc.) that get relayed to your character. With it on, nothing said as `@party <command>` is relayed, and a party member needs the **Query health/status** permission to get an answer to a bare `@party`. The other party signals (`@wait`, `@ok`, `@comeback`, `@share`) are not affected. See **@party** under *Remote @-commands*.
 **When you might change it:** If you're technically partied but want this character to act independently without being steered.
 
 ### Disallow @commands from telepaths / pages, gangpaths, or say (local)
@@ -4261,12 +5722,12 @@ Settings → Talk.
 ### Warn sender on invalid / denied remote command
 
 **Default:** On
-**What it does:** The master gate for replies to denied or unrecognized `@`-commands. When on, most refusals send a reply back (a specific reason when there is one, otherwise the generic message below); when off, refusals are silent. A few hard-blocked commands (such as `reroll` and `@party` suicide) stay silent either way, so a reply can't leak information to a malicious caller.
+**What it does:** The master gate for replies to a refused `@`-command. When on, most refusals send a reply back (a specific reason when there is one, otherwise the generic message below); when off, refusals are silent. Some things are never answered, whatever this is set to: an `@` word that is no command at all, the hard-blocked ones (anything with `reroll` in it, and `@party set suicide`), and every command while the master switch (Auto-All) is off. Which replies of each command count as refusals is in its topic under *Remote @-commands*.
 
 ### Failure message
 
 **Default:** `"command invalid or not allowed"`
-**What it does:** The generic text sent back for a denied/unrecognized command, when a reply is sent at all (see above).
+**What it does:** The generic text sent back for a refused command that has no more specific reason (most often: the sender lacks the permission), when a reply is sent at all (see above). Left empty, no generic refusal is sent.
 
 ### Greet players when first met
 

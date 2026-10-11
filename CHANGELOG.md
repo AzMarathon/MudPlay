@@ -1,5 +1,9 @@
 # Version history
 
+## 3.169.1
+
+- Help: remote @-commands rewritten as a full reference (forms, matching, replies, situations)
+
 ## 3.169.0
 
 - A carried item that negates a room's spell is worn for you (phoenix feather, else magma amulet, against magma heat)
