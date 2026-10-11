@@ -89,7 +89,8 @@ public sealed class HazardBuffRefreshTests : IDisposable
                 messageMatcherForSpell: spell => spell switch
                 {
                     BuffSpell => line => line.Contains("swig of water", StringComparison.OrdinalIgnoreCase),
-                    HeatSpell => line => line.Contains("you need water", StringComparison.OrdinalIgnoreCase),
+                    // The seed's wording for #712, in both realms' message data.
+                    HeatSpell => line => line.Contains("You suffer in the desert heat...", StringComparison.OrdinalIgnoreCase),
                     _ => null,
                 },
                 walkActive: () => WalkActive,
@@ -383,6 +384,147 @@ public sealed class HazardBuffRefreshTests : IDisposable
         f.SendBlocked = false;
         f.Engine.OnApproachingRoom(Dunes);
         Assert.Single(f.Wire);
+    }
+
+    // ----- the lapse line: the game's own word that the buff is off ------------
+
+    // Paradigm's data has the desert's `failspell` and not the block it jumps to, so
+    // nothing in it names the spell that does the damage. The user confirmed it is
+    // #712 (2026-10-10), and the index carries that as an entry of its own, used only
+    // on Paradigm and only where the data gives nothing.
+    private RoomHazardIndex.BuffCounter DesertCounter(string set, int? legit, string tbInfo)
+    {
+        string dir = Path.Combine(_root, set);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"),
+            """ [ { "Map Number": 12, "Room Number": 853, "Name": "Scorching Desert", "Spell": 683 } ] """);
+        File.WriteAllText(Path.Combine(dir, "Spells.json"),
+            """ [ { "Number": 683, "Abil-0": 148, "AbilVal-0": 2653 }, { "Number": 711, "Dur": 600 } ] """);
+        File.WriteAllText(Path.Combine(dir, "Items.json"),
+            """ [ { "Number": 283, "Abil-0": 43, "AbilVal-0": 711 } ] """);
+        File.WriteAllText(Path.Combine(dir, "TBInfo.json"), tbInfo);
+        if (legit is { } code)
+            File.WriteAllText(Path.Combine(dir, "Info.json"), $$""" [ { "Legit": {{code}} } ] """);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(set);
+        RoomHazardIndex index = new(cache);
+        index.OnActiveSetChanged(set);
+        return Assert.Single(index.HazardForSpell(683)!.BuffCounters);
+    }
+
+    private const string ParadigmDesertBlocks = """ [ { "Number": 2653, "Action": "failspell 711 2654:random 2655" } ] """;
+
+    [Fact]
+    public void Paradigm_TheDesertsLapseSpell_IsTheConfirmedFollowOn()
+    {
+        RoomHazardIndex.BuffCounter counter = DesertCounter("para", legit: 2, ParadigmDesertBlocks);
+
+        Assert.Equal(711, counter.BuffSpell);
+        Assert.Equal(712, counter.LapseSpell);
+        Assert.Equal(1800, counter.DurationSeconds);
+    }
+
+    // The entry is Paradigm's. On Stock the lapse spell comes from the data or not at
+    // all, and where the data does name one, the data's stands on either realm.
+    [Fact]
+    public void TheConfirmedFollowOn_IsParadigmsOnly_AndTheDataComesFirst()
+    {
+        Assert.Equal(0, DesertCounter("stock-cut", legit: 1, ParadigmDesertBlocks).LapseSpell);
+        Assert.Equal(999, DesertCounter("para-full", legit: 2,
+            """ [ { "Number": 2653, "Action": "failspell 711 2654:random 2655" }, { "Number": 2654, "Action": "cast 999" } ] """)
+            .LapseSpell);
+    }
+
+    // The line shows with the buff believed on: it is off, whatever the clock said.
+    // On a walk the `use` goes out at once, as it does on Stock, and the clock starts
+    // again from it.
+    [Fact]
+    public void LapseLine_WithTheBuffBelievedOn_OnAWalk_DrinksAtOnce()
+    {
+        Field f = new();
+        f.Engine.OnApproachingRoom(Dunes);
+        f.Engine.OnServerLine(SwigLine);
+        f.Advance(100);
+
+        f.Engine.OnServerLine(ThirstLine);
+
+        Assert.Equal(new[] { "use waterskin", "use waterskin" }, f.Wire);
+        Assert.Contains(f.LogLines, l => l.StartsWith("buff 300 is off: the room's lapse line showed with 1700 s still on its clock"));
+        Assert.Contains(f.LogLines, l => l.StartsWith("re-raised buff 300 with `use waterskin` on lapse prompt"));
+        Assert.Contains("in 1800 s", f.Engine.DescribeTracking()[0]);
+    }
+
+    // Where the line's own `use` can't go out (here the master switch is off) the
+    // buff still counts as off from that line, so once the switch is back the refresh
+    // is due under the same rules as any other: here, and at once.
+    [Fact]
+    public void LapseLine_WithNothingSent_CountsTheBuffAsOff_AndTheRefreshIsDue()
+    {
+        Field f = new();
+        f.Engine.OnApproachingRoom(Dunes);
+        f.Engine.OnServerLine(SwigLine);
+        f.Advance(100);
+        Assert.Null(f.Engine.DueNow());             // 1700 s on the clock
+
+        f.Switch.TurnOff();
+        f.Engine.OnServerLine(ThirstLine);
+        Assert.Single(f.Wire);
+        Assert.Empty(f.Engine.DescribeTracking());  // no longer tracked as on
+
+        f.Switch.TurnOn();
+        Assert.Equal(("use waterskin", true), f.Engine.DueNow());
+        Assert.True(f.Engine.FireDue(sneakKept: false));
+        Assert.Equal(2, f.Wire.Count);
+    }
+
+    // The lapse line's `use` over a kept sneak goes out all the same: the buff is
+    // already off. The sneak is reported spent, as for any forced `use`.
+    [Fact]
+    public void LapseLine_OverAKeptSneak_DrinksAnyway_AndReportsTheSneakSpent()
+    {
+        Field f = new();
+        f.Engine.OnApproachingRoom(Dunes);
+        f.Engine.OnServerLine(SwigLine);
+        f.SneakKept = true;
+
+        f.Engine.OnServerLine(ThirstLine);
+
+        Assert.Equal(2, f.Wire.Count);
+        Assert.Equal(1, f.SneakSpent);
+    }
+
+    // The round's cast was already made when the lapse line's `use` went out: the
+    // refusal leaves the buff off (not back on the clock the lapse line disproved),
+    // and the `use` is due again.
+    [Fact]
+    public void LapseLine_ThenTheRoundRefusal_LeavesTheBuffOff()
+    {
+        Field f = new();
+        f.Engine.OnApproachingRoom(Dunes);
+        f.Engine.OnServerLine(SwigLine);
+        f.Advance(100);
+
+        f.Engine.OnServerLine(ThirstLine);
+        f.Engine.OnServerLine("You have already cast a spell this round!");
+
+        Assert.Equal(("use waterskin", true), f.Engine.DueNow());
+    }
+
+    // The game has already said the item is spent: a lapse line doesn't ask again at
+    // every tick. The walk is halted, and the room told once.
+    [Fact]
+    public void LapseLine_AfterARefusalThatHolds_HaltsInsteadOfAskingAgain()
+    {
+        Field f = new();
+        f.Engine.OnApproachingRoom(Dunes);
+        f.Engine.OnServerLine("There are no more uses in waterskin.");
+
+        f.Engine.OnServerLine(ThirstLine);
+        f.Engine.OnApproachingRoom(Dunes);          // armed again by the next step
+        f.Engine.OnServerLine(ThirstLine);
+
+        Assert.Equal(new[] { "use waterskin", ".I'm out of waterskins!" }, f.Wire);
+        Assert.Contains(f.LogLines, l => l.Contains("lapsed with nothing left to use in waterskin"));
     }
 
     // ----- the master switch -------------------------------------------------

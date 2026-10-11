@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using MudPlay.Game;
 using MudPlay.Game.Spells;
 
 namespace MudPlay.Services;
@@ -60,7 +61,8 @@ public sealed class RoomHazardIndex
     // desert's "you need water, soon!" spell 712), reached down the checkspell's
     // buff-absent branch; its game-data message is the reactive re-`use` trigger,
     // since the waterskin buff has no wear-off line to time off. 0 when the chain
-    // casts nothing (or the target block couldn't be resolved).
+    // casts nothing (or the target block couldn't be resolved) and ConfirmedFollowOns
+    // has no entry to stand in for it.
     // ImmunityItems are the passive failure-branch guards (the desert sunstone
     // wristband) that make the whole hazard a no-op just by being held/worn — the
     // provisioner skips the `use` entirely when one is carried, since spending a
@@ -217,6 +219,21 @@ public sealed class RoomHazardIndex
     private const int AbilEndCast = 151;
     private const int MaxChainDepth = 16;
 
+    // Buff-absent follow-on spells the game data does not tie to their room spell,
+    // each one confirmed by the user and none of them worked out. Paradigm's two
+    // desert room spells gate on the waterskin buff with a `failspell` whose
+    // buff-absent blocks (2654 / 2659) are not in the set, so nothing there names
+    // the spell that does the damage: "the desert rooms spell damage is done by a
+    // follow on spell if they dont have a waterskin buff", and asked whether that
+    // spell is #712, desert damage, 5 to 20 a cast: "yes" (user, 2026-10-10). Stock
+    // needs no entry: its blocks are in the data and lead to the same spell. An entry
+    // is used only where the data gives no lapse spell of its own.
+    private static readonly (RealmType Realm, int RoomSpell, int BuffSpell, int FollowOn)[] ConfirmedFollowOns =
+    {
+        (RealmType.ParaMud, 683, 711, 712),
+        (RealmType.ParaMud, 684, 711, 712),
+    };
+
     private readonly GameDataCache _cache;
     private readonly LogService? _log;
     private readonly Dictionary<int, RoomHazard> _hazardBySpell = new();
@@ -279,11 +296,12 @@ public sealed class RoomHazardIndex
         Dictionary<int, List<int>> castersBySpell = new();
         ReadItemReverseMaps(negatorsBySpell, castersBySpell);
         Dictionary<int, string> tbActions = ReadTbActions();
+        RealmType realm = _cache.ActiveRealm;
 
         foreach (int spell in roomSpells)
         {
             RoomHazard? hazard = BuildHazard(
-                spell, spellAbils, negatorsBySpell, castersBySpell, tbActions, durationSecondsBySpell);
+                spell, spellAbils, negatorsBySpell, castersBySpell, tbActions, durationSecondsBySpell, realm);
             if (hazard is not null) _hazardBySpell[spell] = hazard;
         }
 
@@ -306,7 +324,8 @@ public sealed class RoomHazardIndex
         Dictionary<int, List<int>> negatorsBySpell,
         Dictionary<int, List<int>> castersBySpell,
         Dictionary<int, string> tbActions,
-        Dictionary<int, int> durationSecondsBySpell)
+        Dictionary<int, int> durationSecondsBySpell,
+        RealmType realm)
     {
         HashSet<int> chain = new();
         List<int> textBlocks = new();
@@ -352,6 +371,15 @@ public sealed class RoomHazardIndex
         HashSet<int> visitedTb = new();
         foreach (int tb in textBlocks)
             ScanTextBlock(tb, 0, tbActions, castersBySpell, durationSecondsBySpell, visitedTb, groups, buffCounters);
+
+        // Where the data named no lapse spell, the confirmed list may.
+        for (int i = 0; i < buffCounters.Count; i++)
+        {
+            if (buffCounters[i].LapseSpell != 0) continue;
+            foreach ((RealmType onRealm, int roomSpell, int buffSpell, int followOn) in ConfirmedFollowOns)
+                if (onRealm == realm && roomSpell == rootSpell && buffSpell == buffCounters[i].BuffSpell)
+                    buffCounters[i] = buffCounters[i] with { LapseSpell = followOn };
+        }
 
         // Only index a genuinely harmful spell — a benign one that happens to carry a
         // failitem/checkspell counter is not a hazard (see `harmful` above).

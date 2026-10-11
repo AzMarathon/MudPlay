@@ -40,11 +40,14 @@ namespace MudPlay.Game.Map;
 //  • Reactive (message) — the timer only estimates the lapse. When the buff drops
 //    early the room casts its lapse-damage spell and the game prints that spell's
 //    message ("you suffer in the desert heat... you need water, soon!"). Seeing it,
-//    we fire exactly ONE `use` to re-raise. The trigger is the game-data message
-//    record linked to the hazard's lapse spell (RoomHazardIndex.BuffCounter
-//    .LapseSpell), not hardcoded realm text. If a SECOND lapse prompt arrives before
-//    the swig, the `use` drew nothing (out of charges / waterskins) and we HALT the
-//    walk rather than march deeper into a hazard we can no longer counter.
+//    the buff is counted as off whatever the clock said, and on a walk we fire
+//    exactly ONE `use` to re-raise. The trigger is the game-data message record
+//    linked to the hazard's lapse spell (RoomHazardIndex.BuffCounter.LapseSpell),
+//    not hardcoded realm text; where the data doesn't tie that spell to the room
+//    (Paradigm's desert) RoomHazardIndex.ConfirmedFollowOns does. If a SECOND lapse
+//    prompt arrives before the swig, the `use` drew nothing (out of charges /
+//    waterskins) and we HALT the walk rather than march deeper into a hazard we can
+//    no longer counter.
 //
 // A party FOLLOWER runs no walk of its own — the leader's route carries it — so it
 // raises the buff on arriving in a hazard room, and the window and the lapse prompt
@@ -349,13 +352,19 @@ public sealed class AutoHazardCounterProvisioner
             return null;
         }
 
-        if (_refusedAtCount.TryGetValue(pick, out int countThen))
-        {
-            if (_carriedCount(pick) == countThen) return null;   // said when it was refused
-            _refusedAtCount.Remove(pick);
-        }
+        if (StillRefused(pick)) return null;   // said when it was refused
         if (_sendBlocked?.Invoke() == true) return null;
         return pick;
+    }
+
+    // The game turned a `use` of this item away for a reason that holds, and the count
+    // carried is what it was then.
+    private bool StillRefused(int item)
+    {
+        if (!_refusedAtCount.TryGetValue(item, out int countThen)) return false;
+        if (_carriedCount(item) == countThen) return true;
+        _refusedAtCount.Remove(item);
+        return false;
     }
 
     // True when the client's charge count for the item reads none left: nothing is
@@ -552,9 +561,13 @@ public sealed class AutoHazardCounterProvisioner
 
     private void HandleThirst(RoomHazardIndex.BuffCounter counter)
     {
-        // Only ever act on a live walk — ours, or the leader's we're following. A
-        // lapse line seen while idle is just the player standing in the room, not a
-        // route committing to march through.
+        // The room has just cast its buff-absent spell, so the buff is off whatever
+        // the clock said. Taken first and for anyone standing here: when nothing
+        // below sends a `use`, the refresh is due again under its usual rules.
+        NoteBuffAbsent(counter);
+
+        // The `use` sent from here is for a live walk — ours, or the leader's we're
+        // following: the "out of" say and the halt below are a route's business.
         if (!_walkActive() && !_followingLeader()) return;
 
         // Immune via a passive guard — the lapse prompt can't actually harm us, so
@@ -588,9 +601,36 @@ public sealed class AutoHazardCounterProvisioner
             return;
         }
 
+        // The game already refused this item, or the client counts it empty: asking
+        // again at every lapse would only draw the same line.
+        if (StillRefused(pick) || OutOfCharges(counter, pick))
+        {
+            AnnounceOut(counter);
+            Halt($"buff {counter.BuffSpell}: lapsed with nothing left to use in {_itemName(pick) ?? pick.ToString()}");
+            return;
+        }
+        if (_sendBlocked?.Invoke() == true) return;
+
+        // Read before the send: the `use` itself ends the sneak being kept.
+        bool overSneak = _sneakKept?.Invoke() == true;
         if (SendUse(counter, pick, _now()) is not { } name) return;
         _log?.Info(LogCategory,
-            $"re-raised buff {counter.BuffSpell} with `use {name}` on lapse prompt — it ran out sooner than its timer said");
+            $"re-raised buff {counter.BuffSpell} with `use {name}` on lapse prompt — it ran out sooner than its timer said"
+            + (overSneak ? "; the sneak is spent here" : ""));
+        if (overSneak) SneakSpentHere?.Invoke();
+    }
+
+    // The game's own word that the buff is absent: drop the clock, and the stamp a
+    // pending `use` would put back if it is turned away.
+    private void NoteBuffAbsent(in RoomHazardIndex.BuffCounter counter)
+    {
+        TimeSpan? left = RemainingOf(counter, _now());
+        _on.Remove(counter.BuffSpell);
+        if (_pending is { } sent && sent.BuffSpell == counter.BuffSpell) _pending = sent with { Before = null };
+        // Not while a `use` of ours is unanswered: that one is told as out of charges.
+        if (left is { } l && l > TimeSpan.Zero && !_awaitingSwig)
+            _log?.Info(LogCategory,
+                $"buff {counter.BuffSpell} is off: the room's lapse line showed with {(int)l.TotalSeconds} s still on its clock");
     }
 
     // `use` the carried source item: stamp the buff as on from now, remember what it
