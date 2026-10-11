@@ -113,7 +113,7 @@ public sealed class RoombaQueryHandler : IDisposable
         }
 
         string query = string.Join(' ', ctx.Args).Trim();
-        if (query.Length == 0) { ctx.Reply("usage: @roomba <item name>"); return; }
+        if (query.Length == 0) { ctx.Refuse("usage: @roomba <item name>"); return; }
 
         IReadOnlyList<GhItemSighting> sightings = _locations.FindSightings(query);
         if (sightings.Count == 0)
@@ -131,7 +131,7 @@ public sealed class RoombaQueryHandler : IDisposable
             ctx.Reply(FormatTotal(group.ToList()));
 
         int extraItems = byItem.Count - MaxItemsShown;
-        if (extraItems > 0) ctx.Reply($"{extraItems} more matching item(s) — refine your search");
+        if (extraItems > 0) ctx.Reply($"{extraItems} more matching item(s) - refine your search");
     }
 
     // One line: total quantity across every matching room, the item's

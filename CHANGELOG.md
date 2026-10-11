@@ -1,9 +1,115 @@
 # Version history
 
-## 3.172.4
+## 3.176.1
 
-- Switching game data sets is quicker: the room map's doors, teleports, boats and lookups build in a fraction of the time, with far less memory churned
+- Switching game data sets is quicker: the room map's doors, teleports, boats and lookups build about three times faster, with far less memory churned
 - Program log: the room map's load line says how long the build took
+
+## 3.176.0
+
+- New Cash + Items setting, off by default: Fund party members' tolls / rides if short
+- Changed from 3.172.0, which paid tolls for members unasked: with the setting off, a short or silent member closes tolls, NPC rides and sailings to the party for the trip
+- On: the leader keeps the larger of its own crossings (this one and those further on the route) and Minimum cash to keep on hand; only coin above that is handed over
+- No exact change: the smallest larger amount your coins make is handed over, with no other limit; the terminal says how much over
+- Paid NPC transports and sailings are checked and funded like tolls
+- A bank stop already being made (training trip, item purchase, a stash room set as the Bank) also draws what the party is short of the tolls ahead
+- A hidden member can't be given coin and counts as not funded; coin give refusals are read on every realm
+
+## 3.175.17
+
+- Loops and Auto-Lair setups saved, edited, renamed, moved or deleted in one running client now appear in the others within a few seconds, without a restart
+- A loop already running, paused or staged keeps going from the copy it started with
+- A loop is now written before its old copy is removed, so a client reading at that moment never sees it missing
+- bug reports addressed: paradigm-20261010-225215, paradigm-20261010-225246
+
+## 3.175.15
+
+- Remote commands: a sender without the permission gets only the Failure message; `@suicide`'s lives rule and `@do suicide` answer only a sender who holds it
+- Every refusal (bad or missing word, can't be done, state not read yet, mortally wounded) follows the Warn setting; answers another client waits on are still sent
+- A `&@` relay asked for on say goes by telepath while sneaking
+- `@loop` and `@goto` say they started only when they did, and why not otherwise
+- `@lair` on a running Auto-Lair keeps the run: `already running` for the same lairs, `updated` for others
+- `@deposit-all` in a room surely not a bank answers `not in a bank - nothing deposited` and sends nothing
+- `@kill` naming a player you won't fight (PvP off, your party, another fight) attacks nothing and says why
+- A follower waits longer on a leader's `@comeback` answer only when it says the leader is coming
+- Replies are plain ASCII: a hyphen where a long dash was
+- Reply wording: `can't be hidden`, bare `@profile` without doubled braces, `My party is full: …`
+- A trailing `!` on any command (`@stop!`) is ignored on every path
+- `@help` texts and Talk tab tooltips corrected
+
+## 3.175.2
+
+- A room title or prayer line shown mid-fight is no longer read as a miss (Wire Inspector's Classified tags; a monster's attack under a `break` hold); only dark cyan is one
+- Classified: your room spell's damage line is tagged `You Hit`, not `Monster Hit (you)`
+- bug reports addressed: paradigm-20261010-215619
+
+## 3.175.0
+
+- Bug report: your login name, login password and suicide password are masked everywhere in it, and in a crash report
+- Bug report: the `*` the game echoes for a suicide password is masked too, so its length isn't shown
+- Bug report: racist and other offensive words on chat lines are masked, in the report only
+- Bug report: a list of every command sent, held or dropped, with who sent it (typed, an alias, a window, the Local API, an engine, a macro / trigger / event, a route step)
+- Bug report: Holds and waits near the top: the send gate, each movement gate with who raised it and since when, time in state for every engine, what each is waiting on
+- Bug report: the whole program log with millisecond times; warnings and errors kept apart so routine lines can't push them out; 3,000 lines of scrollback
+- Bug report: the build, when the client started, your system, the connection, open windows, pending work, triggers / aliases / macros, remote-command permissions, death history
+- Bug report: state first, settings after, histories last and oldest first; under 1 MB without the wire sections
+- The wire sections follow the Wire Inspector's tick boxes and show when each read arrived
+- The last 3 to 6 minutes of the program log are always on disk, for a hang or a forced kill (Logs folder, `…-recent-a.log` / `-b.log`)
+- Program log: a startup block, a status line every 3 minutes, and how a walk ended even with the Navigation window closed
+- `@suicide` sends the stored password only when the game asks for it
+- A custom statline counts as the game prompt, for `@suicide` and for the list of commands sent
+- Local API: `/log`, `/scrollback` and `/events` mask the same account details; `/scrollback` sends only rows from inside the game
+- Chat masking follows a chat line onto its next row only where the terminal wrapped it; game text is never changed
+- The last-minutes log never holds the client on a stalled disk, and says what it dropped
+
+## 3.174.6
+
+- Hang-up death check reads the room you come back in: where that room's dead arrive agrees with a death; back where you left rules one out, and so does any other room on unmodified Stock data and the zones Paradigm shares with Stock
+- Lives not read before the hang-up: back stripped where the dead arrive is now recorded as a death; owning nothing a death takes, the room alone is enough
+- Paradigm: back in the Burial Vault (14/1077) after hanging up in Albion (any room you can walk to from it without a boat) counts as where the dead arrive
+- The death record and notice name the room you came back in
+- A hang-up while dropped in an arena room is recorded as an arena death (nothing lost, no pile), on any realm, with or without a lives count from before
+- Sysop god lives asks no life back after an arena death, on either realm
+- Bug report shows where the stored list's dead arrive, how far that is trusted, and the room come back in
+
+## 3.174.3
+
+- Used on also lists the rooms where a command needs the item held to work an exit (lever, rubbed orb, titanium fork), naming the exit it opens
+
+## 3.174.2
+
+- No fight is opened from a room you are stepping out of (a swing at you, a hit line, a room re-run); the attack used to land in the next room
+- A lair entered that way opens with its debuff, then the room attack
+- A step with no landing or refusal within 3 s counts as not taken: the attacker is fought back where you stand
+- Bug report shows an engage held for a move in flight
+- bug reports addressed: paradigm-20261010-231540
+
+## 3.174.1
+
+- Item records show a Used on section listing every exit that names the item as the one needed to pass (a key on a locked door, an item to carry, a ticket): room, map/room and direction, one line per exit
+
+## 3.174.0
+
+- Timers of the buffs on you stop while you are out of the game (dropped link, relog, the board's menu) and run on with the time they had left
+- None of yours is recast for time spent away; a buff on a party member keeps its real end, as before
+- A whole-party buff stands still on you only: in a party it is recast when it would have run out had you not left
+- Your own buffs' time left is saved with the character and put back after MudPlay is closed
+- A client killed while in the game saves none, and buffs afresh
+- Changing profile with a character in the game tosses its buff timers
+- A buff's wear-off line is read after a reconnect or a restart; a hang-up death found late drops the buffs carried over
+- Bug report says whether the timers are running or standing still, and what a load put back
+
+## 3.173.0
+
+- Loops: a third way to wait before a lair, Wait for priority buff spells: every due Priority buff is cast first, other buffs held
+- Held buffs are let through once the debuff has gone out in the lair, two rounds into its fight at the latest, and held again at the next lair's door
+- A buff held at one lair with no cast since gets one cast at the next door first
+- Every lair wait also holds while mana is under what the debuff needs: its Min mana per cast, never less than the spell's cost, the higher of the two debuffs' (nav chip: Waiting for Mana to Debuff); mana-regen buffs still go out
+- A fight at the doorstep holds no buff
+- At a lair's door a buff you can't pay for is passed over for the next due one
+- A lair wait ends at once when the loop is stopped or paused, or Auto-Combat or the master switch goes off
+- Entire Loop Settings offers the lair wait while a loop walks to its first room
+- Program log and bug report say what a lair wait is for, what it holds back and why it ended
 
 ## 3.172.0
 
@@ -102,7 +208,7 @@
 - A room spell's kills count one each as they happen (session kills, lair timer, drop re-look, summon re-scan)
 - A command's `*Combat Off*` is recognised with a prompt or other lines between it and the echo
 - Program log notes a `*Combat Off*` that answers a command
-- bug reports addressed: paradigm-20261010-145330
+- bug reports addressed: paradigm-20261010-145330, paradigm-20261010-215619
 
 ## 3.167.12
 

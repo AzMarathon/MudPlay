@@ -1446,14 +1446,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // sole crossing.
             int? landHops = path is { Count: > 0 } ? path.Count : (int?)null;
             boatPlan = ChooseBoatRoute(source.Key, destination, landHops);
-            // A sailing whose fare our own purse can't pay is not set out for, sole
+            // A sailing whose fare our own purse can't pay, or that the party in tow
+            // can't all be got aboard (PartyTollGate), is not set out for, sole
             // crossing or not: the captain leaves whoever can't pay on the dock, so
             // the walk would only stand there. Kept to name it if nothing else gets
-            // there. One gated on level, or on a follower's purse, still sails with
-            // its warning.
+            // there. One gated on level still sails with its warning.
             BoatRoutePlan? unpaidBoat = null;
-            if (boatPlan is { } gatedBoat && gatedBoat.Block.HasFlag(ExitBlockReason.Fare)
-                && PaidCrossingDescriber.OwnPurseShortOfFare(Filter, gatedBoat.Passage.ArrivalRoom, gatedBoat.Passage.FareCopper))
+            if (boatPlan is { } gatedBoat && gatedBoat.Block.HasFlag(ExitBlockReason.Fare))
             {
                 unpaidBoat = gatedBoat;
                 boatPlan = null;
@@ -1505,8 +1504,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 if (unpaidBoat is { } sail)
                 {
                     BoatPassage passage = sail.Passage;
+                    bool partys = !PaidCrossingDescriber.OwnPurseShortOfFare(Filter, passage.ArrivalRoom, passage.FareCopper);
                     string cantSail = "all routes blocked by "
-                        + PaidCrossingDescriber.DescribeBoat(in passage, RoomNameOf) + " you can't pay"
+                        + PaidCrossingDescriber.DescribeBoat(in passage, RoomNameOf) + " " + PaidCrossingDescriber.WhoCantPay(partys)
                         + (PaidCrossingDescriber.PurseForFare(Filter, passage.ArrivalRoom, passage.FareCopper) is { } purse
                             ? $": {purse}" : string.Empty);
                     FailUnpaid(destination, cantSail);
@@ -1574,7 +1574,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
             && !RemoteActionPathExpander.ReachesDestination(expanded, destination))
         {
             string reason = DescribeUnroutableLever(unroutable[0]);
-            _log?.Info("Walker", $"walk to {destination}: {reason}");
             Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
             return false;
         }
@@ -2168,12 +2167,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     }
 
     // A walk with no route for want of a toll or fare says so where the user is
-    // looking, not only on the Navigation window's chip, and in the log from here:
-    // that window writes a failed walk's reason, and it may be shut.
+    // looking, not only on the Navigation window's chip. (The log line is
+    // Raise's, as for every failed walk.)
     private void FailUnpaid(RoomKey destination, string reason)
     {
         LastUnpaidFailure = destination;
-        _log?.Info("Walker", $"walk to {destination}: {reason}");
         _unpaidCrossingHandler?.Invoke(destination, reason);
         Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
     }
@@ -2417,21 +2415,84 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // member's purse, before anyone is charged. Hold means a movement gate is up
     // and the resume re-drives this step; Closed means the party can't be taken
     // through, and the walk plans again with that exit shut to it.
-    private Func<RoomKey, Direction, RoomExit, PartyTollGate.StepVerdict>? _tollStepCheck;
-    public void SetTollStepCheck(Func<RoomKey, Direction, RoomExit, PartyTollGate.StepVerdict> check)
+    // The last argument is what the rest of the route will charge us ourselves
+    // (OwnChargesPastTheStepDue).
+    private Func<RoomKey, Direction, RoomExit, long, PartyTollGate.StepVerdict>? _tollStepCheck;
+    public void SetTollStepCheck(Func<RoomKey, Direction, RoomExit, long, PartyTollGate.StepVerdict> check)
     {
         ArgumentNullException.ThrowIfNull(check);
         _tollStepCheck = check;
     }
 
+    // The same for the verb that boards a sailing (PartyTollGate.BeforeSailing).
+    private Func<BoatPassage, long, PartyTollGate.StepVerdict>? _sailingCheck;
+    public void SetSailingCheck(Func<BoatPassage, long, PartyTollGate.StepVerdict> check)
+    {
+        ArgumentNullException.ThrowIfNull(check);
+        _sailingCheck = check;
+    }
+
+    // What the route past the step due will charge us ourselves, in copper: every
+    // toll and fare still ahead on the path as planned, a sailing's included. The
+    // party's check keeps that back before it hands coin over at this crossing,
+    // or we would pay a member through one toll and stand at the next unable to
+    // cross. Only the path's own steps count: a toll on a branch not taken is not on it.
+    private long OwnChargesPastTheStepDue()
+    {
+        if (_path is not { } path || _index >= path.Count) return 0;
+        RoomKey? at = path[_index] switch
+        {
+            MoveStep due => due.ExpectedTarget,
+            BoatStep due => due.Passage.ArrivalRoom,
+            _ => null,
+        };
+        long copper = 0;
+        for (int i = _index + 1; i < path.Count; i++)
+        {
+            switch (path[i])
+            {
+                case CommandStep:
+                    break;
+                case BoatStep boat:
+                    copper += Math.Max(0, boat.Passage.FareCopper);
+                    at = boat.Passage.ArrivalRoom;
+                    break;
+                case SysGotoStep jump:
+                    at = jump.LandingRoom;
+                    break;
+                case MoveStep move:
+                    if (at is { } from && _graph.GetRoom(from) is { } room
+                        && room.Exits.TryGetValue(move.Direction, out RoomExit exit))
+                        copper += PaidCrossingDescriber.CostOf(in exit);
+                    at = move.ExpectedTarget;
+                    break;
+            }
+        }
+        return copper;
+    }
+
     private bool TurnedAsideAtToll(WalkStep step)
     {
-        if (_tollStepCheck is not { } check || step is not MoveStep move) return false;
-        if (_tracker.State.CurrentRoom is not { } room
-            || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)
-            || exit.Hint != RoomExitHint.Toll || exit.TollGold <= 0)
-            return false;
-        switch (check(room.Key, move.Direction, exit))
+        PartyTollGate.StepVerdict verdict;
+        string toll;
+        switch (step)
+        {
+            case MoveStep move when _tollStepCheck is { } check
+                && _tracker.State.CurrentRoom is { } room
+                && room.Exits.TryGetValue(move.Direction, out RoomExit exit)
+                && PaidCrossingDescriber.Charges(in exit):
+                verdict = check(room.Key, move.Direction, exit, OwnChargesPastTheStepDue());
+                toll = PaidCrossingDescriber.Describe(room.Key, move.Direction, in exit, RoomNameOf);
+                break;
+            case BoatStep boat when _sailingCheck is { } check && boat.Passage.FareCopper > 0:
+                BoatPassage passage = boat.Passage;
+                verdict = check(passage, OwnChargesPastTheStepDue());
+                toll = PaidCrossingDescriber.DescribeBoat(in passage, RoomNameOf);
+                break;
+            default:
+                return false;
+        }
+        switch (verdict)
         {
             case PartyTollGate.StepVerdict.Go:
                 return false;
@@ -2439,19 +2500,33 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 return true;
         }
         if (_destination is not { } dest) return false;
-        string toll = PaidCrossingDescriber.Describe(room.Key, move.Direction, in exit, RoomNameOf);
         // Counted against the walk's re-plans: a plan that came back through the
-        // same toll would otherwise turn here for ever.
-        if (_replanCount >= MaxReplansPerWalk)
+        // same crossing would otherwise turn here for ever. The turns have a count
+        // of their own as a backstop: the re-plan sends its first step before it
+        // hands the re-plan count back, so a check that closes a crossing the
+        // planner still routes through would recurse without one. In the app both
+        // answers come from PartyTollGate's one judgement, so only a check wired
+        // apart from the filter gets there. Both counts start again at each step
+        // that lands (ClearReplanCounts): a walk turns at as many crossings as it meets.
+        if (_replanCount >= MaxReplansPerWalk || _crossingTurns >= MaxReplansPerWalk)
         {
             FailUnpaid(dest, $"stopped at {toll}: the party can't all pay it");
             Reset();
             return true;
         }
         _replanCount++;
+        _crossingTurns++;
         _log?.Info("Walker", $"step {_index + 1}: {toll} isn't taken with the party; re-planning without it");
         ReplanInPlace(dest);
         return true;
+    }
+
+    private int _crossingTurns;
+
+    private void ClearReplanCounts()
+    {
+        _replanCount = 0;
+        _crossingTurns = 0;
     }
 
     // The party's purses, asked for as this walk was planned, have been read
@@ -2483,11 +2558,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
         {
             if (path[i] is CommandStep) continue;
             // A sailing or a jump lands somewhere the exits don't say: nothing past it is read.
+            if (path[i] is BoatStep boat)
+                return boat.Passage.FareCopper > 0
+                    && filter.DescribeBoatBlock(boat.Passage).HasFlag(ExitBlockReason.Fare);
             if (path[i] is not MoveStep move
                 || _graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit))
                 return false;
-            if (exit.Hint == RoomExitHint.Toll && exit.TollGold > 0
-                && filter.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.Toll))
+            if (PaidCrossingDescriber.Charges(in exit)
+                && (filter.DescribeExitBlock(in exit) & (ExitBlockReason.Toll | ExitBlockReason.Fare)) != 0)
                 return true;
             at = exit.Target;
         }
@@ -2981,7 +3059,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
             round = _bfs.FindPath(here.Key, dest, roundIt, ignoreAvoids: _activeIgnoreAvoids);
         if (round is null)
         {
-            _log?.Info("Walker", $"walk to {dest}: gave up on {door} ({reason}), and there is no other way");
             Raise(new WalkEvent(WalkEventKind.Failed,
                 $"couldn't open {door} ({reason}), and there is no other way to {dest}", _destination));
             Reset();
@@ -3166,11 +3243,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _sailingPlace = passage.Place;
         _sailingEta = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(voyageSeconds);
 
-        // A gated sole-crossing sail still boards — the captain refuses only the
-        // under-level / too-poor members at the dock and leaves them behind. Warn
-        // so the user knows a member may not make the crossing, rather than the
-        // walk silently splitting the party a head short. (One whose fare our own
-        // purse can't pay never gets here: WalkToImmediate fails the walk naming it.)
+        // A level-gated sole-crossing sail still boards — the captain refuses only
+        // the under-level members at the dock and leaves them behind. Warn so the
+        // user knows a member may not make the crossing, rather than the walk
+        // silently splitting the party a head short. (One whose fare we or the
+        // party can't pay never gets here: WalkToImmediate fails the walk naming it.)
         ExitBlockReason gate = Filter?.DescribeBoatBlock(passage) ?? ExitBlockReason.None;
         if (gate != ExitBlockReason.None)
             _log?.Warn("Walker",
@@ -3392,7 +3469,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         {
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -3668,7 +3745,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _sailingPlace = null;
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -3702,7 +3779,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _sailingPlace = null;
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -3730,7 +3807,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _awaitingSysGotoArrival = false;
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -3760,7 +3837,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _awaitingSysGotoArrival = false;
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -3823,7 +3900,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             ClearGreetTeleportWait();
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -4041,6 +4118,26 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // as a force-clear, so the room is fought with Auto-Combat off.
     public bool AwaitingEmptyRoom => _emptyRoom.Active;
 
+    // What the walk is standing on right now, for a bug report: each answer it
+    // has sent for and not had. A walk that "just sits there" is in one of these.
+    public IReadOnlyList<string> DescribeWaits()
+    {
+        List<string> waits = new();
+        if (_stepInFlight) waits.Add("a step is in flight (sent, its room not seen yet)");
+        if (_awaitingPromptForCommand) waits.Add("the prompt after a command step");
+        if (_awaitingDoorOpen) waits.Add("the door handler");
+        if (_awaitingHiddenReveal) waits.Add("the hidden-exit search");
+        if (_awaitingWinch) waits.Add("the winch handler");
+        if (_awaitingTrapDisarm) waits.Add("the trap disarm");
+        if (_awaitingBoatArrival) waits.Add("a boat's arrival");
+        if (_awaitingSysGotoArrival) waits.Add("a sys goto landing");
+        if (_awaitingGreetTeleport) waits.Add("a greet teleport");
+        if (_emptyRoom.Active) waits.Add("an empty room for a room command");
+        if (_abandonHold) waits.Add("holds the AbandonedCombat gate");
+        if (_retryCount > 0) waits.Add($"{_retryCount} retry(ies) of the step");
+        return waits;
+    }
+
     // See EmptyRoomCommandHold.SetHooks.
     public void SetRoomClearHooks(Func<bool> roomHasMonster, Action requestRoomClear, Action abortPartyReform,
         Func<Room, string, bool> commandNeedsEmptyRoom)
@@ -4122,7 +4219,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             ClearGreetTeleportWait();
             _stepInFlight = false;
             _retryCount = 0;
-            _replanCount = 0;
+            ClearReplanCounts();
             AdvanceStep();
             return;
         }
@@ -4566,6 +4663,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _activeArmAcquisition = true;
         _retryCount = 0;
         _replanCount = 0;
+        // Kept through a re-plan in place, whose first step can be the very
+        // crossing it was made to avoid (TurnedAsideAtToll).
+        if (!_replanningInPlace) _crossingTurns = 0;
         _locateAsk = null;
         // Drop any AbandonedCombat hold this walk was carrying so a stopped /
         // completed walk never strands the gate asserted (the auto-release only
@@ -4580,6 +4680,29 @@ public sealed class AutoWalkManager : IRecoverableEngine
         State = WalkState.Idle;
     }
 
+    // How a walk began and ended goes in the program log from here, whoever is
+    // listening. It used to be logged by the Navigation window's view-model, so
+    // with that window closed a walk that failed left no line saying why.
+    private void LogLifecycle(WalkEvent evt)
+    {
+        string verb;
+        switch (evt.Kind)
+        {
+            case WalkEventKind.Started: verb = "started"; break;
+            case WalkEventKind.Resumed: verb = "resumed"; break;
+            case WalkEventKind.Paused: verb = "paused"; break;
+            case WalkEventKind.Stopped: verb = "stopped"; break;
+            case WalkEventKind.Finished: verb = "arrived"; break;
+            case WalkEventKind.Failed: verb = "FAILED"; break;
+            default: return;   // per-step events are the listeners' to report
+        }
+        _log?.Info("Walker", $"walk {verb}"
+            + (evt.Destination is { } to
+                ? $" (to {to}{(_graph.GetRoom(to)?.Name is { Length: > 0 } name ? " - " + name : string.Empty)})"
+                : string.Empty)
+            + (string.IsNullOrWhiteSpace(evt.Detail) ? string.Empty : $": {evt.Detail}"));
+    }
+
     private void Raise(WalkEvent evt)
     {
         // A stop ends the journey whichever leg it catches. Arriving or failing ends
@@ -4590,6 +4713,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             || (evt.Kind is WalkEventKind.Finished or WalkEventKind.Failed && _legToJourneyGoal);
         if (endsJourney) EndJourney();
         LastEvent = evt;
+        LogLifecycle(evt);
         Event?.Invoke(evt);
         // The doors this trip gave up on go with it, after the listeners had their
         // look at them: a Shortcut journey's silent legs, begun with no walk of the

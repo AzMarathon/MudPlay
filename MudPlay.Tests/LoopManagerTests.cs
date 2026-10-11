@@ -189,6 +189,49 @@ public sealed class LoopManagerTests : IDisposable
         Assert.False(round.Waypoints[1].DoNotAttack);
     }
 
+    // The loop file keeps the way of waiting before lairs by the mode's name, and
+    // reads a number too (what a shared loop carries).
+    [Theory]
+    [InlineData(LairEntryDebuffMode.WaitForSpells)]
+    [InlineData(LairEntryDebuffMode.BlockSpells)]
+    [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
+    public void Save_RoundTripsTheLairEntryDebuffMode(LairEntryDebuffMode mode)
+    {
+        LoopManager m1 = NewManager();
+        m1.LoadAll(_setName);
+        m1.Save(new Loop("Debuff loop", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }) { LairEntryDebuff = mode });
+
+        string path = Path.Combine(
+            AppPaths.GameDataSetLoopsFolder(_setName), "Debuff loop" + LoopManager.LoopFileSuffix);
+        using (System.Text.Json.JsonDocument file = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path)))
+            Assert.Equal(mode.ToString(), file.RootElement.GetProperty("LairEntryDebuff").GetString());
+
+        LoopManager m2 = NewManager();
+        m2.LoadAll(_setName);
+        Assert.Equal(mode, m2.Get("Debuff loop")!.LairEntryDebuff);
+    }
+
+    [Fact]
+    public void LoadAll_LairEntryDebuffModeWrittenAsANumber_LoadsAsThatMode()
+    {
+        string folder = AppPaths.GameDataSetLoopsFolder(_setName);
+        Directory.CreateDirectory(folder);
+        const string Json = """
+            {
+              "SchemaVersion": 3,
+              "Name": "Numbered",
+              "LairEntryDebuff": 3,
+              "Waypoints": [ { "Room": "1/1" }, { "Room": "1/2" } ]
+            }
+            """;
+        File.WriteAllText(Path.Combine(folder, "Numbered" + LoopManager.LoopFileSuffix), Json);
+
+        LoopManager m = NewManager();
+        m.LoadAll(_setName);
+
+        Assert.Equal(LairEntryDebuffMode.WaitForPriorityBuffs, m.Get("Numbered")!.LairEntryDebuff);
+    }
+
     [Fact]
     public void LoadAll_LegacyLoopWithoutSuppressionFields_DefaultsFalse()
     {

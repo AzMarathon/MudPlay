@@ -46,6 +46,66 @@ public sealed class SuicidePasswordTrackerTests
             IsPromptLine: false));
 
     [Fact]
+    public void PasswordEntryLikely_CoversABareSuicideAndTheLineThatAnswersIt()
+    {
+        var (tracker, _, _, _, _, tmp) = Setup();
+        try
+        {
+            Assert.False(tracker.PasswordEntryLikely);
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("suicide\r"));
+            Assert.True(tracker.PasswordEntryLikely);
+            // The password, typed before the prompt for it has arrived as a line.
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("hunter2\r"));
+            Assert.True(tracker.PasswordEntryLikely);
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("look\r"));
+            Assert.False(tracker.PasswordEntryLikely);
+        }
+        finally { Directory.Delete(tmp, recursive: true); }
+    }
+
+    [Fact]
+    public void PasswordEntryLikely_HoldsFromSetSuicideUntilTheFlowEnds()
+    {
+        var (tracker, router, _, _, _, tmp) = Setup();
+        try
+        {
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("set suicide\r"));
+            Assert.True(tracker.PasswordEntryLikely);
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("oldpw\r"));
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("newpw\r"));
+            Assert.True(tracker.PasswordEntryLikely);
+            Dispatch(router, "Password Changed");
+            Assert.False(tracker.PasswordEntryLikely);
+        }
+        finally { Directory.Delete(tmp, recursive: true); }
+    }
+
+    // A password longer than eight characters is kept whole, and the prompt line
+    // is read the same whatever run of stars the game echoed after it: Paradigm
+    // prints one for each character sent, Stock's echo call has a width of 8.
+    [Theory]
+    [InlineData(20)]   // Paradigm
+    [InlineData(8)]    // Stock
+    public void ALongPassword_IsStoredWhole_WhateverTheEchoOnThePromptLine(int starsEchoed)
+    {
+        const string placeholder = "placeholder-pw-20-ch";
+        var (tracker, router, gate, profile, protector, tmp) = Setup();
+        try
+        {
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("set suicide\r"));
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes(placeholder + "\r"));
+            // The prompt completes as a line only once it is answered, with the
+            // echo on it.
+            Dispatch(router, "Enter New Password:" + new string('*', starsEchoed));
+            Dispatch(router, "Password changed");
+
+            Assert.False(gate.IsLocked);
+            Assert.Equal(placeholder, protector.Unprotect(profile.Current!.EncryptedSuicidePassword!));
+        }
+        finally { Directory.Delete(tmp, recursive: true); }
+    }
+
+    [Fact]
     public void FirstTimeSet_PrimedByOutboundSetSuicide_CapturesOnPasswordChanged()
     {
         var (tracker, router, gate, profile, protector, tmp) = Setup();

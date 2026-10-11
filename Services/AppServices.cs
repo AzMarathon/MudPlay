@@ -115,11 +115,15 @@ public sealed class AppServices
     // it. Distinct from SendGameCommand, which rides the raw wire-sender with none of
     // that. Used by the quest guide's clickable `'command'` links. No-op until the
     // main VM binds it.
-    private Action<string>? _typedInputSender;
-    public void SetTypedInputSender(Action<string> sender) => _typedInputSender = sender;
-    public void SendTypedInput(string text)
+    // The origin is for the sent-command trail only, which names where a line of
+    // the user's came from: a link or button in a window unless the caller says
+    // otherwise (the local API does).
+    private Action<string, SentCommandTrail.Origin>? _typedInputSender;
+    public void SetTypedInputSender(Action<string, SentCommandTrail.Origin> sender) => _typedInputSender = sender;
+    public void SendTypedInput(string text) => SendTypedInput(text, SentCommandTrail.Origin.Window);
+    public void SendTypedInput(string text, SentCommandTrail.Origin origin)
     {
-        if (!string.IsNullOrWhiteSpace(text)) _typedInputSender?.Invoke(text);
+        if (!string.IsNullOrWhiteSpace(text)) _typedInputSender?.Invoke(text, origin);
     }
 
     // Drop a bracketed yellow status line into the terminal scrollback — the same
@@ -885,6 +889,40 @@ public sealed class AppServices
     // password-entry prompt is active so engine auto-sends don't
     // pollute the input.
     public EngineSendGate EngineGate { get; } = new();
+
+    // The last commands sent, held or dropped, with who sent each: a bug
+    // report's answer to "why did it send that" (SentCommandTrail).
+    public SentCommandTrail SentCommands { get; } = new();
+
+    // The last minutes of the program log, always on disk for a hang or a forced
+    // kill; and the startup block and periodic status line that make that log
+    // readable on its own.
+    public RecentLogFile RecentLog { get; }
+    public ClientHeartbeat Heartbeat { get; }
+
+    // What each last-minutes file opens with. Read on the writer's thread, any
+    // time from the first log entry on: before the settings and game data exist
+    // their halves are simply not known yet.
+    private IReadOnlyList<string> RecentLogHeader()
+    {
+        string? set = null, profile = null;
+        try
+        {
+            set = GameData?.ActiveSet;
+            profile = Settings?.Current.LastUsedProfile?.Name;
+        }
+        catch (Exception ex) when (ex is NullReferenceException or InvalidOperationException)
+        {
+            // Still constructing: the header goes without them.
+        }
+        List<string> lines = new() { "# MudPlay last-minutes log: the program log's last few minutes, kept for a hang or a forced kill" };
+        foreach (string line in ClientHeartbeat.StartupLines(set, profile)) lines.Add("# " + line);
+        return lines;
+    }
+
+    // How long each engine has been in its state, sampled once a second (probes
+    // are registered by BugReportHoldsAndWaits once every engine exists).
+    public EngineStateWatch StateWatch { get; } = new();
 
     // Two-flag one-shot coordinator for "intentional hangup" intent.
     // Set by every engine that deliberately drops the carrier
@@ -1780,6 +1818,10 @@ public sealed class AppServices
     // + the user's Spells + Health tab thresholds.
     public Game.Spells.CastingDirector CastDirector { get; private set; } = null!;
 
+    // Stops every tracked buff's timer while the character is out of the game, and
+    // carries what each had left across a client restart in the character's profile.
+    public Game.Spells.BuffTimerKeeper BuffTimers { get; private set; } = null!;
+
     // Parser for abil <code> breakdown output. Attached to the
     // live line stream in the main VM; feeds ManaRegen the
     // rolled spells: slice of an abil 145 mana-regen read.
@@ -2301,6 +2343,21 @@ public sealed class AppServices
     // any cached room references.
     public Game.Map.RoomGraphManager RoomGraph { get; private set; } = null!;
 
+    // How far the Stock map file's list of where the dead arrive goes for the
+    // active game data: Paradigm by its Info row (Legit 2), an unmodified Stock
+    // set by Legit 1 with Custom "Default", and anything else (a board whose
+    // sysop may have edited its rooms, or no set) unverified.
+    public Game.Recovery.HangupArrivalListTrust HangupArrivalListTrust =>
+        GameData.ActiveRealm == Game.RealmType.ParaMud ? Game.Recovery.HangupArrivalListTrust.Paradigm
+        : GameData.ActiveSetIsVanillaStock ? Game.Recovery.HangupArrivalListTrust.VanillaStock
+        : Game.Recovery.HangupArrivalListTrust.Unverified;
+
+    // Paradigm's Albion: the rooms that can be walked to from the Burial Vault,
+    // where its dead arrive. The walk is made the first time a hang-up in one of
+    // Paradigm's own rooms is judged and kept with the graph (Map.WalkReach).
+    public bool InParadigmAlbion(Game.Map.RoomKey room) =>
+        Game.Map.WalkReach.From(RoomGraph, Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault).Contains(room);
+
     // The teleport spots in the loaded game data, for the
     // setting that says which of them automatic walks may use. Worked out from the
     // room graph on first use and again after the graph reloads.
@@ -2672,6 +2729,9 @@ public sealed class AppServices
     // move so their in-memory Folder values stay in sync.
     public Game.Map.NavFolderManager NavFolders { get; private set; } = null!;
 
+    // Follows what other clients on this set do to the shared Loops folder.
+    public Game.Map.NavFolderWatcher NavWatcher { get; private set; } = null!;
+
     // Game Data → "Manage Sets…" backend: copy / move a set's loop
     // library to another set, delete a set (tables + loops).
     public GameDataSetManager GameDataSetManager { get; private set; } = null!;
@@ -2751,7 +2811,7 @@ public sealed class AppServices
         // per-name folders the rest of the bootstrap now expects.
         // Runs BEFORE any store touches disk; idempotent on
         // already-migrated trees.
-        LogService bootstrapLog = new();
+        LogService bootstrapLog = new(LogService.SessionCapacity);
         DataMigration.RunIfNeeded(bootstrapLog);
 
         _current = new AppServices(bootstrapLog);
@@ -2769,6 +2829,14 @@ public sealed class AppServices
         // opens once the toggle turns on (applied from the profile below or
         // flipped from the Log pane), so a normal session leaves no file.
         ProgramLog = new ProgramLogFile(Log, LogDiagnostics);
+        // The always-written last minutes of the log, for a hang or a forced kill
+        // (RecentLogFile). Older clients' pairs go first, so with this one's the
+        // folder holds ProcessesKept of them.
+        RecentLogFile.PruneOldProcesses(AppPaths.LogsDir, RecentLogFile.ProcessesKept - 1);
+        string recentA = AppPaths.NewDebugLogFile(RecentLogFile.TopicA);
+        string recentB = recentA[..^(RecentLogFile.TopicA.Length + ".log".Length)] + RecentLogFile.TopicB + ".log";
+        RecentLog = new RecentLogFile(Log, LogDiagnostics, recentA, recentB, RecentLogHeader);
+        Heartbeat = new ClientHeartbeat(Log, () => ClientHeartbeat.Describe(this));
         // Surface a one-time legacy data migration (pre-3.0 FujinTerm → MudPlay)
         // now that logging is up — AppPaths ran it at static-init.
         if (AppPaths.MigrationNote is { } migrationNote)
@@ -3408,9 +3476,9 @@ public sealed class AppServices
         // retarget runs against the live engine at @kill time.
         Kill = new Game.Remote.KillHandler(
             RemoteCommands,
-            // A player named by @kill is a fight with a player; anything else is
-            // the combat engine's.
-            name => { if (!PvpFight.EngageOnOrder(name)) Combat.RetargetTo(name); },
+            // A player named by @kill is a fight with a player, or a refusal when
+            // we won't fight them; anything else is the combat engine's.
+            name => PvpFight.TakeKillOrder(name, Combat.RetargetTo),
             Log);
         // @trap auto-disarm flow — manager owns the state machine,
         // handler owns the @-command auth boundary. Wire-sender +
@@ -3489,7 +3557,11 @@ public sealed class AppServices
         // sending while the password tracker locks the gate. Bound by
         // MainWindowViewModel a few lines after the other engine
         // wire-senders, deliberately to the un-wrapped SendUserInput.
-        Suicide = new Game.Remote.SuicideHandler(RemoteCommands, Router, Profile, Passwords, PromptScanner, Log);
+        Suicide = new Game.Remote.SuicideHandler(RemoteCommands, Router, Profile, Passwords, PromptScanner, Log)
+        {
+            SendGate = EngineGate,
+            Telepaths = Telepaths,
+        };
         // Main-menu entry automation — armed by MainWindowVM when
         // LoginAutomator.LoggedIntoGame fires; observes the
         // MainMenuEnterRealm pattern and sends GameCommands.EntryCommand
@@ -5345,15 +5417,10 @@ public sealed class AppServices
             characterName: () => PlayerStats.Name,
             send: cmd => SendGameCommand(cmd),
             log: Log);
-        // Not for a death the Stock engine answered with its colliseum line: that
-        // one leaves the lives as they were (GAME_MECHANICS "Death threshold &
-        // consequences"), and the command would add a life that was never spent.
-        RoomTracker.PlayerDeathObserved += () =>
-        {
-            if (!Death.LastDeathSavedInColliseum) SysopGodLife.OnDeath();
-            else if (SysopGodLivesEnabledHere())
-                Log.Info("SysopGodLife", "A colliseum death spends no life: no life is asked back.");
-        };
+        // Not for an arena death, on either realm: it leaves the lives as they
+        // were (GAME_MECHANICS "Death threshold & consequences"), and the command
+        // would add a life that was never spent.
+        RoomTracker.PlayerDeathObserved += () => SysopGodLife.OnDeath(RoomTracker.LastDeathTookNothing);
 
         // "Sysop goto": gate `sys goto <name>` (per-BBS power + active-combat block +
         // table + level) and, on a fired jump, re-anchor position when the landing
@@ -5447,7 +5514,7 @@ public sealed class AppServices
         // the attack spell" ordering). Only exercised when a debuff is actually
         // due, so a normal engage is untouched.
         Combat.SetInBetweenEvaluator(CastDirector.Evaluate);
-        Combat.SetBetweenRoundSlotMarker(CastDirector.MarkBetweenRoundSlotUsed);
+        Combat.SetBetweenRoundSlotMarker(CastDirector.NotePreAttackDebuffSent);
         Combat.SetBetweenRoundSlotQuery(() => CastDirector.BetweenRoundSlotUsed);
         // A between-round survival cast stops our auto-attack; let the combat
         // engine resume the weapon attack on the resulting *Combat Off*
@@ -5627,9 +5694,10 @@ public sealed class AppServices
         Combat.SetKeepRunning(Health.KeepRunning);
         // A held character's move can't land, so one still unanswered is no reason
         // to hold a fight back.
-        Combat.SetMoveInFlightProbe(() =>
-            RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending
-            && !Conditions.IsMovementPrevented);
+        Combat.SetMoveInFlightProbe(
+            () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending
+                && !Conditions.IsMovementPrevented,
+            moveSentAt: () => RoomTracker.LastMoveSentAt);
         RoomTracker.MoveBlocked += () => Combat.NoteMoveRefused();
 
         // ShadowRest (Paradigm): a race or class carrying ability code 1103 can rest
@@ -6064,6 +6132,11 @@ public sealed class AppServices
         // A bug report copies the terminal only from the time spent in the game, so a
         // login screen never rides along in one.
         InGameCapture = new Game.InGameCapture(Router, PromptScanner, Wire, Log);
+        // The sent-command trail keeps nothing typed outside the game (a login is)
+        // and nothing that may be a suicide password, typed or sent by @suicide.
+        EngineGate.Trail = SentCommands;
+        SentCommands.Withhold = () =>
+            !InGameCapture.InGame || SuicidePassword.PasswordEntryLikely || Suicide.SendingPassword;
         // Out to the board's menu with the link still up: nothing automatic may be
         // sent (it would be a menu selection), a typed selection isn't a move, the
         // menu's lines aren't unknown game lines, and its prompt isn't a broken
@@ -6090,10 +6163,10 @@ public sealed class AppServices
         // Same in-game gate arms unrecognized-line capture: nothing before the first
         // realm prompt (splash / login menu / connect banner) stages a candidate.
         PromptScanner.PromptObserved += _ => MessageCandidateWatcher.NotifyInGame();
-        // Same in-game gate resumes frozen buff timers after an unexpected drop: the
-        // disconnect handler paused them (kept the remaining), and this shifts each
-        // forward by the offline gap so the recast clock picks up where it left off.
-        // Idempotent — no-op unless a drop paused the timers.
+        // Same in-game gate lifts the cast pass's out-of-the-game latch and lets its
+        // buff timers run on: they stood still from the moment the game was left, and
+        // each expiry is moved on by the time spent away, so every buff has what it
+        // had left. Asked on every prompt; a no-op unless they were paused.
         PromptScanner.PromptObserved += _ => CastDirector.ResumeBuffTimers();
         // A fresh character starts disarmed: zero the counters, then Suspend so
         // accrual waits for that character's first in-game prompt. (Disconnect
@@ -6366,7 +6439,15 @@ public sealed class AppServices
                 timer.Tick += (_, _) => { timer.Stop(); action(); };
                 timer.Start();
             },
-            log: Log);
+            log: Log)
+        {
+            // @deposit-all answers "depositing" only where a deposit can start. The
+            // tracker is built later; a room it can't place or isn't sure of is
+            // unknown, not "no bank" (BankCatalog.StandingInBank).
+            InBank = () => RoomTracker?.State is { } at
+                ? Game.GameData.BankCatalog.StandingInBank(GameData, at.CurrentRoom?.Key, at.Confidence)
+                : null,
+        };
         PromptScanner.PromptObserved += _ => InventoryAction.NotePrompt();
 
         // @get-stash: a leader's stash transfer has us search and carry a load too.
@@ -7232,9 +7313,12 @@ public sealed class AppServices
         AutoModeController.KillSwitchToggled += _ => AutoOpen.Recheck();
         Profile.ProfileLoaded += _ => AutoOpen.Reset();
         RoomTracker.PlayerDeathObserved += AutoOpen.OnPlayerDied;
+        // Not for an arena death: it took nothing, so what the entry read found
+        // gone didn't go into a pile.
         RoomTracker.UnwitnessedDeathRecorded += () =>
         {
-            if (Profile.Current?.DeathHistory?.LastOrDefault() is { } record) AutoOpen.OnUnwitnessedDeath(record.At);
+            if (Profile.Current?.DeathHistory?.LastOrDefault() is { NothingLost: false } record)
+                AutoOpen.OnUnwitnessedDeath(record.At);
         };
         // Settings → Talk auto-greet. Self name resolves through the
         // PartyManager's LocalCharacterName first (set on connect), then
@@ -7458,10 +7542,10 @@ public sealed class AppServices
         // Party-wealth probe + tracker. Unlike level, wealth isn't kept warm —
         // it drifts with loot / spend — so @wealth is asked only when a walk's
         // route crosses a paid exit (Probe, from MovementFilter.WarmForRoute) and
-        // at a toll itself (PartyTollGate, further down). The tracker records each
-        // reply and exposes the party's poorest known wallet, which
-        // MovementFilter reads to keep a following party off a fare a member can't
-        // pay; a toll is PartyTollGate's to judge. The probe forwards replies
+        // at a toll, fare or sailing itself (PartyTollGate, further down), which is
+        // what judges the party there. The tracker records each reply and exposes
+        // the party's poorest known wallet, which tells MovementFilter's warm-ups
+        // a party is led and goes in the bug report. The probe forwards replies
         // straight to the tracker (not the players table). The recordWealth closure
         // reads the PartyWealth property lazily, so the construction order is fine.
         PartyWealthProbe = new Game.Remote.PartyWealthProbe(
@@ -8087,9 +8171,10 @@ public sealed class AppServices
         // timers).
         RoomTracker.PlayerDeathObserved += () => AutoHazardCounterProvisioner.Forget("death");
         RoomTracker.PlayerDeathInferred += () => AutoHazardCounterProvisioner.Forget("death");
-        // A dropped link only stops its clock (MainWindowViewModel's disconnect
-        // handler, beside the cast pass's own pause); the first prompt back in the
-        // game starts it again. No-op unless a drop paused it.
+        // Leaving the game only stops its clock (BuffTimerKeeper, with the cast
+        // pass's timers; MainWindowViewModel's disconnect handler for a drop outside
+        // it); the first prompt back in the game starts it again. No-op unless it
+        // was stopped.
         PromptScanner.PromptObserved += _ => AutoHazardCounterProvisioner.Resume();
         Profile.ProfileLoaded += _ => AutoHazardCounterProvisioner.Forget("profile loaded");
         GameData.ActiveSetChanged += _ => AutoHazardCounterProvisioner.Forget("game data changed");
@@ -8303,6 +8388,13 @@ public sealed class AppServices
         // and reloads both managers, instead of either racing the dir.
         NavFolders = new Game.Map.NavFolderManager(Loops, Lairs, Log);
 
+        // Every client on this set shares the Loops folder: pick up what another one
+        // saved, renamed, moved or deleted. The walk runs off the UI thread; the
+        // watcher hands its result back there, where a local change raises the same
+        // events.
+        NavWatcher = new Game.Map.NavFolderWatcher(Loops, Lairs, NavFolders, Log);
+        Tick.HeartbeatElapsed += NavWatcher.OnHeartbeat;
+
         // Game Data → "Manage Sets…" backend. The reload callback re-pulls what
         // a copy/move changed in the active set: the loop/lair caches alone when
         // only the library moved, otherwise the whole set, the way a re-import
@@ -8398,6 +8490,8 @@ public sealed class AppServices
         // overlay.
         LoopRunner = new Game.Map.LoopRunner(RoomTracker, MovementCoordinator,
             PromptScanner, Log, RoomGraph, Recovery, Bfs, Walker, Movement);
+        Loops.NamesInUse = () => new[] { LoopRunner.CurrentLoop?.Name, LoopRunner.StagedLoop?.Name }
+            .OfType<string>().ToArray();
         // A confusion fumble ("You convulse violently!" / "You fumble in
         // confusion!") can bonk several consecutive moves in a row well inside
         // the loop's bounded recovery budget; EnterRecovery reads this to avoid
@@ -8431,8 +8525,28 @@ public sealed class AppServices
                 timer.Tick += (_, _) => { timer.Stop(); action(); };
                 timer.Start();
             },
-            log: Log);
-        CastDirector.SetLairEntryBuffHold(() => LairDebuffHold.BlockingBuffs);
+            log: Log,
+            buffsDue: priority => CastDirector.BuffsDue(priority),
+            stillWanted: LairWaitStillWanted,
+            healOrCureDue: () => CastDirector.HealOrCureDue(),
+            debuffMana: LairEntryDebuffMana,
+            inCombat: () => PlayerState.InCombat,
+            manaIsFull: () => Health.ManaIsAtGameFull,
+            // Where the combat engine itself judges a fight to be: the room a loop
+            // step in flight is entering, else the one the tracker has us in.
+            fightRoom: () => CombatSuppressionVerdict().Room);
+        CastDirector.SetLairEntryBuffHold(LairDebuffHold);
+        CastDirector.SetManaRegenBuffProbe(IsManaRegenRollSpell);
+        // An engage with no debuff to cast first: the hold has nothing to keep the
+        // round's cast for, and lets the buffs through.
+        Combat.SetNoDebuffOnEngageSink(() => LairDebuffHold.NoteNoDebuffThisFight());
+        // A loop that stops or fails never asks again, so its wait is ended here rather
+        // than left to the hold's own next look.
+        LoopRunner.Event += e =>
+        {
+            if (e.Kind is Game.Map.LoopEventKind.Stopped or Game.Map.LoopEventKind.Failed)
+                LairDebuffHold.Reset("the loop stopped");
+        };
         LoopRunner.SetMoveReadyCheck(() =>
         {
             // A "rest up here" room holds the step until the rest is done.
@@ -8441,7 +8555,8 @@ public sealed class AppServices
             // gear and the `sn`: the buffs are raised for the step, and a wear that
             // held it afterwards would spend their time; a wear also ends a sneak.
             if (!CounterWear.ReadyToEnter(NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()))) return false;
-            if (!LairDebuffHold.ReadyToEnter(LairEntryDebuffModeForNextStep())) return false;
+            Game.Map.LairEntryDebuffMode lairWait = LairEntryDebuffModeForNextStep(out Game.Map.RoomKey? lair);
+            if (!LairDebuffHold.ReadyToEnter(lairWait, lair)) return false;
             PreMoveGearOnce(ref _loopPreMoveGearFor, LoopRunner.PeekNextPlannedDirection());
             if (!HazardLastCallBeforeStep(LoopRunner.PeekNextPlannedDirection())) return false;
             return Stealth.ReadyToMoveSneaking();
@@ -8927,11 +9042,13 @@ public sealed class AppServices
             if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;
         };
 
-        // A party at a toll exit (user, 2026-10-10): every follower's purse is
-        // asked before the leader's engine steps through, whoever is short or
-        // silent is handed the coin when we can spare it, and otherwise the exit
+        // A party at a toll exit, an NPC's paid transport or a sailing (user,
+        // 2026-10-10): every follower's purse is asked before the leader's engine
+        // goes through, whoever is short or silent is handed the coin when the
+        // Cash setting allows it and we can spare it, and otherwise the crossing
         // is closed to the party, so the route goes round or the walk ends saying
-        // why. What we spare leaves our own toll and a trip's reserved fees alone.
+        // why. What we spare leaves our own toll or fare and a trip's reserved
+        // fees alone.
         PartyToll = new Game.Map.PartyTollGate(
             PartyWealth,
             ownPurse: () => Inventory.IsLoaded ? Inventory.Snapshot.Currency.TotalCopperValue : (long?)null,
@@ -8951,14 +9068,19 @@ public sealed class AppServices
             // Read when asked: the comeback manager is built further down.
             WentBackFor = (given, from, to) => PartyComeback.WentBackFor(given, from, to),
             KnownLeftBehind = () => PartyComeback.KnownLeftBehind(),
+            // Posted: the hand-over starts from inside the message pump.
+            Notice = text => Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => WriteTerminalNotice($"[Party toll: {text}]")),
         };
         Movement.PartyTollClosedProbe = exit => PartyToll.Closes(in exit);
         Movement.PartyTollClosedReason = exit => PartyToll.DescribeClosed(in exit);
-        Walker.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
-        LoopRunner.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
+        Walker.SetTollStepCheck((from, dir, exit, later) => PartyToll.BeforeTollStep(from, dir, in exit, later));
+        LoopRunner.SetTollStepCheck((from, dir, exit, later) => PartyToll.BeforeTollStep(from, dir, in exit, later));
+        Walker.SetSailingCheck((passage, later) => PartyToll.BeforeSailing(in passage, later));
         Inventory.CoinsGivenAway += (recipient, copper) => PartyToll.OnCoinsGivenAway(recipient, copper);
         Inventory.GiveRefused += recipient => PartyToll.OnGiveRefused(recipient);
         Inventory.CoinGiveMisaimed += () => PartyToll.OnCoinGiveMisaimed();
+        Inventory.CoinGiveLackedCoins += () => PartyToll.OnCoinGiveLackedCoins();
         // A member paid for at a toll has spent it once the room beyond is confirmed.
         RoomTracker.StateChanged += t =>
         {
@@ -8966,6 +9088,23 @@ public sealed class AppServices
                 PartyToll.NoteRoomChanged(left, now.Key);
         };
         Profile.ProfileLoaded += _ => PartyToll.Reset();
+        // The check's two Cash settings are handed to it here, on the UI thread,
+        // when the profile loads, is saved (a Settings save writes the section and
+        // then saves) or closes: a route search asks the check from its own
+        // thread, where the profile's settings dictionary is not safe to read.
+        // The character's own Cash section, as every engine reads its settings;
+        // the floor by the conversion the deposit and the train funding use.
+        void RefreshPartyTollSettings()
+        {
+            Models.Profile.CashSettings cash = ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+            PartyToll.FundsShortMembers = cash.FundPartyTolls;
+            PartyToll.KeepOnHandCopper =
+                cash.KeepOnHandWealth * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
+        }
+        RefreshPartyTollSettings();
+        Profile.ProfileLoaded += _ => RefreshPartyTollSettings();
+        Profile.ProfileSaving += _ => RefreshPartyTollSettings();
+        Profile.ProfileClosed += RefreshPartyTollSettings;
         // A toll closed to the party stays closed for the trip it was closed on.
         MovementControl.StateChanged += () =>
         {
@@ -9179,7 +9318,13 @@ public sealed class AppServices
             // its reply window; the router hears it back on the UI thread.
             requestBankBalances: () => _ = BankBalance.QueryAsync().ContinueWith(
                 _ => Avalonia.Threading.Dispatcher.UIThread.Post(() => TrainFunding.NoteBankRefreshed()),
-                TaskScheduler.Default));
+                TaskScheduler.Default),
+            // A bank stop the trip makes anyway also draws what a party in tow is
+            // short of the trip's tolls and fares (Cash: fund party members' tolls).
+            partyTollFunding: tolls => PartyToll.FundingNeededFor(tolls),
+            readPartyPurses: then => PartyToll.AfterReadingPurses(then),
+            // A stash room picked as the Bank in Settings → Cash + Items.
+            stashIsTheBank: room => Movement.IsStash(room) && PathItemBankRoom() == room);
         // The full parse that answers that `i`: an incremental pickup / drop patch is
         // exactly the drifting figure the refresh exists to replace. Harmless at any
         // other time, since the router only listens while it is holding for one.
@@ -9649,7 +9794,16 @@ public sealed class AppServices
             // arrival (the "sat idle at the shop, never bought" bug).
             walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
-            log: Log);
+            log: Log,
+            // The withdrawal for the item also draws what a party in tow is short
+            // of the tolls on the rest of the walk; their purses are read first,
+            // and only when there is a toll on it to read them for.
+            partyTollTopUp: PathItemPartyTollTopUp,
+            readPartyPurses: (bank, shop, destination, then) =>
+            {
+                if (PathItemTripTolls(bank, shop, destination) > 0) PartyToll.AfterReadingPurses(then);
+                else then();
+            });
         Needs.NeedPosted += PathItemShopRouter.OnNeedPosted;
         Walker.Event += PathItemShopRouter.OnWalkEvent;
         Inventory.Changed += PathItemShopRouter.OnInventoryChanged;
@@ -10041,7 +10195,14 @@ public sealed class AppServices
                 Game.Health.HangupPenaltyNotice.HpShareTop(ResolveActiveRealm()?.Realm, pvp, inFight),
             stockRealm: () => GameData.ActiveRealm == Game.RealmType.Stock,
             recordDeath: RoomTracker.NoteUnwitnessedDeath,
-            staysOnDeath: EveryItemOfThisNameStaysOnDeath);
+            staysOnDeath: EveryItemOfThisNameStaysOnDeath,
+            // Whether the room the character came back in is where the dead of the
+            // room it hung up in arrive. The list is the Stock map file's, and how
+            // far it goes depends on the game data (HangupArrivalListTrust). The
+            // graph says which rooms the map can't tell an arrival room from.
+            entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.Read(
+                hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion),
+            roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}");
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
         // The lives a `stat` on this connection gave: the count carried over a
@@ -10069,18 +10230,73 @@ public sealed class AppServices
         // life is as spent as in a death that was seen, whenever it is found out;
         // it is asked for under the master switch like everything else this check
         // sends: a `stat` the user types can bring the verdict, and with the switch
-        // off nothing automatic goes out.
+        // off nothing automatic goes out. An arena death spent none.
         RoomTracker.UnwitnessedDeathRecorded += () =>
         {
-            if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath();
+            if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath(RoomTracker.LastDeathTookNothing);
         };
-        // The buff timers were only frozen when the link dropped. Cleared for a
-        // death found at the login only: one found later would wipe the timers of
-        // buffs cast since.
+        // The buff timers were only frozen when the link dropped. All of our own are
+        // cleared for a death found at the login only: one found later would wipe the
+        // timers of buffs cast since.
         RoomTracker.PlayerDeathInferred += () => CastDirector.ClearSelfBuffTracking();
+        // A death found later (the verdict waited on a `stat`, typed or sent once
+        // Auto-All was back on) still wiped the buffs that were on when the game was
+        // left. Those timers were carried over the time away and are known by it, so
+        // exactly they go, the hazard buff's with them, and what was raised since
+        // stays. Raised for a death found at the login as well, where the blanket
+        // clear above follows.
+        RoomTracker.UnwitnessedDeathRecorded += () =>
+        {
+            CastDirector.ClearCarriedSelfTimers("a death while out of the game, found after the login");
+            AutoHazardCounterProvisioner.ForgetCarried("a death while out of the game, found after the login");
+        };
         // The event the other engines take a death of our own from (both wordings).
         RoomTracker.PlayerDeathObserved += HangupItems.OnPlayerDied;
         InGameCapture.InGameChanged += HangupItems.OnInGameChanged;
+
+        // Buff timers stand still while the character is out of the game, and what
+        // they had left is kept in its profile between sessions. Wired here on
+        // purpose:
+        //  - after the hang-up check's own handler, so the profile save made on the
+        //    way out of the game finds that check already out of it and leaves its
+        //    list alone;
+        //  - after the cast pass's and the hazard counter's profile-load resets
+        //    (both subscribed far above), so the restore lands on a clean slate with
+        //    the character's game data already the active set;
+        //  - before the start-up profile is loaded below.
+        BuffTimers = new Game.Spells.BuffTimerKeeper(
+            CastDirector,
+            AutoHazardCounterProvisioner,
+            // A named character only, as for the hang-up list above.
+            profile: () => Profile.CurrentProfileName is null ? null : Profile.Current,
+            profileName: () => Profile.CurrentProfileName,
+            realmKey: () => ResolveActiveRealm() is { } played ? $"{played.Bbs.Name}/{played.Realm.Name}" : null,
+            // One of these runs inside the Disconnected handler, where a save that
+            // threw would skip the reconnect scheduling.
+            saveProfile: () =>
+            {
+                try { Profile.Save(); }
+                catch (Exception ex)
+                {
+                    Log.Warn(Game.Spells.BuffTimerKeeper.LogCategory,
+                        $"Couldn't save the buff timers ({ex.GetType().Name}: {ex.Message}).");
+                }
+            },
+            log: Log);
+        InGameCapture.InGameChanged += inGame =>
+        {
+            if (!inGame) BuffTimers.NoteLeftGame("the link dropped or the game was left");
+        };
+        // Back in on a prompt, and told of every one: the first after time out of the
+        // game runs the timers on, and any of them means a client that had begun to
+        // close did not. Subscribed after InGameCapture (which the hang-up check
+        // hears through), so that check is already in the game when the keeper's
+        // save on the way in runs.
+        PromptScanner.PromptObserved += _ => BuffTimers.NoteBackInGame();
+        Profile.ProfileSaving += BuffTimers.WriteTo;
+        Profile.ProfileClosed += BuffTimers.NoteProfileClosed;
+        Profile.ProfileLoaded += BuffTimers.RestoreFrom;
+
         // The opens owed for what a hang-up took end with the check that would
         // have picked it back up (AutoOpen is built far above).
         HangupItems.CheckFinished += AutoOpen.OnHangupCheckFinished;
@@ -11478,14 +11694,17 @@ public sealed class AppServices
     // How the running loop wants its next step taken with respect to the debuff:
     // the loop's own setting when that step enters a lair we would fight in and the
     // combat profile has a debuff to cast on entry, else Off (nothing to wait for).
-    private Game.Map.LairEntryDebuffMode LairEntryDebuffModeForNextStep()
+    // lair is the room that step enters.
+    private Game.Map.LairEntryDebuffMode LairEntryDebuffModeForNextStep(out Game.Map.RoomKey? lair)
     {
+        lair = null;
         if (LoopRunner.CurrentLoop is not { LairEntryDebuff: not Game.Map.LairEntryDebuffMode.Off } loop)
             return Game.Map.LairEntryDebuffMode.Off;
         if (!IsAutoCombatEnabled) return Game.Map.LairEntryDebuffMode.Off;
         if (NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()) is not { } next
             || RoomGraph.GetRoom(next) is not { HasLair: true })
             return Game.Map.LairEntryDebuffMode.Off;
+        lair = next;
         // A lair the loop is told not to fight in gets no debuff either.
         if (Game.Map.LoopCombatSuppression.IsSuppressed(loop, next, currentIsLair: true))
             return Game.Map.LairEntryDebuffMode.Off;
@@ -11495,6 +11714,36 @@ public sealed class AppServices
         bool debuffConfigured = !string.IsNullOrWhiteSpace(combat.AreaDebuffSpell.SpellName)
                                 || !string.IsNullOrWhiteSpace(combat.SingleTargetDebuffSpell.SpellName);
         return debuffConfigured ? loop.LairEntryDebuff : Game.Map.LairEntryDebuffMode.Off;
+    }
+
+    // Asked by a lair wait that already stands: is the loop still about to enter the
+    // lair it waits outside? No once the loop is gone, its option or Auto-Combat (the
+    // master switch with it) is off, or its next step is known and is no longer into
+    // a lair it fights in. A room the tracker can't place at the moment says nothing
+    // either way: ending the wait on that would restart it, and its counts, at once.
+    private bool LairWaitStillWanted()
+    {
+        if (LoopRunner.CurrentLoop is not { LairEntryDebuff: not Game.Map.LairEntryDebuffMode.Off } loop
+            || !IsAutoCombatEnabled)
+            return false;
+        if (NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()) is not { } next) return true;
+        return RoomGraph.GetRoom(next) is { HasLair: true }
+            && !Game.Map.LoopCombatSuppression.IsSuppressed(loop, next, currentIsLair: true);
+    }
+
+    // The debuff a lair wait is for and the mana it needs (the higher-asking of the
+    // profile's two debuffs, by the cost the combat engine checks a cast against),
+    // against what the character has. Null when there is nothing to wait for: no
+    // debuff that needs mana, or mana not read yet.
+    private (string Spell, int Needed, int Mana, int MaxMana, bool IsSpellCost)? LairEntryDebuffMana()
+    {
+        if (PlayerState.MaxMa <= 0) return null;
+        Models.Profile.CombatSettings combat =
+            ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
+        return Game.Combat.CombatSpellChooser.EntryDebuffReserve(
+                combat, ReadAutoModeFlag(d => d.AutoNuke), PlayerState.MaxMa, Spellbook.ManaCostOf) is { } reserve
+            ? (reserve.Spell, reserve.Mana, PlayerState.Ma, PlayerState.MaxMa, reserve.IsSpellCost)
+            : null;
     }
 
     private Game.Map.RoomKey? NextPlannedRoomForEquip(Game.Map.Direction? dir)
@@ -13707,6 +13956,51 @@ public sealed class AppServices
             : null;
     }
 
+    // The tolls and fares on what is left of a path-item detour at its bank stop:
+    // on to the shop, then on to the walk's destination. Each crosser's own.
+    private long PathItemTripTolls(Game.Map.RoomKey bank, Game.Map.RoomKey shop, Game.Map.RoomKey destination) =>
+        Movement.TollCopperOnRoute(Bfs, bank, shop) + Movement.TollCopperOnRoute(Bfs, shop, destination);
+
+    // The deposit this session has seen at the bank whose room this is. Null when
+    // none has: no `bank` listing named it, or the room is no bank's (a stash room
+    // set as the bank, where a `with` draws nothing).
+    private long? KnownDepositAt(Game.Map.RoomKey bankRoom)
+    {
+        IReadOnlyDictionary<string, long> deposits = BankBalance.LastKnown;
+        foreach (Game.GameData.BankShop bank in Game.GameData.BankCatalog.Enumerate(GameData))
+            if (bank.Key == bankRoom && deposits.TryGetValue(bank.Name, out long copper))
+                return copper;
+        return null;
+    }
+
+    // What a path-item detour's withdrawal adds for a party in tow (user,
+    // 2026-10-10: the leader's cash "from hand or bank if its making a bank
+    // trip", and "yes" to this detour drawing it too). The item takes all that
+    // was carried and drawn for it, so the leader needs what it keeps for the
+    // tolls ahead (PartyTollGate.KeptFor) and what the members are short on top.
+    // Never more than the bank is known to hold beyond the item's own draw, since
+    // a `with` for more than the balance draws nothing; with no balance known,
+    // nothing is added.
+    private (long Copper, string Said) PathItemPartyTollTopUp(
+        Game.Map.RoomKey bank, Game.Map.RoomKey shop, Game.Map.RoomKey destination, long drawing)
+    {
+        long tolls = PathItemTripTolls(bank, shop, destination);
+        if (tolls <= 0) return (0, string.Empty);
+        (long needed, string who) = PartyToll.FundingNeededFor(tolls);
+        if (needed <= 0) return (0, string.Empty);
+
+        string lacking = $"The party in tow is {needed:N0} copper short of the walk's {tolls:N0} copper in tolls and fares each ({who}).";
+        if (KnownDepositAt(bank) is not { } balance)
+            return (0, lacking + " Nothing is drawn for them: no balance is known for the bank here.");
+        long wanted = PartyToll.KeptFor(tolls) + needed;
+        long add = Math.Min(wanted, Math.Max(0, balance - drawing));
+        return (add, lacking + (add >= wanted
+            ? $" Drawing {add:N0} copper more: what you keep for your own crossings and their share."
+            : add > 0
+                ? $" Drawing {add:N0} copper more, {wanted - add:N0} short of what that takes: the balance here is {balance:N0}."
+                : $" Nothing more drawn: the balance here ({balance:N0}) has none left beyond the item's {drawing:N0}."));
+    }
+
     // Per-copy buy cost in copper for the shop router's affordability gate:
     // resolve the shop hosting shopRoom, price itemId's slot with the same
     // MajorMUD markup + charm formula the room-detail readout uses, and round up
@@ -14790,7 +15084,10 @@ public sealed class AppServices
         Combat.ClearBackstabLatch();
         Equipment.DropHeldGear();
         ManaRegen.Reset();
-        CastDirector.ResumeBuffTimers();
+        // The cast pass's out-of-the-game latch, only when we are in it: out of the
+        // game the buff timers are standing still, and letting them run from here
+        // would count the rest of the time away against every buff.
+        if (InGameCapture.InGame) CastDirector.ResumeBuffTimers();
         SuicidePassword.Cancel(reason);
         Health.CancelFlee();
 

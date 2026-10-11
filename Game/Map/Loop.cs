@@ -8,8 +8,8 @@ namespace MudPlay.Game.Map;
 // One saved navigation loop — the user's clicked-room cycle plus optional
 // per-waypoint commands. The Navigation right-rail "Loops" section lists
 // every loop loaded by LoopManager; double-clicking runs it. Loops are
-// per-BBS — the same realm-graph means a loop saved on one character is
-// usable by every character connected to that BBS.
+// per game-data set — a loop saved by one character is usable by every
+// character, on any BBS, whose game data is that set.
 //
 // All loops are circular by definition — they end at the room they started
 // in and repeat until the user stops them or the engine recovery gate's

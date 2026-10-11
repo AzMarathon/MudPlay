@@ -80,6 +80,12 @@ public sealed class MovementCoordinator
     // cast is free, or the loop turns away.
     public const string LairDebuffGate = "LairDebuff";
 
+    // The same wait once the cast is free but mana is under the debuff's own "min
+    // mana per cast": asserted in place of LairDebuffGate, so the Navigation window
+    // says it is mana the loop stands there for. Engine-wait tier. Clears when mana
+    // is back at the minimum, or the loop turns away.
+    public const string LairDebuffManaGate = "LairDebuffMana";
+
     // Asserted for the length of a monster's "... temp" death spell when something
     // is waiting to be picked up there: a boss's Grab All, or coins whose get went
     // out before the death was known. The spell leaves the room unable to act and

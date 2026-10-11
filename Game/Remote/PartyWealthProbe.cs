@@ -13,7 +13,8 @@ namespace MudPlay.Game.Remote;
 // check: a (Toll: N) exit is per-crosser — every member needs N*100 copper-value
 // on hand — so before stepping the party through one the leader asks what every
 // follower holds. What is done about a member who is short or doesn't reply is
-// PartyTollGate's: paid for when we can spare it, the toll not taken otherwise.
+// PartyTollGate's: paid for when the Cash setting allows it and we can spare it,
+// the toll not taken otherwise. An NPC's fare and a sailing are asked about the same way.
 //
 // Same round-trip plumbing as PartyLevelProbe: the query goes out through
 // PartyBroadcaster.Broadcast (one /<given> @wealth per member) and each member's
@@ -78,6 +79,10 @@ public sealed partial class PartyWealthProbe : IDisposable
     private readonly Action<string, long>? _recordWealth;
     private readonly LogService? _log;
     private readonly List<PendingQuery> _pending = new();
+
+    // For a bug report: what is asked and not yet answered, or null.
+    public string? DescribePending() =>
+        _pending.Count == 0 ? null : $"{_pending.Count} wealth query(ies) asked of party members, not yet answered";
     private bool _disposed;
 
     // How long to wait for replies before completing with whatever arrived.

@@ -123,8 +123,8 @@ public sealed class TeleportMazeIndex
         var sigBuckets = new Dictionary<string, List<RoomKey>>();
 
         // The graph lists its pocket entrances in the order a walk over every room
-        // and exit would meet them, so the first mouth into a pocket is still the
-        // one recorded as its entrance.
+        // and exit would meet them, so the first mouth into a pocket is the one
+        // recorded as its entrance.
         foreach ((RoomKey source, Direction dir) in _graph.CastPocketEntrances)
         {
             if (_graph.GetRoom(source) is not { } room) continue;

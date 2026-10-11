@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.172.4**
-> - Switching game data sets is quicker: the room map's doors, teleports, boats and lookups build in a fraction of the time, with far less memory churned
+> **Version 3.176.1**
+> - Switching game data sets is quicker: the room map's doors, teleports, boats and lookups build about three times faster, with far less memory churned
 > - Program log: the room map's load line says how long the build took
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
@@ -70,7 +70,7 @@ Profiles, per-BBS settings, global settings, imported game data, and logs each l
 MudPlay has a **built-in bug reporter** that snapshots the client's state at the moment of the problem — far more useful than describing it from memory. Please use it when filing an issue:
 
 1. **Capture** — click **Bug Report** in the menu bar (or right-click the terminal → **Bug report…**), type a short description, and confirm.
-2. MudPlay writes `<realm>-<timestamp>.md` to your **Desktop**: your settings, character name/stats/inventory, movement-engine state, the program log, and ~750 lines of scrollback — all frozen at click time.
+2. MudPlay writes `<realm>-<timestamp>.md` to your **Desktop**: your settings, character name/stats/inventory, movement-engine state, the program log, and up to 3,000 lines of scrollback — all frozen at click time.
 3. **File the issue** at **https://github.com/Tehshortbus/MudPlay/issues/new**, and **attach the `.md` file**.
 
 A short description still helps me target it faster, and you can review the report before sending. ***It does NOT include your BBS login name, password, or logon-menu steps.***

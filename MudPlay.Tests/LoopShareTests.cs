@@ -78,6 +78,45 @@ public sealed class LoopShareTests : IDisposable
     }
 
     [Fact]
+    public void Codec_RoundTripsThePriorityBuffWait_AsTheNumberThree()
+    {
+        Loop loop = SampleLoop();
+        loop.LairEntryDebuff = LairEntryDebuffMode.WaitForPriorityBuffs;
+
+        IReadOnlyList<string> chunks = LoopShareCodec.Encode(loop);
+
+        Assert.Contains("\"ld\":3", Unpack(string.Concat(chunks)));
+        Assert.Equal(LairEntryDebuffMode.WaitForPriorityBuffs, LoopShareCodec.Decode(chunks).LairEntryDebuff);
+    }
+
+    // A way of waiting this client doesn't know (one a newer client added) arrives as
+    // off: the loop is still received and runs, without the wait. A client from before
+    // the priority-buff wait reads the 3 the same way.
+    [Fact]
+    public void Codec_UnknownLairEntryDebuffValue_DecodesAsOff_AndKeepsTheLoop()
+    {
+        string blob = Pack("{\"n\":\"x\",\"w\":[{\"r\":\"1/1\"},{\"r\":\"1/2\"}],\"ld\":99}");
+
+        Loop decoded = LoopShareCodec.Decode(new[] { blob });
+
+        Assert.Equal(LairEntryDebuffMode.Off, decoded.LairEntryDebuff);
+        Assert.Equal(2, decoded.Waypoints.Count);
+    }
+
+    [Fact]
+    public void Receive_PriorityBuffWaitLoop_IsSavedWithItsMode()
+    {
+        var (receiver, loops, _) = NewReceiver();
+        Loop sent = SampleLoop();
+        sent.LairEntryDebuff = LairEntryDebuffMode.WaitForPriorityBuffs;
+
+        receiver.NoteSendConfirmed("Raijin");
+        foreach (string line in DataLines(sent)) receiver.Ingest(Tele("Raijin", line));
+
+        Assert.Equal(LairEntryDebuffMode.WaitForPriorityBuffs, loops.Get("King's Road")!.LairEntryDebuff);
+    }
+
+    [Fact]
     public void Codec_BigLoop_SplitsIntoChatSizedChunks_AndReassembles()
     {
         Loop big = new("Grand tour", Enumerable.Range(1, 400)
@@ -120,10 +159,23 @@ public sealed class LoopShareTests : IDisposable
         return System.Buffers.Text.Base64Url.EncodeToString(packed.ToArray());
     }
 
+    private static string Unpack(string blob)
+    {
+        using DeflateStream inflate = new(
+            new MemoryStream(System.Buffers.Text.Base64Url.DecodeFromChars(blob)), CompressionMode.Decompress);
+        using StreamReader reader = new(inflate, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+
     // ----- Sender (LoopShareHandler) ---------------------------------
 
+    // Refusals land in the same list, as they do from an engine with the Warn
+    // setting on.
     private static RemoteCommandContext Ctx(string sender, List<string> replies) =>
-        new(sender, "@loop", Array.Empty<string>(), "@loop send", RemoteChannel.Telepath, replies.Add);
+        new(sender, "@loop", Array.Empty<string>(), "@loop send", RemoteChannel.Telepath, replies.Add)
+        {
+            Refusal = why => replies.Add(why ?? "command invalid or not allowed"),
+        };
 
     [Fact]
     public void Send_OffersTheBestMatch_ThenSendsOnYes()
@@ -160,7 +212,7 @@ public sealed class LoopShareTests : IDisposable
         share.OnSend(Ctx("Raijin", replies), "yes");
 
         Assert.Equal("loop send of 'King's Road' cancelled", replies[1]);
-        Assert.Equal("no loop send pending — use @loop send <name> first", replies[2]);
+        Assert.Equal("no loop send pending - use @loop send <name> first", replies[2]);
     }
 
     [Fact]
@@ -175,7 +227,7 @@ public sealed class LoopShareTests : IDisposable
         _now += TimeSpan.FromMinutes(5);
         share.OnSend(Ctx("Raijin", replies), "yes");
 
-        Assert.Equal("no loop send pending — use @loop send <name> first", replies[1]);
+        Assert.Equal("no loop send pending - use @loop send <name> first", replies[1]);
     }
 
     [Fact]
@@ -189,7 +241,7 @@ public sealed class LoopShareTests : IDisposable
         share.OnSend(Ctx("Raijin", replies), "king");
         share.OnSend(Ctx("Suijin", replies), "yes");   // someone else can't confirm Raijin's offer
 
-        Assert.Equal("no loop send pending — use @loop send <name> first", replies[1]);
+        Assert.Equal("no loop send pending - use @loop send <name> first", replies[1]);
     }
 
     [Fact]
@@ -207,7 +259,7 @@ public sealed class LoopShareTests : IDisposable
 
         Assert.Equal("no saved loop named 'dragon'", replies[0]);
         Assert.StartsWith("'sewer' matches 2 loops:", replies[1]);
-        Assert.Equal("not running a loop — @loop send <name> for a saved one", replies[2]);
+        Assert.Equal("not running a loop - @loop send <name> for a saved one", replies[2]);
     }
 
     [Fact]

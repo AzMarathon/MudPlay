@@ -12,7 +12,7 @@ namespace MudPlay.Game.Remote;
 // BroadcastExpReset entry-point specifically. Generic Broadcast doesn't consult
 // the toggle — callers can decide their own gating.
 //
-// Wire format per recipient: t <name> @Reset — the same telepath shape the engine
+// Wire format per recipient: /<name> @Reset — the same telepath shape the engine
 // uses for replies.
 public sealed class PartyBroadcaster
 {

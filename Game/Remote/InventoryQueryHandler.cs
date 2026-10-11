@@ -77,6 +77,9 @@ public sealed class InventoryQueryHandler : IDisposable
     // value the game's Wealth: line reports.
     private void OnWealth(RemoteCommandContext ctx)
     {
+        // Protocol, not a refusal: a leader's PartyWealthProbe reads "wealth
+        // unknown" as this member having answered, so it goes whatever the Warn
+        // setting says.
         if (!_inventory.IsLoaded) { ctx.Reply("wealth unknown - parse inventory first (type i)"); return; }
         CurrencyHoldings c = _inventory.Snapshot.Currency;
         string coins = FormatCoins(c);
@@ -90,7 +93,7 @@ public sealed class InventoryQueryHandler : IDisposable
     // @enc — "Encumbrance cur/max (pct%) - Bracket".
     private void OnEnc(RemoteCommandContext ctx)
     {
-        if (!_inventory.IsLoaded) { ctx.Reply("encumbrance unknown - parse inventory first (type i)"); return; }
+        if (!_inventory.IsLoaded) { ctx.Refuse("encumbrance unknown - parse inventory first (type i)"); return; }
         EncumbranceReading e = _inventory.Snapshot.Encumbrance;
         ctx.Reply($"Encumbrance {e.CurrentWeight}/{e.MaxWeight} ({e.Percentage}%) - {e.Category}");
     }
@@ -103,8 +106,8 @@ public sealed class InventoryQueryHandler : IDisposable
     private void OnHave(RemoteCommandContext ctx)
     {
         string query = string.Join(' ', ctx.Args).Trim();
-        if (query.Length == 0) { ctx.Reply("usage: @have <item name>"); return; }
-        if (!_inventory.IsLoaded) { ctx.Reply("inventory not parsed yet (type i)"); return; }
+        if (query.Length == 0) { ctx.Refuse("usage: @have <item name>"); return; }
+        if (!_inventory.IsLoaded) { ctx.Refuse("inventory not parsed yet (type i)"); return; }
 
         InventorySnapshot snap = _inventory.Snapshot;
         int count = 0;
@@ -132,6 +135,7 @@ public sealed class InventoryQueryHandler : IDisposable
 
         // "yes - Nx '<item>'" — echoes the queried name (kept for the @party
         // inventory probe's per-item reply correlation) with the true carried count.
+        // "no" is an answer the probe reads, not a refusal.
         ctx.Reply(count > 0 ? $"yes - {count}x '{query}'" : $"no - nothing matching '{query}'");
     }
 
@@ -142,7 +146,7 @@ public sealed class InventoryQueryHandler : IDisposable
     // split across multiple replies rather than truncated with a "+N more" tail.
     private void OnInv(RemoteCommandContext ctx)
     {
-        if (!_inventory.IsLoaded) { ctx.Reply("inventory not parsed yet (type i)"); return; }
+        if (!_inventory.IsLoaded) { ctx.Refuse("inventory not parsed yet (type i)"); return; }
 
         InventorySnapshot snap = _inventory.Snapshot;
         IReadOnlyList<string> carried = snap.CarriedItems;

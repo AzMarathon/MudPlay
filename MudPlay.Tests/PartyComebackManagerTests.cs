@@ -220,6 +220,62 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal(WalkState.Idle, h.Walker.State);
     }
 
+    // The follower's client reads this answer to give the follow up at once, so
+    // it is sent with denials silenced too: unanswered, the follower would wait
+    // out its whole window for a leader who had already said no.
+    [Fact]
+    public void Idle_WithDenialsSilenced_StillAnswers_BecauseTheFollowerReadsIt()
+    {
+        using Harness h = NewHarness();
+        h.Engine.WarnOnDenial = false;
+        SeatFollower(h, "Tank");
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback"));
+
+        Assert.Equal("/Tank {I can't I'm idle}\r", h.LastReply);
+    }
+
+    // The answer in braces goes on the channel the request came in on. @forget is
+    // a command, which every client that hears it acts on, so it goes by telepath
+    // to the one member it is for.
+    [Fact]
+    public void Declined_OnGangpath_AnswersOnGangpath_AndForgetsByTelepath()
+    {
+        using Harness h = NewHarness();
+        for (int i = 1; i <= 6; i++) SeatFollower(h, $"Member{i}");
+        h.Router.Dispatch(Line("Straggler started to follow you."));
+        h.Router.Dispatch(Line("Straggler stops following you."));
+        StartLair(h);
+
+        h.Engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Gangpath, "Straggler",
+            "@comeback 1/3", "Straggler gangpaths: @comeback 1/3"));
+
+        Assert.StartsWith("bg {my party is full", h.LastReply);
+        Assert.True(Sent(h, "/Straggler @forget"));
+        Assert.False(Sent(h, "bg @forget"));
+    }
+
+    // "I can't yet" follows the Warn setting like the loop's refusal (user,
+    // 2026-10-10); the member is still kept for the fetch when the trip ends.
+    [Fact]
+    public void TrainTrip_WithDenialsSilenced_SaysNothing()
+    {
+        using Harness h = NewHarness(GatedGraphJson);
+        h.Comeback.SetWireSender(_ => { });
+        h.Engine.WarnOnDenial = false;
+        h.Comeback.TrainTripRunning = () => true;
+        h.Tracker.SetLocated(new RoomKey(1, 4));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        int sentBefore = h.Engine.LastSentForTests.Count;
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
+
+        Assert.Equal(sentBefore, h.Engine.LastSentForTests.Count);
+    }
+
     [Fact]
     public void SecondComeback_WhileBusy_RepliesAlreadyInProgress()
     {

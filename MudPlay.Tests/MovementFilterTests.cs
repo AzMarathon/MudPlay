@@ -706,14 +706,19 @@ public sealed class MovementFilterTests
     }
 
     [Fact]
-    public void PartyWealth_PoorestMemberCannotAfford_Blocks()
+    public void PartyWealth_PoorestKnownPurse_BlocksNeitherAFareNorAToll_ThePartysCheckDoes()
     {
         (_, MovementFilter filter) = NewPair();
         filter.PartyWealthProvider = () => 499;
-        Assert.True(filter.IsExitBlocked(FareExit(500)));  // a fare: one short of 500
-        // A toll isn't judged on the poorest known purse: the party-toll check asks
-        // everyone at the toll and pays for whoever is short (user, 2026-10-10).
+        // Neither is judged on the poorest known purse: the party's check asks
+        // everyone at the crossing and pays for whoever is short when it may (user,
+        // 2026-10-10; a ride is checked as a toll is).
+        Assert.False(filter.IsExitBlocked(FareExit(500)));
         Assert.False(filter.IsExitBlocked(TollExit(5)));
+
+        filter.PartyTollClosedProbe = _ => true;
+        Assert.True(filter.IsExitBlocked(FareExit(500)));
+        Assert.True(filter.IsExitBlocked(TollExit(5)));
     }
 
     [Fact]
@@ -773,13 +778,17 @@ public sealed class MovementFilterTests
     }
 
     [Fact]
-    public void Fare_PoorestPartyMemberCannotAfford_Blocks()
+    public void Fare_ThePartyCantAllPay_Blocks()
     {
         (_, MovementFilter filter) = NewPair();
-        // We can pay, but each member pays their own fare — the poorest can't.
+        // We can pay, but each member pays their own fare, and the party's check
+        // says one can't and isn't paid for.
         filter.WealthProvider = () => 5_000_000;
         filter.PartyWealthProvider = () => 999_999;
+        Assert.False(filter.IsExitBlocked(FareExit(1_000_000)));
+        filter.PartyTollClosedProbe = exit => exit.FareCopper == 1_000_000;
         Assert.True(filter.IsExitBlocked(FareExit(1_000_000)));
+        Assert.Equal(ExitBlockReason.Fare, filter.DescribeExitBlock(FareExit(1_000_000)));
     }
 
     [Fact]
@@ -1683,13 +1692,16 @@ public sealed class MovementFilterTests
     }
 
     [Fact]
-    public void Boat_PartyMinWealthGatesFare()
+    public void Boat_ThePartysCheckGatesFare()
     {
         (_, MovementFilter filter) = NewPair();
-        // Leading a party whose poorest member holds less than the fare — the
-        // captain would leave them at the dock, so the sailing isn't routable.
+        // Leading a party one of whom can't pay the fare and isn't paid for: the
+        // captain would leave them at the dock, so the sailing isn't routable. The
+        // check is asked about the sailing as a fare into its port.
         filter.PartyWealthProvider = () => 1_500_000;
-        filter.WealthProvider = () => 9_000_000;   // leader is rich, but party min governs
+        filter.WealthProvider = () => 9_000_000;   // leader is rich
+        Assert.Equal(ExitBlockReason.None, filter.DescribeBoatBlock(Boat(0, 2_000_000)));
+        filter.PartyTollClosedProbe = exit => exit.FareCopper == 2_000_000;
         Assert.Equal(ExitBlockReason.Fare, filter.DescribeBoatBlock(Boat(0, 2_000_000)));
     }
 

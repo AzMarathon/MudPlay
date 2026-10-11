@@ -33,9 +33,17 @@ public sealed class SysopGodLifeRecovery
     }
 
     // Call when the client detects the character's own death.
-    public void OnDeath()
+    //   tookNothing — it was an arena death (RoomTracker.LastDeathTookNothing).
+    //                 That spends no life on either realm, so the command would
+    //                 add one that was never lost.
+    public void OnDeath(bool tookNothing = false)
     {
         if (!_enabled()) return;
+        if (tookNothing)
+        {
+            _log?.Info("SysopGodLife", "An arena death spends no life: no life is asked back.");
+            return;
+        }
         string? name = _characterName()?.Trim();
         if (string.IsNullOrEmpty(name))
         {

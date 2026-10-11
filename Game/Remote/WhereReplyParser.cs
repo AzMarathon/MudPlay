@@ -5,7 +5,7 @@ namespace MudPlay.Game.Remote;
 
 // Pulls the map/room out of a MudPlay @where reply telepath. The responder builds
 // it via PartyEssentialHandlers.FormatRoom, wrapped with an exits tail:
-// "{Adventurer's Guild, Universal Trainer (map 1, room 1376); exit s: west}".
+// "{Adventurer's Guild, Universal Trainer (map 1, room 1376); exits: west}".
 //
 // The match REQUIRES that MudPlay wrapper — a leading '{' and the parenthesised
 // "(map N, room M)" coordinate — so a human telepath that merely mentions "map 9,

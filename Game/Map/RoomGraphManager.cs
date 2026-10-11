@@ -320,6 +320,33 @@ public sealed class RoomGraphManager
                && keys.Count == 1;
     }
 
+    // Whether the map can take the room display of shown for other: the two bear
+    // the same name, and every exit shown prints on its exits line is an exit of
+    // other. That is the test a position match makes (RoomTracker.MatchesPredicted),
+    // and the exact (Name, ExitMask) search lands on such a room when shown itself
+    // has exits its display leaves out: an exit taken by a text command, or a
+    // hidden one, is in the graph and on no exits line. So a character standing in
+    // shown can be confirmed in other. False for a room with itself, and for a
+    // room the graph doesn't have.
+    public bool CouldBeTakenFor(RoomKey shown, RoomKey other)
+    {
+        if (shown == other) return false;
+        if (!_rooms.TryGetValue(shown, out Room? room) || !_rooms.TryGetValue(other, out Room? twin)) return false;
+        if (!string.Equals(room.Name, twin.Name, StringComparison.OrdinalIgnoreCase)) return false;
+        uint printed = 0;
+        foreach ((Direction direction, RoomExit exit) in room.Exits)
+            if (PrintsOnExitsLine(exit)) printed |= 1u << (int)direction;
+        return (printed & twin.ExitMask) == printed;
+    }
+
+    // A hidden exit that a plain step crosses (`Hidden/Passable`) carries no hint
+    // of its own, the walker having nothing special to do for it; only the cell's
+    // own text says it is hidden.
+    private static bool PrintsOnExitsLine(RoomExit exit) =>
+        exit.Hint != RoomExitHint.Text
+        && !MpFile.MegaMudHash.IsHidden(exit.Hint)
+        && exit.RawHint?.StartsWith("Hidden", StringComparison.OrdinalIgnoreCase) != true;
+
     // Rebuild the graph from setName's Rooms.json. Pass null to clear. Safe to
     // call repeatedly; idempotent on no-op transitions (same set still fires
     // GraphReloaded because the caller may have re-imported the underlying
@@ -439,7 +466,7 @@ public sealed class RoomGraphManager
             // text / teleport exits that happen to collide with an action key
             // are left as-is.
             bool leverDoor = exit.Hint is RoomExitHint.Door or RoomExitHint.KeyLocked;
-            if (exit.Hint != RoomExitHint.MultiActionHidden && !leverDoor) continue;
+            if (!exit.AcceptsActions) continue;
 
             // With no explicit "Needs N Actions" modifier, actions that share a
             // StepNumber are redundant alternatives (e.g. two guardroom levers that
