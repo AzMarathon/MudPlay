@@ -2148,4 +2148,132 @@ public sealed class CombatSpellChooserTests
             sut.MarkCast(d, "a rat");
         }
     }
+
+    // ----- The entry debuff's mana reserve (what a lair wait holds for) -----
+
+    // From outside the room its head count isn't known: at or over the AoE debuff's
+    // minimum enemies the room gets that one, under it the single-target one. The
+    // higher of the two needs is what is given, so mana covers whichever the room
+    // turns out to get.
+    [Fact]
+    public void EntryDebuffReserve_WithBothDebuffsCastable_IsTheHigherOfTheirNeeds()
+    {
+        CombatSettings settings = new()
+        {
+            SpellManaThresholdMode = ThresholdMode.Absolute,
+            AreaDebuffSpell = Slot("blind", minMana: 60),
+            SingleTargetDebuffSpell = Slot("curse", minMana: 25),
+        };
+
+        Assert.Equal(("blind", 60, false), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200));
+
+        settings.SingleTargetDebuffSpell = Slot("curse", minMana: 80);
+        Assert.Equal(("curse", 80, false), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200));
+        // Auto-Nuke off: the AoE debuff isn't cast, the single-target one is.
+        settings.SingleTargetDebuffSpell = Slot("curse", minMana: 25);
+        Assert.Equal(("curse", 25, false), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: false, maxMa: 200));
+
+        settings.SingleTargetDebuffSpell = Slot(null);
+        Assert.Equal(("blind", 60, false), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200));
+    }
+
+    // One debuff with no minimum set is not "nothing to wait for": the other's minimum
+    // still holds, whichever of the two slots it is on.
+    [Fact]
+    public void EntryDebuffReserve_OneDebuffWithNoMinimum_TheOthersStillHolds()
+    {
+        CombatSettings areaUnset = Absolute(Slot("blind"), Slot("curse", minMana: 25));
+        Assert.Equal(("curse", 25, false), CombatSpellChooser.EntryDebuffReserve(areaUnset, allowNukes: true, maxMa: 200));
+
+        CombatSettings singleUnset = Absolute(Slot("blind", minMana: 60), Slot("curse"));
+        Assert.Equal(("blind", 60, false), CombatSpellChooser.EntryDebuffReserve(singleUnset, allowNukes: true, maxMa: 200));
+    }
+
+    // A minimum of 0 is no reserve, not a free cast: the debuff needs what its spell
+    // costs, and the higher cost of the two is given.
+    [Fact]
+    public void EntryDebuffReserve_MinimumsAtZero_IsTheHigherSpellCost()
+    {
+        Dictionary<string, int> costs = new() { ["blind"] = 18, ["curse"] = 7 };
+        int? Cost(string spell) => costs.TryGetValue(spell, out int cost) ? cost : null;
+        CombatSettings settings = Absolute(Slot("blind"), Slot("curse"));
+
+        Assert.Equal(("blind", 18, true), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200, Cost));
+
+        costs["curse"] = 30;
+        Assert.Equal(("curse", 30, true), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200, Cost));
+
+        // A minimum under the spell's cost: the cost is what the cast needs.
+        settings.SingleTargetDebuffSpell = Slot("curse", minMana: 10);
+        Assert.Equal(("curse", 30, true), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200, Cost));
+        // And one over it: the minimum is.
+        settings.SingleTargetDebuffSpell = Slot("curse", minMana: 45);
+        Assert.Equal(("curse", 45, false), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200, Cost));
+    }
+
+    [Fact]
+    public void EntryDebuffReserve_NoDebuffThatNeedsMana_IsNothingToWaitFor()
+    {
+        Assert.Null(CombatSpellChooser.EntryDebuffReserve(new CombatSettings(), allowNukes: true, maxMa: 200));
+
+        // No minimum, and a cost that isn't known: nothing is known to be needed.
+        CombatSettings noMinimum = new() { AreaDebuffSpell = Slot("blind"), SingleTargetDebuffSpell = Slot("curse") };
+        Assert.Null(CombatSpellChooser.EntryDebuffReserve(noMinimum, allowNukes: true, maxMa: 200));
+        Assert.Null(CombatSpellChooser.EntryDebuffReserve(noMinimum, allowNukes: true, maxMa: 200, _ => null));
+
+        // Only an AoE debuff, and Auto-Nuke is off: no debuff goes out on entry.
+        CombatSettings aoeOnly = new() { AreaDebuffSpell = Slot("blind", minMana: 60) };
+        Assert.Null(CombatSpellChooser.EntryDebuffReserve(aoeOnly, allowNukes: false, maxMa: 200));
+    }
+
+    // A debuff that is never cast sets nothing: its casts per room at 0 (the slot's
+    // off switch), or a need over maximum mana while the other's is within it.
+    [Fact]
+    public void EntryDebuffReserve_ADebuffThatIsNeverCast_DoesNotCount()
+    {
+        CombatSettings switchedOff = Absolute(Slot("blind", maxCasts: 0, minMana: 90), Slot("curse", minMana: 25));
+        Assert.Equal(("curse", 25, false), CombatSpellChooser.EntryDebuffReserve(switchedOff, allowNukes: true, maxMa: 200));
+
+        CombatSettings outOfReach = Absolute(Slot("blind", minMana: 300), Slot("curse", minMana: 25));
+        Assert.Equal(("curse", 25, false), CombatSpellChooser.EntryDebuffReserve(outOfReach, allowNukes: true, maxMa: 200));
+    }
+
+    // Every need over maximum mana: the highest is still given, for the wait to see it
+    // can never be met and not stand for it.
+    [Fact]
+    public void EntryDebuffReserve_EveryNeedAboveMaximumMana_GivesTheHighest_ForTheWaitToTurnDown()
+    {
+        CombatSettings settings = Absolute(Slot("blind", minMana: 300), Slot("curse", minMana: 250));
+
+        (string Spell, int Mana, bool IsSpellCost)? reserve =
+            CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200);
+
+        Assert.Equal(("blind", 300, false), reserve);
+        Assert.True(reserve!.Value.Mana > 200);
+    }
+
+    private static CombatSettings Absolute(CombatSpellSlot areaDebuff, CombatSpellSlot singleDebuff) => new()
+    {
+        SpellManaThresholdMode = ThresholdMode.Absolute,
+        AreaDebuffSpell = areaDebuff,
+        SingleTargetDebuffSpell = singleDebuff,
+    };
+
+    // The amount is the one the cast-time gate compares against: a percentage is the
+    // rounded share of maximum mana the settings label shows.
+    [Theory]
+    [InlineData(ThresholdMode.Absolute, 82, 66, 82)]
+    [InlineData(ThresholdMode.Percentage, 82, 66, 54)]
+    [InlineData(ThresholdMode.Percentage, 150, 66, 99)]
+    public void EntryDebuffReserve_ReadsTheMinimumPerTheManaMode(ThresholdMode mode, int minMana, int maxMa, int expected)
+    {
+        CombatSettings settings = new() { SpellManaThresholdMode = mode, SingleTargetDebuffSpell = Slot("curse", minMana: minMana) };
+
+        (string Spell, int Mana, bool IsSpellCost)? reserve =
+            CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa);
+
+        Assert.Equal(expected, reserve!.Value.Mana);
+        Assert.True(CombatSpellChooser.ManaMeetsReserve(minMana, expected, maxMa, mode));
+        Assert.False(CombatSpellChooser.ManaMeetsReserve(minMana, expected - 1, maxMa, mode));
+    }
 }

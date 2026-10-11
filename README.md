@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.173.0**
+> **Version 3.174.0**
 > - Bug report: your login name, login password and suicide password are masked everywhere in it, and in a crash report
 > - Bug report: the `*` the game echoes for a suicide password is masked too, so its length isn't shown
 > - Bug report: racist and other offensive words on chat lines are masked, in the report only

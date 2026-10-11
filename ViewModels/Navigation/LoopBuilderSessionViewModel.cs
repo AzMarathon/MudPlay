@@ -42,7 +42,8 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     [ObservableProperty] private bool _onlyAttackInLairRooms;
 
     // Entire Loop Settings: wait one step short of a lair until the debuff can be
-    // cast, and how (Game.Map.LairEntryDebuffModes: 0 wait for spells, 1 block them).
+    // cast, and how (Game.Map.LairEntryDebuffModes: 0 wait for spells, 1 block them,
+    // 2 wait for the priority buffs only).
     [ObservableProperty] private bool _waitToDebuffBeforeLairs;
     [ObservableProperty] private int _lairDebuffWaitChoice;
 
