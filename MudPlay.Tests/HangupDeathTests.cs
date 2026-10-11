@@ -384,15 +384,33 @@ public sealed class HangupDeathTests
         Assert.Contains("nor its HP (200, not above the 200 it left with) says which this was", why);
     }
 
-    // A pack found stripped of what a death takes is a sign of its own: with it a
-    // learned room records a death as a listed one does. And with both counts
-    // read the lives decide, whatever the room rests on.
+    // A pack found stripped of what a death takes is a sign of its own, but not
+    // by itself with a learned room: a penalty that drops items strips a survivor
+    // too, and where the learned room is also the room's leave-the-game room the
+    // survivor stands in it. HP read at the first prompt tells them apart (a
+    // survivor's says no), so it has to have been read. With both counts read
+    // the lives decide, whatever the room rests on.
     [Fact]
-    public void ALearnedRoom_WithAStrippedPack_OrALifeLost_RecordsADeath()
+    public void ALearnedRoom_WithAStrippedPack_NeedsHpReadAtTheFirstPrompt()
     {
-        Assert.Equal(HangupDeathVerdict.Died,
-            HangupDeath.Judge(80, 200, 50, null, livesBefore: null, livesNow: 6, worn: false, loginLines: true,
-                takenStillHeld: false, entryRoom: true, "a room", entryRoomLearned: true).Verdict);
+        (HangupDeathVerdict Verdict, string Why) Stripped(int? hpAtEntry, bool entryRoomLearned = true) =>
+            HangupDeath.Judge(80, 200, 50, hpAtEntry, livesBefore: null, livesNow: 6, worn: false, loginLines: true,
+                takenStillHeld: false, entryRoom: true, "a room", entryRoomLearned: entryRoomLearned);
+
+        (HangupDeathVerdict verdict, string why) = Stripped(hpAtEntry: null);
+        Assert.Equal(HangupDeathVerdict.Unsure, verdict);
+        Assert.Contains("nor its HP (not read at the first prompt) says which this was", why);
+        // Read, and not saying no: recorded.
+        Assert.Equal(HangupDeathVerdict.Died, Stripped(hpAtEntry: 200).Verdict);
+        // A survivor's HP says no on its own.
+        Assert.Equal(HangupDeathVerdict.Alive, Stripped(hpAtEntry: 60).Verdict);
+        // A listed room with the same marks is recorded without the HP.
+        Assert.Equal(HangupDeathVerdict.Died, Stripped(hpAtEntry: null, entryRoomLearned: false).Verdict);
+    }
+
+    [Fact]
+    public void ALearnedRoom_WithALifeLost_RecordsADeath()
+    {
         Assert.Equal(HangupDeathVerdict.Died,
             HangupDeath.Judge(80, 200, 50, null, livesBefore: 7, livesNow: 6, worn: false, loginLines: true,
                 takenStillHeld: null, entryRoom: true, "a room", ownedNothing: true, entryRoomLearned: true).Verdict);

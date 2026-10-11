@@ -119,14 +119,15 @@ public static class HangupDeath
     //                    (HangupEntryRoomReading.Learned), not on a list. That is
     //                    where a death in the room ends, which can also be where a
     //                    hang-up leaves a character that lived
-    //                    (HangupDeathArrivalRooms.ArrivalsOn). So where the room's
-    //                    yes alone would record a death (no count from before,
-    //                    and nothing owned for a death to take), it needs HP at
-    //                    the first prompt to be above what the character left
-    //                    with as well: the penalty only takes HP, and a death
-    //                    sets it to its maximum. A pack found stripped is a sign
-    //                    of its own, and needs no more from a learned room than
-    //                    from a listed one.
+    //                    (HangupDeathArrivalRooms.ArrivalsOn). So with no count
+    //                    from before, a learned yes records a death only when HP
+    //                    was read at the first prompt: a survivor's is at or
+    //                    under what it left with, the penalty only taking HP, and
+    //                    a death sets it to its maximum. Where the room's yes
+    //                    alone would decide (nothing owned for a death to take),
+    //                    that HP has to be above what the character left with.
+    //                    With a pack found stripped, HP read and not saying no
+    //                    is enough.
     public static (HangupDeathVerdict Verdict, string Why) Judge(
         int? hpAtDrop, int? maxHpAtDrop, int? hpShareTop, int? hpAtEntry,
         int? livesBefore, int? livesNow, bool? worn, bool? loginLines, bool? takenStillHeld,
@@ -158,8 +159,14 @@ public static class HangupDeath
             // takes can't be stripped, and the room is enough for it. The record
             // needs the lives it has now, so a `stat` is still waited for.
             bool packAgrees = (takenStillHeld == false || ownedNothing) && worn != true && loginLines != false;
+            // A learned room's yes can be a survivor's. HP read at the first prompt
+            // is what rules that out (a survivor's is at or under what it left
+            // with, which says no above), so unread it leaves the question open
+            // whatever the pack shows: a penalty that drops items strips a
+            // survivor too. Where the room alone decides, HP has to have risen.
             bool roomAlone = takenStillHeld != false;
-            if (entryRoom == true && packAgrees && roomAlone && entryRoomLearned && !(hpAtEntry is { } back && back > dropHp))
+            bool hpBearsItOut = hpAtEntry is { } back && (back > dropHp || !roomAlone);
+            if (entryRoom == true && packAgrees && entryRoomLearned && !hpBearsItOut)
                 return (HangupDeathVerdict.Unsure,
                     $"it came back in {entryRoomText ?? "the room its dead arrive in"}, which is only known from a death seen "
                     + "to end there. A character that hangs up and lives can come back in that room too, and neither its "
