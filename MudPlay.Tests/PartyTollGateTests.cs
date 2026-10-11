@@ -70,8 +70,22 @@ public sealed class PartyTollGateTests : IDisposable
         public bool MasterOff { get; set; }
         public Func<string, RoomKey, RoomKey, bool> WentBack { get; set; } = (_, _, _) => false;
 
-        public long? Purse => Gold is { } gold ? gold * 100L : null;
-        public CurrencyHoldings? Holdings => Gold is { } gold ? new CurrencyHoldings(0, 0, gold, 0, 0, gold * 100L) : null;
+        // A purse of mixed coins, in place of Gold.
+        public CurrencyHoldings? Coins { get; set; }
+        // Who is listed among the players in the room: everyone, unless a test says.
+        public Func<string, bool> InRoom { get; set; } = _ => true;
+
+        public long? Purse => Coins?.TotalCopperValue ?? (Gold is { } gold ? gold * 100L : null);
+        public CurrencyHoldings? Holdings =>
+            Coins ?? (Gold is { } gold ? new CurrencyHoldings(0, 0, gold, 0, 0, gold * 100L) : null);
+
+        // A telepath from a member that is not an answer to anything.
+        public void Chats(string name, string words)
+        {
+            string line = $"{name} telepaths: {words}";
+            Router.Dispatch(new LineExtractor.EmittedLine(
+                line, new CellAttributes[line.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false));
+        }
 
         public void Follower(string name) => Party.Members.Add(new PartyMember { Name = name });
 
@@ -191,11 +205,12 @@ public sealed class PartyTollGateTests : IDisposable
         runner.SetUnpaidCrossingHandler(rig.Notices.Add);
         runner.Event += rig.LoopEvents.Add;
 
-        tracker.StateChanged += t =>
+        wealth.RoundSettled += () =>
         {
-            if (t.PreviousRoom is { } left && t.NewRoom is { } now && left.Key != now.Key)
-                gate.NoteRoomChanged(left, now.Key);
+            walker.ReplanIfATollAheadIsClosed();
+            runner.ReplanIfATollAheadIsClosed();
         };
+        gate.SeenInRoom = name => rig.InRoom(name);
         return rig;
     }
 
@@ -614,6 +629,266 @@ public sealed class PartyTollGateTests : IDisposable
         Assert.Equal(new[] { "e" }, off.Moves);
         Assert.Empty(off.Asked);
         Assert.Empty(off.Gives);
+    }
+
+    // ----- exact change only -------------------------------------------------------
+
+    private static CurrencyHoldings Purse(int silver = 0, int gold = 0, int platinum = 0, int runic = 0) =>
+        new(0, silver, gold, platinum, runic, silver * 10L + gold * 100L + platinum * 10_000L + runic * 1_000_000L);
+
+    // Bob is 3 gold short. A purse that can't make 3 gold hands over nothing: the
+    // next coin up would be a platinum piece or a runic for a gap of a few gold.
+    [Fact]
+    public void AHandOverIsMadeOnlyInExactChange_NeverRoundedUpToABiggerCoin()
+    {
+        foreach (CurrencyHoldings purse in new[] { Purse(platinum: 5), Purse(runic: 3), Purse(gold: 2, platinum: 1) })
+        {
+            Rig rig = PartyAtTheToll();
+            rig.Coins = purse;
+            Assert.True(rig.Walker.WalkTo(WayRoundRoad));
+            rig.Says("Bob", 200);
+            rig.Says("Cal", 500);
+
+            Assert.Empty(rig.Gives);
+            Assert.Equal(new[] { "n" }, rig.Moves);
+            Assert.Contains("can't make 3 gold from the coins carried", rig.Decided);
+        }
+    }
+
+    [Fact]
+    public void ExactChange_IsCountedOutOfAMixedPurse_LargestCoinsFirst()
+    {
+        Rig goldBesideARunic = PartyAtTheToll();
+        goldBesideARunic.Coins = Purse(gold: 7, runic: 1);
+        Assert.True(goldBesideARunic.Walker.WalkTo(WayRoundRoad));
+        goldBesideARunic.Says("Bob", 200);
+        goldBesideARunic.Says("Cal", 500);
+        Assert.Equal(new[] { "give 3 gold to Bob" }, goldBesideARunic.Gives);
+
+        Rig twoCoins = PartyAtTheToll();
+        twoCoins.Coins = Purse(silver: 10, gold: 2, platinum: 1);
+        Assert.True(twoCoins.Walker.WalkTo(WayRoundRoad));
+        twoCoins.Says("Bob", 200);
+        twoCoins.Says("Cal", 500);
+        Assert.Equal(new[] { "give 2 gold to Bob", "give 10 silver to Bob" }, twoCoins.Gives);
+        twoCoins.Gate.OnCoinsGivenAway("Bob", 200);
+        Assert.Empty(twoCoins.Moves);                             // one line of two
+        twoCoins.Gate.OnCoinsGivenAway("Bob", 100);
+        Assert.Equal(new[] { "e" }, twoCoins.Moves);
+    }
+
+    [Fact]
+    public void CountOut_GivesTheNeedExactly_OrComesBackShort()
+    {
+        Assert.Equal(300, PartyTollGate.CountOut(Purse(silver: 30), need: 300, spare: 300).Copper);
+        Assert.Equal(0, PartyTollGate.CountOut(Purse(platinum: 5), need: 300, spare: 40_000).Copper);
+        Assert.Equal(200, PartyTollGate.CountOut(Purse(gold: 2, runic: 1), need: 300, spare: 900_000).Copper);
+        // Never more than can be spared, whatever is carried.
+        Assert.Equal(100, PartyTollGate.CountOut(Purse(gold: 9), need: 300, spare: 100).Copper);
+    }
+
+    // ----- a toll right behind a toll ------------------------------------------------
+
+    //   1/1 West ─E (Toll: 5)─ 1/2 Middle ─E (Toll: 5)─ 1/3 East
+    private const string TwoTollsInARowJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "West",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2 (Toll: 5)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Middle",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/3 (Toll: 5)", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "East",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // A member holding exactly one toll: what they said before the first toll is
+    // not what they hold at the second, though the second step is sent from inside
+    // the arrival at the first.
+    [Fact]
+    public void TheTollAfterATollIsAskedAfresh_NotTakenOnWhatWasHeldBeforeTheFirst()
+    {
+        Rig rig = PartyAtTheToll(TwoTollsInARowJson, new RoomKey(1, 1));
+        rig.Gold = 30;
+        Assert.True(rig.Walker.WalkTo(new RoomKey(1, 3)));
+        rig.Says("Bob", 500);
+        rig.Says("Cal", 5_000);
+        Assert.Equal(new[] { "e" }, rig.Moves);
+
+        rig.Tracker.NoteRoomObserved(Obs("Middle", Direction.E, Direction.W));
+
+        Assert.Equal(4, rig.Asked.Count);                         // asked again at the second toll
+        Assert.Equal(new[] { "e" }, rig.Moves);                   // and held for the answers
+        rig.Says("Bob", 0);
+        rig.Says("Cal", 4_500);
+        Assert.Equal(new[] { "give 5 gold to Bob" }, rig.Gives);
+        rig.Confirms("Bob", 5);
+        Assert.Equal(new[] { "e", "e" }, rig.Moves);
+    }
+
+    [Fact]
+    public void ALoopThroughOneTollBothWays_AsksAgainBeforeTheWayBack()
+    {
+        Rig rig = PartyAtTheToll(TollPurseDoubtTests.TollTheOnlyWayJson, OnlyBailey);
+        Assert.True(rig.Runner.Start(new Loop("toll", new[] { OnlyBailey, OnlyRoad })));
+        rig.Says("Bob", 500);
+        rig.Says("Cal", 500);
+        Assert.Equal(new[] { "e" }, rig.Moves);
+
+        rig.Tracker.NoteRoomObserved(Obs("Road", Direction.W));
+
+        Assert.Equal(4, rig.Asked.Count);
+        Assert.Equal(new[] { "e" }, rig.Moves);                   // `w` waits for what they hold now
+    }
+
+    // ----- a confirmation that comes late ----------------------------------------------
+
+    // The window passed and the member counted as unable; then the game's line came.
+    // The coin did go: it counts toward what they hold and what they were paid, and
+    // they are not handed the toll a second time on the next visit.
+    [Fact]
+    public void AConfirmationAfterTheWindow_IsStillCredited_AndTheMemberIsNotPaidAgain()
+    {
+        Rig rig = PartyAtTheToll();
+        rig.Gold = 40;
+        Assert.True(rig.Walker.WalkTo(WayRoundRoad));
+        rig.Says("Bob", 500);
+        rig.Windows[^1]();                                        // Cal's client never answers @wealth
+        Assert.Equal(new[] { "give 5 gold to Cal" }, rig.Gives);
+        rig.GiveWindow!();                                        // 4 s with no line
+        Assert.Equal(new[] { "n" }, rig.Moves);
+
+        rig.Confirms("Cal", 5);                                   // the line, late
+
+        Assert.Equal(500, rig.Wealth.LastReading("Cal"));
+        rig.Walker.Stop("test");
+        rig.Gate.NoteTripEnded();
+        rig.Now += TimeSpan.FromSeconds(31);
+        rig.Tracker.SetLocated(WayRoundBailey);
+        rig.Moves.Clear();
+        Assert.True(rig.Walker.WalkTo(WayRoundRoad));
+        rig.Says("Bob", 500);
+        rig.Windows[^1]();                                        // silent again
+
+        Assert.Equal(new[] { "give 5 gold to Cal" }, rig.Gives);  // the one hand-over
+        Assert.Equal(new[] { "e" }, rig.Moves);                   // she holds what she was handed
+    }
+
+    // ----- closed for the trip, and turned from early -----------------------------------
+
+    [Fact]
+    public void AWalkWhoseRouteCrossesNoToll_AsksNobody()
+    {
+        Rig rig = PartyAtTheToll(TwoTollsInARowJson, new RoomKey(1, 3));
+        Assert.True(rig.Walker.WalkTo(new RoomKey(1, 1)));        // westward both exits are free
+        Assert.Equal(new[] { "w" }, rig.Moves);
+        Assert.Empty(rig.Asked);
+    }
+
+    // The answers asked for at the start land while the first step is on its way:
+    // the walk ends when that step lands, a room short of the toll, and nobody is
+    // asked a second time.
+    [Fact]
+    public void AnswersThatCloseATollAhead_EndTheWalkBeforeItsGate_WhenThereIsNoWayRound()
+    {
+        Rig rig = PartyAtTheToll(TollPurseDoubtTests.TollTheOnlyWayJson, OnlyGates);
+        rig.Gold = 6;
+        Assert.True(rig.Walker.WalkTo(OnlyRoad));                 // Gates → Bailey (free) → Road (toll)
+        Assert.Equal(new[] { "e" }, rig.Moves);                   // the free step is on its way
+        rig.Says("Bob", 0);
+        rig.Says("Cal", 500);                                     // the answers: Bob can't be covered
+        Assert.Equal(WalkState.Walking, rig.Walker.State);        // not torn up mid-step
+
+        rig.Tracker.NoteRoomObserved(Obs("Bailey", Direction.E, Direction.W));
+
+        Assert.Equal(new[] { "e" }, rig.Moves);                   // no step toward the toll
+        Assert.Equal(BothAsked, rig.Asked);                       // and no second ask at it
+        Assert.Equal(WalkState.Idle, rig.Walker.State);
+        Assert.Contains("the party can't all pay: Bob holds 0 copper, 5 gold short", Assert.Single(rig.Notices));
+        Assert.Equal(OnlyRoad, rig.Walker.LastUnpaidFailure);     // "not now" to a detour, not "never"
+    }
+
+    [Fact]
+    public void AClosedToll_StaysClosedForTheTrip_AndOpensWhenTheTripEndsOrTheFactsChange()
+    {
+        RoomExit toll = new(WayRoundRoad, RoomExitHint.Toll, RawHint: null, TollGold: 5);
+
+        Rig rig = PartyAtTheToll();
+        rig.Gold = 6;
+        Assert.True(rig.Walker.WalkTo(WayRoundRoad));
+        rig.Says("Bob", 0);
+        rig.Says("Cal", 500);
+        Assert.Equal(new[] { "n" }, rig.Moves);
+
+        rig.Now += TimeSpan.FromSeconds(120);                     // the answers are long stale
+        Assert.True(rig.Filter.IsExitBlocked(in toll));           // still closed: the trip is still on
+        Assert.Equal(BothAsked, rig.Asked);
+
+        rig.Gold = 20;                                            // we can now cover what Bob lacked
+        Assert.False(rig.Filter.IsExitBlocked(in toll));
+
+        Rig ended = PartyAtTheToll();
+        ended.Gold = 6;
+        Assert.True(ended.Walker.WalkTo(WayRoundRoad));
+        ended.Says("Bob", 0);
+        ended.Says("Cal", 500);
+        ended.Now += TimeSpan.FromSeconds(120);
+        Assert.True(ended.Filter.IsExitBlocked(in toll));
+        ended.Gate.NoteTripEnded();
+        Assert.False(ended.Filter.IsExitBlocked(in toll));
+
+        Rig joined = PartyAtTheToll();
+        joined.Gold = 6;
+        Assert.True(joined.Walker.WalkTo(WayRoundRoad));
+        joined.Says("Bob", 0);
+        joined.Says("Cal", 500);
+        joined.Now += TimeSpan.FromSeconds(120);
+        joined.Follower("Dee");                                   // the party is not the one it was closed for
+        Assert.False(joined.Filter.IsExitBlocked(in toll));
+    }
+
+    // ----- talk is not an answer ---------------------------------------------------------
+
+    [Fact]
+    public void ATelepathThatMentionsCoins_IsNotReadAsThatMembersPurse()
+    {
+        Rig rig = PartyAtTheToll();
+        Assert.True(rig.Walker.WalkTo(WayRoundRoad));
+
+        rig.Chats("Bob", "can you spare 2 gold for the toll");
+
+        Assert.Null(rig.Wealth.LastReading("Bob"));
+        rig.Says("Cal", 500);
+        Assert.Empty(rig.Gives);                                  // Bob has not answered yet
+        Assert.Empty(rig.Moves);
+        rig.Says("Bob", 500);
+        Assert.Equal(new[] { "e" }, rig.Moves);
+    }
+
+    // ----- a member who isn't here ---------------------------------------------------------
+
+    // Listed in the party and somewhere else: the give gets no line, and she isn't
+    // among the players in the room. She isn't following through this toll, so the
+    // party isn't held to it on her account.
+    [Fact]
+    public void AMemberNotInTheRoom_WhoseHandOverGetsNoLine_IsLeftOutOfTheCount()
+    {
+        Rig rig = PartyAtTheToll();
+        rig.InRoom = name => name != "Cal";
+        Assert.True(rig.Walker.WalkTo(WayRoundRoad));
+        rig.Says("Bob", 500);
+        rig.Windows[^1]();
+        Assert.Equal(new[] { "give 5 gold to Cal" }, rig.Gives);
+
+        rig.GiveWindow!();
+
+        Assert.Equal(new[] { "e" }, rig.Moves);                   // through, with those who are here
+        Assert.Equal(new[] { "give 5 gold to Cal" }, rig.Gives);
     }
 
     // A fare keeps the rule it had: refused on a purse someone reported, and a

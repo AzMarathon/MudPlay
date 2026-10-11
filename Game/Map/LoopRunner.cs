@@ -1846,7 +1846,6 @@ public sealed class LoopRunner : IRecoverableEngine
         // A room command that only works in an empty room waits for the room to
         // clear instead of going out to be refused.
         if (HeldForEmptyRoom(step, alreadySent: false)) return;
-        if (step is MoveLoopStep tollMove && TurnedAsideAtToll(tollMove)) return;
         // Auto-sneak wants a sneak in place before we step; it holds the coordinator
         // meanwhile and the resume re-drives this step.
         if (step is MoveLoopStep && _moveReadyCheck?.Invoke() == false) return;
@@ -1854,6 +1853,20 @@ public sealed class LoopRunner : IRecoverableEngine
         // its gate in one go re-enters this method through the resume, which sends the
         // step. Sending it again here put the move on the wire twice.
         if (_loop is null || State != LoopState.Running || _stepInFlight) return;
+        // The purses were read while a step was in flight or the loop was held.
+        if (_tollCheckOwed)
+        {
+            _tollCheckOwed = false;
+            if (ClosedTollAhead())
+            {
+                _log?.Info("LoopRunner", "a toll on the circuit isn't taken with the party; planning the loop again without it");
+                PlanAgainRoundAToll(_loop);
+                return;
+            }
+        }
+        // Last, with nothing left that could keep the step back: a toll the party is
+        // let through is taken as paid from that moment (PartyTollGate.BeforeTollStep).
+        if (step is MoveLoopStep tollMove && TurnedAsideAtToll(tollMove)) return;
         switch (step)
         {
             case MoveLoopStep move:    SendMove(move);    break;
@@ -1893,15 +1906,63 @@ public sealed class LoopRunner : IRecoverableEngine
         // The plan made for it came straight back to the same toll: it would for ever.
         if (_turningAtToll)
         {
-            FailStep($"stopped at {toll}: the party can't all pay it");
+            string stopped = $"stopped at {toll}: the party can't all pay it";
+            _unpaidCrossingHandler?.Invoke($"loop '{loop.Name}': {stopped}");
+            FailStep(stopped);
             return true;
         }
         _log?.Info("LoopRunner",
             $"step {_index + 1}/{_expandedSteps.Count}: {toll} isn't taken with the party; planning the loop again without it");
+        PlanAgainRoundAToll(loop);
+        return true;
+    }
+
+    private void PlanAgainRoundAToll(Loop loop)
+    {
         _turningAtToll = true;
         try { StartInternal(loop, isRecovery: true); }
         finally { _turningAtToll = false; }
-        return true;
+    }
+
+    // The party's purses, asked for as the loop was planned, have been read
+    // (PartyWealthTracker.RoundSettled). If the circuit goes through a toll that is
+    // now closed to the party, the loop is planned again from here rather than
+    // walked up to the gate: at once between steps, and when the step in flight has
+    // landed otherwise (AutoWalkManager.ReplanIfATollAheadIsClosed is the twin).
+    public void ReplanIfATollAheadIsClosed()
+    {
+        if (_loop is not { } loop) return;
+        if (State != LoopState.Running || _stepInFlight)
+        {
+            _tollCheckOwed = State is LoopState.Running or LoopState.Paused;
+            return;
+        }
+        _tollCheckOwed = false;
+        if (!ClosedTollAhead()) return;
+        _log?.Info("LoopRunner", "a toll on the circuit isn't taken with the party; planning the loop again without it");
+        PlanAgainRoundAToll(loop);
+    }
+
+    private bool _tollCheckOwed;
+
+    // One lap on from the step due, read off the exits: whether it steps through a
+    // toll the filter now turns the party away from.
+    private bool ClosedTollAhead()
+    {
+        if (_filter is null || _graph is null || _expandedSteps.Count == 0
+            || _tracker.State.CurrentRoom is not { } here)
+            return false;
+        RoomKey at = here.Key;
+        for (int n = 0; n < _expandedSteps.Count; n++)
+        {
+            if (_expandedSteps[(_index + n) % _expandedSteps.Count] is not MoveLoopStep move) continue;
+            if (_graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)) return false;
+            if (exit.Hint == RoomExitHint.Toll && exit.TollGold > 0
+                && _filter.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.Toll))
+                return true;
+            at = exit.Target;
+        }
+        return false;
     }
 
     private void SendMove(MoveLoopStep step)

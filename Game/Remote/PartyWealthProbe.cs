@@ -115,6 +115,11 @@ public sealed partial class PartyWealthProbe : IDisposable
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex ForeignCoinPhrase();
 
+    // The shape of another client's answer: its "Wealth:" label, with or without
+    // the brace that client wraps a reply in.
+    [GeneratedRegex(@"^\s*\{?\s*Wealth\s*:", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex ForeignWealthReply();
+
     public PartyWealthProbe(
         PartyBroadcaster broadcaster, ChatRouter chat, PartyState party,
         Action<string, long>? recordWealth = null, LogService? log = null)
@@ -268,9 +273,16 @@ public sealed partial class PartyWealthProbe : IDisposable
             return true;
         }
 
-        // Foreign-client fallback: sum every "<count> <denomination>" coin phrase.
-        // Only treat as a reading when at least one phrase parses, so a non-coin
-        // line ("wealth unknown", chatter) still falls through to false.
+        // Foreign-client fallback: sum every "<count> <denomination>" coin phrase,
+        // in a message shaped like the one such answer on record ("{Wealth: …}").
+        // A telepath that merely mentions coins ("can you spare 2 gold for the
+        // toll") is talk, not an answer: read as a purse, it drew a hand-over.
+        // Only treat as a reading when at least one phrase parses.
+        if (!ForeignWealthReply().IsMatch(message))
+        {
+            copper = 0;
+            return false;
+        }
         long total = 0;
         bool any = false;
         foreach (Match cm in ForeignCoinPhrase().Matches(message))

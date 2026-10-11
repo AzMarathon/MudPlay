@@ -1363,8 +1363,13 @@ public sealed partial class InventoryManager : IDisposable
         // The noun's first word is the metal CurrencyHoldings.ToCopper keys on.
         if (givenTo is not null)
         {
+            // A coin noun whose first word is none of the four metals is the fifth
+            // coin under the name its board gave it, and is worth what a runic is:
+            // the rule the bare-word wording already goes by.
             int space = noun.IndexOf(' ');
-            CoinsGivenAway?.Invoke(givenTo, CurrencyHoldings.ToCopper(space > 0 ? noun[..space] : noun, count));
+            string metal = (space > 0 ? noun[..space] : noun).ToLowerInvariant();
+            if (metal is not ("copper" or "silver" or "gold" or "platinum")) metal = "runic";
+            CoinsGivenAway?.Invoke(givenTo, CurrencyHoldings.ToCopper(metal, count));
         }
         return true;
     }

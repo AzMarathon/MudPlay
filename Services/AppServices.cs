@@ -8950,6 +8950,7 @@ public sealed class AppServices
             MasterSwitchOff = MasterSwitchOff("Party polls"),
             // Read when asked: the comeback manager is built further down.
             WentBackFor = (given, from, to) => PartyComeback.WentBackFor(given, from, to),
+            SeenInRoom = IsGivenNameInRoom,
         };
         Movement.PartyTollClosedProbe = exit => PartyToll.Closes(in exit);
         Movement.PartyTollClosedReason = exit => PartyToll.DescribeClosed(in exit);
@@ -8957,12 +8958,19 @@ public sealed class AppServices
         LoopRunner.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
         Inventory.CoinsGivenAway += (recipient, copper) => PartyToll.OnCoinsGivenAway(recipient, copper);
         Inventory.GiveRefused += recipient => PartyToll.OnGiveRefused(recipient);
-        RoomTracker.StateChanged += t =>
-        {
-            if (t.PreviousRoom is { } left && t.NewRoom is { } now && left.Key != now.Key)
-                PartyToll.NoteRoomChanged(left, now.Key);
-        };
         Profile.ProfileLoaded += _ => PartyToll.Reset();
+        // A toll closed to the party stays closed for the trip it was closed on.
+        MovementControl.StateChanged += () =>
+        {
+            if (MovementControl.IsIdle) PartyToll.NoteTripEnded();
+        };
+        // The purses asked for as a route was planned are in: a toll further on
+        // that the party can't be taken through is turned from now, not at its gate.
+        PartyWealth.RoundSettled += () =>
+        {
+            Walker.ReplanIfATollAheadIsClosed();
+            LoopRunner.ReplanIfATollAheadIsClosed();
+        };
 
         // A held or knocked-down character can't walk and isn't dragged by a leader,
         // so a move that lands proves a latched hold is stale (its wear-off line was

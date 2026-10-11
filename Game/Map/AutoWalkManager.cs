@@ -2172,10 +2172,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // that window writes a failed walk's reason, and it may be shut.
     private void FailUnpaid(RoomKey destination, string reason)
     {
+        LastUnpaidFailure = destination;
         _log?.Info("Walker", $"walk to {destination}: {reason}");
         _unpaidCrossingHandler?.Invoke(destination, reason);
         Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
     }
+
+    // Where the walk just asked for was going, when it had no route for want of a
+    // toll or fare; null once another walk is asked for. A purse can pay tomorrow
+    // what it can't today, so a caller that writes a place off when a walk to it
+    // can't start reads this first, and doesn't.
+    public RoomKey? LastUnpaidFailure { get; private set; }
 
     // Told when a walk has no route for want of a toll or fare, with the walk's
     // destination and the reason it failed with.
@@ -2365,7 +2372,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // clear instead of going out to be refused.
         if (HeldForEmptyRoom(_path[_index], alreadySent: false)) return;
         if (HaltsBeforeBossRoom(_path[_index])) return;
-        if (TurnedAsideAtToll(_path[_index])) return;
 
         WalkStep step = _path[_index];
         // Auto-sneak wants a sneak in place before we step; it holds the coordinator
@@ -2375,6 +2381,20 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // its gate in one go re-enters this method through the resume, which sends the
         // step. Sending it again here put the move on the wire twice.
         if (_stepInFlight || State != WalkState.Walking) return;
+        // The purses were read while a step was in flight or the walk was held.
+        if (_tollCheckOwed)
+        {
+            _tollCheckOwed = false;
+            if (_destination is { } onward && ClosedTollAhead())
+            {
+                _log?.Info("Walker", $"step {_index + 1}: a toll further on isn't taken with the party; re-planning without it");
+                ReplanInPlace(onward);
+                return;
+            }
+        }
+        // Last, with nothing left that could keep the step back: a toll the party is
+        // let through is taken as paid from that moment (PartyTollGate.BeforeTollStep).
+        if (TurnedAsideAtToll(step)) return;
         switch (step)
         {
             case MoveStep move:
@@ -2424,7 +2444,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // same toll would otherwise turn here for ever.
         if (_replanCount >= MaxReplansPerWalk)
         {
-            Raise(new WalkEvent(WalkEventKind.Failed, $"stopped at {toll}: the party can't all pay it", _destination));
+            FailUnpaid(dest, $"stopped at {toll}: the party can't all pay it");
             Reset();
             return true;
         }
@@ -2432,6 +2452,46 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _log?.Info("Walker", $"step {_index + 1}: {toll} isn't taken with the party; re-planning without it");
         ReplanInPlace(dest);
         return true;
+    }
+
+    // The party's purses, asked for as this walk was planned, have been read
+    // (PartyWealthTracker.RoundSettled). If what is left of the route goes through a
+    // toll that is now closed to the party, the walk plans again from where it
+    // stands instead of walking up to the gate to turn there: at once between
+    // steps, and when the step in flight has landed otherwise.
+    public void ReplanIfATollAheadIsClosed()
+    {
+        if (_path is null || _destination is not { } dest) return;
+        if (State != WalkState.Walking || _stepInFlight)
+        {
+            _tollCheckOwed = true;
+            return;
+        }
+        _tollCheckOwed = false;
+        if (!ClosedTollAhead()) return;
+        _log?.Info("Walker", $"step {_index + 1}: a toll further on isn't taken with the party; re-planning without it");
+        ReplanInPlace(dest);
+    }
+
+    private bool _tollCheckOwed;
+
+    private bool ClosedTollAhead()
+    {
+        if (_path is not { } path || Filter is not { } filter || _tracker.State.CurrentRoom is not { } here) return false;
+        RoomKey at = here.Key;
+        for (int i = _index; i < path.Count; i++)
+        {
+            if (path[i] is CommandStep) continue;
+            // A sailing or a jump lands somewhere the exits don't say: nothing past it is read.
+            if (path[i] is not MoveStep move
+                || _graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit))
+                return false;
+            if (exit.Hint == RoomExitHint.Toll && exit.TollGold > 0
+                && filter.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.Toll))
+                return true;
+            at = exit.Target;
+        }
+        return false;
     }
 
     // True when the step's exit demands an item we lack AND an acquisition for it
@@ -4436,6 +4496,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private void Reset()
     {
+        _tollCheckOwed = false;
+        LastUnpaidFailure = null;
         _fleeHolding = false;
         _recovery?.Detach();
         // Drain downstream FSMs that were running on our behalf — if a

@@ -258,7 +258,13 @@ public sealed class PartyWealthTracker
         Action[] waiting = _onSettled.ToArray();
         _onSettled.Clear();
         foreach (Action settled in waiting) settled();
+        RoundSettled?.Invoke();
     }
+
+    // An @wealth round is over: every answer that was coming is in, and whoever
+    // gave none is noted silent. For whoever planned a route on the purses as
+    // they stood before it.
+    public event Action? RoundSettled;
 
     private static string GivenName(string name)
     {

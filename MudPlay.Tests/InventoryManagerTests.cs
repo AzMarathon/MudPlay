@@ -1750,6 +1750,9 @@ public sealed class InventoryManagerTests
     [InlineData("You gave Bob 0 gold", "Bob", 0)]
     [InlineData("You give 3 gold crowns to Bob", "Bob", 300)]
     [InlineData("You give 1 platinum piece to Bob", "Bob", 10_000)]
+    // A fifth coin under a board's own name is worth what a runic is.
+    [InlineData("You give 2 mithril coins to Bob", "Bob", 2_000_000)]
+    [InlineData("You gave Bob 2 mithril", "Bob", 2_000_000)]
     public void GiveAway_Coins_SaysWhoGotThemAndWhatTheyWereWorth(string line, string recipient, long copper)
     {
         using Harness h = new();
