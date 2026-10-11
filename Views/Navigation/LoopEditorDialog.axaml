@@ -51,15 +51,16 @@
                                IsChecked="{Binding Favorite, Mode=TwoWay}"
                                FontSize="11"/>
                     <!-- Entire Loop Setting: mirror of the nav rail's Entire Loop
-                         Settings flyout. Loop-wide, not per-room. -->
+                         Settings flyout. Loop-wide, not per-room, and saved for the
+                         loaded character, not in the loop file. -->
                     <CheckBox  Content="⚔  Only attack in lair rooms (walk through the rest)"
                                IsChecked="{Binding OnlyAttackInLairRooms, Mode=TwoWay}"
                                FontSize="11"
-                               ToolTip.Tip="When on, the loop only engages hostiles in game-data lair rooms; every other room is walked through as if auto-combat were off. A per-room 'do not attack' still skips even a lair room, and a triggered rest still clears any room so it can rest."/>
+                               ToolTip.Tip="When on, the loop only engages hostiles in game-data lair rooms; every other room is walked through as if auto-combat were off. A per-room 'do not attack' still skips even a lair room, and a triggered rest still clears any room so it can rest. This character's own setting for the loop: your other characters keep theirs."/>
                     <CheckBox Content="Wait to enter lairs until I can debuff"
                               FontSize="11"
                               IsChecked="{Binding WaitToDebuffBeforeLairs, Mode=TwoWay}"
-                              ToolTip.Tip="Stand one step short of each lair until the round's between-round cast is free, so your combat profile's debuff goes out as you walk in instead of behind the attack. It also waits there while mana is under that debuff's Min mana per cast. Does nothing unless the profile has a debuff set, and skips lairs marked 'do not attack'."/>
+                              ToolTip.Tip="Stand one step short of each lair until the round's between-round cast is free, so your combat profile's debuff goes out as you walk in instead of behind the attack. It also waits there while mana is under that debuff's Min mana per cast. Does nothing unless the profile has a debuff set, and skips lairs marked 'do not attack'. This character's own setting for the loop: your other characters keep theirs."/>
                     <ComboBox Margin="22,0,0,0" FontSize="11" MinWidth="160"
                               IsVisible="{Binding WaitToDebuffBeforeLairs}"
                               SelectedIndex="{Binding LairDebuffWaitChoice, Mode=TwoWay}">

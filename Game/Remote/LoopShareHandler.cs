@@ -71,7 +71,11 @@ public sealed class LoopShareHandler
         }
 
         _offers[ctx.Sender] = (loop, _now() + OfferLifetime);
-        _log?.Info("LoopShare", $"{ctx.Sender} asked for loop '{loop.Name}' — awaiting their yes/no.");
+        // The short code is the loop's signature as this character runs it, the one
+        // the asker's client shows when the loop arrives. In the log only: the offer
+        // and the lines that follow keep the wording older clients read.
+        _log?.Info("LoopShare",
+            $"{ctx.Sender} asked for loop '{loop.Name}' [{LoopSignature.ShortOf(loop)}] — awaiting their yes/no.");
         ctx.Reply($"preparing to send: {loop.Name}, yes to confirm, no to deny");
     }
 
@@ -92,7 +96,7 @@ public sealed class LoopShareHandler
             lines.Add($"{DataToken} {id} {i + 1}/{chunks.Count} {chunks[i]}");
 
         _log?.Info("LoopShare",
-            $"sending loop '{loop.Name}' ({loop.Waypoints.Count} rooms) to {ctx.Sender} in {lines.Count} line(s).");
+            $"sending loop '{loop.Name}' [{LoopSignature.ShortOf(loop)}] ({loop.Waypoints.Count} rooms) to {ctx.Sender} in {lines.Count} line(s).");
         ctx.Reply($"sending loop '{loop.Name}' ({loop.Waypoints.Count} rooms, {lines.Count} line{(lines.Count == 1 ? "" : "s")})");
         _sender.Enqueue(ctx.Reply, lines);
     }

@@ -86,9 +86,93 @@ public sealed class LoopManager
         RefreshFavorites();
     }
 
-    private void Stamp(Loop loop)
+    private void StampFavorite(Loop loop)
     {
         if (_isFavorite is { } isFavorite) loop.Favorite = isFavorite(loop.Name);
+    }
+
+    // How a loop is run (only attack in lair rooms, the wait to enter lairs) is the
+    // loaded character's to keep as well, by loop name. The store that keeps it plugs
+    // in here: own gives the character's pair for a loop, or null when it has set
+    // neither; keep takes a changed pair, with the pair the loop file holds (what the
+    // character ran the loop with until now); forget drops a deleted loop's.
+    private Func<string, LoopOwnSettings?>? _ownSettings;
+    private Action<string, LoopOwnSettings, LoopOwnSettings>? _keepSettings;
+    private Action<string>? _forgetSettings;
+
+    // The loaded character's settings for a loop changed: the loop's name, or null
+    // when every loop's may have (another character loaded). For whoever holds a loop
+    // apart from the catalogue, a run above all.
+    public event Action<string?>? SettingsChanged;
+
+    public void AttachSettings(Func<string, LoopOwnSettings?> own,
+        Action<string, LoopOwnSettings, LoopOwnSettings> keep, Action<string> forget)
+    {
+        _ownSettings = own ?? throw new ArgumentNullException(nameof(own));
+        _keepSettings = keep ?? throw new ArgumentNullException(nameof(keep));
+        _forgetSettings = forget ?? throw new ArgumentNullException(nameof(forget));
+        RefreshSettings();
+    }
+
+    // Re-read every loop's settings for the character now loaded.
+    public void RefreshSettings()
+    {
+        foreach (Loop loop in _loops.Values) StampSettings(loop);
+        SettingsChanged?.Invoke(null);
+    }
+
+    // Set the loaded character's settings for the loop named name, live. The loop
+    // file is not written: it is every character's, and these are this one's.
+    public void SetSettings(string name, LoopOwnSettings settings)
+    {
+        if (!_loops.TryGetValue(name, out Loop? held)) return;
+        held.OwnSettings = settings;
+        KeepSettingsOf(held);
+    }
+
+    // Give loops held apart from the catalogue (the one a run started from, its
+    // snapshot of the last run) the character's settings for the saved loop of their
+    // name: only those named name, or all of them when it is null. A loop that was
+    // never saved has none kept and is left as it is.
+    public void CopySettingsTo(IEnumerable<Loop> copies, string? name)
+    {
+        ArgumentNullException.ThrowIfNull(copies);
+        foreach (Loop copy in copies)
+        {
+            if (name is not null && !string.Equals(copy.Name, name, StringComparison.OrdinalIgnoreCase)) continue;
+            if (_loops.TryGetValue(copy.Name, out Loop? held) && !ReferenceEquals(held, copy))
+                copy.OwnSettings = held.OwnSettings;
+        }
+    }
+
+    // The character's own pair where it has set one, else the pair the file holds.
+    private void StampSettings(Loop loop) =>
+        loop.OwnSettings = _ownSettings?.Invoke(loop.Name) ?? loop.SharedSettings;
+
+    // loop carries the settings the character wants for it. Kept for the character
+    // only when they are not the ones it runs the loop with already, so a character
+    // that never changes a loop's settings goes on reading the file's.
+    private void KeepSettingsOf(Loop loop)
+    {
+        LoopOwnSettings running = _ownSettings?.Invoke(loop.Name) ?? loop.SharedSettings;
+        if (loop.OwnSettings == running) return;
+        _keepSettings?.Invoke(loop.Name, loop.OwnSettings, loop.SharedSettings);
+        SettingsChanged?.Invoke(loop.Name);
+    }
+
+    // What the file being written holds of the two settings is what the file of that
+    // name held: a save can hand in a fresh object (a built loop, a received one, a
+    // running loop's snapshot) that never read the file.
+    private void KeepSharedSettings(Loop loop)
+    {
+        if (_loops.TryGetValue(loop.Name, out Loop? held) && !ReferenceEquals(held, loop))
+            loop.SharedSettings = held.SharedSettings;
+    }
+
+    private void Stamp(Loop loop)
+    {
+        StampFavorite(loop);
+        StampSettings(loop);
     }
 
     public LoopManager(BfsMapper bfs, RoomGraphManager graph, LogService? log = null)
@@ -306,6 +390,7 @@ public sealed class LoopManager
             Loop? loop = JsonStore.Load<Loop>(path);
             if (loop is null || string.IsNullOrWhiteSpace(loop.Name)) return null;
             UpgradeIfNeeded(loop);
+            StampSettings(loop);
             return loop;
         }
         catch
@@ -315,6 +400,11 @@ public sealed class LoopManager
     }
 
     // Persist loop under GameDataSetLoopsFolder. No-op when no set is active.
+    //
+    // The write is split. The loop itself (rooms, commands, delays, the per-room
+    // marks, notes) goes to the file, which every character on the game data reads.
+    // Its OnlyAttackInLairRooms and LairEntryDebuff are what the loaded character
+    // wants for it and are kept for that character alone.
     public void Save(Loop loop)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -333,6 +423,7 @@ public sealed class LoopManager
         string dir = NavFolders.ToDirectory(root, loop.Folder);
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, SafeFileName(loop.Name));
+        KeepSharedSettings(loop);
         // Written (atomically) before the stale copy goes: another client reading the
         // folder between the two sees the loop twice, never not at all.
         JsonStore.Save(path, loop);
@@ -340,8 +431,9 @@ public sealed class LoopManager
         DeleteFileForName(root, loop.Name, keep: path);
         // A save may hand in a fresh object (a running loop's snapshot); it is
         // still the same favourite it was.
-        Stamp(loop);
+        StampFavorite(loop);
         _loops[loop.Name] = loop;
+        KeepSettingsOf(loop);
         LoopsChanged?.Invoke();
     }
 
@@ -362,13 +454,17 @@ public sealed class LoopManager
 
         string? dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
+        string root = string.IsNullOrWhiteSpace(_setName) ? "" : AppPaths.GameDataSetLoopsFolder(_setName);
+        bool catalogued = root.Length > 0 && IsUnder(path, root);
+        if (catalogued) KeepSharedSettings(loop);
         JsonStore.Save(path, loop);
 
-        string root = string.IsNullOrWhiteSpace(_setName) ? "" : AppPaths.GameDataSetLoopsFolder(_setName);
-        if (root.Length > 0 && IsUnder(path, root))
+        if (catalogued)
         {
             _stamp.NoteWritten(path);
             loop.Folder = NavFolders.RelativeFolder(root, path);
+            // What is saved this way sets neither of the character's two settings
+            // (the estimator has none), so a loop it replaces keeps them.
             Stamp(loop);
             _loops[loop.Name] = loop;
             _log?.Info("Loops", $"Saved loop '{loop.Name}' to {path}.");
@@ -411,8 +507,10 @@ public sealed class LoopManager
 
         _stamp.NoteHeldChanged();
         DeleteFileForName(AppPaths.GameDataSetLoopsFolder(_setName), name);
-        // A deleted loop's name is free for another; that one isn't a favourite.
+        // A deleted loop's name is free for another; that one isn't a favourite,
+        // and isn't run the way this one was.
         _setFavorite?.Invoke(name, false);
+        _forgetSettings?.Invoke(name);
         LoopsChanged?.Invoke();
         return true;
     }

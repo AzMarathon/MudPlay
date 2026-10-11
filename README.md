@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.176.1**
-> - Switching game data sets is quicker: the room map's doors, teleports, boats and lookups build about three times faster, with far less memory churned
-> - Program log: the room map's load line says how long the build took
+> **Version 3.176.3**
+> - A loop's Only attack in lair rooms and Wait to enter lairs settings are now each character's own; a loop a character hasn't set them for runs with what the loop file holds
+> - Ticking either no longer rewrites the shared loop file
+> - `@loop send`: a loop whose name you already have is rejected when it is the same loop, and saved as `<name> 2` when it differs; your own loop and its settings are never changed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
