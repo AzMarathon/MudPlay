@@ -193,7 +193,26 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void OnSimulatorCharacterLoaded(Models.Profile.CharacterProfile _) => Simulator.CharacterChanged();
     private void OnSimulatorCharacterClosed() => Simulator.CharacterChanged();
     private void OnSimulatorCharacterRenamed(string? oldBbs, string? oldName) => Simulator.CharacterRenamed();
-    private void OnSimulatorGameDataChanged(string? set) => Simulator.GameDataChanged(set);
+    private void OnSimulatorGameDataChanged(string? set)
+    {
+        Simulator.GameDataChanged(set);
+        DropLoopBuiltOnOtherGameData(set);
+    }
+
+    // Nothing made of one game data's room numbers is saved under another: a loop
+    // being built when the set changes is dropped, with a notice, since it was the
+    // user's work. The loop catalogue is on the new set by now (the app's own
+    // handler ran first), which is what the session measures itself against.
+    private void DropLoopBuiltOnOtherGameData(string? set)
+    {
+        if (LoopBuilder is not { } builder || !builder.DropIfBuiltOnOtherGameData(out string? builtOn)) return;
+        _services.Log.Info("Navigation",
+            $"loop being built dropped: its rooms were game data '{builtOn}''s and '{set ?? "(none)"}' is active now");
+        // Posted: a set change can come from inside the line pump, where writing to
+        // the terminal re-enters it.
+        Dispatcher.UIThread.Post(() => _services.WriteTerminalNotice(
+            $"[Loop being built was dropped: its rooms belonged to game data '{builtOn}', and '{set ?? "(none)"}' is active now]"));
+    }
 
     // The Simulator window's state: it plays saved loops or the estimator's sketch,
     // so it lives here with the Navigation window rather than with the estimator.

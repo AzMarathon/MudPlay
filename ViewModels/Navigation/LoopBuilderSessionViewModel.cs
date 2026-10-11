@@ -19,6 +19,9 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     private readonly RoomGraphManager _graph;
     private readonly IRoomFilter? _filter;
     private readonly List<RoomKey> _clicks = new();
+    // The game-data set the rooms clicked are of: the one the loop catalogue was on
+    // when they were clicked, which is where Save writes.
+    private string? _builtOn;
 
     public LoopBuilderSessionViewModel(LoopManager loops, RoomGraphManager graph, IRoomFilter? filter = null)
     {
@@ -27,7 +30,27 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         _loops = loops;
         _graph = graph;
         _filter = filter;
+        _builtOn = loops.SetName;
         ProposedName = $"Loop {DateTime.Now:HH-mm}";
+    }
+
+    // The active game data changed. Under another set the rooms clicked are other
+    // rooms, and Save would write them into that set's Loops folder, a file every
+    // character and every running client on that set reads: the build is dropped,
+    // and the session carries on, empty, on the new set. The same set read in again
+    // keeps it. True when a build with rooms in it was dropped; builtOn is then the
+    // set it belonged to.
+    public bool DropIfBuiltOnOtherGameData(out string? builtOn)
+    {
+        builtOn = _builtOn;
+        if (string.Equals(_builtOn, _loops.SetName, StringComparison.OrdinalIgnoreCase)) return false;
+        bool had = HasClicks;
+        _builtOn = _loops.SetName;
+        Clear();
+        // The name and notes were the dropped loop's.
+        Notes = string.Empty;
+        ProposedName = $"Loop {DateTime.Now:HH-mm}";
+        return had;
     }
 
     // Click sequence rendered in the bottom strip — read-only externally.

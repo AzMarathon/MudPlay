@@ -415,4 +415,52 @@ public sealed class LoopBuilderSessionTests : IDisposable
         Assert.NotEmpty(s.UnreachableSummary);
         Assert.False(s.CanSave);
     }
+
+    // ----- A build belongs to the game data its rooms were clicked on ----------
+
+    [Fact]
+    public void ASwitchToOtherGameData_DropsTheLoopBeingBuilt_SoItsRoomsAreNotSavedThere()
+    {
+        (LoopBuilderSessionViewModel s, LoopManager loops) = NewSession();
+        s.ProposedName = "Built on the first";
+        s.Notes = "the first set's";
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 3));
+        Assert.True(s.CanSave);
+        Assert.False(s.DropIfBuiltOnOtherGameData(out _));
+
+        string other = _bbs + "-other";
+        loops.LoadAll(other);
+
+        Assert.True(s.DropIfBuiltOnOtherGameData(out string? builtOn));
+        Assert.Equal(_bbs, builtOn);
+        Assert.False(s.HasClicks);
+        Assert.False(s.CanSave);
+        Assert.Null(s.PreviewedRoomKeys);
+        Assert.Null(s.Save());
+        Assert.Empty(loops.Loops);
+        Assert.False(Directory.Exists(AppPaths.GameDataSetLoopsFolder(other)));
+        Assert.Equal(string.Empty, s.Notes);
+        Assert.NotEqual("Built on the first", s.ProposedName);
+
+        // The session carries on, on the set now active: its rooms are that set's.
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 2));
+        Assert.False(s.DropIfBuiltOnOtherGameData(out _));
+        Assert.True(s.CanSave);
+    }
+
+    [Fact]
+    public void TheSameGameDataReadInAgain_KeepsTheLoopBeingBuilt()
+    {
+        (LoopBuilderSessionViewModel s, LoopManager loops) = NewSession();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 3));
+
+        loops.LoadAll(_bbs);
+
+        Assert.False(s.DropIfBuiltOnOtherGameData(out _));
+        Assert.True(s.HasClicks);
+        Assert.True(s.CanSave);
+    }
 }
