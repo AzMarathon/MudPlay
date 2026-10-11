@@ -52,6 +52,85 @@ public sealed class BugReportHoldsAndWaitsTests
         Assert.True(readings[1].SinceWatchStart);
     }
 
+    // A snapshot shows a change the watch hasn't sampled yet, but remembers
+    // nothing: only Sample writes, so a snapshot taken off the UI thread (a crash
+    // report) changes nothing the UI thread's sampling is working on.
+    [Fact]
+    public void Watch_SnapshotWritesNothing_TheNextSampleStampsTheChange()
+    {
+        string state = "Idle";
+        EngineStateWatch watch = new();
+        watch.Add("Door handler", () => state, keep: 2);
+        watch.Sample(T0);
+        state = "Opening";
+
+        EngineStateWatch.Reading first = Assert.Single(watch.Snapshot(T0.AddSeconds(3)));
+        EngineStateWatch.Reading second = Assert.Single(watch.Snapshot(T0.AddSeconds(4)));
+
+        // Had the first snapshot recorded the change, the second would date it
+        // from then.
+        Assert.Equal(T0.AddSeconds(3), first.Since);
+        Assert.Equal(T0.AddSeconds(4), second.Since);
+        Assert.Equal(new EngineStateWatch.Change(T0.AddSeconds(4), "Idle", "Opening"), Assert.Single(second.Recent));
+
+        watch.Sample(T0.AddSeconds(5));
+        EngineStateWatch.Reading afterSample = Assert.Single(watch.Snapshot(T0.AddSeconds(60)));
+        Assert.Equal(T0.AddSeconds(5), afterSample.Since);
+        Assert.Equal(new EngineStateWatch.Change(T0.AddSeconds(5), "Idle", "Opening"), Assert.Single(afterSample.Recent));
+    }
+
+    [Fact]
+    public void Watch_AChangeSeenOnlyByTheSnapshot_StillKeepsNoMoreThanTheProbeAsksFor()
+    {
+        string state = "A";
+        EngineStateWatch watch = new();
+        watch.Add("Walker", () => state, keep: 2);
+        watch.Sample(T0);
+        state = "B";
+        watch.Sample(T0.AddSeconds(1));
+        state = "C";
+        watch.Sample(T0.AddSeconds(2));
+        state = "D";
+
+        EngineStateWatch.Reading reading = Assert.Single(watch.Snapshot(T0.AddSeconds(3)));
+
+        Assert.Equal("D", reading.Value);
+        Assert.Equal(new[] { "B", "C" }, reading.Recent.Select(c => c.From));
+    }
+
+    // Snapshots from other threads while the watch samples: each reading is whole
+    // (its value is where its last change went), and nothing throws.
+    [Fact]
+    public async Task Watch_SnapshotsFromOtherThreadsWhileSampling_AreEachConsistent()
+    {
+        int tick = 0;
+        EngineStateWatch watch = new();
+        for (int p = 0; p < 8; p++) watch.Add($"Engine {p}", () => "s" + (Volatile.Read(ref tick) % 5), keep: 4);
+        using CancellationTokenSource stop = new();
+
+        Task[] readers = Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                foreach (EngineStateWatch.Reading reading in watch.Snapshot(DateTimeOffset.UtcNow))
+                {
+                    Assert.InRange(reading.Recent.Count, 0, 4);
+                    if (reading.Recent.Count > 0) Assert.Equal(reading.Recent[^1].To, reading.Value);
+                    for (int i = 1; i < reading.Recent.Count; i++)
+                        Assert.Equal(reading.Recent[i - 1].To, reading.Recent[i].From);
+                }
+            }
+        })).ToArray();
+
+        for (int i = 0; i < 20_000; i++)
+        {
+            Interlocked.Increment(ref tick);
+            watch.Sample(DateTimeOffset.UtcNow);
+        }
+        stop.Cancel();
+        await Task.WhenAll(readers);
+    }
+
     [Fact]
     public void States_PrintHowLongAndWhatCameBefore()
     {
