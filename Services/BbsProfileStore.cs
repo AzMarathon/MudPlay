@@ -23,12 +23,23 @@ public sealed class BbsProfileStore
         _log = log;
     }
 
+    // A BBS's name is its folder's, and Delete and Rename take that folder whole
+    // with every character under it. A name that can't be used for one
+    // (PathGuard.Usable: a plain name, or a folder already there under an older,
+    // odder name) is refused before anything is touched, with the refusal logged.
+    private static bool Usable(string operation, string? bbsName)
+    {
+        if (PathGuard.Usable(AppPaths.BbsDir, bbsName)) return true;
+        PathGuard.Refuse(operation, "BBS name", bbsName);
+        return false;
+    }
+
     // Load a single BBS profile by name. Returns null if no bbs.json exists for
     // that name. The folder may exist with only side-files (e.g. mid-migration)
     // — that still counts as "no BBS profile".
     public BbsProfile? Get(string bbsName)
     {
-        if (string.IsNullOrWhiteSpace(bbsName)) return null;
+        if (string.IsNullOrWhiteSpace(bbsName) || !Usable("Reading a BBS", bbsName)) return null;
         BbsProfile? profile = JsonStore.Load<BbsProfile>(AppPaths.BbsProfileFile(bbsName));
 
         // The FOLDER is the source of truth for a BBS's identity (ProfileService:
@@ -69,6 +80,8 @@ public sealed class BbsProfileStore
         if (profile is null) throw new ArgumentNullException(nameof(profile));
         if (string.IsNullOrWhiteSpace(profile.Name))
             throw new ArgumentException("BbsProfile.Name is required for save.", nameof(profile));
+        if (!Usable("Saving a BBS", profile.Name))
+            throw new ArgumentException($"{PathGuard.Show(profile.Name)} can't be used as a BBS name.", nameof(profile));
         if (profile.Realms.Count == 0) profile.Realms.Add(new RealmProfile { Name = profile.Name });
 
         Directory.CreateDirectory(AppPaths.BbsFolder(profile.Name));
@@ -125,33 +138,39 @@ public sealed class BbsProfileStore
     // half-deleted BBS, or one holding only nested profiles). Callers gate their
     // rename clash-check on this so they refuse the same cases Move would reject.
     public bool Exists(string bbsName) =>
-        !string.IsNullOrWhiteSpace(bbsName) && Directory.Exists(AppPaths.BbsFolder(bbsName));
+        !string.IsNullOrWhiteSpace(bbsName) && Usable("Looking for a BBS", bbsName)
+        && Directory.Exists(AppPaths.BbsFolder(bbsName));
 
     // Delete a BBS — removes the entire Data/BBS/{name}/ folder (primary file +
-    // all side-files). No-op if the folder doesn't exist.
+    // all side-files). No-op if the folder doesn't exist, or the name is not one a
+    // BBS can have. The folder is checked once more as a path before it goes: only
+    // ever a folder inside the BBS folder, never that folder or one above it.
     public void Delete(string bbsName)
     {
         if (string.IsNullOrWhiteSpace(bbsName)) return;
-        string folder = AppPaths.BbsFolder(bbsName);
-        if (Directory.Exists(folder))
-            Directory.Delete(folder, recursive: true);
+        const string operation = "Deleting a BBS";
+        if (!Usable(operation, bbsName)) return;
+        PathGuard.DeleteTree(AppPaths.BbsFolder(bbsName), AppPaths.BbsDir, operation);
     }
 
     // Rename a BBS in place: move the whole Data/BBS/{old}/ folder — bbs.json,
     // every override side-file, AND every nested character profile — to the new
     // name, then rewrite the primary file's Name field. A folder move keeps the
     // nested profiles intact; a Delete(old)+Save(new) would recursively destroy
-    // them. No-op if the source folder is missing; throws if the destination
-    // already exists (the caller resolves clashes first). Case-only renames
-    // never reach here — the Settings Apply path gates on an OrdinalIgnoreCase
-    // inequality, and Directory.Move can't do a case-only move on a
-    // case-insensitive filesystem.
-    public void Rename(string oldName, string newName)
+    // them. Returns whether it was renamed: false, with nothing changed, if the
+    // source folder is missing or either name is not one a BBS can have. Throws if
+    // the destination already exists (the caller resolves clashes first).
+    // Case-only renames never reach here — the Settings Apply path gates on an
+    // OrdinalIgnoreCase inequality, and Directory.Move can't do a case-only move
+    // on a case-insensitive filesystem.
+    public bool Rename(string oldName, string newName)
     {
-        if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName)) return;
+        if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName)) return false;
+        const string operation = "Renaming a BBS";
+        if (!Usable(operation, oldName) || !Usable(operation, newName)) return false;
         string oldFolder = AppPaths.BbsFolder(oldName);
         string newFolder = AppPaths.BbsFolder(newName);
-        if (!Directory.Exists(oldFolder)) return;
+        if (!Directory.Exists(oldFolder)) return false;
         if (Directory.Exists(newFolder))
             throw new IOException($"A BBS folder already exists at '{newFolder}'.");
 
@@ -163,6 +182,7 @@ public sealed class BbsProfileStore
             profile.Name = newName;
             JsonStore.Save(AppPaths.BbsProfileFile(newName), profile);
         }
+        return true;
     }
 
     // Enumerate every BBS that has a primary bbs.json on disk. The folder name
@@ -173,8 +193,10 @@ public sealed class BbsProfileStore
         if (!Directory.Exists(AppPaths.BbsDir)) yield break;
         foreach (string folder in Directory.EnumerateDirectories(AppPaths.BbsDir))
         {
+            // A folder's own name is one path segment, plain or not; nothing that
+            // would lead elsewhere is ever listed.
             string name = Path.GetFileName(folder);
-            if (string.IsNullOrEmpty(name)) continue;
+            if (string.IsNullOrEmpty(name) || !Usable("Listing BBSes", name)) continue;
             if (!File.Exists(AppPaths.BbsProfileFile(name))) continue;
             yield return name;
         }

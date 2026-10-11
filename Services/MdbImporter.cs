@@ -79,6 +79,15 @@ public sealed class MdbImporter
             return MdbImportResult.Failure($"Database file not found: {mdbFilePath}");
 
         string folderName = targetSubfolder ?? Path.GetFileNameWithoutExtension(mdbFilePath);
+        // The set is named after the file, and a file can be called anything: the
+        // name has to be one a set can have (a plain one, or a set already there).
+        if (!PathGuard.Usable(GameDataRoot, folderName))
+        {
+            PathGuard.Refuse("Importing a database", "game-data set name", folderName);
+            return MdbImportResult.Failure(
+                $"{PathGuard.Show(folderName)} can't be used as a game-data set's name: " +
+                $"{PathGuard.WhyNotPlain(folderName, "set name")} Rename the file and import it again.");
+        }
         string outputPath = Path.Combine(GameDataRoot, folderName);
         Directory.CreateDirectory(outputPath);
 

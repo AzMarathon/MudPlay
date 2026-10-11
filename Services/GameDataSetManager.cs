@@ -74,7 +74,7 @@ public sealed class GameDataSetManager
     // tick box, and zero means there is nothing of it to take.
     public int FileCount(string setName, GameDataSetPart part)
     {
-        if (string.IsNullOrWhiteSpace(setName)) return 0;
+        if (string.IsNullOrWhiteSpace(setName) || !IsASet("Counting a set's files", setName)) return 0;
         try { return FilesOf(setName, part).Count(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -90,6 +90,9 @@ public sealed class GameDataSetManager
             return new OpResult(false, $"Pick a source and a destination set to {verb} between.");
         if (string.Equals(sourceSet, destSet, StringComparison.OrdinalIgnoreCase))
             return new OpResult(false, "Source and destination are the same set.");
+        string operation = move ? "Moving a set's data" : "Copying a set's data";
+        if (!IsASet(operation, sourceSet)) return new OpResult(false, $"'{sourceSet}' is not a game-data set.");
+        if (!IsASet(operation, destSet)) return new OpResult(false, $"'{destSet}' is not a game-data set.");
         if (!Directory.Exists(AppPaths.GameDataSetDir(destSet)))
             return new OpResult(false, $"Destination set '{destSet}' does not exist.");
         if (parts == GameDataSetPart.None)
@@ -126,6 +129,17 @@ public sealed class GameDataSetManager
         _log?.Info("GameData", summary);
         return new OpResult(true,
             empty.Count == 0 ? summary : $"{summary} Nothing there for: {string.Join(", ", empty)}.");
+    }
+
+    // A set's name is its folder's under the game-data folder, and the operations
+    // here delete that folder or write into it. True when setName names a folder
+    // directly inside it (the sets are picked from a listing, so any name that does
+    // not is not one of them); otherwise the refusal is logged.
+    private static bool IsASet(string operation, string? setName)
+    {
+        if (PathGuard.Child(AppPaths.GameDataRoot, setName) is not null) return true;
+        PathGuard.Refuse(operation, "game-data set name", setName);
+        return false;
     }
 
     // Take one part across; returns the files written.
@@ -213,6 +227,8 @@ public sealed class GameDataSetManager
     {
         if (string.IsNullOrWhiteSpace(setName))
             return new OpResult(false, "Pick a set to delete.");
+        const string operation = "Deleting a game-data set";
+        if (!IsASet(operation, setName)) return new OpResult(false, $"'{setName}' is not a game-data set.");
         string dir = AppPaths.GameDataSetDir(setName);
         if (!Directory.Exists(dir))
             return new OpResult(false, $"Set '{setName}' does not exist.");
@@ -225,7 +241,10 @@ public sealed class GameDataSetManager
 
         try
         {
-            Directory.Delete(dir, recursive: true);
+            // Only ever a folder inside the game-data folder, never that folder
+            // itself or one above it.
+            if (!PathGuard.DeleteTree(dir, AppPaths.GameDataRoot, operation))
+                return new OpResult(false, $"'{setName}' is not a game-data set.");
         }
         catch (Exception ex)
         {
