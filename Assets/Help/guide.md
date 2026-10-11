@@ -1899,7 +1899,7 @@ Reports the coins you carry.
 
 **Situations:**
 
-- **The asking side:** a MudPlay leader about to take the party through a toll asks every member `@wealth` by itself, and routes around the toll when a member can't pay.
+- **The asking side:** a MudPlay leader about to take the party through a toll asks every member `@wealth` by itself, and pays for a member who is short when it can spare the coin or goes round the toll when it can't (see **A party at a toll** under *The Navigation window*).
 
 #### @enc
 

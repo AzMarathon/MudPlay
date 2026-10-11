@@ -1,11 +1,17 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.172.0**
-> - Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay
-> - Members who are short are handed exactly what they lack when you can spare it and your coins make the amount; the step waits for the game to confirm it
-> - Otherwise the route goes round the toll, or the walk or loop ends naming the toll and who can't pay
-> - A member paid for at a toll that still turned them away is not paid for twice there
+> **Version 3.172.10**
+> - Remote commands: a sender without the permission gets only the Failure message; `@suicide`'s lives rule and `@do suicide` answer only a sender who holds it, and match the exact word
+> - Every refusal (bad or missing word, can't be done, state not read yet) follows the Warn setting; answers another client waits on are always sent
+> - A `&@` relay asked for on say goes by telepath while sneaking
+> - `@loop`, `@goto` and `@lair` say they started only when they did, and why not otherwise
+> - `@deposit-all` outside a bank answers `not in a bank - nothing deposited` and sends nothing
+> - Replies are plain ASCII: a hyphen where a long dash was
+> - Reply wording: `can't be hidden`, bare `@profile` without doubled braces, `My party is full: …`
+> - A trailing `!` on any command (`@stop!`) is ignored on every path
+> - `@help` texts corrected
+> - Talk tab tooltips corrected
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
