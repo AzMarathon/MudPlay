@@ -229,6 +229,98 @@ public sealed class ChatRouterTests
         Assert.Equal("ouch",   e.Message);
     }
 
+    // Every shape the game sends for a yell. A yeller one room away is not named, so the
+    // speaker is the game's own word "Someone" (never null, which means our own line).
+    [Theory]
+    [InlineData(@"From Alder (Yelling): ""over here""",             "Alder",   "over here")]
+    [InlineData(@"Someone yells from above ""over here""",          "Someone", "over here")]
+    [InlineData(@"Someone yells from below ""over here""",          "Someone", "over here")]
+    [InlineData(@"Someone yells from the north ""over here""",      "Someone", "over here")]
+    [InlineData(@"Someone yells from the southwest ""over here""",  "Someone", "over here")]
+    [InlineData(@"You yell ""over here""",                          null,      "over here")]
+    public void Yell_EveryShapeFromTheGame_ClassifiesAsYell(string line, string? speaker, string message)
+    {
+        var (router, _, entries) = Setup();
+        router.Dispatch(Line(line));
+
+        ChatLogEntry e = Assert.Single(entries);
+        Assert.Equal(ChatChannel.Yell, e.Channel);
+        Assert.Equal(speaker, e.Speaker);
+        Assert.Equal(message, e.Message);
+        Assert.Equal(line, e.RawText);
+    }
+
+    // Where a next-room yell came from is taken from the game's own words in the line;
+    // the same-room, own and bare forms carry none.
+    [Theory]
+    [InlineData(@"Someone yells from above ""over here""",         "above")]
+    [InlineData(@"Someone yells from below ""over here""",         "below")]
+    [InlineData(@"Someone yells from the north ""over here""",     "the north")]
+    [InlineData(@"Someone yells from the southwest ""over here""", "the southwest")]
+    [InlineData(@"From Alder (Yelling): ""over here""",            null)]
+    [InlineData(@"Alder yells ""over here""",                      null)]
+    [InlineData(@"You yell ""over here""",                         null)]
+    public void Yell_HeardFrom_IsTheGamesDirectionWords_OnlyForNextRoomYells(string line, string? heardFrom)
+    {
+        var (router, _, entries) = Setup();
+        router.Dispatch(Line(line));
+
+        ChatLogEntry e = Assert.Single(entries);
+        Assert.Equal(heardFrom, e.HeardFrom);
+        Assert.Null(e.DirectedTo);
+        Assert.Equal("over here", e.Message);
+    }
+
+    [Theory]
+    [InlineData(@"From Alder (Yelling): ""he said ""run"" and left""",           "he said \"run\" and left")]
+    [InlineData(@"Someone yells from the east ""he said ""run"" and left""",     "he said \"run\" and left")]
+    [InlineData(@"Alder yells ""he said ""run"" and left""",                     "he said \"run\" and left")]
+    public void Yell_QuoteInsideTheMessage_KeepsTheWholeMessage(string line, string message)
+    {
+        var (router, _, entries) = Setup();
+        router.Dispatch(Line(line));
+
+        Assert.Equal(message, Assert.Single(entries).Message);
+    }
+
+    // The yell shapes only count at the start of the line: a say, a gossip or any other
+    // line that quotes one is not a yell.
+    [Fact]
+    public void Yell_ShapeQuotedInsideASay_IsStillTheSay()
+    {
+        var (router, _, entries) = Setup();
+        router.Dispatch(Line(@"Alder says ""Someone yells from the north ""x"""""));
+
+        ChatLogEntry e = Assert.Single(entries);
+        Assert.Equal(ChatChannel.Local, e.Channel);
+        Assert.Equal("Alder", e.Speaker);
+        Assert.Equal(@"Someone yells from the north ""x""", e.Message);
+    }
+
+    [Theory]
+    [InlineData(@"Alder gossips: From Birch (Yelling): ""x""", ChatChannel.Gossip)]
+    [InlineData(@"Alder telepaths: Someone yells from above ""x""", ChatChannel.TelepathIncoming)]
+    public void Yell_ShapeQuotedInsideAnotherChannel_IsNotAYell(string line, ChatChannel channel)
+    {
+        var (router, _, entries) = Setup();
+        router.Dispatch(Line(line));
+
+        Assert.Equal(channel, Assert.Single(entries).Channel);
+    }
+
+    [Theory]
+    [InlineData(@"The sign reads Someone yells from the north ""x""")]
+    [InlineData(@"They shout From Alder (Yelling): ""x""")]
+    [InlineData(@"Someone yells from nowhere ""x""")]
+    [InlineData(@"Someone yells from the north")]
+    public void Yell_ShapeNotAtTheStartOrNotTheGamesWording_IsNoYell(string line)
+    {
+        var (router, _, entries) = Setup();
+        router.Dispatch(Line(line));
+
+        Assert.Empty(entries);
+    }
+
     [Fact]
     public void Say_OtherClassifiesAsLocal()
     {

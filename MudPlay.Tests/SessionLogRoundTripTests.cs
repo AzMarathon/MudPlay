@@ -75,6 +75,38 @@ public sealed class SessionLogRoundTripTests
         Assert.Equal("legacy", back.Message);
     }
 
+    [Theory]
+    [InlineData("the north")]
+    [InlineData("above")]
+    [InlineData("below")]
+    public void Chat_YellFromTheNextRoom_KeepsItsDirection(string heardFrom)
+    {
+        ChatLogEntry src = new(Local(9, 0, 0), ChatChannel.Yell, "Someone", "note: over here", "ignored", HeardFrom: heardFrom);
+        string line = SessionLogService.FormatChatLine(src);
+        Assert.Contains($"Yell Someone (from {heardFrom}): note: over here", line);
+        Assert.True(SessionLogService.TryParseChatLine(line, out ChatLogEntry back));
+
+        Assert.Equal(ChatChannel.Yell, back.Channel);
+        Assert.Equal("Someone", back.Speaker);
+        Assert.Equal(heardFrom, back.HeardFrom);
+        Assert.Equal("note: over here", back.Message);
+    }
+
+    [Fact]
+    public void Chat_YellWithoutDirection_ReadsBackWithNone()
+    {
+        // A line written before the direction was kept, and a same-room yell today.
+        Assert.True(SessionLogService.TryParseChatLine("[2026-03-04 09:00:00] Yell Someone: old line", out ChatLogEntry old));
+        Assert.Equal("Someone", old.Speaker);
+        Assert.Null(old.HeardFrom);
+        Assert.Equal("old line", old.Message);
+
+        ChatLogEntry sameRoom = new(Local(9, 0, 0), ChatChannel.Yell, "Alder", "hi", "hi");
+        Assert.True(SessionLogService.TryParseChatLine(SessionLogService.FormatChatLine(sameRoom), out ChatLogEntry back));
+        Assert.Equal("Alder", back.Speaker);
+        Assert.Null(back.HeardFrom);
+    }
+
     [Fact]
     public void Chat_GarbageLine_ReturnsFalse()
     {

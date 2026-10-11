@@ -32,6 +32,8 @@ public static partial class ChatLineDetector
         @"(?:Broadcast from \S+ """ +
         @"|\S+ (?:gossips|auctions|gangpaths|telepaths):" +
         @"|(?:\S+ yells|You yell) """ +
+        @"|From \S+ \(Yelling\): """ +
+        @"|Someone yells from (?:above|below|the \S+) """ +
         @"|(?:\S+ says|You say)(?: \(to [^)]*\))? """ +
         @")",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]

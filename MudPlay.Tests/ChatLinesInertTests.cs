@@ -52,6 +52,30 @@ public sealed class ChatLinesInertTests
     public void IsChat_ServerOutput_False(string text)
         => Assert.False(ChatLineDetector.IsChat(text));
 
+    // A yell reaches us as "From X (Yelling):" from the same room and as "Someone yells
+    // from …" from the next one; both are another player's typed text.
+    [Theory]
+    [InlineData("From Alder (Yelling): \"You are flat on your back!\"")]
+    [InlineData("Someone yells from above \"You are flat on your back!\"")]
+    [InlineData("Someone yells from below \"You are flat on your back!\"")]
+    [InlineData("Someone yells from the north \"You are flat on your back!\"")]
+    [InlineData("Someone yells from the north \"no closing quote")]
+    [InlineData("  From Alder (Yelling): \"leading whitespace\"")]
+    [InlineData("[HP=407/MA=542]: (Meditating) From Alder (Yelling): \"prompt not split off\"")]
+    [InlineData("[HP=407/MA=542]: Someone yells from the south \"prompt not split off\"")]
+    [InlineData("FROM Alder (YELLING): \"case\"")]
+    public void IsChat_YellShapesFromOtherPlayers_True(string text)
+        => Assert.True(ChatLineDetector.IsChat(text));
+
+    [Theory]
+    [InlineData("The sign reads Someone yells from the north \"x\"")]
+    [InlineData("You hear From Alder (Yelling): \"x\"")]
+    [InlineData("Someone yells from nowhere \"x\"")]
+    [InlineData("Someone yells from the north")]
+    [InlineData("From Alder (Yelling)")]
+    public void IsChat_YellWordsOutsideTheGamesShape_False(string text)
+        => Assert.False(ChatLineDetector.IsChat(text));
+
     // ----- LineExtractor lanes ------------------------------------------------
 
     [Fact]
@@ -100,6 +124,24 @@ public sealed class ChatLinesInertTests
         Assert.Equal("Broadcast from Placido \"" + body + "\"", Assert.Single(chat));
     }
 
+    [Fact]
+    public void LineExtractor_YellShapes_GoToChatLane_NotLineEmitted()
+    {
+        (List<string> server, List<string> chat) = FeedThroughEmulator(
+            "From Alder (Yelling): \"over here\"\r\n" +
+            "Someone yells from above \"over here\"\r\n" +
+            "Someone yells from the north \"over here\"\r\n" +
+            "[HP=407/MA=542]: Someone yells from below \"over here\"\r\n" +
+            "You are flat on your back!\r\n");
+
+        Assert.Equal(new[] { "You are flat on your back!" }, server);
+        Assert.Equal(4, chat.Count);
+        Assert.Equal("From Alder (Yelling): \"over here\"", chat[0]);
+        Assert.Equal("Someone yells from above \"over here\"", chat[1]);
+        Assert.Equal("Someone yells from the north \"over here\"", chat[2]);
+        Assert.StartsWith("Someone yells from below", chat[3].TrimStart());
+    }
+
     // ----- ConditionTracker end-to-end ---------------------------------------
 
     [Fact]
@@ -120,6 +162,18 @@ public sealed class ChatLinesInertTests
     [InlineData("Forged yells \"You are flat on your back!\"")]
     [InlineData("Forged says \"You are flat on your back!\"")]
     public void EveryChatChannel_QuotingKnockdownText_DoesNotLatchMovementPrevented(string chatLine)
+    {
+        using ConditionHarness h = new();
+
+        h.Feed(chatLine + "\r\n");
+
+        Assert.False(h.Tracker.IsMovementPrevented);
+    }
+
+    [Theory]
+    [InlineData("From Alder (Yelling): \"You are flat on your back!\"")]
+    [InlineData("Someone yells from the north \"You are flat on your back!\"")]
+    public void YellShapes_QuotingKnockdownText_DoNotLatchMovementPrevented(string chatLine)
     {
         using ConditionHarness h = new();
 
@@ -190,6 +244,22 @@ public sealed class ChatLinesInertTests
         Assert.Equal(
             new[] { ChatChannel.Broadcast, ChatChannel.Gossip, ChatChannel.TelepathIncoming },
             entries.Select(e => e.Channel).ToArray());
+    }
+
+    [Fact]
+    public void ChatRouter_StillClassifiesFlaggedYellShapes()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        ChatRouter chat = new(router);
+        List<ChatLogEntry> entries = new();
+        chat.EntryClassified += entries.Add;
+
+        router.Dispatch(ChatLine("From Alder (Yelling): \"over here\""));
+        router.Dispatch(ChatLine("Someone yells from the north \"over here\""));
+
+        Assert.Equal(new[] { ChatChannel.Yell, ChatChannel.Yell }, entries.Select(e => e.Channel).ToArray());
+        Assert.Equal(new[] { "Alder", "Someone" }, entries.Select(e => e.Speaker).ToArray());
     }
 
     // ----- helpers ------------------------------------------------------------

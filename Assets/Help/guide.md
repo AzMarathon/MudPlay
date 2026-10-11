@@ -4098,7 +4098,7 @@ Press **Alt+C** to open the **Conversation** window — a dedicated view of all 
 
 Chat is collected into one merged, timestamped stream (not per-channel tabs). Each line shows the time, a colored **channel tag**, the speaker, and the message:
 
-- **GOS** gossip · **SAY** local say · **YELL** yell · **←TELE / TELE→** telepaths received and sent · **GANG** gang/guild · **BCAST** broadcasts · **SERVER** realm notices (players entering and leaving, PvP messages).
+- **GOS** gossip · **SAY** local say · **YELL** yells (one heard from the next room doesn't name the yeller, so it shows as from *Someone* with where it came from, e.g. *Someone (from the north)*, *Someone (from above)*; the talk log keeps that too) · **←TELE / TELE→** telepaths received and sent · **GANG** gang/guild · **BCAST** broadcasts · **SERVER** realm notices (players entering and leaving, PvP messages).
 
 Each channel has its own color, and web links inside a message are clickable. Party chat isn't shown here — it has its own **Party** window.
 
