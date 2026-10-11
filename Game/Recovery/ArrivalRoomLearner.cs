@@ -34,9 +34,11 @@ namespace MudPlay.Game.Recovery;
 // Paradigm shares with Stock) nothing is learned, and a death that ends where the
 // list says is no news. One that ends somewhere the list doesn't allow is:
 //   - on an unmodified Stock set, a sign that the BOARD's rooms were edited while
-//     it still runs on the standard data. The board is marked for it
-//     (boardContradicted), and from then on it is treated as any board with
-//     edited rooms: the list says yes and never no, and what is learned is read;
+//     it still runs on the standard data. It is counted on the board
+//     (boardContradicted, StandardListContradictions), and nothing is learned
+//     from it until the board is marked: from then on it is treated as any board
+//     with edited rooms, where the list says yes and never no, and what is
+//     learned is read;
 //   - on Paradigm, said in the log and left at that.
 public sealed class ArrivalRoomLearner
 {
@@ -54,7 +56,7 @@ public sealed class ArrivalRoomLearner
     private readonly Func<RoomKey, RoomKey, bool>? _couldBeTakenFor;
     private readonly Func<RoomKey, bool>? _inAlbion;
     private readonly Func<string, bool>? _isExitCommandSomewhere;
-    private readonly Action? _boardContradicted;
+    private readonly Action<RoomKey, RoomKey, IReadOnlyList<RoomKey>>? _boardContradicted;
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
 
@@ -70,10 +72,11 @@ public sealed class ArrivalRoomLearner
     //                     to arrive in the Burial Vault.
     //   isExitCommandSomewhere — RoomGraphManager.IsExitCommandSomewhere: the line
     //                     is a text exit or a room command of some room.
-    //   boardContradicted — a death on an unmodified Stock set ended where the
-    //                     list doesn't allow: the board's rooms don't match the
-    //                     standard data. The trust read after it is the board's
-    //                     new one.
+    //   boardContradicted — StandardListContradictions.Note: a death on an
+    //                     unmodified Stock set (room died in, room arrived in)
+    //                     ended where the list (the rooms it allows) doesn't.
+    //                     It says so itself, and the trust read after it is the
+    //                     board's new one.
     public ArrivalRoomLearner(
         RoomTracker tracker,
         LearnedArrivalRoomStore store,
@@ -82,7 +85,7 @@ public sealed class ArrivalRoomLearner
         Func<RoomKey, RoomKey, bool>? couldBeTakenFor = null,
         Func<RoomKey, bool>? inAlbion = null,
         Func<string, bool>? isExitCommandSomewhere = null,
-        Action? boardContradicted = null,
+        Action<RoomKey, RoomKey, IReadOnlyList<RoomKey>>? boardContradicted = null,
         Func<DateTimeOffset>? now = null,
         LogService? log = null)
     {
@@ -162,6 +165,8 @@ public sealed class ArrivalRoomLearner
         // What a death there was expected to show, and on whose word.
         IReadOnlyList<RoomKey>? expected = HangupDeathArrivalRooms.DeathArrivalsOn(diedIn, trust);
         string onWhoseWord = "the Stock list";
+        // The board's own count has said what there is to say of this death.
+        bool said = false;
         if (expected is not null)
         {
             if (Fits(expected)) return;
@@ -175,9 +180,11 @@ public sealed class ArrivalRoomLearner
             }
             if (trust == HangupArrivalListTrust.VanillaStock)
             {
-                _boardContradicted?.Invoke();
-                // Still the world's own list: nobody is keeping count of boards.
+                _boardContradicted?.Invoke(diedIn, arrivedIn, expected);
+                // Still the world's own list (the board isn't marked yet, or
+                // nobody is keeping count of boards): nothing is learned.
                 if (_trust() == HangupArrivalListTrust.VanillaStock) return;
+                said = true;
             }
         }
         else if (trust == HangupArrivalListTrust.Paradigm && _inAlbion?.Invoke(diedIn) == true)
@@ -196,7 +203,7 @@ public sealed class ArrivalRoomLearner
         LearnedArrivalOutcome outcome = _store.Learn(diedIn, arrivedIn);
         // The room's own reading is kept and wins for that room; the land keeps
         // its reading for its other rooms.
-        if (outcome == LearnedArrivalOutcome.Learned && expected is not null && !Fits(expected))
+        if (outcome == LearnedArrivalOutcome.Learned && !said && expected is not null && !Fits(expected))
             _log?.Warn(LearnedArrivalRoomStore.LogCategory,
                 $"A death seen in {diedIn} ended in {arrivedIn}, not in {string.Join(" or ", expected)} as {onWhoseWord} had "
                 + "it. Recorded as that room's own: it is what is used for that room from now on.");

@@ -2356,35 +2356,18 @@ public sealed class AppServices
     // sysop may have edited its rooms, or no set) unverified.
     //
     // A board can run edited rooms and still be played on the standard data set.
-    // Nothing in the set says so; a death seen there that ends where the list
-    // doesn't allow does, and is counted on the board
-    // (RealmProfile.DeathsContradictingStandardArrivalRooms). Such a board is
-    // unverified too, whatever its set.
+    // Nothing in the set says so; deaths seen there that end where the list
+    // doesn't allow do, and are counted on the board (StandardListContradictions).
+    // A board marked by them is unverified too, whatever its set.
     public Game.Recovery.HangupArrivalListTrust HangupArrivalListTrust =>
         GameData.ActiveRealm == Game.RealmType.ParaMud ? Game.Recovery.HangupArrivalListTrust.Paradigm
-        : GameData.ActiveSetIsVanillaStock && DeathsContradictingStandardArrivalRooms == 0
+        : GameData.ActiveSetIsVanillaStock && !StandardListContradictions.Marked
             ? Game.Recovery.HangupArrivalListTrust.VanillaStock
         : Game.Recovery.HangupArrivalListTrust.Unverified;
 
-    public int DeathsContradictingStandardArrivalRooms =>
-        ResolveActiveRealm()?.Realm.DeathsContradictingStandardArrivalRooms ?? 0;
-
-    // ArrivalRoomLearner: a death on the unmodified Stock set ended in a room the
-    // list doesn't allow. Counted on the board, and said the first time. With no
-    // board to count it on, nothing changes.
-    private void NoteDeathContradictedStandardArrivalRooms()
-    {
-        if (ResolveActiveRealm() is not { } active) return;
-        active.Realm.DeathsContradictingStandardArrivalRooms++;
-        Bbs.Save(active.Bbs);
-        if (active.Realm.DeathsContradictingStandardArrivalRooms == 1)
-            Log.Warn(LearnedArrivalRoomStore.LogCategory,
-                $"This board's rooms do not match the standard data set it is played on ('{GameData.ActiveSet}'): a death "
-                + "just ended in a room the standard list doesn't allow for the room it happened in. From now on the list "
-                + "is taken here as on any board with edited rooms: it says where the dead arrive, never that a room is "
-                + "the wrong one, and what is learned from deaths seen is used. If the board has its own game data, "
-                + "import it and point the realm at it.");
-    }
+    // The active board's count of deaths the standard list of arrival rooms
+    // doesn't allow, against the set in play.
+    public Game.Recovery.StandardListContradictions StandardListContradictions { get; private set; } = null!;
 
     // The land a room stands on, for what a death seen in one room says of the
     // rooms around it (Recovery.LearnedArrivalLookup). Walked the first time it
@@ -10194,10 +10177,13 @@ public sealed class AppServices
         if (GameData.ActiveSet is not null) LearnedArrivals.OnActiveSetChanged(GameData.ActiveSet);
         Tick.HeartbeatElapsed += () => LearnedArrivals.TakeInOutsideChanges();
         LearnedArrivalLands = new Game.Recovery.LearnedArrivalLookup(LearnedArrivals, LandOf);
+        StandardListContradictions = new Game.Recovery.StandardListContradictions(
+            () => ResolveActiveRealm()?.Realm, () => GameData.ActiveSet,
+            () => { if (ResolveActiveBbs() is { } board) Bbs.Save(board); }, Log);
         ArrivalLearner = new Game.Recovery.ArrivalRoomLearner(
             RoomTracker, LearnedArrivals, LearnedArrivalLands, () => HangupArrivalListTrust,
             RoomGraph.CouldBeTakenFor, InParadigmAlbion, RoomGraph.IsExitCommandSomewhere,
-            boardContradicted: NoteDeathContradictedStandardArrivalRooms, log: Log);
+            boardContradicted: StandardListContradictions.Note, log: Log);
         RoomTracker.PlayerDeathObserved += ArrivalLearner.OnPlayerDied;
         RoomTracker.StateChanged += ArrivalLearner.OnRoomStateChanged;
         OutboundMovement.MoveSent += ArrivalLearner.NoteMoveSent;

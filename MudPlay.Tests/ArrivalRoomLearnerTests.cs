@@ -87,11 +87,16 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
     private readonly LearnedArrivalLookup _lookup;
     private readonly ArrivalRoomLearner _learner;
     private readonly List<LogEntry> _log = new();
+    // What the game data says of the list; a board marked for edited rooms is
+    // unverified whatever its set, as the app has it.
     private HangupArrivalListTrust _trust = HangupArrivalListTrust.Paradigm;
+    private HangupArrivalListTrust Trust =>
+        _trust == HangupArrivalListTrust.VanillaStock && _board.Marked ? HangupArrivalListTrust.Unverified : _trust;
     private DateTimeOffset _now = new(2026, 10, 11, 12, 0, 0, TimeSpan.Zero);
-    // How often a death has shown the board's rooms to differ from the standard
-    // set. As the app does it, the board is unverified from the first.
-    private int _boardContradictions;
+    // The board's count of deaths the standard list doesn't allow.
+    private readonly MudPlay.Models.Settings.RealmProfile _realm = new();
+    private readonly StandardListContradictions _board;
+    private int BoardContradictions => _board.Count;
 
     private int Warnings => _log.Count(e => e.Severity == LogSeverity.Warn);
 
@@ -111,14 +116,11 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         _store = new LearnedArrivalRoomStore(log, set => Path.Combine(_root, set, "learned-arrival-rooms.json"));
         _store.OnActiveSetChanged("alpha");
         _lookup = new LearnedArrivalLookup(_store, room => WalkReach.OnItsMap(graph, room));
-        _learner = new ArrivalRoomLearner(_tracker, _store, _lookup, () => _trust, graph.CouldBeTakenFor,
+        _board = new StandardListContradictions(() => _realm, () => "alpha", save: () => { }, log);
+        _learner = new ArrivalRoomLearner(_tracker, _store, _lookup, () => Trust, graph.CouldBeTakenFor,
             inAlbion: room => room == Kingsport || room == Vault,
             isExitCommandSomewhere: graph.IsExitCommandSomewhere,
-            boardContradicted: () =>
-            {
-                _boardContradictions++;
-                _trust = HangupArrivalListTrust.Unverified;
-            },
+            boardContradicted: _board.Note,
             now: () => _now, log: log);
         // As AppServices wires it.
         _tracker.PlayerDeathObserved += _learner.OnPlayerDied;
@@ -308,7 +310,7 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         Assert.Contains("A death seen in 1/109 ended in 14/1900", warning.Message);
         Assert.Contains("1/2189 or 1/142", warning.Message);
         Assert.Contains("Not learned", warning.Message);
-        Assert.Equal(0, _boardContradictions);
+        Assert.Equal(0, BoardContradictions);
     }
 
     // The list is of where a HANG-UP's dead arrive. For a room with a leave-the-
@@ -328,31 +330,49 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         Assert.Equal(new RoomKey(17, 3247), _tracker.State.CurrentRoom?.Key);
         Assert.Equal(0, _store.Count);
         Assert.Equal(0, Warnings);
-        Assert.Equal(0, _boardContradictions);
+        Assert.Equal(0, BoardContradictions);
     }
 
     // An unmodified Stock set, and a death that ends in a room the list doesn't
-    // allow: the board's rooms were edited while it runs on the standard data.
-    // The board is marked, and from then on it is a board with edited rooms: the
-    // reading is learned, and read.
+    // allow: the board's rooms were edited while it runs on the standard data, or
+    // the map had the wrong room for the death. One such death is said and
+    // changes nothing. The second marks the board: from then on it is a board
+    // with edited rooms, and the reading is learned, and read.
     [Fact]
-    public void OnAStandardSet_ADeathTheListDoesNotAllow_MarksTheBoardAsEdited_AndIsLearned()
+    public void OnAStandardSet_TwoDeathsTheListDoesNotAllow_MarkTheBoardAsEdited_AndTheSecondIsLearned()
     {
         _trust = HangupArrivalListTrust.VanillaStock;
 
         DieIn(Darkwood);
         _tracker.NoteRoomObserved(TempleShown);
-        Assert.Equal(0, _boardContradictions);
+        Assert.Equal(0, BoardContradictions);
         Assert.Equal(0, _store.Count);
 
         DieIn(Darkwood);
         _tracker.NoteRoomObserved(ShrineShown);
 
-        Assert.Equal(1, _boardContradictions);
-        Assert.Equal(HangupArrivalListTrust.Unverified, _trust);
+        Assert.Equal(1, BoardContradictions);
+        Assert.Equal(HangupArrivalListTrust.VanillaStock, Trust);
+        Assert.Equal(0, _store.Count);
+        LogEntry first = Assert.Single(_log, e => e.Severity == LogSeverity.Warn);
+        Assert.Contains("A death seen in 1/109 ended in 14/1900, where the standard list has the dead of that room arrive in 1/2189 or 1/142",
+            first.Message);
+        Assert.Contains("Nothing changes yet: 1 more such death(s)", first.Message);
+
+        DieIn(Darkwood);
+        _tracker.NoteRoomObserved(ShrineShown);
+
+        Assert.Equal(2, BoardContradictions);
+        Assert.Equal(HangupArrivalListTrust.Unverified, Trust);
         Assert.Equal(new[] { Shrine }, _store.ArrivalsFor(Darkwood));
-        LogEntry warning = Assert.Single(_log, e => e.Severity == LogSeverity.Warn);
-        Assert.Contains("A death seen in 1/109 ended in 14/1900, not in 1/2189 or 1/142 as the Stock list had it", warning.Message);
+        // One line a death: the board's own, which names the rooms.
+        Assert.Equal(2, Warnings);
+        Assert.Contains("That is 2 such deaths on this board", _log.Last(e => e.Severity == LogSeverity.Warn).Message);
+
+        // Marked, the board is not counted again.
+        DieIn(Darkwood);
+        _tracker.NoteRoomObserved(VaultShown);
+        Assert.Equal(2, BoardContradictions);
     }
 
     // On a board already known for edited rooms, the list is only Stock's word:
@@ -370,7 +390,7 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         DieIn(Darkwood);
         _tracker.NoteRoomObserved(ShrineShown);
         Assert.Equal(new[] { Shrine }, _store.ArrivalsFor(Darkwood));
-        Assert.Equal(0, _boardContradictions);
+        Assert.Equal(0, BoardContradictions);
     }
 
     // ----- A room, its land, and Albion --------------------------------------

@@ -92,13 +92,18 @@ public sealed class RealmProfile
 
     // How many deaths seen on this board ended in a room the standard Stock list
     // doesn't allow for the room died in, while the board was running on the
-    // unmodified Stock game data. One is enough to say the board's rooms were
-    // edited: from then on the list is taken there as it is on any board with
-    // edited rooms (Game.Recovery.HangupArrivalListTrust.Unverified), saying where
-    // the dead arrive and never that a room is the wrong one. Written by
-    // Game.Recovery.ArrivalRoomLearner through AppServices; no setting shows it,
-    // and a bug report does.
+    // unmodified Stock game data. Two say the board's rooms were edited: from
+    // then on the list is taken there as it is on any board with edited rooms
+    // (Game.Recovery.HangupArrivalListTrust.Unverified), saying where the dead
+    // arrive and never that a room is the wrong one. Written and read by
+    // Game.Recovery.StandardListContradictions; no setting shows it, and a bug
+    // report does.
     public int DeathsContradictingStandardArrivalRooms { get; set; }
+
+    // The game-data set those deaths were seen on. The count is evidence about
+    // this board against that set, so it counts for nothing while the realm plays
+    // another: pointing the realm at another set starts it afresh.
+    public string? DeathsContradictingStandardArrivalRoomsOn { get; set; }
 
     // The realm's nightly cleanup wall-clock time. Some bosses ("Respawns @
     // Cleanup" in the boss table) reset only at this daily cleanup — a marked one
