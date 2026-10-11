@@ -134,13 +134,17 @@ public static partial class DamageLineAttributor
         return false;
     }
 
-    // The known name a line leads with, after its article: whose line a "<name> <verb>
-    // ..." line is. The longest wins, as in TryAttribute. Null when it leads with none.
-    public static string? LeadingName(string line, IReadOnlyCollection<string> names)
+    // The known name a line leads with, after its article, when the line is that
+    // one's doing: "<name> <verb> ...". The longest wins, as in TryAttribute. Null
+    // when it leads with none, and when the name is followed by "is / are / was /
+    // were ...", which makes it the one acted on ("The orc is knocked flat!"), as
+    // FromPre reads a damage line.
+    public static string? LeadingActor(string line, IReadOnlyCollection<string> names)
     {
         string text = line.TrimStart();
         int at = StartsWithWord(text, "The") ? 4 : 0;
-        return LongestNameAt(text, at, names)?.Name;
+        if (LongestNameAt(text, at, names) is not { } lead) return null;
+        return PassiveAfterName().IsMatch(text[(at + lead.Length)..]) ? null : lead.Name;
     }
 
     // Name both sides from the part of a damage line before its amount.

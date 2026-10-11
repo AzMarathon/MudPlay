@@ -29,8 +29,8 @@ public sealed class OutboundBreakObserver
     private readonly Action<string, string?> _onBreak;
     private readonly Action<string, string?, string?> _onAttack;
 
-    // onBreak(word, askedBy) and onAttack(word, target, askedBy): askedBy is the
-    // party member whose `@do` sent the line, null for the user's own.
+    // onBreak(word, askedBy) and onAttack(word, target, askedBy): askedBy says whose
+    // relay sent the line ("<name>'s @do"), null for the user's own.
     public OutboundBreakObserver(
         Func<string, bool> isAttackSpell,
         Action<string, string?> onBreak,

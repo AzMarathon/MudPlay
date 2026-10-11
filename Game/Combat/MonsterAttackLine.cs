@@ -10,8 +10,10 @@ namespace MudPlay.Game.Combat;
 // It has no wording of its own. A hit is a damage line the round ledger's reader
 // (DamageLineAttributor) credits to that monster. A miss, a dodge or a blow that
 // armour turned is what CombatLineClassifier reads off the line's colour, on a
-// line that leads with the monster's name; the engine's "<victim> just dodged an
-// attack from <attacker>." names it at the other end.
+// line that leads with the monster's name as the one acting; the engine's
+// "<victim> just dodged an attack from <attacker>." names it at the other end. A
+// line in a miss's colour that leads with the monster as the one acted on ("<name>
+// is knocked flat!") is something done to it, not its attack.
 public static class MonsterAttackLine
 {
     private const string DodgedAttackFrom = " just dodged an attack from ";
@@ -32,10 +34,10 @@ public static class MonsterAttackLine
                 or CombatLineKind.DodgeYou or CombatLineKind.DodgeOther
                 or CombatLineKind.ArmorBlockYou or CombatLineKind.ArmorBlockOther))
             return false;
-        if (Is(DamageLineAttributor.LeadingName(text, names.Keys))) return true;
+        if (Is(DamageLineAttributor.LeadingActor(text, names.Keys))) return true;
         int from = text.IndexOf(DodgedAttackFrom, StringComparison.Ordinal);
         return from >= 0
-            && Is(DamageLineAttributor.LeadingName(text[(from + DodgedAttackFrom.Length)..], names.Keys));
+            && Is(DamageLineAttributor.LeadingActor(text[(from + DodgedAttackFrom.Length)..], names.Keys));
 
         bool Is(string? name)
             => name is not null

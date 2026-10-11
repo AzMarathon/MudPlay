@@ -141,7 +141,7 @@ public sealed class CombatManagerBreakHoldTests
         // way with that member's name (DoHandler.SendingFor).
         public void PartyMemberDoes(string member, string line)
         {
-            UserCommands.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), member);
+            UserCommands.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), $"{member}'s @do");
             DrainPosted();
         }
 
@@ -333,7 +333,7 @@ public sealed class CombatManagerBreakHoldTests
 
         Assert.Null(h.Combat.UserBreakHoldTarget);
         Assert.Equal(Rat, h.Combat.CurrentTarget);
-        Assert.Contains("Leader sent 'a rat' by @do", h.Combat.UserBreakHoldSummary);
+        Assert.Contains("'a rat' sent by Leader's @do", h.Combat.UserBreakHoldSummary);
     }
 
     // ----- no attack path fires under it ---------------------------------
@@ -812,11 +812,12 @@ public sealed class CombatManagerBreakHoldTests
 
     // user, 2026-10-10: "hostile monsters attack every round, so if we go 1 round and
     // we dont see that monster attacking anyone that we do know is in the room,
-    // assume its dead". The round is the round clock's: at a tick with no attack
-    // line from it for a round and a second, the room is read, and that reading
-    // ends the hold and picks the next target.
+    // assume its dead". That is how a death the client cannot see is known; where it
+    // can see, the room's listing decides. The round is the round clock's: at a tick
+    // with no attack line from it for a round and a second, the room is read. Read
+    // without it, the hold ends and the next target is picked.
     [Fact]
-    public void ARoundWithNoAttackFromIt_TakesItForDead_ReadsTheRoom_AndEngagesTheNext()
+    public void ARoundWithNoAttackFromIt_ReadsTheRoom_AndItsAbsenceEndsTheHold()
     {
         using Harness h = FightingARatBesideAThief();
         h.UserBreaks();
@@ -836,26 +837,89 @@ public sealed class CombatManagerBreakHoldTests
         h.Feed($"Also here: {Thief}.");
 
         Assert.Null(h.Combat.UserBreakHoldTarget);
-        Assert.Contains("taken for dead", h.Combat.UserBreakHoldSummary);
+        Assert.Contains("no longer in the room", h.Combat.UserBreakHoldSummary);
         Assert.Equal($"a {Thief}", h.LastSent);
         Assert.Equal(sent + 2, h.Sent.Count);
     }
 
-    // The ruling is to assume it dead: a monster of its name still listed doesn't
-    // bring the hold back, and is fought as any monster is.
+    // The look decides. A monster the room still lists is alive, however quiet: the
+    // hold stands and nothing is sent at it.
     [Fact]
-    public void TakenForDead_ButStillListed_TheHoldDoesNotComeBack()
+    public void SilentForARound_ButStillListed_TheHoldStands()
     {
         using Harness h = FightingARat();
         h.UserBreaks();
         h.Tick();
         h.Tick();
         Assert.Equal(string.Empty, h.LastSent);
+        int sent = h.Sent.Count;
 
         h.Feed($"Also here: {Rat}.");
+        h.Tick();
+
+        Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);
+        Assert.Equal(sent, h.Sent.Count);
+        Assert.True(h.CombatGateHeld);
+    }
+
+    // A neutral the user hit by hand and then broke from never attacks. Two silent
+    // rounds make the client look once; the room lists it, so it is left alone, and
+    // its silence asks for no other look for thirty seconds.
+    [Fact]
+    public void PassiveNeutralBrokenFrom_IsLookedAtOnce_AndNeverAttacked()
+    {
+        const string Guard = "village guard";
+        using Harness h = new();
+        h.AddMonster(3, Guard);
+        h.Overlays[3] = new MonsterOverlay { Relationship = MonsterRelationship.Neutral };
+        h.Feed($"Also here: {Guard}.");
+        Assert.Empty(h.Sent);
+        h.Combat.NoteAttackCommandObserved("a", Guard);     // the round override's reading of the line
+        h.UserSends($"a {Guard}");
+        h.Feed("*Combat Engaged*");
+
+        h.UserBreaks();
+        h.Tick();
+        h.Tick();
+        Assert.Equal(new[] { string.Empty }, h.AllSent);    // one bare Enter
+
+        h.Feed($"Also here: {Guard}.");
+        for (int round = 0; round < 5; round++) h.Tick();   // to 35 s after the break
+
+        Assert.Equal(new[] { string.Empty }, h.AllSent);
+        Assert.Equal(Guard, h.Combat.UserBreakHoldTarget);
+        Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    // The break takes a hand-engaged neutral back out of the engine's hands, so
+    // whatever ends the hold, it isn't fought again without a new attack from the
+    // user. Here another of its name dies.
+    [Fact]
+    public void NeutralBrokenFrom_IsNotFoughtAgain_WhenTheHoldEndsAnotherWay()
+    {
+        const string Guard = "village guard";
+        using Harness h = new();
+        h.AddMonster(3, Guard);
+        h.Overlays[3] = new MonsterOverlay { Relationship = MonsterRelationship.Neutral };
+        h.Feed($"Also here: {Guard}, {Guard}.");
+        h.Combat.NoteAttackCommandObserved("a", Guard);
+        h.UserSends($"a {Guard}");
+        h.Feed("*Combat Engaged*");
+        h.UserBreaks();
+
+        h.Feed($"Also here: {Guard}.");
+        h.Tick();
+        h.Feed($"Also here: {Guard}.");
+        h.Tick();
 
         Assert.Null(h.Combat.UserBreakHoldTarget);
-        Assert.Equal($"a {Rat}", h.LastSent);
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.Empty(h.Sent);
+
+        // A new attack from the user puts it back in the engine's hands.
+        h.Combat.NoteAttackCommandObserved("a", Guard);
+        h.UserSends($"a {Guard}");
+        Assert.Equal(Guard, h.Combat.CurrentTarget);
     }
 
     // Every kind of attack line from it keeps the hold: a hit or a miss, on us or on
@@ -889,10 +953,10 @@ public sealed class CombatManagerBreakHoldTests
     }
 
     // Lines that name it and are not its attack say nothing of it attacking:
-    // someone else hitting it or missing it, a spell searing it, another monster's
-    // attack.
+    // someone else hitting it or missing it, a spell searing it, something done to
+    // it that prints in a miss's colour (knocked flat), another monster's attack.
     [Fact]
-    public void LinesThatAreNotItsAttack_DoNotKeepTheHold()
+    public void LinesThatAreNotItsAttack_DoNotCountAsItAttacking()
     {
         using Harness h = FightingARatBesideAThief();
         h.UserBreaks();
@@ -903,6 +967,7 @@ public sealed class CombatManagerBreakHoldTests
         h.Tick();
         h.FeedInColour("Bob swings at the giant rat, but misses!", 6);
         h.Feed("The giant rat is seared by the flames for 12 damage!");
+        h.FeedInColour("The giant rat is knocked flat!", 6);
         h.Feed(ThiefBites);
         h.Tick();
 
@@ -928,10 +993,10 @@ public sealed class CombatManagerBreakHoldTests
         Assert.Equal(sent + 1, h.Sent.Count);
     }
 
-    // Its own attack line arriving after it was taken for dead, before the room has
-    // been read: it stands, and the hold with it.
+    // Its own attack line arriving after its silence asked for the room, before the
+    // room has been read: it stands, and the hold with it.
     [Fact]
-    public void ItsAttackAfterBeingTakenForDead_KeepsTheHold()
+    public void ItsAttackAfterTheRoomWasAskedFor_KeepsTheHold()
     {
         using Harness h = FightingARat();
         h.UserBreaks();
@@ -947,10 +1012,11 @@ public sealed class CombatManagerBreakHoldTests
         Assert.Equal(sent, h.Sent.Count);
     }
 
-    // The reading asked for never comes: it is not waited for past the next round.
-    // The monster is dropped from the roster as a death is, and the next engaged.
+    // The reading asked for never comes: it is not waited for past the next round,
+    // and with nothing to see by, the silence decides. The monster is dropped from
+    // the roster as a death is, and the next engaged.
     [Fact]
-    public void TakenForDead_AndTheRoomReadNeverComes_TheHoldEndsAtTheNextRound()
+    public void SilentForARound_AndTheRoomReadNeverComes_ItIsTakenForDeadAtTheNextRound()
     {
         using Harness h = FightingARatBesideAThief();
         h.UserBreaks();
@@ -961,6 +1027,7 @@ public sealed class CombatManagerBreakHoldTests
         h.Tick();
 
         Assert.Null(h.Combat.UserBreakHoldTarget);
+        Assert.Contains("taken for dead", h.Combat.UserBreakHoldSummary);
         Assert.True(h.Classifier.Current is { Entities.Count: 1 });
         Assert.Equal($"a {Thief}", h.LastSent);
     }
@@ -968,7 +1035,7 @@ public sealed class CombatManagerBreakHoldTests
     // The room it shows lists nobody: the monster is gone with everyone else. An
     // empty room prints no "Also here:", so the display's end is the answer.
     [Fact]
-    public void TakenForDead_AndTheRoomShowsNobody_EndsTheHold_AndLetsTheGateGo()
+    public void SilentForARound_AndTheRoomShowsNobody_EndsTheHold_AndLetsTheGateGo()
     {
         using Harness h = FightingARat();
         h.UserBreaks();
@@ -979,7 +1046,7 @@ public sealed class CombatManagerBreakHoldTests
         h.Combat.NoteRoomDisplayed();
 
         Assert.Null(h.Combat.UserBreakHoldTarget);
-        Assert.Contains("taken for dead", h.Combat.UserBreakHoldSummary);
+        Assert.Contains("lists nobody", h.Combat.UserBreakHoldSummary);
         Assert.False(h.CombatGateHeld);
     }
 
@@ -996,10 +1063,11 @@ public sealed class CombatManagerBreakHoldTests
         Assert.True(h.Classifier.Current is { Entities.Count: 1 });
     }
 
-    // In the dark a look lists nobody whoever is there, so none is sent: the hold
-    // simply ends, and the monster comes off the roster as a death does.
+    // In the dark a look lists nobody whoever is there, so none is sent and the
+    // silence alone decides: the hold ends, and the monster comes off the roster as
+    // a death does.
     [Fact]
-    public void TakenForDead_InADarkRoom_EndsTheHoldWithoutReadingTheRoom()
+    public void SilentForARound_InADarkRoom_IsTakenForDeadWithoutReadingTheRoom()
     {
         using Harness h = FightingARatBesideAThief();
         h.UserBreaks();
@@ -1010,14 +1078,16 @@ public sealed class CombatManagerBreakHoldTests
         h.Tick();
 
         Assert.Null(h.Combat.UserBreakHoldTarget);
+        Assert.Contains("taken for dead", h.Combat.UserBreakHoldSummary);
         Assert.DoesNotContain(string.Empty, h.AllSent.Skip(sent));
         Assert.True(h.Classifier.Current is { Entities.Count: 1 });
         Assert.Equal($"a {Thief}", h.LastSent);
     }
 
-    // With the engine off nothing automatic is sent: the hold ends and that is all.
+    // With the engine off nothing automatic is sent, and nothing waits on the
+    // answer: the hold is left as it is. Back on, the silence is judged by a look.
     [Fact]
-    public void TakenForDead_WithTheEngineOff_EndsTheHold_AndSendsNothing()
+    public void SilentWithTheEngineOff_TheHoldStands_AndIsJudgedOnceTheEngineIsBack()
     {
         using Harness h = FightingARat();
         h.UserBreaks();
@@ -1026,37 +1096,75 @@ public sealed class CombatManagerBreakHoldTests
 
         h.Tick();
         h.Tick();
+        h.Tick();
 
-        Assert.Null(h.Combat.UserBreakHoldTarget);
+        Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);
         Assert.Equal(sent, h.Sent.Count);
-        Assert.True(h.Classifier.Current is { Entities.Count: 1 });
+
+        h.AutoCombatEnabled = true;
+        h.Tick();
+
+        Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);
+        Assert.Equal(sent + 1, h.Sent.Count);
+        Assert.Equal(string.Empty, h.LastSent);
     }
 
-    // Another re-display went out a moment ago, so this one waits out its cooldown:
-    // the heartbeat asks again and the room is read then.
+    // A monster that stays silent and listed isn't looked at every round: after a
+    // look has shown it, its silence asks for the next one no sooner than thirty
+    // seconds on. That one meets the first look's cooldown here (it runs on real
+    // time), and the heartbeat sends it once the cooldown lets it out.
     [Fact]
-    public void TakenForDead_WhileAnotherReDisplayCoolsDown_TheHeartbeatAsksAgain()
+    public void SilentAndStillListed_IsLookedAtAgainOnlyAfterThirtySeconds()
     {
-        using Harness h = FightingARatBesideAThief();
+        using Harness h = FightingARat();
         h.UserBreaks();
-        h.Feed("You gain 50 experience.");          // a kill under the hold reads the room
-        h.Feed("*Combat Off*");
-        h.Feed($"Also here: {Rat}.");               // the thief was the one that died
         int sent = h.Sent.Count;
 
         h.Tick();
-        h.Tick();
-        h.Combat.OnHeartbeat();
-        Assert.Equal(sent, h.Sent.Count);           // taken for dead, the look held back
+        h.Tick();                                   // 10 s: the first look
+        Assert.Equal(sent + 1, h.Sent.Count);
+        h.Feed($"Also here: {Rat}.");
+        Assert.Contains("silent but listed at the last look", h.Combat.UserBreakHoldSummary);
+
+        for (int round = 0; round < 5; round++)     // 15 s to 35 s: silent, and no look
+        {
+            h.Tick();
+            h.Combat.OnHeartbeat();
+        }
+        Assert.Equal(sent + 1, h.Sent.Count);
         Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);
 
-        Thread.Sleep(3100);                         // the re-display cooldown runs on real time
+        h.Tick();                                   // 40 s: thirty seconds after that reading
+        h.Combat.OnHeartbeat();
+        Assert.Equal(sent + 1, h.Sent.Count);       // asked for, held back by the cooldown
+        Assert.Contains("the room is being read", h.Combat.UserBreakHoldSummary);
+
+        Thread.Sleep(3100);
         h.Combat.OnHeartbeat();
 
-        Assert.Equal(sent + 1, h.Sent.Count);
+        Assert.Equal(sent + 2, h.Sent.Count);
         Assert.Equal(string.Empty, h.LastSent);
         h.Combat.OnHeartbeat();
-        Assert.Equal(sent + 1, h.Sent.Count);       // asked once
+        Assert.Equal(sent + 2, h.Sent.Count);       // asked once
+        Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);
+    }
+
+    // An ordinary room display in between is judged by the count as always: the
+    // back-off holds back only the looks its silence asks for.
+    [Fact]
+    public void SilentAndStillListed_AnOrdinaryDisplayWithoutIt_StillEndsTheHold()
+    {
+        using Harness h = FightingARatBesideAThief();
+        h.UserBreaks();
+        h.Tick();
+        h.Tick();
+        h.Feed($"Also here: {Rat}, {Thief}.");      // silent but listed
+        h.Tick();
+
+        h.Feed($"Also here: {Thief}.");
+
+        Assert.Null(h.Combat.UserBreakHoldTarget);
+        Assert.Equal($"a {Thief}", h.LastSent);
     }
 
     // The combat tracker's idle watchdog takes six quiet seconds under a held gate

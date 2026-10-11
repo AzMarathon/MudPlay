@@ -3834,10 +3834,10 @@ public partial class MainWindowViewModel : ObservableObject
         // neither, and the raw wire's lines (`sys goto` sends a break ahead of a
         // jump) are an engine's although nothing wraps them. A party member's `@do`
         // line counts with the user's (user, 2026-10-10) and carries their name.
-        string? doAskedBy = AppServices.Current.Do.SendingFor;
+        string? relayedFor = AppServices.Current.Do.SendingFor is { } doSender ? $"{doSender}'s @do" : null;
         if (typed && !AppServices.Current.SendingEngineRawCommand
-            && (AppServices.Current.EngineGate.SendingUsersOwnCommand || doAskedBy is not null))
-            AppServices.Current.OutboundBreak.ObserveOutbound(data, doAskedBy);
+            && (AppServices.Current.EngineGate.SendingUsersOwnCommand || relayedFor is not null))
+            AppServices.Current.OutboundBreak.ObserveOutbound(data, relayedFor);
         // Left-behind watch — a typed `leave` is the user leaving the party, and a
         // typed room command can draw an exit's refusal; neither is a follower the
         // leader walked off without. Typed lines only, as for gear.
