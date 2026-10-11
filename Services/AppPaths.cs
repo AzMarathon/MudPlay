@@ -437,8 +437,8 @@ public static class AppPaths
     // character's results, so a copy of the set does not carry it.
     //
     // The files under it are named by BBS and profile. Only AreaRankingFiles builds
-    // those paths, since it is the one place that checks the names are fit to be
-    // path pieces and that the result stays inside this folder.
+    // those paths, each piece through PathGuard, so the result stays inside this
+    // folder.
     public static string SimulatorRankingsFolder(string setName) =>
         Path.Combine(GameDataSetDir(setName), "Simulator");
 

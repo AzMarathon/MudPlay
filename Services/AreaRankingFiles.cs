@@ -38,88 +38,59 @@ public sealed class AreaRankingFiles
     };
 
     private readonly Func<DateTimeOffset> _now;
-    private readonly LogService? _log;
-    private readonly HashSet<string> _refusalsSaid = new(StringComparer.Ordinal);
 
-    public AreaRankingFiles(Func<DateTimeOffset>? clock = null, LogService? log = null)
-    {
-        _now = clock ?? (() => DateTimeOffset.Now);
-        _log = log;
-    }
+    public AreaRankingFiles(Func<DateTimeOffset>? clock = null) => _now = clock ?? (() => DateTimeOffset.Now);
 
     // ----- Where a file may be ---------
     //
     // A path here is built from three names that come from outside: a game-data set,
-    // a BBS and a profile. They are folder names the user chose, and a profile store
-    // that only checks them for blank is all that stands between a name like ".." or
-    // "/etc/x" and a file written, or a folder deleted with everything under it,
-    // somewhere else. So nothing below trusts them, twice over:
-    //   - each name must be one plain file name (IsPlainName), or nothing is done;
-    //   - and whatever path comes out must lie inside that set's Simulator folder
-    //     once resolved (Inside), or nothing is done. A recursive delete goes only
-    //     for a folder strictly below it.
-    // A refusal is logged at Warn, once for each name, and touches nothing on disk.
+    // a BBS and a profile, each a folder's name that the user chose. The rule for
+    // such names is PathGuard's and is not repeated here: each of the three must name
+    // an entry directly inside the folder above it (PathGuard.Child), so the file is
+    // always game data/{set}/Simulator/{bbs}/{profile}.ranking.json and nothing else.
+    // The names are an existing set's and an existing character's, so they are held
+    // to that and not to the stricter rule for a name being given: a profile made
+    // under an odder name before names were checked keeps its rankings like any other.
+    //
+    // A recursive delete goes only for a folder strictly below a set's Simulator
+    // folder (PathGuard.DeleteTree). A refusal is logged through PathGuard, once
+    // while it is remembered, and touches nothing on disk.
+    //
+    // The Simulator folder and the BBS folders in it are made here, as folders. One
+    // that is a link was put there by something else and leads wherever it likes:
+    // it is not followed, written through or emptied.
 
-    // True when piece is fit to be one part of a path: a single file name, with
-    // nothing in it that could name another folder, a drive or a device.
-    internal static bool IsPlainName(string? piece)
-    {
-        if (string.IsNullOrWhiteSpace(piece) || piece is "." or "..") return false;
-        if (piece[^1] is '.' or ' ') return false;
-        foreach (char c in piece)
-            if (c is '/' or '\\' or ':' || char.IsControl(c)) return false;
-        return string.Equals(Path.GetFileName(piece), piece, StringComparison.Ordinal);
-    }
-
-    // A set's Simulator folder as a full path, or null when the set's name is not a
-    // plain name or the folder would not lie inside the game-data root.
+    // A set's Simulator folder as a full path, or null when the set's name does not
+    // name a folder directly inside the game-data folder.
     private static string? SimulatorFolder(string? set)
     {
-        if (!IsPlainName(set)) return null;
-        string root = Path.GetFullPath(AppPaths.GameDataRoot);
+        if (PathGuard.Child(AppPaths.GameDataRoot, set) is null) return null;
         string folder = Path.GetFullPath(AppPaths.SimulatorRankingsFolder(set!));
-        return Inside(folder, Path.Combine(root, set!)) ? folder : null;
+        return IsLink(folder) ? null : folder;
     }
 
     // A BBS's folder inside a set's Simulator folder, or null.
-    private static string? BbsFolder(string? set, string? bbs)
+    private static string? BbsFolder(string? set, string? bbs) =>
+        SimulatorFolder(set) is { } simulator && PathGuard.Child(simulator, bbs) is { } folder && !IsLink(folder)
+            ? folder
+            : null;
+
+    // A character's file on a set, or null. The profile's name is held to the rule
+    // by itself first: ".." with the suffix on is a file name like any other.
+    private static string? FileIn(string? set, string? bbs, string? profile) =>
+        BbsFolder(set, bbs) is { } folder && PathGuard.Child(folder, profile) is not null
+            ? PathGuard.Child(folder, profile + Suffix)
+            : null;
+
+    private static bool IsLink(string folder)
     {
-        if (SimulatorFolder(set) is not { } simulator || !IsPlainName(bbs)) return null;
-        string folder = Path.GetFullPath(Path.Combine(simulator, bbs!));
-        return Inside(folder, simulator) ? folder : null;
+        try { return new DirectoryInfo(folder).LinkTarget is not null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return true; }
     }
 
-    // A character's file on a set, or null.
-    private static string? FileIn(string? set, string? bbs, string? profile)
-    {
-        if (BbsFolder(set, bbs) is not { } folder || !IsPlainName(profile)) return null;
-        string file = Path.GetFullPath(Path.Combine(folder, profile + Suffix));
-        return Inside(file, folder) ? file : null;
-    }
-
-    // True when path, already made full, lies strictly below folder.
-    private static bool Inside(string path, string folder)
-    {
-        string below = Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar;
-        return path.Length > below.Length && path.StartsWith(below, PathComparison);
-    }
-
-    private static readonly StringComparison PathComparison =
-        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-
-    // Remove folder and all under it, only when it lies strictly below simulator, a
-    // set's Simulator folder: never that folder's parent, the set, with its tables.
-    private static void DeleteBelow(string folder, string simulator)
-    {
-        if (Inside(Path.GetFullPath(folder), simulator) && Directory.Exists(folder))
-            Directory.Delete(folder, recursive: true);
-    }
-
-    private void Refuse(string what, string names)
-    {
-        if (!_refusalsSaid.Add(what + "|" + names)) return;
-        _log?.Warn("Simulator", $"area ranking file work refused ({what}): {names} is not a plain set, BBS or profile name; nothing on disk was touched");
-    }
+    // True when piece could be a set's, a BBS's or a profile's name at all: one path
+    // segment, whichever folder it is then looked for in.
+    private static bool IsOneName(string? piece) => PathGuard.Child(AppPaths.GameDataRoot, piece) is not null;
 
     // The file a pairing's ranking is kept in, or null when it has none: no set, no
     // character (the default profile is nobody, and its ranking is not kept), or a
@@ -127,13 +98,17 @@ public sealed class AreaRankingFiles
     public static string? FileFor(SimulatorOwner owner) =>
         Split(owner.Character) is var (bbs, profile) ? FileIn(owner.Set, bbs, profile) : null;
 
-    // The file for owner, with a refusal logged when owner names a set and character
-    // but no file may be kept for them.
-    private string? Resolve(SimulatorOwner owner, string what)
+    // The file for owner, with a refusal logged, naming the piece at fault, when
+    // owner names a set and character but no file may be kept for them.
+    private static string? Resolve(SimulatorOwner owner, string operation)
     {
         if (string.IsNullOrEmpty(owner.Set) || owner.Character is null) return null;
         if (FileFor(owner) is { } path) return path;
-        Refuse(what, $"game data '{owner.Set}', character '{owner.Character}'");
+        if (!IsOneName(owner.Set)) PathGuard.Refuse(operation, "game-data set name", owner.Set);
+        else if (Split(owner.Character) is not var (bbs, profile)) PathGuard.Refuse(operation, "character", owner.Character);
+        else if (!IsOneName(bbs)) PathGuard.Refuse(operation, "BBS name", bbs);
+        else if (!IsOneName(profile)) PathGuard.Refuse(operation, "profile name", profile);
+        else PathGuard.Refuse(operation, "ranking folder", $"{owner.Set}/{bbs}");
         return null;
     }
 
@@ -158,7 +133,7 @@ public sealed class AreaRankingFiles
     public (string? Error, long Bytes) Write(SimulatorOwner owner, AreaRanking ranking)
     {
         ArgumentNullException.ThrowIfNull(ranking);
-        if (ranking.World is not { } world || Resolve(owner, "save") is not { } path) return (null, 0);
+        if (ranking.World is not { } world || Resolve(owner, "Saving an area ranking") is not { } path) return (null, 0);
         try
         {
             if (!Directory.Exists(AppPaths.GameDataSetDir(owner.Set!))) return (null, 0);
@@ -176,7 +151,7 @@ public sealed class AreaRankingFiles
     public ReadResult Read(SimulatorOwner owner, RankingWorld worldNow)
     {
         ArgumentNullException.ThrowIfNull(worldNow);
-        if (Resolve(owner, "load") is not { } path) return default;
+        if (Resolve(owner, "Reading a saved area ranking") is not { } path) return default;
         RankingFile? file;
         try
         {
@@ -212,7 +187,7 @@ public sealed class AreaRankingFiles
 
     public void Delete(SimulatorOwner owner)
     {
-        if (Resolve(owner, "delete") is { } path) TryDelete(path);
+        if (Resolve(owner, "Deleting a saved area ranking") is { } path) TryDelete(path);
     }
 
     // Every ranking kept for a set, whoever's. Returns how many files went. What is
@@ -221,18 +196,25 @@ public sealed class AreaRankingFiles
     public int DeleteSet(string? set)
     {
         if (string.IsNullOrEmpty(set)) return 0;
+        const string operation = "Deleting a set's saved area rankings";
         if (SimulatorFolder(set) is not { } folder)
         {
-            Refuse("forget a set's rankings", $"game data '{set}'");
+            PathGuard.Refuse(operation, IsOneName(set) ? "ranking folder" : "game-data set name", set);
             return 0;
         }
         try
         {
             if (!Directory.Exists(folder)) return 0;
-            int files = Directory.EnumerateFiles(folder, "*" + Suffix, SearchOption.AllDirectories).Count();
-            foreach (string bbs in Directory.GetDirectories(folder)) DeleteBelow(bbs, folder);
+            // Counted and removed folder by folder, a link among them as the link it
+            // is: what it points at is somebody else's.
+            int files = Directory.GetFiles(folder, "*" + Suffix).Length;
+            foreach (string bbs in Directory.GetDirectories(folder))
+            {
+                if (!IsLink(bbs)) files += Directory.GetFiles(bbs, "*" + Suffix).Length;
+                PathGuard.DeleteTree(bbs, folder, operation);
+            }
             foreach (string stray in Directory.GetFiles(folder))
-                if (Inside(Path.GetFullPath(stray), folder)) File.Delete(stray);
+                if (PathGuard.IsInside(stray, folder)) File.Delete(stray);
             Directory.Delete(folder);
             return files;
         }
@@ -250,11 +232,13 @@ public sealed class AreaRankingFiles
     {
         if (Split(from) is not var (fromBbs, fromProfile)) return;
         (string Bbs, string Profile)? target = Split(to);
-        if (!IsPlainName(fromBbs) || !IsPlainName(fromProfile)
-            || (target is var (toBbs, toProfile) && (!IsPlainName(toBbs) || !IsPlainName(toProfile))))
+        string operation = to is null ? "Deleting a character's saved area rankings" : "Moving a character's saved area rankings";
+        string[] pieces = target is var (toBbs, toProfile)
+            ? new[] { fromBbs, fromProfile, toBbs, toProfile }
+            : new[] { fromBbs, fromProfile };
+        if (Array.Find(pieces, p => !IsOneName(p)) is { } bad)
         {
-            Refuse(to is null ? "delete a character's rankings" : "move a character's rankings",
-                $"'{from}'{(to is null ? "" : $" or '{to}'")}");
+            PathGuard.Refuse(operation, "BBS or profile name", bad);
             return;
         }
         foreach (string set in Sets()) MoveCharacter(from, to, set);
@@ -301,9 +285,10 @@ public sealed class AreaRankingFiles
     // (MoveCharacter ran for it first).
     public void MoveBbs(string oldBbs, string newBbs)
     {
-        if (!IsPlainName(oldBbs) || !IsPlainName(newBbs))
+        const string operation = "Moving a BBS's saved area rankings";
+        if (!IsOneName(oldBbs) || !IsOneName(newBbs))
         {
-            Refuse("move a BBS's rankings", $"'{oldBbs}' or '{newBbs}'");
+            PathGuard.Refuse(operation, "BBS name", IsOneName(oldBbs) ? newBbs : oldBbs);
             return;
         }
         foreach (string set in Sets())
@@ -314,7 +299,7 @@ public sealed class AreaRankingFiles
                 if (!Directory.Exists(source)) continue;
                 foreach (string file in Directory.GetFiles(source, "*" + Suffix))
                     MoveCharacter(SimulatorOwner.CharacterKey(oldBbs, ProfileOf(file)), SimulatorOwner.CharacterKey(newBbs, ProfileOf(file)), set);
-                DeleteBelow(source, simulator);
+                PathGuard.DeleteTree(source, simulator, operation);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* a file left under the old name says inside whose it was, and is dropped if ever read as another's */ }
         }
@@ -323,15 +308,16 @@ public sealed class AreaRankingFiles
     // A BBS was removed, and every profile under it.
     public void DeleteBbs(string bbs)
     {
-        if (!IsPlainName(bbs))
+        const string operation = "Deleting a BBS's saved area rankings";
+        if (!IsOneName(bbs))
         {
-            Refuse("delete a BBS's rankings", $"'{bbs}'");
+            PathGuard.Refuse(operation, "BBS name", bbs);
             return;
         }
         foreach (string set in Sets())
         {
             if (SimulatorFolder(set) is not { } simulator || BbsFolder(set, bbs) is not { } folder) continue;
-            try { DeleteBelow(folder, simulator); }
+            try { PathGuard.DeleteTree(folder, simulator, operation); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* its files say whose they were, and are dropped if ever read as another's */ }
         }
     }

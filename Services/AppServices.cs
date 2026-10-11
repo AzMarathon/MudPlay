@@ -8457,7 +8457,7 @@ public sealed class AppServices
         // Each ranking is also kept in a file in its set's folder, so it is there
         // after a restart; what a read finds is handed back on the UI thread.
         SimulatorRankings = new Game.Simulation.AreaRankingStore(
-            new AreaRankingFiles(log: Log), act => Avalonia.Threading.Dispatcher.UIThread.Post(act), Log);
+            new AreaRankingFiles(), act => Avalonia.Threading.Dispatcher.UIThread.Post(act), Log);
         SimulatorRankings.NoteActiveSet(GameData.ActiveSet);
         GameData.ActiveSetChanged += setName =>
             LogStaleSimulatorRankings(setName, "was read in again", SimulatorRankings.NoteActiveSet(setName));

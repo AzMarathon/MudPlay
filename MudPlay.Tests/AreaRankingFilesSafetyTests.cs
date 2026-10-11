@@ -10,21 +10,24 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // A ranking file's path is built from a set name, a BBS name and a profile name,
-// and whole folders are deleted by those names. None of the three is trusted: a
-// name that is not one plain file name is refused, and no read, write, move or
-// delete may land outside the set's Simulator folder whatever it is handed. Every
-// case here leaves a set of canary files, placed where a bad path would reach,
-// exactly as they were.
+// and whole folders are deleted by those names. None of the three is trusted: each
+// must name an entry directly inside the folder above it (PathGuard), and no read,
+// write, move or delete may land outside the set's Simulator folder whatever it is
+// handed. Every case here leaves a set of canary files, placed where a bad path
+// would reach, exactly as they were.
 //
 // The BBS names carry the test's own tag: moves and deletes by BBS walk every set
-// under the data root, other test classes' included.
+// under the data root, other test classes' included. The class runs in the
+// collection of the tests that draw refusals, one after another: a refusal is said
+// once and remembered for a while, across the whole process.
+[Collection(ScratchRoot.NamesCollection)]
 public sealed class AreaRankingFilesSafetyTests : IDisposable
 {
     private readonly string _tag = Guid.NewGuid().ToString("N")[..10];
     private readonly string _set;
     private readonly string _otherSet;
     private readonly List<string> _canaries = new();
-    private readonly LogService _log = new();
+    private readonly List<string> _said = new();
     private readonly AreaRankingFiles _files;
 
     private string Board => $"board-{_tag}";
@@ -36,9 +39,11 @@ public sealed class AreaRankingFilesSafetyTests : IDisposable
 
     public AreaRankingFilesSafetyTests()
     {
+        ScratchRoot.Require();
         _set = $"test-safe-a-{_tag}";
         _otherSet = $"test-safe-b-{_tag}";
-        _files = new AreaRankingFiles(log: _log);
+        _files = new AreaRankingFiles();
+        PathGuard.Refused += Hear;
         foreach (string set in new[] { _set, _otherSet })
         {
             Directory.CreateDirectory(AppPaths.GameDataSetDir(set));
@@ -65,8 +70,15 @@ public sealed class AreaRankingFilesSafetyTests : IDisposable
         _canaries.Add(path);
     }
 
+    private void Hear(string line) { lock (_said) _said.Add(line); }
+
+    // The refusals drawn by names that carry this test's tag: the guard's are the
+    // whole process's, and any other test's go by too.
+    private List<string> Said { get { lock (_said) return _said.Where(l => l.Contains(_tag)).ToList(); } }
+
     public void Dispose()
     {
+        PathGuard.Refused -= Hear;
         foreach (string set in new[] { _set, _otherSet })
         {
             try { Directory.Delete(AppPaths.GameDataSetDir(set), recursive: true); }
@@ -96,12 +108,19 @@ public sealed class AreaRankingFilesSafetyTests : IDisposable
         Level: 42, Step: 1.1, Hours: 1, Runs: 1, From: new RoomKey(1, 5), Realm: "Stock", Summary: "s",
         MadeAt: DateTimeOffset.Now, CharacterLevel: 42, World: World);
 
-    // Names that are not one plain file name. Some would climb out of the folder,
-    // some name a drive or a device, some Windows would quietly alter.
+    // Names that would lead somewhere other than a folder of that name: up, down a
+    // level, to an absolute path, or to no name at all.
     public static TheoryData<string> Hostile => new()
     {
-        "..", ".", "../..", "a/b", "a\\b", "/etc/x", "\\x", "C:x", "C:\\x", "name.", "name ", "", " ", "   ",
-        "a\u0001b", "a\nb", "..\\..", "./x", "x/..", "~/x", "a:b",
+        "..", ".", "../..", "a/b", "/etc/x", "", " ", "   ", "./x", "x/..", "~/x", "a/", "nul\0l",
+    };
+
+    // Names nothing would be given today, and that are one path segment where the
+    // file system allows them: a profile or BBS made under one before names were
+    // checked is a character like any other, and keeps its rankings.
+    public static TheoryData<string> OddButHarmless => new()
+    {
+        "name.", "a:b", "Sir: Bob", "a\\b", "\\x", "C:x", "C:\\x", "name ", "a\u0001b", "a\nb", "..\\..", "CON",
     };
 
     [Theory]
@@ -175,17 +194,25 @@ public sealed class AreaRankingFilesSafetyTests : IDisposable
     }
 
     [Fact]
-    public void ARefusalIsLoggedAtWarn_OnceForEachName()
+    public void ARefusalIsSaidThroughTheSharedGuard_OnceForEachOperationAndName()
     {
-        _files.DeleteBbs("..");
-        _files.DeleteBbs("..");
-        _files.Write(new SimulatorOwner(_set, "../one"), Ranking());
+        // Each name carries this test's tag, so the lines are its own whatever any
+        // other test has had refused before it.
+        string bbs = $"../{_tag}";
+        string profile = $"../p{_tag}";
+        _files.DeleteBbs(bbs);
+        _files.DeleteBbs(bbs);
+        _files.Write(new SimulatorOwner(_set, $"{Board}/{profile}"), Ranking());
+        _files.Write(new SimulatorOwner(_set, $"{Board}/{profile}"), Ranking());
+        _files.Read(new SimulatorOwner($"../s{_tag}", Good), World);
 
-        string[] warned = _log.Snapshot().Where(e => e.Severity == LogSeverity.Warn).Select(e => e.Message).ToArray();
-        Assert.Equal(2, warned.Length);
-        Assert.All(warned, m => Assert.Contains("nothing on disk was touched", m));
-        Assert.Contains(warned, m => m.Contains("delete a BBS's rankings") && m.Contains("'..'"));
-        Assert.Contains(warned, m => m.Contains("save") && m.Contains("'../one'"));
+        List<string> said = Said;
+        Assert.Equal(3, said.Count);
+        Assert.All(said, m => Assert.EndsWith("nothing on disk was changed.", m));
+        Assert.Contains($"Deleting a BBS's saved area rankings refused: '{bbs}' can't be used as a BBS name; nothing on disk was changed.", said);
+        Assert.Contains($"Saving an area ranking refused: '{profile}' can't be used as a profile name; nothing on disk was changed.", said);
+        Assert.Contains($"Reading a saved area ranking refused: '../s{_tag}' can't be used as a game-data set name; nothing on disk was changed.", said);
+        AssertNothingElseTouched();
     }
 
     [Fact]
@@ -198,8 +225,114 @@ public sealed class AreaRankingFilesSafetyTests : IDisposable
             Assert.Null(_files.Write(owner, Ranking()).Error);
             Assert.NotNull(_files.Read(owner, World).Ranking);
         }
-        Assert.True(AreaRankingFiles.IsPlainName("data-Paradigm-1.9.1 (room commands)"));
+        // A set named the way an imported one is has a file's place, made or not.
+        Assert.Equal(
+            Path.Combine(AppPaths.GameDataRoot, "data-Paradigm-1.9.1 (room commands)", "Simulator", Board, "one.ranking.json"),
+            AreaRankingFiles.FileFor(new SimulatorOwner("data-Paradigm-1.9.1 (room commands)", Good)));
+        Assert.Empty(Said);
         AssertNothingElseTouched();
+    }
+
+    [Theory]
+    [MemberData(nameof(OddButHarmless))]
+    public void AnOddButHarmlessProfileOrBbsName_GetsItsFile_InsideTheSimulatorFolder(string odd)
+    {
+        if (OperatingSystem.IsWindows()) return;   // none of these is one folder's name there
+        string simulator = AppPaths.SimulatorRankingsFolder(_set);
+        string oddBbs = $"{_tag}{odd}";
+        foreach (var owner in new[] { new SimulatorOwner(_set, $"{Board}/{odd}"), new SimulatorOwner(_set, $"{oddBbs}/one") })
+        {
+            string file = Assert.IsType<string>(AreaRankingFiles.FileFor(owner));
+            Assert.True(PathGuard.IsInside(file, simulator), file);
+            Assert.Null(_files.Write(owner, Ranking()).Error);
+            Assert.True(File.Exists(file));
+            Assert.NotNull(_files.Read(owner, World).Ranking);
+        }
+
+        // It goes with the character to a plain name, and with its BBS when that goes.
+        _files.MoveCharacter($"{Board}/{odd}", $"{Board}/renamed");
+        Assert.True(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(_set, $"{Board}/renamed"))));
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(_set, $"{Board}/{odd}"))));
+        _files.DeleteBbs(oddBbs);
+        Assert.False(Directory.Exists(Path.Combine(simulator, oddBbs)));
+
+        Assert.Empty(Said);
+        AssertNothingElseTouched();
+    }
+
+    // ----- A link where a folder should be ---------
+
+    // Somewhere outside the set, holding what a delete or a move gone through a link
+    // would take.
+    private string Victim()
+    {
+        string victim = Path.Combine(AppPaths.DataRoot, $"victim-{_tag}");
+        Canary(Path.Combine(victim, "one.ranking.json"));
+        Canary(Path.Combine(victim, "deep", "two.ranking.json"));
+        Canary(Path.Combine(victim, "other.txt"));
+        return victim;
+    }
+
+    [Fact]
+    public void ABbsFolderThatIsALinkToElsewhere_IsNotReadWrittenMovedOrEmptied()
+    {
+        if (OperatingSystem.IsWindows()) return;   // making a link needs a privilege there
+        string victim = Victim();
+        string linked = $"linked-{_tag}";
+        string link = Path.Combine(AppPaths.SimulatorRankingsFolder(_set), linked);
+        Directory.CreateSymbolicLink(link, victim);
+        var owner = new SimulatorOwner(_set, $"{linked}/one");
+
+        Assert.Null(AreaRankingFiles.FileFor(owner));
+        Assert.Equal((null, 0L), _files.Write(owner, Ranking()));
+        Assert.Equal(default, _files.Read(owner, World));
+        _files.Delete(owner);
+        _files.MoveCharacter(owner.Character, $"{Board}/two");
+        _files.MoveBbs(linked, Tavern);
+        _files.DeleteBbs(linked);
+        AssertNothingElseTouched();
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(_set, $"{Tavern}/one"))));
+
+        // The set's rankings going takes the link, as a link, and nothing through it.
+        _files.DeleteSet(_set);
+        Assert.False(Directory.Exists(link));
+        foreach (string canary in _canaries.Where(c => c.StartsWith(victim, StringComparison.Ordinal)))
+            Assert.True(File.Exists(canary), $"gone: {canary}");
+        try { Directory.Delete(victim, recursive: true); }
+        catch (IOException) { /* best-effort cleanup of a scratch folder */ }
+    }
+
+    [Fact]
+    public void ASimulatorFolderThatIsALinkToElsewhere_IsLeftAlone()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        string victim = Victim();
+        string set = $"test-safe-linked-{_tag}";
+        Directory.CreateDirectory(AppPaths.GameDataSetDir(set));
+        Directory.CreateSymbolicLink(AppPaths.SimulatorRankingsFolder(set), victim);
+        // Through the link, "deep" is a BBS's folder and its file a character's.
+        var owner = new SimulatorOwner(set, "deep/two");
+
+        try
+        {
+            Assert.Null(AreaRankingFiles.FileFor(owner));
+            Assert.Equal((null, 0L), _files.Write(owner, Ranking()));
+            Assert.Equal(default, _files.Read(owner, World));
+            _files.Delete(owner);
+            _files.MoveCharacter(owner.Character, null);
+            _files.MoveBbs("deep", Tavern);
+            _files.DeleteBbs("deep");
+            Assert.Equal(0, _files.DeleteSet(set));
+
+            foreach (string canary in _canaries.Where(c => c.StartsWith(victim, StringComparison.Ordinal)))
+                Assert.True(File.Exists(canary), $"gone: {canary}");
+            Assert.Equal(3, Directory.EnumerateFiles(victim, "*", SearchOption.AllDirectories).Count());
+        }
+        finally
+        {
+            Directory.Delete(AppPaths.GameDataSetDir(set), recursive: true);
+            Directory.Delete(victim, recursive: true);
+        }
     }
 
     [Fact]
