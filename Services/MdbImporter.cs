@@ -48,7 +48,8 @@ public sealed class MdbImporter
         if (!Directory.Exists(GameDataRoot)) return Array.Empty<string>();
         return Directory.GetDirectories(GameDataRoot)
             .Select(Path.GetFileName)
-            .Where(static n => !string.IsNullOrEmpty(n))
+            .Where(static n => !string.IsNullOrEmpty(n)
+                               && !n.Equals(AppPaths.RefusedName, StringComparison.OrdinalIgnoreCase))
             .Select(static n => n!)
             .OrderBy(static n => n, StringComparer.OrdinalIgnoreCase)
             .ToArray();

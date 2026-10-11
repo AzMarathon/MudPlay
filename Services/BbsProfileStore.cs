@@ -196,7 +196,8 @@ public sealed class BbsProfileStore
             // A folder's own name is one path segment, plain or not; nothing that
             // would lead elsewhere is ever listed.
             string name = Path.GetFileName(folder);
-            if (string.IsNullOrEmpty(name) || !Usable("Listing BBSes", name)) continue;
+            if (string.IsNullOrEmpty(name) || name.Equals(AppPaths.RefusedName, StringComparison.OrdinalIgnoreCase)
+                || !Usable("Listing BBSes", name)) continue;
             if (!File.Exists(AppPaths.BbsProfileFile(name))) continue;
             yield return name;
         }
