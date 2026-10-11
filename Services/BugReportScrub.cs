@@ -84,6 +84,31 @@ public static class BugReportScrub
         return sb.ToString();
     }
 
+    // The game's echo of a suicide password as it is typed: `*` after one of its
+    // three password prompts (GAME_MECHANICS "Wire, prompt & command output":
+    // `set suicide`). A run of any length is the echo: Paradigm prints one for
+    // each character sent, and nothing here counts on Stock printing fewer. The
+    // run is masked whole, so a report doesn't give the password's length away.
+    // Between the stars the raw wire may carry a colour change or the erase of a
+    // correction (caret notation), never a line end.
+    private const string EchoBreak = @"\^\[\[[0-9;?]*[A-Za-z]|\^H[ ]\^H|\^[@A-IKLN-Z\\\]^_]";
+    private static readonly Regex PasswordEcho = new(
+        @"(?<before>(?:Enter your suicide password:|Enter the current password:|Enter New Password:)(?:[ ]|" + EchoBreak + @")*)"
+        + @"\*(?:(?:" + EchoBreak + @")*\*)*",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    // Masks every password echo in text; how many were masked comes back.
+    private static string MaskPasswordEchoes(string text, out int masked)
+    {
+        int count = 0;
+        // No star, no echo: most text is done here.
+        string result = text.Contains('*')
+            ? PasswordEcho.Replace(text, m => { count++; return m.Groups["before"].Value + Mask; })
+            : text;
+        masked = count;
+        return result;
+    }
+
     public sealed class Scrubber
     {
         public static readonly Scrubber None = new(Array.Empty<Regex>(), Array.Empty<string>(), Array.Empty<string>());
@@ -114,8 +139,13 @@ public static class BugReportScrub
         public string Apply(string text, out int replaced)
         {
             replaced = 0;
-            if (string.IsNullOrEmpty(text) || _patterns.Length == 0) return text;
-            int count = 0;
+            if (string.IsNullOrEmpty(text)) return text;
+            // The echo is masked whether or not a password is saved here: one
+            // typed by hand is echoed all the same.
+            text = MaskPasswordEchoes(text, out int echoes);
+            replaced = echoes;
+            if (_patterns.Length == 0) return text;
+            int count = echoes;
             // A raw-wire line that shows a value only once its backspace
             // corrections are applied is rewritten with them applied, so the
             // passes below see it.

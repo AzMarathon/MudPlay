@@ -202,6 +202,55 @@ public sealed class BugReportScrubTests
         Assert.Empty(scrubber.Notes);
     }
 
+    // The game echoes a suicide password as stars. Paradigm prints one for each
+    // character sent, however many; Stock's call is echsec('*', 8). Whatever the
+    // run's length it is the echo, and it is masked whole: a report doesn't say
+    // how long the password is. The placeholder here is 20 characters.
+    [Theory]
+    [InlineData("12:00:01 Enter your suicide password:********************", "12:00:01 Enter your suicide password:[redacted]")]   // Paradigm: one a character
+    [InlineData("12:00:01 Enter your suicide password:********", "12:00:01 Enter your suicide password:[redacted]")]               // Stock: a width of 8
+    [InlineData("12:00:01 [HP=100/MA=50]:Enter your suicide password: ***", "12:00:01 [HP=100/MA=50]:Enter your suicide password: [redacted]")]
+    [InlineData("12:00:01 Enter the current password:*********************", "12:00:01 Enter the current password:[redacted]")]
+    [InlineData("12:00:01 Enter New Password:*", "12:00:01 Enter New Password:[redacted]")]
+    [InlineData("Enter your suicide password:^[[0;37m****^[[1m****^[[0m^M", "Enter your suicide password:^[[0;37m[redacted]^[[0m^M")]
+    [InlineData("Enter New Password:***^H ^H*****^M", "Enter New Password:[redacted]^M")]
+    public void TheEchoOfASuicidePassword_IsMaskedWhateverItsLength(string text, string expected)
+    {
+        // Saved or not: a password typed by hand is echoed all the same.
+        Assert.Equal(expected, MakeScrubber().Apply(text));
+        Assert.Equal(expected, BugReportScrub.Build([], []).Apply(text));
+        // Masking again changes nothing.
+        Assert.Equal(expected, MakeScrubber().Apply(expected));
+    }
+
+    [Theory]
+    [InlineData("12:00:01 *Combat Off*")]
+    [InlineData("12:00:01 Enter your suicide password:")]
+    [InlineData("12:00:01 Enter your suicide password:\n12:00:02 *Combat Off*")]
+    [InlineData("Enter your suicide password:^M\n*Combat Engaged*^M")]
+    [InlineData("12:00:01 Somebody gossips: my password is ******** lol")]
+    public void StarsThatAreNotAPasswordsEcho_AreLeft(string text) =>
+        Assert.Equal(text, MakeScrubber().Apply(text));
+
+    [Fact]
+    public void Render_ShowsNoPasswordLength_FromItsEcho()
+    {
+        const string placeholder = "placeholder-password-20";
+        BugReportBuilder.BugReportCapture capture = new(
+            new DateTimeOffset(2026, 10, 10, 14, 0, 0, TimeSpan.Zero), RealmType.ParaMud,
+            [
+                new BugReportBuilder.Section("Scrollback (oldest first)", "intro",
+                    ["12:00:01 [HP=10/MA=5]:suicide", "12:00:01 Enter your suicide password:" + new string('*', placeholder.Length), "12:00:02 Invalid password specified."]),
+                new BugReportBuilder.Section("Wire — raw", "```\nEnter your suicide password:" + new string('*', placeholder.Length) + "^M\n```", InBudget: false),
+            ],
+            BugReportScrub.Build([new(BugReportScrub.SuicidePasswordLabel, placeholder)], []));
+
+        string md = BugReportBuilder.Render(capture, "x");
+
+        Assert.DoesNotContain("***", md);
+        Assert.Equal(2, CountOf(md, "Enter your suicide password:" + BugReportScrub.Mask));
+    }
+
     [Fact]
     public void Apply_IsCaseInsensitive()
     {

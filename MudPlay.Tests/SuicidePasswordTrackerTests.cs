@@ -80,6 +80,31 @@ public sealed class SuicidePasswordTrackerTests
         finally { Directory.Delete(tmp, recursive: true); }
     }
 
+    // A password longer than eight characters is kept whole, and the prompt line
+    // is read the same whatever run of stars the game echoed after it: Paradigm
+    // prints one for each character sent, Stock's echo call has a width of 8.
+    [Theory]
+    [InlineData(20)]   // Paradigm
+    [InlineData(8)]    // Stock
+    public void ALongPassword_IsStoredWhole_WhateverTheEchoOnThePromptLine(int starsEchoed)
+    {
+        const string placeholder = "placeholder-pw-20-ch";
+        var (tracker, router, gate, profile, protector, tmp) = Setup();
+        try
+        {
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes("set suicide\r"));
+            tracker.ObserveOutbound(Encoding.Latin1.GetBytes(placeholder + "\r"));
+            // The prompt completes as a line only once it is answered, with the
+            // echo on it.
+            Dispatch(router, "Enter New Password:" + new string('*', starsEchoed));
+            Dispatch(router, "Password changed");
+
+            Assert.False(gate.IsLocked);
+            Assert.Equal(placeholder, protector.Unprotect(profile.Current!.EncryptedSuicidePassword!));
+        }
+        finally { Directory.Delete(tmp, recursive: true); }
+    }
+
     [Fact]
     public void FirstTimeSet_PrimedByOutboundSetSuicide_CapturesOnPasswordChanged()
     {

@@ -3,6 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.173.0**
 > - Bug report: your login name, login password and suicide password are masked everywhere in it, and in a crash report
+> - Bug report: the `*` the game echoes for a suicide password is masked too, so its length isn't shown
 > - Bug report: racist and other offensive words on chat lines are masked, in the report only
 > - Bug report: a list of every command sent, held or dropped, with who sent it (typed, an alias, a window, the Local API, an engine, a macro / trigger / event, a route step)
 > - Bug report: Holds and waits near the top: the send gate, each movement gate with who raised it and since when, time in state for every engine, what each is waiting on

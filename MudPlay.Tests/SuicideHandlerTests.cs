@@ -184,6 +184,48 @@ public sealed class SuicideHandlerTests
         Assert.True(h.Handler.AwaitingPasswordPrompt);
     }
 
+    // A stored password is sent whole, however long: nothing here counts on a
+    // length. What the game echoes for it differs by realm (Paradigm one star a
+    // character, Stock's echo call has a width of 8); either row is just the
+    // answered prompt, and nothing more is sent for it.
+    [Theory]
+    [InlineData(20)]   // Paradigm: a star for each character sent
+    [InlineData(8)]    // Stock: echsec('*', 8)
+    public void StoredPassword_LongerThanEightCharacters_IsSentWhole_AndItsEchoSendsNothingMore(int starsEchoed)
+    {
+        const string placeholder = "placeholder-pw-20-ch";
+        using Harness h = new();
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect(placeholder);
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Handler.ObserveCursorRow("Enter your suicide password:");
+        Assert.Equal(placeholder + "\r", Encoding.Latin1.GetString(h.Wire[^1]));
+
+        int sent = h.Wire.Count;
+        h.Handler.ObserveCursorRow("Enter your suicide password:" + new string('*', starsEchoed));
+        Assert.Equal(sent, h.Wire.Count);
+        Assert.False(h.Handler.AwaitingPasswordPrompt);
+    }
+
+    // The echo standing on the row while a later @suicide waits is not the
+    // prompt: the row must be the prompt alone.
+    [Theory]
+    [InlineData(20)]
+    [InlineData(8)]
+    public void StoredPassword_ARowStillShowingAnEarlierEcho_IsNotThePrompt(int starsEchoed)
+    {
+        using Harness h = new();
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("placeholder-pw-20-ch");
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Handler.ObserveCursorRow("Enter your suicide password:" + new string('*', starsEchoed));
+
+        Assert.DoesNotContain(h.Wire, b => Encoding.Latin1.GetString(b).Contains("placeholder"));
+        Assert.True(h.Handler.AwaitingPasswordPrompt);
+    }
+
     // More of the same: a statline with a player's line after it, a bracketed
     // word standing in for one, and our own say quoting the prompt.
     [Theory]
