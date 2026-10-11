@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
-using MudPlay.Game;
 using MudPlay.Game.Spells;
 
 namespace MudPlay.Services;
@@ -61,8 +60,8 @@ public sealed class RoomHazardIndex
     // desert's "you need water, soon!" spell 712), reached down the checkspell's
     // buff-absent branch; its game-data message is the reactive re-`use` trigger,
     // since the waterskin buff has no wear-off line to time off. 0 when the chain
-    // casts nothing (or the target block couldn't be resolved) and ConfirmedFollowOns
-    // has no entry to stand in for it.
+    // casts nothing (or the target block couldn't be resolved) and the user has named
+    // no follow-on for the room spell (RoomSpellDamageClassifier.ConfirmedFollowOn).
     // ImmunityItems are the passive failure-branch guards (the desert sunstone
     // wristband) that make the whole hazard a no-op just by being held/worn — the
     // provisioner skips the `use` entirely when one is carried, since spending a
@@ -133,16 +132,20 @@ public sealed class RoomHazardIndex
         // damage, negated by an item's `NegateSpell-N`".
         private readonly int _negateGroup;
 
+        // The items of that group, empty when there is none: what RoomSpellCounterWear
+        // picks from to put on before a step into the room.
+        public IReadOnlyList<int> NegatingItems =>
+            _negateGroup >= 0 && _negateGroup < RequirementGroups.Count ? RequirementGroups[_negateGroup] : [];
+
         // True when the hazard does nothing to this character as things stand: the
         // negate group has an item on the body, and every other group one that is
         // held, worn or not. Asked group by group, since the two are different checks
         // in the game: an item that is in both has to be worn for the one and only
-        // held for the other. Stricter than IsSatisfiedBy, which asks only whether a
-        // counter is carried. Route planning goes by that looser test today and no
-        // engine puts a carried counter on, so a route can cross a room this says
-        // still hurts. A buff's source item counts while carried: the hazard
-        // provisioner keeps that buff raised in these rooms, and a lapse is not read
-        // here.
+        // held for the other. Stricter than IsSatisfiedBy, which is what a route is
+        // planned on: there a carried negating item counts when the client will put
+        // it on before the step (RoomSpellCounterWear). A buff's source item counts
+        // while carried: the hazard provisioner keeps that buff raised in these
+        // rooms, and a lapse is not read here.
         public bool IsCounteredNow(Func<int, bool> worn, Func<int, bool> carried)
         {
             ArgumentNullException.ThrowIfNull(worn);
@@ -202,11 +205,20 @@ public sealed class RoomHazardIndex
             RequirementGroups.Where(static g => g.Count == 1)
                 .Select(static g => g[0]).Distinct().ToArray();
 
-        // True when the player carries at least one item from every group.
-        public bool IsSatisfiedBy(Func<int, bool> carries)
+        // True when the player carries at least one item from every group: what a
+        // route can be planned on. A negating item only works worn, so for that
+        // group negatorUsable also has to pass the item: it is on, or the client will
+        // put it on before the step. Null counts every carried one, as before the
+        // client wore them.
+        public bool IsSatisfiedBy(Func<int, bool> carries, Func<int, bool>? negatorUsable = null)
         {
             ArgumentNullException.ThrowIfNull(carries);
-            return RequirementGroups.All(g => g.Any(carries));
+            for (int i = 0; i < RequirementGroups.Count; i++)
+            {
+                bool negating = i == _negateGroup && negatorUsable is not null;
+                if (!RequirementGroups[i].Any(id => carries(id) && (!negating || negatorUsable!(id)))) return false;
+            }
+            return true;
         }
     }
 
@@ -218,21 +230,6 @@ public sealed class RoomHazardIndex
     private const int AbilTextBlock = SpellTextBlock.AbilityCode;
     private const int AbilEndCast = 151;
     private const int MaxChainDepth = 16;
-
-    // Buff-absent follow-on spells the game data does not tie to their room spell,
-    // each one confirmed by the user and none of them worked out. Paradigm's two
-    // desert room spells gate on the waterskin buff with a `failspell` whose
-    // buff-absent blocks (2654 / 2659) are not in the set, so nothing there names
-    // the spell that does the damage: "the desert rooms spell damage is done by a
-    // follow on spell if they dont have a waterskin buff", and asked whether that
-    // spell is #712, desert damage, 5 to 20 a cast: "yes" (user, 2026-10-10). Stock
-    // needs no entry: its blocks are in the data and lead to the same spell. An entry
-    // is used only where the data gives no lapse spell of its own.
-    private static readonly (RealmType Realm, int RoomSpell, int BuffSpell, int FollowOn)[] ConfirmedFollowOns =
-    {
-        (RealmType.ParaMud, 683, 711, 712),
-        (RealmType.ParaMud, 684, 711, 712),
-    };
 
     private readonly GameDataCache _cache;
     private readonly LogService? _log;
@@ -296,12 +293,11 @@ public sealed class RoomHazardIndex
         Dictionary<int, List<int>> castersBySpell = new();
         ReadItemReverseMaps(negatorsBySpell, castersBySpell);
         Dictionary<int, string> tbActions = ReadTbActions();
-        RealmType realm = _cache.ActiveRealm;
 
         foreach (int spell in roomSpells)
         {
             RoomHazard? hazard = BuildHazard(
-                spell, spellAbils, negatorsBySpell, castersBySpell, tbActions, durationSecondsBySpell, realm);
+                spell, spellAbils, negatorsBySpell, castersBySpell, tbActions, durationSecondsBySpell);
             if (hazard is not null) _hazardBySpell[spell] = hazard;
         }
 
@@ -324,8 +320,7 @@ public sealed class RoomHazardIndex
         Dictionary<int, List<int>> negatorsBySpell,
         Dictionary<int, List<int>> castersBySpell,
         Dictionary<int, string> tbActions,
-        Dictionary<int, int> durationSecondsBySpell,
-        RealmType realm)
+        Dictionary<int, int> durationSecondsBySpell)
     {
         HashSet<int> chain = new();
         List<int> textBlocks = new();
@@ -372,14 +367,15 @@ public sealed class RoomHazardIndex
         foreach (int tb in textBlocks)
             ScanTextBlock(tb, 0, tbActions, castersBySpell, durationSecondsBySpell, visitedTb, groups, buffCounters);
 
-        // Where the data named no lapse spell, the confirmed list may.
-        for (int i = 0; i < buffCounters.Count; i++)
-        {
-            if (buffCounters[i].LapseSpell != 0) continue;
-            foreach ((RealmType onRealm, int roomSpell, int buffSpell, int followOn) in ConfirmedFollowOns)
-                if (onRealm == realm && roomSpell == rootSpell && buffSpell == buffCounters[i].BuffSpell)
+        // Where the data named no lapse spell, the user may have: Paradigm's two
+        // desert spells gate on the waterskin buff with a `failspell` whose
+        // buff-absent block the set lacks, and the spell cast there is on the user's
+        // word (RoomSpellDamageClassifier.ConfirmedFollowOn, the one list of them).
+        // A set that has the block (Stock) is read from its own data above.
+        if (Game.Map.RoomSpellDamageClassifier.ConfirmedFollowOn(rootSpell) is > 0 and int followOn)
+            for (int i = 0; i < buffCounters.Count; i++)
+                if (buffCounters[i].LapseSpell == 0)
                     buffCounters[i] = buffCounters[i] with { LapseSpell = followOn };
-        }
 
         // Only index a genuinely harmful spell — a benign one that happens to carry a
         // failitem/checkspell counter is not a hazard (see `harmful` above).

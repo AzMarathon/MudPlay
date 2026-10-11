@@ -78,6 +78,7 @@ public static class NavActivity
         (MovementCoordinator.AcquisitionGate, "looting", NavActivityKind.Waiting, false),
         (MovementCoordinator.GhSortGate, "Roomba", NavActivityKind.Waiting, true),
         (MovementCoordinator.GearSwapGate, "changing gear", NavActivityKind.Waiting, false),
+        (MovementCoordinator.CounterWearGate, "putting on a room-spell counter", NavActivityKind.Waiting, false),
         (MovementCoordinator.SneakCooldownGate, "Waiting to Sneak", NavActivityKind.Waiting, true),
         (MovementCoordinator.SneakSettleGate, "sneaking", NavActivityKind.Waiting, false),
         (MovementCoordinator.SneakCastGate, "Buffing", NavActivityKind.Waiting, true),

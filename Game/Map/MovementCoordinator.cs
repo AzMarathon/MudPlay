@@ -122,6 +122,13 @@ public sealed class MovementCoordinator
     // of the answer and walk on unsneaked. Capped at a few seconds. Engine-wait tier.
     public const string SneakSettleGate = "SneakSettle";
 
+    // Asserted by RoomSpellCounterWear from the `wear` of a room-spell counter (the
+    // phoenix feather ahead of magma heat) until the game says it is on or refuses
+    // it, so the step into the room goes out after the item does. Capped like the
+    // sneak answer above, so a wear the game never answers can't strand the route.
+    // Engine-wait tier.
+    public const string CounterWearGate = "CounterWear";
+
     // Asserted by StealthManager while auto-sneak is on and a buff / heal / cure that
     // sneak keeping held on the way comes due in an NPC-free room: the step waits for
     // the cast, then the re-sneak, since that's the one place both can go out. Capped

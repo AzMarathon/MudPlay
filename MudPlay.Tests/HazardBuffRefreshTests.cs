@@ -839,9 +839,9 @@ public sealed class HazardBuffRefreshTests : IDisposable
 
     // Paradigm's data has the desert's `failspell` and not the block it jumps to, so
     // nothing in it names the spell that does the damage. The user confirmed it is
-    // #712 (2026-10-10), and the index carries that as an entry of its own, used only
-    // on Paradigm and only where the data gives nothing.
-    private RoomHazardIndex.BuffCounter DesertCounter(string set, int? legit, string tbInfo)
+    // #712 (2026-10-10). The index takes that from the one list of such follow-ons
+    // (RoomSpellDamageClassifier), and only where the data gives nothing.
+    private RoomHazardIndex.BuffCounter DesertCounter(string set, string tbInfo)
     {
         string dir = Path.Combine(_root, set);
         Directory.CreateDirectory(dir);
@@ -852,8 +852,6 @@ public sealed class HazardBuffRefreshTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "Items.json"),
             """ [ { "Number": 283, "Abil-0": 43, "AbilVal-0": 711 } ] """);
         File.WriteAllText(Path.Combine(dir, "TBInfo.json"), tbInfo);
-        if (legit is { } code)
-            File.WriteAllText(Path.Combine(dir, "Info.json"), $$""" [ { "Legit": {{code}} } ] """);
         GameDataCache cache = new(_root);
         cache.SwitchSet(set);
         RoomHazardIndex index = new(cache);
@@ -866,21 +864,20 @@ public sealed class HazardBuffRefreshTests : IDisposable
     [Fact]
     public void Paradigm_TheDesertsLapseSpell_IsTheConfirmedFollowOn()
     {
-        RoomHazardIndex.BuffCounter counter = DesertCounter("para", legit: 2, ParadigmDesertBlocks);
+        RoomHazardIndex.BuffCounter counter = DesertCounter("para", ParadigmDesertBlocks);
 
         Assert.Equal(711, counter.BuffSpell);
         Assert.Equal(712, counter.LapseSpell);
         Assert.Equal(1800, counter.DurationSeconds);
     }
 
-    // The entry is Paradigm's. On Stock the lapse spell comes from the data or not at
-    // all, and where the data does name one, the data's stands on either realm.
+    // A set that has the buff-absent block (Stock) is read from its own data: the
+    // confirmed follow-on stands in only where the block is missing.
     [Fact]
-    public void TheConfirmedFollowOn_IsParadigmsOnly_AndTheDataComesFirst()
+    public void TheConfirmedFollowOn_StandsInOnlyWhereTheDataNamesNoLapseSpell()
     {
-        Assert.Equal(0, DesertCounter("stock-cut", legit: 1, ParadigmDesertBlocks).LapseSpell);
-        Assert.Equal(999, DesertCounter("para-full", legit: 2,
-            """ [ { "Number": 2653, "Action": "failspell 711 2654:random 2655" }, { "Number": 2654, "Action": "cast 999" } ] """)
+        Assert.Equal(999, DesertCounter("with-block",
+            """ [ { "Number": 2653, "Action": "checkspell 711 2654:random 2655" }, { "Number": 2654, "Action": "cast 999" } ] """)
             .LapseSpell);
     }
 

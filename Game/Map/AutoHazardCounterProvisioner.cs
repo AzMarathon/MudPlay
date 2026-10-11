@@ -49,7 +49,7 @@ namespace MudPlay.Game.Map;
 //    exactly ONE `use` to re-raise. The trigger is the game-data message record
 //    linked to the hazard's lapse spell (RoomHazardIndex.BuffCounter.LapseSpell),
 //    not hardcoded realm text; where the data doesn't tie that spell to the room
-//    (Paradigm's desert) RoomHazardIndex.ConfirmedFollowOns does. If a SECOND lapse
+//    (Paradigm's desert) RoomSpellDamageClassifier.ConfirmedFollowOn does. If a SECOND lapse
 //    prompt arrives before the swig, the `use` drew nothing (out of charges /
 //    waterskins) and we HALT the walk rather than march deeper into a hazard we can
 //    no longer counter.

@@ -29,6 +29,9 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
     private readonly Func<int, string?> _itemName;
     private readonly Func<int, string?>? _spellName;
     private readonly LogService? _log;
+    // Run when a save changed the wear setting: the engine acts on it where the
+    // character stands, not at its next step.
+    private readonly Action? _wearSettingSaved;
     private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
@@ -36,6 +39,13 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
     // What the profile holds, as last loaded or saved: the save's log line names
     // the spells whose stored choice it changed.
     private Dictionary<int, bool> _stored = new();
+    private bool _storedWear = true;
+
+    // Put on a carried item that negates a room's spell before stepping into the
+    // room, and give its slot back afterwards (RoomSpellCounterWear).
+    [ObservableProperty] private bool _wearCounterBeforeEntering = true;
+
+    partial void OnWearCounterBeforeEnteringChanged(bool value) => OnRowChanged();
 
     public override string Id => SectionId;
     public override string Title => "Periodic Damage Room Spells";
@@ -55,6 +65,9 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
             yield return "Magma heat";
             yield return "Swamp poison";
             yield return "Countered by";
+            yield return "Wear the item that negates a room's spell before stepping in";
+            yield return "Phoenix feather";
+            yield return "Magma amulet";
         }
     }
 
@@ -107,7 +120,8 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
             AppServices.Current.ItemNames.GetName,
             AppServices.Current.GameData,
             AppServices.Current.Log,
-            AppServices.Current.SpellCatalog.GetSpellNameByNumber) { }
+            AppServices.Current.SpellCatalog.GetSpellNameByNumber,
+            AppServices.Current.NoteCounterWearSettingSaved) { }
 
     public PeriodicDamageRoomSpellsSectionViewModel(
         ProfileService profile,
@@ -116,8 +130,10 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
         Func<int, string?> itemName,
         GameDataCache? gameData = null,
         LogService? log = null,
-        Func<int, string?>? spellName = null)
+        Func<int, string?>? spellName = null,
+        Action? wearSettingSaved = null)
     {
+        _wearSettingSaved = wearSettingSaved;
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(spells);
         ArgumentNullException.ThrowIfNull(activeSet);
@@ -159,9 +175,14 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
             .Where(row => row.BarsResting != StoredOrDefault(row))
             .Select(static row => (row.Number, row.Name, row.BarsResting))
             .ToList();
+        bool wearPending = WearCounterBeforeEntering != _storedWear;
+        bool wearWas = WearCounterBeforeEntering;
 
         _suppressDirty = true;
-        _stored = new Dictionary<int, bool>(ReadOrDefault(_profile.Current).BarsResting);
+        PeriodicDamageRoomSpellSettings saved = ReadOrDefault(_profile.Current);
+        _stored = new Dictionary<int, bool>(saved.BarsResting);
+        _storedWear = saved.WearCounterBeforeEntering;
+        WearCounterBeforeEntering = keepPending && wearPending ? wearWas : _storedWear;
         int? picked = SelectedSpell?.Number;
         Spells.Clear();
         HashSet<int> listed = new();
@@ -186,10 +207,12 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
             if (keepPending && Spells.FirstOrDefault(r => r.Number == number) is { } kept) kept.BarsResting = bars;
             else dropped.Add($"{name} (#{number})");
         }
+        if (wearPending && !keepPending) dropped.Add("the counter-wearing box");
 
         SelectedSpell = Spells.FirstOrDefault(row => row.Number == picked);
         _suppressDirty = false;
-        _dirty = Spells.Any(row => row.BarsResting != StoredOrDefault(row));
+        _dirty = WearCounterBeforeEntering != _storedWear
+            || Spells.Any(row => row.BarsResting != StoredOrDefault(row));
         OnPropertyChanged(nameof(IsDirty));
         UpdateSummary();
         OnPropertyChanged(nameof(HasProfile));
@@ -237,16 +260,29 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
                 changes.Add($"{row.Name} ({row.NumberText}) {(row.BarsResting ? "now bars resting" : "no longer bars resting")}");
         }
 
+        bool wearChanged = WearCounterBeforeEntering != _storedWear;
         profile.Settings ??= new();
-        profile.Settings[PeriodicDamageRoomSpellSettings.TabKey] =
-            JsonSerializer.SerializeToElement(new PeriodicDamageRoomSpellSettings { BarsResting = next });
+        profile.Settings[PeriodicDamageRoomSpellSettings.TabKey] = JsonSerializer.SerializeToElement(
+            new PeriodicDamageRoomSpellSettings
+            {
+                BarsResting = next,
+                WearCounterBeforeEntering = WearCounterBeforeEntering,
+            });
         _profile.Save();
         _stored = next;
+        _storedWear = WearCounterBeforeEntering;
         ClearDirty();
         UpdateSummary();
         if (changes.Count > 0)
             _log?.Info("Health",
                 $"Periodic Damage Room Spells: {string.Join("; ", changes)}. In effect from the next rest decision.");
+        if (wearChanged)
+        {
+            _log?.Info("Equipment", WearCounterBeforeEntering
+                ? "Periodic Damage Room Spells: a carried item that negates a room's spell is now put on before stepping in, and at once in such a room."
+                : "Periodic Damage Room Spells: a carried item that negates a room's spell is no longer put on, and routes no longer count one that isn't worn. One already on is given back as usual.");
+            _wearSettingSaved?.Invoke();
+        }
     }
 
     public override void Discard() => Reload(keepPending: false, why: null);
