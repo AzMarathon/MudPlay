@@ -429,6 +429,80 @@ public sealed class AreaRankingFilesTests : IDisposable
         Assert.Same(fresh, later.Store.Get(owner));
     }
 
+    // A read is still out when the ranking it is reading is forgotten. The delete is
+    // queued behind it, so the read finds the file; what it found must not come back.
+    [Fact]
+    public void ARankingForgottenWhileItIsBeingRead_IsNotPutBack()
+    {
+        var owner = new SimulatorOwner(NewSet("a"), One);
+        var first = new Client();
+        first.Store.Keep(owner, Ranking("Hills"));
+        first.Settle();
+
+        // A re-rank starts before the read of the earlier session's file is back.
+        var later = new Client();
+        var handed = new List<AreaRanking?>();
+        later.Store.Load(owner, World, handed.Add);
+        later.Store.Forget(owner);
+        later.Settle();
+
+        Assert.DoesNotContain(handed, r => r is not null);
+        Assert.Null(later.Store.Get(owner));
+        Assert.Equal(0, later.Store.Count);
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(owner)));
+    }
+
+    [Fact]
+    public void ARankingWhoseSetIsReplacedWhileItIsBeingRead_IsNotPutBack()
+    {
+        string set = NewSet("a");
+        var owner = new SimulatorOwner(set, One);
+        var first = new Client();
+        first.Store.Keep(owner, Ranking("Hills"));
+        first.Settle();
+
+        foreach (Action<AreaRankingStore> replaced in new Action<AreaRankingStore>[]
+                 {
+                     s => s.ForgetSet(set),
+                     s => { s.NoteActiveSet(set); s.NoteActiveSet(set); },
+                     s => s.ForgetCharacter(One),
+                     s => s.ForgetBbs(Board),
+                 })
+        {
+            first.Store.Keep(owner, Ranking("Hills"));
+            first.Settle();
+            var later = new Client();
+            var handed = new List<AreaRanking?>();
+            later.Store.Load(owner, World, handed.Add);
+            replaced(later.Store);
+            later.Settle();
+
+            Assert.DoesNotContain(handed, r => r is not null);
+            Assert.Null(later.Store.Get(owner));
+            Assert.False(File.Exists(AreaRankingFiles.FileFor(owner)));
+        }
+    }
+
+    [Fact]
+    public void AReadThatComesBackAfterSomethingElseWasForgotten_IsAskedAgain_AndStillListed()
+    {
+        string set = NewSet("a"), other = NewSet("b");
+        var owner = new SimulatorOwner(set, One);
+        var first = new Client();
+        first.Store.Keep(owner, Ranking("Hills"));
+        first.Store.Keep(new SimulatorOwner(other, One), Ranking("Marsh"));
+        first.Settle();
+
+        var later = new Client();
+        var handed = new List<AreaRanking?>();
+        later.Store.Load(owner, World, handed.Add);
+        later.Store.ForgetSet(other);
+        later.Settle();
+
+        Assert.Equal("Hills", Assert.Single(handed)?.Rows[0].Area);
+        Assert.NotNull(later.Store.Get(owner));
+    }
+
     [Fact]
     public void AWriteThatFailsDoesNotThrow_IsSaidOnce_AndTheRankingIsStillHeld()
     {

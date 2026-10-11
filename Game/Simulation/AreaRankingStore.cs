@@ -39,6 +39,8 @@ public sealed class AreaRankingStore
     private readonly LogService? _log;
     private readonly object _ioLock = new();
     private Task _io = Task.CompletedTask;
+    // Moves with every forget and rename; see Load.
+    private long _epoch;
     private bool _writeFailureSaid;
 
     // What the files have been through lately, newest last, for the bug report:
@@ -124,11 +126,20 @@ public sealed class AreaRankingStore
     // dropped. found is called on the UI thread, with the ranking now held in memory
     // or with null (no file, or one that was dropped), unless a ranking was made or
     // read for owner in the meantime, which then stands.
+    //
+    // A read is still out when it comes back, and anything may have been forgotten
+    // or renamed while it was: a re-rank started, the set's data replaced. The
+    // delete or move that went with that is queued behind the read, so the read
+    // found the file as it was before, and handing that back would put a forgotten
+    // ranking into memory and onto the list. _epoch moves with every such change;
+    // a read that comes back to another epoch is thrown away and asked again, which
+    // by the order of the queue sees the files as the change left them.
     public void Load(SimulatorOwner owner, RankingWorld worldNow, Action<AreaRanking?> found)
     {
         ArgumentNullException.ThrowIfNull(worldNow);
         ArgumentNullException.ThrowIfNull(found);
         if (_files is not { } files || !HasFile(owner)) return;
+        long epoch = _epoch;
         Enqueue(() =>
         {
             AreaRankingFiles.ReadResult read = files.Read(owner, worldNow);
@@ -136,6 +147,11 @@ public sealed class AreaRankingStore
             {
                 if (read.Dropped is { } why)
                     Note($"the saved area ranking for {owner.Label} was dropped: {why}");
+                if (epoch != _epoch)
+                {
+                    Load(owner, worldNow, found);
+                    return;
+                }
                 if (_kept.Any(k => k.Owner == owner)) return;
                 if (read.Ranking is { } ranking)
                 {
@@ -150,6 +166,7 @@ public sealed class AreaRankingStore
     // A re-rank starts: owner's ranking is replaced from here on, as its list is.
     public void Forget(SimulatorOwner owner)
     {
+        _epoch++;
         _kept.RemoveAll(k => k.Owner == owner);
         if (_files is { } files) Enqueue(() => files.Delete(owner));
     }
@@ -168,6 +185,7 @@ public sealed class AreaRankingStore
     public int RenameCharacter(string? from, string? to)
     {
         if (string.Equals(from, to, StringComparison.Ordinal)) return 0;
+        _epoch++;
         bool capitalsOnly = string.Equals(from, to, StringComparison.OrdinalIgnoreCase);
         if (!capitalsOnly)
             _kept.RemoveAll(k => string.Equals(k.Owner.Character, to, StringComparison.OrdinalIgnoreCase));
@@ -187,6 +205,7 @@ public sealed class AreaRankingStore
     public void ForgetCharacter(string? character)
     {
         if (character is null) return;
+        _epoch++;
         _kept.RemoveAll(k => string.Equals(k.Owner.Character, character, StringComparison.OrdinalIgnoreCase));
         if (_files is { } files) Enqueue(() => files.MoveCharacter(character, null));
     }
@@ -198,6 +217,7 @@ public sealed class AreaRankingStore
     public void RenameBbs(string oldBbs, string newBbs)
     {
         if (string.Equals(oldBbs, newBbs, StringComparison.OrdinalIgnoreCase)) return;
+        _epoch++;
         string under = oldBbs + "/";
         for (int i = 0; i < _kept.Count; i++)
         {
@@ -210,6 +230,7 @@ public sealed class AreaRankingStore
     // A BBS was removed with every profile under it: so are their rankings.
     public void ForgetBbs(string bbs)
     {
+        _epoch++;
         string under = bbs + "/";
         _kept.RemoveAll(k => k.Owner.Character is { } c && c.StartsWith(under, StringComparison.OrdinalIgnoreCase));
         if (_files is { } files) Enqueue(() => files.DeleteBbs(bbs));
@@ -238,6 +259,7 @@ public sealed class AreaRankingStore
     // from it, and that is what takes the ranking off the list.
     public int ForgetSet(string? set)
     {
+        _epoch++;
         if (_files is { } files)
             Enqueue(() =>
             {

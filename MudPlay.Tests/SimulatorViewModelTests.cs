@@ -774,6 +774,25 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.Equal(new[] { "Hills" }, h.Simulator.Rankings.Select(r => r.Area));
     }
 
+    // The read of a saved ranking is out when the set is read in again under the same
+    // name. The pairing is unchanged and the list is empty afterwards, which is the
+    // state a late arrival is listed in: it must not be, having been made on the
+    // tables that were just replaced.
+    [Fact]
+    public void ASavedRankingStillBeingReadWhenItsGameDataIsReadInAgain_IsNotListed()
+    {
+        string set = SetWithASavedRanking(Ranking("Hills"));
+
+        using Harness h = Build(set: set, onDisk: true);
+        h.Cache.ReloadActiveSet();
+        h.Settle();
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal("", h.Simulator.RankStatus);
+        Assert.Null(h.Rankings.Get(new SimulatorOwner(set, One)));
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(set, One))));
+    }
+
     [Fact]
     public void NothingIsReadForAPairingThatIsNeverShown()
     {
