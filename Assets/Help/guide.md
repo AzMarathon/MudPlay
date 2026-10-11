@@ -1146,7 +1146,7 @@ The six movement commands (`@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@r
 
 Three rules hold for `@goto`, `@loop` and `@lair` alike:
 
-- **A new movement command replaces what is running.** A loop, an Auto-Lair run or a walk-to already under way is stopped for it, and the program log names the sender (`superseded by remote @ from <sender>`).
+- **A new movement command replaces what is running.** A loop, an Auto-Lair run or a walk-to already under way is stopped for it, and the program log names the sender (`superseded by remote @ from <sender>`). The one exception is `@lair` sent to a running Auto-Lair, which keeps the run (see **@lair**).
 - **It overrides an `@stop`.** After `@stop`, an `@goto`, `@loop` or `@lair` drops the pause and starts moving at once. Use `@rego` only to carry on with the same thing you paused.
 - **The reply says the movement was started, not that it arrived.** Ask `@path` or `@status` to follow it. A start that was turned down is answered with the reason, as a **Refusal**: "started" is only ever said of a movement that did start.
 
@@ -1337,6 +1337,8 @@ Starts Auto-Lair on one of your saved lair setups, or on a list of rooms.
 |---|---|
 | `auto-lair '<name>': <n> lairs` | The saved setup was found and Auto-Lair started. |
 | `auto-lair: <n> lairs` | A room list was given and Auto-Lair started. |
+| `auto-lair updated: <n> lairs` | Auto-Lair was already running on other lairs. The run carries on with the new ones. |
+| `auto-lair already running (<n> lairs)` | Auto-Lair was already running on exactly these lairs. Nothing was changed. It ends `, paused` when an `@stop` is holding the run. |
 | `auto-lair not started: it needs at least two lair rooms` | **Refusal:** the setup, or the list, comes to fewer than two different rooms. |
 | `auto-lair not started: I don't know what room I'm in` | **Refusal:** your client has no room to set out from. |
 | `auto-lair failed to start` | **Refusal:** the rooms were marked but Auto-Lair would not start on them. |
@@ -1347,8 +1349,9 @@ Starts Auto-Lair on one of your saved lair setups, or on a list of rooms.
 **Situations:**
 
 - **Your marked lairs are replaced, once it is going to start.** The lairs you had marked are cleared and the new ones marked in their place. A saved setup brings its own respawn times with it. A request refused with one of the two `not started` answers leaves your marks and whatever is running untouched.
-- **Looping, walking, or in another Auto-Lair run:** that is stopped first. An Auto-Lair run already under way is stopped and started afresh on the new lairs.
-- **Paused by `@stop`:** the pause is dropped.
+- **Looping or walking:** that is stopped first.
+- **Auto-Lair already running** is never stopped and started over. Asked for other lairs (or other respawn times), the marks are swapped under the run: it keeps going, and the lairs it keeps hold their respawn clocks. Asked for the lairs it already has, nothing is touched at all.
+- **Paused by `@stop`:** the pause is dropped when Auto-Lair starts or its lairs change. A request for the lairs it already has leaves the pause in place; use `@rego` to carry on.
 - **Master switch off:** ignored, no answer.
 
 #### @stop

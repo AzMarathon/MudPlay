@@ -184,18 +184,59 @@ public sealed class MovePlayerHandlerStartReplyTests : IDisposable
         Assert.False(r.AutoLair.IsActive);
     }
 
-    // A run already under way is replaced by a fresh one on the new lairs.
+    // Asked for other lairs, a run under way keeps running: the marks are swapped
+    // under it and it is never stopped, so its clocks and what it has learnt stay.
     [Fact]
-    public void Lair_WhileAnotherRunIsUnderWay_StartsTheNewOne()
+    public void Lair_WithOtherLairs_WhileRunning_SwapsTheMarks_AndKeepsTheRun()
     {
         using Rig r = Build();
         r.Tracker.SetLocated(new RoomKey(1, 1));
         r.Ask("@lair", "1/1,", "1/3");
+        List<bool> activeFlips = new();
+        r.AutoLair.ActiveChanged += activeFlips.Add;
 
-        Assert.Equal("auto-lair: 2 lairs", r.Ask("@lair", "1/2,", "1/3"));
+        Assert.Equal("auto-lair updated: 2 lairs", r.Ask("@lair", "1/2,", "1/3"));
+
+        Assert.Empty(activeFlips);
         Assert.True(r.AutoLair.IsActive);
         Assert.False(r.AutoLair.IsMarked(new RoomKey(1, 1)));
         Assert.True(r.AutoLair.IsMarked(new RoomKey(1, 2)));
+    }
+
+    // Asked for the lairs it already has, nothing is touched and the answer says
+    // it was running already, not that it started.
+    [Fact]
+    public void Lair_WithTheSameLairs_WhileRunning_ChangesNothing()
+    {
+        using Rig r = Build();
+        r.Tracker.SetLocated(new RoomKey(1, 1));
+        r.Ask("@lair", "1/1,", "1/3");
+        int markChanges = 0;
+        List<bool> activeFlips = new();
+        r.AutoLair.MarkedChanged += () => markChanges++;
+        r.AutoLair.ActiveChanged += activeFlips.Add;
+
+        Assert.Equal("auto-lair already running (2 lairs)", r.Ask("@lair", "1/3,", "1/1"));
+
+        Assert.Equal(0, markChanges);
+        Assert.Empty(activeFlips);
+        Assert.True(r.AutoLair.IsActive);
+    }
+
+    // The same lairs asked for again leave a standing @stop where it is.
+    [Fact]
+    public void Lair_WithTheSameLairs_WhilePausedByStop_StaysPaused()
+    {
+        using Rig r = Build();
+        r.Tracker.SetLocated(new RoomKey(1, 1));
+        r.Ask("@lair", "1/1,", "1/3");
+        r.Ask("@stop");
+        Assert.True(r.Controller.IsUserPaused);
+
+        Assert.Equal("auto-lair already running (2 lairs), paused", r.Ask("@lair", "1/1,", "1/3"));
+
+        Assert.True(r.Controller.IsUserPaused);
+        Assert.True(r.AutoLair.IsActive);
     }
 
     [Fact]

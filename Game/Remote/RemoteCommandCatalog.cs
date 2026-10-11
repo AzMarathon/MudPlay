@@ -270,7 +270,7 @@ public static class RemoteCommandCatalog
             ["@equip"]        = new("@equip <set> [update] | @equip-all", "wears a saved gear set (default / backstab / resthp / restma / moving / bossing, or its keyword); 'update' saves what you're wearing into that set; @equip-all wears the Default set"),
             ["@goto"]         = new("@goto <destination>", "walks you to a GOTO favorite, a searched room (coords/name/acronym), or a boss"),
             ["@loop"]         = new("@loop <name> | <m/r, m/r, ...> | last | send [name|yes|no]", "starts a saved loop, a loop through 2+ map/room coords (commas or semicolons between them), or the last loop again; 'send' asks for a copy of one of my loops"),
-            ["@lair"]         = new("@lair <name> | <m/r, m/r, ...>", "starts Auto-Lair on a saved setup (its whole name) or on 2 or more map/room coords (commas or semicolons between them)"),
+            ["@lair"]         = new("@lair <name> | <m/r, m/r, ...>", "starts Auto-Lair on a saved setup (its whole name) or on 2+ map/room coords (commas or semicolons between); one already running takes the new lairs and carries on"),
             ["@stop"]         = new("@stop", "pauses your movement"),
             ["@rego"]         = new("@rego", "resumes your movement"),
             ["@atkprio"]      = new("@atkprio [1|2|3 <name>]", "Target Priority: bare reports it; 1 Default, 2 follow-leader, 3 <name> attack-what-player"),

@@ -434,28 +434,60 @@ public sealed class MovePlayerHandler : IDisposable
     // Replace the marked lairs and start Auto-Lair on them, answering `started`
     // only when it did start. What Auto-Lair would refuse (fewer than two lair
     // rooms, no known room to set out from) is refused here first, before the
-    // marks we have are cleared or anything running is stopped. A run already
-    // under way is stopped like any other engine: left running, Start would be a
-    // no-op and the answer would report a start that never happened.
+    // marks we have are cleared or anything running is stopped.
+    //
+    // A run already under way is never restarted: a restart would drop the walk
+    // in progress, the entry and engage timers, every lair's respawn clock (so a
+    // whole circuit would set out at once) and what the run has learnt about
+    // doors and lairs it can't reach. Asked for the lairs it already has, it is
+    // left exactly as it is, a standing @stop included. Asked for others, the
+    // marks are swapped under it and it carries on. Either way the answer says
+    // which happened, never that it started.
     private void StartLair(RemoteCommandContext ctx, List<(RoomKey Room, int? RespawnSeconds)> lairs,
         string label, string started)
     {
-        if (lairs.Select(l => l.Room).Distinct().Count() < 2)
+        Dictionary<RoomKey, int?> wanted = new();
+        foreach ((RoomKey room, int? respawn) in lairs) wanted[room] = respawn;
+        if (wanted.Count < 2)
         {
             ctx.Refuse("auto-lair not started: it needs at least two lair rooms");
             return;
         }
+        string count = $"{wanted.Count} lairs";
+
+        if (_autoLair.IsActive)
+        {
+            if (SameLairs(_autoLair.Overrides, wanted))
+            {
+                ctx.Reply($"auto-lair already running ({count}){(_autoLair.IsPaused ? ", paused" : "")}");
+                return;
+            }
+            StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Lair);
+            _autoLair.Clear();
+            foreach ((RoomKey room, int? respawn) in wanted) _autoLair.Mark(room, respawn);
+            ctx.Reply($"auto-lair updated: {count}");
+            return;
+        }
+
         if (_tracker.State.CurrentRoom is null)
         {
             ctx.Refuse("auto-lair not started: I don't know what room I'm in");
             return;
         }
 
-        StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.None);
+        StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Lair);
         _autoLair.Clear();
-        foreach ((RoomKey room, int? respawn) in lairs) _autoLair.Mark(room, respawn);
+        foreach ((RoomKey room, int? respawn) in wanted) _autoLair.Mark(room, respawn);
         if (_autoLair.Start(label)) ctx.Reply(started);
         else ctx.Refuse("auto-lair failed to start");
+    }
+
+    private static bool SameLairs(IReadOnlyDictionary<RoomKey, int?> marked, Dictionary<RoomKey, int?> wanted)
+    {
+        if (marked.Count != wanted.Count) return false;
+        foreach ((RoomKey room, int? respawn) in wanted)
+            if (!marked.TryGetValue(room, out int? current) || current != respawn) return false;
+        return true;
     }
 
     // @stop mirrors the toolbar Pause button exactly (routes through the same
