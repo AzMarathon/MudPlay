@@ -154,8 +154,8 @@ public sealed class SimulatorViewModelTests : IDisposable
         var log = new LogService();
         var simulation = new SimulationSource(
             _ => null, () => null, () => harness?.Level ?? 30, _ => 1.0, () => new RoomKey(1, 1), _root,
-            () => harness?.World ?? SameWorld, _ => harness is null ? SameCharacter : harness.CharacterNow,
-            () => cache.ActiveSet);
+            () => harness?.World ?? SameWorld, () => harness?.World ?? SameWorld,
+            _ => harness is null ? SameCharacter : harness.CharacterNow, () => cache.ActiveLoad);
         var session = new ExpEstimatorSessionViewModel(resolver, loops, graph, cache);
         SimulatorViewModel? sim = null;
         AreaRankingStore? store = rankings;

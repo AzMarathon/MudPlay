@@ -10,13 +10,14 @@ namespace MudPlay.Game.Simulation;
 // the live check reads back live.
 //
 // For a ranking kept between sessions: World is the game data this client is running
-// on (null with no set active, or when the tables in memory are not of one version
-// of the set: RankingWorldWatch), and CharacterAt the character as it would be
-// simulated at a level, as the groups a kept ranking is compared by (null while it
-// can't be read: no `stat` or no inventory on this connection). Load says which load
-// of the game data is in hand, equal for as long as it is the same one: a ranking
-// is stamped with World when it finishes, by which time it has read every table it
-// uses, and only if the load is still the one it started in.
+// on, to compare a saved ranking with (null with no set active, or when the tables
+// in memory are not of one version of the set: RankingWorldWatch). WorldMadeIn is the
+// same for stamping a ranking that has just finished: it reads any table not read
+// yet, and is null as well when one can't be read. CharacterAt is the character as
+// it would be simulated at a level, as the groups a kept ranking is compared by
+// (null while it can't be read: no `stat` or no inventory on this connection). Load
+// says which load of the game data is in hand, equal for as long as it is the same
+// one: a ranking is stamped only if the load is still the one it started in.
 public sealed record SimulationSource(
     Func<int?, (SimCharacter Character, SimWorld World)?> Build,
     Func<string?> Character,
@@ -25,5 +26,6 @@ public sealed record SimulationSource(
     Func<RoomKey?> Room,
     string LogsDir,
     Func<RankingWorld?> World,
+    Func<RankingWorld?> WorldMadeIn,
     Func<int, RankingCharacter?> CharacterAt,
     Func<object?> Load);

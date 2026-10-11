@@ -2663,9 +2663,8 @@ public static class BugReportBuilder
         Kv(sb, "Character read since connecting", svc.SimulatorCharacterReads);
         // The set's files were replaced under this client: nothing is saved or read
         // back until it is read in again, which reads as "my ranking is gone".
-        IReadOnlyList<string> mixed = svc.SimulatorTablesChangedUnderClient;
-        if (mixed.Count > 0)
-            Kv(sb, "Area rankings not saved", $"{string.Join(", ", mixed)} read again from a file that changed while the set was loaded");
+        if (svc.SimulatorWorldUnfit is { } unfit)
+            Kv(sb, "Area rankings not saved", unfit);
         if (snap.RankingFiles.Count > 0)
         {
             sb.Append("\n**Area ranking files** (latest last)\n\n");

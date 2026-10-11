@@ -771,7 +771,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
             // now, and the stamp is of those reads. A load that changed under it
             // cancelled it above; were one ever to slip through, a ranking of two
             // loads is of neither and is kept for the session only.
-            RankingWorld? madeIn = Equals(_simulation.Load(), startedIn) ? _simulation.World() : null;
+            RankingWorld? madeIn = Equals(_simulation.Load(), startedIn) ? _simulation.WorldMadeIn() : null;
             ListFinishedRanking(owner, new AreaRanking(
                 ranked, level, step, hours, runs, here, RealmLabel, summary, DateTimeOffset.Now, ownLevel, madeIn, madeFor,
                 Loops: loopSignatures));

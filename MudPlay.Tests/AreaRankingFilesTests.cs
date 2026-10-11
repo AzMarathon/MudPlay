@@ -598,4 +598,170 @@ public sealed class AreaRankingFilesTests : IDisposable
         Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(a, $"{Tavern}/renamed"))));
         Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(b, $"{Tavern}/renamed"))));
     }
+
+    // ----- Stamped with the tables this client read, over the real cache ---------
+
+    // A running client on a set: the cache, with the set's tables read as a load
+    // reads them, and the watch the app puts over it.
+    private sealed class Running
+    {
+        public GameDataCache Cache { get; } = new(AppPaths.GameDataRoot);
+        public RankingWorldWatch Watch { get; }
+
+        public Running(string set, params string[] read)
+        {
+            Cache.SwitchSet(set);
+            foreach (string table in read) Assert.NotNull(Cache.GetTable(table));
+            Watch = RankingWorldWatch.Over(Cache);
+            Watch.Observe(Cache.ActiveLoad);
+        }
+
+        // What a ranking finishing now is stamped with.
+        public RankingWorld? MadeIn(out string? why) => Watch.NowForSaving(Cache.ActiveLoad, "seed", out why);
+        public RankingWorld? MadeIn() => MadeIn(out _);
+        // What a saved ranking is compared with.
+        public RankingWorld? World() => Watch.Now(Cache.ActiveLoad, "seed", out _);
+    }
+
+    private static readonly string[] Tables = RankingWorld.TableNames.Where(t => t != "Lairs").ToArray();
+
+    private string NewSetWithTables(string name = "tables")
+    {
+        string set = NewSet(name);
+        foreach (string table in Tables) File.WriteAllText(TableFile(set, table), """[{"Number":1}]""");
+        return set;
+    }
+
+    private static string TableFile(string set, string table) => Path.Combine(AppPaths.GameDataSetDir(set), table + ".json");
+
+    // The file as another client's import leaves it: other rows, another length.
+    private static void ImportedElsewhere(string set, string table) =>
+        File.WriteAllText(TableFile(set, table), """[{"Number":1},{"Number":2}]""");
+
+    private static string StampOf(string file) =>
+        RankingWorldWatch.Stamp(new FileInfo(file).Length, new FileInfo(file).LastWriteTimeUtc);
+
+    [Fact]
+    public void ARankingFinishedAfterATableWasReplacedOnDisk_IsStampedWithTheFileThatWasRead()
+    {
+        string set = NewSetWithTables();
+        var owner = new SimulatorOwner(set, One);
+        string rooms = TableFile(set, "Rooms");
+        string asLoaded = StampOf(rooms);
+        var running = new Running(set, "Rooms", "Monsters");
+
+        // Another client imports the set; this one is not told and reloads nothing.
+        ImportedElsewhere(set, "Rooms");
+        Assert.NotEqual(asLoaded, StampOf(rooms));
+
+        RankingWorld madeIn = Assert.IsType<RankingWorld>(running.MadeIn(out string? why));
+        Assert.Null(why);
+        Assert.Equal(asLoaded, madeIn.Tables["Rooms"]);
+        Assert.Equal(RankingWorldWatch.NoTable, madeIn.Tables["Lairs"]);
+        // Every other table was read to be stamped: none is vouched for off the disk.
+        Assert.All(Tables, t => Assert.NotNull(running.Cache.FileStampAsRead(t)));
+
+        var client = new Client();
+        client.Store.Keep(owner, Ranking() with { World = madeIn });
+        client.Settle();
+        Assert.True(File.Exists(AreaRankingFiles.FileFor(owner)));
+
+        // The same client lists it again as its own: it is still on those tables.
+        var sameSession = new Client();
+        Assert.NotNull(sameSession.Load(owner, running.World()));
+
+        // A client started afterwards reads the imported Rooms, and drops it.
+        client.Store.Keep(owner, Ranking() with { World = madeIn });
+        client.Settle();
+        var restarted = new Running(set, "Rooms", "Monsters");
+        var later = new Client();
+        Assert.Null(later.Load(owner, restarted.World()));
+        Assert.Contains(later.Said(LogSeverity.Info), m => m.Contains("was dropped") && m.Contains("Rooms table has changed"));
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(owner)));
+    }
+
+    [Fact]
+    public void OnceTheChangedFileIsReadAgainInTheSameLoad_NoRankingIsSaved_UntilTheSetIsReadInAgain()
+    {
+        string set = NewSetWithTables();
+        var owner = new SimulatorOwner(set, One);
+        var running = new Running(set, Tables);
+        GameDataCache.Load load = running.Cache.ActiveLoad;
+        ImportedElsewhere(set, "Rooms");
+
+        // The idle sweep drops the table and the next lookup reads the new file: the
+        // room map built at load is of the old one, the rows from here on of the new.
+        running.Cache.EvictIdle(TimeSpan.Zero);
+        Assert.False(running.Cache.IsTableLoaded("Rooms"));
+        Assert.NotNull(running.Cache.GetTable("Rooms"));
+        Assert.Equal(load, running.Cache.ActiveLoad);
+
+        Assert.Null(running.MadeIn(out string? why));
+        Assert.Equal("Rooms was read again from a file that had changed since the set was loaded", why);
+        Assert.Null(running.World());
+        Assert.Equal("Rooms was read again from a file that had changed since the set was loaded", running.Watch.WhyUnfit);
+
+        // A ranking made now carries no world, and one with none is never written.
+        var client = new Client();
+        client.Store.Keep(owner, Ranking() with { World = running.MadeIn() });
+        client.Settle();
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(owner)));
+        Assert.NotNull(client.Store.Get(owner));
+
+        // Read in again, it is one version once more, and that is the imported one.
+        running.Cache.ReloadActiveSet();
+        Assert.NotEqual(load, running.Cache.ActiveLoad);
+        foreach (string table in Tables) running.Cache.GetTable(table);
+        RankingWorld reloaded = Assert.IsType<RankingWorld>(running.MadeIn());
+        Assert.Equal(StampOf(TableFile(set, "Rooms")), reloaded.Tables["Rooms"]);
+        Assert.Null(running.Watch.WhyUnfit);
+    }
+
+    [Fact]
+    public void ATableThatWasNeverRead_IsReadToBeStamped_AndOneThatWillNotReadStopsTheSave()
+    {
+        string set = NewSetWithTables();
+        var running = new Running(set, "Rooms");
+
+        // Not read yet and readable: read now, and stamped by that read.
+        Assert.Null(running.Cache.FileStampAsRead("Items"));
+        RankingWorld madeIn = Assert.IsType<RankingWorld>(running.MadeIn());
+        Assert.Equal(StampOf(TableFile(set, "Items")), madeIn.Tables["Items"]);
+        Assert.NotNull(running.Cache.FileStampAsRead("Items"));
+
+        // Not read yet and not a table: no stamp is taken off the disk for it.
+        string other = NewSetWithTables("broken");
+        File.WriteAllText(TableFile(other, "Items"), "[{\"Name\":\"Go" + (char)0x1E + "blin\"}]");
+        var broken = new Running(other, "Rooms");
+        Assert.Null(broken.MadeIn(out string? why));
+        Assert.Equal("Items could not be read", why);
+        // To compare a saved ranking with, nothing is read and the file stands in.
+        Assert.NotNull(broken.World());
+    }
+
+    [Fact]
+    public void ATableReadAndThenNotReadableAgain_LeavesTheLoadUnfit()
+    {
+        string set = NewSetWithTables();
+        var running = new Running(set, Tables);
+        Assert.NotNull(running.MadeIn());
+
+        // Dropped, its file replaced by one that will not parse, and asked for again.
+        running.Cache.EvictIdle(TimeSpan.Zero);
+        File.WriteAllText(TableFile(set, "Spells"), "[{\"Name\":\"Go" + (char)0x1E + "blin\"}]");
+        Assert.Null(running.Cache.GetTable("Spells"));
+        Assert.Null(running.Cache.FileStampAsRead("Spells"));
+
+        Assert.Null(running.MadeIn(out string? why));
+        Assert.Equal("Spells could not be read again (the file is gone or would not read)", why);
+        Assert.Null(running.World());
+
+        // A table whose file goes missing after it was read is the same.
+        var gone = new Running(NewSetWithTables("gone"), Tables);
+        gone.Cache.EvictIdle(TimeSpan.Zero);
+        File.Delete(TableFile(gone.Cache.ActiveSet!, "Races"));
+        Assert.Null(gone.Cache.GetTable("Races"));
+        Assert.Null(gone.MadeIn(out why));
+        Assert.StartsWith("Races could not be read again", why);
+    }
 }
