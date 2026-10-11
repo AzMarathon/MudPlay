@@ -54,6 +54,11 @@ public sealed class AcquisitionGate : IDisposable
     private int _pendingDeferred;
     private int _outstandingGets;   // dispatched but not yet confirmed
     private bool _reLookPending;
+
+    // For a bug report: the pickups being waited out, or null.
+    public string? DescribePending() =>
+        _pendingDeferred == 0 && !_reLookPending ? null
+        : $"{_pendingDeferred} deferred pickup(s)" + (_reLookPending ? ", a room re-look pending" : string.Empty);
     private bool _asserted;
     private bool _disposed;
 

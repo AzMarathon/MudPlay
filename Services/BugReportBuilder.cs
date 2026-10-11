@@ -109,6 +109,7 @@ public static class BugReportBuilder
             new("Session", SafeSection(() => BuildSession(svc, realm, now) + AccountDetailNote(scrubber))),
             new(BugReportContext.Heading, SafeSection(() => BugReportContext.Build(svc, emulator, now))),
             new(BugReportHoldsAndWaits.Heading, SafeSection(() => BugReportHoldsAndWaits.Build(svc, now))),
+            new(BugReportAutomationSections.PendingHeading, SafeSection(() => BugReportAutomationSections.PendingWork(svc))),
             new("Player state", SafeSection(() => BuildPlayerState(svc))),
             new("Statline", SafeSection(() => BuildStatline(svc))),
             new("Party", SafeSection(() => BuildParty(svc))),
@@ -131,6 +132,12 @@ public static class BugReportBuilder
             new("Combat profiles", SafeSection(() => BuildCombatProfiles(svc))),
             new("Special room markers", SafeSection(() => BuildRoomMarkers(svc))),
             new("Player Workshop", SafeSection(() => BuildWorkshop(svc))),
+            new(BugReportAutomationSections.AutomationHeading, SafeSection(() =>
+                BugReportAutomationSections.UserAutomation(
+                    svc.Triggers.Triggers.ToList(), svc.Aliases.Aliases.ToList(), svc.Macros.Macros.ToList(),
+                    scrubber, Censor))),
+            new(BugReportAutomationSections.PermissionsHeading, SafeSection(() => BugReportAutomationSections.RemotePermissions(svc))),
+            new(BugReportAutomationSections.DeathsHeading, SafeSection(() => BugReportAutomationSections.DeathHistory(svc.DeathRecovery.Records))),
             new("Keybindings (changed from the default)", SafeSection(() => BuildKeybindings(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
             new("Monster observations (this character, newest first)", SafeSection(() => BuildMonsterObservations(svc))),

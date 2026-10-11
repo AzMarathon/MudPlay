@@ -116,6 +116,13 @@ public sealed class EquipmentManager
     private readonly record struct PendingEquip(string SetId, EquipmentSlot Slot, string ItemName);
     private readonly List<PendingEquip> _pending = new();
     private DateTimeOffset _pendingStamp;
+
+    // For a bug report: the gear commands sent and not yet confirmed, or null.
+    public string? DescribePending() =>
+        _pending.Count == 0 && !_thrashHolding ? null
+        : $"{_pending.Count} gear command(s) unconfirmed"
+          + (_pending.Count > 0 ? $" since {_pendingStamp.ToLocalTime():HH:mm:ss}" : string.Empty)
+          + (_thrashHolding ? ", swaps held (too many in a short time)" : string.Empty);
     private static readonly TimeSpan PendingWindow = TimeSpan.FromSeconds(6);
 
     // True while a gear-set apply is streaming its `wear`/`rem` commands.

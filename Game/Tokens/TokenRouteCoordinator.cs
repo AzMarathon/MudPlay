@@ -123,6 +123,12 @@ public sealed class TokenRouteCoordinator
     };
 
     private Phase _phaseBacking = Phase.Idle;
+
+    // For a bug report: the token trip in progress, or null.
+    public string? DescribePending() =>
+        _phaseBacking == Phase.Idle && _regroupPending.Count == 0 ? null
+        : $"phase {_phaseBacking}"
+          + (_regroupPending.Count > 0 ? $", regroup awaited from {string.Join(", ", _regroupPending)} ({_regroupRetries} retry(ies))" : string.Empty);
     private Phase _phase
     {
         get => _phaseBacking;

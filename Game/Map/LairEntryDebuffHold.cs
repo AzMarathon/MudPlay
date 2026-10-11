@@ -40,6 +40,12 @@ public sealed class LairEntryDebuffHold
     private DateTimeOffset _waitStarted;
     private DateTimeOffset _blockUntil = DateTimeOffset.MinValue;
     private bool _blockWhileWaiting;
+
+    // For a bug report: the lair-entry wait in progress, or null.
+    public string? DescribePending() =>
+        !_waiting && _blockUntil <= DateTimeOffset.UtcNow ? null
+        : (_waiting ? "waiting to debuff before the lair" : "not waiting")
+          + (_blockUntil > DateTimeOffset.UtcNow ? $", blocked until {_blockUntil.ToLocalTime():HH:mm:ss}" : string.Empty);
     private int _generation;
 
     // slotUsed: this round's between-round cast is spent. castDue: a heal, cure or
