@@ -13,17 +13,24 @@ public sealed partial class BossTimerSyncCellViewModel : ObservableObject
     public DateTimeOffset KilledAt { get; }
     public string Text { get; }
 
+    // An answer to a request of the user's that several players can answer, for a
+    // boss we held no timer for when it came: it waits with the others for the
+    // replies to settle, and is merged in then if they all agree.
+    public bool Gathered { get; }
+
     private readonly Action<BossTimerSyncCellViewModel> _onAdopt;
 
     [ObservableProperty] private bool _isSelected;
 
     public BossTimerSyncCellViewModel(
-        string responder, DateTimeOffset killedAt, string text, Action<BossTimerSyncCellViewModel> onAdopt)
+        string responder, DateTimeOffset killedAt, string text, Action<BossTimerSyncCellViewModel> onAdopt,
+        bool gathered = false)
     {
         ArgumentNullException.ThrowIfNull(onAdopt);
         Responder = responder;
         KilledAt = killedAt;
         Text = text;
+        Gathered = gathered;
         _onAdopt = onAdopt;
     }
 

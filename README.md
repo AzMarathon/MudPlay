@@ -2,7 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.180.7**
-> - Sync Timers compares every answer with the timer you hold: none held, it is merged in; asked of one player by telepath, a differing timer syncs; where several can answer, differing timers are listed for you to pick
+> - Sync Timers compares every answer with the timer you hold. One player asked by telepath: merged in when you hold none, synced when it differs. Asked on gang, say or broadcast: replies are gathered for 10 seconds, merged in only if they all agree, listed for you to pick otherwise
+> - A timer of yours that changed after you asked is never replaced as a sync answer arrives; the boss is listed instead
 > - Remote commands are read on the broadcast channel when "Disallow @commands from broadcast" is unticked, under each player's permissions, answered on the channel once a minute per player
 > - Picking the active game-data set again no longer deletes its saved Simulator rankings; one is dropped only if its tables changed (an import rewrites them, so it still drops them)
 > - Saved Simulator rankings older than 180 days are deleted once each start, for every character

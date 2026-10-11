@@ -37,15 +37,16 @@ public sealed class BossTimerSyncMergeTests
             BossTimerSyncViewModel.Classify(ours: T, tracked: true, offer: T.AddHours(3)));
 
     // What an offer is to the requests the user made decides the two outcomes that
-    // write without a pick. None held: merged in when it answers a request of the
-    // user's, listed when it answers none. Differs from ours: synced when it is the
-    // answer of the one player asked, listed otherwise. The same timer, and a boss
-    // off our list, come out the same whoever it is from.
+    // write without a pick. None held: merged in from the one player asked, gathered
+    // with the other replies from one of several (to be merged in only if they all
+    // agree), listed when it answers no request. Differs from ours: synced when it
+    // is the answer of the one player asked, listed otherwise. The same timer, and
+    // a boss off our list, come out the same whoever it is from.
     [Theory]
     [InlineData(MudPlay.Game.Remote.TimerSyncStanding.TheOneAsked,
         BossTimerSyncViewModel.TimerMergeKind.AutoMerge, BossTimerSyncViewModel.TimerMergeKind.Sync)]
     [InlineData(MudPlay.Game.Remote.TimerSyncStanding.OneOfSeveral,
-        BossTimerSyncViewModel.TimerMergeKind.AutoMerge, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
+        BossTimerSyncViewModel.TimerMergeKind.Gather, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
     [InlineData(MudPlay.Game.Remote.TimerSyncStanding.NotAsked,
         BossTimerSyncViewModel.TimerMergeKind.Conflict, BossTimerSyncViewModel.TimerMergeKind.Conflict)]
     internal void What_is_written_without_a_pick_goes_by_what_the_offer_answers(
@@ -93,6 +94,37 @@ public sealed class BossTimerSyncMergeTests
 
         Assert.Equal("Keep ours", row.KeepOursLabel);
         Assert.Equal("Aug 24 00:13 · merged in from Bob", row.OursText);
+    }
+
+    // Answers gathered for a boss we held no timer for, all agreeing, are merged in
+    // together: the row holds that timer, says whose it was, and their cells are
+    // taken off. A cell that differs from it stays to be picked, and a pick of one
+    // taken off goes back to the default.
+    [Fact]
+    public void Gathered_answers_merged_in_leave_only_the_cells_that_differ()
+    {
+        BossTimerSyncRowViewModel row = new("ok", 300, "ok", null, null, "— no timer —");
+        row.AddConflict("Bob", T, "Aug 24 00:13", gathered: true);
+        row.AddConflict("Sue", T.AddSeconds(20), "Aug 24 00:13", gathered: true);
+        row.AddConflict("Mallory", T.AddHours(3), "Aug 24 03:13");
+        Assert.Equal(new[] { "Bob", "Sue" }, row.Gathered().Select(c => c.Responder));
+        row.Responders[0].AdoptCommand.Execute(null);
+
+        row.MarkAutoMerged("Bob, Sue", T, "Aug 24 00:13");
+        row.DropCellsMatchingOurs(BossTimerSyncViewModel.SameTimer);
+
+        Assert.True(row.HasConflict);
+        Assert.Equal("Mallory", Assert.Single(row.Responders).Responder);
+        Assert.True(row.KeepOursSelected);
+        Assert.Null(row.SelectedKilledAt);
+        Assert.Equal("Aug 24 00:13 · merged in from Bob, Sue", row.OursText);
+
+        // Our timer moves to the one still listed: that cell is no pick either.
+        row.Rebase(T.AddHours(3), "Aug 24 03:13");
+        row.DropCellsMatchingOurs(BossTimerSyncViewModel.SameTimer);
+        Assert.False(row.HasConflict);
+        Assert.Empty(row.Responders);
+        Assert.Equal("Already in sync with Mallory", row.ResolvedStatus);
     }
 
     // A synced row holds the responder's timer as ours and says whose it was. What

@@ -113,7 +113,7 @@ public sealed class SentCommandTrailTests
         SentCommandTrail trail = new();
         List<string> told = new();
         trail.TypedLineEntered = told.Add;
-        trail.TypedAtGamePrompt = _ => false;   // the trail itself keeps none of these
+        trail.TypedAtGamePrompt = _ => true;    // typed at the game's own prompt
 
         trail.ObserveTyped(Encoding.Latin1.GetBytes("/bo @timer sync\r"));
         foreach (char key in "/suu") trail.ObserveTyped([(byte)key]);
@@ -124,7 +124,31 @@ public sealed class SentCommandTrailTests
         trail.ObserveTyped([(byte)'\r']);                  // a bare Enter is no line
 
         Assert.Equal(new[] { "/bo @timer sync", "/sue @timer sync" }, told);
+        Assert.Equal(told, trail.Snapshot().Select(e => e.Text));
+    }
+
+    // A line typed at a prompt that is not the game's own may be a password: the
+    // trail keeps only that something was typed there, and tells the line to
+    // nobody. A telepath typed at the game's prompt afterwards is still told.
+    [Fact]
+    public void TypedLineEntered_IsNotToldALineTheTrailWithholdsAtAPrompt()
+    {
+        SentCommandTrail trail = new();
+        List<string> told = new();
+        trail.TypedLineEntered = told.Add;
+        bool atGamePrompt = false;
+        trail.TypedAtGamePrompt = _ => atGamePrompt;
+
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("hunter2\r"));
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("/hunter 2\r"));   // one shaped like a telepath
+
+        Assert.Empty(told);
         Assert.All(trail.Snapshot(), e => Assert.Equal(SentCommandTrail.WithheldAtPrompt, e.Text));
+        Assert.Equal(2, trail.Snapshot().Length);
+
+        atGamePrompt = true;
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("/bo @timer sync\r"));
+        Assert.Equal("/bo @timer sync", Assert.Single(told));
     }
 
     [Fact]

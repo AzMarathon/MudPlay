@@ -182,8 +182,7 @@ public sealed class SentCommandTrail
             lock (_ringLock) { _withheld++; }
             return;
         }
-        if (Withhold?.Invoke() != true) TypedLineEntered?.Invoke(line);
-        UserLineSent(line, Origin.Typed);
+        if (UserLineSent(line, Origin.Typed)) TypedLineEntered?.Invoke(line);
     }
 
     // Told each line the user typed at the terminal, as its Enter goes out: the
@@ -191,18 +190,22 @@ public sealed class SentCommandTrail
     // time. This is the one account of what the user typed that does not come off
     // the screen, so whatever must know that a line was the user's own typing
     // (the chat log, for a request telepathed to another client) is told from
-    // here. Not told a line any part of which went by while nothing is kept: it
-    // may be a password.
+    // here. Told only a line this trail itself keeps in the clear. One it
+    // withholds for any reason (typed while nothing is kept, or at a prompt that
+    // is not the game's own) may be a password, and is told to nobody.
     public Action<string>? TypedLineEntered { get; set; }
 
-    private void UserLineSent(string line, Origin origin)
+    // True when the line was kept as it was sent, false when it was withheld.
+    private bool UserLineSent(string line, Origin origin)
     {
-        if (Withhold?.Invoke() != true && TypedAtGamePrompt is { } atGamePrompt && !atGamePrompt(line))
+        bool nothingIsKept = Withhold?.Invoke() == true;
+        if (!nothingIsKept && TypedAtGamePrompt is { } atGamePrompt && !atGamePrompt(line))
         {
             Store(new Entry(DateTimeOffset.Now, WithheldAtPrompt, origin, null, Outcome.Sent, null));
-            return;
+            return false;
         }
-        Record(line, origin, sender: null, Outcome.Sent);
+        Record(line, origin, sender: null, Outcome.Sent);   // counts the line and keeps none of it while nothing is kept
+        return !nothingIsKept;
     }
 
     private void Store(Entry entry)

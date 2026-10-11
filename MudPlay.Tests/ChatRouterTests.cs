@@ -270,6 +270,82 @@ public sealed class ChatRouterTests
             seen.Select(s => (s.Entry.Speaker!, s.Entry.Message, s.Users)));
     }
 
+    // A confirmation is first the confirmation of a send addressed to exactly the
+    // name it carries. The user typed letters that fit two players and reached
+    // nobody; then the client telepaths a player whose name those letters begin
+    // (a reply to her own remote command). Her confirmation is the reply's, not
+    // the user's request's: she was never asked.
+    [Fact]
+    public void TelepathOut_AConfirmation_TakesTheSendAddressedToExactlyThatName_BeforeAShortenedOne()
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/b @timer sync"), usersOwn: true);
+        chat.ObserveOutbound(Wire("/Betty {command invalid or not allowed}"));
+        router.Dispatch(Line("--- Telepath sent to Betty ---"));
+
+        (ChatLogEntry e, bool users) = Assert.Single(seen);
+        Assert.Equal(("Betty", "{command invalid or not allowed}"), (e.Speaker, e.Message));
+        Assert.False(users);
+    }
+
+    // A shortened request that did reach its player, with a telepath of the
+    // client's to the same player going out before or after it: the two
+    // confirmations take the two sends, the full-name one first, and the request
+    // is confirmed as the user's exactly once.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TelepathOut_AShortenedRequestAndAFullNameSendToTheSamePlayer_AreEachConfirmedOnce(bool requestFirst)
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        if (requestFirst) chat.ObserveOutbound(Wire("/bo @timer sync"), usersOwn: true);
+        chat.ObserveOutbound(Wire("/Bob @health"));
+        if (!requestFirst) chat.ObserveOutbound(Wire("/bo @timer sync"), usersOwn: true);
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+
+        Assert.Equal(new[] { ("Bob", "@health", false), ("Bob", "@timer sync", true) },
+            seen.Select(s => (s.Entry.Speaker!, s.Entry.Message, s.Users)));
+
+        // A third confirmation has no send left to be for.
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+        Assert.False(seen[2].Users);
+        Assert.Equal(string.Empty, seen[2].Entry.Message);
+    }
+
+    // The notice for a pending send that was never confirmed quotes the send only
+    // when it was the client's own line. What the user sent, and a row known only
+    // from the screen, are the user's words: the log says one went unconfirmed
+    // and keeps none of it, neither the message nor the name it was addressed to.
+    [Fact]
+    public void TelepathOut_StaleEntryDiscard_KeepsNoneOfTheUsersWords()
+    {
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        LogService log = new();
+        List<LogEntry> lines = new();
+        log.EntryAdded += lines.Add;
+        var (router, chat, _) = Setup(log: log, clock: () => now);
+
+        chat.ObserveOutbound(Wire("/hunter 2secret"), usersOwn: true);
+        router.Dispatch(Line("/swordfish 3secret"));
+        chat.ObserveOutbound(Wire("/Farmer {no record of \"martial\"}"));
+        now = now.AddSeconds(30);   // well past PendingCaptureStaleAfter
+        router.Dispatch(Line("--- Telepath sent to Farmer ---"));
+
+        string[] warned = lines.Where(l => l.Severity == LogSeverity.Warn && l.Source == "ChatRouter")
+            .Select(l => l.Message).ToArray();
+        Assert.Equal(3, warned.Length);
+        Assert.Contains(warned, m => m.Contains("a telepath the user sent (its words are not kept)", StringComparison.Ordinal));
+        Assert.Contains(warned, m => m.Contains("a row shown on screen (its words are not kept)", StringComparison.Ordinal));
+        Assert.Contains(warned, m => m.Contains("martial", StringComparison.Ordinal));
+        Assert.DoesNotContain(warned, m => m.Contains("secret", StringComparison.Ordinal)
+            || m.Contains("hunter", StringComparison.Ordinal) || m.Contains("swordfish", StringComparison.Ordinal));
+    }
+
     // Whose send it was goes with it to its confirmation, and comes only from the
     // line as it went out: the user's own (typed at the terminal, or sent by
     // something of theirs), or one the client made by itself or for another player.

@@ -59,6 +59,16 @@ public sealed class BossTimerSyncCollector : IDisposable
 
     public event Action<BossTimerSyncResponse>? ResponseReceived;
 
+    // A request of ours went out, or a line of some responder's set came in. The
+    // merge window waits for these to go quiet before it judges together the
+    // answers of a request several players can answer.
+    public event Action? Activity;
+
+    // A request of the user's own went out, raised before Activity. The merge
+    // window notes what timers it holds at the first one: a timer of ours that
+    // changes after the user asked is never written over as an answer arrives.
+    public event Action? UserAsked;
+
     // broadcastOff: the Talk tab's "Disallow @commands from broadcast". Ticked, the
     // broadcast channel is not listened to at all, for answers no more than for
     // requests: it is public, and off until the user opens it.
@@ -110,6 +120,8 @@ public sealed class BossTimerSyncCollector : IDisposable
         }
         foreach (string delivered in _partial.Where(p => p.Value.Done).Select(p => p.Key).ToList())
             _partial.Remove(delivered);
+        if (byUser) UserAsked?.Invoke();
+        Activity?.Invoke();
     }
 
     public void Stop()
@@ -126,6 +138,11 @@ public sealed class BossTimerSyncCollector : IDisposable
     // differs, with no pick.
     public bool OnePlayerAsked =>
         _askedOn.Count == 1 && _askedOn.Contains(RemoteChannel.Telepath) && _telepathed.Count == 1;
+
+    // True while a request of the user's is out that several players can answer:
+    // one on a shared channel, or telepaths to players none of whom is the one
+    // player asked. Their answers are gathered and judged together.
+    public bool SeveralMayAnswer => _usersAskedOn.Count > 0 || (_telepathed.Count > 0 && !OnePlayerAsked);
 
     public void Dispose()
     {
@@ -180,6 +197,7 @@ public sealed class BossTimerSyncCollector : IDisposable
         p.Chunks[index - 1] = blob;
         p.OnBroadcast |= heardOn == RemoteChannel.Broadcast;
         _log?.Debug("BossTimerSync", $"received line {index}/{count} from {sender} ({blob.Length} chars)");
+        Activity?.Invoke();
         if (p.Chunks.Any(c => c is null)) return;   // still missing pieces
 
         p.Done = true;

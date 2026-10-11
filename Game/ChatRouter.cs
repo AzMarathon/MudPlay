@@ -340,7 +340,7 @@ public sealed class ChatRouter : IDisposable
             // and its screen copy is expected.
             if (IsTelepathLine(outLine, out _))
             {
-                AddPendingTelepath(outLine, usersOwn);
+                AddPendingTelepath(outLine, usersOwn ? SendOrigin.User : SendOrigin.Client);
                 _sentLately.RemoveAll(s => now - s.At > PendingCaptureStaleAfter);
                 _sentLately.Add((outLine, now));
             }
@@ -386,14 +386,14 @@ public sealed class ChatRouter : IDisposable
     // confirmation the server never sends / this client never recognizes) leaves
     // a stale entry, discarded once it's too old to plausibly be the real match.
     //
-    // usersOwn: the line was seen going out as the user's own doing. False for one
-    // the client sent by itself or for another player, and for one known only from
-    // a row on the screen.
-    private void AddPendingTelepath(string text, bool usersOwn)
+    // origin: the line was seen going out as the user's own doing, or as one the
+    // client sent by itself or for another player, or is known only from a row on
+    // the screen.
+    private void AddPendingTelepath(string text, SendOrigin origin)
     {
         if (!IsTelepathLine(text, out int sp)) return;
         if (_pendingTelepaths.Count >= MaxPendingChatCaptures) _pendingTelepaths.RemoveAt(0);
-        _pendingTelepaths.Add(new PendingTelepath(text[1..sp], text[(sp + 1)..], _now(), usersOwn));
+        _pendingTelepaths.Add(new PendingTelepath(text[1..sp], text[(sp + 1)..], _now(), origin));
     }
 
     private static bool IsTelepathLine(string text, out int space)
@@ -422,16 +422,20 @@ public sealed class ChatRouter : IDisposable
                                     || text.StartsWith(s.Line, StringComparison.Ordinal)))
             return;
         if (text == _lastEnqueuedTelepath) return; // the same row seen twice — see _lastEnqueuedTelepath
-        AddPendingTelepath(text, usersOwn: false);
+        AddPendingTelepath(text, SendOrigin.Screen);
         _lastEnqueuedTelepath = text;
     }
 
-    // The pending send a "--- Telepath Sent to <name> ---" confirmation is for: the
-    // oldest one still fresh whose addressed name begins the name confirmed. The
-    // game takes the first letters of a name for a player and confirms with the
-    // name in full ("/raij" reaches Raijin), which is the rule TelepathPacer pairs
-    // its own telepaths by. A send addressed to anyone else is never the one
-    // confirmed, however long it has waited: its own reply was something other
+    // The pending send a "--- Telepath Sent to <name> ---" confirmation is for.
+    // First the oldest one still fresh that was addressed to exactly the name
+    // confirmed; only with none of those, the oldest whose addressed name begins
+    // it. The game takes the first letters of a name for a player and confirms
+    // with the name in full ("/raij" reaches Raijin). But the client addresses its
+    // own telepaths by the full name, so a confirmation for one of those must take
+    // that send, and not an older shortened request of the user's that reached
+    // nobody (its letters fitted two players): that would make the player named
+    // here the one the user asked. A send addressed to anyone else is never the
+    // one confirmed, however long it has waited: its own reply was something other
     // than a confirmation (no such player, letters that fit two players, the
     // telepath not sent), and handing it to this one would say the player named
     // here was sent a message they never were. Null when no pending send fits.
@@ -443,20 +447,35 @@ public sealed class ChatRouter : IDisposable
             PendingTelepath old = _pendingTelepaths[i];
             if (now - old.EnqueuedAt <= PendingCaptureStaleAfter) continue;
             _pendingTelepaths.RemoveAt(i);
+            // Only a line the client sent by itself is quoted: that is its own
+            // protocol text. What the user sent, or a row off the screen that may
+            // be the copy of it, is the user's words, and no log keeps those.
+            string what = old.Origin == SendOrigin.Client
+                ? $"\"{old.Message}\""
+                : old.Origin == SendOrigin.User ? "a telepath the user sent (its words are not kept)"
+                : "a row shown on screen (its words are not kept)";
             _log?.Warn("ChatRouter",
                 $"discarding stale unconfirmed telepath capture (queued {(now - old.EnqueuedAt).TotalSeconds:F0}s ago, "
-                + $"never confirmed): \"{old.Message}\" — its own confirmation never arrived, so it can't be the "
+                + $"never confirmed): {what} — its own confirmation never arrived, so it can't be the "
                 + "match for this one.");
         }
         if (string.IsNullOrEmpty(name)) return null;
-        int at = _pendingTelepaths.FindIndex(p => name.StartsWith(p.Target, StringComparison.OrdinalIgnoreCase));
+        int at = _pendingTelepaths.FindIndex(p => name.Equals(p.Target, StringComparison.OrdinalIgnoreCase));
+        if (at < 0) at = _pendingTelepaths.FindIndex(p => name.StartsWith(p.Target, StringComparison.OrdinalIgnoreCase));
         if (at < 0) return null;
         PendingTelepath sent = _pendingTelepaths[at];
         _pendingTelepaths.RemoveAt(at);
         return sent;
     }
 
-    private readonly record struct PendingTelepath(string Target, string Message, DateTimeOffset EnqueuedAt, bool UsersOwn);
+    // Where a pending send is known from: the line as the client sent it by itself
+    // or for another player, the line as the user sent it, or a row on the screen.
+    private enum SendOrigin { Client, User, Screen }
+
+    private readonly record struct PendingTelepath(string Target, string Message, DateTimeOffset EnqueuedAt, SendOrigin Origin)
+    {
+        public bool UsersOwn => Origin == SendOrigin.User;
+    }
 
     // True while EntryClassified is being raised for an outgoing telepath that the
     // confirmation was paired with and that was the user's own. A subscriber that
