@@ -202,13 +202,13 @@ public sealed class PartyTollGateTests : IDisposable
         filter.PartyTollClosedReason = exit => gate.DescribeClosed(in exit);
 
         walker.SetWireSender(bytes => rig.Moves.Add(Encoding.Latin1.GetString(bytes).Trim()));
-        walker.SetTollStepCheck((from, dir, exit) => gate.BeforeTollStep(from, dir, in exit));
-        walker.SetSailingCheck(passage => gate.BeforeSailing(in passage));
+        walker.SetTollStepCheck((from, dir, exit, later) => gate.BeforeTollStep(from, dir, in exit, later));
+        walker.SetSailingCheck((passage, later) => gate.BeforeSailing(in passage, later));
         walker.SetUnpaidCrossingHandler((_, reason) => rig.Notices.Add(reason));
         walker.Event += rig.WalkEvents.Add;
 
         runner.SetWireSender(bytes => rig.Moves.Add(Encoding.Latin1.GetString(bytes).Trim()));
-        runner.SetTollStepCheck((from, dir, exit) => gate.BeforeTollStep(from, dir, in exit));
+        runner.SetTollStepCheck((from, dir, exit, later) => gate.BeforeTollStep(from, dir, in exit, later));
         runner.SetUnpaidCrossingHandler(rig.Notices.Add);
         runner.Event += rig.LoopEvents.Add;
 
@@ -1147,7 +1147,7 @@ public sealed class PartyTollGateTests : IDisposable
         Rig rig = NewRig(ThreeTollsEachWithAWayRoundJson);
         HashSet<RoomKey> closed = new();
         rig.Filter.PartyTollClosedProbe = exit => closed.Contains(exit.Target);
-        rig.Walker.SetTollStepCheck((_, _, exit) =>
+        rig.Walker.SetTollStepCheck((_, _, exit, _) =>
         {
             closed.Add(exit.Target);
             return PartyTollGate.StepVerdict.Closed;
@@ -1238,6 +1238,82 @@ public sealed class PartyTollGateTests : IDisposable
         overpay.Says("Cal", 500);
         Assert.Empty(overpay.Gives);
         Assert.Contains("going past the 50 gold you can spare after the 4 platinum 50 gold you keep on hand", overpay.Decided);
+    }
+
+    // 12 gold, two 5 gold tolls on the walk, and a member with nothing. Handing him
+    // 5 at the first would leave us 2 at the second, between two tolls we can't
+    // cross. Our own toll further on is kept back, so he isn't paid for at the
+    // first and the walk doesn't set out through it.
+    [Fact]
+    public void OurOwnTollsFurtherOnTheRoute_AreKeptBack_SoWeNeverStrandOurselvesBetweenTwoTolls()
+    {
+        Rig stuck = FundingPartyAtTheToll(TwoTollsInARowJson, new RoomKey(1, 1));
+        stuck.Gold = 12;
+        Assert.True(stuck.Walker.WalkTo(new RoomKey(1, 3)));
+        stuck.Says("Bob", 0);
+        stuck.Says("Cal", 5_000);
+
+        Assert.Empty(stuck.Gives);
+        Assert.Empty(stuck.Moves);
+        Assert.Equal(WalkState.Idle, stuck.Walker.State);
+        Assert.Equal(
+            "all routes blocked by a toll east from 1/1 (West) (5 gold) the party can't all pay: "
+            + "Bob holds 0 copper, 5 gold short; "
+            + "Bob isn't paid for here: 5 gold is kept for your own tolls and fares further on this route",
+            Assert.Single(stuck.Notices));
+        Assert.Contains(
+            "you can spare 2 gold after your own toll and the 5 gold of your own tolls and fares further on this route",
+            stuck.Decided);
+
+        // With a way round the first toll, it is taken, and at the second, the
+        // last on the route, there is the 5 gold to hand him.
+        Rig round = FundingPartyAtTheToll(ThreeTollsEachWithAWayRoundJson, new RoomKey(1, 1));
+        round.Gold = 12;
+        Assert.True(round.Walker.WalkTo(new RoomKey(1, 3)));
+        round.Says("Bob", 0);
+        round.Says("Cal", 5_000);
+        Assert.Empty(round.Gives);
+        Assert.Equal(new[] { "n" }, round.Moves);
+        round.Tracker.NoteRoomObserved(Obs("B1", Direction.E));
+        round.Tracker.NoteRoomObserved(Obs("C1", Direction.S));
+        round.Tracker.NoteRoomObserved(Obs("A2", Direction.N, Direction.E));
+        Assert.Equal(new[] { "give 5 gold to Bob" }, round.Gives);
+        round.Confirms("Bob", 5);
+        Assert.Equal(new[] { "n", "e", "s", "e" }, round.Moves);
+        Assert.Equal(700, round.Purse);                           // and our own 5 gold for it
+    }
+
+    // Only the tolls on the route as planned are kept back: a toll beyond the
+    // destination, or on a branch the route doesn't take, is not ours to pay.
+    [Fact]
+    public void ATollTheRouteDoesNotTake_IsNotKeptBack()
+    {
+        Rig rig = FundingPartyAtTheToll(ThreeTollsEachWithAWayRoundJson, new RoomKey(1, 1));
+        rig.Gold = 12;
+        Assert.True(rig.Walker.WalkTo(new RoomKey(1, 2)));        // one toll; two more lie east of where we stop
+        rig.Says("Bob", 0);
+        rig.Says("Cal", 5_000);
+
+        Assert.Equal(new[] { "give 5 gold to Bob" }, rig.Gives);
+        rig.Confirms("Bob", 5);
+        Assert.Equal(new[] { "e" }, rig.Moves);
+    }
+
+    // A loop's way back is a toll too: the toll for it is kept back at the way out.
+    [Fact]
+    public void ALoop_KeepsBackItsOwnTollsOnTheRestOfTheLap()
+    {
+        Rig rig = FundingPartyAtTheToll(TollPurseDoubtTests.TollTheOnlyWayJson, OnlyBailey);
+        rig.Gold = 12;                                            // out 5, back 5, and 2 to spare
+        Assert.True(rig.Runner.Start(new Loop("toll", new[] { OnlyBailey, OnlyRoad })));
+        rig.Says("Bob", 200);
+        rig.Says("Cal", 5_000);
+
+        Assert.Empty(rig.Gives);
+        Assert.Empty(rig.Moves);
+        Assert.Equal(LoopState.Idle, rig.Runner.State);
+        Assert.Contains("Bob isn't paid for here: 5 gold is kept for your own tolls and fares further on this route",
+            Assert.Single(rig.Notices));
     }
 
     // ----- every lap -----------------------------------------------------------------------

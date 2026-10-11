@@ -43,8 +43,11 @@ public static class PaidCrossingDescriber
     public static string WhoCantPay(bool partys) => partys ? "the party can't all pay" : "you can't pay";
 
     // An exit that charges each crosser: a toll, or an NPC's paid transport.
-    public static bool Charges(in RoomExit exit) =>
-        (exit.Hint == RoomExitHint.Toll && exit.TollGold > 0) || exit.FareCopper > 0;
+    public static bool Charges(in RoomExit exit) => CostOf(in exit) > 0;
+
+    // What it charges each crosser, in copper: the toll, else the fare.
+    public static long CostOf(in RoomExit exit) =>
+        exit.Hint == RoomExitHint.Toll && exit.TollGold > 0 ? (long)exit.TollGold * 100 : Math.Max(0, exit.FareCopper);
 
     // How the purse stands against a fare no exit carries (a sailing's): asked as
     // the fare of an exit to the same place, which is all a filter judges by.

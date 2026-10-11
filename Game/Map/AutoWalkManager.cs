@@ -2417,19 +2417,60 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // member's purse, before anyone is charged. Hold means a movement gate is up
     // and the resume re-drives this step; Closed means the party can't be taken
     // through, and the walk plans again with that exit shut to it.
-    private Func<RoomKey, Direction, RoomExit, PartyTollGate.StepVerdict>? _tollStepCheck;
-    public void SetTollStepCheck(Func<RoomKey, Direction, RoomExit, PartyTollGate.StepVerdict> check)
+    // The last argument is what the rest of the route will charge us ourselves
+    // (OwnChargesPastTheStepDue).
+    private Func<RoomKey, Direction, RoomExit, long, PartyTollGate.StepVerdict>? _tollStepCheck;
+    public void SetTollStepCheck(Func<RoomKey, Direction, RoomExit, long, PartyTollGate.StepVerdict> check)
     {
         ArgumentNullException.ThrowIfNull(check);
         _tollStepCheck = check;
     }
 
     // The same for the verb that boards a sailing (PartyTollGate.BeforeSailing).
-    private Func<BoatPassage, PartyTollGate.StepVerdict>? _sailingCheck;
-    public void SetSailingCheck(Func<BoatPassage, PartyTollGate.StepVerdict> check)
+    private Func<BoatPassage, long, PartyTollGate.StepVerdict>? _sailingCheck;
+    public void SetSailingCheck(Func<BoatPassage, long, PartyTollGate.StepVerdict> check)
     {
         ArgumentNullException.ThrowIfNull(check);
         _sailingCheck = check;
+    }
+
+    // What the route past the step due will charge us ourselves, in copper: every
+    // toll and fare still ahead on the path as planned, a sailing's included. The
+    // party's check keeps that back before it hands coin over at this crossing,
+    // or we would pay a member through one toll and stand at the next unable to
+    // cross. Only the path's own steps count: a toll on a branch not taken is not on it.
+    private long OwnChargesPastTheStepDue()
+    {
+        if (_path is not { } path || _index >= path.Count) return 0;
+        RoomKey? at = path[_index] switch
+        {
+            MoveStep due => due.ExpectedTarget,
+            BoatStep due => due.Passage.ArrivalRoom,
+            _ => null,
+        };
+        long copper = 0;
+        for (int i = _index + 1; i < path.Count; i++)
+        {
+            switch (path[i])
+            {
+                case CommandStep:
+                    break;
+                case BoatStep boat:
+                    copper += Math.Max(0, boat.Passage.FareCopper);
+                    at = boat.Passage.ArrivalRoom;
+                    break;
+                case SysGotoStep jump:
+                    at = jump.LandingRoom;
+                    break;
+                case MoveStep move:
+                    if (at is { } from && _graph.GetRoom(from) is { } room
+                        && room.Exits.TryGetValue(move.Direction, out RoomExit exit))
+                        copper += PaidCrossingDescriber.CostOf(in exit);
+                    at = move.ExpectedTarget;
+                    break;
+            }
+        }
+        return copper;
     }
 
     private bool TurnedAsideAtToll(WalkStep step)
@@ -2442,12 +2483,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 && _tracker.State.CurrentRoom is { } room
                 && room.Exits.TryGetValue(move.Direction, out RoomExit exit)
                 && PaidCrossingDescriber.Charges(in exit):
-                verdict = check(room.Key, move.Direction, exit);
+                verdict = check(room.Key, move.Direction, exit, OwnChargesPastTheStepDue());
                 toll = PaidCrossingDescriber.Describe(room.Key, move.Direction, in exit, RoomNameOf);
                 break;
             case BoatStep boat when _sailingCheck is { } check && boat.Passage.FareCopper > 0:
                 BoatPassage passage = boat.Passage;
-                verdict = check(passage);
+                verdict = check(passage, OwnChargesPastTheStepDue());
                 toll = PaidCrossingDescriber.DescribeBoat(in passage, RoomNameOf);
                 break;
             default:

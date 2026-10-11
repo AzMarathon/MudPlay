@@ -299,7 +299,9 @@ public sealed class PartyTollGate
     private static Crossing? KeyOf(in BoatPassage passage) =>
         passage.FareCopper > 0 ? new Crossing(passage.ArrivalRoom, passage.FareCopper, Fare: true) : null;
 
-    private Judgement JudgeNow(Crossing crossing, IReadOnlyList<string> followers)
+    // later: what the rest of the route will charge us ourselves, which the step
+    // through the crossing knows and a route search doesn't (Kept).
+    private Judgement JudgeNow(Crossing crossing, IReadOnlyList<string> followers, long later = 0)
     {
         DateTime now = _clock();
         List<Member> members = new(followers.Count);
@@ -328,26 +330,29 @@ public sealed class PartyTollGate
         bool someoneShort = members.Any(m => m.Knowledge == PartyWealthTracker.PurseKnowledge.Silent
             || (m.Knowledge == PartyWealthTracker.PurseKnowledge.Read && m.Copper < crossing.Copper));
         return someoneShort
-            ? Judge(crossing.Copper, Spare(crossing.Copper), members, FundingOn, crossing.Word, Keeping(crossing))
+            ? Judge(crossing.Copper, Spare(crossing.Copper, later), members, FundingOn, crossing.Word, Keeping(crossing, later))
             : Judge(crossing.Copper, spare: null, members, word: crossing.Word);
     }
 
-    // What we may not hand over at a crossing of this price: our own toll or fare
-    // with what a trip has set aside for its fees, or the keep-on-hand amount when
-    // that is more.
-    private long Kept(long cost) =>
-        Math.Max(cost + Math.Max(0, _reservedCopper()), Math.Max(0, KeepOnHandCopper?.Invoke() ?? 0));
+    // What we may not hand over at a crossing of this price: what we need to
+    // cross ourselves (our own toll or fare here, our own tolls and fares on the
+    // rest of the route, and what a trip has set aside for its fees), or the
+    // keep-on-hand amount when that is more.
+    private long Kept(long cost, long later) =>
+        Math.Max(cost + Math.Max(0, later) + Math.Max(0, _reservedCopper()), Math.Max(0, KeepOnHandCopper?.Invoke() ?? 0));
 
     // What we can hand over there: the purse on record less Kept. Null while the
     // purse isn't known.
-    private long? Spare(long cost) => _ownPurse() is { } purse ? purse - Kept(cost) : null;
+    private long? Spare(long cost, long later = 0) => _ownPurse() is { } purse ? purse - Kept(cost, later) : null;
 
     // The words for what Spare was counted after.
-    private string Keeping(Crossing crossing)
+    private string Keeping(Crossing crossing, long later = 0)
     {
         long keep = Math.Max(0, KeepOnHandCopper?.Invoke() ?? 0);
-        return keep > crossing.Copper + Math.Max(0, _reservedCopper())
-            ? $"the {CurrencyFormat.Full(keep)} you keep on hand"
+        if (keep > crossing.Copper + Math.Max(0, later) + Math.Max(0, _reservedCopper()))
+            return $"the {CurrencyFormat.Full(keep)} you keep on hand";
+        return later > 0
+            ? $"your own {crossing.Word} and the {CurrencyFormat.Full(later)} of your own tolls and fares further on this route"
             : $"your own {crossing.Word}";
     }
 
@@ -359,19 +364,30 @@ public sealed class PartyTollGate
     // atTheStep: asked by the step through the crossing, which records its own
     // decision; a closure first made for a route search is recorded here, since
     // nothing else will say why the route turned.
-    private Judgement JudgeForTrip(Crossing crossing, IReadOnlyList<string> followers, bool atTheStep = false)
+    private Judgement JudgeForTrip(
+        Crossing crossing, IReadOnlyList<string> followers, bool atTheStep = false, long later = 0)
     {
-        Judgement fresh = JudgeNow(crossing, followers);
+        Judgement fresh = JudgeNow(crossing, followers, later);
         long cost = crossing.Copper;
         if (fresh.Outcome == Outcome.Closed)
         {
+            // Closed only for what is kept back for our own crossings further on,
+            // which a route search can't see: it would judge this one coverable and
+            // send the walk straight back. So the short members stand as unable
+            // here, as after a hand-over that failed.
+            bool keptForLater = later > 0 && !fresh.MemberUnable
+                && JudgeNow(crossing, followers).Outcome == Outcome.Fund;
+            if (keptForLater)
+                foreach ((string name, _) in fresh.Needs)
+                    MarkUnable(name, crossing,
+                        $"isn't paid for here: {CurrencyFormat.Full(later)} is kept for your own tolls and fares further on this route");
             bool isNew;
             lock (_marksLock)
             {
                 isNew = !_closed.ContainsKey(crossing);
                 _closed[crossing] = new Closure(
                     new HashSet<string>(followers, StringComparer.OrdinalIgnoreCase),
-                    fresh.Needs, fresh.MemberUnable, fresh.Summary);
+                    fresh.Needs, fresh.MemberUnable || keptForLater, fresh.Summary);
             }
             // Said with the lock let go: the log is not ours to hold it across.
             if (isNew && !atTheStep)
@@ -479,17 +495,22 @@ public sealed class PartyTollGate
     // ----- the step through a paid crossing ------------------------------------
 
     // A step through a toll exit, or an exit that is an NPC's paid transport.
-    public StepVerdict BeforeTollStep(RoomKey from, Direction direction, in RoomExit exit)
+    // laterOwnCopper: what the rest of the engine's route will charge us ourselves
+    // (its tolls, fares and sailings past this step), which is kept back with our
+    // own price here before anything is handed over.
+    public StepVerdict BeforeTollStep(RoomKey from, Direction direction, in RoomExit exit, long laterOwnCopper = 0)
     {
         if (KeyOf(in exit) is not { } crossing || !Checks(out IReadOnlyList<string> followers)) return StepVerdict.Go;
-        return BeforeCrossing(from, crossing, followers, PaidCrossingDescriber.Describe(from, direction, in exit, _roomName));
+        return BeforeCrossing(from, crossing, followers,
+            PaidCrossingDescriber.Describe(from, direction, in exit, _roomName), laterOwnCopper);
     }
 
     // The verb that boards a sailing, at its dock.
-    public StepVerdict BeforeSailing(in BoatPassage passage)
+    public StepVerdict BeforeSailing(in BoatPassage passage, long laterOwnCopper = 0)
     {
         if (KeyOf(in passage) is not { } crossing || !Checks(out IReadOnlyList<string> followers)) return StepVerdict.Go;
-        return BeforeCrossing(passage.DockRoom, crossing, followers, PaidCrossingDescriber.DescribeBoat(in passage, _roomName));
+        return BeforeCrossing(passage.DockRoom, crossing, followers,
+            PaidCrossingDescriber.DescribeBoat(in passage, _roomName), laterOwnCopper);
     }
 
     private bool Checks(out IReadOnlyList<string> followers)
@@ -498,17 +519,18 @@ public sealed class PartyTollGate
         return MasterSwitchOff?.Invoke() != true && Applies(out followers);
     }
 
-    private StepVerdict BeforeCrossing(RoomKey from, Crossing crossing, IReadOnlyList<string> followers, string described)
+    private StepVerdict BeforeCrossing(
+        RoomKey from, Crossing crossing, IReadOnlyList<string> followers, string described, long later)
     {
         // The gate is up for an ask or a hand-over: the step comes back when it clears.
         if (_asking is not null || _funding is not null) return StepVerdict.Hold;
         RefreshLeftBehind();
 
-        long cost = crossing.Copper;
+        later = Math.Max(0, later);
         NoteFundedAndTurnedAway(from, crossing, followers);
 
-        Judgement judged = JudgeForTrip(crossing, followers, atTheStep: true);
-        LastReadings = DescribeReadings(followers, crossing);
+        Judgement judged = JudgeForTrip(crossing, followers, atTheStep: true, later);
+        LastReadings = DescribeReadings(followers, crossing, later);
         switch (judged.Outcome)
         {
             case Outcome.Clear:
@@ -530,7 +552,7 @@ public sealed class PartyTollGate
                 return StepVerdict.Hold;
 
             default:
-                return BeginFunding(crossing, described, judged);
+                return BeginFunding(crossing, described, judged, later);
         }
     }
 
@@ -568,7 +590,7 @@ public sealed class PartyTollGate
         }
     }
 
-    private StepVerdict BeginFunding(Crossing crossing, string described, Judgement judged)
+    private StepVerdict BeginFunding(Crossing crossing, string described, Judgement judged, long later)
     {
         long cost = crossing.Copper;
         if (_holdings() is not { } holdings || _ownPurse() is not { } purse)
@@ -579,9 +601,9 @@ public sealed class PartyTollGate
             return StepVerdict.Closed;
         }
 
-        // Never what we keep: our own toll or fare and a trip's fees, or the
-        // keep-on-hand amount. An overpay stays inside the same spare.
-        long spare = purse - Kept(cost);
+        // Never what we keep: our own toll or fare here and further on with a
+        // trip's fees, or the keep-on-hand amount. An overpay stays inside the same spare.
+        long spare = purse - Kept(cost, later);
         if (PlanHandOvers(holdings, judged.Needs, spare, out IReadOnlyList<string> uncovered) is not { } plans)
         {
             foreach ((string name, long need) in judged.Needs.Where(n => uncovered.Contains(n.Name)))
@@ -589,7 +611,7 @@ public sealed class PartyTollGate
                     $"can't be handed coin: the coins carried don't make {CurrencyFormat.Full(need)} without going past what you can spare");
             Decide($"{described}: not taken with the party. {judged.Summary}, but the coins carried don't make what "
                 + $"{string.Join(", ", uncovered)} needs without going past the {CurrencyFormat.Full(Math.Max(0, spare))} "
-                + $"you can spare after {Keeping(crossing)}");
+                + $"you can spare after {Keeping(crossing, later)}");
             return StepVerdict.Closed;
         }
 
@@ -958,7 +980,7 @@ public sealed class PartyTollGate
         return $"{name} no answer";
     }
 
-    private string DescribeReadings(IReadOnlyList<string> followers, Crossing crossing)
+    private string DescribeReadings(IReadOnlyList<string> followers, Crossing crossing, long later)
     {
         IReadOnlyCollection<string> leftBehind = _leftBehind;
         IEnumerable<string> purses = followers.Select(name =>
@@ -975,6 +997,7 @@ public sealed class PartyTollGate
             ? $"own purse {CurrencyFormat.Full(purse)}"
               + (_reservedCopper() > 0 ? $" with {CurrencyFormat.Full(_reservedCopper())} set aside" : string.Empty)
               + (keep > 0 ? $", {CurrencyFormat.Full(keep)} kept on hand" : string.Empty)
+              + (later > 0 ? $", {CurrencyFormat.Full(later)} of our own tolls and fares further on this route" : string.Empty)
             : "own purse not read";
         return $"{crossing.Word} {CurrencyFormat.Full(crossing.Copper)}; {string.Join(", ", purses)}; {own}; "
             + $"funding short members {(FundingOn ? "on" : "off")}";

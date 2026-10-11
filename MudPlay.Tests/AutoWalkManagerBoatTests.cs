@@ -300,7 +300,7 @@ public sealed class AutoWalkManagerBoatTests : IDisposable
         Harness h = NewHarness();
         bool held = true;
         List<long> faresAsked = new();
-        h.Walker.SetSailingCheck(passage =>
+        h.Walker.SetSailingCheck((passage, _) =>
         {
             faresAsked.Add(passage.FareCopper);
             if (!held) return PartyTollGate.StepVerdict.Go;
@@ -327,7 +327,7 @@ public sealed class AutoWalkManagerBoatTests : IDisposable
     public void BoatStep_ClosedToTheParty_IsNeverBoarded_AndTheWalkEndsNamingTheSailing()
     {
         Harness h = NewHarness();
-        h.Walker.SetSailingCheck(_ => PartyTollGate.StepVerdict.Closed);
+        h.Walker.SetSailingCheck((_, _) => PartyTollGate.StepVerdict.Closed);
         List<string> notices = new();
         h.Walker.SetUnpaidCrossingHandler((_, reason) => notices.Add(reason));
         h.Tracker.SetLocated(new RoomKey(1, 1));

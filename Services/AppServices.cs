@@ -8968,9 +8968,9 @@ public sealed class AppServices
         };
         Movement.PartyTollClosedProbe = exit => PartyToll.Closes(in exit);
         Movement.PartyTollClosedReason = exit => PartyToll.DescribeClosed(in exit);
-        Walker.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
-        LoopRunner.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
-        Walker.SetSailingCheck(passage => PartyToll.BeforeSailing(in passage));
+        Walker.SetTollStepCheck((from, dir, exit, later) => PartyToll.BeforeTollStep(from, dir, in exit, later));
+        LoopRunner.SetTollStepCheck((from, dir, exit, later) => PartyToll.BeforeTollStep(from, dir, in exit, later));
+        Walker.SetSailingCheck((passage, later) => PartyToll.BeforeSailing(in passage, later));
         Inventory.CoinsGivenAway += (recipient, copper) => PartyToll.OnCoinsGivenAway(recipient, copper);
         Inventory.GiveRefused += recipient => PartyToll.OnGiveRefused(recipient);
         Inventory.CoinGiveMisaimed += () => PartyToll.OnCoinGiveMisaimed();
