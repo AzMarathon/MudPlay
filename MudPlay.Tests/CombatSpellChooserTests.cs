@@ -2151,8 +2151,12 @@ public sealed class CombatSpellChooserTests
 
     // ----- The entry debuff's mana reserve (what a lair wait holds for) -----
 
+    // From outside the room its head count isn't known: at or over the AoE debuff's
+    // minimum enemies the room gets that one, under it the single-target one. The
+    // lower of the two minimums is what is given, so nothing waits for a debuff the
+    // room may not get.
     [Fact]
-    public void EntryDebuffReserve_IsTheAoeDebuffs_WhenItCouldCoverTheRoom_ElseTheSingleTargetOnes()
+    public void EntryDebuffReserve_WithBothDebuffsCastable_IsTheLowerOfTheirMinimums()
     {
         CombatSettings settings = new()
         {
@@ -2161,12 +2165,15 @@ public sealed class CombatSpellChooserTests
             SingleTargetDebuffSpell = Slot("curse", minMana: 25),
         };
 
+        Assert.Equal(("curse", 25), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200));
+
+        settings.SingleTargetDebuffSpell = Slot("curse", minMana: 80);
         Assert.Equal(("blind", 60), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200));
         // Auto-Nuke off: the AoE debuff isn't cast, the single-target one is.
-        Assert.Equal(("curse", 25), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: false, maxMa: 200));
+        Assert.Equal(("curse", 80), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: false, maxMa: 200));
 
-        settings.AreaDebuffSpell = Slot(null);
-        Assert.Equal(("curse", 25), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200));
+        settings.SingleTargetDebuffSpell = Slot(null);
+        Assert.Equal(("blind", 60), CombatSpellChooser.EntryDebuffReserve(settings, allowNukes: true, maxMa: 200));
     }
 
     [Fact]

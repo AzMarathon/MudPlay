@@ -648,17 +648,21 @@ public sealed class CombatSpellChooser
             : (int)System.Math.Round(maxMa * minManaPerCast / 100.0);
 
     // The debuff a profile casts on walking into a room, and the mana its slot's "min
-    // mana per cast" asks for; null with no debuff to cast or no minimum on it. Asked
-    // from outside the room, where the head count isn't known: the AoE debuff is taken
-    // to be the one whenever it could cover the room (configured, Auto-Nuke on), as
-    // TryDebuffing would pick it there at or over its minimum enemies, and the
-    // single-target one otherwise.
+    // mana per cast" asks for; null with no debuff to cast or no minimum to meet. Asked
+    // from outside the room, where the head count isn't known. With the AoE debuff set
+    // and Auto-Nuke on, TryDebuffing casts it at or over its minimum enemies and the
+    // single-target one under that, so either may be the one: the lower of their two
+    // minimums is given, and a caller waiting on it never waits for a debuff the room
+    // turns out not to get. With only one of them castable, it is that one's.
     public static (string Spell, int Mana)? EntryDebuffReserve(CombatSettings settings, bool allowNukes, int maxMa)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        CombatSpellSlot? slot = IsConfigured(settings.AreaDebuffSpell) && allowNukes ? settings.AreaDebuffSpell
-            : IsConfigured(settings.SingleTargetDebuffSpell) ? settings.SingleTargetDebuffSpell
-            : null;
+        CombatSpellSlot? area = IsConfigured(settings.AreaDebuffSpell) && allowNukes ? settings.AreaDebuffSpell : null;
+        CombatSpellSlot? single = IsConfigured(settings.SingleTargetDebuffSpell) ? settings.SingleTargetDebuffSpell : null;
+        CombatSpellSlot? slot = area is null ? single
+            : single is null ? area
+            : single.MinManaPerCast < area.MinManaPerCast ? single
+            : area;
         if (slot is null || slot.MinManaPerCast <= 0) return null;
         return (slot.SpellName!.Trim(), ReserveInMana(slot.MinManaPerCast, maxMa, settings.SpellManaThresholdMode));
     }
