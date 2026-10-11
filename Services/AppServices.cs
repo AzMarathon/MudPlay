@@ -7678,6 +7678,7 @@ public sealed class AppServices
         Walker.SetMoveReadyCheck(() =>
         {
             PreMoveGearOnce(ref _walkerPreMoveGearFor, Walker.PeekNextPlannedDirection());
+            HazardLastCallBeforeStep(Walker.PeekNextPlannedDirection());
             return Stealth.ReadyToMoveSneaking();
         });
         Walker.SetRoomActionHook(cmd => Stealth.NoteSneakBroken($"room command '{cmd}'"));
@@ -7882,7 +7883,34 @@ public sealed class AppServices
             log:            Log,
             // A follower is carried through a hazard by the leader's route, with no
             // walk of its own for the approach hook to ride — it raises on arrival.
-            followingLeader: () => PartyState.IsInParty && !PartyState.SelfIsLeader);
+            followingLeader: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
+            roomsAhead:     HazardRoomsAhead,
+            allCounters:    () => RoomHazards.Hazards.SelectMany(h => h.BuffCounters),
+            sneakKept:      () => SneakGuard.Holds,
+            chargesLeft:    id => ItemNames.GetName(id) is { } name ? CarriedCharges.RemainingForName(name) : null,
+            sendBlocked:    () => EngineGate.IsLocked);
+        // The refresh inside its window is sent by the between-round cast pass: one
+        // cast a round, held while a sneak is being kept, then the fight's resume and
+        // the re-sneak. Nothing is offered while the master switch is off. A `use`
+        // sent by another road (the step into a hazard room, a lapse prompt) is
+        // reported to the same pass, so it counts as the round's cast too.
+        CastDirector.SetClientUseSource(
+            due: () => AutoModeController.KillSwitchEngaged ? null : AutoHazardCounterProvisioner.DueNow(),
+            fire: AutoHazardCounterProvisioner.FireDue,
+            heldForSneak: AutoHazardCounterProvisioner.NoteHeldForSneak);
+        AutoHazardCounterProvisioner.UseSent += CastDirector.NoteClientUseSent;
+        // A `use` that could not wait for a room with no NPCs spent the sneak where
+        // the character stands: the same thing, to whatever reacts to a lost sneak,
+        // as a sneak that failed on the way in.
+        AutoHazardCounterProvisioner.SneakSpentHere += CombatTracker.NoteSilentSneakLoss;
+        // What is believed about the buff is dropped wherever it can't be vouched
+        // for: a death wipes it, and a new profile or game-data set is another
+        // character or other data. (A dropped link forgets it too, from
+        // MainWindowViewModel's disconnect handler.)
+        RoomTracker.PlayerDeathObserved += () => AutoHazardCounterProvisioner.Forget("death");
+        RoomTracker.PlayerDeathInferred += () => AutoHazardCounterProvisioner.Forget("death");
+        Profile.ProfileLoaded += _ => AutoHazardCounterProvisioner.Forget("profile loaded");
+        GameData.ActiveSetChanged += _ => AutoHazardCounterProvisioner.Forget("game data changed");
         RoomTracker.StateChanged += t =>
         {
             if (t.NewRoom is { } arrived && !Equals(arrived.Key, t.PreviousRoom?.Key))
@@ -8227,6 +8255,7 @@ public sealed class AppServices
             if (Health.HoldForRestHere()) return false;
             if (!LairDebuffHold.ReadyToEnter(LairEntryDebuffModeForNextStep())) return false;
             PreMoveGearOnce(ref _loopPreMoveGearFor, LoopRunner.PeekNextPlannedDirection());
+            HazardLastCallBeforeStep(LoopRunner.PeekNextPlannedDirection());
             return Stealth.ReadyToMoveSneaking();
         });
         LoopRunner.SetPreMoveHook(() =>
@@ -11078,6 +11107,35 @@ public sealed class AppServices
     {
         if (dir is not { } d || RoomTracker.State.CurrentRoom is not { } cur) return null;
         return cur.Exits.TryGetValue(d, out Game.Map.RoomExit exit) ? exit.Target : null;
+    }
+
+    // The hazard counter's last call for the step about to be taken, asked ahead of
+    // the sneak check. A `use` it sends ends the sneak, and sent here the `sn` that
+    // follows is the held kind, answered before the step goes. Sent from the approach
+    // hook, behind the check, its `sn` went out in one burst with the move.
+    private void HazardLastCallBeforeStep(Game.Map.Direction? direction)
+    {
+        if (NextPlannedRoomForEquip(direction) is { } next)
+            AutoHazardCounterProvisioner.OnApproachingRoom(next);
+    }
+
+    // The room the character stands in, then the rooms the running walk or loop
+    // plans to enter next: where the hazard counter looks for a room its buff matters
+    // in. A follower has no plan of its own, so for it this is the one room.
+    private IReadOnlyList<Game.Map.RoomKey> HazardRoomsAhead()
+    {
+        if (RoomTracker.State.CurrentRoom is not { } here) return Array.Empty<Game.Map.RoomKey>();
+        List<Game.Map.RoomKey> rooms = new(1 + Game.Map.AutoHazardCounterProvisioner.LookaheadSteps) { here.Key };
+        if (ResolveActiveMovementEngine() is not { } engine) return rooms;
+        Game.Map.Room at = here;
+        foreach (Game.Map.Direction step in engine.PeekPlannedDirections(Game.Map.AutoHazardCounterProvisioner.LookaheadSteps))
+        {
+            if (!at.Exits.TryGetValue(step, out Game.Map.RoomExit exit) || RoomGraph.GetRoom(exit.Target) is not { } next)
+                break;
+            rooms.Add(next.Key);
+            at = next;
+        }
+        return rooms;
     }
 
     // The DEFAULT gear set's item-bearing slots as EquippedItems, for summing their

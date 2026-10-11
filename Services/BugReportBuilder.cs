@@ -771,6 +771,11 @@ public static class BugReportBuilder
         Kv(sb, "Sneak keeping — cast held", svc.CastDirector.HasSneakHeldCast
             ? (svc.Stealth.IsHoldingForCast ? "yes — the step waits here while it goes out" : "yes — stops in the next NPC-free room")
             : "no");
+        // A hazard counter's buff (the desert waterskin) as the client tracks it: on
+        // since, when it runs out, and what a due refresh is waiting on.
+        Kv(sb, "Hazard buff", svc.AutoHazardCounterProvisioner.DescribeTracking() is { Count: > 0 } hazardBuff
+            ? string.Join(" · ", hazardBuff)
+            : "none tracked (off, or not known to be on)");
         Kv(sb, "Party cures backing off", svc.CastDirector.DescribePartyCureBackoff() is { Count: > 0 } cures
             ? string.Join(" · ", cures)
             : "(none)");

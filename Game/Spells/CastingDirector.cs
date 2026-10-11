@@ -692,6 +692,43 @@ public sealed class CastingDirector : IDisposable
             && (PickBuff(health, priority: true) is not null || PickBuff(health, priority: false) is not null);
     }
 
+    // ----- a use the client owns ------------------------------------------------
+    // A buff the client keeps up on its own account by using an item: a hazard
+    // counter (the desert waterskin), which Game.Map.AutoHazardCounterProvisioner
+    // tracks. It is not a buff slot: the user never listed it, it answers to neither
+    // Auto-Heal nor Auto-Bless, and it is due only where its hazard is. What it shares
+    // with the slots is the sending: one between-round cast a round, held while a
+    // sneak is being kept, and followed by the fight's resume and the re-sneak
+    // (CastFired). So the provisioner keeps the clock and this pass does the sending.
+    private Func<(string What, bool MustGoNow)?>? _clientUseDue;
+    private Func<bool, bool>? _fireClientUse;
+    private Action? _clientUseHeld;
+
+    // due: the command a use would send and whether it can wait, null when none is
+    // due. fire: send it, told whether a sneak was being kept; true when it went out.
+    // heldForSneak: the pass held it to keep a sneak.
+    public void SetClientUseSource(
+        Func<(string What, bool MustGoNow)?> due, Func<bool, bool> fire, Action heldForSneak)
+    {
+        ArgumentNullException.ThrowIfNull(due);
+        ArgumentNullException.ThrowIfNull(fire);
+        ArgumentNullException.ThrowIfNull(heldForSneak);
+        _clientUseDue = due;
+        _fireClientUse = fire;
+        _clientUseHeld = heldForSneak;
+    }
+
+    // The client's own use went out, from this pass or by another road (the step
+    // into a hazard room, a lapse prompt). Either way it took the round's
+    // between-round cast: the slot is spent, a fight resumes on the *Combat Off* it
+    // draws and the sneak is taken again.
+    public void NoteClientUseSent()
+    {
+        _cast.NotifyExternalCastSent();
+        _betweenRoundSlotUsedAt = _now();
+        CastFired?.Invoke();
+    }
+
     // Wire the sneak-keeping gate (Game.Stealth.SneakGuard.Holds). While it returns
     // true every in-between category but debuffing is HELD rather than cast (see the
     // decision pass). Optional — until wired, nothing defers.
@@ -1837,7 +1874,9 @@ public sealed class CastingDirector : IDisposable
         // when BOTH are off (nothing in the switch could fire).
         bool healEnabled = _isEnabled();
         bool blessEnabled = _autoBlessEnabled?.Invoke() ?? true;
-        if (!healEnabled && !blessEnabled) return null;
+        // The client's own use answers to neither toggle (see SetClientUseSource).
+        (string What, bool MustGoNow)? ownUse = _clientUseDue?.Invoke();
+        if (!healEnabled && !blessEnabled && ownUse is null) return null;
         // A full-screen menu owns the keyboard (train-stats box): any cast text
         // would corrupt its form, so suppress every category until it closes.
         if (_inputCaptured?.Invoke() == true) return null;
@@ -1878,7 +1917,7 @@ public sealed class CastingDirector : IDisposable
         // so the gate is no longer combat-only.
         if (SlotSpentThisRound) return null;
 
-        string? cast = RunDecisionPass(healEnabled, blessEnabled);
+        string? cast = RunDecisionPass(healEnabled, blessEnabled, ownUse);
         // Mark the round's single between-round slot spent so a second Evaluate this
         // round doesn't send another (doomed) cast; freed at the round boundary / window.
         if (cast is not null) _betweenRoundSlotUsedAt = _now();
@@ -1942,7 +1981,7 @@ public sealed class CastingDirector : IDisposable
 
     // Walk the priority list and fire the first ready candidate. Returns the spell
     // that was cast (for diagnostics / tests), or null if nothing matched.
-    private string? RunDecisionPass(bool healEnabled, bool blessEnabled)
+    private string? RunDecisionPass(bool healEnabled, bool blessEnabled, (string What, bool MustGoNow)? ownUse)
     {
         SpellsSettings spells = _readSpells();
         HealthSettings health = _readHealth();
@@ -1999,6 +2038,30 @@ public sealed class CastingDirector : IDisposable
         bool emergencyHealBypass = _emergencyHealBypass?.Invoke() == true;
         HasSneakHeldCast = false;
         SneakHeldCategory = null;
+
+        // The client's own use (a hazard counter's buff) goes ahead of the user's
+        // categories, an emergency heal excepted: it is due only in a short window
+        // before the buff ends, and one round's delay to a buff or a lesser heal costs
+        // less than the buff lapsing in a room that punishes it. It is one
+        // between-round cast like the rest and is held for sneak keeping the same way,
+        // until it can no longer wait. Mid-burst it waits for the settled pass.
+        if (ownUse is { } own && !settling
+            && !(healEnabled && PickEmergencySelfHeal(spells, health) is not null))
+        {
+            if (deferSneakMaintenance && !own.MustGoNow)
+            {
+                _log?.Combat(LogCategory,
+                    $"sneak kept: {own.What} (hazard buff) held — the backstab is still owed, our sneaked move is landing, or we're sneaking past hostiles.");
+                HasSneakHeldCast = true;
+                _clientUseHeld?.Invoke();
+            }
+            else if (_fireClientUse?.Invoke(deferSneakMaintenance) == true)
+            {
+                _log?.Combat(LogCategory,
+                    $"hazard buff fired {own.What} hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
+                return own.What;
+            }
+        }
 
         foreach (SpellCategory category in PrioritisedCategories(spells))
         {

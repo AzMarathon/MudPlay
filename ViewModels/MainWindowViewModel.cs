@@ -3610,6 +3610,10 @@ public partial class MainWindowViewModel : ObservableObject
                 // and a resume gap longer than the longest buff clears them then; so a
                 // brief manual disconnect keeps the recast clock instead of restarting it.
                 AppServices.Current.CastDirector.PauseBuffTimers();
+                // A hazard counter's buff is not carried over on that reasoning: a
+                // wrong guess there walks a hazard room unprotected, so across a
+                // dropped link it counts as unknown and is raised again when needed.
+                AppServices.Current.AutoHazardCounterProvisioner.Forget("the link dropped");
                 // The reconnect's splash and login menu ride the same line extractor.
                 AppServices.Current.MessageCandidateWatcher.NotifyLeftGame();
                 AppServices.Current.InGameCapture.NotifyDisconnected();
