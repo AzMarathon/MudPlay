@@ -1,5 +1,13 @@
 # Version history
 
+## 3.167.26
+
+- A `break` you type holds Auto-Combat's attack until you attack, the monster dies or leaves, or you leave the room
+- Room-spell kills are counted against every monster the room listed, neutrals included
+- Only the room spell's own damage line counts as the spell landing
+- Stock: a room spell is left running through the `*Combat Off*` after its kill
+- Temp-death response goes out once for a room spell's kills, mixed rooms included
+
 ## 3.167.21
 
 - After a death, walks and loops avoid tolls, fares and sailings until the inventory is re-read; an arena death takes nothing
