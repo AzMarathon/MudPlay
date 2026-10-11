@@ -4633,11 +4633,14 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyBless_Reconnect_KeepsBothSelfAndPartyTimers()
+    public void PartyBless_Reconnect_BothSelfAndPartyTimersResumeWithTheTimeTheyHad()
     {
-        // On OUR reconnect BOTH survive the drop: the party member stayed online (absolute
-        // expiry, now reduced), and our OWN buff persisted server-side through the link-
-        // drop (paradigm-20260908-205555). Neither is shifted; both keep their real expiry.
+        // On OUR reconnect BOTH survive the drop (paradigm-20260908-205555), and both
+        // run on with the time they had when it began: "as soon as we've disconnected
+        // all timers need to be paused until we're back in the game, then they all
+        // resume" (user, 2026-10-10). The member's is paused with ours, since from out
+        // of the game there is no knowing the member stayed in it. Until that ruling
+        // this test pinned both expiries as absolute and unshifted.
         using PartyBlessHarness h = new();
         h.Health.BlessIfAboveMa = 0;
         h.AddTargetSlot("bles", "Raijin");
@@ -4663,8 +4666,9 @@ public sealed class CastingDirectorTests
         Assert.Equal(2, after.Count);                   // both survive
         foreach (Game.Spells.ActiveBuffTimer t in after)
         {
-            if (t.Target == "raijin") Assert.Equal(partyUntil, t.Until);  // absolute, unshifted
-            else { Assert.Equal(string.Empty, t.Target); Assert.Equal(selfUntil, t.Until); }
+            // Each expiry is moved on by the 45 s away: the time left is what it was.
+            if (t.Target == "raijin") Assert.Equal(partyUntil.AddSeconds(45), t.Until);
+            else { Assert.Equal(string.Empty, t.Target); Assert.Equal(selfUntil.AddSeconds(45), t.Until); }
         }
     }
 
