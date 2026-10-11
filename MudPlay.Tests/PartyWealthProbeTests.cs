@@ -299,6 +299,28 @@ public sealed class PartyWealthProbeTests
         Assert.Contains(("Broke", 0L), h.Recorded);   // empty purse recorded as 0
     }
 
+    // A `@loop send` line names a loop, and a loop can be named like a purse. Read
+    // as one it would be a member with five copper, and coin is handed over on
+    // these readings. The member's real answer after it is still taken.
+    [Theory]
+    [InlineData("{@loopresult 9da659db saved as 'Toll run (= 5 copper)'}")]
+    [InlineData("{sending loop 'Toll run (= 5 copper)' (3 rooms, 1 line)}")]
+    [InlineData("{preparing to send: Toll run (= 5 copper), yes to confirm, no to deny (code 9da659db)}")]
+    [InlineData("{loop send of 'no coins on hand' cancelled}")]
+    public void LoopSendLineNamingALoopLikeAPurse_IsNoWealthReply(string line)
+    {
+        var h = new Harness();
+        h.AddMember("Bob");
+        h.GoInParty();
+
+        _ = h.Probe.QueryAsync();
+        h.Reply("Bob", line);
+        Assert.Empty(h.Recorded);
+
+        h.Reply("Bob", Harness.Coins(4200));
+        Assert.Equal(new[] { ("Bob", 4200L) }, h.Recorded);
+    }
+
     [Fact]
     public void UnknownReply_RecordsNothing()
     {

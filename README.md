@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.177.9**
+> **Version 3.178.1**
 > - A game-data set whose empty text blocks link round in a circle no longer freezes the client as it loads; the program log names the blocks
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

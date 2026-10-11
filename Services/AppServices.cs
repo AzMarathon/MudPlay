@@ -657,6 +657,13 @@ public sealed class AppServices
     // MainWindowViewModel.
     public Game.Inventory.HangupItemRecheck HangupItems { get; private set; } = null!;
 
+    // Where the dead of a room were seen to arrive, kept with the game-data set,
+    // and the watcher that learns a pair from a death the client witnesses. The
+    // hang-up death check reads them for the rooms no list covers.
+    public LearnedArrivalRoomStore LearnedArrivals { get; private set; } = null!;
+    public Game.Recovery.LearnedArrivalLookup LearnedArrivalLands { get; private set; } = null!;
+    public Game.Recovery.ArrivalRoomLearner ArrivalLearner { get; private set; } = null!;
+
     // Leader-side reconnect party reform — the mirror of PartyRejoin. Snapshots the
     // followers we're leading at disconnect and, on the first in-game room after the
     // reconnect, rebases the grace window + holds the loop so a nightly-cleanup
@@ -2346,10 +2353,20 @@ public sealed class AppServices
     // active game data: Paradigm by its Info row (Legit 2), an unmodified Stock
     // set by Legit 1 with Custom "Default", and anything else (a board whose
     // sysop may have edited its rooms, or no set) unverified.
+    //
+    // A board can run edited rooms and still be played on the standard data set.
+    // Nothing in the set says so; deaths seen there that end where the list
+    // doesn't allow do, and are counted on the board (StandardListContradictions).
+    // A board marked by them is unverified too, whatever its set.
     public Game.Recovery.HangupArrivalListTrust HangupArrivalListTrust =>
         GameData.ActiveRealm == Game.RealmType.ParaMud ? Game.Recovery.HangupArrivalListTrust.Paradigm
-        : GameData.ActiveSetIsVanillaStock ? Game.Recovery.HangupArrivalListTrust.VanillaStock
+        : GameData.ActiveSetIsVanillaStock && !StandardListContradictions.Marked
+            ? Game.Recovery.HangupArrivalListTrust.VanillaStock
         : Game.Recovery.HangupArrivalListTrust.Unverified;
+
+    // The active board's count of deaths the standard list of arrival rooms
+    // doesn't allow, against the set in play.
+    public Game.Recovery.StandardListContradictions StandardListContradictions { get; private set; } = null!;
 
     // Paradigm's Albion: the rooms that can be walked to from the Burial Vault,
     // where its dead arrive. The walk is made the first time a hang-up in one of
@@ -3064,6 +3081,11 @@ public sealed class AppServices
         // swallows it instead of bouncing "{command invalid}" at each responder.
         RemoteCommands.RegisterIgnored(Game.Remote.BossTimerQueryHandler.SyncResponseToken);
         RemoteCommands.RegisterIgnored(Game.Remote.RoombaQueryHandler.SyncResponseToken);
+        // The two lines of a `@loop send` that are answers and never commands. They
+        // travel in braces, which keeps them from the engine; reserved as well, so
+        // that one typed by hand without its braces is swallowed like the others.
+        RemoteCommands.RegisterIgnored(Game.Remote.LoopShareHandler.DataToken);
+        RemoteCommands.RegisterIgnored(Game.Remote.LoopShareHandler.ResultToken);
         // Stat-screen parser ahead of LivesProvider hookup below so
         // both the engine's @suicide hard-block and the @lives reply
         // path share the same "unknown until first stat poll" source.
@@ -9186,9 +9208,15 @@ public sealed class AppServices
         // receiver saves a loop we asked for (window opened by our own outbound
         // `@loop send yes`, wired from the outbound-chat watcher in MainWindowViewModel).
         LoopShare = new Game.Remote.LoopShareHandler(Loops, Log, paceScheduler: pacedReplyScheduler,
-            runningLoop: () => LoopRunner.State is not Game.Map.LoopState.Idle ? LoopRunner.CurrentLoop : null);
+            runningLoop: () => LoopRunner.State is not Game.Map.LoopState.Idle ? LoopRunner.CurrentLoop : null,
+            notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)));
+        // What the asker's client answers when a loop we sent has arrived there.
+        Chat.EntryClassified += LoopShare.NoteChat;
+        // The receiver's one answer to the sender goes out as every remote reply
+        // does, and is held back by the master switch and the Warn setting there.
         LoopShareInbox = new Game.Remote.LoopShareReceiver(Chat, Loops,
-            notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)), Log);
+            notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)), Log,
+            tell: RemoteCommands.SendOutcome);
 
         // MovePlayer remote-command handler.
         // Registers @goto, @loop, @lair, @stop, @rego against the
@@ -10176,6 +10204,36 @@ public sealed class AppServices
             BlockedByMasterSwitch = what => AutoModeController.Blocks("Default task", what),
         };
 
+        // Where the dead of a room arrive, learned from the deaths this client sees
+        // and kept with the game-data set, which every board and character on it
+        // shares. Read by the hang-up death check below for the rooms no list
+        // covers. Nothing is sent for it, so the master switch has no say.
+        LearnedArrivals = new LearnedArrivalRoomStore(Log);
+        GameData.ActiveSetChanged += LearnedArrivals.OnActiveSetChanged;
+        if (GameData.ActiveSet is not null) LearnedArrivals.OnActiveSetChanged(GameData.ActiveSet);
+        Tick.HeartbeatElapsed += () => LearnedArrivals.TakeInOutsideChanges();
+        // The land a room stands on, for what a death seen in one room says of
+        // the rooms around it: a map's lands are worked out the first time one of
+        // its rooms is asked about, and kept with the graph.
+        LearnedArrivalLands = new Game.Recovery.LearnedArrivalLookup(
+            LearnedArrivals,
+            room => Game.Map.WalkReach.KnotOnItsMap(RoomGraph, room),
+            (from, room) => Game.Map.WalkReach.OnItsMap(RoomGraph, from, room));
+        RoomGraph.GraphReloaded += LearnedArrivalLands.Forget;
+        StandardListContradictions = new Game.Recovery.StandardListContradictions(
+            () => ResolveActiveRealm()?.Realm, () => GameData.ActiveSet,
+            () => { if (ResolveActiveBbs() is { } board) Bbs.Save(board); }, Log);
+        ArrivalLearner = new Game.Recovery.ArrivalRoomLearner(
+            RoomTracker, LearnedArrivals, LearnedArrivalLands, () => HangupArrivalListTrust,
+            RoomGraph.CouldBeTakenFor, InParadigmAlbion, RoomGraph.IsExitCommandSomewhere,
+            boardContradicted: StandardListContradictions.Note, log: Log);
+        RoomTracker.PlayerDeathObserved += ArrivalLearner.OnPlayerDied;
+        RoomTracker.StateChanged += ArrivalLearner.OnRoomStateChanged;
+        OutboundMovement.MoveSent += ArrivalLearner.NoteMoveSent;
+        // Out of the game before the room was drawn (the link dropped, the game was
+        // left): the room the next entry shows is not known to be the same one.
+        InGameCapture.InGameChanged += inGame => { if (!inGame) ArrivalLearner.Forget(); };
+
         // What a penalised hang-up dropped, looked for on the way back in. Gated on
         // the realm's own settings, and on Auto-All for anything it sends. Its gets
         // go out through the auto-get engine, and gear that comes back is the
@@ -10240,9 +10298,11 @@ public sealed class AppServices
             // Whether the room the character came back in is where the dead of the
             // room it hung up in arrive. The list is the Stock map file's, and how
             // far it goes depends on the game data (HangupArrivalListTrust). The
-            // graph says which rooms the map can't tell an arrival room from.
+            // graph says which rooms the map can't tell an arrival room from, and
+            // what was learned from deaths seen speaks for the rooms no list covers.
             entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.Read(
-                hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion),
+                hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion,
+                LearnedArrivalLands.For),
             roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}");
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();

@@ -211,6 +211,11 @@ public sealed class RoomTracker
     // room wasn't known.
     public RoomKey? LastDeathRoom { get; private set; }
 
+    // Whether the map was sure of that room when the death came. With a move in
+    // flight, or a position in doubt, the room it held is only where the
+    // character was last known to be.
+    public bool LastDeathRoomConfirmed { get; private set; }
+
     // Whether the last death recorded was an arena death, which takes no item,
     // coin or key: a witnessed one (NoteDeath's tookNothing) or one worked out
     // after the fact (UnwitnessedDeath.NothingLost). For the listeners of the
@@ -1366,6 +1371,7 @@ public sealed class RoomTracker
         DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
         Room? died = State.CurrentRoom;
         LastDeathRoom = died?.Key;
+        LastDeathRoomConfirmed = died is not null && State.Confidence == RoomConfidence.Confirmed;
         LastDeathTookNothing = tookNothing;
 
         if (_profile is not null)
