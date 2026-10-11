@@ -9202,6 +9202,9 @@ public sealed class AppServices
         // A follower we backtracked for couldn't move — hold for their @ok as if
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
+        // Stock keeps a follower an exit turned away on the leader's member list,
+        // where Paradigm drops them: what brings such a member back differs.
+        PartyComeback.OnStock = () => GameData.ActiveRealm != Game.RealmType.ParaMud;
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
         // A loop doesn't go back for a member an exit of its circuit turned away.
         // What tells that from a hold: a wait or hold the member has out with us,

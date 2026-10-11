@@ -654,6 +654,11 @@ public static class BugReportBuilder
             Kv(sb, "Left at an exit by Auto-Lair (invited when a pass finds them)", string.Join(", ", onSight));
         if (svc.PartyComeback.FetchedAtGates is { Count: > 0 } fetched)
             Kv(sb, "Fetched once from an exit that may turn them away", string.Join(", ", fetched));
+        // Stock: a member still on our list is told to join, and invited only if
+        // that doesn't bring them back. A "leader came and never invited me" report
+        // is answered here.
+        if (svc.PartyComeback.AskedToJoin is { Count: > 0 } askedToJoin)
+            Kv(sb, "Told to join, no invite yet (Stock: still on our list)", string.Join(", ", askedToJoin));
         Kv(sb, "Party train trip we set out on", svc.PartyTrain.TripWeSetOutOn ?? "(none)");
         // Leader-side reconnect reform state — the followers we snapshotted at the
         // last drop and will wait for on reconnect. A "leader sprinted off / didn't
