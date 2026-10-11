@@ -2684,6 +2684,12 @@ public static class BugReportBuilder
         sb.Append('\n');
         Kv(sb, "Favourite loops (this character)", NamesOrNone(svc.LoopFavorites.Loops));
         Kv(sb, "Favourite auto-lair setups (this character)", NamesOrNone(svc.LoopFavorites.LairSetups));
+        DateTimeOffset? lastOutside = svc.Loops.LastOutsideReadAt is { } l && svc.Lairs.LastOutsideReadAt is { } s
+            ? (l > s ? l : s)
+            : svc.Loops.LastOutsideReadAt ?? svc.Lairs.LastOutsideReadAt;
+        Kv(sb, "Loops folder",
+            $"set {svc.Loops.SetName ?? "(none)"}; {svc.Loops.Loops.Count} loops and {svc.Lairs.Setups.Count} lair setups in memory; last re-read for an outside change: "
+            + (lastOutside is { } reread ? reread.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) : "never"));
 
         return sb.ToString();
     }

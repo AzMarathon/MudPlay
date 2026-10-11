@@ -121,6 +121,9 @@ public sealed class LoopShareReceiver : IDisposable
             return;
         }
 
+        // A loop of that name another client saved a moment ago counts for the
+        // clash checks below.
+        _loops.TakeInOutsideChanges();
         if (_loops.Get(loop.Name) is { } existing && SameRoute(existing, loop))
         {
             _log?.Info("LoopShare", $"loop '{loop.Name}' from {sender} matches ours — nothing saved.");

@@ -101,7 +101,7 @@ public sealed class AutoModeRemoteHandler : IDisposable
 
         if (_profile.Current is not { } profile)
         {
-            if (_engine.WarnOnDenial) ctx.Reply("?");
+            ctx.Refuse("?");
             return;
         }
 
@@ -116,7 +116,7 @@ public sealed class AutoModeRemoteHandler : IDisposable
         }
         else if (!TryParseOnOff(ctx.Args[0], out wanted))
         {
-            if (_engine.WarnOnDenial) ctx.Reply("?");
+            ctx.Refuse("?");
             return;
         }
 
@@ -134,7 +134,7 @@ public sealed class AutoModeRemoteHandler : IDisposable
     {
         if (_profile.Current is null)
         {
-            if (_engine.WarnOnDenial) ctx.Reply("?");
+            ctx.Refuse("?");
             return;
         }
 
@@ -150,7 +150,7 @@ public sealed class AutoModeRemoteHandler : IDisposable
         }
         else
         {
-            if (_engine.WarnOnDenial) ctx.Reply("?");
+            ctx.Refuse("?");
             return;
         }
 

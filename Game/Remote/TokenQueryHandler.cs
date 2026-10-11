@@ -50,9 +50,10 @@ public sealed class TokenQueryHandler : IDisposable
         if (query.Length == 0)
         {
             IReadOnlyList<Tokens.TokenTracker.TokenCharge> all = _tokens.KnownCharges();
+            // None read is a result, as "no limited-use items carried" is for @uses.
             ctx.Reply(all.Count == 0
                 ? "no token charges read yet (hold transport tokens and log in on Paradigm)"
-                : "token charges — " + string.Join(", ", all.Select(c => $"{c.Place}: {c.Remaining}")));
+                : "token charges - " + string.Join(", ", all.Select(c => $"{c.Place}: {c.Remaining}")));
             return;
         }
 
@@ -60,6 +61,6 @@ public sealed class TokenQueryHandler : IDisposable
         if (_tokens.ChargesFor(query) is { } n)
             ctx.Reply($"token of {place}: {n} use(s) remaining");
         else
-            ctx.Reply($"no charge count for a token of {place} — not held, or not read yet");
+            ctx.Refuse($"no charge count for a token of {place} - not held, or not read yet");
     }
 }

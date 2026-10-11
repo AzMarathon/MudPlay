@@ -57,16 +57,16 @@ public sealed class ItemUsesQueryHandler : IDisposable
 
         if (_charges.ResolveCarried(query) is not { } name)
         {
-            ctx.Reply($"no carried item matches '{query}'");
+            ctx.Refuse($"no carried item matches '{query}'");
             return;
         }
         int? remaining = _charges.RemainingForName(name);
         if (remaining is { } n)
             ctx.Reply($"{name}: {n} use(s) remaining");
         else if (_charges.IsLimitedUse(name))
-            ctx.Reply($"{name}: charges not read yet");   // Paradigm — look at it, or wait for the auto-look
+            ctx.Refuse($"{name}: charges not read yet");   // Paradigm — look at it, or wait for the auto-look
         else
-            ctx.Reply($"{name} isn't a limited-use item");
+            ctx.Refuse($"{name} isn't a limited-use item");
     }
 
     private static string Show(int? remaining) => remaining is { } n ? n.ToString() : "?";

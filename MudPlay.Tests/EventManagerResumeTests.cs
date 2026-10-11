@@ -178,6 +178,21 @@ public sealed class EventManagerResumeTests : IDisposable
         Assert.Equal(2, h.AutoLair.Marked.Count);
     }
 
+    // Another client's edit makes the catalogue's copy a different object from the
+    // one the run holds; the loop is still the one running and is left alone.
+    [Fact]
+    public void Resume_OfARunningLoop_IsLeftAlone_EvenWhenTheCatalogueHoldsANewCopy()
+    {
+        using Harness h = NewHarness();
+        Loop running = RunLoop(h);
+        Loop catalogueCopy = new("AB", new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) });
+
+        EventManager.EngineStart outcome =h.Events.ExecuteResume(new EventManager.EventResumePlan.Loop(catalogueCopy));
+
+        Assert.Equal(EventManager.EngineStart.StillRunning, outcome);
+        Assert.Same(running, h.Runner.CurrentLoop);
+    }
+
     // ----- Walk-to runs --------------------------------------------------
 
     private static Loop RunLoop(Harness h)

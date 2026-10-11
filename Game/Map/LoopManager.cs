@@ -15,7 +15,9 @@ namespace MudPlay.Game.Map;
 // realm's MDB), so the same loop library follows the realm across every
 // BBS / character that points at that set. When the active set changes,
 // LoadAll reloads from disk. Mutating methods (Save, Delete) update the
-// in-memory cache and fire LoopsChanged so the UI can refresh.
+// in-memory cache and fire LoopsChanged so the UI can refresh. Another client
+// running on the same set writes to the same folder, so NavFolderWatcher follows
+// what it saved, renamed, moved or deleted.
 //
 // Gap-fill: when the user clicks rooms that aren't directly connected,
 // waypoint expansion runs BfsMapper.FindPath between consecutive clicks
@@ -38,8 +40,21 @@ public sealed class LoopManager
     public IReadOnlyList<Loop> Loops =>
         _loops.Values.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase).ToArray();
 
-    // Fires after any mutation to Loops (load, save, delete).
+    // Fires after any mutation to Loops (load, save, delete, an outside change
+    // taken in).
     public event Action? LoopsChanged;
+
+    private readonly SharedFolderStamp _stamp = new();
+    private readonly HashSet<string> _unreadable = new(StringComparer.Ordinal);
+
+    // When the folder was last re-read because another client had changed it; null
+    // until it has been.
+    public DateTimeOffset? LastOutsideReadAt { get; private set; }
+
+    // Names of the loops this client is running, has paused or has staged. Plugged in
+    // by the app so a re-read can say which of them was changed under it; it never
+    // swaps or drops the copy the run holds.
+    public Func<IReadOnlyCollection<string>>? NamesInUse { get; set; }
 
     // Which loops the loaded character has favourited is the profile's to keep, not
     // the loop file's. The store that keeps it plugs in here: the lookup stamps
@@ -94,10 +109,12 @@ public sealed class LoopManager
     public void LoadAll(string? setName)
     {
         _loops.Clear();
+        _unreadable.Clear();
         _setName = setName;
 
         if (string.IsNullOrWhiteSpace(setName))
         {
+            _stamp.Accept(new Dictionary<string, SharedFolderStamp.FileMark>());
             LoopsChanged?.Invoke();
             return;
         }
@@ -105,6 +122,7 @@ public sealed class LoopManager
         string folder = AppPaths.GameDataSetLoopsFolder(setName);
         if (!Directory.Exists(folder))
         {
+            _stamp.Accept(new Dictionary<string, SharedFolderStamp.FileMark>());
             _log?.Info("Loops", $"no loops folder for set '{setName}'; empty catalogue.");
             LoopsChanged?.Invoke();
             return;
@@ -113,6 +131,11 @@ public sealed class LoopManager
         // One-shot migration: rename pre-suffix .json loop files to
         // .loop so subsequent loads find them. Skips lair files.
         MigrateLegacyJsonFilesIfPresent(folder);
+        // Marked before the files are read, so a file another client writes meanwhile
+        // shows on the next poll instead of being taken as already read.
+        IReadOnlyDictionary<string, SharedFolderStamp.FileMark> seen =
+            NavTreeScan.Walk(folder, LoopFileSuffix).FilesWith(LoopFileSuffix);
+        _stamp.Accept(seen);
 
         int loaded = 0;
         int failed = 0;
@@ -128,7 +151,12 @@ public sealed class LoopManager
                 // that isn't a Loop (or one we can't deserialise) is
                 // silently skipped — the user can hand-drop .loop
                 // files without us blowing up.
-                if (loop is null || string.IsNullOrWhiteSpace(loop.Name)) { failed++; continue; }
+                if (loop is null || string.IsNullOrWhiteSpace(loop.Name))
+                {
+                    failed++;
+                    NavCatalogueReread.NoteSkipped(_unreadable, seen, path);
+                    continue;
+                }
                 if (UpgradeIfNeeded(loop)) upgraded++;
                 loop.Folder = NavFolders.RelativeFolder(folder, path);
                 Stamp(loop);
@@ -138,6 +166,7 @@ public sealed class LoopManager
             catch
             {
                 failed++;
+                NavCatalogueReread.NoteSkipped(_unreadable, seen, path);
             }
         }
 
@@ -147,6 +176,103 @@ public sealed class LoopManager
         if (upgraded > 0) detail += $"; {upgraded} legacy loop(s) upgraded to v{Loop3Schema} in memory";
         _log?.Info("Loops", detail + ".");
         LoopsChanged?.Invoke();
+    }
+
+    // Bumped by every read or write of the folder this client makes. A walk of the
+    // tree that began before the bump may have seen it half done, so its result is
+    // dropped (NavFolderWatcher).
+    internal long Generation => _stamp.Generation;
+
+    // True when the folder now holds loop files other than the ones this client
+    // holds: another client saved, edited, renamed, moved or deleted a loop.
+    internal bool DiffersFrom(NavTreeScan scan) =>
+        _setName is not null && _stamp.Differs(scan.FilesWith(LoopFileSuffix));
+
+    // Take in at once what another client did to the Loops folder, with no waiting
+    // for it to settle: a check the caller is about to make against the catalogue
+    // (the editor's name clash) must see it. Returns whether anything was re-read.
+    public bool TakeInOutsideChanges()
+    {
+        if (_setName is null) return false;
+        NavTreeScan scan = NavTreeScan.Walk(AppPaths.GameDataSetLoopsFolder(_setName), LoopFileSuffix);
+        if (!scan.Complete || PlanOutside(scan) is not { } plan) return false;
+        plan()();
+        return true;
+    }
+
+    // Plan the re-read of the loop files in scan, or null when they are the ones held.
+    // The plan is two steps. The first reads and parses the changed files from copies,
+    // so it can run on any thread, and returns the second, which swaps the catalogue
+    // over and must run on the UI thread, with nothing of this client's own written in
+    // between. A file that can't be read leaves the copy held where it is. A loop a
+    // run here holds is never touched: its object stays the one the run started from;
+    // only the catalogue's entry moves on.
+    internal Func<Action>? PlanOutside(NavTreeScan scan)
+    {
+        if (_setName is null || !DiffersFrom(scan)) return null;
+        string root = AppPaths.GameDataSetLoopsFolder(_setName);
+        IReadOnlyDictionary<string, SharedFolderStamp.FileMark> files = scan.FilesWith(LoopFileSuffix);
+        Dictionary<string, SharedFolderStamp.FileMark> known = new(_stamp.Known);
+        Dictionary<string, Loop> heldByPath = new(StringComparer.Ordinal);
+        foreach (Loop l in _loops.Values) heldByPath[PathOf(root, l)] = l;
+        HashSet<string> heldPaths = new(heldByPath.Keys, StringComparer.Ordinal);
+        HashSet<string> reported = new(_unreadable);
+        return () =>
+        {
+            Dictionary<string, NavCatalogueReread.Outcome<Loop>> outcomes =
+                NavCatalogueReread.Preread(files, known, heldPaths, reported, path => ReadOutsideFile(root, path));
+            return () => ApplyOutside(root, files, heldByPath, outcomes);
+        };
+    }
+
+    private void ApplyOutside(string root, IReadOnlyDictionary<string, SharedFolderStamp.FileMark> files,
+        IReadOnlyDictionary<string, Loop> heldByPath, IReadOnlyDictionary<string, NavCatalogueReread.Outcome<Loop>> outcomes)
+    {
+        NavReread<Loop> found = NavCatalogueReread.Run(_stamp.Known, files, _loops, heldByPath,
+            l => l.Name,
+            (a, b) => NavCatalogueReread.SameRecord(a, a.Folder, b, b.Folder),
+            outcomes,
+            path => ReadOutsideFile(root, path),
+            _unreadable,
+            (path, why) => _log?.Warn("Loops", $"loop file '{path}' changed on disk but can't be read ({why}); keeping the copy held."));
+        _stamp.Accept(files);
+        if (!found.AnyItemChanged) return;
+
+        foreach (string name in found.Added.Concat(found.Changed)) Stamp(found.Fresh[name]);
+        _loops.Clear();
+        foreach ((string name, Loop loop) in found.Fresh) _loops[name] = loop;
+        LastOutsideReadAt = DateTimeOffset.UtcNow;
+        _log?.Info("Loops", NavCatalogueReread.Summary("loops", found));
+        NoteRunsHere(found);
+        LoopsChanged?.Invoke();
+    }
+
+    private static string PathOf(string root, Loop loop) =>
+        Path.GetFullPath(Path.Combine(NavFolders.ToDirectory(root, loop.Folder), SafeFileName(loop.Name)));
+
+    // A new catalogue entry for the file at path, or null when it isn't a loop. Runs
+    // on a worker thread: it touches nothing of the catalogue (the favourite flag is
+    // stamped on afterwards, on the UI thread) and UpgradeIfNeeded only logs.
+    private Loop? ReadOutsideFile(string root, string path)
+    {
+        Loop? loop = JsonStore.Load<Loop>(path);
+        if (loop is null || string.IsNullOrWhiteSpace(loop.Name)) return null;
+        UpgradeIfNeeded(loop);
+        loop.Folder = NavFolders.RelativeFolder(root, path);
+        return loop;
+    }
+
+    private void NoteRunsHere(NavReread<Loop> found)
+    {
+        if (NamesInUse?.Invoke() is not { Count: > 0 } inUse) return;
+        foreach (string name in found.Changed.Concat(found.Removed))
+        {
+            if (!inUse.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
+            string what = found.Removed.Contains(name, StringComparer.OrdinalIgnoreCase)
+                ? "deleted or renamed on disk"
+                : "edited on disk";
+            _log?.Info("Loops", $"loop '{name}' was {what}; the run here keeps going from the copy it started with.");
+        }
     }
 
     // Lookup by name. Returns null when the loop isn't in the catalogue.
@@ -202,13 +328,16 @@ public sealed class LoopManager
         loop.Folder = NavFolders.Normalize(loop.Folder);
         string root = AppPaths.GameDataSetLoopsFolder(_setName);
         // A loop name is unique set-wide, so a folder change is a move:
-        // delete any stale file for this name (in any folder) first so
-        // we don't leave a duplicate behind.
-        DeleteFileForName(root, loop.Name);
+        // any stale file for this name (in any folder) is removed after
+        // the write so we don't leave a duplicate behind.
         string dir = NavFolders.ToDirectory(root, loop.Folder);
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, SafeFileName(loop.Name));
+        // Written (atomically) before the stale copy goes: another client reading the
+        // folder between the two sees the loop twice, never not at all.
         JsonStore.Save(path, loop);
+        _stamp.NoteWritten(path);
+        DeleteFileForName(root, loop.Name, keep: path);
         // A save may hand in a fresh object (a running loop's snapshot); it is
         // still the same favourite it was.
         Stamp(loop);
@@ -238,6 +367,7 @@ public sealed class LoopManager
         string root = string.IsNullOrWhiteSpace(_setName) ? "" : AppPaths.GameDataSetLoopsFolder(_setName);
         if (root.Length > 0 && IsUnder(path, root))
         {
+            _stamp.NoteWritten(path);
             loop.Folder = NavFolders.RelativeFolder(root, path);
             Stamp(loop);
             _loops[loop.Name] = loop;
@@ -279,6 +409,7 @@ public sealed class LoopManager
         if (_setName is null) return false;
         if (!_loops.Remove(name)) return false;
 
+        _stamp.NoteHeldChanged();
         DeleteFileForName(AppPaths.GameDataSetLoopsFolder(_setName), name);
         // A deleted loop's name is free for another; that one isn't a favourite.
         _setFavorite?.Invoke(name, false);
@@ -288,13 +419,19 @@ public sealed class LoopManager
 
     // Delete the on-disk .loop file for name wherever it lives under root
     // (the name is unique set-wide). Best-effort — failures are logged.
-    private void DeleteFileForName(string root, string name)
+    private void DeleteFileForName(string root, string name, string? keep = null)
     {
         if (!Directory.Exists(root)) return;
         string fileName = SafeFileName(name);
         foreach (string path in Directory.EnumerateFiles(root, fileName, SearchOption.AllDirectories))
         {
-            try { File.Delete(path); }
+            if (keep is not null && string.Equals(Path.GetFullPath(path), Path.GetFullPath(keep), StringComparison.OrdinalIgnoreCase))
+                continue;
+            try
+            {
+                File.Delete(path);
+                _stamp.NoteGone(path);
+            }
             catch (Exception ex)
             {
                 _log?.Warn("Loops", $"failed to delete loop file '{path}': {ex.Message}");

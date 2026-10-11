@@ -14,8 +14,8 @@ namespace MudPlay.Game.Remote;
 //                      accepted with or without the leading @ (`@help suicide` ==
 //                      `@help @suicide`).
 //
-// Party-whitelist commands (@wait / @ok / @comeback / @share) are excluded from the
-// no-arg list — those aren't permission-gated, so they don't belong in a
+// Party-whitelist commands (@wait / @ok / @waiting / @comeback / @forget / @share /
+// @ptrain) are excluded from the no-arg list — those aren't permission-gated, so they don't belong in a
 // per-permission list — but @help still *describes* them by name. The list is split
 // across multiple telepath replies when it exceeds MaxPayloadChars so no single
 // reply risks server-side truncation. Replies use ctx.Reply, so the engine handles
@@ -54,12 +54,12 @@ public sealed class HelpHandler : IDisposable
             string requested = ctx.Args[0];
             // The relay-back marker isn't a catalog command, but it is listed.
             if (requested.StartsWith('&'))
-                ctx.Reply($"{RemoteCommandManager.RelayBackPrefix}<command> — sends @<command> back to you, "
+                ctx.Reply($"{RemoteCommandManager.RelayBackPrefix}<command> - sends @<command> back to you, "
                     + "so your client runs it as if I'd sent it (e.g. &@invite makes me ask you for a party invite)");
             else if (RemoteCommandCatalog.TryGetHelp(requested, out RemoteCommandHelp help))
-                ctx.Reply($"{help.Syntax} — {help.Description}");
+                ctx.Reply($"{help.Syntax} - {help.Description}");
             else
-                ctx.Reply($"no such command '{requested}' — try @help for the list");
+                ctx.Refuse($"no such command '{requested}' - try @help for the list");
             return;
         }
 

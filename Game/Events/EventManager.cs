@@ -1928,7 +1928,10 @@ public sealed class EventManager : IDisposable
             {
                 case EventResumePlan.Loop l:
                     if (_loopRunner is null) return EngineStart.Refused;
-                    if (_loopRunner.State is not LoopState.Idle && ReferenceEquals(_loopRunner.CurrentLoop, l.SavedLoop))
+                    // By name: the catalogue's copy of a loop the run holds is a new object
+                    // once another client has edited the file.
+                    if (_loopRunner.State is not LoopState.Idle
+                        && string.Equals(_loopRunner.CurrentLoop?.Name, l.SavedLoop.Name, StringComparison.OrdinalIgnoreCase))
                         return EngineStart.StillRunning;
                     EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Loop, "event resume");
                     return StartedLoop(_loopRunner, l.SavedLoop) ? EngineStart.Started : EngineStart.Refused;
