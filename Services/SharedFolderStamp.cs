@@ -47,6 +47,11 @@ public sealed class SharedFolderStamp
         Generation++;
     }
 
+    // This client changed what it holds without writing a file (it deleted an entry
+    // whose file another client had already removed). A walk begun before that would
+    // put the entry back from its own copy, so it is made stale like any other.
+    public void NoteHeldChanged() => Generation++;
+
     // True when files is not what this client holds.
     public bool Differs(IReadOnlyDictionary<string, FileMark> files) =>
         files.Count != _known.Count

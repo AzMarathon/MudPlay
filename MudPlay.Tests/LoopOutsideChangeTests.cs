@@ -625,6 +625,60 @@ public sealed class LoopOutsideChangeTests : IDisposable
         Assert.Null(mine.Loops.LastOutsideReadAt);
     }
 
+    // Another client removed the file first, so this client's delete writes nothing.
+    // A walk already on its way must still be made stale by it, or its copy of the
+    // loop would be put back.
+    [Fact]
+    public async Task ALoopDeletedHereAfterItsFileWasRemovedElsewhere_IsNotPutBackByAWalkInFlight()
+    {
+        NewLoops().Save(NewLoop("Gone"));
+        NewLoops().Save(NewLoop("Other"));
+        Client mine = NewClient();
+        LoopManager other = NewLoops();
+        Loop theirs = other.Get("Other")!;
+        theirs.Waypoints.Add(new LoopWaypoint(new RoomKey(1, 3)));
+        other.Save(theirs);
+        await Beat(mine);   // sees the edit
+
+        mine.WhileWalking = () =>
+        {
+            mine.WhileWalking = null;
+            File.Delete(LoopPath("Gone"));
+            mine.Loops.Delete("Gone");
+        };
+        await Beat(mine);
+        Assert.Null(mine.Loops.Get("Gone"));
+
+        await Beat(mine, 3);
+        Assert.Null(mine.Loops.Get("Gone"));
+        Assert.DoesNotContain(Messages(mine), m => m.Contains("added: 'Gone'"));
+    }
+
+    // A sub-folder that can't be opened is not a folder whose loops were deleted.
+    [Fact]
+    public async Task SubFolderThatCannotBeOpened_KeepsItsLoops()
+    {
+        if (OperatingSystem.IsWindows()) return;   // no mode bits to take away
+        NewLoops().Save(new Loop("Locked away", NewLoop("x").Waypoints) { Folder = "Vault" });
+        Client mine = NewClient();
+        int raised = mine.LoopEvents;
+        string vault = Path.Combine(Folder, "Vault");
+        UnixFileMode before = File.GetUnixFileMode(vault);
+
+        File.SetUnixFileMode(vault, UnixFileMode.None);
+        try
+        {
+            await Beat(mine, 5);
+
+            Assert.NotNull(mine.Loops.Get("Locked away"));
+            Assert.Equal(raised, mine.LoopEvents);
+        }
+        finally
+        {
+            File.SetUnixFileMode(vault, before);
+        }
+    }
+
     [Fact]
     public async Task TheWalkAndTheParsingRunOffTheCallingThread()
     {

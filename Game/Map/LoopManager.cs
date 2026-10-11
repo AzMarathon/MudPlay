@@ -409,6 +409,7 @@ public sealed class LoopManager
         if (_setName is null) return false;
         if (!_loops.Remove(name)) return false;
 
+        _stamp.NoteHeldChanged();
         DeleteFileForName(AppPaths.GameDataSetLoopsFolder(_setName), name);
         // A deleted loop's name is free for another; that one isn't a favourite.
         _setFavorite?.Invoke(name, false);

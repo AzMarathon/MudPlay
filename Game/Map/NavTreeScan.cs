@@ -66,7 +66,9 @@ internal sealed class NavTreeScan
 
         StringComparison casing = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
             ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        EnumerationOptions options = new() { RecurseSubdirectories = true, AttributesToSkip = 0 };
+        // A sub-folder that can't be opened must fail the walk, not be skipped: skipped,
+        // its loops would read as deleted by another client.
+        EnumerationOptions options = new() { RecurseSubdirectories = true, AttributesToSkip = 0, IgnoreInaccessible = false };
         // Read straight off the directory entries: this runs over a tree of hundreds
         // of files, so a file that doesn't match is never stat'ed and none gets a
         // FileInfo.

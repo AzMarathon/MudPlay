@@ -279,6 +279,7 @@ public sealed class LairManager
         if (_setName is null) return false;
         if (!_setups.Remove(name)) return false;
 
+        _stamp.NoteHeldChanged();
         DeleteFileForName(AppPaths.GameDataSetLoopsFolder(_setName), name);
         _setFavorite?.Invoke(name, false);
         SetupsChanged?.Invoke();
