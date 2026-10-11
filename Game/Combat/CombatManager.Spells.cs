@@ -637,6 +637,8 @@ public sealed partial class CombatManager
         // recovery. Must precede the CombatSpellsWired gate below.
         VerifyEngagement();
 
+        NoteRoundBoundaryUnderUserBreakHold();
+
         // The user's attack took a break hold off without naming a monster we could
         // place; their round is over, so pick from the room as a fresh fight would.
         if (_repickAfterUserAttack)

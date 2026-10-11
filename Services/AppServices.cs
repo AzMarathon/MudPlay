@@ -5473,8 +5473,8 @@ public sealed class AppServices
             if (t.NewRoom?.Key != t.PreviousRoom?.Key) Combat.NoteRoomLeft();
         };
         Profile.ProfileLoaded += _ => Combat.ClearUserBreakHold("another profile was loaded");
-        // No line says a monster we aren't attacking has died, so under the hold the
-        // room is read again once a fight in it has gone quiet.
+        // The room read a held monster taken for dead waits on is asked for again
+        // here when another re-display's cooldown held it back.
         Tick.HeartbeatElapsed += Combat.OnHeartbeat;
         // On Stock a room spell's kill prints *Combat Off* and the spell runs on.
         Combat.SetStockRealmProbe(() => GameData.ActiveRealm != Game.RealmType.ParaMud);

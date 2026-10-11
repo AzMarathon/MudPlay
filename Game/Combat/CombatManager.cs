@@ -126,6 +126,8 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _selfDefenseHitsSub;
     private readonly IDisposable _selfDefenseMissesSub;
     private readonly IDisposable _selfDefenseDodgesSub;
+    // The router's readings of an attack on us, for the user's break hold.
+    private readonly IDisposable[] _attackOnUsSubs;
 
     // Minimum gap between safety-net `l` refreshes. Keeps a flurry of miss/hit
     // lines from spamming the server.
@@ -922,6 +924,14 @@ public sealed partial class CombatManager : IDisposable
         _selfDefenseHitsSub   = router.Subscribe(KnownPatterns.MobHits,    OnAttackedInSelfDefense);
         _selfDefenseMissesSub = router.Subscribe(KnownPatterns.MobMisses,  OnAttackedInSelfDefense);
         _selfDefenseDodgesSub = router.Subscribe(KnownPatterns.UserDodges, OnAttackedInSelfDefense);
+        _attackOnUsSubs = new[]
+        {
+            router.Subscribe(KnownPatterns.MobHits,       OnAttackOnUsUnderUserBreakHold),
+            router.Subscribe(KnownPatterns.MobMisses,     OnAttackOnUsUnderUserBreakHold),
+            router.Subscribe(KnownPatterns.MobAttacksYou, OnAttackOnUsUnderUserBreakHold),
+            router.Subscribe(KnownPatterns.UserDodges,    OnAttackOnUsUnderUserBreakHold),
+        };
+        router.LineDispatched += OnLineUnderUserBreakHold;
         _targetGoneSub = router.Subscribe(KnownPatterns.TargetNotHere, OnTargetNotHere);
         _weaponNoEffectSub = router.Subscribe(KnownPatterns.WeaponNoEffect, OnWeaponNoEffect);
         _weaponLandedSub   = router.Subscribe(KnownPatterns.UserHits,       OnUserWeaponLanded);
@@ -1610,21 +1620,19 @@ public sealed partial class CombatManager : IDisposable
             _summonRescanArmed = false;
         }
 
-        if (obs.Source == RoomObservationSource.AlsoHere && obs.At != _rosterReadAt)
+        bool freshRead = obs.Source == RoomObservationSource.AlsoHere && obs.At != _rosterReadAt;
+        if (freshRead)
         {
             _rosterReadAt = obs.At;
             _expGainsSinceRosterRead = 0;
             _heldRoomLookPending = false;
         }
 
-        // The monster a typed break holds the attack on is gone from the room: it
-        // died or it left, and this is the roster without it. The hold ends here and
-        // the rest of this pass engages whatever is left, as after any kill. An
-        // arrival says nothing of who has gone.
-        if (_userBreakHold is { } heldMonster
-            && obs.Source != RoomObservationSource.Arrival
-            && !TargetPresent(obs, heldMonster))
-            EndUserBreakHold("it is no longer in the room");
+        // The roster says whether the monster a break holds the attack on has died
+        // or gone. When the hold ends here the rest of this pass engages whatever
+        // is left, as after any kill.
+        if (_userBreakHold is { } heldMonster)
+            JudgeUserBreakHoldByRoster(obs, heldMonster, freshRead);
 
         CombatSettings settings = _readSettings();
 
@@ -3298,12 +3306,6 @@ public sealed partial class CombatManager : IDisposable
     // room description, exits block, and ground-item enumeration that `l` dumps.
     private void OnCombatLine(MatchResult match)
     {
-        // A fight is going on around the held monster: look at the room once it stops.
-        if (_userBreakHold is not null)
-        {
-            _heldRoomCheckOwed = true;
-            _heldRoomCheckFrom = _now();
-        }
         if (!Fighting()) return;
         // A room's own damage is nothing swinging at us: no re-attack to wake, no
         // unseen monster to re-display the room for (CombatStateTracker's probe, the
@@ -3751,7 +3753,8 @@ public sealed partial class CombatManager : IDisposable
         // one, whatever else of that name stands here: the hold ends and the death is
         // handled as that monster's. A room attack may have killed any of them, and
         // so may whatever paid the exp later on (a damage shield), so for those the
-        // room is read again and its roster decides.
+        // room is read again and its roster decides: one fewer of the held monster's
+        // name ends the hold (JudgeUserBreakHoldByRoster).
         if (_userBreakHold is { } held)
         {
             if (_userBreakHoldRoomAttack || !_userBreakHoldKillRaced)
@@ -4120,19 +4123,34 @@ public sealed partial class CombatManager : IDisposable
     // other monster in the room: Fighting() reads false, exactly as with Auto-Combat
     // off, and AttacksBlocked() is the same answer at every send. Heals and buffs
     // between rounds aren't the engine's attacks and carry on. A monster hitting us
-    // changes nothing: the user chose to stand.
+    // changes nothing: the user chose to stand. A walk or loop waits in the room on
+    // the Combat gate as in any fight; a flee is the health engine's own move, which
+    // that gate doesn't hold, and still runs the character out.
     //
     // It ends when the user attacks (any attack word or attack spell, at any
-    // monster), when no monster of that name is left in the room, when we leave the
-    // room, on a disconnect, a profile load or Reset States. The Auto-Combat toggle
-    // and the master switch don't end it: with the engine off there is nothing to
-    // hold back, and it is still in force when the engine comes back on.
+    // monster), when the monster dies or leaves, when we leave the room, on a
+    // disconnect, a profile load or Reset States. The Auto-Combat toggle and the
+    // master switch don't end it: with the engine off there is nothing to hold
+    // back, and it is still in force when the engine comes back on.
     //
-    // The monster is known by name only. With several of one name in the room the
-    // hold stands while any of them does, except where the death is known to be the
-    // held one's (NoteUnattributedDeath).
+    // The monster is known by name only, and no line says a monster we aren't
+    // attacking has died: a bystander gets no experience for the kill and the client
+    // reads no death line. So its death is taken from three things (user,
+    // 2026-10-10):
+    //   - the room listing fewer monsters of that name than it did ("the break
+    //     hold should end on the death of any monster matching the name");
+    //   - an exp line of our own (NoteUnattributedDeath);
+    //   - a whole round in which it attacked nobody ("hostile monsters attack
+    //     every round, so if we go 1 round and we dont see that monster attacking
+    //     anyone that we do know is in the room, assume its dead"). A monster that
+    //     is stunned or held for a round is taken for dead with the rest.
     private string? _userBreakHold;
     private DateTimeOffset _userBreakHoldSince;
+    // How many monsters of that name the room listed when last seen. One fewer is
+    // the death, or the leaving, of one of them.
+    private int _userBreakHoldCount;
+    // The party member whose `@do break` set it; null for the user's own.
+    private string? _userBreakHoldAskedBy;
     // The break stopped a room attack: a kill that lands behind it may be any
     // monster's, so only a look at the room says whether the held one still stands.
     private bool _userBreakHoldRoomAttack;
@@ -4155,14 +4173,19 @@ public sealed partial class CombatManager : IDisposable
     // round is theirs, and the next one picks a target as any fresh fight does.
     private bool _repickAfterUserAttack;
 
-    // Nobody tells us a monster we aren't attacking has died: the kill pays no exp
-    // to a bystander (GAME_MECHANICS "Kill detection and monster-kill message order")
-    // and its death line is its own. So once a fight in the room has gone quiet the
-    // room is read again, once, and the roster decides. Armed by every combat line
-    // read under the hold, and by the hold itself.
-    private bool _heldRoomCheckOwed;
-    private DateTimeOffset _heldRoomCheckFrom = DateTimeOffset.MinValue;
-    private static readonly TimeSpan HeldRoomCheckQuiet = TimeSpan.FromSeconds(6);
+    // When the held monster was last seen attacking: the moment of the break, then
+    // each attack line of its own (MonsterAttackLine). At a round tick with no such
+    // line for HeldMonsterSilentRound it is taken for dead. The length is a round
+    // and a second: a round's lines arrive within a moment of the tick that marks
+    // it, in no fixed order with it, so the tick straight after an attack line is
+    // always inside it and the one after that, a whole round on, is always past.
+    private DateTimeOffset _heldMonsterAttackedAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan HeldMonsterSilentRound = TimeSpan.FromSeconds(6);
+    private const string TakenForDead = "no attack from it for a round: taken for dead";
+    // Taken for dead in a lit room: the hold stays until the room has been read
+    // again, so the next target is picked off a fresh roster. Whatever that read
+    // lists, the hold ends on it.
+    private bool _heldMonsterTakenForDead;
     // We asked to see the room under the hold and its roster hasn't come yet. A
     // room nobody is left in prints no "Also here:" at all, so the display ending
     // with this still set is the answer "empty" (NoteRoomDisplayed).
@@ -4189,6 +4212,10 @@ public sealed partial class CombatManager : IDisposable
                 : "none ended this session";
             return _userBreakHold is { } held
                 ? $"on '{held}' since {_userBreakHoldSince:HH:mm:ss.fff}"
+                  + (_userBreakHoldAskedBy is { } by ? $", asked for by {by}'s @do" : ", the user's own")
+                  + $", {_userBreakHoldCount} of that name listed"
+                  + $", its last attack line (or the break) {(_now() - _heldMonsterAttackedAt).TotalSeconds:0.0}s ago"
+                  + (_heldMonsterTakenForDead ? ", taken for dead and waiting for the room to be read" : "")
                   + (_userBreakHoldRoomAttack ? ", a room attack broken off" : "")
                   + (EngineOn() ? "" : ", engine off") + $"; {last}"
                 : $"(none); {last}";
@@ -4225,8 +4252,13 @@ public sealed partial class CombatManager : IDisposable
         _userBreakHoldOffSeen = false;
         _userBreakHoldKillRaced = false;
         _repickAfterUserAttack = false;
-        _heldRoomCheckOwed = true;
-        _heldRoomCheckFrom = _now();
+        _userBreakHoldAskedBy = askedBy;
+        _userBreakHoldCount = _classifier.Current is { } listing ? CountOfName(listing, target) : 0;
+        _heldMonsterAttackedAt = _now();
+        _heldMonsterTakenForDead = false;
+        // The round clock only runs once something has placed a round; a break
+        // sent before the fight's first line would otherwise never see a boundary.
+        _ensureCombatTickAnchor?.Invoke();
         _log?.Info(LogCategory,
             $"{whose} '{word}' — attack held on '{target}' until the user attacks, it dies or leaves, or we leave the room"
             + (_userBreakHoldAnnounced ? "" : " (engine off: nothing to hold back for now)"));
@@ -4304,25 +4336,131 @@ public sealed partial class CombatManager : IDisposable
         EndUserBreakHold(why);
     }
 
-    // The 1 s heartbeat. Under the hold, with the engine on, reads the room again
-    // once a fight in it has been quiet for HeldRoomCheckQuiet.
-    public void OnHeartbeat()
+    // How many monsters the room lists under the held monster's name.
+    private static int CountOfName(RoomEntitiesObservation obs, string rawName)
     {
-        if (_disposed || _userBreakHold is null || !_heldRoomCheckOwed) return;
-        if (_now() - _heldRoomCheckFrom < HeldRoomCheckQuiet) return;
-        // Engine off (the master switch among the reasons): nothing waits on the
-        // answer, and nothing automatic goes on the wire. In the dark a re-display
-        // lists nobody whoever is there.
-        if (!EngineOn() || _isInDarkRoom?.Invoke() == true)
+        int count = 0;
+        foreach (RoomEntity e in obs.Entities)
+            if (e.Kind == EntityKind.Monster
+                && string.Equals(e.RawName, rawName, StringComparison.OrdinalIgnoreCase))
+                count++;
+        return count;
+    }
+
+    // A reading of the room under the hold. A fresh read that was asked for because
+    // the monster was taken for dead ends the hold whatever it lists: the ruling is
+    // to assume it dead, and one of its name still listed is fought as any monster
+    // is. Otherwise one fewer of the name than before is the death (or the leaving)
+    // of one of them, which ends it too (user, 2026-10-10); one more is noted so its
+    // own going is seen.
+    private void JudgeUserBreakHoldByRoster(RoomEntitiesObservation obs, string held, bool freshRead)
+    {
+        if (freshRead && _heldMonsterTakenForDead)
         {
-            _heldRoomCheckOwed = false;
+            EndUserBreakHold(TakenForDead);
             return;
         }
-        // Still owed while another re-display's cooldown holds this one back.
-        if (!LookAtRoomUnderHold("attack held, the room has gone quiet")) return;
-        _heldRoomCheckOwed = false;
+        int listed = CountOfName(obs, held);
+        if (listed < _userBreakHoldCount)
+            EndUserBreakHold(listed == 0
+                ? "it is no longer in the room"
+                : "one of that name died or left the room");
+        else
+            _userBreakHoldCount = listed;
+    }
+
+    // Every line read under the hold: an attack by the held monster, on us or on
+    // anyone else here, says it still stands.
+    private void OnLineUnderUserBreakHold(Terminal.LineExtractor.EmittedLine line)
+    {
+        if (_disposed || _userBreakHold is not { } held) return;
+        if (MonsterAttackLine.IsBy(line, held, NamesInRoomWith(held)))
+            NoteHeldMonsterAttacked();
+    }
+
+    // The same from the router's own patterns for an attack on us (mob hits, mob
+    // misses, mob attacks, our dodge), which go by wording alone where the line
+    // classifier needs a miss's colour.
+    private void OnAttackOnUsUnderUserBreakHold(MatchResult match)
+    {
+        if (_disposed || _userBreakHold is not { } held) return;
+        Dictionary<string, string> names = NamesInRoomWith(held);
+        if (DamageLineAttributor.LeadingName(match.Text, names.Keys) is { } lead
+            && names[lead].Equals(held, StringComparison.OrdinalIgnoreCase))
+            NoteHeldMonsterAttacked();
+    }
+
+    private void NoteHeldMonsterAttacked()
+    {
+        _heldMonsterAttackedAt = _now();
+        if (!_heldMonsterTakenForDead) return;
+        // Its line came after all, before the room was read: it stands.
+        _heldMonsterTakenForDead = false;
         _log?.Combat(LogCategory,
-            $"attack held on '{_userBreakHold}' and the room has gone quiet — re-displaying it to see whether it still stands");
+            $"'{_userBreakHold}' attacked after being taken for dead — the hold stands");
+    }
+
+    // Every name the room's occupants go by, mapped to the name the roster lists
+    // them under, with the held monster's own.
+    private Dictionary<string, string> NamesInRoomWith(string held)
+    {
+        Dictionary<string, string> names = new(StringComparer.OrdinalIgnoreCase) { [held] = held };
+        if (_classifier.Current is not { } room) return names;
+        foreach (RoomEntity e in room.Entities)
+        {
+            if (string.IsNullOrWhiteSpace(e.RawName)) continue;
+            names[e.RawName] = e.RawName;
+            if (!string.IsNullOrWhiteSpace(e.ResolvedName)) names.TryAdd(e.ResolvedName, e.RawName);
+        }
+        return names;
+    }
+
+    // A round boundary under the hold (OnCombatTick, the round clock every engine
+    // runs on). With no attack line from the held monster for a round it is taken
+    // for dead. In a lit room with the engine on the room is read first, once, and
+    // the hold ends on that reading; a reading that hasn't come by the next
+    // boundary is not waited for. In the dark a look lists nobody, and with the
+    // engine off nothing automatic is sent: there the hold ends at once.
+    private void NoteRoundBoundaryUnderUserBreakHold()
+    {
+        if (_userBreakHold is not { } held) return;
+        if (_heldMonsterTakenForDead)
+        {
+            EndUserBreakHoldForTheDead(held);
+            return;
+        }
+        if (_now() - _heldMonsterAttackedAt < HeldMonsterSilentRound) return;
+
+        bool canLook = EngineOn() && _wireSender is not null && _isInDarkRoom?.Invoke() != true;
+        if (!canLook)
+        {
+            EndUserBreakHoldForTheDead(held);
+            return;
+        }
+        _heldMonsterTakenForDead = true;
+        _log?.Info(LogCategory,
+            $"no attack line from '{held}' for a round — taken for dead; reading the room before the next target is picked");
+        // On another re-display's cooldown the heartbeat asks again.
+        LookAtRoomUnderHold("held monster taken for dead");
+    }
+
+    // The hold ends on a monster taken for dead with no reading of the room to go
+    // by: it is dropped from the roster as a death is, which picks the next target.
+    private void EndUserBreakHoldForTheDead(string held)
+    {
+        EndUserBreakHold(TakenForDead);
+        if (!Fighting()) return;
+        if (!_classifier.RemoveDeadEntity(held) && _classifier.Current is { } here)
+            OnEntitiesObserved(here);
+    }
+
+    // The 1 s heartbeat: the room read a monster taken for dead is waiting on,
+    // asked for again when another re-display's cooldown held it back.
+    public void OnHeartbeat()
+    {
+        if (_disposed || _userBreakHold is null) return;
+        if (!_heldMonsterTakenForDead || _heldRoomLookPending) return;
+        LookAtRoomUnderHold("held monster taken for dead");
     }
 
     private bool LookAtRoomUnderHold(string context)
@@ -4334,15 +4472,15 @@ public sealed partial class CombatManager : IDisposable
 
     // A room display has finished (not a `look <direction>` at the next room). When
     // it is the one asked for under the hold and it listed nobody, the held monster
-    // is gone with everyone else: the roster that still names it is emptied, which
-    // ends the hold and lets go of the Combat gate. With an "Also here:" in it the
+    // is gone with everyone else: the hold ends, and the roster that still names it
+    // is emptied, which lets go of the Combat gate. With an "Also here:" in it the
     // roster was read on that line and has already decided.
     public void NoteRoomDisplayed()
     {
         if (_disposed || _userBreakHold is not { } held || !_heldRoomLookPending) return;
-        _heldRoomLookPending = false;
         _log?.Combat(LogCategory,
             $"the room re-displayed with nobody in it — '{held}' is gone; dropping the stale roster");
+        EndUserBreakHold(_heldMonsterTakenForDead ? TakenForDead : "the room is empty");
         _classifier.NoteRoomChanged();
     }
 
@@ -4350,7 +4488,8 @@ public sealed partial class CombatManager : IDisposable
     {
         if (_userBreakHold is not { } held) return;
         _userBreakHold = null;
-        _heldRoomCheckOwed = false;
+        _userBreakHoldCount = 0;
+        _heldMonsterTakenForDead = false;
         _heldRoomLookPending = false;
         _lastUserBreakHoldEnd = (DateTimeOffset.Now, $"'{held}': {why}");
         _log?.Info(LogCategory, $"attack hold on '{held}' ended — {why}");
@@ -5526,6 +5665,8 @@ public sealed partial class CombatManager : IDisposable
         _selfDefenseHitsSub.Dispose();
         _selfDefenseMissesSub.Dispose();
         _selfDefenseDodgesSub.Dispose();
+        foreach (IDisposable sub in _attackOnUsSubs) sub.Dispose();
+        _router.LineDispatched -= OnLineUnderUserBreakHold;
     }
 
     private readonly record struct EngageableCandidate(

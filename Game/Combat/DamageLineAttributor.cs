@@ -134,6 +134,15 @@ public static partial class DamageLineAttributor
         return false;
     }
 
+    // The known name a line leads with, after its article: whose line a "<name> <verb>
+    // ..." line is. The longest wins, as in TryAttribute. Null when it leads with none.
+    public static string? LeadingName(string line, IReadOnlyCollection<string> names)
+    {
+        string text = line.TrimStart();
+        int at = StartsWithWord(text, "The") ? 4 : 0;
+        return LongestNameAt(text, at, names)?.Name;
+    }
+
     // Name both sides from the part of a damage line before its amount.
     private static DamageAttribution FromPre(string pre, int amount, IReadOnlyCollection<string> names)
     {

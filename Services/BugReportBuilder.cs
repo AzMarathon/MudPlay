@@ -715,9 +715,11 @@ public static class BugReportBuilder
         // off, and what came of it: a skip here beside a live target is a fight left
         // standing (report paradigm-20261009-122342).
         Kv(sb, "Last attack-resume decision", svc.Combat.LastResumeDecision ?? "(none this session)");
-        // A `break` the user sent holds the engine's attack on that monster until
-        // they attack again, it is gone from the room, or we are: a fight left
-        // standing with this set is one they asked for.
+        // A `break` the user sent (or a party member's `@do break`) holds the engine's
+        // attack on that monster until they attack again, it dies or leaves, or we
+        // leave: a fight left standing with this set is one they asked for. The line
+        // says who asked, how many of that name are listed and when it last attacked,
+        // which is what its death is judged by.
         Kv(sb, "Attack held by the user's break", svc.Combat.UserBreakHoldSummary);
         // A room spell's kills are counted on their exp lines; one left to its
         // *Combat Off* says why (the spell's damage line unread, or more exp lines
