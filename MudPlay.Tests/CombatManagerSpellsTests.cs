@@ -726,7 +726,8 @@ public sealed class CombatManagerSpellsTests
         h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "isto", MinEnemies = 2, MaxCastsPerRoom = 1 };
         h.AddMonster(2739, "brute zombie");
         bool moving = false;
-        h.Combat.SetMoveInFlightProbe(() => moving);
+        DateTimeOffset stepSentAt = DateTimeOffset.UtcNow;
+        h.Combat.SetMoveInFlightProbe(() => moving, () => stepSentAt);
         land = () => moving = false;
 
         h.Feed("*Combat Off*");                     // the last lair's fight ended
@@ -843,6 +844,74 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Empty(h.Sent);
         Assert.Null(h.Combat.CurrentTarget);
+    }
+
+    // The step is never answered: no landing, no refusal the client reads. The hold
+    // lasts three seconds from the step, then the attacker is answered where we stand,
+    // on the hold's own timer (a quiet attacker) or on the next line that comes.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SwingWhileOurMoveIsInFlight_StepNeverLands_IsAnsweredAfterTheBound(bool byTimer)
+    {
+        using Harness h = AtTheLairDoorstepWithTheStepSent(out _);
+
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.AdvanceClock(TimeSpan.FromSeconds(2));
+        h.Feed("The brute zombie swings at you with its arm!");
+        h.FireSettle();                              // a timer firing early changes nothing
+        h.DrainPosted();
+        Assert.Empty(h.Sent);
+
+        h.AdvanceClock(TimeSpan.FromSeconds(2));
+        if (byTimer) h.FireSettle();
+        else h.Feed("The brute zombie swings at you with its arm!");
+        h.DrainPosted();
+
+        Assert.Equal(new[] { "aslt brute zombie" }, h.AllSent);
+    }
+
+    // A Friend is engaged only on the mark its attack earns, so the bound has to hand
+    // that mark over, not just stop holding.
+    [Fact]
+    public void SwingWhileOurMoveIsInFlight_FriendAttacker_StepNeverLands_IsFoughtBackAfterTheBound()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "big gravedigger");
+        h.SetOverlay(1, relationship: MonsterRelationship.Friend);
+        DateTimeOffset stepSentAt = DateTimeOffset.UtcNow;
+        h.Combat.SetMoveInFlightProbe(() => true, () => stepSentAt);
+
+        h.Feed("Also here: big gravedigger.");
+        h.Feed("The big gravedigger hits you for 12 damage!");
+        h.AdvanceClock(TimeSpan.FromSeconds(2));
+        h.FireSettle();
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("gravedigger"));
+
+        h.AdvanceClock(TimeSpan.FromSeconds(2));
+        h.FireSettle();
+
+        Assert.Equal("a big gravedigger", h.LastSent);
+    }
+
+    // The arrival's hold is under the same bound: a monster that came in as a step
+    // went out, the step never answered, is engaged once the bound has passed.
+    [Fact]
+    public void ArrivalSettle_OurMoveInFlight_StepNeverLands_EngagesAfterTheBound()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        DateTimeOffset stepSentAt = DateTimeOffset.UtcNow;
+        h.Combat.SetMoveInFlightProbe(() => true, () => stepSentAt);
+
+        h.Arrive("giant rat");
+        h.FireSettle();                              // the settle elapses: held for the move
+        Assert.Equal(string.Empty, h.LastSent);
+
+        h.AdvanceClock(TimeSpan.FromSeconds(4));
+        h.FireSettle();                              // the hold's timer
+
+        Assert.Equal("a giant rat", h.LastSent);
     }
 
     // A Friend that hit us with the step refused is fought back, as it is with no move.
