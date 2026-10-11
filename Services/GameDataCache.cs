@@ -134,7 +134,9 @@ public sealed class GameDataCache
     // build a switch overtook is then never mistaken for one of the set switched
     // back to, whatever tables it read on the way. Asked on every lookup of such an
     // index, so it takes no lock: the count alone tells two loads apart, and the
-    // name beside it need not be read in the same instant.
+    // name beside it need not be read in the same instant. (A switch moves the count
+    // before the name, and this reads the name first, so the worst a reader caught
+    // mid-switch gets is the old name with the new count, which equals no load.)
     public Load ActiveLoad => new(ActiveSet, Interlocked.Read(ref _generation));
 
     // Long enough that anything read per combat round / tick / room entry never ages
@@ -272,17 +274,18 @@ public sealed class GameDataCache
         // Normalize empty → null so the event payload is consistent.
         if (string.IsNullOrWhiteSpace(setName)) setName = null;
 
-        if (string.Equals(ActiveSet, setName, StringComparison.OrdinalIgnoreCase)) return;
-
-        string? outgoing = ActiveSet;
-        EvictAll();
-        ActiveSet = setName;
-        // Again once the new set is the active one: a result built in between read
-        // tables of the old.
+        // One step to every other thread: the old set's tables go, the count moves
+        // and the new name arrives under one hold of the lock. Done in stages, a
+        // lookup between them resolved the old set's file under the count of the new
+        // load and left that table in place for the whole of it. The handlers run
+        // after the lock is let go: they call back into the cache.
+        string? outgoing;
         lock (_tables)
         {
-            _derived.Clear();
-            Interlocked.Increment(ref _generation);
+            if (string.Equals(ActiveSet, setName, StringComparison.OrdinalIgnoreCase)) return;
+            outgoing = ActiveSet;
+            EvictAll();
+            ActiveSet = setName;
         }
         Log?.Log(LogSeverity.Info, "GameData",
             (outgoing, setName) switch
@@ -301,14 +304,18 @@ public sealed class GameDataCache
     // the ones only the rebuild read.
     private void LogTablesHeld()
     {
-        if (Log is null || ActiveSet is null) return;
+        if (Log is null) return;
+        string? set;
         (string Table, long Bytes)[] held;
         lock (_tables)
+        {
+            set = ActiveSet;
             held = _tables.Select(t => (t.Key, t.Value.ResidentBytes)).OrderBy(t => t.Key, StringComparer.Ordinal).ToArray();
-        if (held.Length == 0) return;
+        }
+        if (set is null || held.Length == 0) return;
         static string Mb(long bytes) => (bytes / 1048576.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         Log.Log(LogSeverity.Info, "GameData",
-            $"Tables held for '{ActiveSet}': {string.Join(", ", held.Select(t => $"{t.Table} {Mb(t.Bytes)} MB"))} "
+            $"Tables held for '{set}': {string.Join(", ", held.Select(t => $"{t.Table} {Mb(t.Bytes)} MB"))} "
             + $"({Mb(held.Sum(t => t.Bytes))} MB in all).");
     }
 
@@ -328,29 +335,34 @@ public sealed class GameDataCache
     // exactly what a real swap does. No-op when no set is active.
     public void ReloadActiveSet()
     {
-        if (ActiveSet is null) return;
-        EvictAll();
-        // Drop any still-unclaimed background prewarm for this set, running or done —
-        // it predates the re-import, so claiming it later would hand back stale
-        // tables. (Startup prewarm entries are normally claimed long before a
-        // re-import; this covers a table that happened never to be read.) A lookup's
-        // own read still running goes with them: it belongs to the load just ended.
+        string? set;
+        // One hold of the lock for the whole of it, as in SwitchSet: a lookup of the
+        // new load must not get in between the tables going and the old prewarms going.
         lock (_tables)
         {
+            set = ActiveSet;
+            if (set is null) return;
+            EvictAll();
+            // Drop any still-unclaimed background prewarm for this set, running or
+            // done — it predates the re-import, so claiming it later would hand back
+            // stale tables. (Startup prewarm entries are normally claimed long before
+            // a re-import; this covers a table that happened never to be read.) A
+            // lookup's own read still running goes with them: it belongs to the load
+            // just ended.
             foreach ((string Set, string Table) key in _reading.Keys
-                         .Where(k => string.Equals(k.Set, ActiveSet, StringComparison.OrdinalIgnoreCase))
+                         .Where(k => string.Equals(k.Set, set, StringComparison.OrdinalIgnoreCase))
                          .ToList())
                 _reading.Remove(key);
             foreach ((string Set, string Table) key in _prewarmed.Keys
-                         .Where(k => string.Equals(k.Set, ActiveSet, StringComparison.OrdinalIgnoreCase))
+                         .Where(k => string.Equals(k.Set, set, StringComparison.OrdinalIgnoreCase))
                          .ToList())
             {
                 _prewarmed.Remove(key);
                 _prewarmedAt.Remove(key);
             }
         }
-        Log?.Log(LogSeverity.Info, "GameData", $"Re-ingested game data set '{ActiveSet}'.");
-        ActiveSetChanged?.Invoke(ActiveSet);
+        Log?.Log(LogSeverity.Info, "GameData", $"Re-ingested game data set '{set}'.");
+        ActiveSetChanged?.Invoke(set);
         LogTablesHeld();
     }
 
@@ -371,6 +383,11 @@ public sealed class GameDataCache
         bool mine;
         lock (_tables)
         {
+            // The set as it is under the lock, read once: the check above was made
+            // without it, and the set may have been switched (to nothing, too) since.
+            if (ActiveSet is not { } active) return null;
+            set = active;
+
             if (_tables.TryGetValue(tableName, out GameTable? cached))
             {
                 _lastRead[tableName] = Environment.TickCount64;
@@ -380,18 +397,17 @@ public sealed class GameDataCache
 
             // A PrewarmAsync call already parsed this table for the set that's now
             // active, ahead of the switch — claim it instead of re-reading the file.
-            if (_prewarmed.Remove((ActiveSet, tableName), out ReadOutcome warmed))
+            if (_prewarmed.Remove((set, tableName), out ReadOutcome warmed))
             {
-                _prewarmedAt.Remove((ActiveSet, tableName));
+                _prewarmedAt.Remove((set, tableName));
                 _tables[tableName] = warmed.Table!;
                 _stamps[tableName] = warmed.Stamp;
                 _lastRead[tableName] = Environment.TickCount64;
                 Log?.Log(LogSeverity.Debug, "GameData",
-                    $"'{tableName}' claimed from background prewarm for '{ActiveSet}'.");
+                    $"'{tableName}' claimed from background prewarm for '{set}'.");
                 return warmed.Table;
             }
 
-            set = ActiveSet;
             path = ResolveTablePath(set, tableName);
             if (path is null || !File.Exists(path)) return null;
             generation = _generation;
