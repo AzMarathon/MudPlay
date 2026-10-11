@@ -241,10 +241,13 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
                 active.Add(code);
                 // First sighting, or a recast pushed the expiry later → (re)snapshot the
-                // current members as the covered set.
+                // current members as the covered set. A timer put back from an earlier
+                // session's profile covers nobody we can name: that cast wasn't seen
+                // by this client, whoever is in the party when its bar first shows.
                 if (!_wholePartyCoverage.TryGetValue(code, out (DateTime Until, HashSet<string> Covered) cur)
                     || timer.Until > cur.Until)
-                    _wholePartyCoverage[code] = (timer.Until, CurrentMemberGivens());
+                    _wholePartyCoverage[code] = (timer.Until,
+                        timer.Restored ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : CurrentMemberGivens());
             }
 
         // Drop coverage for buffs whose timer is no longer up.
@@ -253,16 +256,16 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                 _wholePartyCoverage.Remove(gone);
     }
 
-    // The timers ran on after standing still out of the game, each expiry moved on
-    // by the time away. The expiries kept here move with them: a later expiry is how
-    // a recast is told, and this one is no recast, so the record of who the buff
-    // covered stays as it was.
-    private void OnTimersResumed(TimeSpan away)
+    // The timers on ourselves ran on after standing still out of the game, the ones
+    // named having had their expiry moved on by the time away. The expiries kept here
+    // move with exactly those: a later expiry is how a recast is told, and this one is
+    // no recast, so the record of who the buff covered stays as it was.
+    private void OnTimersResumed(TimeSpan away, IReadOnlyCollection<string> moved)
     {
-        foreach (string code in _wholePartyCoverage.Keys.ToList())
+        foreach (string code in moved)
         {
-            (DateTime until, HashSet<string> covered) = _wholePartyCoverage[code];
-            _wholePartyCoverage[code] = (until + away, covered);
+            if (!_wholePartyCoverage.TryGetValue(code, out (DateTime Until, HashSet<string> Covered) cov)) continue;
+            _wholePartyCoverage[code] = (cov.Until + away, cov.Covered);
         }
     }
 

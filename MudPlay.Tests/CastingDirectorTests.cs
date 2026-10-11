@@ -2767,11 +2767,13 @@ public sealed class CastingDirectorTests
         return double.NaN;
     }
 
-    // Every timer stands still alike, the ones on party members with our own: from
-    // out of the game there is no knowing a member stayed in it (user, 2026-10-10:
-    // "for each buff we're tracking ... all timers need to be paused").
+    // Our own timer stands still while we are out. A party member's does not: the
+    // member may have stayed in the game, where its buff ran down the whole time
+    // (user, 2026-08-28), so its timer keeps its real expiry, and one that passed
+    // while we were away is dropped and the buff cast again. Whether the 2026-10-10
+    // ruling means members' timers too is with the user.
     [Fact]
-    public void PauseResume_PartyMemberTimersStandStillWithOurOwn()
+    public void PauseResume_OurOwnTimerStandsStill_APartyMembersRunsOn()
     {
         using PartyBlessHarness h = new();
         h.Health.BlessIfAboveMa = 0;
@@ -2783,18 +2785,44 @@ public sealed class CastingDirectorTests
         h.Confirm("You cast bless on Raijin!");
         h.Director.NoteManualBuffCast("mysh");
         h.Now = h.Now.AddSeconds(50);
+        DateTime membersExpiry = h.Director.SnapshotActiveBuffs().Single(t => t.Target == "raijin").Until;
 
         h.Director.PauseBuffTimers();
-        h.Now = h.Now.AddSeconds(1000);
-        Assert.Equal(250, SecondsLeft(h.Director, h.Now, "raijin", "bles"));   // shown standing still
+        h.Now = h.Now.AddSeconds(100);
         Assert.Equal(150, SecondsLeft(h.Director, h.Now, "", "mysh"));
-        TimeSpan? movedOn = null;
-        h.Director.TimersResumed += away => movedOn = away;
+        (TimeSpan Away, string[] Moved)? resumed = null;
+        h.Director.TimersResumed += (away, moved) => resumed = (away, moved.ToArray());
         h.Director.ResumeBuffTimers();
 
-        Assert.Equal(250, SecondsLeft(h.Director, h.Now, "raijin", "bles"));
         Assert.Equal(150, SecondsLeft(h.Director, h.Now, "", "mysh"));
-        Assert.Equal(TimeSpan.FromSeconds(1000), movedOn);
+        Assert.Equal(membersExpiry, h.Director.SnapshotActiveBuffs().Single(t => t.Target == "raijin").Until);
+        Assert.Equal(150, SecondsLeft(h.Director, h.Now, "raijin", "bles"));   // 250 at the pause, less the 100 away
+        Assert.Equal(TimeSpan.FromSeconds(100), resumed!.Value.Away);
+        Assert.Equal(new[] { "mysh" }, resumed.Value.Moved);
+    }
+
+    // A member's buff that ran out while we were away is dropped on the way back in,
+    // and cast again; our own, with the same time on it, is not.
+    [Fact]
+    public void PauseResume_APartyMembersTimerThatRanOutWhileAway_IsDropped()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["mysh"] = (string.Empty, 300);
+        h.AddMember("Raijin");
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Raijin!");
+        h.Director.NoteManualBuffCast("mysh");
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(1800);
+        h.Director.ResumeBuffTimers();
+
+        ActiveBuffTimer ours = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal(string.Empty, ours.Target);
+        Assert.Equal(300, SecondsLeft(h.Director, h.Now, "", "mysh"));
     }
 
     // A second drop before any prompt is the same stretch away: the first pause
@@ -2951,9 +2979,13 @@ public sealed class CastingDirectorTests
         Assert.Equal(new[] { "bless" }, h.CastsSent);
     }
 
-    // A buff's wear-off line still ends a timer that was put back from a profile.
+    // A wear-off line ends only a buff the condition tracker holds as applied, and a
+    // client started since the cast holds nothing. So the buff put back from a profile
+    // is latched again when its timer runs on, and its wear-off line, with no applied
+    // line before it, ends the timer. Without that the timer ran to its end over a
+    // buff that had gone.
     [Fact]
-    public void RestoredTimer_IsEndedByItsWearOffLine()
+    public void RestoredTimer_IsEndedByItsWearOffLineAlone()
     {
         using CureHarness h = new();
         h.AutoBlessEnabled = false;
@@ -2966,11 +2998,126 @@ public sealed class CastingDirectorTests
             new SavedBuffTimer { Short = "bless", RemainingSec = 120, MarginSec = 0, TotalSec = 300 },
         });
         h.Director.ResumeBuffTimers();
-        h.FeedLine("You are blessed!");            // latched as applied, as it was last session
 
         h.FeedLine("Your blessing fades.");
 
         Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
+    // Within one run the same: the disconnect handler clears the condition tracker
+    // (right for ailments), the buff stays on the character, and its wear-off line
+    // after the reconnect still ends its timer.
+    [Fact]
+    public void TimerCarriedAcrossADisconnect_IsEndedByItsWearOffLine()
+    {
+        using CureHarness h = new();
+        h.AutoBlessEnabled = false;
+        h.Spells.BlessSlots[1] = "bless";
+        h.BuffInfo["bless"] = (string.Empty, 300);
+        h.RecordCondition("bless", MessageFlags.None,
+            applied: "You are blessed!", endsWith: "Your blessing fades.");
+        h.FeedLine("You are blessed!");
+        Assert.Single(h.Director.SnapshotActiveBuffs());
+        h.Now = h.Now.AddSeconds(100);
+
+        h.Conditions.ClearAll("disconnect");       // MainWindowViewModel's disconnect handler
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(3600);
+        h.Director.ResumeBuffTimers();
+        Assert.Equal(200, SecondsLeft(h.Director, h.Now, "", "bless"));
+        h.Now = h.Now.AddSeconds(50);
+        h.FeedLine("Your blessing fades.");
+
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
+    // A buff that shares its wear-off text with the carried one, and was not on, is
+    // not latched with it: only the buff whose timer was carried is.
+    [Fact]
+    public void CarriedTimer_LatchesOnlyItsOwnBuff()
+    {
+        using CureHarness h = new();
+        h.AutoBlessEnabled = false;
+        h.Spells.BlessSlots[1] = "bless";
+        h.BuffInfo["bless"] = (string.Empty, 300);
+        h.RecordCondition("bless", MessageFlags.None, applied: "You feel lucky!", endsWith: "Your luck fades.");
+        h.RecordCondition("chant", MessageFlags.None, applied: "You feel lucky!", endsWith: "Your luck fades.");
+        h.Director.RestoreSelfTimers(new[]
+        {
+            new SavedBuffTimer { Short = "bless", RemainingSec = 120, MarginSec = 0, TotalSec = 300 },
+        });
+
+        h.Director.ResumeBuffTimers();
+
+        Assert.True(h.Conditions.IsActiveByName("bless"));
+        Assert.False(h.Conditions.IsActiveByName("chant"));
+    }
+
+    // A draw item's card is carried the same way: its wear-off line after a
+    // disconnect makes the slot due again.
+    [Fact]
+    public void DrawnCardCarriedAcrossADisconnect_IsEndedByItsWearOffLine()
+    {
+        using CureHarness h = new();
+        h.AutoBlessEnabled = false;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = Deck, CastOnSelf = true, RecastMarginSec = 15 });
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        int uses = 0;
+        h.Director.SetItemCastSource(durationOf: _ => null, execute: _ => { uses++; return true; });
+        h.Director.SetItemDrawSource(token => token == Deck ? new[] { (966, "card-priest", 720L) } : null);
+        h.RecordCondition("card-priest", MessageFlags.None,
+            applied: "You draw the priest.", endsWith: "The priest's favour leaves you.");
+        h.AutoBlessEnabled = true;
+        h.Director.Evaluate();
+        Assert.Equal(1, uses);
+        h.FeedLine("You draw the priest.");
+        Assert.Equal("card-priest", Assert.Single(h.Director.SnapshotActiveBuffs()).Outcome);
+
+        h.Conditions.ClearAll("disconnect");
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(3600);
+        h.Director.ResumeBuffTimers();
+        Assert.Single(h.Director.SnapshotActiveBuffs());
+
+        h.FeedLine("The priest's favour leaves you.");
+
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
+    // A death the client did not see, learned of after it is back in the game, wiped
+    // the buffs that were on when the game was left and none raised since: exactly
+    // the carried timers go.
+    [Fact]
+    public void ClearCarried_TakesTheCarriedTimers_AndLeavesTheOnesRaisedSince()
+    {
+        using CureHarness h = new();
+        h.AutoBlessEnabled = false;
+        h.Spells.BlessSlots[1] = "bles";
+        h.Spells.BlessSlots[2] = "mysh";
+        h.Spells.BlessSlots[3] = "prot";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.BuffInfo["mysh"] = (string.Empty, 200);
+        h.BuffInfo["prot"] = (string.Empty, 400);
+        h.Director.RestoreSelfTimers(new[]
+        {
+            new SavedBuffTimer { Short = "bles", RemainingSec = 120, MarginSec = 0, TotalSec = 300 },
+            new SavedBuffTimer { Short = "mysh", RemainingSec = 90, MarginSec = 0, TotalSec = 200 },
+        });
+        h.Director.ResumeBuffTimers();
+        Assert.All(h.Director.SnapshotActiveBuffs(), t => Assert.True(t.Restored));
+        h.Director.NoteManualBuffCast("mysh");     // raised again since
+        h.Director.NoteManualBuffCast("prot");     // new since
+
+        Assert.Equal(1, h.Director.ClearCarriedSelfTimers("a death found late"));
+
+        Assert.Equal(new[] { "mysh", "prot" },
+            h.Director.SnapshotActiveBuffs().Select(t => t.Short).OrderBy(s => s).ToArray());
+        Assert.All(h.Director.SnapshotActiveBuffs(), t => Assert.False(t.Restored));
+        Assert.Equal(0, h.Director.ClearCarriedSelfTimers("again"));
     }
 
     // A death found at the login (a hang-up death) wipes what was put back.
@@ -4633,14 +4780,15 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyBless_Reconnect_BothSelfAndPartyTimersResumeWithTheTimeTheyHad()
+    public void PartyBless_Reconnect_SelfTimerResumesWithItsTimeLeft_TheMembersRunsOn()
     {
-        // On OUR reconnect BOTH survive the drop (paradigm-20260908-205555), and both
-        // run on with the time they had when it began: "as soon as we've disconnected
-        // all timers need to be paused until we're back in the game, then they all
-        // resume" (user, 2026-10-10). The member's is paused with ours, since from out
-        // of the game there is no knowing the member stayed in it. Until that ruling
-        // this test pinned both expiries as absolute and unshifted.
+        // On OUR reconnect BOTH survive the drop (paradigm-20260908-205555). Our own
+        // runs on with the time it had when the drop began: "as soon as we've
+        // disconnected all timers need to be paused until we're back in the game, then
+        // they all resume" (user, 2026-10-10); until that ruling this test pinned its
+        // expiry as absolute and unshifted too. The party member's still is: the
+        // member stayed online, and its buff ran down the whole time (user,
+        // 2026-08-28).
         using PartyBlessHarness h = new();
         h.Health.BlessIfAboveMa = 0;
         h.AddTargetSlot("bles", "Raijin");
@@ -4666,8 +4814,8 @@ public sealed class CastingDirectorTests
         Assert.Equal(2, after.Count);                   // both survive
         foreach (Game.Spells.ActiveBuffTimer t in after)
         {
-            // Each expiry is moved on by the 45 s away: the time left is what it was.
-            if (t.Target == "raijin") Assert.Equal(partyUntil.AddSeconds(45), t.Until);
+            if (t.Target == "raijin") Assert.Equal(partyUntil, t.Until);  // absolute, unshifted
+            // Ours is moved on by the 45 s away: the time left is what it was.
             else { Assert.Equal(string.Empty, t.Target); Assert.Equal(selfUntil.AddSeconds(45), t.Until); }
         }
     }
