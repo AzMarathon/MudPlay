@@ -256,35 +256,58 @@ public sealed class EventScheduler : IDisposable
 
     private void OnEventsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // Add / Remove / Replace all warrant a full rebuild. The list
+        if (!_isInGame) return;
+
+        // The same event put back in its place is a switch (EventManager.SetEnabled),
+        // not an edit: only its own countdown starts or stops. A full rebuild would
+        // start every other event's "Every" period over, so switching one event
+        // every few minutes would keep an hourly one from ever firing.
+        if (e.Action == NotifyCollectionChangedAction.Replace
+            && e.OldItems is [ScheduledEvent before] && e.NewItems is [ScheduledEvent after]
+            && ReferenceEquals(before, after))
+        {
+            StopEveryTimer(after);
+            StartEveryTimer(after);
+            return;
+        }
+
+        // Add / Remove / an edit's Replace all warrant a full rebuild. The list
         // is small (handfuls of events at most) so cost is trivial vs
         // tracking deltas precisely.
-        if (_isInGame) RebuildEveryTimers();
+        RebuildEveryTimers();
     }
 
     private void RebuildEveryTimers()
     {
         StopAllEveryTimers();
-        foreach (ScheduledEvent ev in _events.Events)
-        {
-            if (ev.Disabled) continue;
-            if (ev.TriggerType != EventTriggerType.Every) continue;
-            if (ev.TryParseEvery() is not { } interval) continue;
+        foreach (ScheduledEvent ev in _events.Events) StartEveryTimer(ev);
+    }
 
-            DispatcherTimer t = new() { Interval = interval };
-            // Capture by value — the timer outlives this loop iteration.
-            ScheduledEvent captured = ev;
-            t.Tick += (_, _) =>
-            {
-                // Re-arm the due-time before firing: DispatcherTimer repeats on
-                // the same interval, so the next tick lands one interval out.
-                _everyNextFire[captured] = DateTime.Now + interval;
-                _events.Fire(captured);
-            };
-            _everyTimers[ev] = t;
+    // Starts the event's own countdown, when it is an enabled "Every" event with a
+    // period that parses.
+    private void StartEveryTimer(ScheduledEvent ev)
+    {
+        if (ev.Disabled) return;
+        if (ev.TriggerType != EventTriggerType.Every) return;
+        if (ev.TryParseEvery() is not { } interval) return;
+
+        DispatcherTimer t = new() { Interval = interval };
+        t.Tick += (_, _) =>
+        {
+            // Re-arm the due-time before firing: DispatcherTimer repeats on
+            // the same interval, so the next tick lands one interval out.
             _everyNextFire[ev] = DateTime.Now + interval;
-            t.Start();
-        }
+            _events.Fire(ev);
+        };
+        _everyTimers[ev] = t;
+        _everyNextFire[ev] = DateTime.Now + interval;
+        t.Start();
+    }
+
+    private void StopEveryTimer(ScheduledEvent ev)
+    {
+        if (_everyTimers.Remove(ev, out DispatcherTimer? t)) t.Stop();
+        _everyNextFire.Remove(ev);
     }
 
     private void StopAllEveryTimers()

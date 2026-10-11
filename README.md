@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.178.4**
+> **Version 3.179.3**
 > - Simulator: an area ranking belongs to the game data and character it was made on; a switch lists that pairing's own ranking or none, and switching back lists the first again
 > - Nothing ranked on one game data can be picked, drawn on the map or saved as a loop under another; a game-data switch also clears the estimator's sketch
 > - Rankings are kept while the client runs (the last eight), through closing the Navigation window and a rename of the character; a set imported again, deleted, re-picked or changed in Manage Sets loses the ones made on it

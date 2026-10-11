@@ -20,7 +20,15 @@ public sealed partial class EventRowViewModel : ObservableObject
         _isAutoDisabled = isAutoDisabled;
     }
 
-    [ObservableProperty] private bool _isAutoDisabled;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsOffBadge))]
+    private bool _isAutoDisabled;
+
+    // The "off" badge: the event is disabled by the user's own choice (its edit
+    // window, or a remote @event). One the reconciler switched off shows the
+    // target-missing badge in its place. The row is rebuilt whenever the event's
+    // state is switched, so this is read once per row.
+    public bool ShowsOffBadge => IsDisabled && !IsAutoDisabled;
 
     // Countdown to this event's next scheduled fire, refreshed on a ticker by
     // the section VM (EventScheduler owns the real due-time; the row just
@@ -143,20 +151,6 @@ public sealed partial class EventRowViewModel : ObservableObject
     // True when the event's Disabled flag is set (manually or by the reconciler).
     public bool IsDisabled => Source.Disabled;
 
-    private string FormatEvery()
-    {
-        if (Source.EveryAmount is not { } amount || Source.EveryUnit is not { } unit)
-            return "Every —";
-        string label = (amount, unit) switch
-        {
-            (1, EventTimeUnit.Seconds) => "second",
-            (_, EventTimeUnit.Seconds) => "seconds",
-            (1, EventTimeUnit.Minutes) => "minute",
-            (_, EventTimeUnit.Minutes) => "minutes",
-            (1, EventTimeUnit.Hours)   => "hour",
-            (_, EventTimeUnit.Hours)   => "hours",
-            _ => "?",
-        };
-        return $"Every {amount} {label}";
-    }
+    private string FormatEvery() =>
+        EventScheduleText.Period(Source) is { } period ? $"Every {period}" : "Every —";
 }

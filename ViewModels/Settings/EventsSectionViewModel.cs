@@ -198,14 +198,24 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
 
     // Open EventEditDialogViewModel with the selected row's event as the starting
     // state. On Save (non-null result) the original is replaced via
-    // EventManager.Replace. Cancel discards.
+    // EventManager.Replace. Cancel discards. A remote @event that switches the
+    // event while the window is open moves the window's Disabled box with it.
     [RelayCommand(CanExecute = nameof(CanModifyOrRemove))]
     private async Task ModifyAsync()
     {
         if (SelectedRow?.Source is not { } original) return;
         EventEditDialogViewModel dialog = BuildDialogVM(original, isNew: false);
-        ScheduledEvent? edited = await AppServices.Current.Dialogs
-            .OpenWindowAsync<EventEditDialogViewModel, ScheduledEvent?>(dialog);
+        Action stopFollowing = dialog.FollowSwitches(_events.Events, original);
+        ScheduledEvent? edited;
+        try
+        {
+            edited = await AppServices.Current.Dialogs
+                .OpenWindowAsync<EventEditDialogViewModel, ScheduledEvent?>(dialog);
+        }
+        finally
+        {
+            stopFollowing();
+        }
         if (edited is null) return;
 
         _events.Replace(original, edited);

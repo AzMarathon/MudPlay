@@ -321,6 +321,31 @@ public sealed class PartyWealthProbeTests
         Assert.Equal(new[] { ("Bob", 4200L) }, h.Recorded);
     }
 
+    // An @events or @event reply names an event, and an event can be named like a
+    // purse as well. The member's real answer after it is still taken.
+    [Theory]
+    [InlineData("{events: Sell run (= 5 copper) on, Bank off}")]
+    [InlineData("{events (2/3): no coins on hand off}")]
+    [InlineData("{event 'Sell run (= 5 copper)' switched on}")]
+    [InlineData("{event 'Sell run (= 5 copper)' is on: fires on a timer, sends a command}")]
+    [InlineData("{no event named 'no coins on hand'}")]
+    [InlineData("{event name '(= 5 copper)' matches 2: 'Sell run (= 5 copper)', 'Buy run (= 5 copper)'}")]
+    [InlineData("{events: 1 Sell run (= 5 copper) on, 2 Bank off}")]
+    [InlineData("{event 2 'Sell run (= 5 copper)' switched on}")]
+    public void EventReplyNamingAnEventLikeAPurse_IsNoWealthReply(string line)
+    {
+        var h = new Harness();
+        h.AddMember("Bob");
+        h.GoInParty();
+
+        _ = h.Probe.QueryAsync();
+        h.Reply("Bob", line);
+        Assert.Empty(h.Recorded);
+
+        h.Reply("Bob", Harness.Coins(4200));
+        Assert.Equal(new[] { ("Bob", 4200L) }, h.Recorded);
+    }
+
     [Fact]
     public void UnknownReply_RecordsNothing()
     {
