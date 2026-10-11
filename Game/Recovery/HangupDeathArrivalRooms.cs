@@ -82,15 +82,34 @@ public static class HangupDeathArrivalRooms
     //   - maps 5 and 14, where every Stock room does: the Tournament Arena is
     //     Shadowmere there, and the Silver River is Albion and Port Blackwater;
     //   - four rooms with another name and no neighbour in common with the Stock
-    //     room (4/2, 6/1338, 12/2383, 16/2272);
-    //   - sixteen rooms Stock only has as `Blank` placeholders (map 1), which
-    //     Paradigm made a dungeon of. There is no Stock zone there to share.
-    // The other 411 keep a neighbour (382 keep every exit): the same room under a
+    //     room (4/2, 6/1338, 12/2383, 16/2272).
+    // The other 427 keep a neighbour (383 keep every exit): the same room under a
     // new name, shared like the rest.
     private static readonly (int Map, int First, int Last)[] AnotherPlaceOnParadigm =
     {
-        (1, 2171, 2174), (1, 2176, 2181), (1, 2183, 2188), (4, 2, 2), (5, 1, 25), (6, 1338, 1338),
-        (12, 2383, 2383), (14, 1, 28), (16, 2272, 2272),
+        (4, 2, 2), (5, 1, 25), (6, 1338, 1338), (12, 2383, 2383), (14, 1, 28), (16, 2272, 2272),
+    };
+
+    // Rooms whose dead arrive somewhere else on Paradigm than the Stock file has
+    // under their number: (map, first room, last room, the room they arrive in).
+    // Sixteen rooms of map 1 are `Blank` placeholders on Stock, with no graveyard
+    // named, and a dungeon on Paradigm, joined to rooms whose dead arrive in
+    // 1/2190 (Newhaven, Healer). Theirs do too (the owner, 2026-10-11).
+    private static readonly (int Map, int First, int Last, int Arrival)[] NamedOnParadigm =
+    {
+        (1, 2171, 2174, 2190), (1, 2176, 2181, 2190), (1, 2183, 2188, 2190),
+    };
+
+    // Rooms a death and a hang-up leave differently: (map, first room, last room,
+    // the room's own graveyard). These are the rooms with a leave-the-game room
+    // whose graveyard is not theirs. Named above has where a HANG-UP's dead
+    // arrive, worked out through the leave room; a death the client watches ends
+    // in the room's own graveyard instead. 101 rooms of the Stock map file.
+    private static readonly (int Map, int First, int Last, int Graveyard)[] DeathNotHangup =
+    {
+        (12, 2378, 2378, 2379), (12, 2381, 2381, 1), (17, 2019, 2019, 2415), (17, 2020, 2020, 2514),
+        (17, 3028, 3028, 2982), (17, 3231, 3231, 2982), (17, 3250, 3252, 3247), (17, 3254, 3302, 3247),
+        (17, 3304, 3346, 3247),
     };
 
     // The rooms a character killed by a hang-up in this room can arrive in by the
@@ -103,6 +122,30 @@ public static class HangupDeathArrivalRooms
             if (hungUpIn.Map == map && hungUpIn.Room >= first && hungUpIn.Room <= last)
                 return new[] { new RoomKey(map, arrival) };
         return new[] { Temple, EvilTomb };
+    }
+
+    // The same as it applies to the game data in hand: the Stock file's entry,
+    // or Paradigm's own for the rooms where it differs. Null for a room the list
+    // doesn't speak for there (ListCovers).
+    public static IReadOnlyList<RoomKey>? ListedOn(RoomKey hungUpIn, HangupArrivalListTrust trust)
+    {
+        if (!ListCovers(hungUpIn, trust)) return null;
+        if (trust == HangupArrivalListTrust.Paradigm)
+            foreach ((int map, int first, int last, int arrival) in NamedOnParadigm)
+                if (hungUpIn.Map == map && hungUpIn.Room >= first && hungUpIn.Room <= last)
+                    return new[] { new RoomKey(map, arrival) };
+        return For(hungUpIn);
+    }
+
+    // Where a death that is SEEN in this room ends, by the list: the room's own
+    // graveyard, with no leave-the-game room in the way. Null as ListedOn.
+    public static IReadOnlyList<RoomKey>? DeathArrivalsOn(RoomKey diedIn, HangupArrivalListTrust trust)
+    {
+        if (!ListCovers(diedIn, trust)) return null;
+        foreach ((int map, int first, int last, int graveyard) in DeathNotHangup)
+            if (diedIn.Map == map && diedIn.Room >= first && diedIn.Room <= last)
+                return new[] { new RoomKey(map, graveyard) };
+        return ListedOn(diedIn, trust);
     }
 
     // Whether the Stock list speaks for this room on the game data in hand: it is
@@ -123,13 +166,57 @@ public static class HangupDeathArrivalRooms
     //   Albion   — it is one of Paradigm's own rooms, and in Albion.
     //   inAlbion — the room can be walked to from ParadigmAlbionVault; asked only
     //              of a room the list doesn't cover, on Paradigm.
+    //   learned  — LearnedArrivalLookup.For: the rooms a death in this room, or in
+    //              a room of its land, was seen to end in.
+    //
+    // What was learned is never set against the list where the list is the
+    // world's own (an unmodified Stock set, a zone Paradigm shares with Stock): it
+    // isn't asked for there. It speaks for the rooms no list covers, and on a
+    // board whose rooms may have been edited it adds a room to the list's.
+    //
+    // A learned room is a weaker word than the list's, both ways, and for one
+    // reason: what was seen is where a DEATH in that room ends, and a hang-up
+    // leaves through the room's leave-the-game room first, its dead going where
+    // THAT room sends them. The data carries no leave rooms for these rooms, and
+    // on Stock alone 101 rooms have one that changes where their dead arrive.
+    //   - It never says no. A hang-up's dead may end somewhere else than a
+    //     death's, so coming back anywhere else is not "the wrong room".
+    //   - Its yes can be a survivor's. Where a room's graveyard is also its
+    //     leave-the-game room (17/3250 and 94 more on Stock, both 17/3247), a
+    //     character that hangs up and lives comes back in the very room a death
+    //     there was seen to end in. So a learned yes records no death by itself.
+    //     With no count from before, HangupDeath.Judge asks for HP read at the
+    //     first prompt with it, and above what the character left with where
+    //     the list's yes could stand alone (nothing owned for a death to take).
     public static (IReadOnlyList<RoomKey>? Rooms, bool AllKnown, bool Albion) ArrivalsOn(
-        RoomKey hungUpIn, HangupArrivalListTrust trust, Func<RoomKey, bool>? inAlbion)
+        RoomKey hungUpIn, HangupArrivalListTrust trust, Func<RoomKey, bool>? inAlbion,
+        Func<RoomKey, IReadOnlyList<LearnedArrival>?>? learned = null)
     {
-        if (ListCovers(hungUpIn, trust)) return (For(hungUpIn), true, false);
-        return trust == HangupArrivalListTrust.Paradigm && inAlbion?.Invoke(hungUpIn) == true
-            ? (AlbionArrivals, false, true)
-            : (null, false, false);
+        IReadOnlyList<RoomKey>? listed = ListedOn(hungUpIn, trust);
+        IReadOnlyList<RoomKey>? seen = LearnedFor(hungUpIn, trust, inAlbion, learned)?.Select(l => l.Arrival).Distinct().ToList();
+        if (listed is not null) return (seen is null ? listed : listed.Union(seen).ToList(), true, false);
+        // A room's own reading is that room's, Albion or not.
+        if (seen is not null) return (seen, false, false);
+        return IsAlbion(hungUpIn, trust, inAlbion) ? (AlbionArrivals, false, true) : (null, false, false);
+    }
+
+    private static bool IsAlbion(RoomKey room, HangupArrivalListTrust trust, Func<RoomKey, bool>? inAlbion) =>
+        trust == HangupArrivalListTrust.Paradigm && !ListCovers(room, trust) && inAlbion?.Invoke(room) == true;
+
+    // What was learned for this room, where it is let speak.
+    //   - Never where the list is the world's own.
+    //   - In Albion, whose dead are known to arrive in the Burial Vault, only a
+    //     death seen in the room itself: what another room of its land showed
+    //     doesn't stand against that.
+    public static IReadOnlyList<LearnedArrival>? LearnedFor(
+        RoomKey hungUpIn, HangupArrivalListTrust trust, Func<RoomKey, bool>? inAlbion,
+        Func<RoomKey, IReadOnlyList<LearnedArrival>?>? learned)
+    {
+        if (ListCovers(hungUpIn, trust) && trust != HangupArrivalListTrust.Unverified) return null;
+        if (learned?.Invoke(hungUpIn) is not { Count: > 0 } seen) return null;
+        if (!IsAlbion(hungUpIn, trust, inAlbion)) return seen;
+        List<LearnedArrival> own = seen.Where(l => l.SeenIn == hungUpIn).ToList();
+        return own.Count > 0 ? own : null;
     }
 
     // What the first room confirmed on the way back in says of a death by the
@@ -145,7 +232,9 @@ public static class HangupDeathArrivalRooms
     //   - A room the list doesn't cover (ListCovers): on Paradigm, one in Albion
     //     found in the Burial Vault is a yes. Nothing says no for it: a hang-up
     //     goes through the room's leave-the-game room first, and Paradigm's
-    //     aren't in the data. Any other such room says nothing at all.
+    //     aren't in the data. One whose dead were seen to arrive somewhere
+    //     (learned) is a yes there, on the same terms. Any other such room says
+    //     nothing at all.
     // An arena room is a room like any other here: its dead are moved the same way
     // whether the death was the arena's free one or not (HangupDeath.JudgeArena
     // tells those apart).
@@ -164,10 +253,13 @@ public static class HangupDeathArrivalRooms
     //     room it left, so the map never moves. There the room says nothing.
     public static HangupEntryRoomReading Read(
         RoomKey? hungUpIn, RoomKey? enteredIn, HangupArrivalListTrust trust,
-        Func<RoomKey, RoomKey, bool>? couldBeTakenFor = null, Func<RoomKey, bool>? inAlbion = null)
+        Func<RoomKey, RoomKey, bool>? couldBeTakenFor = null, Func<RoomKey, bool>? inAlbion = null,
+        Func<RoomKey, IReadOnlyList<LearnedArrival>?>? learned = null)
     {
         if (hungUpIn is not { } left || enteredIn is not { } entered) return default;
-        (IReadOnlyList<RoomKey>? arrivals, bool allKnown, bool albion) = ArrivalsOn(left, trust, inAlbion);
+        (IReadOnlyList<RoomKey>? arrivals, bool allKnown, bool albion) = ArrivalsOn(left, trust, inAlbion, learned);
+        IReadOnlyList<LearnedArrival>? seen = LearnedFor(left, trust, inAlbion, learned);
+        IReadOnlyList<RoomKey>? listed = ListedOn(left, trust);
         if (arrivals is null || arrivals.Contains(left)) return default;
         if (allKnown && Array.IndexOf(LeftThroughTheirArrivalRoom, left) >= 0) return default;
 
@@ -183,9 +275,24 @@ public static class HangupDeathArrivalRooms
         // from one to the other, or tell either from a third that looks the same.
         bool leftLooksLikeIt = ArrivalItLooksLike(left) is not null;
         if (entered == left) return allKnown && !leftLooksLikeIt ? new HangupEntryRoomReading(false) : default;
-        if (arrivals.Contains(entered)) return new HangupEntryRoomReading(true, Albion: albion);
+        // What the yes rests on. The Burial Vault is Albion's. A room the list
+        // has is the list's, whatever was seen besides. Any other is one a death
+        // was seen to end in, and the reading says in which room.
+        bool ByAlbion(RoomKey arrival) => albion && arrival == ParadigmAlbionVault;
+        RoomKey? BySeeing(RoomKey arrival)
+        {
+            if (seen is null || listed?.Contains(arrival) == true) return null;
+            foreach (LearnedArrival reading in seen)
+                if (reading.Arrival == arrival) return reading.SeenIn;
+            return null;
+        }
+
+        if (arrivals.Contains(entered))
+            return new HangupEntryRoomReading(true, Albion: ByAlbion(entered), LearnedFrom: BySeeing(entered));
         if (ArrivalItLooksLike(entered) is { } stoodFor)
-            return leftLooksLikeIt ? default : new HangupEntryRoomReading(true, stoodFor, albion);
+            return leftLooksLikeIt
+                ? default
+                : new HangupEntryRoomReading(true, stoodFor, ByAlbion(stoodFor), BySeeing(stoodFor));
         return new HangupEntryRoomReading(allKnown && trust != HangupArrivalListTrust.Unverified ? false : null);
     }
 }

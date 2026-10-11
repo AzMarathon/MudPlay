@@ -1995,4 +1995,50 @@ public sealed class RoomGraphManagerTests : IDisposable
         if (laterRowHasTheCommand)
             Assert.Equal(new RoomKey(1, 9), room.Exits[Direction.Teleport].Target);
     }
+
+    // A damaged set: room commands that lead into empty text blocks linked round
+    // in a circle (100 to itself, 300 and 301 to each other). The boat pass reads
+    // every room command, and one that follows those links blindly never comes
+    // back. The build has to finish, and say which blocks are broken once, however
+    // many rooms share them.
+    [Fact]
+    public void EmptyTextBlocksLinkedInACircle_BuildFinishes_AndAreNamedOnce()
+    {
+        const string tbinfo = """
+            [
+              { "Number": 100, "LinkTo": 100, "Action": "", "Called From": "" },
+              { "Number": 300, "LinkTo": 301, "Action": "", "Called From": "" },
+              { "Number": 301, "LinkTo": 300, "Action": "", "Called From": "" },
+              { "Number": 400, "LinkTo": 0, "Action": "go hole:teleport 9 1\n", "Called From": "" }
+            ]
+            """;
+        string rooms = "[" + string.Join(",\n",
+            RoomRow(1, 100, "N=1/2"),
+            RoomRow(2, 100, "S=1/1", "N=1/3"),
+            RoomRow(3, 100, "S=1/2", "N=1/4"),
+            RoomRow(4, 300, "S=1/3", "N=1/5"),
+            RoomRow(5, 301, "S=1/4"),
+            RoomRow(6, 400, "N=1/1"),
+            RoomRow(9, 0, "N=1/1")) + "]";
+        SeedTable("alpha", "Rooms", rooms);
+        SeedTable("alpha", "TBInfo", tbinfo);
+        SeedTable("alpha", "Spells", "[]");
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        TBInfoStore store = new(cache);
+        store.OnActiveSetChanged("alpha");
+        LogService log = new();
+        RoomGraphManager graph = new(cache, log, store, new KnownSpellCatalog(cache));
+
+        BoundedRun.Finish(() => { graph.OnActiveSetChanged("alpha"); return true; });
+
+        Assert.Equal(7, graph.RoomCount);
+        // The whole room command next to them is still read.
+        Assert.Equal(new RoomKey(1, 9), graph.GetRoom(new RoomKey(1, 6))!.Exits[Direction.Teleport].Target);
+        Assert.Empty(graph.AllBoatPassages);
+
+        LogEntry warning = Assert.Single(log.SnapshotProblems());
+        Assert.Equal(LogSeverity.Warn, warning.Severity);
+        Assert.Contains("100, 300, 301", warning.Message);
+    }
 }
