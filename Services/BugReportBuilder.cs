@@ -2659,6 +2659,11 @@ public static class BugReportBuilder
         // A ranking is kept on disk between sessions: figures that look wrong may be
         // an earlier day's, listed marked, and an empty list may be a file dropped.
         Kv(sb, "Area ranking listed", snap.ListedRanking ?? "(none)");
+        // The set's files were replaced under this client: nothing is saved or read
+        // back until it is read in again, which reads as "my ranking is gone".
+        svc.GameData.TableStampsInUse(Game.Simulation.RankingWorld.TableNames, out IReadOnlyList<string> mixed);
+        if (mixed.Count > 0)
+            Kv(sb, "Area rankings not saved", $"{string.Join(", ", mixed)} read again from a file that changed while the set was loaded");
         if (snap.RankingFiles.Count > 0)
         {
             sb.Append("\n**Area ranking files** (latest last)\n\n");

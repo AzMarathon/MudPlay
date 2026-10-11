@@ -48,37 +48,128 @@ public sealed class RankingStampTests : IDisposable
         Assert.NotNull(without.DiffersFrom(World()));
     }
 
-    [Fact]
-    public void TheWorldIsReadOffTheSetsTablesAndTheSeed()
+    // ----- The tables, as this client read them ---------
+
+    private const string Set = "alpha";
+
+    private string TableFile(string table) => Path.Combine(_dir, Set, table + ".json");
+
+    // A set with every table the simulator reads but Lairs, and one it doesn't.
+    private GameDataCache LoadedSet()
     {
-        var reader = new RankingStampReader();
-        string seed = Path.Combine(_dir, "seed.json");
-        File.WriteAllText(seed, "[1]");
-        foreach (string table in RankingWorld.TableNames.Where(t => t != "Lairs"))
-            File.WriteAllText(Path.Combine(_dir, table + ".json"), "[]");
-        File.WriteAllText(Path.Combine(_dir, "Shops.json"), "[]");
+        Directory.CreateDirectory(Path.Combine(_dir, Set));
+        foreach (string table in RankingWorld.TableNames.Where(t => t != "Lairs").Append("Shops"))
+            File.WriteAllText(TableFile(table), """[{"Number":1}]""");
+        var cache = new GameDataCache(_dir);
+        cache.SwitchSet(Set);
+        return cache;
+    }
 
-        RankingWorld made = reader.World(_dir, seed);
-        Assert.Equal(LoopSimulator.SimulatorVersion, made.SimulatorVersion);
-        Assert.Equal("none", made.Tables["Lairs"]);
-        Assert.Null(reader.World(_dir, seed).DiffersFrom(made));
+    // The file as another client's import leaves it: other rows, another length.
+    private void ImportedElsewhere(string table) =>
+        File.WriteAllText(TableFile(table), """[{"Number":1},{"Number":2}]""");
 
-        // A table the simulator doesn't read, and the seed written again as it was.
-        File.WriteAllText(Path.Combine(_dir, "Shops.json"), "[1, 2, 3]");
-        File.WriteAllText(seed, "[1]");
-        File.SetLastWriteTimeUtc(seed, DateTime.UtcNow.AddMinutes(5));
-        Assert.Null(reader.World(_dir, seed).DiffersFrom(made));
+    private static RankingWorld WorldOf(GameDataCache cache, out IReadOnlyList<string> changed) =>
+        new(LoopSimulator.SimulatorVersion, cache.TableStampsInUse(RankingWorld.TableNames, out changed), "s");
 
-        // A table imported again, a table that arrives, another seed, no seed.
-        File.WriteAllText(Path.Combine(_dir, "Monsters.json"), "[ ]");
-        Assert.Contains("Monsters", reader.World(_dir, seed).DiffersFrom(made));
-        made = reader.World(_dir, seed);
-        File.WriteAllText(Path.Combine(_dir, "Lairs.json"), "[]");
-        Assert.Contains("Lairs", reader.World(_dir, seed).DiffersFrom(made));
-        made = reader.World(_dir, seed);
-        File.WriteAllText(seed, "[2]");
-        Assert.Contains("seed", reader.World(_dir, seed).DiffersFrom(made));
-        Assert.Contains("seed", reader.World(_dir, null).DiffersFrom(made));
+    [Fact]
+    public void ATableIsStampedByTheFileItWasReadFrom_NotTheOneOnDiskNow()
+    {
+        GameDataCache cache = LoadedSet();
+        Assert.NotNull(cache.GetTable("Rooms"));
+        RankingWorld loaded = WorldOf(cache, out _);
+        Assert.Equal("none", loaded.Tables["Lairs"]);
+
+        // Another client imports the set while this one runs on the rows it read.
+        ImportedElsewhere("Rooms");
+        ImportedElsewhere("Shops");
+        RankingWorld made = WorldOf(cache, out IReadOnlyList<string> changed);
+        Assert.Null(made.DiffersFrom(loaded));
+        Assert.Empty(changed);
+
+        // After a restart the tables are the new ones, and that ranking is not of them.
+        var restarted = new GameDataCache(_dir);
+        restarted.SwitchSet(Set);
+        Assert.Contains("Rooms table has changed", WorldOf(restarted, out _).DiffersFrom(made));
+    }
+
+    [Fact]
+    public void ATableDroppedFromMemoryKeepsItsStamp_AndReadAgainFromTheSameFileIsTheSame()
+    {
+        GameDataCache cache = LoadedSet();
+        cache.GetTable("Rooms");
+        RankingWorld loaded = WorldOf(cache, out _);
+
+        cache.EvictIdle(TimeSpan.Zero);
+        Assert.False(cache.IsTableLoaded("Rooms"));
+        Assert.Null(WorldOf(cache, out IReadOnlyList<string> changed).DiffersFrom(loaded));
+        Assert.Empty(changed);
+
+        cache.GetTable("Rooms");
+        Assert.Null(WorldOf(cache, out changed).DiffersFrom(loaded));
+        Assert.Empty(changed);
+    }
+
+    [Fact]
+    public void ATableReadAgainFromAChangedFileHasNoOneStamp_UntilTheSetIsReadInAgain()
+    {
+        GameDataCache cache = LoadedSet();
+        cache.GetTable("Rooms");
+        RankingWorld loaded = WorldOf(cache, out _);
+
+        // Dropped by the idle sweep, replaced on disk, read again: what was built at
+        // load is from the old file and the rows from here on are the new one's.
+        cache.EvictIdle(TimeSpan.Zero);
+        ImportedElsewhere("Rooms");
+        cache.GetTable("Rooms");
+        WorldOf(cache, out IReadOnlyList<string> changed);
+        Assert.Equal(new[] { "Rooms" }, changed);
+
+        // So is one stamped before it was ever read, and then read from another file.
+        ImportedElsewhere("Monsters");
+        cache.GetTable("Monsters");
+        WorldOf(cache, out changed);
+        Assert.Equal(new[] { "Monsters", "Rooms" }, changed);
+
+        // Read in again (an import here, a restart), everything is of the files now.
+        cache.ReloadActiveSet();
+        cache.GetTable("Rooms");
+        RankingWorld reloaded = WorldOf(cache, out changed);
+        Assert.Empty(changed);
+        Assert.Contains("Rooms, Monsters tables", reloaded.DiffersFrom(loaded));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task ATableReadAheadOfTheSwitchIsStampedByThatRead()
+    {
+        Directory.CreateDirectory(Path.Combine(_dir, Set));
+        File.WriteAllText(TableFile("Rooms"), """[{"Number":1}]""");
+        var before = new FileInfo(TableFile("Rooms"));
+        string asRead = $"{before.Length}:{before.LastWriteTimeUtc.Ticks}";
+        var cache = new GameDataCache(_dir);
+        await cache.PrewarmAsync(Set, new[] { "Rooms" });
+
+        ImportedElsewhere("Rooms");
+        cache.SwitchSet(Set);
+        cache.GetTable("Rooms");
+        Assert.Equal(asRead, cache.TableStampsInUse(new[] { "Rooms" }, out IReadOnlyList<string> changed)["Rooms"]);
+        Assert.Empty(changed);
+    }
+
+    // ----- The monster seed, as loaded ---------
+
+    [Fact]
+    public void TheSeedIsStampedByTheRecordsHeld_InAnyOrder()
+    {
+        static KeyValuePair<int, MonsterOverlay> Record(int number, string? area, MonsterAttackPriority? priority = null) =>
+            new(number, new MonsterOverlay { Area = area, Priority = priority });
+
+        string made = MonsterOverlaySeedStore.StampOf(new[] { Record(1, "Cave"), Record(2, "Marsh") });
+        Assert.Equal(made, MonsterOverlaySeedStore.StampOf(new[] { Record(2, "Marsh"), Record(1, "Cave") }));
+        Assert.NotEqual(made, MonsterOverlaySeedStore.StampOf(new[] { Record(1, "Cave"), Record(2, "Fen") }));
+        Assert.NotEqual(made, MonsterOverlaySeedStore.StampOf(new[] { Record(1, "Cave"), Record(2, "Marsh", MonsterAttackPriority.High) }));
+        Assert.NotEqual(made, MonsterOverlaySeedStore.StampOf(new[] { Record(1, "Cave") }));
+        Assert.Equal("none", new MonsterOverlaySeedStore().ContentStamp);
     }
 
     [Fact]

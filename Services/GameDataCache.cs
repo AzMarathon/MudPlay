@@ -226,6 +226,8 @@ public sealed class GameDataCache
         {
             _derived.Clear();
             _generation++;
+            _stampsInUse.Clear();
+            _changedInUse.Clear();
         }
         Log?.Log(LogSeverity.Info, "GameData",
             (outgoing, setName) switch
@@ -325,6 +327,7 @@ public sealed class GameDataCache
             {
                 _prewarmedAt.Remove((ActiveSet, tableName));
                 _tables[tableName] = warmed;
+                NoteInUse(tableName, warmed);
                 _lastRead[tableName] = Environment.TickCount64;
                 Log?.Log(LogSeverity.Debug, "GameData",
                     $"'{tableName}' claimed from background prewarm for '{ActiveSet}'.");
@@ -374,6 +377,7 @@ public sealed class GameDataCache
             {
                 result = parsed;
                 _tables[tableName] = result;
+                NoteInUse(tableName, result);
                 _lastRead[tableName] = Environment.TickCount64;
                 Log?.Log(LogSeverity.Debug, "GameData", fromPrewarm
                     ? $"'{tableName}' taken from the prewarm in flight for '{set}'."
@@ -404,12 +408,79 @@ public sealed class GameDataCache
     // One table file into its compact form, a block at a time: the file is never
     // whole in memory. The stream does no buffering of its own; the reader's block
     // is the buffer.
+    //
+    // The file's stamp is taken from the same open handle, before the first block is
+    // read, and goes with the table (FileStamps): it says which file these rows are,
+    // whatever is at that path later.
     private static GameTable ReadTable(string path, out long kilobytes)
     {
         using FileStream file = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
             bufferSize: 0, FileOptions.SequentialScan);
         kilobytes = file.Length / 1024;
-        return GameTableReader.Read(file);
+        string stamp = Stamp(file.Length, File.GetLastWriteTimeUtc(file.SafeFileHandle));
+        GameTable table = GameTableReader.Read(file);
+        FileStamps.Add(table, stamp);
+        return table;
+    }
+
+    // ----- Which files the tables in use were read from ---------
+    //
+    // For a result that is kept beyond this session and trusted later only while the
+    // tables it was made on are still the ones on disk (the Simulator's rankings).
+    // The files on disk now are the wrong thing to stamp such a result with: another
+    // client can import the set while this one runs, and this one goes on with the
+    // rows it read. So each table read carries the length and last-write time of the
+    // file it came from, and the first one seen for a table since the set was made
+    // active (or read in again) is that table's stamp for as long as the set stays:
+    // through the table being dropped from memory by the idle sweep, which unloads
+    // rows but not the room map and catalogs built from them.
+    //
+    // A table dropped and read again from a file that changed meanwhile has no one
+    // stamp any more: what was built at load is from the old file, and rows looked
+    // up from here on are from the new. It is reported as changed, and no result
+    // made on this set should be kept until the set is read in again as a whole.
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<GameTable, string> FileStamps = new();
+    private readonly Dictionary<string, string> _stampsInUse = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _changedInUse = new(StringComparer.OrdinalIgnoreCase);
+
+    private static string Stamp(long length, DateTime writtenUtc) => $"{length}:{writtenUtc.Ticks}";
+
+    // Called with _tables held, as a table is published for the active set.
+    private void NoteInUse(string tableName, GameTable table)
+    {
+        if (!FileStamps.TryGetValue(table, out string? stamp)) return;
+        if (!_stampsInUse.TryGetValue(tableName, out string? first)) _stampsInUse[tableName] = stamp;
+        else if (!string.Equals(first, stamp, StringComparison.Ordinal)) _changedInUse.Add(tableName);
+    }
+
+    // The stamp of each named table of the active set, as described above. A table
+    // not read since the set was made active is stamped from its file now, "none"
+    // when it has none, and held to that: read later from another file, it counts as
+    // changed. changed lists the tables with no one stamp; empty is the usual case.
+    public IReadOnlyDictionary<string, string> TableStampsInUse(IEnumerable<string> tableNames, out IReadOnlyList<string> changed)
+    {
+        ArgumentNullException.ThrowIfNull(tableNames);
+        var stamps = new Dictionary<string, string>(StringComparer.Ordinal);
+        lock (_tables)
+        {
+            foreach (string table in tableNames)
+            {
+                if (!_stampsInUse.TryGetValue(table, out string? stamp))
+                {
+                    stamp = "none";
+                    if (ActiveSet is { } set && ResolveTablePath(set, table) is { } path)
+                    {
+                        FileInfo file = new(path);
+                        if (file.Exists) stamp = Stamp(file.Length, file.LastWriteTimeUtc);
+                    }
+                    _stampsInUse[table] = stamp;
+                }
+                stamps[table] = stamp;
+            }
+            changed = _changedInUse.Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+        return stamps;
     }
 
     // Parse tableNames for setName on background threads, ahead of setName actually
@@ -627,6 +698,8 @@ public sealed class GameDataCache
             _tables.Clear();
             _failedTables.Clear();
             _lastRead.Clear();
+            _stampsInUse.Clear();
+            _changedInUse.Clear();
         }
     }
 

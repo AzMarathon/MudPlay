@@ -8442,7 +8442,10 @@ public sealed class AppServices
             new AreaRankingFiles(log: Log), act => Avalonia.Threading.Dispatcher.UIThread.Post(act), Log);
         SimulatorRankings.NoteActiveSet(GameData.ActiveSet);
         GameData.ActiveSetChanged += setName =>
+        {
+            _simulatorMixedTablesSaid = null;
             LogStaleSimulatorRankings(setName, "was read in again", SimulatorRankings.NoteActiveSet(setName));
+        };
         // They are a character's as well. One that comes to go by another name is
         // the same character: its rankings go with it, and none stay under the name
         // it left for the next profile given that name.
@@ -11532,13 +11535,37 @@ public sealed class AppServices
             SimulatorWorld, SimulatorCharacterAt);
     private Game.Simulation.SimulationSource? _loopSimulationSource;
 
-    // The game data as it is now, for a ranking kept between sessions (RankingWorld):
-    // the active set's table files and the monster seed in use.
-    private Game.Simulation.RankingWorld? SimulatorWorld() =>
-        GameData.ActiveSet is { } set
-            ? _rankingStamps.World(AppPaths.GameDataSetDir(set),
-                MonsterOverlaySeed.ActiveRealm is { } realm ? AppPaths.MonsterOverlaySeedFile(realm) : null)
-            : null;
+    // The game data this client is running on, for a ranking kept between sessions
+    // (RankingWorld): the table files as they were when read and the monster seed as
+    // loaded, not what is on disk now. Another client can import the set or an update
+    // replace the seed while this one runs; a ranking made here is still a ranking of
+    // the old data, and stamped with the new it would be trusted after a restart.
+    //
+    // Null when a table has since been read again from a changed file. The room map
+    // and catalogs built at load are then from one file and the rows looked up since
+    // from another, so no stamp describes what a ranking would be made on: none is
+    // saved or read back until the set is read in again, which a restart or a
+    // re-import does. A ranking is still made and listed for the session.
+    private Game.Simulation.RankingWorld? SimulatorWorld()
+    {
+        if (GameData.ActiveSet is not { } set) return null;
+        IReadOnlyDictionary<string, string> tables =
+            GameData.TableStampsInUse(Game.Simulation.RankingWorld.TableNames, out IReadOnlyList<string> changed);
+        if (changed.Count == 0)
+            return new Game.Simulation.RankingWorld(
+                Game.Simulation.LoopSimulator.SimulatorVersion, tables, MonsterOverlaySeed.ContentStamp);
+        if (!string.Equals(_simulatorMixedTablesSaid, set, StringComparison.OrdinalIgnoreCase))
+        {
+            _simulatorMixedTablesSaid = set;
+            Log.Info("Simulator",
+                $"'{set}' changed on disk while it was loaded ({string.Join(", ", changed)} read again from a new file): " +
+                "area rankings are not saved or read back until the set is read in again (restart, or import it here)");
+        }
+        return null;
+    }
+
+    // The set the line above was last logged for; cleared when a set is read in.
+    private string? _simulatorMixedTablesSaid;
 
     // The character as a ranking at `level` would simulate it now, as the groups a
     // kept ranking is compared by (RankingCharacter). Null while it can't be read: no

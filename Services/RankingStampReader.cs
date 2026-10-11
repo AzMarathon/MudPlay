@@ -2,35 +2,22 @@ using MudPlay.Game.Simulation;
 
 namespace MudPlay.Services;
 
-// Reads off disk the parts of what a kept area ranking is compared by that are
-// files: the game-data tables' stamps and the monster seed (RankingWorld), and the
-// user's record overrides (the "game-data edits" group of RankingCharacter).
+// Reads off disk the one part of what a kept area ranking is compared by that is
+// read from files as they are now: the user's record overrides (the "game-data
+// edits" group of RankingCharacter). The resolver takes in another client's write to
+// those files on the next heartbeat, so the files now are what a simulation uses
+// now. (The tables and the monster seed are held in memory from when they were
+// read, and are stamped there: GameDataCache's TableStampsInUse,
+// MonsterOverlaySeedStore's ContentStamp.)
 //
-// A table is stamped by its length and last-write time: the tables run to tens of
-// megabytes, and an import rewrites them. The seed and the overrides are small and
-// are stamped by content, so a file rewritten with what it already held (a seed
-// extracted again at launch, a settings save) is not a change. A content hash is
-// remembered against the file's length and time, so a file is read once for as
-// long as it is left alone.
+// The overrides are small and are stamped by content, so a file rewritten with what
+// it already held (a settings save) is not a change. A content hash is remembered
+// against the file's length and time, so a file is read once for as long as it is
+// left alone.
 public sealed class RankingStampReader
 {
     private readonly Dictionary<string, (long Length, DateTime Written, string Hash)> _hashes =
         new(StringComparer.Ordinal);
-
-    // The world a ranking made now on the set in setDir is made in. seedFile is the
-    // monster seed in use (null: none loaded).
-    public RankingWorld World(string setDir, string? seedFile)
-    {
-        var tables = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (string table in RankingWorld.TableNames)
-        {
-            FileInfo file = new(Path.Combine(setDir, table + ".json"));
-            // A set without the table (Lairs is optional in an export) is stamped as
-            // without it: the table arriving later is a change like any other.
-            tables[table] = file.Exists ? $"{file.Length}:{file.LastWriteTimeUtc.Ticks}" : "none";
-        }
-        return new RankingWorld(LoopSimulator.SimulatorVersion, tables, seedFile is null ? "none" : ContentHash(seedFile));
-    }
 
     // The user's record overrides for a set, at every tier that applies to the
     // loaded character: folders is the Global folder, the realm's and the
