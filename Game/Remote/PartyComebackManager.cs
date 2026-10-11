@@ -24,8 +24,9 @@ namespace MudPlay.Game.Remote;
 // full (we backfilled the slot while they were gone) and skip if they're farther
 // than the return-distance setting, declining via @forget + a spoken reason so
 // the member isn't left waiting. Otherwise we pause the running movement engine,
-// walk to recover them, re-invite (left-behind members are dropped from the party
-// server-side), wait for the follow confirmation, then resume. The member
+// walk to recover them, re-invite (Paradigm drops a left-behind member from the
+// party; on Stock one an exit turned away is still on our list and is told to
+// join, see AskBack), wait for the follow confirmation, then resume. The member
 // following us again ends the recovery at whatever stage it has reached.
 //
 // Stop-and-restart, not gate-pause. Asserting a MovementCoordinator gate would

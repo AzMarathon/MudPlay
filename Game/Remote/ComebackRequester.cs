@@ -10,8 +10,9 @@ namespace MudPlay.Game.Remote;
 
 // Follower-side @comeback sender. A follower the party leader walked off without
 // telepaths one @comeback <map>/<room> (bare when our room isn't Confirmed) so the
-// leader's PartyComebackManager comes back for it. A telepath is all it sends:
-// nothing here moves this character.
+// leader's PartyComebackManager comes back for it. Nothing here moves this
+// character: it sends that telepath and, on Stock, the `join` that puts a
+// follower still on the leader's list back once the leader is with it (TryJoin).
 //
 // How the client knows it was left behind (GAME_MECHANICS "@comeback (follower →
 // leader)"):
@@ -187,8 +188,10 @@ public sealed partial class ComebackRequester : IDisposable
     public Action<string, string>? FollowGivenUp { get; set; }
 
     // Whether that player is the leader we asked to come back for us, and hasn't
-    // declined. A member an exit turned away is out of the party and needs a fresh
-    // invite to rejoin; having asked for the pickup is our consent to take it, so
+    // declined. On Paradigm a member an exit turned away is out of the party and
+    // needs a fresh invite to rejoin (on Stock they join by themselves, TryJoin,
+    // and the invite is the fallback); having asked for the pickup is our consent
+    // to take it, so
     // AutoPartyManager follows that leader's invite whatever the per-player "join
     // if invited" box says. Lapses once we follow again, or after AskedLife.
     public bool IsLeaderWeAsked(string name)

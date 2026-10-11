@@ -1,9 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.176.1**
-> - Switching game data sets is quicker: the room map's doors, teleports, boats and lookups build about three times faster, with far less memory churned
-> - Program log: the room map's load line says how long the build took
+> **Version 3.176.8**
+> - Stock: a follower an exit left behind is still on the leader's list, and is now brought back with a `join`, not an invite it never sees
+> - Stock leader: tells that member to `@join` when it reaches them, and invites only if they aren't following 5 s later
+> - Stock follower: joins the leader it asked back by itself on `found you` or on seeing them; on `You must be invited first!` it waits for the invite
+> - Stock: Auto-Lair's promised invite on its next pass is now kept
+> - Stock: a party of six no longer answers its own left-behind member `my party is full`
+> - Stock: a loop's invite wait that runs out no longer uninvites a member who was following before
+> - Stock: after a follow is given up, a `par` of `[Invited]` rows no longer makes the follower a party leader
+> - Paradigm unchanged
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -463,9 +463,11 @@ public sealed partial class PartyManager : IDisposable
 
     // Re-invite a player to follow (`invite X`). Used by PartyComebackManager to
     // pull a stranded follower back into the party after the leader walks back
-    // to re-collect them — the server removes left-behind members from the
-    // party, so recovery requires an explicit re-invite before the follower can
-    // resume following. Addresses by given name only (family suffix stripped).
+    // to re-collect them — Paradigm removes left-behind members from the party,
+    // so recovery requires an explicit re-invite before the follower can resume
+    // following. (On Stock a member an exit left behind is still on the list and
+    // is told to join; the invite is that flow's fallback: PartyComebackManager's
+    // AskBack.) Addresses by given name only (family suffix stripped).
     // The leader-side "You have invited X to follow you." echo still flows
     // through OnYouInvited as usual.
     public void Invite(string name)
