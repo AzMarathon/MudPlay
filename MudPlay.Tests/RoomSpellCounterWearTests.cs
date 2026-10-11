@@ -966,6 +966,23 @@ public sealed class RoomSpellCounterWearTests
         Assert.Empty(w.Wear.OwnedSnapshot());
     }
 
+    [Fact]
+    public void TakenOffInARoomThatNeedsIt_ItIsNotPutStraightBackOn_ButIsInTheNextRoom()
+    {
+        // The user's own `rem`, or another swap that borrows the slot for a moment:
+        // the two must not trade the slot back and forth where the character stands.
+        World w = WearingTheFeatherIn(3);
+
+        w.GameRemoves("phoenix feather");              // ends with the inventory's change notice
+
+        Assert.Single(w.Sent);
+        Assert.Empty(w.Wear.OwnedSnapshot());
+        Assert.Single(w.Info, l => l.Contains("'phoenix feather' was taken off"));
+
+        w.Arrive(4);                                   // still lava
+        Assert.Equal(new[] { "wear phoenix feather", "wear phoenix feather" }, w.Sent);
+    }
+
     // ----- fingers and wrists: two places ----------------------------------------
 
     private static World Tundra(params string[] rings)

@@ -146,6 +146,10 @@ public sealed class RoomSpellCounterWear
     // cures come back when a piece comes off. Null = no answer.
     private readonly Dictionary<int, SlotWearAnswer?> _shelved = new();
 
+    // Something else took a counter of ours off in the room stood in: no counter
+    // is put on here again. A step into a room that needs one still gets its wear.
+    private bool _takenOffHere;
+
     // Said once each, not on every look: a carried counter the character can't
     // wear, a wear the locked send gate dropped, a restore a kept sneak is holding.
     private readonly HashSet<int> _saidUnwearable = new();
@@ -283,6 +287,7 @@ public sealed class RoomSpellCounterWear
             _lastArrived = room;
             _stepHeldOut = false;
             _saidNotSent.Clear();
+            _takenOffHere = false;
         }
         Settle(room, "on arriving");
     }
@@ -322,7 +327,8 @@ public sealed class RoomSpellCounterWear
         {
             if (near.Spell <= 0) continue;
             needed.Add(near.Spell);
-            TryWear(near, hold: false, ReferenceEquals(near, here) ? $"{when} in" : $"{when} next to");
+            if (!_takenOffHere)
+                TryWear(near, hold: false, ReferenceEquals(near, here) ? $"{when} in" : $"{when} next to");
         }
 
         // Sneaking past things: the same rooms a few steps on along the plan are
@@ -338,6 +344,7 @@ public sealed class RoomSpellCounterWear
                 {
                     if (near.Spell <= 0) continue;
                     needed.Add(near.Spell);
+                    if (_takenOffHere) continue;
                     if (empty) TryWear(near, hold: false, "in an empty room, ahead of");
                     else if (CouldWearFor(near.Spell)) _waitingForEmptyRoom = true;
                 }
@@ -425,16 +432,30 @@ public sealed class RoomSpellCounterWear
 
     // The game said a piece came off (`You have removed X.`). While a wear of ours
     // is out and the piece was in the slot it is going into, this is the piece the
-    // wear pushed out: the line comes just ahead of the wear line. A counter of
-    // ours named here is simply no longer on.
+    // wear pushed out: the line comes just ahead of the wear line.
+    //
+    // A counter of ours named here was taken off by other hands: the user's, or
+    // another swap (an item readied for one use and put back). The slot is theirs
+    // again, and the counter is left off until the character stands somewhere
+    // else, so the two don't trade the slot back and forth in one room. Our own
+    // restore lets go of the item before its `rem` goes out, so it never lands here.
     public void NoteRemoved(string itemName)
     {
         string name = itemName?.Trim() ?? string.Empty;
         IEnumerable<Wear> waiting = _pending is { } pending ? _late.Values.Append(pending) : _late.Values;
         foreach (Wear wear in waiting)
             if (wear.InSlotBefore.Contains(name, StringComparer.OrdinalIgnoreCase)) wear.Evicted = name;
-        foreach ((int id, Owned owned) in _owned)
-            if (string.Equals(owned.Name, name, StringComparison.OrdinalIgnoreCase)) _confirmedOn.Remove(id);
+        foreach ((int id, Owned owned) in _owned.ToList())
+        {
+            if (!string.Equals(owned.Name, name, StringComparison.OrdinalIgnoreCase)
+                || _pending?.Id == id || _late.ContainsKey(id)) continue;
+            _confirmedOn.Remove(id);
+            _owned.Remove(id);
+            _takenOffHere = true;
+            _equipment.DropSlotOverride(owned.Name, Owner);
+            _log?.Info(LogCategory,
+                $"{Owner}: '{owned.Name}' was taken off — its slot goes back to the gear sets, and it is left off until the next room");
+        }
 
         // A place is free again: what had no room, or a piece stuck in its way, may go on.
         List<int> freed = _shelved
@@ -452,6 +473,7 @@ public sealed class RoomSpellCounterWear
         _confirmedOn.Clear();
         _late.Clear();
         _gaveUp.Clear();
+        _takenOffHere = false;
         _lastArrived = null;
         _refused.Clear();
         _shelved.Clear();
