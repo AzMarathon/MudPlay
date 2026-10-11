@@ -28,19 +28,23 @@ public static class PaidCrossingDescriber
             + $"({CurrencyFormat.Full(passage.FareCopper)} per person)";
     }
 
-    // The crossing with "you can't pay" and the purse; for a toll our own purse
-    // covers and a follower's doesn't, with "the party can't all pay" and who is
-    // short. Null when the filter says nothing of purses.
+    // The crossing with "you can't pay" and the purse; for a toll or fare our own
+    // purse covers and a follower's doesn't, with "the party can't all pay" and
+    // who is short. Null when the filter says nothing of purses.
     public static string? DescribeUnpaid(
         RoomKey from, Direction dir, in RoomExit exit, IRoomFilter? filter, Func<RoomKey, string?> roomName)
     {
         if (filter?.DescribePurseFor(in exit) is not { } purse) return null;
-        bool partys = IsToll(in exit) && !filter.IsOwnPurseShort(in exit)
-            && filter.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.Toll);
-        return $"{Describe(from, dir, in exit, roomName)} {(partys ? "the party can't all pay" : "you can't pay")}: {purse}";
+        bool partys = !filter.IsOwnPurseShort(in exit)
+            && (filter.DescribeExitBlock(in exit) & (ExitBlockReason.Toll | ExitBlockReason.Fare)) != 0;
+        return $"{Describe(from, dir, in exit, roomName)} {WhoCantPay(partys)}: {purse}";
     }
 
-    private static bool IsToll(in RoomExit exit) => exit.Hint == RoomExitHint.Toll && exit.TollGold > 0;
+    public static string WhoCantPay(bool partys) => partys ? "the party can't all pay" : "you can't pay";
+
+    // An exit that charges each crosser: a toll, or an NPC's paid transport.
+    public static bool Charges(in RoomExit exit) =>
+        (exit.Hint == RoomExitHint.Toll && exit.TollGold > 0) || exit.FareCopper > 0;
 
     // How the purse stands against a fare no exit carries (a sailing's): asked as
     // the fare of an exit to the same place, which is all a filter judges by.
@@ -60,10 +64,8 @@ public static class PaidCrossingDescriber
     private static RoomExit AsFare(RoomKey arrival, long fareCopper) =>
         new(arrival, RoomExitHint.Teleport, RawHint: null, FareCopper: fareCopper);
 
-    // The first hop of a path the filter turns away for coin: a toll the crosser
-    // or the party in tow can't get through (PartyTollGate), or a fare the
-    // crosser's own purse doesn't cover. A fare only a party member can't pay is
-    // not it: fares keep the party rules they had.
+    // The first hop of a path the filter turns away for coin: a toll or fare the
+    // crosser or the party in tow can't get through (PartyTollGate).
     public static (RoomKey From, Direction Dir, RoomExit Exit)? FirstUnpaidOn(
         RoomGraphManager graph, RoomKey source, IReadOnlyList<Direction> path, IRoomFilter filter)
     {
@@ -74,9 +76,7 @@ public static class PaidCrossingDescriber
         foreach (Direction dir in path)
         {
             if (graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(dir, out RoomExit exit)) return null;
-            ExitBlockReason block = filter.DescribeExitBlock(in exit);
-            if (block.HasFlag(ExitBlockReason.Toll)
-                || (block.HasFlag(ExitBlockReason.Fare) && filter.IsOwnPurseShort(in exit)))
+            if ((filter.DescribeExitBlock(in exit) & (ExitBlockReason.Toll | ExitBlockReason.Fare)) != 0)
                 return (at, dir, exit);
             at = exit.Target;
         }

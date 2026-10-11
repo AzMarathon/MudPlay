@@ -1893,7 +1893,7 @@ public sealed class LoopRunner : IRecoverableEngine
         if (_tollStepCheck is not { } check || _loop is not { } loop) return false;
         if (_tracker.State.CurrentRoom is not { } room
             || !room.Exits.TryGetValue(step.Direction, out RoomExit exit)
-            || exit.Hint != RoomExitHint.Toll || exit.TollGold <= 0)
+            || !PaidCrossingDescriber.Charges(in exit))
             return false;
         switch (check(room.Key, step.Direction, exit))
         {
@@ -1957,8 +1957,8 @@ public sealed class LoopRunner : IRecoverableEngine
         {
             if (_expandedSteps[(_index + n) % _expandedSteps.Count] is not MoveLoopStep move) continue;
             if (_graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)) return false;
-            if (exit.Hint == RoomExitHint.Toll && exit.TollGold > 0
-                && _filter.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.Toll))
+            if (PaidCrossingDescriber.Charges(in exit)
+                && (_filter.DescribeExitBlock(in exit) & (ExitBlockReason.Toll | ExitBlockReason.Fare)) != 0)
                 return true;
             at = exit.Target;
         }

@@ -1446,14 +1446,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // sole crossing.
             int? landHops = path is { Count: > 0 } ? path.Count : (int?)null;
             boatPlan = ChooseBoatRoute(source.Key, destination, landHops);
-            // A sailing whose fare our own purse can't pay is not set out for, sole
+            // A sailing whose fare our own purse can't pay, or that the party in tow
+            // can't all be got aboard (PartyTollGate), is not set out for, sole
             // crossing or not: the captain leaves whoever can't pay on the dock, so
             // the walk would only stand there. Kept to name it if nothing else gets
-            // there. One gated on level, or on a follower's purse, still sails with
-            // its warning.
+            // there. One gated on level still sails with its warning.
             BoatRoutePlan? unpaidBoat = null;
-            if (boatPlan is { } gatedBoat && gatedBoat.Block.HasFlag(ExitBlockReason.Fare)
-                && PaidCrossingDescriber.OwnPurseShortOfFare(Filter, gatedBoat.Passage.ArrivalRoom, gatedBoat.Passage.FareCopper))
+            if (boatPlan is { } gatedBoat && gatedBoat.Block.HasFlag(ExitBlockReason.Fare))
             {
                 unpaidBoat = gatedBoat;
                 boatPlan = null;
@@ -1505,8 +1504,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 if (unpaidBoat is { } sail)
                 {
                     BoatPassage passage = sail.Passage;
+                    bool partys = !PaidCrossingDescriber.OwnPurseShortOfFare(Filter, passage.ArrivalRoom, passage.FareCopper);
                     string cantSail = "all routes blocked by "
-                        + PaidCrossingDescriber.DescribeBoat(in passage, RoomNameOf) + " you can't pay"
+                        + PaidCrossingDescriber.DescribeBoat(in passage, RoomNameOf) + " " + PaidCrossingDescriber.WhoCantPay(partys)
                         + (PaidCrossingDescriber.PurseForFare(Filter, passage.ArrivalRoom, passage.FareCopper) is { } purse
                             ? $": {purse}" : string.Empty);
                     FailUnpaid(destination, cantSail);
@@ -2424,14 +2424,36 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _tollStepCheck = check;
     }
 
+    // The same for the verb that boards a sailing (PartyTollGate.BeforeSailing).
+    private Func<BoatPassage, PartyTollGate.StepVerdict>? _sailingCheck;
+    public void SetSailingCheck(Func<BoatPassage, PartyTollGate.StepVerdict> check)
+    {
+        ArgumentNullException.ThrowIfNull(check);
+        _sailingCheck = check;
+    }
+
     private bool TurnedAsideAtToll(WalkStep step)
     {
-        if (_tollStepCheck is not { } check || step is not MoveStep move) return false;
-        if (_tracker.State.CurrentRoom is not { } room
-            || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)
-            || exit.Hint != RoomExitHint.Toll || exit.TollGold <= 0)
-            return false;
-        switch (check(room.Key, move.Direction, exit))
+        PartyTollGate.StepVerdict verdict;
+        string toll;
+        switch (step)
+        {
+            case MoveStep move when _tollStepCheck is { } check
+                && _tracker.State.CurrentRoom is { } room
+                && room.Exits.TryGetValue(move.Direction, out RoomExit exit)
+                && PaidCrossingDescriber.Charges(in exit):
+                verdict = check(room.Key, move.Direction, exit);
+                toll = PaidCrossingDescriber.Describe(room.Key, move.Direction, in exit, RoomNameOf);
+                break;
+            case BoatStep boat when _sailingCheck is { } check && boat.Passage.FareCopper > 0:
+                BoatPassage passage = boat.Passage;
+                verdict = check(passage);
+                toll = PaidCrossingDescriber.DescribeBoat(in passage, RoomNameOf);
+                break;
+            default:
+                return false;
+        }
+        switch (verdict)
         {
             case PartyTollGate.StepVerdict.Go:
                 return false;
@@ -2439,20 +2461,24 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 return true;
         }
         if (_destination is not { } dest) return false;
-        string toll = PaidCrossingDescriber.Describe(room.Key, move.Direction, in exit, RoomNameOf);
         // Counted against the walk's re-plans: a plan that came back through the
-        // same toll would otherwise turn here for ever.
-        if (_replanCount >= MaxReplansPerWalk)
+        // same crossing would otherwise turn here for ever. The turns have a count
+        // of their own as well, because the re-plan sends its first step before it
+        // hands the re-plan count back, and that step can be this crossing again.
+        if (_replanCount >= MaxReplansPerWalk || _crossingTurns >= MaxReplansPerWalk)
         {
             FailUnpaid(dest, $"stopped at {toll}: the party can't all pay it");
             Reset();
             return true;
         }
         _replanCount++;
+        _crossingTurns++;
         _log?.Info("Walker", $"step {_index + 1}: {toll} isn't taken with the party; re-planning without it");
         ReplanInPlace(dest);
         return true;
     }
+
+    private int _crossingTurns;
 
     // The party's purses, asked for as this walk was planned, have been read
     // (PartyWealthTracker.RoundSettled). If what is left of the route goes through a
@@ -2483,11 +2509,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
         {
             if (path[i] is CommandStep) continue;
             // A sailing or a jump lands somewhere the exits don't say: nothing past it is read.
+            if (path[i] is BoatStep boat)
+                return boat.Passage.FareCopper > 0
+                    && filter.DescribeBoatBlock(boat.Passage).HasFlag(ExitBlockReason.Fare);
             if (path[i] is not MoveStep move
                 || _graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit))
                 return false;
-            if (exit.Hint == RoomExitHint.Toll && exit.TollGold > 0
-                && filter.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.Toll))
+            if (PaidCrossingDescriber.Charges(in exit)
+                && (filter.DescribeExitBlock(in exit) & (ExitBlockReason.Toll | ExitBlockReason.Fare)) != 0)
                 return true;
             at = exit.Target;
         }
@@ -3166,11 +3195,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _sailingPlace = passage.Place;
         _sailingEta = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(voyageSeconds);
 
-        // A gated sole-crossing sail still boards — the captain refuses only the
-        // under-level / too-poor members at the dock and leaves them behind. Warn
-        // so the user knows a member may not make the crossing, rather than the
-        // walk silently splitting the party a head short. (One whose fare our own
-        // purse can't pay never gets here: WalkToImmediate fails the walk naming it.)
+        // A level-gated sole-crossing sail still boards — the captain refuses only
+        // the under-level members at the dock and leaves them behind. Warn so the
+        // user knows a member may not make the crossing, rather than the walk
+        // silently splitting the party a head short. (One whose fare we or the
+        // party can't pay never gets here: WalkToImmediate fails the walk naming it.)
         ExitBlockReason gate = Filter?.DescribeBoatBlock(passage) ?? ExitBlockReason.None;
         if (gate != ExitBlockReason.None)
             _log?.Warn("Walker",
@@ -4566,6 +4595,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _activeArmAcquisition = true;
         _retryCount = 0;
         _replanCount = 0;
+        // Kept through a re-plan in place, whose first step can be the very
+        // crossing it was made to avoid (TurnedAsideAtToll).
+        if (!_replanningInPlace) _crossingTurns = 0;
         _locateAsk = null;
         // Drop any AbandonedCombat hold this walk was carrying so a stopped /
         // completed walk never strands the gate asserted (the auto-release only

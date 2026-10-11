@@ -688,13 +688,16 @@ public sealed class TollPurseDoubtTests : IDisposable
             filter.DescribePurseFor(TollExit(5)));
         filter.ReservedCopper = 0;
 
-        // Leading a party: a fare is described on the poorest known purse, a toll
-        // on our own (who is short at a toll is the party-toll check's to say).
+        // Leading a party: a fare and a toll are both described on our own purse
+        // (who is short among the party is the party's check to say), and the
+        // poorest known purse is the bug report's line.
         filter.PartyWealthProvider = () => 120;
-        Assert.Equal(
-            "the party's poorest known purse holds 1 gold 2 silver, 3 gold 8 silver short",
-            filter.DescribePurseFor(FareExit(500)));
+        Assert.Equal("you carry 3 gold, 2 gold short", filter.DescribePurseFor(FareExit(500)));
         Assert.Equal("you carry 3 gold, 2 gold short", filter.DescribePurseFor(TollExit(5)));
+        Assert.Equal("the party's poorest known purse holds 1 gold 2 silver", filter.DescribePurse());
+        filter.PartyTollClosedReason = _ => "a member holds 1 gold 2 silver, 8 silver short";
+        Assert.Equal("a member holds 1 gold 2 silver, 8 silver short", filter.DescribePurseFor(FareExit(200)));
+        filter.PartyTollClosedReason = null;
         filter.PartyWealthProvider = null;
 
         filter.NotePurseLostAtDeath();

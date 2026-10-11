@@ -7458,10 +7458,10 @@ public sealed class AppServices
         // Party-wealth probe + tracker. Unlike level, wealth isn't kept warm —
         // it drifts with loot / spend — so @wealth is asked only when a walk's
         // route crosses a paid exit (Probe, from MovementFilter.WarmForRoute) and
-        // at a toll itself (PartyTollGate, further down). The tracker records each
-        // reply and exposes the party's poorest known wallet, which
-        // MovementFilter reads to keep a following party off a fare a member can't
-        // pay; a toll is PartyTollGate's to judge. The probe forwards replies
+        // at a toll, fare or sailing itself (PartyTollGate, further down), which is
+        // what judges the party there. The tracker records each reply and exposes
+        // the party's poorest known wallet, which tells MovementFilter's warm-ups
+        // a party is led and goes in the bug report. The probe forwards replies
         // straight to the tracker (not the players table). The recordWealth closure
         // reads the PartyWealth property lazily, so the construction order is fine.
         PartyWealthProbe = new Game.Remote.PartyWealthProbe(
@@ -8927,11 +8927,13 @@ public sealed class AppServices
             if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;
         };
 
-        // A party at a toll exit (user, 2026-10-10): every follower's purse is
-        // asked before the leader's engine steps through, whoever is short or
-        // silent is handed the coin when we can spare it, and otherwise the exit
+        // A party at a toll exit, an NPC's paid transport or a sailing (user,
+        // 2026-10-10): every follower's purse is asked before the leader's engine
+        // goes through, whoever is short or silent is handed the coin when the
+        // Cash setting allows it and we can spare it, and otherwise the crossing
         // is closed to the party, so the route goes round or the walk ends saying
-        // why. What we spare leaves our own toll and a trip's reserved fees alone.
+        // why. What we spare leaves our own toll or fare and a trip's reserved
+        // fees alone.
         PartyToll = new Game.Map.PartyTollGate(
             PartyWealth,
             ownPurse: () => Inventory.IsLoaded ? Inventory.Snapshot.Currency.TotalCopperValue : (long?)null,
@@ -8948,6 +8950,18 @@ public sealed class AppServices
             log: Log)
         {
             MasterSwitchOff = MasterSwitchOff("Party polls"),
+            // The character's own Cash section, as every engine reads its settings.
+            FundsShortMembers = () =>
+                ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").FundPartyTolls,
+            // The deposit floor, in copper: the same conversion the deposit and the
+            // train funding use, so all three agree on what "keep" means.
+            KeepOnHandCopper = () =>
+            {
+                Models.Profile.CashSettings cash =
+                    ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+                return cash.KeepOnHandWealth
+                       * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
+            },
             // Read when asked: the comeback manager is built further down.
             WentBackFor = (given, from, to) => PartyComeback.WentBackFor(given, from, to),
             KnownLeftBehind = () => PartyComeback.KnownLeftBehind(),
@@ -8956,9 +8970,11 @@ public sealed class AppServices
         Movement.PartyTollClosedReason = exit => PartyToll.DescribeClosed(in exit);
         Walker.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
         LoopRunner.SetTollStepCheck((from, dir, exit) => PartyToll.BeforeTollStep(from, dir, in exit));
+        Walker.SetSailingCheck(passage => PartyToll.BeforeSailing(in passage));
         Inventory.CoinsGivenAway += (recipient, copper) => PartyToll.OnCoinsGivenAway(recipient, copper);
         Inventory.GiveRefused += recipient => PartyToll.OnGiveRefused(recipient);
         Inventory.CoinGiveMisaimed += () => PartyToll.OnCoinGiveMisaimed();
+        Inventory.CoinGiveLackedCoins += () => PartyToll.OnCoinGiveLackedCoins();
         // A member paid for at a toll has spent it once the room beyond is confirmed.
         RoomTracker.StateChanged += t =>
         {
@@ -9179,7 +9195,11 @@ public sealed class AppServices
             // its reply window; the router hears it back on the UI thread.
             requestBankBalances: () => _ = BankBalance.QueryAsync().ContinueWith(
                 _ => Avalonia.Threading.Dispatcher.UIThread.Post(() => TrainFunding.NoteBankRefreshed()),
-                TaskScheduler.Default));
+                TaskScheduler.Default),
+            // A bank stop the trip makes anyway also draws what a party in tow is
+            // short of the trip's tolls and fares (Cash: fund party members' tolls).
+            partyTollFunding: tolls => PartyToll.FundingNeededFor(tolls),
+            readPartyPurses: then => PartyToll.AfterReadingPurses(then));
         // The full parse that answers that `i`: an incremental pickup / drop patch is
         // exactly the drifting figure the refresh exists to replace. Harmless at any
         // other time, since the router only listens while it is holding for one.

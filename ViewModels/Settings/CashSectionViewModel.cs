@@ -40,6 +40,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         "Collect", "Ignore", "Discard",
         "Auto-deposit", "Stashing", "Bank", "Keep on hand", "Wealth threshold",
         "Detour", "No combat", "Sell detour",
+        "Party", "Toll", "Ride", "Fare", "Fund party members",
         "Coin count", "Coins exceed",
         "Encumbrance", "Weight", "Light", "Medium", "Heavy",
         "Auto-get", "Get item", "Collection rules",
@@ -88,6 +89,10 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
 
     // Stash → bank transfers as party leader: the members carry a share too.
     [ObservableProperty] private bool _stashTransferPartyShare;
+
+    // As party leader: hand a member what they lack for a toll or a paid ride. The
+    // default is CashSettings' own.
+    [ObservableProperty] private bool _fundPartyTolls = new CashSettings().FundPartyTolls;
 
     // No combat until an auto-sell detour / auto-deposit trip is back on the loop.
     [ObservableProperty] private bool _noCombatOnSellDetour;
@@ -183,6 +188,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
             StashCoinCutoff = StashCoinCutoff,
             StashAsFollower = StashAsFollower,
             StashTransferPartyShare = StashTransferPartyShare,
+            FundPartyTolls = FundPartyTolls,
             NoCombatOnSellDetour = NoCombatOnSellDetour,
             NoCombatOnDepositTrip = NoCombatOnDepositTrip,
             SellOnBankRunWithinSteps = Math.Max(0, SellOnBankRunWithinSteps),
@@ -260,6 +266,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         StashCoinCutoff = dto.StashCoinCutoff;
         StashAsFollower = dto.StashAsFollower;
         StashTransferPartyShare = dto.StashTransferPartyShare;
+        FundPartyTolls = dto.FundPartyTolls;
         NoCombatOnSellDetour = dto.NoCombatOnSellDetour;
         NoCombatOnDepositTrip = dto.NoCombatOnDepositTrip;
         SellOnBankRunWithinSteps = dto.SellOnBankRunWithinSteps;
@@ -325,6 +332,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     partial void OnStashCoinCutoffChanged(StashCoinCutoff value)      => MarkDirty();
     partial void OnStashAsFollowerChanged(bool value)                => MarkDirty();
     partial void OnStashTransferPartyShareChanged(bool value)        => MarkDirty();
+    partial void OnFundPartyTollsChanged(bool value)                 => MarkDirty();
     partial void OnNoCombatOnSellDetourChanged(bool value)           => MarkDirty();
     partial void OnNoCombatOnDepositTripChanged(bool value)          => MarkDirty();
     // ----- Encumbrance-gate cascade ---------------------------------

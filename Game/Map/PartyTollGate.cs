@@ -7,27 +7,33 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
 
-// A party at a toll exit. The game charges every crosser and leaves behind
-// whoever can't pay, so a leader's engine doesn't step through one until it knows
+// A party at a crossing that charges each crosser: a toll exit, an NPC's paid
+// transport, a sea captain's sailing. The game charges every member and leaves
+// behind whoever can't pay, so a leader's engine doesn't take one until it knows
 // the whole party gets through (user, 2026-10-10: "either all party members can
 // make it, or we go around if possible, if not possible abandon the walk. we read
 // all of their purses when we think we're going through it to verify, so if they
 // dont respond, assume they cant, and if we can pay for it, for them, give them
 // the money they need and continue through it").
 //
-// At the step through a toll exit (BeforeTollStep):
+// At the step through one (BeforeTollStep, BeforeSailing):
 //   - every follower's purse is asked for (@wealth) unless an answer no older
 //     than the freshness window is in hand, and the step is held meanwhile;
 //   - all can pay: the step goes;
-//   - someone is short or gave no answer, and what we can spare covers them: each
-//     is handed what they lack (a silent member the whole toll), the step held
-//     until the game confirms every hand-over, then it goes;
-//   - otherwise the exit is closed to the party (Closes) and the engine plans
-//     again: round it where a way exists, and to a stop naming the toll and who
-//     can't pay where none does.
+//   - someone is short or gave no answer, funding is on (Settings → Cash + Items,
+//     "Fund party members' tolls / rides if short") and what we can spare covers
+//     them: each is handed what they lack (a silent member the whole price), the
+//     step held until the game confirms every hand-over, then it goes;
+//   - otherwise the crossing is closed to the party (Closes) and the engine plans
+//     again: round it where a way exists, and to a stop naming the crossing and
+//     who can't pay where none does.
 //
-// Tolls only. A fare (an NPC's transport, a boat) is left to
-// PartyWealthTracker.MinWealth as before.
+// What we can spare is the purse less what we keep (Kept): our own toll or fare
+// with what a trip has set aside for its fees, or the Cash tab's keep-on-hand
+// amount when that is more. A hand-over is exact change when the coins carried
+// make it, and otherwise the smallest amount above it they make, as long as that
+// too can be spared (user, 2026-10-10: overpay "if it doesnt make the leader
+// unable to cross").
 //
 // Everything here runs on the UI thread except Closes and DescribeClosed, which a
 // route search can call from a planning thread: they read the purse readings
@@ -36,13 +42,13 @@ public sealed class PartyTollGate
 {
     private const string LogCategory = "PartyToll";
 
-    // What an engine does with a step through a toll exit. Hold: the PartyToll
+    // What an engine does with a step through a paid crossing. Hold: the PartyToll
     // movement gate is up, and the step is asked about again when it clears.
     public enum StepVerdict { Go, Hold, Closed }
 
     internal enum Outcome { Clear, Unverified, Fund, Closed }
 
-    // One follower against one toll. Unable: why they can't be paid for here,
+    // One follower against one crossing. Unable: why they can't be paid for here,
     // null when nothing says so.
     internal readonly record struct Member(
         string Name, PartyWealthTracker.PurseKnowledge Knowledge, long Copper, string? Unable = null);
@@ -52,18 +58,31 @@ public sealed class PartyTollGate
     internal readonly record struct Judgement(
         Outcome Outcome, IReadOnlyList<(string Name, long Need)> Needs, string Summary, bool MemberUnable = false);
 
-    // A toll closed to the party, kept for the trip it was closed on: who the
+    // What one short member is handed: the coins, what they are worth, and what
+    // the member lacked.
+    internal readonly record struct HandOver(
+        string Name, long Need, IReadOnlyList<(string Currency, long Count)> Coins, long Copper)
+    {
+        public long Over => Copper - Need;
+    }
+
+    // A crossing closed to the party, kept for the trip it was closed on: who the
     // party was, what each short member lacked, and the words for it.
     private sealed record Closure(
         HashSet<string> Followers, IReadOnlyList<(string Name, long Need)> Needs, bool MemberUnable, string Summary);
 
-    // A toll exit as a route search hands it over: where it leads and its price.
-    private readonly record struct TollKey(RoomKey Target, int TollGold);
-
-    private sealed class Funding(TollKey toll, string crossing, IDisposable? timer)
+    // A paid crossing as a route search hands it over: where it leads, its price
+    // for each crosser, and whether that is a fare (an NPC's transport, a sailing)
+    // or an exit's toll.
+    private readonly record struct Crossing(RoomKey Target, long Copper, bool Fare)
     {
-        public TollKey Toll { get; } = toll;
-        public string Crossing { get; } = crossing;
+        public string Word => Fare ? "fare" : "toll";
+    }
+
+    private sealed class Funding(Crossing crossing, string described, IDisposable? timer)
+    {
+        public Crossing Crossing { get; } = crossing;
+        public string Described { get; } = described;
         public IDisposable? Timer { get; } = timer;
         // Per member: copper asked for, copper the game has confirmed, and the give
         // commands whose lines are still to come.
@@ -71,6 +90,9 @@ public sealed class PartyTollGate
             new(StringComparer.OrdinalIgnoreCase);
         // Per member: what each give sent and not yet answered was worth, in copper.
         public Dictionary<string, List<long>> Unanswered { get; } = new(StringComparer.OrdinalIgnoreCase);
+        // The game answered one of several gives with its line for a target it
+        // can't find for us, which names nobody.
+        public bool Misaimed { get; set; }
     }
 
     private readonly PartyWealthTracker _wealth;
@@ -86,34 +108,34 @@ public sealed class PartyTollGate
     private readonly Func<DateTime> _clock;
     private readonly LogService? _log;
 
-    // Guards the two mark tables, which a route search reads.
+    // Guards the mark tables, which a route search reads.
     private readonly object _marksLock = new();
-    // What each member was last handed at each toll, in copper, and whether a toll
-    // has been crossed since: an answer of theirs after that is their own word, not
-    // the echo of what we handed them.
-    private readonly Dictionary<(string Name, TollKey Toll), (long Copper, bool CrossedSince)> _funded =
+    // What each member was last handed at each crossing, in copper, and whether it
+    // has been crossed since: an answer of theirs after that is their own word,
+    // not the echo of what we handed them.
+    private readonly Dictionary<(string Name, Crossing At), (long Copper, bool CrossedSince)> _funded =
         new(FundedComparer.Instance);
-    // Members who can't be paid for at a toll for now, and why: a hand-over the
-    // game refused or never confirmed, or one that didn't get them through.
-    private readonly Dictionary<(string Name, TollKey Toll), (DateTime At, string Why)> _unable =
+    // Members who can't be paid for at a crossing for now, and why: a hand-over
+    // the game refused or never confirmed, or one that didn't get them through.
+    private readonly Dictionary<(string Name, Crossing At), (DateTime At, string Why)> _unable =
         new(FundedComparer.Instance);
 
-    // Tolls closed to the party on the trip under way. A closure outlives the
+    // Crossings closed to the party on the trip under way. A closure outlives the
     // answers it was made on: asked again every 30 s, a toll with no way through
     // would be walked up to and turned from over and over.
-    private readonly Dictionary<TollKey, Closure> _closed = new();
+    private readonly Dictionary<Crossing, Closure> _closed = new();
     // Members known not to be with us, as last asked on the UI thread (a route
     // search reads this copy, never the comeback manager's own lists). They are
-    // left out of a toll's count: they aren't following through it. Swapped whole.
+    // left out of a crossing's count: they aren't following through it. Swapped whole.
     private volatile IReadOnlyCollection<string> _leftBehind = [];
 
     // Hand-overs whose window passed with no line from the game, by member: the
-    // toll they were for and when the window passed. A line that comes late still
-    // means the coin went, so it is still credited.
-    private readonly Dictionary<string, (TollKey Toll, DateTime At, List<long> Unanswered)> _lateGives =
+    // crossing they were for and when the window passed. A line that comes late
+    // still means the coin went, so it is still credited.
+    private readonly Dictionary<string, (Crossing For, DateTime At, List<long> Unanswered)> _lateGives =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private TollKey? _asking;
+    private Crossing? _asking;
     private Funding? _funding;
 
     // How long after its window a hand-over's line is still taken as its own.
@@ -125,7 +147,7 @@ public sealed class PartyTollGate
     // drawn, and the ruling is that everyone gets through or nobody does.
     public Func<IReadOnlyCollection<string>>? KnownLeftBehind { get; set; }
 
-    // Asked on the UI thread, at each toll step and when a round of answers is in.
+    // Asked on the UI thread, at each paid step and when a round of answers is in.
     public void RefreshLeftBehind() => _leftBehind = KnownLeftBehind?.Invoke() ?? [];
 
     // How long a hand-over may go unconfirmed before the member counts as unable.
@@ -135,13 +157,30 @@ public sealed class PartyTollGate
     // The master switch (true = off): off, nothing is asked, given or held.
     public Func<bool>? MasterSwitchOff { get; set; }
 
+    // Settings → Cash + Items, "Fund party members' tolls / rides if short"
+    // (CashSettings.FundPartyTolls, off until ticked). Off or unset: no coin is
+    // handed over, so a short or silent member closes the crossing.
+    public Func<bool>? FundsShortMembers { get; set; }
+
+    public bool FundingOn => FundsShortMembers?.Invoke() == true;
+
+    // Settings → Cash + Items, "Minimum cash to keep on hand", in copper. What we
+    // may not hand over is the larger of this and what we need to cross ourselves
+    // (user, 2026-10-10: "first protect the leaders crossing requirement, if their
+    // keep on hand is less than that, protect the crossing amount, if their keep
+    // on hand is more than that, protect the keep on hand amount").
+    public Func<long>? KeepOnHandCopper { get; set; }
+
+    internal const string FundingSettingName = "Fund party members' tolls / rides if short";
+
     // Whether we have already gone back for this member from this exit on the run
-    // under way (PartyComebackManager.WentBackFor): the toll turned them away once.
+    // under way (PartyComebackManager.WentBackFor): the crossing turned them away once.
     public Func<string, RoomKey, RoomKey, bool>? WentBackFor { get; set; }
 
-    // For the bug report: the latest decisions made at tolls, oldest first, each
-    // with its time, and the purses the last one was made on. A hand-over and the
-    // crossing it paid for are two decisions, so one alone would hide the first.
+    // For the bug report: the latest decisions made at paid crossings, oldest
+    // first, each with its time, and the purses the last one was made on. A
+    // hand-over and the crossing it paid for are two decisions, so one alone would
+    // hide the first.
     private const int DecisionsKept = 8;
     private readonly List<string> _decisions = new();
     private readonly object _decisionsLock = new();
@@ -191,10 +230,15 @@ public sealed class PartyTollGate
 
     // ----- the judgement -----------------------------------------------------
 
-    // cost: the toll in copper. spare: our own purse less what a trip has set
-    // aside and less our own toll; null while our purse isn't known.
-    internal static Judgement Judge(long cost, long? spare, IReadOnlyList<Member> members)
+    // cost: the toll or fare in copper. spare: our own purse less what we keep
+    // (Kept); null while our purse isn't known. fund: whether a short member is
+    // handed coin at all. word: "toll" or "fare". keeping: what the spare was
+    // counted after, "your own toll" unless something else was said.
+    internal static Judgement Judge(
+        long cost, long? spare, IReadOnlyList<Member> members, bool fund = true, string word = "toll",
+        string? keeping = null)
     {
+        keeping ??= $"your own {word}";
         ArgumentNullException.ThrowIfNull(members);
         List<string> unasked = members
             .Where(m => m.Knowledge == PartyWealthTracker.PurseKnowledge.Unasked).Select(m => m.Name).ToList();
@@ -214,10 +258,13 @@ public sealed class PartyTollGate
                 : $"{m.Name} holds {CurrencyFormat.Full(m.Copper)}, {CurrencyFormat.Full(need)} short");
             if (m.Unable is { } why) unable.Add($"{m.Name} {why}");
         }
-        if (needs.Count == 0) return new Judgement(Outcome.Clear, needs, "every party member holds the toll");
+        if (needs.Count == 0) return new Judgement(Outcome.Clear, needs, $"every party member holds the {word}");
 
         string who = string.Join("; ", said);
         long total = needs.Sum(n => n.Need);
+        if (!fund)
+            return new Judgement(Outcome.Closed, needs,
+                $"{who}; \"{FundingSettingName}\" is off (Settings, Cash + Items), so no coin is handed over");
         if (unable.Count > 0)
             return new Judgement(Outcome.Closed, needs, $"{who}; {string.Join("; ", unable)}", MemberUnable: true);
         if (spare is not { } free)
@@ -226,7 +273,7 @@ public sealed class PartyTollGate
         if (free < total)
             return new Judgement(Outcome.Closed, needs,
                 $"{who}; covering that takes {CurrencyFormat.Full(total)} and you can spare "
-                + $"{CurrencyFormat.Full(Math.Max(0, free))} after your own toll");
+                + $"{CurrencyFormat.Full(Math.Max(0, free))} after {keeping}");
         return new Judgement(Outcome.Fund, needs, $"{who}; you can spare it");
     }
 
@@ -238,14 +285,22 @@ public sealed class PartyTollGate
         return followers.Count > 0;
     }
 
-    private static TollKey KeyOf(in RoomExit exit) => new(exit.Target, exit.TollGold);
-
-    private static bool IsToll(in RoomExit exit) => exit.Hint == RoomExitHint.Toll && exit.TollGold > 0;
-
-    private Judgement JudgeNow(in RoomExit exit, IReadOnlyList<string> followers)
+    // An exit that charges: its toll, or the fare an NPC's transport carries. Null
+    // for an exit that charges nothing.
+    private static Crossing? KeyOf(in RoomExit exit)
     {
-        long cost = (long)exit.TollGold * 100;
-        TollKey toll = KeyOf(in exit);
+        if (exit.Hint == RoomExitHint.Toll && exit.TollGold > 0)
+            return new Crossing(exit.Target, (long)exit.TollGold * 100, Fare: false);
+        return exit.FareCopper > 0 ? new Crossing(exit.Target, exit.FareCopper, Fare: true) : null;
+    }
+
+    // A sailing, keyed as a fare into its port: what MovementFilter asks Closes
+    // about, since a sailing is no exit.
+    private static Crossing? KeyOf(in BoatPassage passage) =>
+        passage.FareCopper > 0 ? new Crossing(passage.ArrivalRoom, passage.FareCopper, Fare: true) : null;
+
+    private Judgement JudgeNow(Crossing crossing, IReadOnlyList<string> followers)
+    {
         DateTime now = _clock();
         List<Member> members = new(followers.Count);
         IReadOnlyCollection<string> leftBehind = _leftBehind;
@@ -256,64 +311,85 @@ public sealed class PartyTollGate
             string? unable = null;
             lock (_marksLock)
             {
-                // Silent, but handed coin at this toll with no toll crossed since:
-                // they hold at least that, which is all there is to go on.
+                // Silent, but handed coin here with it not crossed since: they hold
+                // at least that, which is all there is to go on.
                 if (knowledge == PartyWealthTracker.PurseKnowledge.Silent
-                    && _funded.TryGetValue((name, toll), out (long Copper, bool CrossedSince) paid) && !paid.CrossedSince)
+                    && _funded.TryGetValue((name, crossing), out (long Copper, bool CrossedSince) paid) && !paid.CrossedSince)
                     (knowledge, copper) = (PartyWealthTracker.PurseKnowledge.Read, paid.Copper);
-                if (_unable.TryGetValue((name, toll), out (DateTime At, string Why) mark)
+                if (_unable.TryGetValue((name, crossing), out (DateTime At, string Why) mark)
                     && now - mark.At <= _wealth.FreshnessWindow)
                     unable = mark.Why;
             }
             members.Add(new Member(name, knowledge, copper, unable));
         }
-        return Judge(cost, Spare(cost), members);
+        // The purse and the Cash settings are read only when someone is short, which
+        // is when they decide anything: a route search asks this of every toll and
+        // fare in its frontier, from its own thread.
+        bool someoneShort = members.Any(m => m.Knowledge == PartyWealthTracker.PurseKnowledge.Silent
+            || (m.Knowledge == PartyWealthTracker.PurseKnowledge.Read && m.Copper < crossing.Copper));
+        return someoneShort
+            ? Judge(crossing.Copper, Spare(crossing.Copper), members, FundingOn, crossing.Word, Keeping(crossing))
+            : Judge(crossing.Copper, spare: null, members, word: crossing.Word);
     }
 
-    // What we can hand over at a toll of this price: the purse on record less what
-    // a trip has set aside and less our own toll. Null while the purse isn't known.
-    private long? Spare(long cost) =>
-        _ownPurse() is { } purse ? purse - Math.Max(0, _reservedCopper()) - cost : null;
+    // What we may not hand over at a crossing of this price: our own toll or fare
+    // with what a trip has set aside for its fees, or the keep-on-hand amount when
+    // that is more.
+    private long Kept(long cost) =>
+        Math.Max(cost + Math.Max(0, _reservedCopper()), Math.Max(0, KeepOnHandCopper?.Invoke() ?? 0));
+
+    // What we can hand over there: the purse on record less Kept. Null while the
+    // purse isn't known.
+    private long? Spare(long cost) => _ownPurse() is { } purse ? purse - Kept(cost) : null;
+
+    // The words for what Spare was counted after.
+    private string Keeping(Crossing crossing)
+    {
+        long keep = Math.Max(0, KeepOnHandCopper?.Invoke() ?? 0);
+        return keep > crossing.Copper + Math.Max(0, _reservedCopper())
+            ? $"the {CurrencyFormat.Full(keep)} you keep on hand"
+            : $"your own {crossing.Word}";
+    }
 
     // The judgement on what is known now, with the trip's closures kept and let go:
     // a closure stands while nothing fresh says otherwise, and falls when the party
     // is no longer the one it was made for, when what the short members lacked is
     // covered by their own fresh answers and what we can now spare, or when a
     // fresh judgement lets the party through.
-    // atTheStep: asked by the step through the toll, which records its own decision;
-    // a closure first made for a route search is recorded here, since nothing else
-    // will say why the route turned.
-    private Judgement JudgeForTrip(in RoomExit exit, IReadOnlyList<string> followers, bool atTheStep = false)
+    // atTheStep: asked by the step through the crossing, which records its own
+    // decision; a closure first made for a route search is recorded here, since
+    // nothing else will say why the route turned.
+    private Judgement JudgeForTrip(Crossing crossing, IReadOnlyList<string> followers, bool atTheStep = false)
     {
-        Judgement fresh = JudgeNow(in exit, followers);
-        TollKey toll = KeyOf(in exit);
-        long cost = (long)exit.TollGold * 100;
+        Judgement fresh = JudgeNow(crossing, followers);
+        long cost = crossing.Copper;
         if (fresh.Outcome == Outcome.Closed)
         {
             bool isNew;
             lock (_marksLock)
             {
-                isNew = !_closed.ContainsKey(toll);
-                _closed[toll] = new Closure(
+                isNew = !_closed.ContainsKey(crossing);
+                _closed[crossing] = new Closure(
                     new HashSet<string>(followers, StringComparer.OrdinalIgnoreCase),
                     fresh.Needs, fresh.MemberUnable, fresh.Summary);
             }
             // Said with the lock let go: the log is not ours to hold it across.
             if (isNew && !atTheStep)
-                Decide($"the toll into {toll.Target} ({toll.TollGold} gold): closed to the party for this trip. {fresh.Summary}");
+                Decide($"the {crossing.Word} into {crossing.Target} ({CurrencyFormat.Full(cost)}): "
+                    + $"closed to the party for this trip. {fresh.Summary}");
             return fresh;
         }
         Closure? closure;
         lock (_marksLock)
         {
-            if (fresh.Outcome != Outcome.Unverified || !_closed.TryGetValue(toll, out closure))
+            if (fresh.Outcome != Outcome.Unverified || !_closed.TryGetValue(crossing, out closure))
             {
-                _closed.Remove(toll);
+                _closed.Remove(crossing);
                 return fresh;
             }
             if (!closure.Followers.SetEquals(followers))
             {
-                _closed.Remove(toll);
+                _closed.Remove(crossing);
                 return fresh;
             }
         }
@@ -322,9 +398,10 @@ public sealed class PartyTollGate
         foreach ((string name, long need) in closure.Needs)
             if (_wealth.FreshPurse(name) is not (PartyWealthTracker.PurseKnowledge.Read, long held) || held < cost)
                 stillLacking += need;
-        if (stillLacking == 0 || (!closure.MemberUnable && Spare(cost) is { } spare && spare >= stillLacking))
+        if (stillLacking == 0
+            || (FundingOn && !closure.MemberUnable && Spare(cost) is { } spare && spare >= stillLacking))
         {
-            lock (_marksLock) _closed.Remove(toll);
+            lock (_marksLock) _closed.Remove(crossing);
             return fresh;
         }
         return new Judgement(Outcome.Closed, closure.Needs, closure.Summary, closure.MemberUnable);
@@ -332,168 +409,337 @@ public sealed class PartyTollGate
 
     // ----- route searches ------------------------------------------------------
 
-    // Whether the party can't be taken through this toll as things stand. False
-    // while a follower hasn't been asked: the check at the toll itself asks.
+    // Whether the party can't be taken through this toll or fare as things stand.
+    // False while a follower hasn't been asked: the check at the crossing itself asks.
     public bool Closes(in RoomExit exit)
     {
-        if (!IsToll(in exit) || !Applies(out IReadOnlyList<string> followers)) return false;
-        return JudgeForTrip(in exit, followers).Outcome == Outcome.Closed;
+        if (KeyOf(in exit) is not { } crossing || !Applies(out IReadOnlyList<string> followers)) return false;
+        return JudgeForTrip(crossing, followers).Outcome == Outcome.Closed;
     }
 
     // Who can't pay and by how much, for the line a walk with no other way gives.
-    // Null when the party doesn't close this toll.
+    // Null when the party doesn't close this crossing.
     public string? DescribeClosed(in RoomExit exit)
     {
-        if (!IsToll(in exit) || !Applies(out IReadOnlyList<string> followers)) return null;
-        Judgement judged = JudgeForTrip(in exit, followers);
+        if (KeyOf(in exit) is not { } crossing || !Applies(out IReadOnlyList<string> followers)) return null;
+        Judgement judged = JudgeForTrip(crossing, followers);
         return judged.Outcome == Outcome.Closed ? judged.Summary : null;
     }
 
-    // ----- the step through a toll ---------------------------------------------
+    // ----- a trip's bank stop --------------------------------------------------
 
+    // What handing the party through crossings that charge each member this much
+    // in all would take from our purse, on the purses as they are fresh now: a
+    // short member what they lack, a silent one all of it, one nobody has asked
+    // nothing. For a bank stop a trip is making anyway (TrainFundingRouter), which
+    // draws that on top of its own bill. Nothing when nobody is led, funding is
+    // off, or the master switch is.
+    public (long Copper, string Who) FundingNeededFor(long perMemberCopper)
+    {
+        if (perMemberCopper <= 0 || MasterSwitchOff?.Invoke() == true || !FundingOn
+            || !Applies(out IReadOnlyList<string> followers))
+            return (0, string.Empty);
+        long total = 0;
+        List<string> who = new();
+        IReadOnlyCollection<string> leftBehind = _leftBehind;
+        foreach (string name in followers)
+        {
+            if (leftBehind.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
+            (PartyWealthTracker.PurseKnowledge knowledge, long copper) = _wealth.FreshPurse(name);
+            long need = knowledge switch
+            {
+                PartyWealthTracker.PurseKnowledge.Read => Math.Max(0, perMemberCopper - copper),
+                PartyWealthTracker.PurseKnowledge.Silent => perMemberCopper,
+                _ => 0,
+            };
+            if (need <= 0) continue;
+            total += need;
+            who.Add(knowledge == PartyWealthTracker.PurseKnowledge.Silent
+                ? $"{name} gave no answer to @wealth, {CurrencyFormat.Full(need)}"
+                : $"{name} holds {CurrencyFormat.Full(copper)}, {CurrencyFormat.Full(need)} short");
+        }
+        return (total, string.Join("; ", who));
+    }
+
+    // Runs `then` once the followers' purses are as fresh as an ask makes them
+    // (one @wealth round, no longer than the probe's window): at once when nobody
+    // is led, funding is off, or the master switch is.
+    public void AfterReadingPurses(Action then)
+    {
+        ArgumentNullException.ThrowIfNull(then);
+        if (MasterSwitchOff?.Invoke() == true || !FundingOn || !Applies(out _))
+        {
+            then();
+            return;
+        }
+        RefreshLeftBehind();
+        _wealth.Verify(then);
+    }
+
+    // ----- the step through a paid crossing ------------------------------------
+
+    // A step through a toll exit, or an exit that is an NPC's paid transport.
     public StepVerdict BeforeTollStep(RoomKey from, Direction direction, in RoomExit exit)
     {
-        if (!IsToll(in exit) || MasterSwitchOff?.Invoke() == true) return StepVerdict.Go;
-        if (!Applies(out IReadOnlyList<string> followers)) return StepVerdict.Go;
+        if (KeyOf(in exit) is not { } crossing || !Checks(out IReadOnlyList<string> followers)) return StepVerdict.Go;
+        return BeforeCrossing(from, crossing, followers, PaidCrossingDescriber.Describe(from, direction, in exit, _roomName));
+    }
+
+    // The verb that boards a sailing, at its dock.
+    public StepVerdict BeforeSailing(in BoatPassage passage)
+    {
+        if (KeyOf(in passage) is not { } crossing || !Checks(out IReadOnlyList<string> followers)) return StepVerdict.Go;
+        return BeforeCrossing(passage.DockRoom, crossing, followers, PaidCrossingDescriber.DescribeBoat(in passage, _roomName));
+    }
+
+    private bool Checks(out IReadOnlyList<string> followers)
+    {
+        followers = [];
+        return MasterSwitchOff?.Invoke() != true && Applies(out followers);
+    }
+
+    private StepVerdict BeforeCrossing(RoomKey from, Crossing crossing, IReadOnlyList<string> followers, string described)
+    {
         // The gate is up for an ask or a hand-over: the step comes back when it clears.
         if (_asking is not null || _funding is not null) return StepVerdict.Hold;
         RefreshLeftBehind();
 
-        TollKey toll = KeyOf(in exit);
-        string crossing = PaidCrossingDescriber.Describe(from, direction, in exit, _roomName);
-        long cost = (long)exit.TollGold * 100;
-        NoteFundedAndTurnedAway(from, toll, cost, followers);
+        long cost = crossing.Copper;
+        NoteFundedAndTurnedAway(from, crossing, followers);
 
-        Judgement judged = JudgeForTrip(in exit, followers, atTheStep: true);
-        LastReadings = DescribeReadings(followers, cost);
+        Judgement judged = JudgeForTrip(crossing, followers, atTheStep: true);
+        LastReadings = DescribeReadings(followers, crossing);
         switch (judged.Outcome)
         {
             case Outcome.Clear:
-                Decide($"{crossing}: every party member with us can pay ({LastReadings}); going through");
+                Decide($"{described}: every party member with us can pay ({LastReadings}); going through");
                 NoteTollTaken();
                 return StepVerdict.Go;
 
             case Outcome.Closed:
-                Decide($"{crossing}: not taken with the party. {judged.Summary}");
+                Decide($"{described}: not taken with the party. {judged.Summary}");
                 return StepVerdict.Closed;
 
             case Outcome.Unverified:
-                _asking = toll;
+                _asking = crossing;
                 _log?.Info(LogCategory,
-                    $"{crossing}: asking {string.Join(", ", followers)} what they hold (@wealth) before stepping through.");
-                _assertGate($"asking the party's purses at {crossing}");
-                _wealth.Verify(() => OnVerified(crossing));
+                    $"{described}: asking {string.Join(", ", followers)} what they hold (@wealth) before going through "
+                    + $"(funding short members is {(FundingOn ? "on" : "off")}).");
+                _assertGate($"asking the party's purses at {described}");
+                _wealth.Verify(() => OnVerified(described));
                 return StepVerdict.Hold;
 
             default:
-                return BeginFunding(toll, crossing, judged);
+                return BeginFunding(crossing, described, judged);
         }
     }
 
-    private void OnVerified(string crossing)
+    private void OnVerified(string described)
     {
         if (_asking is null) return;
         _asking = null;
-        _log?.Info(LogCategory, $"{crossing}: the party's purses are read.");
+        _log?.Info(LogCategory, $"{described}: the party's purses are read.");
         _clearGate("the party's purses are read");
     }
 
-    // A member we handed coin at this toll, gone back for from it since, and short
-    // again: the hand-over didn't get them through, and they aren't paid twice.
-    // One who says, after a crossing, that they hold the toll themselves is no
-    // longer about what we handed them.
-    private void NoteFundedAndTurnedAway(RoomKey from, TollKey toll, long cost, IReadOnlyList<string> followers)
+    // A member we handed coin at this crossing, gone back for from it since, and
+    // short again: the hand-over didn't get them through, and they aren't paid
+    // twice. One who says, after a crossing, that they hold the price themselves
+    // is no longer about what we handed them.
+    private void NoteFundedAndTurnedAway(RoomKey from, Crossing crossing, IReadOnlyList<string> followers)
     {
         foreach (string name in followers)
         {
             (long Copper, bool CrossedSince) given;
             lock (_marksLock)
-                if (!_funded.TryGetValue((name, toll), out given)) continue;
+                if (!_funded.TryGetValue((name, crossing), out given)) continue;
             (PartyWealthTracker.PurseKnowledge knowledge, long copper) = _wealth.FreshPurse(name);
             if (knowledge == PartyWealthTracker.PurseKnowledge.Unasked) continue;
-            if (knowledge == PartyWealthTracker.PurseKnowledge.Read && copper >= cost)
+            if (knowledge == PartyWealthTracker.PurseKnowledge.Read && copper >= crossing.Copper)
             {
                 if (given.CrossedSince)
-                    lock (_marksLock) _funded.Remove((name, toll));
+                    lock (_marksLock) _funded.Remove((name, crossing));
                 continue;
             }
-            if (WentBackFor?.Invoke(name, from, toll.Target) != true) continue;
+            if (WentBackFor?.Invoke(name, from, crossing.Target) != true) continue;
             lock (_marksLock)
-                _unable[(name, toll)] = (_clock(),
-                    $"was handed {CurrencyFormat.Full(given.Copper)} at this toll already and was still turned away: not paid for twice");
+                _unable[(name, crossing)] = (_clock(),
+                    $"was handed {CurrencyFormat.Full(given.Copper)} at this {crossing.Word} already and was still turned away: not paid for twice");
         }
     }
 
-    private StepVerdict BeginFunding(TollKey toll, string crossing, Judgement judged)
+    private StepVerdict BeginFunding(Crossing crossing, string described, Judgement judged)
     {
-        long cost = (long)toll.TollGold * 100;
+        long cost = crossing.Copper;
         if (_holdings() is not { } holdings || _ownPurse() is not { } purse)
         {
             foreach ((string name, _) in judged.Needs)
-                MarkUnable(name, toll, "can't be handed coin: the inventory isn't read");
-            Decide($"{crossing}: not taken with the party. {judged.Summary}, but the inventory isn't read, so no coin can be counted out");
+                MarkUnable(name, crossing, "can't be handed coin: the inventory isn't read");
+            Decide($"{described}: not taken with the party. {judged.Summary}, but the inventory isn't read, so no coin can be counted out");
             return StepVerdict.Closed;
         }
 
-        // Each member's coins are counted out of what the ones before left, and
-        // out of what is still spare: never our own toll, never what a trip set aside.
-        long spare = purse - Math.Max(0, _reservedCopper()) - cost;
-        CurrencyHoldings left = holdings;
-        List<(string Name, IReadOnlyList<(string Currency, long Count)> Coins, long Copper)> plans = new();
-        List<string> uncovered = new();
-        foreach ((string name, long need) in judged.Needs)
+        // Never what we keep: our own toll or fare and a trip's fees, or the
+        // keep-on-hand amount. An overpay stays inside the same spare.
+        long spare = purse - Kept(cost);
+        if (PlanHandOvers(holdings, judged.Needs, spare, out IReadOnlyList<string> uncovered) is not { } plans)
         {
-            (IReadOnlyList<(string Currency, long Count)> coins, long copper) = CountOut(left, need, spare);
-            if (copper < need)
-            {
-                MarkUnable(name, toll,
-                    $"can't be handed coin: can't make {CurrencyFormat.Full(need)} from the coins carried");
-                uncovered.Add(name);
-                continue;
-            }
-            plans.Add((name, coins, copper));
-            spare -= copper;
-            left = Take(left, coins, copper);
-        }
-        if (uncovered.Count > 0)
-        {
-            Decide($"{crossing}: not taken with the party. {judged.Summary}, but the coins carried can't make what "
-                + $"{string.Join(", ", uncovered)} needs exactly");
+            foreach ((string name, long need) in judged.Needs.Where(n => uncovered.Contains(n.Name)))
+                MarkUnable(name, crossing,
+                    $"can't be handed coin: the coins carried don't make {CurrencyFormat.Full(need)} without going past what you can spare");
+            Decide($"{described}: not taken with the party. {judged.Summary}, but the coins carried don't make what "
+                + $"{string.Join(", ", uncovered)} needs without going past the {CurrencyFormat.Full(Math.Max(0, spare))} "
+                + $"you can spare after {Keeping(crossing)}");
             return StepVerdict.Closed;
         }
 
-        Funding funding = new(toll, crossing, _schedule(GiveConfirmWindow, OnGiveWindowElapsed));
+        Funding funding = new(crossing, described, _schedule(GiveConfirmWindow, OnGiveWindowElapsed));
         _funding = funding;
-        _assertGate($"handing coin to the party at {crossing}");
-        Decide($"{crossing}: {judged.Summary}. Handing over "
-            + string.Join(", ", plans.Select(p => $"{CurrencyFormat.Full(p.Copper)} to {p.Name}"))
+        _assertGate($"handing coin to the party at {described}");
+        Decide($"{described}: {judged.Summary}. Handing over "
+            + string.Join(", ", plans.Select(DescribeHandOver))
             + ", then going through");
         // Everyone is on the list before the first command goes: a confirmation
         // that came back at once would otherwise find the list empty and end it.
-        foreach ((string name, IReadOnlyList<(string Currency, long Count)> coins, long copper) in plans)
+        foreach (HandOver plan in plans)
         {
-            funding.Pending[name] = (copper, 0, coins.Count);
-            funding.Unanswered[name] = coins.Select(c => CurrencyHoldings.ToCopper(c.Currency, c.Count)).ToList();
+            funding.Pending[plan.Name] = (plan.Copper, 0, plan.Coins.Count);
+            funding.Unanswered[plan.Name] = plan.Coins.Select(c => CurrencyHoldings.ToCopper(c.Currency, c.Count)).ToList();
         }
         string runic = _runicName();
-        foreach ((string name, IReadOnlyList<(string Currency, long Count)> coins, _) in plans)
-            foreach ((string currency, long count) in coins)
-                _send(CoinGiveCommand.For(currency, count, name, runic));
+        foreach (HandOver plan in plans)
+            foreach ((string currency, long count) in plan.Coins)
+                _send(CoinGiveCommand.For(currency, count, plan.Name, runic));
         return StepVerdict.Hold;
     }
 
-    // How far over a member's shortfall a hand-over may go when the coins carried
-    // don't make it exactly. Nothing: the next coin up can be a platinum piece or a
-    // runic for a gap of a few gold, and the ruling is "give them the money they
-    // need". The one place to change if some overpaying is ever wanted.
-    internal const long OverpayAllowedCopper = 0;
+    private static string DescribeHandOver(HandOver plan) =>
+        $"{CurrencyFormat.Full(plan.Copper)} to {plan.Name}"
+        + (plan.Over > 0
+            ? $" ({CurrencyFormat.Full(plan.Over)} more than the {CurrencyFormat.Full(plan.Need)} they lack: "
+              + "the coins carried make nothing nearer)"
+            : string.Empty);
 
-    // The coins to hand over for a shortfall, largest first, out of what is held
-    // and inside what can be spared. Comes back short of the need when the coins
-    // held can't make it within OverpayAllowedCopper.
+    private static readonly long[] CoinUnits = [1, 10, 100, 10_000, 1_000_000];
+    private static readonly string[] CoinNames = ["copper", "silver", "gold", "platinum", "runic"];
+
+    // The coins to hand over for a shortfall, out of what is held and inside what
+    // can be spared: the need exactly when the coins make it, and otherwise the
+    // smallest amount above it they make. Comes back short of the need when
+    // neither fits inside the spare.
+    //
+    // Each coin is worth a whole number of the one below, so taking as many of the
+    // largest as fit and working down finds exact change whenever there is any;
+    // and the least that overshoots is, for some coin, "as many as fit of every
+    // larger one, then one more of this than fits and nothing smaller".
     internal static (IReadOnlyList<(string Currency, long Count)> Coins, long Copper) CountOut(
-        CurrencyHoldings held, long need, long spare) =>
-        held.PlanCover(need, Math.Min(spare, need + OverpayAllowedCopper));
+        CurrencyHoldings held, long need, long spare)
+    {
+        if (need <= 0) return ([], 0);
+        if (spare < need) return held.PlanCover(need, spare);
+
+        long[] available = [held.Copper, held.Silver, held.Gold, held.Platinum, held.Runic];
+        long[] taken = new long[CoinUnits.Length];
+        long[]? over = null;
+        long overCopper = long.MaxValue;
+        long remaining = need;
+        for (int i = CoinUnits.Length - 1; i >= 0 && remaining > 0; i--)
+        {
+            long fit = Math.Min(available[i], remaining / CoinUnits[i]);
+            if (fit < available[i])
+            {
+                long worth = need - remaining + (fit + 1) * CoinUnits[i];
+                if (worth < overCopper)
+                {
+                    overCopper = worth;
+                    over = (long[])taken.Clone();
+                    over[i] = fit + 1;
+                }
+            }
+            taken[i] = fit;
+            remaining -= fit * CoinUnits[i];
+        }
+        if (remaining > 0 && over is not null && overCopper <= spare) taken = over;
+
+        List<(string Currency, long Count)> coins = new();
+        long copper = 0;
+        for (int i = CoinUnits.Length - 1; i >= 0; i--)
+        {
+            if (taken[i] <= 0) continue;
+            coins.Add((CoinNames[i], taken[i]));
+            copper += taken[i] * CoinUnits[i];
+        }
+        return (coins, copper);
+    }
+
+    // A party is six at most, so five followers and 120 orders.
+    private const int MaxMembersPermuted = 6;
+
+    // Every short member's coins out of the one purse, inside what can be spared
+    // in all. What the first is handed decides what is left for the next, so the
+    // members are tried in every order and the one that hands over least is kept
+    // (the order as given on a tie). Null when no order covers everyone, with
+    // `uncovered` naming whom the order as given left short.
+    internal static IReadOnlyList<HandOver>? PlanHandOvers(
+        CurrencyHoldings held, IReadOnlyList<(string Name, long Need)> needs, long spare,
+        out IReadOnlyList<string> uncovered)
+    {
+        ArgumentNullException.ThrowIfNull(needs);
+        HandOver[]? best = null;
+        long bestCopper = long.MaxValue;
+        List<string>? firstShort = null;
+        foreach (int[] order in Orders(needs.Count))
+        {
+            HandOver[] plans = new HandOver[needs.Count];
+            List<string> left = new();
+            CurrencyHoldings purse = held;
+            long spareLeft = spare;
+            long total = 0;
+            foreach (int i in order)
+            {
+                (string name, long need) = needs[i];
+                (IReadOnlyList<(string Currency, long Count)> coins, long copper) = CountOut(purse, need, spareLeft);
+                if (copper < need)
+                {
+                    left.Add(name);
+                    continue;
+                }
+                plans[i] = new HandOver(name, need, coins, copper);
+                spareLeft -= copper;
+                total += copper;
+                purse = Take(purse, coins, copper);
+            }
+            firstShort ??= left;
+            if (left.Count == 0 && total < bestCopper) (best, bestCopper) = (plans, total);
+        }
+        uncovered = best is null ? firstShort ?? [] : [];
+        return best;
+    }
+
+    // The order as given first, then every other (Heap's algorithm).
+    private static IEnumerable<int[]> Orders(int count)
+    {
+        int[] order = Enumerable.Range(0, count).ToArray();
+        yield return (int[])order.Clone();
+        if (count > MaxMembersPermuted) yield break;
+        int[] turns = new int[count];
+        for (int i = 0; i < count;)
+        {
+            if (turns[i] < i)
+            {
+                int with = i % 2 == 0 ? 0 : turns[i];
+                (order[with], order[i]) = (order[i], order[with]);
+                yield return (int[])order.Clone();
+                turns[i]++;
+                i = 0;
+            }
+            else
+            {
+                turns[i] = 0;
+                i++;
+            }
+        }
+    }
 
     private static CurrencyHoldings Take(
         CurrencyHoldings held, IReadOnlyList<(string Currency, long Count)> coins, long copper)
@@ -541,40 +787,58 @@ public sealed class PartyTollGate
         Settle(funding, recipient, pending.Confirmed, "wasn't handed the coin: the game refused the hand-over");
     }
 
-    // InventoryManager.CoinGiveMisaimed: the Stock engine's answer to a coin give
-    // at something that isn't a player, or at a player hidden from us. It names
-    // nobody, so it is taken for the hand-over in hand only when there is just one.
+    // InventoryManager.CoinGiveMisaimed: the engine's answer to a coin give at
+    // something that isn't a player, or at a player hidden from us (a hidden
+    // member can't be handed coin; a sneaking one can: user, 2026-10-10). It names
+    // nobody, so it fails the hand-over in hand when there is just one, and with
+    // several is kept for the words of whoever then goes unconfirmed.
     public void OnCoinGiveMisaimed()
     {
-        if (_funding is not { Pending.Count: 1 } funding) return;
+        if (_funding is not { } funding) return;
+        if (!FailTheOneInHand(
+                "could not be given coin: the game says there is nobody of that name here to give to (not here, or hidden from us)"))
+            funding.Misaimed = true;
+    }
+
+    // InventoryManager.CoinGiveLackedCoins: the engine's answer to a coin give of
+    // more of a coin than we hold. It names nobody either.
+    public void OnCoinGiveLackedCoins() => FailTheOneInHand(
+        "could not be given coin: the game says we don't hold that many of the coin sent");
+
+    private bool FailTheOneInHand(string failure)
+    {
+        if (_funding is not { Pending.Count: 1 } funding) return false;
         (string name, (long _, long confirmed, int _)) = funding.Pending.First();
-        Settle(funding, name, confirmed,
-            "wasn't handed the coin: the game says there is nobody of that name here to give to (not here, or hidden from us)");
+        Settle(funding, name, confirmed, failure);
+        return true;
     }
 
     private void OnGiveWindowElapsed()
     {
         if (_funding is not { } funding) return;
         DateTime now = _clock();
+        string failure = funding.Misaimed
+            ? $"could not be given coin: no line named them inside {GiveConfirmWindow.TotalSeconds:0} s, and the game answered "
+              + "a give with its line for nobody of that name here (not here, or hidden from us)"
+            : $"gave no answer to the hand-over: no line from the game inside {GiveConfirmWindow.TotalSeconds:0} s";
         foreach ((string name, (long _, long confirmed, int _)) in funding.Pending.ToArray())
         {
             // The commands went out, so their lines may still come: what was sent
             // and not yet answered is kept on record.
-            _lateGives[name] = (funding.Toll, now, funding.Unanswered[name]);
-            Settle(funding, name, confirmed,
-                $"gave no answer to the hand-over: no line from the game inside {GiveConfirmWindow.TotalSeconds:0} s");
+            _lateGives[name] = (funding.Crossing, now, funding.Unanswered[name]);
+            Settle(funding, name, confirmed, failure);
         }
     }
 
     // A coin line for a member whose hand-over had already been given up on: the
     // coin left our purse all the same, so it counts toward what they hold and
-    // toward what they were paid at that toll, whatever was decided meanwhile.
+    // toward what they were paid at that crossing, whatever was decided meanwhile.
     // Only a line worth what one of the unanswered gives was worth: coin handed to
-    // them by hand, or by another feature, is not this toll's.
+    // them by hand, or by another feature, is not this crossing's.
     private void CreditLateHandOver(string recipient, long copper)
     {
         if (copper <= 0
-            || !_lateGives.TryGetValue(recipient, out (TollKey Toll, DateTime At, List<long> Unanswered) late))
+            || !_lateGives.TryGetValue(recipient, out (Crossing For, DateTime At, List<long> Unanswered) late))
             return;
         if (_clock() - late.At > LateConfirmationWindow)
         {
@@ -586,28 +850,28 @@ public sealed class PartyTollGate
         _wealth.NoteGiven(recipient, copper);
         lock (_marksLock)
         {
-            long before = _funded.TryGetValue((recipient, late.Toll), out (long Copper, bool CrossedSince) paid) ? paid.Copper : 0;
-            _funded[(recipient, late.Toll)] = (before + copper, CrossedSince: false);
+            long before = _funded.TryGetValue((recipient, late.For), out (long Copper, bool CrossedSince) paid) ? paid.Copper : 0;
+            _funded[(recipient, late.For)] = (before + copper, CrossedSince: false);
         }
         _log?.Info(LogCategory,
             $"A late line from the game: {CurrencyFormat.Full(copper)} did reach {recipient}. Counted toward what they hold and what they were paid.");
     }
 
-    // A failure stands against the member at this toll (MarkUnable).
+    // A failure stands against the member at this crossing (MarkUnable).
     private void Settle(Funding funding, string name, long confirmed, string? failure)
     {
         funding.Pending.Remove(name);
         if (confirmed > 0)
         {
             _wealth.NoteGiven(name, confirmed);
-            lock (_marksLock) _funded[(name, funding.Toll)] = (confirmed, CrossedSince: false);
+            lock (_marksLock) _funded[(name, funding.Crossing)] = (confirmed, CrossedSince: false);
         }
         if (failure is null)
-            _log?.Info(LogCategory, $"{funding.Crossing}: the game confirmed {CurrencyFormat.Full(confirmed)} handed to {name}.");
+            _log?.Info(LogCategory, $"{funding.Described}: the game confirmed {CurrencyFormat.Full(confirmed)} handed to {name}.");
         else
         {
-            MarkUnable(name, funding.Toll, failure);
-            _log?.Info(LogCategory, $"{funding.Crossing}: {name} {failure}.");
+            MarkUnable(name, funding.Crossing, failure);
+            _log?.Info(LogCategory, $"{funding.Described}: {name} {failure}.");
         }
         if (funding.Pending.Count > 0 || !ReferenceEquals(_funding, funding)) return;
         _funding = null;
@@ -615,40 +879,41 @@ public sealed class PartyTollGate
         _clearGate("the hand-overs are settled");
     }
 
-    private void MarkUnable(string name, TollKey toll, string why)
+    private void MarkUnable(string name, Crossing crossing, string why)
     {
-        lock (_marksLock) _unable[(name, toll)] = (_clock(), why);
+        lock (_marksLock) _unable[(name, crossing)] = (_clock(), why);
     }
 
     // ----- housekeeping ----------------------------------------------------------
 
-    // The step through a toll is let go: every purse in the party is about to pay
-    // or its owner to be left, so nothing read before answers for the next toll.
-    // Done here, where the step is released, and not on the room change: the
-    // engine sends its next step from inside that change, and a second toll right
-    // behind the first was judged on what was read before the first was paid.
-    // What a member was paid at this toll is another matter: that stands until
-    // the crossing is seen to have happened (NoteRoomChanged), since a step let go
+    // The step through a paid crossing is let go: every purse in the party is
+    // about to pay or its owner to be left, so nothing read before answers for the
+    // next one. Done here, where the step is released, and not on the room change:
+    // the engine sends its next step from inside that change, and a second toll
+    // right behind the first was judged on what was read before the first was paid.
+    // What a member was paid here is another matter: that stands until the
+    // crossing is seen to have happened (NoteRoomChanged), since a step let go
     // can still bounce, and a member paid for it must not be paid for the retry.
     private void NoteTollTaken() => _wealth.ExpireReadings();
 
-    // The tracker confirmed a move from one room to another. Through a toll exit,
-    // whoever was paid for that toll has now spent it or been left at it: what
-    // they were handed there no longer stands for what they hold.
+    // The tracker confirmed a move from one room to another. Through an exit that
+    // charges, whoever was paid for it has now spent it or been left at it: what
+    // they were handed there no longer stands for what they hold. A sailing is no
+    // exit, so a fare is also taken as spent on arrival in the room it leads to.
     public void NoteRoomChanged(Room previous, RoomKey now)
     {
         ArgumentNullException.ThrowIfNull(previous);
+        HashSet<Crossing> crossed = new();
         foreach (RoomExit exit in previous.Exits.Values)
-        {
-            if (!IsToll(in exit) || (exit.Target != now && exit.Landing != now)) continue;
-            TollKey crossed = KeyOf(in exit);
-            lock (_marksLock)
-                foreach ((string Name, TollKey Toll) key in _funded.Keys.Where(k => k.Toll == crossed).ToArray())
-                    _funded[key] = (_funded[key].Copper, CrossedSince: true);
-        }
+            if ((exit.Target == now || exit.Landing == now) && KeyOf(in exit) is { } through)
+                crossed.Add(through);
+        lock (_marksLock)
+            foreach ((string Name, Crossing At) key in _funded.Keys
+                         .Where(k => crossed.Contains(k.At) || (k.At.Fare && k.At.Target == now)).ToArray())
+                _funded[key] = (_funded[key].Copper, CrossedSince: true);
     }
 
-    // MovementController going idle: the trip a toll was closed on is over.
+    // MovementController going idle: the trip a crossing was closed on is over.
     public void NoteTripEnded()
     {
         lock (_marksLock) _closed.Clear();
@@ -683,46 +948,47 @@ public sealed class PartyTollGate
         _log?.Info(LogCategory, text);
     }
 
-    // A member who gave no answer: with what we have handed them for a toll of
-    // this price and not yet seen spent, when that is why they count as paid.
-    private string PaidAndSilent(string name, long cost)
+    // A member who gave no answer: with what we have handed them here and not yet
+    // seen spent, when that is why they count as paid.
+    private string PaidAndSilent(string name, Crossing crossing)
     {
         lock (_marksLock)
-            foreach (((string Name, TollKey Toll) key, (long Copper, bool CrossedSince) paid) in _funded)
-                if (!paid.CrossedSince && (long)key.Toll.TollGold * 100 == cost
-                    && string.Equals(key.Name, name, StringComparison.OrdinalIgnoreCase))
-                    return $"{name} no answer, handed {CurrencyFormat.Full(paid.Copper)} for this toll";
+            if (_funded.TryGetValue((name, crossing), out (long Copper, bool CrossedSince) paid) && !paid.CrossedSince)
+                return $"{name} no answer, handed {CurrencyFormat.Full(paid.Copper)} for this {crossing.Word}";
         return $"{name} no answer";
     }
 
-    private string DescribeReadings(IReadOnlyList<string> followers, long cost)
+    private string DescribeReadings(IReadOnlyList<string> followers, Crossing crossing)
     {
         IReadOnlyCollection<string> leftBehind = _leftBehind;
         IEnumerable<string> purses = followers.Select(name =>
             leftBehind.Contains(name, StringComparer.OrdinalIgnoreCase)
-                ? $"{name} left out (known to be left behind, not following through this toll)"
+                ? $"{name} left out (known to be left behind, not following through this {crossing.Word})"
                 : _wealth.FreshPurse(name) switch
                 {
                     (PartyWealthTracker.PurseKnowledge.Read, long copper) => $"{name} {CurrencyFormat.Full(copper)}",
-                    (PartyWealthTracker.PurseKnowledge.Silent, _) => PaidAndSilent(name, cost),
+                    (PartyWealthTracker.PurseKnowledge.Silent, _) => PaidAndSilent(name, crossing),
                     _ => $"{name} not asked yet",
                 });
+        long keep = Math.Max(0, KeepOnHandCopper?.Invoke() ?? 0);
         string own = _ownPurse() is { } purse
             ? $"own purse {CurrencyFormat.Full(purse)}"
               + (_reservedCopper() > 0 ? $" with {CurrencyFormat.Full(_reservedCopper())} set aside" : string.Empty)
+              + (keep > 0 ? $", {CurrencyFormat.Full(keep)} kept on hand" : string.Empty)
             : "own purse not read";
-        return $"toll {CurrencyFormat.Full(cost)}; {string.Join(", ", purses)}; {own}";
+        return $"{crossing.Word} {CurrencyFormat.Full(crossing.Copper)}; {string.Join(", ", purses)}; {own}; "
+            + $"funding short members {(FundingOn ? "on" : "off")}";
     }
 
     // Marks are kept by the member's name whatever its case.
-    private sealed class FundedComparer : IEqualityComparer<(string Name, TollKey Toll)>
+    private sealed class FundedComparer : IEqualityComparer<(string Name, Crossing At)>
     {
         public static readonly FundedComparer Instance = new();
 
-        public bool Equals((string Name, TollKey Toll) x, (string Name, TollKey Toll) y) =>
-            x.Toll == y.Toll && string.Equals(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+        public bool Equals((string Name, Crossing At) x, (string Name, Crossing At) y) =>
+            x.At == y.At && string.Equals(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
 
-        public int GetHashCode((string Name, TollKey Toll) key) =>
-            HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(key.Name), key.Toll);
+        public int GetHashCode((string Name, Crossing At) key) =>
+            HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(key.Name), key.At);
     }
 }

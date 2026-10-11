@@ -150,6 +150,12 @@
                           IsChecked="{Binding StashTransferPartyShare, Mode=TwoWay}"
                           ToolTip.Tip="When you run a stash → bank transfer as the party leader, each member is telepathed @get-stash at the stash (they search and take coin up to their own weight limits), then @deposit-all at the bank, so they deposit at the same bank into their own accounts. Members must run MudPlay and allow you to run commands on them. Off by default."/>
 
+                <!-- ============ Party tolls and rides ============ -->
+                <TextBlock Classes="SectionHeader" Text="Party Tolls and Rides"/>
+                <CheckBox Content="Fund party members' tolls / rides if short"
+                          IsChecked="{Binding FundPartyTolls, Mode=TwoWay}"
+                          ToolTip.Tip="When you lead a party and a walk or loop of yours reaches a toll, an NPC's paid transport or a sailing, every member's purse is asked first (@wealth). Off (the default): no coin is handed over, and a crossing a member can't pay, or gives no answer about, is closed to the party for the trip, so the route goes round or the walk ends saying why. On: such a member is handed what they lack out of your extra coin. You always keep the larger of what you need to cross yourself (your own toll or fare, plus the fees the trip has set aside) and your 'Minimum cash to keep on hand'; only what you carry above that is extra. Exact change is used when your coins make it; otherwise the smallest larger amount they make, as long as you still hold what you keep. A bank trip the walk is already making for its own fees draws the members' shortfall too; none is made just for it. A sneaking member can be handed coin; a hidden one can't, and counts as not funded. Tolls and rides you step through by hand are never checked."/>
+
                 <!-- ============ Detours ============ -->
                 <TextBlock Classes="SectionHeader" Text="Detours"/>
                 <CheckBox Content="No combat during an auto-sell detour"
