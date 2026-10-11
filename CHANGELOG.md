@@ -1,6 +1,6 @@
 # Version history
 
-## 3.171.3
+## 3.172.3
 
 - Hang-up death check reads the room you come back in: where that room's dead arrive agrees with a death; back where you left (on Stock, anywhere else) rules one out
 - Lives not read before the hang-up: back stripped where the dead arrive is now recorded as a death
@@ -8,6 +8,13 @@
 - A hang-up while dropped in an arena room is recorded as an arena death (nothing lost, no pile), on any realm
 - Sysop god lives asks no life back after an arena death, on either realm
 - Bug report shows where the stored list's dead arrive and the room come back in
+
+## 3.172.0
+
+- Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay
+- Members who are short are handed exactly what they lack when you can spare it and your coins make the amount; the step waits for the game to confirm it
+- Otherwise the route goes round the toll, or the walk or loop ends naming the toll and who can't pay
+- A member paid for at a toll that still turned them away is not paid for twice there
 
 ## 3.171.0
 

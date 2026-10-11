@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.171.3**
+> **Version 3.172.3**
 > - Hang-up death check reads the room you come back in: where that room's dead arrive agrees with a death; back where you left (on Stock, anywhere else) rules one out
 > - Lives not read before the hang-up: back stripped where the dead arrive is now recorded as a death
 > - The death record and notice name the room you came back in
