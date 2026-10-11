@@ -74,6 +74,8 @@ public sealed class ItemNameStore
     private readonly Dictionary<int, int> _packStealthByNumber = new();
     private const int StealthAbilityCode = 27;
     private const int ItemAbilitySlots = 20;
+    private static readonly string[] AbilFields = NumberedFields.Of("Abil-", ItemAbilitySlots);
+    private static readonly string[] AbilValFields = NumberedFields.Of("AbilVal-", ItemAbilitySlots);
 
     public string? ActiveSet { get; private set; }
 
@@ -283,8 +285,8 @@ public sealed class ItemNameStore
     {
         int total = 0;
         for (int i = 0; i < ItemAbilitySlots; i++)
-            if (ReadInt(row, $"Abil-{i}") == StealthAbilityCode)
-                total += ReadInt(row, $"AbilVal-{i}");
+            if (ReadInt(row, AbilFields[i]) == StealthAbilityCode)
+                total += ReadInt(row, AbilValFields[i]);
         return total;
     }
 

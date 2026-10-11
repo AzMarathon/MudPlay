@@ -12,15 +12,17 @@ namespace MudPlay.Game.Spells;
 public static class SpellFormulaReader
 {
     private const int AbilitySlots = 10;
+    private static readonly string[] AbilFields = NumberedFields.Of("Abil-", AbilitySlots);
+    private static readonly string[] AbilValFields = NumberedFields.Of("AbilVal-", AbilitySlots);
 
     public static SpellFormulaInput Read(GameRow row)
     {
         List<SpellAbility> abilities = new();
         for (int x = 0; x < AbilitySlots; x++)
         {
-            int code = ReadInt(row, $"Abil-{x}");
+            int code = ReadInt(row, AbilFields[x]);
             if (code == 0) continue; // empty slot — the calculator ignores code 0 anyway
-            abilities.Add(new SpellAbility(code, ReadInt(row, $"AbilVal-{x}")));
+            abilities.Add(new SpellAbility(code, ReadInt(row, AbilValFields[x])));
         }
 
         return new SpellFormulaInput
