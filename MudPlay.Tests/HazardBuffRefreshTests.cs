@@ -213,6 +213,43 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Assert.Single(f.Wire);
     }
 
+    // The thirst line can show on the way back in, ahead of the first prompt. It is
+    // the game's word that the buff is off, and is taken; its `use` waits until we are
+    // back, like everything else.
+    [Fact]
+    public void ThirstLineWhileTheLinkIsDown_CountsTheBuffAsOff_AndSendsNothing()
+    {
+        Field f = new() { AutoSneak = false };
+        f.Engine.OnApproachingRoom(Dunes);
+        f.Engine.OnServerLine(SwigLine);
+        f.Engine.Pause();
+        f.Advance(600);
+
+        f.Engine.OnServerLine(ThirstLine);
+        Assert.Single(f.Wire);
+
+        f.Engine.Resume();
+        Assert.Equal(("use waterskin", true), f.Engine.DueNow());
+    }
+
+    // A buff whose line shows while the clock is stopped started then: the time away
+    // is not added to it on top.
+    [Fact]
+    public void ABuffRaisedOnTheWayBackIn_IsNotCreditedWithTheTimeAway()
+    {
+        Field f = new() { AutoSneak = false };
+        f.Engine.OnServerLine(SwigLine);
+        f.Engine.Pause();
+        f.Advance(600);
+        f.Engine.OnServerLine(SwigLine);            // drunk by hand at the first room display
+        f.Engine.Resume();
+
+        f.Advance(1784);
+        Assert.Null(f.Engine.DueNow());
+        f.Advance(1);                               // 1785 s after that drink, not 2385
+        Assert.Equal(("use waterskin", true), f.Engine.DueNow());
+    }
+
     // A death while the link was down (a hang-up death, worked out at the login)
     // still ends the buff.
     [Fact]

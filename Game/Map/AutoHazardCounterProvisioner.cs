@@ -369,8 +369,11 @@ public sealed class AutoHazardCounterProvisioner
         if (_pausedAt is not { } since) return;
         _pausedAt = null;
         TimeSpan away = _now() - since;
+        // Only what was running when the link dropped stood still. A buff whose line
+        // showed on the way back in, ahead of the first prompt, started then.
         foreach (int buffSpell in _on.Keys.ToList())
-            _on[buffSpell] = (_on[buffSpell].OnSince + away, _on[buffSpell].Confirmed);
+            if (_on[buffSpell].OnSince <= since)
+                _on[buffSpell] = (_on[buffSpell].OnSince + away, _on[buffSpell].Confirmed);
         if (_on.Count > 0)
             _log?.Info(LogCategory, $"buff clock resumed after {(int)away.TotalSeconds} s away — {TimeLeftText()}");
     }
@@ -800,6 +803,9 @@ public sealed class AutoHazardCounterProvisioner
         // the clock said. Taken first and for anyone standing here: when nothing
         // below sends a `use`, the refresh is due again under its usual rules.
         NoteBuffAbsent(counter);
+        // On the way back in, ahead of the first in-game prompt: the line is the
+        // game's and the buff is off, but nothing is sent until we are back.
+        if (_pausedAt is not null) return;
         SweepSetAside();
 
         // The `use` sent from here is for a live walk — ours, or the leader's we're
@@ -863,7 +869,7 @@ public sealed class AutoHazardCounterProvisioner
     // pending `use` would put back if it is turned away.
     private void NoteBuffAbsent(in RoomHazardIndex.BuffCounter counter)
     {
-        TimeSpan? left = RemainingOf(counter, _now());
+        TimeSpan? left = RemainingOf(counter, Clock());
         _on.Remove(counter.BuffSpell);
         if (_pending is { } sent && sent.BuffSpell == counter.BuffSpell) _pending = sent with { Before = null };
         // Not while a `use` of ours is unanswered: that one is told as out of charges.
