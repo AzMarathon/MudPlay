@@ -119,6 +119,119 @@ public sealed class SuicideHandlerTests
         Assert.Equal("hunter2\r", Encoding.Latin1.GetString(h.Wire[^1]));
     }
 
+    [Theory]
+    [InlineData("Bob telepaths: ]: Enter your suicide password:")]
+    [InlineData("Bob telepaths: Enter your suicide password:")]
+    [InlineData("Bob gossips: [HP=1/MA=1]:Enter your suicide password:")]
+    [InlineData("You hear: Enter your suicide password:")]
+    [InlineData("[HP=100/MA=50]:Enter your suicide password: now")]
+    [InlineData("Enter your suicide password: please")]
+    public void StoredPassword_ThePromptsWordsInsideAnythingElse_SendNothing(string row)
+    {
+        using Harness h = new();
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Handler.ObserveCursorRow(row);
+
+        Assert.DoesNotContain(h.Wire, b => Encoding.Latin1.GetString(b).Contains("hunter2"));
+        Assert.True(h.Handler.AwaitingPasswordPrompt);
+    }
+
+    [Fact]
+    public void StoredPassword_TheSendGateIsHeldFromTheCommandUntilThePasswordIsSent()
+    {
+        using Harness h = new();
+        EngineSendGate gate = new();
+        h.Handler.SendGate = gate;
+        List<string> engineWire = new();
+        Action<byte[]> engine = gate.WrapEngineSender(b => engineWire.Add(Encoding.Latin1.GetString(b)));
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+
+        // In the window an engine's command never reaches the game, where it
+        // would be read as the password.
+        Assert.True(gate.IsLocked);
+        engine(Encoding.Latin1.GetBytes("par\r"));
+        Assert.Empty(engineWire);
+
+        h.Handler.ObserveCursorRow("Enter your suicide password:");
+
+        Assert.False(gate.IsLocked);
+        engine(Encoding.Latin1.GetBytes("par\r"));
+        Assert.Equal("par\r", Assert.Single(engineWire));
+    }
+
+    [Fact]
+    public void StoredPassword_AnotherLineSentInTheWindow_CancelsAndThePasswordNeverFollows()
+    {
+        using Harness h = new();
+        EngineSendGate gate = new();
+        h.Handler.SendGate = gate;
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Wire.Clear();
+        // A key on its own is not a line; the line the user then sends is.
+        h.Handler.NoteLineSent("l"u8);
+        Assert.True(h.Handler.AwaitingPasswordPrompt);
+        h.Handler.NoteLineSent("look\r"u8);
+
+        Assert.False(h.Handler.AwaitingPasswordPrompt);
+        Assert.False(gate.IsLocked);
+        Assert.Equal("/Trusted {suicide cancelled, another command went out first}\r",
+            Encoding.Latin1.GetString(Assert.Single(h.Wire)));
+
+        // The prompt now on the row was answered by that line: nothing more goes out.
+        h.Wire.Clear();
+        h.Handler.ObserveCursorRow("Enter your suicide password:");
+        Assert.Empty(h.Wire);
+    }
+
+    [Theory]
+    [InlineData("You may not suicide or reroll during a tournament.")]
+    [InlineData("You may not suicide or reroll in this room!")]
+    public void StoredPassword_TheGamesRefusal_EndsTheWaitAtOnce(string refusal)
+    {
+        using Harness h = new();
+        EngineSendGate gate = new();
+        h.Handler.SendGate = gate;
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Wire.Clear();
+        DispatchLine(h.Router, refusal);
+
+        Assert.False(h.Handler.AwaitingPasswordPrompt);
+        Assert.False(gate.IsLocked);
+        Assert.Equal("/Trusted {suicide refused by the game}\r", Encoding.Latin1.GetString(Assert.Single(h.Wire)));
+    }
+
+    [Fact]
+    public void StoredPassword_Timeout_ReleasesTheSendGate()
+    {
+        using Harness h = new();
+        EngineSendGate gate = new();
+        h.Handler.SendGate = gate;
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+        DateTimeOffset now = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        h.Handler.Clock = () => now;
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        Assert.True(gate.IsLocked);
+        now += SuicideHandler.PromptWait + TimeSpan.FromSeconds(1);
+        h.Handler.FireNextPromptForTests();
+
+        Assert.False(gate.IsLocked);
+        Assert.DoesNotContain(h.Wire, b => Encoding.Latin1.GetString(b).Contains("hunter2"));
+    }
+
     [Fact]
     public void StoredPassword_PromptNeverComes_PasswordIsNeverSentAndSenderIsTold()
     {

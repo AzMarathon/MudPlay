@@ -848,6 +848,11 @@ public partial class MainWindowViewModel : ObservableObject
         // stat-box marker and skipped entirely once armed.
         Emulator.ScreenUpdated += OnScreenUpdatedForTrainerMenu;
         Emulator.ScreenUpdated += OnScreenUpdatedForSuicidePrompt;
+        // A typed line is kept in the sent-command trail only when it was typed
+        // at the game's own prompt: what answers any other prompt may be a
+        // password, and the game's prompts for those reach us too late to know.
+        AppServices.Current.SentCommands.TypedAtGamePrompt =
+            line => SentCommandTrail.RowIsGamePrompt(CursorRowText(), line);
 
         // Feed the crash reporter a live-state snapshot so a fatal fault's
         // Crash-<timestamp>.md carries the same scrollback / log / engine dump a
@@ -893,6 +898,7 @@ public partial class MainWindowViewModel : ObservableObject
             DateTimeOffset now = DateTimeOffset.Now;
             AppServices.Current.StateWatch.Sample(now);
             AppServices.Current.Heartbeat.Tick(now);
+            AppServices.Current.Suicide.CheckTimeout();
         };
         _engineStateSample.Start();
         AppServices.Current.Heartbeat.LogStartup(
@@ -3781,9 +3787,16 @@ public partial class MainWindowViewModel : ObservableObject
     {
         Game.Remote.SuicideHandler suicide = AppServices.Current.Suicide;
         if (!suicide.AwaitingPasswordPrompt) return;
+        suicide.ObserveCursorRow(CursorRowText());
+    }
+
+    // What the terminal shows on the row the cursor is on: where a prompt that is
+    // waiting for an answer stands.
+    private string CursorRowText()
+    {
         TerminalScreen screen = Emulator.Screen;
         int row = Math.Clamp(screen.CursorY, 0, screen.Rows - 1);
-        suicide.ObserveCursorRow(TranscriptSnapshot.RowText(screen.Row(row)));
+        return TranscriptSnapshot.RowText(screen.Row(row));
     }
 
     private void OnScreenUpdatedForTrainerMenu()
@@ -3843,6 +3856,10 @@ public partial class MainWindowViewModel : ObservableObject
         // in it (the gate records each command once); what reaches here unwrapped
         // is typed, or a named sender going round the gate.
         EngineSendGate sendGate = AppServices.Current.EngineGate;
+        // An @suicide waiting to answer the game's password prompt: any other
+        // line that goes out first is what the game takes as the password, so
+        // the stored one must not follow it.
+        AppServices.Current.Suicide.NoteLineSent(data);
         if (!sendGate.SendingClientCommand)
         {
             if (sendGate.CurrentSender is { } pastGate)

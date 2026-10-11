@@ -58,13 +58,36 @@ public sealed class SentCommandTrail
             return;
         }
         if (text.Length > MaxTextLength) text = text[..MaxTextLength] + "…";
-        Entry entry = new(DateTimeOffset.Now, text, origin, sender, outcome, why);
-        lock (_gate)
+        // A command dropped again and again under one long hold is one entry with
+        // a count, not a page of them.
+        if (outcome == Outcome.Dropped)
         {
-            _ring[_head] = entry;
-            _head = (_head + 1) % Capacity;
-            if (_count < Capacity) _count++;
+            lock (_gate)
+            {
+                if (_count > 0)
+                {
+                    int last = (_head - 1 + Capacity) % Capacity;
+                    Entry previous = _ring[last];
+                    if (previous.Outcome == Outcome.Dropped && previous.Text == text && previous.Sender == sender
+                        && previous.Origin == origin && BaseWhy(previous.Why) == why)
+                    {
+                        _repeats++;
+                        _ring[last] = previous with { Why = $"{why}; dropped {_repeats} times, the last at {DateTimeOffset.Now:HH:mm:ss.fff}" };
+                        return;
+                    }
+                }
+                _repeats = 1;
+            }
         }
+        Store(new Entry(DateTimeOffset.Now, text, origin, sender, outcome, why));
+    }
+
+    private int _repeats = 1;
+
+    private static string? BaseWhy(string? why)
+    {
+        int cut = why?.IndexOf("; dropped ", StringComparison.Ordinal) ?? -1;
+        return cut < 0 ? why : why![..cut];
     }
 
     // Bytes the user typed. The terminal sends a whole line at a time, or a key
@@ -75,12 +98,22 @@ public sealed class SentCommandTrail
     {
         foreach (byte b in data)
         {
+            // An escape sequence (an arrow key, a function key) is a key, not
+            // text: it runs from ESC to its final letter.
+            if (_inEscape)
+            {
+                if (b is >= 0x40 and <= 0x7E && b != (byte)'[' && b != (byte)'O') _inEscape = false;
+                continue;
+            }
             switch (b)
             {
+                case 0x1B:
+                    _inEscape = true;
+                    break;
                 case 0x0D or 0x0A:
-                    if (_typedLine.Length > 0)
+                    if (_typedLine.Length > 0 || _pendingWithheld)
                     {
-                        Record(_typedLine.ToString(), Origin.Typed, sender: null, Outcome.Sent);
+                        TypedLineSent(_typedLine.ToString());
                         _typedLine.Clear();
                     }
                     break;
@@ -90,10 +123,62 @@ public sealed class SentCommandTrail
                 case < 0x20:
                     break;
                 default:
+                    // Keys pressed while nothing is kept (a login, a hot key at
+                    // the board's menu) don't wait here to head the first line
+                    // typed in the game.
+                    if (Withhold?.Invoke() == true) { _typedLine.Clear(); _pendingWithheld = true; break; }
                     if (_typedLine.Length <= MaxTextLength) _typedLine.Append((char)b);
                     break;
             }
         }
+    }
+
+    private bool _inEscape;
+    private bool _pendingWithheld;
+
+    // Whether the terminal's cursor row is the game's own prompt as the typed
+    // line's Enter goes out; the argument is the line. Anything else on that row
+    // (a password prompt, a menu, a question, a prompt we don't know) means the
+    // line answers it, and what answers a prompt is never kept: only that
+    // something was typed there. Null in tests that don't model a terminal.
+    public Func<string, bool>? TypedAtGamePrompt { get; set; }
+
+    public const string WithheldAtPrompt = "(typed at a prompt: withheld)";
+
+    private void TypedLineSent(string line)
+    {
+        if (_pendingWithheld)
+        {
+            // Part of this line was typed while nothing is kept.
+            _pendingWithheld = false;
+            lock (_gate) { _withheld++; }
+            return;
+        }
+        if (Withhold?.Invoke() != true && TypedAtGamePrompt is { } atGamePrompt && !atGamePrompt(line))
+        {
+            Store(new Entry(DateTimeOffset.Now, WithheldAtPrompt, Origin.Typed, null, Outcome.Sent, null));
+            return;
+        }
+        Record(line, Origin.Typed, sender: null, Outcome.Sent);
+    }
+
+    private void Store(Entry entry)
+    {
+        lock (_gate)
+        {
+            _ring[_head] = entry;
+            _head = (_head + 1) % Capacity;
+            if (_count < Capacity) _count++;
+        }
+    }
+
+    // The rule TypedAtGamePrompt applies to a cursor row: the statline prompt,
+    // with nothing after it but what the game has echoed of the line being typed.
+    public static bool RowIsGamePrompt(string? cursorRow, string typedLine)
+    {
+        if (!Terminal.LineExtractor.TrySplitPrompt(cursorRow?.TrimStart(), out string rest)) return false;
+        rest = rest.Trim();
+        return rest.Length == 0 || typedLine.Trim().StartsWith(rest, StringComparison.OrdinalIgnoreCase);
     }
 
     // Oldest first.

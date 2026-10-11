@@ -97,9 +97,100 @@ public sealed class SentCommandTrailTests
         SentCommandTrail.Entry[] entries = trail.Snapshot();
         Assert.Equal(2, entries.Length);
         Assert.Equal("look", entries[0].Text);
-        Assert.Equal("n[A", entries[1].Text);
+        Assert.Equal("n", entries[1].Text);
         Assert.All(entries, e => Assert.Equal(SentCommandTrail.Origin.Typed, e.Origin));
     }
+
+    // The five ways a typed suicide password could reach the trail. The line is
+    // judged at its Enter by the terminal's cursor row: only a line typed at the
+    // game's own prompt is kept.
+    [Theory]
+    [InlineData("set sui", "Enter New Password:")]
+    [InlineData("SET  SUICIDE", "Enter the current password:")]
+    [InlineData("reroll", "Enter your suicide password:")]
+    [InlineData("suicide", "Enter your suicide password:")]
+    public void ATypedPassword_IsWithheld_ByTheCursorRowAlone(string command, string promptRow)
+    {
+        string row = "[HP=100/MA=50]:";
+        SentCommandTrail trail = new() { TypedAtGamePrompt = line => SentCommandTrail.RowIsGamePrompt(row, line) };
+
+        trail.ObserveTyped(Encoding.Latin1.GetBytes(command + "\r"));
+        row = promptRow;
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("s3cretpw\r"));
+        row = "[HP=100/MA=50]:";
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("look\r"));
+
+        string[] texts = trail.Snapshot().Select(e => e.Text).ToArray();
+        Assert.Equal(new[] { command, SentCommandTrail.WithheldAtPrompt, "look" }, texts);
+    }
+
+    [Fact]
+    public void ATypedPassword_IsWithheld_WhenAnEngineCommandWentOutBetween()
+    {
+        string row = "[HP=100/MA=50]:";
+        EngineSendGate gate = new();
+        SentCommandTrail trail = new() { TypedAtGamePrompt = line => SentCommandTrail.RowIsGamePrompt(row, line) };
+        gate.Trail = trail;
+
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("suicide\r"));
+        row = "Enter your suicide password:";
+        gate.Named(gate.WrapEngineSender(_ => { }), "PartyPoller")(Line("par"));
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("s3cretpw\r"));
+
+        Assert.DoesNotContain(trail.Snapshot(), e => e.Text.Contains("s3cretpw"));
+        Assert.Equal(SentCommandTrail.WithheldAtPrompt, trail.Snapshot()[^1].Text);
+    }
+
+    [Theory]
+    [InlineData("[HP=100/MA=50]:", "look", true)]
+    [InlineData("[HP=100/MA=50]: (Resting)", "look", true)]
+    [InlineData("[HP=100/MA=50]:lo", "look", true)]            // the game echoing the line as typed
+    [InlineData("[HP=100/MA=50]:Enter your suicide password:", "x", false)]
+    [InlineData("Enter New Password:", "x", false)]
+    [InlineData("Are you sure (y/n)?", "y", false)]
+    [InlineData("", "look", false)]
+    public void RowIsGamePrompt_OnlyTheStatlinePrompt(string row, string typed, bool expected) =>
+        Assert.Equal(expected, SentCommandTrail.RowIsGamePrompt(row, typed));
+
+    [Fact]
+    public void KeysPressedWhileNothingIsKept_DoNotHeadTheFirstLineTypedInTheGame()
+    {
+        bool withhold = true;
+        SentCommandTrail trail = new() { Withhold = () => withhold };
+
+        trail.ObserveTyped("e"u8);          // a hot key at the board's menu
+        withhold = false;
+        trail.ObserveTyped("look\r"u8);
+        trail.ObserveTyped("north\r"u8);
+
+        Assert.Equal(new[] { "north" }, trail.Snapshot().Select(e => e.Text));
+        Assert.Equal(1, trail.Withheld);
+    }
+
+    [Fact]
+    public void RepeatedDropsOfOneCommandUnderOneHold_AreOneEntryWithACount()
+    {
+        var (gate, trail, _) = Setup();
+        Action<byte[]> poller = gate.Named(gate.WrapEngineSender(_ => { }), "PartyPoller");
+        gate.Hold("MortallyWounded");
+
+        for (int i = 0; i < 5; i++) poller(Line("par"));
+
+        SentCommandTrail.Entry entry = Assert.Single(trail.Snapshot());
+        Assert.StartsWith("send gate held: MortallyWounded; dropped 5 times, the last at ", entry.Why);
+        Assert.Equal(5, gate.DroppedCount);
+    }
+
+    [Theory]
+    [InlineData("set suicide", true)]
+    [InlineData("set sui", true)]
+    [InlineData("SET  SUICIDE", true)]
+    [InlineData("set s", true)]
+    [InlineData("set statline full", false)]
+    [InlineData("set suicidex", false)]
+    [InlineData("suicide", false)]
+    public void IsSetSuicide_TakesAnyPrefixAnySpacing(string line, bool expected) =>
+        Assert.Equal(expected, MudPlay.Game.SuicidePasswordTracker.IsSetSuicide(line));
 
     [Fact]
     public void Withheld_KeepsNothingAndOnlyCounts()

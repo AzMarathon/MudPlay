@@ -63,6 +63,7 @@ public sealed class SuicideHandler : IDisposable
     // and not at all once PromptWait has passed.
     private DateTimeOffset? _promptAwaitedSince;
     private readonly IMessagePattern _passwordPrompt;
+    private readonly MessageRouter _router;
     internal static readonly TimeSpan PromptWait = TimeSpan.FromSeconds(10);
     internal Func<DateTimeOffset> Clock { get; set; } = () => DateTimeOffset.UtcNow;
 
@@ -98,6 +99,10 @@ public sealed class SuicideHandler : IDisposable
 
         if (!router.TryGetPattern(KnownPatterns.SuicidePromptUseSuicide, out _passwordPrompt))
             throw new InvalidOperationException("No catalog pattern for the suicide password prompt.");
+        if (!IsPasswordPrompt(PasswordPromptText))
+            throw new InvalidOperationException("The catalog's suicide password prompt is no longer the text this handler waits for.");
+        _router = router;
+        _router.LineDispatched += OnLineDispatched;
 
         _invalidSub = router.Subscribe(KnownPatterns.SuicideInvalidPassword, _ => OnInvalid());
         // SuicideNotSet doubles as the no-stored-password pre-check
@@ -136,6 +141,8 @@ public sealed class SuicideHandler : IDisposable
         _invalidSub.Dispose();
         _notSetSub.Dispose();
         _promptScanner.PromptObserved -= _promptHandler;
+        _router.LineDispatched -= OnLineDispatched;
+        SendGate?.Release(GateHold);
     }
 
     private void OnSuicide(RemoteCommandContext ctx)
@@ -165,7 +172,11 @@ public sealed class SuicideHandler : IDisposable
             }
             _pendingReply = ctx.Reply;
             _promptAwaitedSince = Clock();
-            _wireSender(Encoding.Latin1.GetBytes("suicide\r"));
+            // Nothing an engine sends may reach the game between the command and
+            // its password: the game would take that as the password, and the
+            // real one would then land at the ordinary prompt, in clear.
+            SendGate?.Hold(GateHold);
+            SendOwn("suicide");
             _log?.Log(LogSeverity.Info, "Suicide",
                 "@suicide: sent `suicide`; the stored password goes out when the game asks for it.");
             return;
@@ -199,7 +210,7 @@ public sealed class SuicideHandler : IDisposable
         if (Clock() - since > PromptWait) { GiveUpOnPrompt(); return; }
         if (!ShowsPasswordPrompt(rowText)) return;
 
-        _promptAwaitedSince = null;
+        EndWait();
         string? password = _profile.Current is { EncryptedSuicidePassword: { Length: > 0 } blob }
             ? _protector.Unprotect(blob)
             : null;
@@ -212,19 +223,22 @@ public sealed class SuicideHandler : IDisposable
             return;
         }
         SendingPassword = true;
-        try { _wireSender(Encoding.Latin1.GetBytes(password + "\r")); }
+        try { SendOwn(password); }
         finally { SendingPassword = false; }
         _log?.Log(LogSeverity.Info, "Suicide", "@suicide: the game asked for the password; sent.");
     }
 
-    // The prompt, alone on the row or after a statline the game left in front of it.
-    private bool ShowsPasswordPrompt(string? rowText)
+    // The row must BE the prompt: alone, or straight after the game's statline.
+    // The prompt's words inside anything else (a telepath quoting them) are a
+    // player's text, and never a reason to send a password.
+    private static bool ShowsPasswordPrompt(string? rowText)
     {
         if (string.IsNullOrWhiteSpace(rowText)) return false;
-        string text = rowText.TrimStart();
-        if (IsPasswordPrompt(text)) return true;
-        int statlineEnd = text.LastIndexOf("]:", StringComparison.Ordinal);
-        return statlineEnd >= 0 && IsPasswordPrompt(text[(statlineEnd + 2)..].TrimStart());
+        if (Terminal.ChatLineDetector.IsChat(rowText)) return false;
+        string text = rowText.Trim();
+        if (text.Equals(PasswordPromptText, StringComparison.Ordinal)) return true;
+        return Terminal.LineExtractor.TrySplitPrompt(text, out string rest)
+            && rest.Trim().Equals(PasswordPromptText, StringComparison.Ordinal);
     }
 
     private bool IsPasswordPrompt(string text) =>
@@ -233,9 +247,67 @@ public sealed class SuicideHandler : IDisposable
                 text, Array.Empty<Terminal.CellAttributes>(), DateTimeOffset.UnixEpoch, IsPromptLine: false),
             out _);
 
-    private void GiveUpOnPrompt()
+    // The game's prompt for the password (GAME_MECHANICS "Suicide and reroll").
+    // Checked against the message catalogue's own pattern at construction, so
+    // the two can't drift apart.
+    internal const string PasswordPromptText = "Enter your suicide password:";
+
+    // What the game says instead of asking, when it won't take the command.
+    internal const string RefusedPrefix = "You may not suicide or reroll";
+
+    private const string GateHold = "SuicideCommand";
+
+    // The send gate, held from `suicide` going out until the wait ends. Null in
+    // tests that don't model it.
+    public EngineSendGate? SendGate { get; set; }
+
+    private bool _sendingOwn;
+
+    private void SendOwn(string line)
+    {
+        _sendingOwn = true;
+        try { _wireSender?.Invoke(Encoding.Latin1.GetBytes(line + "\r")); }
+        finally { _sendingOwn = false; }
+    }
+
+    private void EndWait()
     {
         _promptAwaitedSince = null;
+        SendGate?.Release(GateHold);
+    }
+
+    // Every line that reaches the wire, whoever sent it. The send gate keeps the
+    // engines quiet during the wait, but not the user, a hang-up or the trainer
+    // form: whatever goes out first is what the game reads at its prompt. The
+    // wait ends there and the stored password is not sent after it.
+    public void NoteLineSent(ReadOnlySpan<byte> data)
+    {
+        if (_promptAwaitedSince is null || _sendingOwn) return;
+        if (data.IndexOfAny((byte)'\r', (byte)'\n') < 0) return;
+        EndWait();
+        FailPending("another line went out before the game asked for the password: the stored password was not sent",
+            "suicide cancelled, another command went out first");
+    }
+
+    private void OnLineDispatched(Terminal.LineExtractor.EmittedLine line)
+    {
+        if (_promptAwaitedSince is null || line.IsChat) return;
+        if (!line.Text.TrimStart().StartsWith(RefusedPrefix, StringComparison.Ordinal)) return;
+        EndWait();
+        FailPending($"the game refused the command (\"{line.Text.Trim()}\"): the password was not sent",
+            "suicide refused by the game");
+    }
+
+    // Called about once a second by the client's own clock: the wait holds the
+    // send gate, and a game that says nothing at all must not hold it for ever.
+    public void CheckTimeout()
+    {
+        if (_promptAwaitedSince is { } since && Clock() - since > PromptWait) GiveUpOnPrompt();
+    }
+
+    private void GiveUpOnPrompt()
+    {
+        EndWait();
         FailPending(
             $"the game did not ask for the suicide password within {PromptWait.TotalSeconds:0} s of `suicide`: the password was not sent",
             "suicide failed, the game did not ask for the password");

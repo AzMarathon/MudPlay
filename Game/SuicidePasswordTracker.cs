@@ -181,9 +181,12 @@ public sealed class SuicidePasswordTracker : IDisposable
         _currentOutLine.Clear();
         if (completed.Length == 0) return;
 
-        // A bare `suicide` is answered with the password as the very next line,
-        // typed before the game's prompt for it has reached us as a line.
-        if (completed.Trim().Equals("suicide", StringComparison.OrdinalIgnoreCase)) _useFlowLines = 2;
+        // `suicide` and `reroll` are one command in the game and both are answered
+        // with the password as the very next line, typed before the game's prompt
+        // for it has reached us as a line.
+        string trimmed = completed.Trim();
+        if (trimmed.Equals("suicide", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("reroll", StringComparison.OrdinalIgnoreCase)) _useFlowLines = 2;
         else if (_useFlowLines > 0) _useFlowLines--;
 
         if (!_captureArmed)
@@ -191,7 +194,7 @@ public sealed class SuicidePasswordTracker : IDisposable
             // Arm on outbound `set suicide`. Case-insensitive because
             // MUDs accept any casing. The bare `suicide` (use-pw form)
             // does NOT change the password, so it doesn't arm.
-            if (completed.Trim().Equals("set suicide", StringComparison.OrdinalIgnoreCase))
+            if (IsSetSuicide(trimmed))
             {
                 _captureArmed = true;
                 _log?.Log(LogSeverity.Info, "Suicide",
@@ -206,6 +209,16 @@ public sealed class SuicidePasswordTracker : IDisposable
         _latestArmedLine = completed;
         _log?.Log(LogSeverity.Debug, "Suicide",
             $"Captured outbound line while armed ({completed.Length} char).");
+    }
+
+    // `set` followed by any prefix of `suicide`, however spaced or cased: the
+    // game takes every one of them (GAME_MECHANICS "Suicide and reroll").
+    internal static bool IsSetSuicide(string line)
+    {
+        string[] words = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return words.Length == 2
+            && words[0].Equals("set", StringComparison.OrdinalIgnoreCase)
+            && "suicide".StartsWith(words[1], StringComparison.OrdinalIgnoreCase);
     }
 
     // ----- Server-line handlers ------------------------------------------
