@@ -8222,10 +8222,18 @@ public sealed class AppServices
                 timer.Start();
             },
             log: Log,
-            buffsDue: priority => CastDirector.BuffsDue(priority));
+            buffsDue: priority => CastDirector.BuffsDue(priority),
+            stillWanted: () => LairEntryDebuffModeForNextStep() != Game.Map.LairEntryDebuffMode.Off);
         CastDirector.SetLairEntryBuffHold(
             () => LairDebuffHold.BlockingBuffs, () => LairDebuffHold.BlockingOrdinaryBuffs,
             buff => LairDebuffHold.NotePriorityBuffCast(buff));
+        // A loop that stops or fails never asks again, so its wait is ended here rather
+        // than left to the hold's own next look.
+        LoopRunner.Event += e =>
+        {
+            if (e.Kind is Game.Map.LoopEventKind.Stopped or Game.Map.LoopEventKind.Failed)
+                LairDebuffHold.Reset("the loop stopped");
+        };
         LoopRunner.SetMoveReadyCheck(() =>
         {
             // A "rest up here" room holds the step until the rest is done.

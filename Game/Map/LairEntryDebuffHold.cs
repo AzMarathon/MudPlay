@@ -42,6 +42,7 @@ public sealed class LairEntryDebuffHold
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
     private readonly Func<bool, IReadOnlyList<string>>? _buffsDue;
+    private readonly Func<bool>? _stillWanted;
 
     private LairEntryDebuffMode _mode;
     private bool _waiting;
@@ -63,10 +64,12 @@ public sealed class LairEntryDebuffHold
     // slotUsed: this round's between-round cast is spent. castDue: a heal, cure or
     // buff that isn't being held back is due and would take it. buffsDue: the names of
     // the buffs due, those ticked "Priority buff" (true) or the rest (false), held
-    // back or not; only read to say what a wait is for.
+    // back or not; only read to say what a wait is for. stillWanted: the loop is still
+    // about to step into a lair it waits outside (asked while a wait stands, since a
+    // loop that was stopped or switched off never asks ReadyToEnter again).
     public LairEntryDebuffHold(MovementCoordinator coordinator, Func<bool> slotUsed, Func<bool> castDue,
         Action<TimeSpan, Action> scheduleAfter, Func<DateTimeOffset>? now = null, LogService? log = null,
-        Func<bool, IReadOnlyList<string>>? buffsDue = null)
+        Func<bool, IReadOnlyList<string>>? buffsDue = null, Func<bool>? stillWanted = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(slotUsed);
@@ -79,6 +82,7 @@ public sealed class LairEntryDebuffHold
         _now = now ?? (() => DateTimeOffset.UtcNow);
         _log = log;
         _buffsDue = buffsDue;
+        _stillWanted = stillWanted;
     }
 
     // Every buff waits: the loop is at a lair's doorstep with no more casts allowed
@@ -130,8 +134,9 @@ public sealed class LairEntryDebuffHold
             : $"priority buff {buff} cast again while waiting outside the lair (sent {sends} times)");
     }
 
-    // The step landed, or the loop turned away from the lair: nothing is held any more.
-    public void Reset()
+    // The step landed, the loop turned away from the lair, or it stopped: nothing is
+    // held any more.
+    public void Reset(string why = "no longer entering a lair")
     {
         _generation++;
         _blockWhileWaiting = false;
@@ -142,8 +147,9 @@ public sealed class LairEntryDebuffHold
         _limitReached = WaitLimit.None;
         if (!_waiting) return;
         _waiting = false;
-        _lastOutcome = $"{_now():HH:mm:ss} no longer entering a lair";
-        _coordinator.ClearGate(MovementCoordinator.LairDebuffGate, Asserter, "no longer entering a lair");
+        _lastOutcome = $"{_now():HH:mm:ss} {why}";
+        _log?.Info("Loop", $"the wait outside the lair is over, buffs released — {why}");
+        _coordinator.ClearGate(MovementCoordinator.LairDebuffGate, Asserter, why);
     }
 
     // What the hold is doing and how its last wait ended, for the bug report.
@@ -274,8 +280,18 @@ public sealed class LairEntryDebuffHold
         _scheduleAfter(Poll, () =>
         {
             if (generation != _generation || !_waiting) return;
-            if (Decide()) GoIn();
+            if (WhyNoLongerWanted() is { } why) Reset(why);
+            else if (Decide()) GoIn();
             else SchedulePoll();
         });
     }
+
+    // A wait stands until the loop asks again, and a loop that was stopped, paused by
+    // hand or switched off doesn't: left alone, the wait would hold its gate and the
+    // buffs until its own limits ran out, over whatever the player did next.
+    private string? WhyNoLongerWanted() =>
+        _coordinator.IsGateAsserted(MovementCoordinator.UserGate) ? "paused by hand"
+        : _coordinator.IsGateAsserted(MovementCoordinator.AutoAllGate) ? "the master switch is off"
+        : _stillWanted?.Invoke() == false ? "the loop is no longer about to enter a lair it waits outside"
+        : null;
 }

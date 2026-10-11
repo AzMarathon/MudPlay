@@ -24,11 +24,14 @@ public sealed class LairEntryDebuffHoldTests
         public List<string> PriorityDue { get; } = new();
         public List<string> OrdinaryDue { get; } = new();
         public LogService Log { get; } = new();
+        // The loop is still about to step into the lair it waits outside.
+        public bool StillWanted = true;
 
         public Harness() =>
             Hold = new LairEntryDebuffHold(Coordinator, () => SlotUsed, () => CastDue,
                 (_, action) => Scheduled.Add(action), () => Now, Log,
-                priority => priority ? PriorityDue : OrdinaryDue);
+                priority => priority ? PriorityDue : OrdinaryDue,
+                stillWanted: () => StillWanted);
 
         public bool Held => Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffGate);
 
@@ -151,6 +154,59 @@ public sealed class LairEntryDebuffHoldTests
         Assert.False(h.Hold.BlockingBuffs);
         h.Poll();                                    // a late timer does nothing
         Assert.False(h.Held);
+    }
+
+    // ----- A wait the loop never comes back to -----------------------
+
+    // A stopped loop never asks again. The wait must not hold its gate and the buffs
+    // on by its own timer: a walk started next would sit on "Waiting to Debuff".
+    [Theory]
+    [InlineData(LairEntryDebuffMode.WaitForSpells)]
+    [InlineData(LairEntryDebuffMode.BlockSpells)]
+    [InlineData(LairEntryDebuffMode.WaitForPriorityBuffs)]
+    public void LoopStoppedMidWait_ReleasesTheGateAndTheBuffs_AtTheNextLook(LairEntryDebuffMode mode)
+    {
+        Harness h = new() { SlotUsed = true, CastDue = true };
+        Assert.False(h.Hold.ReadyToEnter(mode));
+        Assert.True(h.Held);
+
+        h.StillWanted = false;                      // Stop pressed, Auto-Combat off, the route changed
+        h.Poll();
+
+        Assert.False(h.Held);
+        Assert.False(h.Hold.BlockingBuffs);         // not even for the step in: there is none
+        Assert.False(h.Hold.BlockingOrdinaryBuffs);
+        Assert.Empty(h.Scheduled);                  // and it stops looking
+        Assert.Contains(h.LoopLog, m => m.StartsWith("the wait outside the lair is over, buffs released"));
+    }
+
+    [Fact]
+    public void PausedByHandMidWait_ReleasesTheHold()
+    {
+        Harness h = new() { SlotUsed = true, CastDue = true };
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.WaitForPriorityBuffs));
+
+        h.Coordinator.AssertGate(MovementCoordinator.UserGate);
+        h.Poll();
+
+        Assert.False(h.Held);
+        Assert.False(h.Hold.BlockingOrdinaryBuffs);
+        Assert.EndsWith("paused by hand", h.Hold.Describe());
+    }
+
+    [Fact]
+    public void MasterSwitchOffMidWait_ReleasesTheHold()
+    {
+        Harness h = new() { SlotUsed = true, CastDue = true };
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells));
+
+        h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate);
+        h.Coordinator.ParkHoldsForMasterSwitch();
+        h.Poll();
+
+        Assert.False(h.Hold.IsWaiting);
+        Assert.False(h.Hold.BlockingBuffs);
+        Assert.DoesNotContain(MovementCoordinator.LairDebuffGate, h.Coordinator.ParkedGates);
     }
 
     // ----- Wait for priority buff spells -----------------------------

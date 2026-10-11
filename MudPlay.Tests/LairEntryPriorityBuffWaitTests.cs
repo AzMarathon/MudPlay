@@ -33,6 +33,8 @@ public sealed class LairEntryPriorityBuffWaitTests
         public bool AutoHeal { get; set; } = true;
         public bool AutoBless { get; set; } = true;
         public bool SneakKept { get; set; }
+        // False once the loop is stopped (or otherwise no longer about to enter).
+        public bool LoopStillAtTheDoor { get; set; } = true;
         // The combat profile's debuff, offered once the loop is in the lair.
         public string? DebuffOwed { get; set; }
         public DateTime Now { get; set; } = new(2026, 10, 10, 12, 0, 0, DateTimeKind.Utc);
@@ -66,7 +68,8 @@ public sealed class LairEntryPriorityBuffWaitTests
                 scheduleAfter: (_, action) => Scheduled.Add(action),
                 now: () => new DateTimeOffset(Now),
                 log: Log,
-                buffsDue: Director.BuffsDue);
+                buffsDue: Director.BuffsDue,
+                stillWanted: () => LoopStillAtTheDoor);
             Director.SetLairEntryBuffHold(
                 () => Hold.BlockingBuffs, () => Hold.BlockingOrdinaryBuffs, Hold.NotePriorityBuffCast);
 
@@ -349,6 +352,31 @@ public sealed class LairEntryPriorityBuffWaitTests
         Assert.Equal(new[] { "star", "star", "star" }, h.CastsSent);
         Assert.Contains(h.InfoLog("Loop"), m => m.StartsWith(
             "priority buff star went out 3 times in this wait, the most one may (priority buffs still due: star)"));
+    }
+
+    // Stop pressed with five priority buffs still to go: the wait ends at its next
+    // look instead of running on for 25 seconds with the gate up and the others held.
+    [Fact]
+    public void LoopStoppedMidWait_TheGateAndTheHeldBuffsAreReleasedAtOnce()
+    {
+        using Harness h = new();
+        for (int i = 1; i <= 5; i++) h.AddBuff($"sta{i}", priority: true);
+        h.AddBuff("plai", priority: false);
+        Assert.False(h.AskToEnter());
+        Assert.Equal("sta1", h.Director.Evaluate());
+        h.Poll();
+
+        h.LoopStillAtTheDoor = false;               // Stop: the loop never asks again
+        h.NextRound();
+        h.Poll();
+
+        Assert.False(h.Held);
+        h.NextRound(); h.Director.Evaluate();
+        h.NextRound(); h.Director.Evaluate();
+        h.NextRound(); h.Director.Evaluate();
+        h.NextRound(); h.Director.Evaluate();
+        h.NextRound();
+        Assert.Equal("plai", h.Director.Evaluate());   // ordinary buffing is back to normal
     }
 
     // The same five buffs under Wait for spells: its three rounds are what they were.
