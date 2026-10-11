@@ -22,9 +22,13 @@ namespace MudPlay.Game.Simulation;
 // record:
 //   game-data edits   the user's record overrides at every tier (Game Data Browser)
 //   reach             what decides which areas can be walked to, as far as it holds
-//                     still: avoided rooms, class and race, gate items carried
-// The purse is left out: it moves with every kill, and a ranking marked for it
-// would always be marked.
+//                     still: avoided and blacklisted rooms, class and race, gate
+//                     items carried (RankingReach)
+// The purse and the walk pace are left out: they move with every kill and every
+// item picked up, and a ranking marked for them would always be marked.
+//
+// The user's own loops in a ranking are compared too, but apart from these, loop by
+// loop (RankingLoops): they are not the character's, and the check names them.
 public sealed record RankingCharacter(IReadOnlyDictionary<string, string> Groups)
 {
     public const string StatsOrGear = "stats or gear";
