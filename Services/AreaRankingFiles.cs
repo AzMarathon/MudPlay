@@ -339,11 +339,13 @@ public sealed class AreaRankingFiles
     // held are the files of rankings the client has in memory and are left alone.
     //
     // Other clients share the folder and may sweep, or save a ranking, at the same
-    // moment. A file is deleted, and counted, only by the pass that got it to
-    // itself: one another sweep holds or took first is left out of the count, so
-    // two clients' counts never add up to more than went. One replaced between the
-    // look at its stamp and the delete has another write time by then, and is
-    // left: it is a new ranking.
+    // moment. A file is counted only by a pass that held it while it was there and
+    // found it gone on letting go; one another sweep holds or took first is left
+    // out of the count. With two sweeps run together on Linux the two counts came
+    // to exactly the files that went in every round tried, which is a measurement
+    // and not a proof for every interleaving. One replaced between the look at its
+    // stamp and the delete has another write time by then, and is left: it is a
+    // new ranking.
     public int SweepOld(IReadOnlyCollection<string> held, Action<string>? skipped = null)
     {
         ArgumentNullException.ThrowIfNull(held);
@@ -407,11 +409,18 @@ public sealed class AreaRankingFiles
                 }
                 if (_now() - madeAt <= MaxAge) continue;
                 if (File.GetLastWriteTimeUtc(file) != writtenAt) continue;
-                // Opened to ourselves alone and deleted as it closes: of two clients
-                // sweeping at once only one gets the file, so only one counts it.
-                // The other finds it held or gone and counts nothing.
-                using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None, bufferSize: 1, FileOptions.DeleteOnClose)) { }
-                deleted++;
+                // Opened to ourselves alone and deleted as it closes. On Windows the
+                // open is exclusive: a second sweep cannot have the file at all. On
+                // Linux the hold is an advisory lock and the delete happens at
+                // the close, so a second sweep can still be handed a file the first
+                // has already removed, and a delete that fails (a folder that
+                // cannot be written) fails without a word. So a file is counted
+                // only if it was there while we held it and is gone once we let go.
+                bool wasThere;
+                using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None, bufferSize: 1, FileOptions.DeleteOnClose))
+                    wasThere = File.Exists(file);
+                if (wasThere && !File.Exists(file)) deleted++;
+                else skipped?.Invoke($"{file}: it could not be deleted, or another client's sweep took it");
             }
             catch (FileNotFoundException) { /* another client's sweep took it first */ }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException

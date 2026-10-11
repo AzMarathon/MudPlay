@@ -352,7 +352,11 @@ public sealed class AreaRankingStore
             int deleted = files.SweepOld(held, skipped.Add);
             _post(() =>
             {
-                foreach (string why in skipped) _log?.Debug("Simulator", $"saved area ranking left by the sweep: {why}");
+                // One line for the pass: with another client sweeping at the same
+                // moment nearly every old file is one of these.
+                if (skipped.Count > 0)
+                    _log?.Log(LogSeverity.Debug, "Simulator",
+                        $"the sweep of saved area rankings left {skipped.Count} file(s) it could not read, judge or take; the first: {skipped[0]}");
                 if (deleted > 0)
                     Note($"deleted {deleted} saved area ranking(s) made more than {AreaRankingFiles.MaxAge.Days} days ago");
             });

@@ -636,6 +636,57 @@ public sealed class AreaRankingFilesTests : IDisposable
         Assert.Equal(0, Files(SweepNow).SweepOld(Array.Empty<string>()));
     }
 
+    // A file that cannot be deleted (its folder cannot be written) is opened all the
+    // same, and on Linux the delete then fails without a word. It is not counted,
+    // it is said, and the file stays.
+    [Fact]
+    public void TheSweep_DoesNotCountAFileItCouldNotDelete()
+    {
+        // No such thing as a folder that cannot be written for root, and Windows
+        // refuses the open itself.
+        if (OperatingSystem.IsWindows() || Environment.UserName == "root") return;
+        string set = NewSet("a");
+        string old = Save(new SimulatorOwner(set, One), OldThen);
+        string folder = Path.GetDirectoryName(old)!;
+        var skipped = new List<string>();
+        UnixFileMode before = File.GetUnixFileMode(folder);
+        File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            Assert.Equal(0, Files(SweepNow).SweepOld(Array.Empty<string>(), skipped.Add));
+        }
+        finally
+        {
+            File.SetUnixFileMode(folder, before);
+        }
+
+        Assert.True(File.Exists(old));
+        Assert.Contains(skipped, s => s.StartsWith(old, StringComparison.Ordinal) && s.Contains("could not be deleted"));
+        Assert.True(Directory.Exists(folder));
+    }
+
+    // What the sweep left is one line of the log for the pass, with the count: two
+    // clients sweeping together leave each other nearly every old file.
+    [Fact]
+    public void TheStoresSweep_SaysWhatItLeftInOneLine()
+    {
+        string set = NewSet("a");
+        string folder = Path.GetDirectoryName(Save(new SimulatorOwner(set, One), FreshThen))!;
+        File.WriteAllText(Path.Combine(folder, "one.ranking.json"), "{\"Format\":1}");
+        File.WriteAllText(Path.Combine(folder, "two.ranking.json"), "{ not json");
+        var client = new Client(Files(SweepNow));
+
+        client.Store.SweepOld();
+        client.Settle();
+
+        LogEntry line = Assert.Single(client.Log.Snapshot(), l => l.Message.StartsWith("the sweep of saved area rankings left"));
+        Assert.Equal(LogSeverity.Debug, line.Severity);
+        // At least these two: the sweep walks every set under the data root, other
+        // test classes' included.
+        int left = int.Parse(System.Text.RegularExpressions.Regex.Match(line.Message, @"left (\d+) file\(s\)").Groups[1].Value);
+        Assert.True(left >= 2, line.Message);
+    }
+
     // A Simulator folder or a BBS folder that is a link leads wherever it likes:
     // the sweep does not look through it, however old what lies behind it.
     [Fact]
