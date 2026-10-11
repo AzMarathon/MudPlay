@@ -1,13 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.18**
-> - After a death no walk or loop takes a toll, fare or sailing until the inventory is read again (your coin went with the pile); a death in an arena room takes nothing
-> - A toll or fare the game refuses is never sent twice; it reopens once your inventory has been read and you carry the price it named
-> - A walk with no way round one you can't pay says so on the terminal, naming it and how short you are
-> - A loop over a toll you can't pay is not started, and stops if refused mid-lap; such a loop could crash the client
-> - A sailing you can't pay for is not walked to
-> - The re-read a refusal asks for waits for Auto-All to come back on; the one after a death is no longer lost to a held send
+> **Version 3.167.21**
+> - After a death, walks and loops avoid tolls, fares and sailings until the inventory is re-read; an arena death takes nothing
+> - A toll or fare the game refuses isn't sent twice; it reopens once you carry the price
+> - A walk with no way round an unpayable toll says so on the terminal
+> - A loop over an unpayable toll isn't started, and stops if refused mid-lap (it could crash the client)
+> - A sailing you can't pay for isn't walked to
+> - The purse re-read after a refusal or a death stays owed until it goes out
 > - Program log and bug report show the purse a toll was judged on
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
