@@ -179,4 +179,25 @@ public sealed class QuestStepGraphTests : IDisposable
         Assert.Equal(2, steps.Length);
         Assert.All(steps, s => Assert.Equal(1, s.Order));
     }
+
+    // A chain is passed over unread when the flag's digits are nowhere in it. The
+    // digits are also there in a longer number, in another directive's argument and
+    // in a flag written with leading zeros: the first two are no step, the last is.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Build_OnlyTheFlagItselfMakesAStep(bool byAbilityValue)
+    {
+        GameDataCache cache = CacheWith(
+            ("sit throne:giveability 50 1:giveitem 100", "Room 1/1"),
+            ("touch altar:giveability 150 1:giveitem 50", "Room 1/2"),
+            ("pull lever:giveability 505 1:giveitem 300", "Room 1/3"),
+            ("read sign:giveability 050 2:giveitem 400", "Room 1/4"),
+            ("open box:giveability 7 1:giveitem 500\nring bell:giveability 50 3:giveitem 600", "Room 1/5"),
+            ("light lamp:giveability 7 1:giveitem 700", "Room 1/6"));
+
+        string?[] commands = QuestStepGraph.Build(cache, 50, byAbilityValue).Select(s => s.Command).ToArray();
+
+        Assert.Equal(new[] { "sit throne", "read sign", "ring bell" }, commands);
+    }
 }

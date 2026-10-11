@@ -29,6 +29,11 @@ public readonly struct GameValue
     // of it: for telling a common cell ("0") apart in a loop over a whole table.
     public bool ValueEquals(ReadOnlySpan<byte> utf8Text) => Table.ValueEquals(_cell, utf8Text);
 
+    // Whether a string's text holds these UTF-8 bytes anywhere, likewise without
+    // making a string of it: for passing over the long cells (a textblock's script) a
+    // search has no business in.
+    public bool ValueContains(ReadOnlySpan<byte> utf8Text) => Table.ValueContains(_cell, utf8Text);
+
     public bool TryGetInt32(out int value) => Table.TryGetInt32(_cell, out value);
 
     public int GetInt32() => TryGetInt32(out int value) ? value : throw new FormatException("The number is not a 32-bit whole number.");

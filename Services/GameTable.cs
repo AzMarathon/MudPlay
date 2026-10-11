@@ -184,6 +184,15 @@ public sealed class GameTable
         _ => throw WrongKind(cell, "String"),
     };
 
+    // Whether a string's text holds these UTF-8 bytes anywhere, searched in place. A
+    // null holds nothing, the empty span included.
+    internal bool ValueContains(int cell, ReadOnlySpan<byte> utf8) => _kinds[cell] switch
+    {
+        StringCell => Utf8(_values[cell]).IndexOf(utf8) >= 0,
+        NullCell => false,
+        _ => throw WrongKind(cell, "String"),
+    };
+
     // A number is whole only when its text is: "7.0" and "7e0" are not.
     // A failed read leaves 0 in value, never the digits it got through.
     internal bool TryGetInt32(int cell, out int value)

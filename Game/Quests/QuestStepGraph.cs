@@ -50,14 +50,19 @@ public static class QuestStepGraph
         var steps = new List<QuestStep>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
-        // Index every block by its textblock number so a guard-led (command-less) step
-        // can walk its Called-From chain up to the NPC whose ask-keyword branches to it.
-        Dictionary<int, GameRow> byNumber = IndexByNumber(tbinfo);
+        // A chain is a step only through a directive whose first number is the flag,
+        // so a chain that doesn't hold the flag's digits anywhere is none, and neither
+        // is any chain of a block that doesn't. The draft is built for every quest in
+        // turn, each walking every block: making a string of each block's script and
+        // taking every chain apart to find that out was all of what a set's drafts cost.
+        string flagDigits = Math.Abs((long)flag).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        byte[] flagDigitsUtf8 = System.Text.Encoding.ASCII.GetBytes(flagDigits);
 
         foreach (GameRow block in tbinfo.Rows)
         {
             if (!block.TryGetProperty("Action", out GameValue actionEl)) continue;
             if (actionEl.ValueKind != JsonValueKind.String) continue;
+            if (!actionEl.ValueContains(flagDigitsUtf8)) continue;
             string? action = actionEl.GetString();
             if (string.IsNullOrEmpty(action) || action == "\0") continue;
 
@@ -65,9 +70,10 @@ public static class QuestStepGraph
 
             foreach (string raw in action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
+                if (!raw.Contains(flagDigits, StringComparison.Ordinal)) continue;
                 QuestStep? step = byAbilityValue ? BuildValueStep(raw, flag, location) : BuildStep(raw, flag, location);
                 if (step is null) continue;
-                step = ResolveAsk(step, cache, byNumber);
+                step = ResolveAsk(step, cache, tbinfo);
                 if (seen.Add(CanonicalKey(step))) steps.Add(step);
             }
         }
@@ -183,20 +189,6 @@ public static class QuestStepGraph
         return string.IsNullOrWhiteSpace(s) ? null : s;
     }
 
-    // Index blocks by textblock number (first row wins — a number is unique in
-    // practice) so ResolveAsk can hop a step's Called-From chain by number.
-    private static Dictionary<int, GameRow> IndexByNumber(GameTable tbinfo)
-    {
-        var map = new Dictionary<int, GameRow>();
-        foreach (GameRow block in tbinfo.Rows)
-        {
-            if (block.TryGetProperty("Number", out GameValue n)
-                && n.ValueKind == JsonValueKind.Number && n.TryGetInt32(out int num))
-                map.TryAdd(num, block);
-        }
-        return map;
-    }
-
     // Enrich a guard-led step anchored on a textblock with the player command that
     // reaches it: an "ask <npc> <keyword>" recovered by walking the Called-From chain
     // up to the NPC whose dialogue keyword branches into the step, re-anchoring the
@@ -205,13 +197,12 @@ public static class QuestStepGraph
     // (ask keyword → textblock → giveability), not standalone room commands. Verb-led
     // steps, and steps rooted on a room / monster / spell rather than a textblock, are
     // left untouched.
-    private static QuestStep ResolveAsk(QuestStep step, GameDataCache cache,
-        Dictionary<int, GameRow> byNumber)
+    private static QuestStep ResolveAsk(QuestStep step, GameDataCache cache, GameTable tbinfo)
     {
         if (step.Command is not null) return step;
         if (ParseTextblockRef(step.Location) is null) return step;
 
-        var hit = ResolveAskSource(step.Location, byNumber);
+        var hit = ResolveAskSource(step.Location, tbinfo);
         if (hit is null) return step;
 
         (int monster, string keyword) = hit.Value;
@@ -229,8 +220,11 @@ public static class QuestStepGraph
     // step. Null when the chain doesn't root at an askable NPC keyword — an auto-shown
     // greeting textblock, a spell/room root, the NPC being the step's direct parent
     // (no intermediate textblock names the keyword), or an unresolvable ref.
+    //
+    // A block is looked up by its textblock number in the table's own index (first
+    // row wins — a number is unique in practice), which every quest's draft shares.
     private static (int Monster, string Keyword)? ResolveAskSource(
-        string? stepCalledFrom, Dictionary<int, GameRow> byNumber)
+        string? stepCalledFrom, GameTable tbinfo)
     {
         int? cur = ParseTextblockRef(stepCalledFrom);
         if (cur is null) return null;
@@ -240,7 +234,7 @@ public static class QuestStepGraph
         int guard = 0;
         while (cur is int c && seen.Add(c) && guard++ < 64)
         {
-            if (!byNumber.TryGetValue(c, out GameRow block)) return null;
+            if (tbinfo.FindByNumber(c) is not { } block) return null;
             string? parent = ReadStringProp(block, "Called From");
 
             if (ParseMonsterRef(parent) is int monster)
