@@ -1,3 +1,4 @@
+using System.Text;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 
@@ -11,52 +12,93 @@ namespace MudPlay.Game.Recovery;
 // (LearnedArrivalRoomStore) and read by the hang-up death check
 // (HangupDeathArrivalRooms), for the rooms no list covers.
 //
-// A pair is learned only when both ends are certain:
+// A reading is made only when both ends are certain:
 //   - the death was seen (its lines read), in a room the map was sure of;
 //   - it was not an arena death. That one is the arena's own rule, and where it
 //     puts the character says nothing of a death that costs a life;
-//   - the room the character arrived in is the one the first room display after
-//     the death showed, with no move sent in between, and the map is sure of it.
-// A graveyard too dark to show, a display the map can't place, a move typed
-// before the room was drawn: nothing is learned, and nothing is tried again from
-// a later display, by which time the character may stand somewhere else.
+//   - the room the character arrived in is one a room display showed after the
+//     death, with nothing sent in between that could have moved the character,
+//     and the map is sure of it.
+// A graveyard too dark to show, a display the map can't place, a move or a room
+// command sent before the room was drawn: nothing is learned.
+//
+// The death lines print no room themselves, so the first display afterwards is
+// whatever was asked for, and one asked for while the death was still being
+// carried out can be of the room died in (PlayerDeathMovementHalt). That display
+// is not the arrival: it teaches nothing, and the next one is waited for, for a
+// short while. A room that really is its own graveyard is never learned this way.
+// On Stock the list has those rooms; elsewhere they stay unlearned, which costs
+// nothing, since standing in the room it left says nothing of a room like that.
 //
 // Where the Stock list is the world's own (an unmodified Stock set, a zone
-// Paradigm shares with Stock) nothing is learned: the list stands. A death seen
-// to end somewhere the list doesn't have is said in the log, and left at that.
+// Paradigm shares with Stock) nothing is learned, and a death that ends where the
+// list says is no news. One that ends somewhere the list doesn't allow is:
+//   - on an unmodified Stock set, a sign that the BOARD's rooms were edited while
+//     it still runs on the standard data. The board is marked for it
+//     (boardContradicted), and from then on it is treated as any board with
+//     edited rooms: the list says yes and never no, and what is learned is read;
+//   - on Paradigm, said in the log and left at that.
 public sealed class ArrivalRoomLearner
 {
+    // How long after a death a room display is still taken for the room it left
+    // the character in. The graveyard's own display has been seen to take 37
+    // seconds to come (PlayerDeathMovementHalt asks for it after 2.5), so a minute
+    // covers a slow one. It is a backstop, not the test: whatever could move the
+    // character meanwhile ends the wait at once.
+    public static readonly TimeSpan Window = TimeSpan.FromSeconds(60);
+
     private readonly RoomTracker _tracker;
     private readonly LearnedArrivalRoomStore _store;
+    private readonly LearnedArrivalLookup _lookup;
     private readonly Func<HangupArrivalListTrust> _trust;
     private readonly Func<RoomKey, RoomKey, bool>? _couldBeTakenFor;
     private readonly Func<RoomKey, bool>? _inAlbion;
+    private readonly Func<string, bool>? _isExitCommandSomewhere;
+    private readonly Action? _boardContradicted;
+    private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
 
-    // The room of a death just seen, until the first room display after it.
+    // The room of a death just seen, and when, until the room it arrived in is
+    // drawn.
     private RoomKey? _diedIn;
+    private DateTimeOffset _diedAt;
 
     //   trust           — how far the Stock list goes for the active game data.
     //   couldBeTakenFor — RoomGraphManager.CouldBeTakenFor: the map can confirm a
     //                     listed arrival room as a room that looks the same.
     //   inAlbion        — the room is in Paradigm's Albion, whose dead are known
     //                     to arrive in the Burial Vault.
+    //   isExitCommandSomewhere — RoomGraphManager.IsExitCommandSomewhere: the line
+    //                     is a text exit or a room command of some room.
+    //   boardContradicted — a death on an unmodified Stock set ended where the
+    //                     list doesn't allow: the board's rooms don't match the
+    //                     standard data. The trust read after it is the board's
+    //                     new one.
     public ArrivalRoomLearner(
         RoomTracker tracker,
         LearnedArrivalRoomStore store,
+        LearnedArrivalLookup lookup,
         Func<HangupArrivalListTrust> trust,
         Func<RoomKey, RoomKey, bool>? couldBeTakenFor = null,
         Func<RoomKey, bool>? inAlbion = null,
+        Func<string, bool>? isExitCommandSomewhere = null,
+        Action? boardContradicted = null,
+        Func<DateTimeOffset>? now = null,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(lookup);
         ArgumentNullException.ThrowIfNull(trust);
         _tracker = tracker;
         _store = store;
+        _lookup = lookup;
         _trust = trust;
         _couldBeTakenFor = couldBeTakenFor;
         _inAlbion = inAlbion;
+        _isExitCommandSomewhere = isExitCommandSomewhere;
+        _boardContradicted = boardContradicted;
+        _now = now ?? (static () => DateTimeOffset.UtcNow);
         _log = log;
     }
 
@@ -66,21 +108,41 @@ public sealed class ArrivalRoomLearner
         _diedIn = null;
         if (_tracker.LastDeathTookNothing || !_tracker.LastDeathRoomConfirmed) return;
         _diedIn = _tracker.LastDeathRoom;
+        _diedAt = _now();
     }
 
     // OutboundMovementObserver.MoveSent: the room the next display shows is no
     // longer the one the death left the character in.
     public void NoteMoveSent() => Forget();
 
+    // Every line going out, as the other outbound observers see it. A room
+    // command (`touch altar`) moves the character and is no direction or `go`,
+    // so the movement observer doesn't call it a move. With no room known after
+    // a death, any line that is an exit command of SOME room is taken for one.
+    public void ObserveOutbound(ReadOnlySpan<byte> bytes)
+    {
+        if (_diedIn is null || _isExitCommandSomewhere is null || bytes.IsEmpty || bytes.Length > 64) return;
+        string line = Encoding.Latin1.GetString(bytes).TrimEnd('\r', '\n', '\0').Trim();
+        if (line.Length > 0 && _isExitCommandSomewhere(line)) Forget();
+    }
+
     // The game was left, or the link dropped, before the room was drawn: on the
     // way back in the character may have been played from somewhere else.
     public void Forget() => _diedIn = null;
 
-    // RoomTracker.StateChanged. Only the first transition a room display decides
-    // counts, whatever it comes to.
+    // RoomTracker.StateChanged, for the transitions a room display decided.
     public void OnRoomStateChanged(RoomTransition transition)
     {
         if (_diedIn is not { } diedIn || !transition.Displayed) return;
+        if (_now() - _diedAt > Window)
+        {
+            Forget();
+            return;
+        }
+        // A display of the room died in: asked for before the death had moved the
+        // character. The room it arrived in is still to come.
+        if (transition.NewConfidence == RoomConfidence.Confirmed && transition.NewRoom?.Key == diedIn) return;
+
         _diedIn = null;
         if (transition.NewConfidence != RoomConfidence.Confirmed || transition.NewRoom is not { } arrived)
         {
@@ -93,35 +155,50 @@ public sealed class ArrivalRoomLearner
 
     private void Learn(RoomKey diedIn, RoomKey arrivedIn)
     {
-        HangupArrivalListTrust trust = _trust();
-        bool Fits(IReadOnlyList<RoomKey> known) =>
-            known.Contains(arrivedIn) || known.Any(room => _couldBeTakenFor?.Invoke(room, arrivedIn) == true);
+        bool Fits(IEnumerable<RoomKey> known) =>
+            known.Any(room => room == arrivedIn || _couldBeTakenFor?.Invoke(room, arrivedIn) == true);
 
-        if (HangupDeathArrivalRooms.ListCovers(diedIn, trust))
+        HangupArrivalListTrust trust = _trust();
+        // What a death there was expected to show, and on whose word.
+        IReadOnlyList<RoomKey>? expected = HangupDeathArrivalRooms.DeathArrivalsOn(diedIn, trust);
+        string onWhoseWord = "the Stock list";
+        if (expected is not null)
         {
-            IReadOnlyList<RoomKey> listed = HangupDeathArrivalRooms.For(diedIn)!;
-            if (Fits(listed)) return;
-            // On a board whose rooms may have been edited the list is only Stock's
-            // word, and what was seen is one more room its dead can arrive in.
-            if (trust == HangupArrivalListTrust.Unverified)
+            if (Fits(expected)) return;
+            if (trust == HangupArrivalListTrust.Paradigm)
             {
-                _store.Learn(diedIn, arrivedIn);
+                _log?.Warn(LearnedArrivalRoomStore.LogCategory,
+                    $"A death seen in {diedIn} ended in {arrivedIn}, where the Stock list has its dead arrive in "
+                    + $"{string.Join(" or ", expected)}. Not learned: the list stands for the zones Paradigm shares with "
+                    + "Stock. The list or the map is wrong about one of these rooms.");
                 return;
             }
-            // The list is of where a HANG-UP's dead arrive, which for the rooms
-            // with a leave-the-game room is not where a death's do. So this is
-            // either one of those, or a finding about the data.
-            _log?.Warn(LearnedArrivalRoomStore.LogCategory,
-                $"A death seen in {diedIn} ended in {arrivedIn}, where the Stock list has the dead of a hang-up there arrive "
-                + $"in {string.Join(" or ", listed)}. Not learned: the list stands for this game data. (The two differ for a "
-                + "room with a leave-the-game room; otherwise the list or the map is wrong about one of these rooms.)");
-            return;
+            if (trust == HangupArrivalListTrust.VanillaStock)
+            {
+                _boardContradicted?.Invoke();
+                // Still the world's own list: nobody is keeping count of boards.
+                if (_trust() == HangupArrivalListTrust.VanillaStock) return;
+            }
+        }
+        else if (trust == HangupArrivalListTrust.Paradigm && _inAlbion?.Invoke(diedIn) == true)
+        {
+            // Albion's dead are known to arrive in the Burial Vault: seeing it adds nothing.
+            expected = new[] { HangupDeathArrivalRooms.ParadigmAlbionVault };
+            onWhoseWord = "Albion";
+            if (Fits(expected)) return;
+        }
+        else if (_lookup.LandSays(diedIn).Arrivals is { } land)
+        {
+            expected = land.Select(l => l.Arrival).Distinct().ToList();
+            onWhoseWord = $"a death seen in {land[0].SeenIn}, a room of the same land,";
         }
 
-        // Albion's dead are known to arrive in the Burial Vault: seeing it adds nothing.
-        if (trust == HangupArrivalListTrust.Paradigm && _inAlbion?.Invoke(diedIn) == true
-            && Fits(new[] { HangupDeathArrivalRooms.ParadigmAlbionVault }))
-            return;
-        _store.Learn(diedIn, arrivedIn);
+        LearnedArrivalOutcome outcome = _store.Learn(diedIn, arrivedIn);
+        // The room's own reading is kept and wins for that room; the land keeps
+        // its reading for its other rooms.
+        if (outcome == LearnedArrivalOutcome.Learned && expected is not null && !Fits(expected))
+            _log?.Warn(LearnedArrivalRoomStore.LogCategory,
+                $"A death seen in {diedIn} ended in {arrivedIn}, not in {string.Join(" or ", expected)} as {onWhoseWord} had "
+                + "it. Recorded as that room's own: it is what is used for that room from now on.");
     }
 }

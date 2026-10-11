@@ -247,6 +247,9 @@ public sealed class HangupItemRecheckTests
         // What the game-data set has learned from deaths seen: room died in → the
         // room its dead were seen to arrive in (LearnedArrivalRoomStore).
         public Dictionary<RoomKey, RoomKey> LearnedArrivals { get; } = new();
+        // Set, the death that taught them was seen in this other room of the land,
+        // not in the room itself.
+        public RoomKey? LearnedIn { get; set; }
         public Dictionary<RoomKey, string> RoomNames { get; } = new();
         public List<MudPlay.Game.Recovery.UnwitnessedDeath> Deaths { get; } = new();
         public HangupItemRecheck Check { get; }
@@ -299,7 +302,9 @@ public sealed class HangupItemRecheckTests
                     : EditedBoard ? MudPlay.Game.Recovery.HangupArrivalListTrust.Unverified
                     : MudPlay.Game.Recovery.HangupArrivalListTrust.VanillaStock,
                     CouldBeTakenFor, Albion.Contains,
-                    room => LearnedArrivals.TryGetValue(room, out RoomKey seen) ? new[] { seen } : null),
+                    room => LearnedArrivals.TryGetValue(room, out RoomKey seen)
+                        ? new[] { new MudPlay.Game.Recovery.LearnedArrival(seen, LearnedIn ?? room) }
+                        : null),
                 roomLabel: room => RoomNames.TryGetValue(room, out string? name) ? $"{name} ({room})" : $"room {room}");
             Check.SetWireSender(_ => { });
         }
@@ -349,15 +354,16 @@ public sealed class HangupItemRecheckTests
         }
 
         // The next entry: this room, this HP at the first prompt, the board's line
-        // or not, the login's `stat` or not, then its `i`.
-        public void ComeBack(int hp, int? lives, InventorySnapshot held, bool boardLine = true, RoomKey? room = null)
+        // or not, the login's `stat` or not, then its `i`. A null hp is a first
+        // prompt the statline's HP wasn't read from.
+        public void ComeBack(int? hp, int? lives, InventorySnapshot held, bool boardLine = true, RoomKey? room = null)
         {
             Room = room ?? HallsOfTheDead;
             Now = Now.AddMinutes(1);
             Check.NoteConnected();
             if (boardLine) BoardSaysHungUp();
             Check.NoteRoomDisplayed();
-            Vitals = (hp, 200);
+            Vitals = hp is { } read0 ? (read0, 200) : null;
             Check.OnInGameChanged(true);
             if (lives is { } read)
             {
@@ -3847,6 +3853,53 @@ public sealed class HangupItemRecheckTests
         Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in Isle Shrine (14/1900), where the dead of room 14/1813 "
             + "arrive (learned from a death seen there).", Assert.Single(h.Deaths).Message);
         Assert.Equal("14/1813 → 14/1900", h.Check.LastLearnedArrivalUsed);
+    }
+
+    // A death seen in one room stands for its land: hung up on the path beside
+    // the landing, back in the shrine the landing's dead were seen to arrive in.
+    // The record and the bug report say which room the death was seen in.
+    [Fact]
+    public void ARoomOfTheLandADeathWasSeenIn_BackWhereThatDeathEnded_IsADeath_AndSaysWhoseReadingItIs()
+    {
+        RoomKey path = new(14, 1814);
+        Harness h = OnParadigm();
+        h.LearnedArrivals[path] = IsleShrine;
+        h.LearnedIn = TerraIsta;
+        h.RoomNames[IsleShrine] = "Isle Shrine";
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, path);
+
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: IsleShrine);
+
+        Assert.Equal($"{HangupItemRecheck.DeathMessage} It came back in Isle Shrine (14/1900), where the dead of room 14/1814 "
+            + "arrive (learned from a death seen in room 14/1813, a room of the same land).", Assert.Single(h.Deaths).Message);
+        Assert.Equal("14/1813 → 14/1900 (standing for 14/1814, a room of its land)", h.Check.LastLearnedArrivalUsed);
+    }
+
+    // A learned room is where a DEATH there ends, which can be where a hang-up
+    // leaves a character that lived. So where the room alone would record a death
+    // (no count from before, nothing owned for a death to take), a learned room
+    // needs HP at the first prompt above what the character left with as well.
+    [Fact]
+    public void ALearnedArrivalRoom_IsNotEnoughByItself_ForACharacterThatOwnedNothing()
+    {
+        Harness h = WithALearnedArrival();
+        h.StoredAt(-5, Snap(), lives: null, room: new RoomRef(14, 1813));
+        h.ComeBack(hp: null, lives: 6, Snap(), boardLine: false, room: IsleShrine);
+        Assert.Empty(h.Deaths);
+        Assert.Contains("which is only known from a death seen to end there", h.Check.LastDeathCheck);
+        Assert.Contains("nor its HP (not read at the first prompt) says which this was", Assert.Single(h.Notices));
+
+        // HP read, and above the -5 it left with: recorded.
+        Harness o = WithALearnedArrival();
+        o.StoredAt(-5, Snap(), lives: null, room: new RoomRef(14, 1813));
+        o.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false, room: IsleShrine);
+        Assert.Contains("(learned from a death seen there)", Assert.Single(o.Deaths).Message);
+
+        // A room the list has needs no more than itself for that character.
+        Harness l = WithArrivalRooms();
+        l.StoredAt(-5, Snap(), lives: null, room: new RoomRef(1, 109));
+        l.ComeBack(hp: null, lives: 6, Snap(), room: HallsOfTheDead);
+        Assert.Single(l.Deaths);
     }
 
     // Anywhere else, the learned room says nothing: a hang-up leaves through the

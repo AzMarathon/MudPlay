@@ -801,7 +801,8 @@ public sealed class HangupItemRecheck
         bool? loginLines = stock ? _loginLines || older.LoginLinesSeenSince : null;
         (bool? entryRoom, string? entryRoomText, LastLearnedArrivalUsed) = EntryRoom(older);
         (Recovery.HangupDeathVerdict verdict, string why, bool arena) =
-            Verdict(older, hpAtEntry, worn: null, loginLines, takenStillHeld: null, entryRoom, entryRoomText);
+            Verdict(older, hpAtEntry, worn: null, loginLines, takenStillHeld: null, entryRoom, entryRoomText,
+                entryRoomLearned: LastLearnedArrivalUsed is not null);
         // Without an inventory read the worn and still-held checks that tell a death
         // by that hang-up from a life lost on another client (recovered, everything
         // worn again) can't be made. On Stock the board's login lines still can; off
@@ -1048,20 +1049,20 @@ public sealed class HangupItemRecheck
     // and the ordinary rule when it wasn't.
     private (Recovery.HangupDeathVerdict Verdict, string Why, bool Arena) Verdict(
         HeldAtDisconnect before, int? hpAtEntry, bool? worn, bool? loginLines, bool? takenStillHeld,
-        bool? entryRoom, string? entryRoomText)
+        bool? entryRoom, string? entryRoomText, bool entryRoomLearned)
     {
         string? notArena = null;
         if (ArenaDeathPossible(before))
         {
             (Recovery.HangupDeathVerdict arena, string arenaWhy) = Recovery.HangupDeath.JudgeArena(
                 before.Hp, hpAtEntry, before.Lives, _livesReadThisLink, takenStillHeld, entryRoom, entryRoomText,
-                ordinaryDeathPossible: ShareTop(before) is not null);
+                ordinaryDeathPossible: ShareTop(before) is not null, entryRoomLearned);
             if (arena != Recovery.HangupDeathVerdict.NotSuspected) return (arena, arenaWhy, true);
             notArena = arenaWhy;
         }
         (Recovery.HangupDeathVerdict verdict, string why) = Recovery.HangupDeath.Judge(
             before.Hp, before.MaxHp, ShareTop(before), hpAtEntry, before.Lives, _livesReadThisLink,
-            worn, loginLines, takenStillHeld, entryRoom, entryRoomText, OwnedNothing(before));
+            worn, loginLines, takenStillHeld, entryRoom, entryRoomText, OwnedNothing(before), entryRoomLearned);
         // A realm that doesn't penalise the hang-up was looked at for the arena
         // alone: the reason it wasn't that is the one worth reading.
         if (verdict == Recovery.HangupDeathVerdict.NotSuspected && notArena is not null)
@@ -1115,7 +1116,8 @@ public sealed class HangupItemRecheck
         bool? takenStillHeld = _firstInventory is null ? null : TakenStillHeld(before, held);
         (bool? entryRoom, string? entryRoomText, LastLearnedArrivalUsed) = EntryRoom(before);
         (Recovery.HangupDeathVerdict verdict, string why, bool arena) =
-            Verdict(before, hpAtEntry, worn, loginLines, takenStillHeld, entryRoom, entryRoomText);
+            Verdict(before, hpAtEntry, worn, loginLines, takenStillHeld, entryRoom, entryRoomText,
+                entryRoomLearned: LastLearnedArrivalUsed is not null);
 
         RoomKey? here = _confirmedRoom();
         string evidence =
@@ -1206,10 +1208,14 @@ public sealed class HangupItemRecheck
                 : $"{Label(here)}, where the dead of {Label(hungUpIn)} arrive")
               // Paradigm: no list names this room's arrival room; it is in Albion.
               + (reading.Albion ? " (Albion: reachable from that room without a boat)" : "")
-              // No list names it either: a death seen in that room ended there.
-              + (reading.Learned ? " (learned from a death seen there)" : "");
-        return (reading.Says, text,
-            reading is { Says: true, Learned: true } ? $"{hungUpIn} → {reading.TakenFor ?? here}" : null);
+              // No list names it either: a death seen ended there, in that room or
+              // in another of its land.
+              + (reading.LearnedFrom is not { } seenIn ? ""
+                  : seenIn == hungUpIn ? " (learned from a death seen there)"
+                  : $" (learned from a death seen in {Label(seenIn)}, a room of the same land)");
+        return (reading.Says, text, reading is { Says: true, LearnedFrom: { } from }
+            ? $"{from} → {reading.TakenFor ?? here}" + (from == hungUpIn ? "" : $" (standing for {hungUpIn}, a room of its land)")
+            : null);
     }
 
     private string Label(RoomKey room) => _roomLabel?.Invoke(room) ?? $"room {room}";
@@ -1272,9 +1278,10 @@ public sealed class HangupItemRecheck
         // first inventory read is asked when there is one, and with none read yet
         // the question is whether either answer would leave it open.
         int? hpAtEntry = before.HpAtFirstEntrySince ?? _hpAtEntry;
-        bool? entryRoom = EntryRoom(before).Says;
+        (bool? entryRoom, _, string? learnedPair) = EntryRoom(before);
         bool StillOpen(bool? takenStillHeld) =>
-            Verdict(before, hpAtEntry, worn: null, loginLines: null, takenStillHeld, entryRoom, entryRoomText: null).Verdict
+            Verdict(before, hpAtEntry, worn: null, loginLines: null, takenStillHeld, entryRoom, entryRoomText: null,
+                    entryRoomLearned: learnedPair is not null).Verdict
                 is Recovery.HangupDeathVerdict.NeedsLives or Recovery.HangupDeathVerdict.Died;
         bool open = _firstInventory is { } first
             ? StillOpen(TakenStillHeld(before, first))

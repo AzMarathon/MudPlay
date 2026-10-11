@@ -50,7 +50,15 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 14, "Room Number": 5000, "Name": "Kingsport, Market",
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
-            "N": "0", "S": "0", "E": "14/5001", "W": "0",
+            "N": "0", "S": "0", "E": "14/5001", "W": "14/5002 (Text: go alley, enter alley)",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 17, "Room Number": 3250, "Name": "Vaulted Hall",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "17/3247", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 17, "Room Number": 3247, "Name": "Grand Chamber",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "17/3250", "S": "0", "E": "0", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 14, "Room Number": 1077, "Name": "Burial Vault",
             "Light": -50, "Shop": 0, "Lair": "", "Delay": 5,
@@ -71,12 +79,21 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
     private static readonly RoomObservation VaultShown = new("Burial Vault", new HashSet<Direction> { Direction.U });
     private static readonly RoomObservation GrottoShown = new("Dark Grotto", new HashSet<Direction> { Direction.E });
 
+    private static readonly RoomObservation LandingShown = new("Terra Ista, Landing", new HashSet<Direction> { Direction.N });
+
     private readonly string _root;
     private readonly RoomTracker _tracker;
     private readonly LearnedArrivalRoomStore _store;
+    private readonly LearnedArrivalLookup _lookup;
     private readonly ArrivalRoomLearner _learner;
     private readonly List<LogEntry> _log = new();
     private HangupArrivalListTrust _trust = HangupArrivalListTrust.Paradigm;
+    private DateTimeOffset _now = new(2026, 10, 11, 12, 0, 0, TimeSpan.Zero);
+    // How often a death has shown the board's rooms to differ from the standard
+    // set. As the app does it, the board is unverified from the first.
+    private int _boardContradictions;
+
+    private int Warnings => _log.Count(e => e.Severity == LogSeverity.Warn);
 
     public ArrivalRoomLearnerTests()
     {
@@ -93,12 +110,22 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         log.EntryAdded += _log.Add;
         _store = new LearnedArrivalRoomStore(log, set => Path.Combine(_root, set, "learned-arrival-rooms.json"));
         _store.OnActiveSetChanged("alpha");
-        _learner = new ArrivalRoomLearner(_tracker, _store, () => _trust, graph.CouldBeTakenFor,
-            inAlbion: room => room == Kingsport || room == Vault, log);
+        _lookup = new LearnedArrivalLookup(_store, room => WalkReach.OnItsMap(graph, room));
+        _learner = new ArrivalRoomLearner(_tracker, _store, _lookup, () => _trust, graph.CouldBeTakenFor,
+            inAlbion: room => room == Kingsport || room == Vault,
+            isExitCommandSomewhere: graph.IsExitCommandSomewhere,
+            boardContradicted: () =>
+            {
+                _boardContradictions++;
+                _trust = HangupArrivalListTrust.Unverified;
+            },
+            now: () => _now, log: log);
         // As AppServices wires it.
         _tracker.PlayerDeathObserved += _learner.OnPlayerDied;
         _tracker.StateChanged += _learner.OnRoomStateChanged;
     }
+
+    private void Type(string line) => _learner.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes(line + "\r"));
 
     public void Dispose()
     {
@@ -199,20 +226,80 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         Assert.Equal(0, _store.Count);
     }
 
-    // Where the Stock list is the world's own, nothing is learned. A death that
-    // ends where the list says is no news; one that doesn't is said, and the list
-    // stands.
-    [Theory]
-    [InlineData(HangupArrivalListTrust.VanillaStock)]
-    [InlineData(HangupArrivalListTrust.Paradigm)]
-    public void WhereTheStockListIsTheWorldsOwn_NothingIsLearned(HangupArrivalListTrust trust)
-    {
-        _trust = trust;
+    // ----- The display of the room died in --------------------------------
+    //
+    // The death lines print no room, so the first display afterwards is whatever
+    // was asked for; one asked for while the death was being carried out is of the
+    // room died in. That is not where the dead arrive.
 
+    [Fact]
+    public void ADisplayOfTheRoomDiedIn_IsNotTheArrival_AndTheNextDisplayIsWaitedFor()
+    {
+        DieIn(Landing);
+
+        _tracker.NoteRoomObserved(LandingShown);
+        Assert.Equal(Landing, _tracker.State.CurrentRoom?.Key);
+        Assert.Equal(0, _store.Count);
+        Assert.DoesNotContain(_log, e => e.Message.StartsWith("learned:"));
+
+        _tracker.NoteRoomObserved(ShrineShown);
+        Assert.Equal(new[] { Shrine }, _store.ArrivalsFor(Landing));
+    }
+
+    // The wait is short: a display that comes long after the death is not taken
+    // for the room it left the character in.
+    [Fact]
+    public void ADisplayLongAfterTheDeath_TeachesNothing()
+    {
+        DieIn(Landing);
+        _tracker.NoteRoomObserved(LandingShown);
+
+        _now += ArrivalRoomLearner.Window + TimeSpan.FromSeconds(1);
+        _tracker.NoteRoomObserved(ShrineShown);
+
+        Assert.Equal(0, _store.Count);
+    }
+
+    [Fact]
+    public void ADisplayJustInsideTheWait_StillTeaches()
+    {
+        DieIn(Landing);
+        _now += ArrivalRoomLearner.Window;
+        _tracker.NoteRoomObserved(ShrineShown);
+
+        Assert.Equal(1, _store.Count);
+    }
+
+    // A room command moves the character and is neither a direction nor a `go`
+    // the movement observer knows of here: with no room known after a death, a
+    // line that is an exit command of some room ends the wait. Other lines don't.
+    [Theory]
+    [InlineData("go alley", false)]
+    [InlineData("ENTER ALLEY", false)]
+    [InlineData("stat", true)]
+    [InlineData("sys god someone add life", true)]
+    [InlineData("", true)]
+    public void ARoomCommandSentBeforeTheRoomWasDrawn_TeachesNothing(string line, bool learned)
+    {
+        DieIn(Landing);
+        Type(line);
+
+        _tracker.NoteRoomObserved(ShrineShown);
+
+        Assert.Equal(learned ? 1 : 0, _store.Count);
+    }
+
+    // ----- Where the list is the world's own --------------------------------
+
+    // A zone Paradigm shares with Stock: a death that ends where the list says
+    // is no news; one that doesn't is said, and the list stands.
+    [Fact]
+    public void OnParadigmsSharedZones_NothingIsLearned_AndAContradictionIsSaid()
+    {
         DieIn(Darkwood);
         _tracker.NoteRoomObserved(TempleShown);
         Assert.Equal(0, _store.Count);
-        Assert.DoesNotContain(_log, e => e.Severity == LogSeverity.Warn);
+        Assert.Equal(0, Warnings);
 
         DieIn(Darkwood);
         _tracker.NoteRoomObserved(ShrineShown);
@@ -221,10 +308,56 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         Assert.Contains("A death seen in 1/109 ended in 14/1900", warning.Message);
         Assert.Contains("1/2189 or 1/142", warning.Message);
         Assert.Contains("Not learned", warning.Message);
+        Assert.Equal(0, _boardContradictions);
     }
 
-    // On a board whose rooms may have been edited, the list is only Stock's word:
-    // a death that ends somewhere else is learned, as one more room to say yes in.
+    // The list is of where a HANG-UP's dead arrive. For a room with a leave-the-
+    // game room that is not where a death ends: 17/3250's dead by a hang-up
+    // arrive in the Temple, and a death seen there ends in its own graveyard,
+    // 17/3247. That is the list agreeing, not a finding, and nothing is said.
+    [Theory]
+    [InlineData(HangupArrivalListTrust.VanillaStock)]
+    [InlineData(HangupArrivalListTrust.Paradigm)]
+    public void ADeathInARoomWithALeaveTheGameRoom_EndingInItsOwnGraveyard_IsNoNewsAndNoWarning(HangupArrivalListTrust trust)
+    {
+        _trust = trust;
+        DieIn(new RoomKey(17, 3250));
+
+        _tracker.NoteRoomObserved(new RoomObservation("Grand Chamber", new HashSet<Direction> { Direction.N }));
+
+        Assert.Equal(new RoomKey(17, 3247), _tracker.State.CurrentRoom?.Key);
+        Assert.Equal(0, _store.Count);
+        Assert.Equal(0, Warnings);
+        Assert.Equal(0, _boardContradictions);
+    }
+
+    // An unmodified Stock set, and a death that ends in a room the list doesn't
+    // allow: the board's rooms were edited while it runs on the standard data.
+    // The board is marked, and from then on it is a board with edited rooms: the
+    // reading is learned, and read.
+    [Fact]
+    public void OnAStandardSet_ADeathTheListDoesNotAllow_MarksTheBoardAsEdited_AndIsLearned()
+    {
+        _trust = HangupArrivalListTrust.VanillaStock;
+
+        DieIn(Darkwood);
+        _tracker.NoteRoomObserved(TempleShown);
+        Assert.Equal(0, _boardContradictions);
+        Assert.Equal(0, _store.Count);
+
+        DieIn(Darkwood);
+        _tracker.NoteRoomObserved(ShrineShown);
+
+        Assert.Equal(1, _boardContradictions);
+        Assert.Equal(HangupArrivalListTrust.Unverified, _trust);
+        Assert.Equal(new[] { Shrine }, _store.ArrivalsFor(Darkwood));
+        LogEntry warning = Assert.Single(_log, e => e.Severity == LogSeverity.Warn);
+        Assert.Contains("A death seen in 1/109 ended in 14/1900, not in 1/2189 or 1/142 as the Stock list had it", warning.Message);
+    }
+
+    // On a board already known for edited rooms, the list is only Stock's word:
+    // a death that ends somewhere else is learned, and the board isn't counted
+    // again.
     [Fact]
     public void OnAnEditedBoard_ADeathThatEndsSomewhereElseThanTheList_IsLearned()
     {
@@ -237,27 +370,78 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         DieIn(Darkwood);
         _tracker.NoteRoomObserved(ShrineShown);
         Assert.Equal(new[] { Shrine }, _store.ArrivalsFor(Darkwood));
-        Assert.DoesNotContain(_log, e => e.Severity == LogSeverity.Warn);
+        Assert.Equal(0, _boardContradictions);
     }
 
+    // ----- A room, its land, and Albion --------------------------------------
+
     // Albion's dead are known to arrive in the Burial Vault: seeing it adds
-    // nothing. Seen to end somewhere else, that room is learned for that room.
+    // nothing. Seen to end somewhere else, that is recorded as that room's own,
+    // and said.
     [Fact]
-    public void AnAlbionDeath_EndingInTheBurialVault_IsNoNews()
+    public void AnAlbionDeath_EndingInTheBurialVault_IsNoNews_AndOneThatDoesNotIsRecorded()
     {
         DieIn(Kingsport);
         _tracker.NoteRoomObserved(VaultShown);
         Assert.Equal(0, _store.Count);
+        Assert.Equal(0, Warnings);
 
         DieIn(Kingsport);
         _tracker.NoteRoomObserved(ShrineShown);
         Assert.Equal(new[] { Shrine }, _store.ArrivalsFor(Kingsport));
+        Assert.Contains("A death seen in 14/5000 ended in 14/1900, not in 14/1077 as Albion had it",
+            Assert.Single(_log, e => e.Severity == LogSeverity.Warn).Message);
+    }
+
+    // A death seen in one room stands for its land: the path beside the landing
+    // takes the landing's reading. A death on the path that ends in the same room
+    // is no surprise, and is kept as the path's own reading all the same.
+    [Fact]
+    public void ADeathSeenInOneRoom_StandsForItsLand()
+    {
+        RoomKey path = new(14, 1814);
+        DieIn(Landing);
+        _tracker.NoteRoomObserved(ShrineShown);
+
+        Assert.Equal(new[] { new LearnedArrival(Shrine, Landing) }, _lookup.For(path));
+        Assert.Equal(new[] { new LearnedArrival(Shrine, Landing) }, _lookup.For(Landing));
+        // Another map's room, and a room the landing's land doesn't reach, take nothing.
+        Assert.Null(_lookup.For(Darkwood));
+        Assert.Null(_lookup.For(Kingsport));
+
+        DieIn(path);
+        _tracker.NoteRoomObserved(ShrineShown);
+        Assert.Equal(new[] { new LearnedArrival(Shrine, path) }, _lookup.For(path));
+        Assert.Equal(0, Warnings);
+        Assert.Empty(_lookup.AtOddsWithTheirLand());
+    }
+
+    // A death in a room of that land that ends somewhere else is "definitely
+    // recorded": it is that room's own reading, said in the log, and the land
+    // keeps its reading for its other rooms.
+    [Fact]
+    public void ADeathThatEndsElsewhereThanItsLandSays_IsRecordedAsThatRoomsOwn()
+    {
+        RoomKey path = new(14, 1814);
+        DieIn(Landing);
+        _tracker.NoteRoomObserved(ShrineShown);
+
+        DieIn(path);
+        _tracker.NoteRoomObserved(VaultShown);
+
+        Assert.Equal(new[] { new LearnedArrival(Vault, path) }, _lookup.For(path));
+        Assert.Equal(new[] { new LearnedArrival(Shrine, Landing) }, _lookup.For(Landing));
+        Assert.StartsWith("A death seen in 14/1814 ended in 14/1077, not in 14/1900 as a death seen in 14/1813, a room of the same land, had it.",
+            Assert.Single(_log, e => e.Severity == LogSeverity.Warn).Message);
+        // Two rooms, two readings, neither held by more: the land has two.
+        Assert.All(_lookup.AtOddsWithTheirLand(), o => Assert.False(o.Exception));
+        Assert.Equal(2, _lookup.AtOddsWithTheirLand().Count);
     }
 
     // A second death in the same room that ends somewhere else: the room becomes
-    // disputed, and neither reading is used.
+    // disputed, and neither reading is used until one is seen again.
     [Fact]
-    public void ASecondDeathThatEndsSomewhereElse_DisputesTheRoom()
+    public void ASecondDeathThatEndsSomewhereElse_DisputesTheRoom_UntilOneIsSeenAgain()
     {
         DieIn(Landing);
         _tracker.NoteRoomObserved(ShrineShown);
@@ -266,6 +450,11 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
 
         Assert.Null(_store.ArrivalsFor(Landing));
         Assert.Equal((0, 1), (_store.Count, _store.DisputedCount));
-        Assert.Single(_log, e => e.Severity == LogSeverity.Warn);
+        Assert.Equal(1, Warnings);
+
+        DieIn(Landing);
+        _tracker.NoteRoomObserved(ShrineShown);
+        Assert.Equal(new[] { Shrine }, _store.ArrivalsFor(Landing));
+        Assert.Equal(1, Warnings);
     }
 }

@@ -339,6 +339,24 @@ public sealed class RoomGraphManager
         return (printed & twin.ExitMask) == printed;
     }
 
+    // Whether some room has an exit this line crosses: a text exit (`go path`), or
+    // a room command the graph made an edge of (`touch altar`). For a caller that
+    // doesn't know which room the character stands in and needs to know whether a
+    // line could have moved it. Built once per graph, on the first question.
+    public bool IsExitCommandSomewhere(string command) =>
+        !string.IsNullOrWhiteSpace(command)
+        && Derived("exit commands of every room", BuildExitCommands).Contains(command.Trim());
+
+    private HashSet<string> BuildExitCommands()
+    {
+        HashSet<string> commands = new(StringComparer.OrdinalIgnoreCase);
+        foreach (Room room in _rooms.Values)
+            foreach (RoomExit exit in room.Exits.Values)
+                if (exit.TextCommands is { } lines)
+                    foreach (string line in lines) commands.Add(line.Trim());
+        return commands;
+    }
+
     // A hidden exit that a plain step crosses (`Hidden/Passable`) carries no hint
     // of its own, the walker having nothing special to do for it; only the cell's
     // own text says it is hidden.

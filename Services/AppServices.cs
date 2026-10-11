@@ -661,6 +661,7 @@ public sealed class AppServices
     // and the watcher that learns a pair from a death the client witnesses. The
     // hang-up death check reads them for the rooms no list covers.
     public LearnedArrivalRoomStore LearnedArrivals { get; private set; } = null!;
+    public Game.Recovery.LearnedArrivalLookup LearnedArrivalLands { get; private set; } = null!;
     public Game.Recovery.ArrivalRoomLearner ArrivalLearner { get; private set; } = null!;
 
     // Leader-side reconnect party reform — the mirror of PartyRejoin. Snapshots the
@@ -2353,10 +2354,42 @@ public sealed class AppServices
     // active game data: Paradigm by its Info row (Legit 2), an unmodified Stock
     // set by Legit 1 with Custom "Default", and anything else (a board whose
     // sysop may have edited its rooms, or no set) unverified.
+    //
+    // A board can run edited rooms and still be played on the standard data set.
+    // Nothing in the set says so; a death seen there that ends where the list
+    // doesn't allow does, and is counted on the board
+    // (RealmProfile.DeathsContradictingStandardArrivalRooms). Such a board is
+    // unverified too, whatever its set.
     public Game.Recovery.HangupArrivalListTrust HangupArrivalListTrust =>
         GameData.ActiveRealm == Game.RealmType.ParaMud ? Game.Recovery.HangupArrivalListTrust.Paradigm
-        : GameData.ActiveSetIsVanillaStock ? Game.Recovery.HangupArrivalListTrust.VanillaStock
+        : GameData.ActiveSetIsVanillaStock && DeathsContradictingStandardArrivalRooms == 0
+            ? Game.Recovery.HangupArrivalListTrust.VanillaStock
         : Game.Recovery.HangupArrivalListTrust.Unverified;
+
+    public int DeathsContradictingStandardArrivalRooms =>
+        ResolveActiveRealm()?.Realm.DeathsContradictingStandardArrivalRooms ?? 0;
+
+    // ArrivalRoomLearner: a death on the unmodified Stock set ended in a room the
+    // list doesn't allow. Counted on the board, and said the first time. With no
+    // board to count it on, nothing changes.
+    private void NoteDeathContradictedStandardArrivalRooms()
+    {
+        if (ResolveActiveRealm() is not { } active) return;
+        active.Realm.DeathsContradictingStandardArrivalRooms++;
+        Bbs.Save(active.Bbs);
+        if (active.Realm.DeathsContradictingStandardArrivalRooms == 1)
+            Log.Warn(LearnedArrivalRoomStore.LogCategory,
+                $"This board's rooms do not match the standard data set it is played on ('{GameData.ActiveSet}'): a death "
+                + "just ended in a room the standard list doesn't allow for the room it happened in. From now on the list "
+                + "is taken here as on any board with edited rooms: it says where the dead arrive, never that a room is "
+                + "the wrong one, and what is learned from deaths seen is used. If the board has its own game data, "
+                + "import it and point the realm at it.");
+    }
+
+    // The land a room stands on, for what a death seen in one room says of the
+    // rooms around it (Recovery.LearnedArrivalLookup). Walked the first time it
+    // is asked for, and kept with the graph.
+    private IReadOnlySet<Game.Map.RoomKey> LandOf(Game.Map.RoomKey room) => Game.Map.WalkReach.OnItsMap(RoomGraph, room);
 
     // Paradigm's Albion: the rooms that can be walked to from the Burial Vault,
     // where its dead arrive. The walk is made the first time a hang-up in one of
@@ -10149,8 +10182,11 @@ public sealed class AppServices
         GameData.ActiveSetChanged += LearnedArrivals.OnActiveSetChanged;
         if (GameData.ActiveSet is not null) LearnedArrivals.OnActiveSetChanged(GameData.ActiveSet);
         Tick.HeartbeatElapsed += () => LearnedArrivals.TakeInOutsideChanges();
+        LearnedArrivalLands = new Game.Recovery.LearnedArrivalLookup(LearnedArrivals, LandOf);
         ArrivalLearner = new Game.Recovery.ArrivalRoomLearner(
-            RoomTracker, LearnedArrivals, () => HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion, Log);
+            RoomTracker, LearnedArrivals, LearnedArrivalLands, () => HangupArrivalListTrust,
+            RoomGraph.CouldBeTakenFor, InParadigmAlbion, RoomGraph.IsExitCommandSomewhere,
+            boardContradicted: NoteDeathContradictedStandardArrivalRooms, log: Log);
         RoomTracker.PlayerDeathObserved += ArrivalLearner.OnPlayerDied;
         RoomTracker.StateChanged += ArrivalLearner.OnRoomStateChanged;
         OutboundMovement.MoveSent += ArrivalLearner.NoteMoveSent;
@@ -10226,7 +10262,7 @@ public sealed class AppServices
             // what was learned from deaths seen speaks for the rooms no list covers.
             entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.Read(
                 hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion,
-                LearnedArrivals.ArrivalsFor),
+                LearnedArrivalLands.For),
             roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}");
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();

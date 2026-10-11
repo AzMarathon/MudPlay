@@ -181,7 +181,7 @@ public sealed class WalkReachTests : IDisposable
 
     // One that lands on another map is a way out of the place, and is not.
     [Fact]
-    public void ARoomCommandThatMovesTheCharacter_IsNotWalking()
+    public void ARoomCommandThatLeadsOffTheMap_IsNotFollowed()
     {
         RoomGraphManager graph = NewGraph();
         // Guard the fixture: the graph does make an edge of `go portal`.
@@ -203,6 +203,62 @@ public sealed class WalkReachTests : IDisposable
         RoomGraphManager graph = NewGraph();
 
         Assert.DoesNotContain(new RoomKey(14, 759), WalkReach.From(graph, Vault));
+    }
+
+    // The land a room stands on is the same walk kept to its map: the toll road
+    // runs onto map 2, and neither that room nor anything reached through it is
+    // part of the land. A room command that stays on the map still is.
+    [Fact]
+    public void TheLandOfARoom_StopsAtTheEdgeOfItsMap()
+    {
+        RoomGraphManager graph = NewGraph();
+
+        IReadOnlySet<RoomKey> land = WalkReach.OnItsMap(graph, Vault);
+
+        Assert.Equal(
+            new HashSet<RoomKey>
+            {
+                Vault, new(14, 1072), new(14, 2000), new(14, 2001), new(14, 2002), new(14, 2003),
+                new(14, 2004), new(14, 2005), new(14, 2006),
+            },
+            new HashSet<RoomKey>(land));
+        // From the far side of the map's edge it is that map's land, which does
+        // not come back.
+        Assert.Equal(new HashSet<RoomKey> { new(2, 11960) },
+            new HashSet<RoomKey>(WalkReach.OnItsMap(graph, new RoomKey(2, 11960))));
+    }
+
+    // The walk is one way, so the land is told from the room asked about: the
+    // docks lead into the crypt and nothing leads back, so the docks' land holds
+    // the crypt and the crypt's land doesn't hold the docks. Two rooms that do
+    // reach each other have one land between them, held once.
+    [Fact]
+    public void TheLandIsToldFromTheRoomAskedAbout_AndRoomsThatReachEachOtherShareOne()
+    {
+        RoomGraphManager graph = NewGraph();
+        RoomKey docks = new(14, 759), crypt = new(14, 1072), behindTheDoor = new(14, 2000);
+
+        Assert.Contains(crypt, WalkReach.OnItsMap(graph, docks));
+        Assert.DoesNotContain(docks, WalkReach.OnItsMap(graph, crypt));
+        Assert.Same(WalkReach.OnItsMap(graph, crypt), WalkReach.OnItsMap(graph, behindTheDoor));
+        Assert.NotSame(WalkReach.OnItsMap(graph, crypt), WalkReach.OnItsMap(graph, docks));
+        // The vault leads up into the crypt and nothing leads down again.
+        Assert.DoesNotContain(Vault, WalkReach.OnItsMap(graph, crypt));
+    }
+
+    // What the arrival learner asks before taking a typed line for a move: is it
+    // an exit command of any room at all.
+    [Theory]
+    [InlineData("go gap", true)]
+    [InlineData("ENTER GAP", true)]
+    [InlineData("  go gap ", true)]
+    [InlineData("go portal", true)]
+    [InlineData("go", false)]
+    [InlineData("stat", false)]
+    [InlineData("", false)]
+    public void ALineIsKnownForAnExitCommand_WhenSomeRoomHasIt(string line, bool known)
+    {
+        Assert.Equal(known, NewGraph().IsExitCommandSomewhere(line));
     }
 
     [Fact]

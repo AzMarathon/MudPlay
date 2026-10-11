@@ -28,10 +28,36 @@ public static class WalkReach
     public static IReadOnlySet<RoomKey> From(RoomGraphManager graph, RoomKey start)
     {
         ArgumentNullException.ThrowIfNull(graph);
-        return graph.Derived($"walk reach {start}", () => Build(graph, start));
+        return graph.Derived($"walk reach {start}", () => Build(graph, start, stayOnMap: false));
     }
 
-    private static HashSet<RoomKey> Build(RoomGraphManager graph, RoomKey start)
+    // The same walk kept to the start room's own map: the land a room stands on.
+    // It never steps onto another map, so it doesn't come back from one either;
+    // a stretch of the map reached only through another map is another land.
+    // "Connected rooms ... [that] share map numbers" (the owner, 2026-10-11), for
+    // the rooms a death seen in one room stands for (Recovery.LearnedArrivalLookup).
+    public static IReadOnlySet<RoomKey> OnItsMap(RoomGraphManager graph, RoomKey start)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        return graph.Derived($"walk reach on its map {start}", () =>
+        {
+            HashSet<RoomKey> reached = Build(graph, start, stayOnMap: true);
+            // Two rooms that reach each other reach the same rooms, and most of a
+            // land is one such knot: its rooms share one set, where a set each
+            // would be thousands of rooms held once per room asked about.
+            List<(RoomKey Start, HashSet<RoomKey> Reached)> lands =
+                graph.Derived("lands walked", static () => new List<(RoomKey, HashSet<RoomKey>)>());
+            lock (lands)
+            {
+                foreach ((RoomKey other, HashSet<RoomKey> same) in lands)
+                    if (same.Contains(start) && reached.Contains(other)) return same;
+                lands.Add((start, reached));
+            }
+            return reached;
+        });
+    }
+
+    private static HashSet<RoomKey> Build(RoomGraphManager graph, RoomKey start, bool stayOnMap)
     {
         HashSet<RoomKey> reached = [];
         if (graph.GetRoom(start) is null) return reached;
@@ -43,7 +69,7 @@ public static class WalkReach
             if (graph.GetRoom(todo.Pop()) is not { } room) continue;
             foreach ((Direction direction, RoomExit exit) in room.Exits)
             {
-                if (direction == Direction.Teleport && exit.Target.Map != room.Key.Map) continue;
+                if (exit.Target.Map != room.Key.Map && (stayOnMap || direction == Direction.Teleport)) continue;
                 if (graph.GetRoom(exit.Target) is not null && reached.Add(exit.Target)) todo.Push(exit.Target);
             }
         }

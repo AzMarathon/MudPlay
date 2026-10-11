@@ -115,10 +115,22 @@ public static class HangupDeath
     //   ownedNothing   — the list is known to have held nothing a death takes: no
     //                    such item and no coin. takenStillHeld is null then, with
     //                    nothing to look for.
+    //   entryRoomLearned — the room's yes rests on a death once seen to end there
+    //                    (HangupEntryRoomReading.Learned), not on a list. That is
+    //                    where a death in the room ends, which can also be where a
+    //                    hang-up leaves a character that lived
+    //                    (HangupDeathArrivalRooms.ArrivalsOn). So where the room's
+    //                    yes alone would record a death (no count from before,
+    //                    and nothing owned for a death to take), it needs HP at
+    //                    the first prompt to be above what the character left
+    //                    with as well: the penalty only takes HP, and a death
+    //                    sets it to its maximum. A pack found stripped is a sign
+    //                    of its own, and needs no more from a learned room than
+    //                    from a listed one.
     public static (HangupDeathVerdict Verdict, string Why) Judge(
         int? hpAtDrop, int? maxHpAtDrop, int? hpShareTop, int? hpAtEntry,
         int? livesBefore, int? livesNow, bool? worn, bool? loginLines, bool? takenStillHeld,
-        bool? entryRoom = null, string? entryRoomText = null, bool ownedNothing = false)
+        bool? entryRoom = null, string? entryRoomText = null, bool ownedNothing = false, bool entryRoomLearned = false)
     {
         if (hpAtDrop is not { } dropHp)
             return (HangupDeathVerdict.NotSuspected, "HP wasn't known when the character left the game");
@@ -145,7 +157,15 @@ public static class HangupDeath
             // another client still holds its gear. One that owned nothing a death
             // takes can't be stripped, and the room is enough for it. The record
             // needs the lives it has now, so a `stat` is still waited for.
-            if (entryRoom == true && (takenStillHeld == false || ownedNothing) && worn != true && loginLines != false)
+            bool packAgrees = (takenStillHeld == false || ownedNothing) && worn != true && loginLines != false;
+            bool roomAlone = takenStillHeld != false;
+            if (entryRoom == true && packAgrees && roomAlone && entryRoomLearned && !(hpAtEntry is { } back && back > dropHp))
+                return (HangupDeathVerdict.Unsure,
+                    $"it came back in {entryRoomText ?? "the room its dead arrive in"}, which is only known from a death seen "
+                    + "to end there. A character that hangs up and lives can come back in that room too, and neither its "
+                    + $"lives (not read on the connection it left on) nor its HP ({(hpAtEntry is { } hp ? $"{hp}, not above the {dropHp} it left with" : "not read at the first prompt")}) "
+                    + "says which this was");
+            if (entryRoom == true && packAgrees)
                 return livesNow is null
                     ? (HangupDeathVerdict.NeedsLives, "no `stat` has given the lives on this connection")
                     : (HangupDeathVerdict.Died,
@@ -214,9 +234,12 @@ public static class HangupDeath
     // The record carries a count read on this connection, as Judge's does.
     //   takenStillHeld / entryRoom / entryRoomText — as Judge's.
     //   ordinaryDeathPossible — the realm's settings penalise that hang-up.
+    //   entryRoomLearned — as Judge's. Here the room's yes is the whole case, so a
+    //                    learned one needs HP read at the first prompt and above
+    //                    0, which is above what a dropped character left with.
     public static (HangupDeathVerdict Verdict, string Why) JudgeArena(
         int? hpAtDrop, int? hpAtEntry, int? livesBefore, int? livesNow, bool? takenStillHeld,
-        bool? entryRoom, string? entryRoomText, bool ordinaryDeathPossible)
+        bool? entryRoom, string? entryRoomText, bool ordinaryDeathPossible, bool entryRoomLearned = false)
     {
         if (hpAtDrop is not <= 0)
             return (HangupDeathVerdict.NotSuspected, "the character wasn't dropped when it left the game");
@@ -224,6 +247,11 @@ public static class HangupDeath
             return (HangupDeathVerdict.NotSuspected, "it didn't come back where that arena room's dead arrive");
         if (hpAtEntry is <= 0)
             return (HangupDeathVerdict.NotSuspected, "it came back dropped");
+        if (entryRoomLearned && hpAtEntry is null)
+            return (HangupDeathVerdict.Unsure,
+                $"it left the game dropped in an arena room and came back in {entryRoomText ?? "a room"}, which is only "
+                + "known from a death seen to end there, and its HP wasn't read at the first prompt to say it had been "
+                + "put back");
         if (takenStillHeld == false)
             return (HangupDeathVerdict.NotSuspected, "it came back with nothing left of what a death takes, where an arena death takes nothing");
         // The room says it died. Whether it was the arena's death or an ordinary

@@ -90,6 +90,16 @@ public sealed class RealmProfile
     // hang-up line and the bug report.
     public bool HangupOutsideFightPenaltyEnabled { get; set; }
 
+    // How many deaths seen on this board ended in a room the standard Stock list
+    // doesn't allow for the room died in, while the board was running on the
+    // unmodified Stock game data. One is enough to say the board's rooms were
+    // edited: from then on the list is taken there as it is on any board with
+    // edited rooms (Game.Recovery.HangupArrivalListTrust.Unverified), saying where
+    // the dead arrive and never that a room is the wrong one. Written by
+    // Game.Recovery.ArrivalRoomLearner through AppServices; no setting shows it,
+    // and a bug report does.
+    public int DeathsContradictingStandardArrivalRooms { get; set; }
+
     // The realm's nightly cleanup wall-clock time. Some bosses ("Respawns @
     // Cleanup" in the boss table) reset only at this daily cleanup — a marked one
     // reads DEAD until the next cleanup, then ALIVE. Format "HH:mm" in

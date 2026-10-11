@@ -339,6 +339,68 @@ public sealed class HangupDeathTests
             HangupDeath.Judge(-5, 200, 50, 200, 7, 7, false, true, null, true, InTheTemple, ownedNothing: true).Verdict);
     }
 
+    // A room known only from a death seen to end there is where a DEATH in the
+    // room ends, which can also be where a hang-up leaves a character that lived
+    // (17/3250's dead by a death arrive in 17/3247, and 17/3247 is also the room
+    // it leaves the game to). So where the room's yes alone would record a death
+    // (no count from before, nothing owned for a death to take), a learned yes
+    // needs HP at the first prompt above what the character left with as well.
+    [Fact]
+    public void LivesNotReadBefore_OwningNothing_ALearnedRoomIsNotEnoughByItself()
+    {
+        const string learned = "Grand Chamber (17/3247), where the dead of Vaulted Hall (17/3250) arrive (learned from a death seen there)";
+        // Left at 80 of 200, a share of up to 50%: suspected.
+        (HangupDeathVerdict Verdict, string Why) Naked(int? hpAtEntry, bool entryRoomLearned, int? livesNow = 6) =>
+            HangupDeath.Judge(80, 200, 50, hpAtEntry, livesBefore: null, livesNow, worn: false, loginLines: true,
+                takenStillHeld: null, entryRoom: true, learned, ownedNothing: true, entryRoomLearned);
+
+        // HP not above what it left with: back at the 80 it left with would say
+        // no on its own, so the case is HP not read at the first prompt.
+        (HangupDeathVerdict verdict, string why) = Naked(hpAtEntry: null, entryRoomLearned: true);
+        Assert.Equal(HangupDeathVerdict.Unsure, verdict);
+        Assert.Contains("which is only known from a death seen to end there", why);
+        Assert.Contains("nor its HP (not read at the first prompt) says which this was", why);
+        // The same marks with a room the list has: recorded.
+        Assert.Equal(HangupDeathVerdict.Died, Naked(hpAtEntry: null, entryRoomLearned: false).Verdict);
+
+        // HP above what it left with: the learned room and that are enough.
+        Assert.Equal(HangupDeathVerdict.Died, Naked(hpAtEntry: 200, entryRoomLearned: true).Verdict);
+        Assert.Equal(HangupDeathVerdict.NeedsLives, Naked(hpAtEntry: 200, entryRoomLearned: true, livesNow: null).Verdict);
+        Assert.Equal(HangupDeathVerdict.Died, Naked(hpAtEntry: 81, entryRoomLearned: true).Verdict);
+        // HP that says no still says no.
+        Assert.Equal(HangupDeathVerdict.Alive, Naked(hpAtEntry: 80, entryRoomLearned: true).Verdict);
+    }
+
+    // Left at its maximum, a death puts HP back to the same number: HP can't say
+    // it rose, and the learned room is not enough.
+    [Fact]
+    public void LivesNotReadBefore_OwningNothing_ALearnedRoom_WithHpItCouldNotRiseAbove_IsNotRecorded()
+    {
+        (HangupDeathVerdict verdict, string why) = HangupDeath.Judge(200, 200, 100, 200, livesBefore: null, livesNow: 6,
+            worn: false, loginLines: true, takenStillHeld: null, entryRoom: true, "a room", ownedNothing: true,
+            entryRoomLearned: true);
+
+        Assert.Equal(HangupDeathVerdict.Unsure, verdict);
+        Assert.Contains("nor its HP (200, not above the 200 it left with) says which this was", why);
+    }
+
+    // A pack found stripped of what a death takes is a sign of its own: with it a
+    // learned room records a death as a listed one does. And with both counts
+    // read the lives decide, whatever the room rests on.
+    [Fact]
+    public void ALearnedRoom_WithAStrippedPack_OrALifeLost_RecordsADeath()
+    {
+        Assert.Equal(HangupDeathVerdict.Died,
+            HangupDeath.Judge(80, 200, 50, null, livesBefore: null, livesNow: 6, worn: false, loginLines: true,
+                takenStillHeld: false, entryRoom: true, "a room", entryRoomLearned: true).Verdict);
+        Assert.Equal(HangupDeathVerdict.Died,
+            HangupDeath.Judge(80, 200, 50, null, livesBefore: 7, livesNow: 6, worn: false, loginLines: true,
+                takenStillHeld: null, entryRoom: true, "a room", ownedNothing: true, entryRoomLearned: true).Verdict);
+        Assert.Equal(HangupDeathVerdict.Alive,
+            HangupDeath.Judge(80, 200, 50, null, livesBefore: 7, livesNow: 7, worn: false, loginLines: true,
+                takenStillHeld: null, entryRoom: true, "a room", ownedNothing: true, entryRoomLearned: true).Verdict);
+    }
+
     // With no life known lost, a room a death wouldn't have left it in closes the
     // question, as HP at the first prompt does.
     [Theory]
@@ -416,6 +478,25 @@ public sealed class HangupDeathTests
         Assert.Contains("doesn't tell an arena death, which takes nothing, from an ordinary one", why);
         Assert.Equal(HangupDeathVerdict.Unsure,
             ArenaVerdict(livesBefore: null, livesNow: null, takenStillHeld: null, penalised: true).Verdict);
+    }
+
+    // In an arena the room's yes is the whole case. One known only from a death
+    // seen to end there needs HP read at the first prompt and above 0, which is
+    // above what a dropped character left with.
+    [Fact]
+    public void AnArenaDeath_ByALearnedRoom_NeedsHpReadAtTheFirstPrompt()
+    {
+        (HangupDeathVerdict Verdict, string Why) Learned(int? hpAtEntry) =>
+            HangupDeath.JudgeArena(-5, hpAtEntry, 7, 7, takenStillHeld: true, entryRoom: true, InTheArenaHalls,
+                ordinaryDeathPossible: false, entryRoomLearned: true);
+
+        (HangupDeathVerdict verdict, string why) = Learned(hpAtEntry: null);
+        Assert.Equal(HangupDeathVerdict.Unsure, verdict);
+        Assert.Contains("which is only known from a death seen to end there, and its HP wasn't read at the first prompt", why);
+        Assert.Equal(HangupDeathVerdict.Died, Learned(hpAtEntry: 150).Verdict);
+        Assert.Equal(HangupDeathVerdict.NotSuspected, Learned(hpAtEntry: -5).Verdict);
+        // A listed room with the same marks is recorded.
+        Assert.Equal(HangupDeathVerdict.Died, ArenaVerdict(hpAtEntry: null).Verdict);
     }
 
     [Fact]
