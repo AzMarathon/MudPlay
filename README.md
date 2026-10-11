@@ -1,18 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.170.0**
-> - A `break` you type holds Auto-Combat's attack until you attack, the monster dies or leaves, or you leave the room
-> - A party member's `@do break` or `@party break` holds it the same way; an attack they relay lifts it
-> - The hold ends when any monster of that name dies or leaves
-> - A round with no attack from it makes the client look at the room: gone ends the hold, still listed keeps it; in the dark the silence alone ends it
-> - A neutral you hit and then broke from isn't fought again until you attack it again
-> - A flee still runs under the hold; a loop or walk waits
-> - Typed `backstab`, `punch`, `kick` and `jumpkick` count as taking the round yourself; a text exit such as `jump pool` doesn't
-> - Room-spell kills are counted against every monster the room listed, neutrals included
-> - Only the room spell's own damage line counts as the spell landing
-> - Stock: a room spell is left running through the `*Combat Off*` after its kill
-> - Temp-death response goes out once for a room spell's kills, mixed rooms included
+> **Version 3.170.1**
+> - Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay
+> - Members who are short are handed the coin when you can spare it, and the step waits for the game to confirm it
+> - Otherwise the route goes round the toll, or the walk or loop ends naming the toll and who can't pay
+> - A member paid for at a toll that still turned them away is not paid for twice there
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

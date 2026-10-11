@@ -1,5 +1,12 @@
 # Version history
 
+## 3.170.1
+
+- Leading a party at a toll: every member's purse is asked (`@wealth`) before stepping through; no answer counts as can't pay
+- Members who are short are handed the coin when you can spare it, and the step waits for the game to confirm it
+- Otherwise the route goes round the toll, or the walk or loop ends naming the toll and who can't pay
+- A member paid for at a toll that still turned them away is not paid for twice there
+
 ## 3.170.0
 
 - A `break` you type holds Auto-Combat's attack until you attack, the monster dies or leaves, or you leave the room
