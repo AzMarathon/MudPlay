@@ -41,6 +41,31 @@ public sealed class CrashReporterTests
     }
 
     [Fact]
+    public void Build_AggregateException_ShowsEveryFault()
+    {
+        AggregateException ex = new("two tasks failed",
+            new InvalidOperationException("first fault"), new FormatException("second fault"));
+
+        string md = CrashReporter.Build(ex, "TaskScheduler.UnobservedTaskException");
+
+        Assert.Contains("Fault 1 of 2", md);
+        Assert.Contains("first fault", md);
+        Assert.Contains("Fault 2 of 2", md);
+        Assert.Contains("System.FormatException", md);
+        Assert.Contains("second fault", md);
+    }
+
+    [Fact]
+    public void Build_NamesTheBuildAndWhereTheLogsAre()
+    {
+        string md = CrashReporter.Build(new InvalidOperationException("boom"), "UI run loop");
+
+        Assert.Contains("- **Build**: " + AppInfo.Version, md);
+        Assert.Contains("- **Log folder**: ", md);
+        Assert.Contains("- **Log to send with this**: ", md);
+    }
+
+    [Fact]
     public void Build_NullException_StillProducesReport()
     {
         string md = CrashReporter.Build(null, "TaskScheduler.UnobservedTaskException");

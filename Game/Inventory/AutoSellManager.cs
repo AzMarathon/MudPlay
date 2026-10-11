@@ -63,6 +63,11 @@ public sealed class AutoSellManager : IDisposable
     private Action<TimeSpan, Action>? _schedule;
     private int _timeoutGeneration;
     private bool _gateHeld;
+
+    // For a bug report: the sale in progress, or null.
+    public string? DescribePending() =>
+        _queue.Count == 0 && !_gateHeld ? null
+        : $"{_queue.Count} sale(s) queued, sale {_active + 1} active" + (_gateHeld ? ", holding the Selling gate" : string.Empty);
     private bool _disposed;
 
     // shopTradesItem(shopNumber, itemNumber): whether that shop has the item in its

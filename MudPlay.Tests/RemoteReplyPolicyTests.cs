@@ -348,7 +348,8 @@ public sealed class RemoteReplyPolicyTests : IDisposable
     }
 
     // The gate lives in one place. A handler that read the setting itself could
-    // gate one failure and forget the next; none does.
+    // gate one failure and forget the next; none does. The bug report reads it only
+    // to print it, and decides nothing by it.
     [Fact]
     public void OnlyTheEngineReadsTheWarnSetting()
     {
@@ -359,6 +360,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
             TypeDefinition outer = type;
             while (outer.DeclaringType is not null) outer = outer.DeclaringType;
             if (outer.Name == nameof(RemoteCommandManager)) continue;
+            if (outer.Name == nameof(MudPlay.Services.BugReportAutomationSections)) continue;
 
             foreach (MethodDefinition method in type.Methods)
             {

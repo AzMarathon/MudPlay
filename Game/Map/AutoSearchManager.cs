@@ -91,6 +91,12 @@ public sealed class AutoSearchManager : IDisposable
     // A fight was seen this room — the search waits for it to clear and the Search
     // gate is held meanwhile.
     private bool _deferredForCombat;
+
+    // For a bug report: the search owed, or null.
+    public string? DescribePending() =>
+        _owedFor is null && !_deferredForCombat ? null
+        : (_owedFor is { } owed ? $"a search is owed for {owed}" : "no search owed")
+          + (_deferredForCombat ? ", put off for combat" : string.Empty);
     private bool _gateAsserted;
     private bool _disposed;
 

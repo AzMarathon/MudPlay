@@ -115,11 +115,15 @@ public sealed class AppServices
     // it. Distinct from SendGameCommand, which rides the raw wire-sender with none of
     // that. Used by the quest guide's clickable `'command'` links. No-op until the
     // main VM binds it.
-    private Action<string>? _typedInputSender;
-    public void SetTypedInputSender(Action<string> sender) => _typedInputSender = sender;
-    public void SendTypedInput(string text)
+    // The origin is for the sent-command trail only, which names where a line of
+    // the user's came from: a link or button in a window unless the caller says
+    // otherwise (the local API does).
+    private Action<string, SentCommandTrail.Origin>? _typedInputSender;
+    public void SetTypedInputSender(Action<string, SentCommandTrail.Origin> sender) => _typedInputSender = sender;
+    public void SendTypedInput(string text) => SendTypedInput(text, SentCommandTrail.Origin.Window);
+    public void SendTypedInput(string text, SentCommandTrail.Origin origin)
     {
-        if (!string.IsNullOrWhiteSpace(text)) _typedInputSender?.Invoke(text);
+        if (!string.IsNullOrWhiteSpace(text)) _typedInputSender?.Invoke(text, origin);
     }
 
     // Drop a bracketed yellow status line into the terminal scrollback — the same
@@ -885,6 +889,40 @@ public sealed class AppServices
     // password-entry prompt is active so engine auto-sends don't
     // pollute the input.
     public EngineSendGate EngineGate { get; } = new();
+
+    // The last commands sent, held or dropped, with who sent each: a bug
+    // report's answer to "why did it send that" (SentCommandTrail).
+    public SentCommandTrail SentCommands { get; } = new();
+
+    // The last minutes of the program log, always on disk for a hang or a forced
+    // kill; and the startup block and periodic status line that make that log
+    // readable on its own.
+    public RecentLogFile RecentLog { get; }
+    public ClientHeartbeat Heartbeat { get; }
+
+    // What each last-minutes file opens with. Read on the writer's thread, any
+    // time from the first log entry on: before the settings and game data exist
+    // their halves are simply not known yet.
+    private IReadOnlyList<string> RecentLogHeader()
+    {
+        string? set = null, profile = null;
+        try
+        {
+            set = GameData?.ActiveSet;
+            profile = Settings?.Current.LastUsedProfile?.Name;
+        }
+        catch (Exception ex) when (ex is NullReferenceException or InvalidOperationException)
+        {
+            // Still constructing: the header goes without them.
+        }
+        List<string> lines = new() { "# MudPlay last-minutes log: the program log's last few minutes, kept for a hang or a forced kill" };
+        foreach (string line in ClientHeartbeat.StartupLines(set, profile)) lines.Add("# " + line);
+        return lines;
+    }
+
+    // How long each engine has been in its state, sampled once a second (probes
+    // are registered by BugReportHoldsAndWaits once every engine exists).
+    public EngineStateWatch StateWatch { get; } = new();
 
     // Two-flag one-shot coordinator for "intentional hangup" intent.
     // Set by every engine that deliberately drops the carrier
@@ -2305,6 +2343,21 @@ public sealed class AppServices
     // any cached room references.
     public Game.Map.RoomGraphManager RoomGraph { get; private set; } = null!;
 
+    // How far the Stock map file's list of where the dead arrive goes for the
+    // active game data: Paradigm by its Info row (Legit 2), an unmodified Stock
+    // set by Legit 1 with Custom "Default", and anything else (a board whose
+    // sysop may have edited its rooms, or no set) unverified.
+    public Game.Recovery.HangupArrivalListTrust HangupArrivalListTrust =>
+        GameData.ActiveRealm == Game.RealmType.ParaMud ? Game.Recovery.HangupArrivalListTrust.Paradigm
+        : GameData.ActiveSetIsVanillaStock ? Game.Recovery.HangupArrivalListTrust.VanillaStock
+        : Game.Recovery.HangupArrivalListTrust.Unverified;
+
+    // Paradigm's Albion: the rooms that can be walked to from the Burial Vault,
+    // where its dead arrive. The walk is made the first time a hang-up in one of
+    // Paradigm's own rooms is judged and kept with the graph (Map.WalkReach).
+    public bool InParadigmAlbion(Game.Map.RoomKey room) =>
+        Game.Map.WalkReach.From(RoomGraph, Game.Recovery.HangupDeathArrivalRooms.ParadigmAlbionVault).Contains(room);
+
     // The teleport spots in the loaded game data, for the
     // setting that says which of them automatic walks may use. Worked out from the
     // room graph on first use and again after the graph reloads.
@@ -2755,7 +2808,7 @@ public sealed class AppServices
         // per-name folders the rest of the bootstrap now expects.
         // Runs BEFORE any store touches disk; idempotent on
         // already-migrated trees.
-        LogService bootstrapLog = new();
+        LogService bootstrapLog = new(LogService.SessionCapacity);
         DataMigration.RunIfNeeded(bootstrapLog);
 
         _current = new AppServices(bootstrapLog);
@@ -2773,6 +2826,14 @@ public sealed class AppServices
         // opens once the toggle turns on (applied from the profile below or
         // flipped from the Log pane), so a normal session leaves no file.
         ProgramLog = new ProgramLogFile(Log, LogDiagnostics);
+        // The always-written last minutes of the log, for a hang or a forced kill
+        // (RecentLogFile). Older clients' pairs go first, so with this one's the
+        // folder holds ProcessesKept of them.
+        RecentLogFile.PruneOldProcesses(AppPaths.LogsDir, RecentLogFile.ProcessesKept - 1);
+        string recentA = AppPaths.NewDebugLogFile(RecentLogFile.TopicA);
+        string recentB = recentA[..^(RecentLogFile.TopicA.Length + ".log".Length)] + RecentLogFile.TopicB + ".log";
+        RecentLog = new RecentLogFile(Log, LogDiagnostics, recentA, recentB, RecentLogHeader);
+        Heartbeat = new ClientHeartbeat(Log, () => ClientHeartbeat.Describe(this));
         // Surface a one-time legacy data migration (pre-3.0 FujinTerm → MudPlay)
         // now that logging is up — AppPaths ran it at static-init.
         if (AppPaths.MigrationNote is { } migrationNote)
@@ -3493,7 +3554,11 @@ public sealed class AppServices
         // sending while the password tracker locks the gate. Bound by
         // MainWindowViewModel a few lines after the other engine
         // wire-senders, deliberately to the un-wrapped SendUserInput.
-        Suicide = new Game.Remote.SuicideHandler(RemoteCommands, Router, Profile, Passwords, PromptScanner, Log);
+        Suicide = new Game.Remote.SuicideHandler(RemoteCommands, Router, Profile, Passwords, PromptScanner, Log)
+        {
+            SendGate = EngineGate,
+            Telepaths = Telepaths,
+        };
         // Main-menu entry automation — armed by MainWindowVM when
         // LoginAutomator.LoggedIntoGame fires; observes the
         // MainMenuEnterRealm pattern and sends GameCommands.EntryCommand
@@ -5349,15 +5414,10 @@ public sealed class AppServices
             characterName: () => PlayerStats.Name,
             send: cmd => SendGameCommand(cmd),
             log: Log);
-        // Not for a death the Stock engine answered with its colliseum line: that
-        // one leaves the lives as they were (GAME_MECHANICS "Death threshold &
-        // consequences"), and the command would add a life that was never spent.
-        RoomTracker.PlayerDeathObserved += () =>
-        {
-            if (!Death.LastDeathSavedInColliseum) SysopGodLife.OnDeath();
-            else if (SysopGodLivesEnabledHere())
-                Log.Info("SysopGodLife", "A colliseum death spends no life: no life is asked back.");
-        };
+        // Not for an arena death, on either realm: it leaves the lives as they
+        // were (GAME_MECHANICS "Death threshold & consequences"), and the command
+        // would add a life that was never spent.
+        RoomTracker.PlayerDeathObserved += () => SysopGodLife.OnDeath(RoomTracker.LastDeathTookNothing);
 
         // "Sysop goto": gate `sys goto <name>` (per-BBS power + active-combat block +
         // table + level) and, on a fired jump, re-anchor position when the landing
@@ -6069,6 +6129,11 @@ public sealed class AppServices
         // A bug report copies the terminal only from the time spent in the game, so a
         // login screen never rides along in one.
         InGameCapture = new Game.InGameCapture(Router, PromptScanner, Wire, Log);
+        // The sent-command trail keeps nothing typed outside the game (a login is)
+        // and nothing that may be a suicide password, typed or sent by @suicide.
+        EngineGate.Trail = SentCommands;
+        SentCommands.Withhold = () =>
+            !InGameCapture.InGame || SuicidePassword.PasswordEntryLikely || Suicide.SendingPassword;
         // Out to the board's menu with the link still up: nothing automatic may be
         // sent (it would be a menu selection), a typed selection isn't a move, the
         // menu's lines aren't unknown game lines, and its prompt isn't a broken
@@ -7245,9 +7310,12 @@ public sealed class AppServices
         AutoModeController.KillSwitchToggled += _ => AutoOpen.Recheck();
         Profile.ProfileLoaded += _ => AutoOpen.Reset();
         RoomTracker.PlayerDeathObserved += AutoOpen.OnPlayerDied;
+        // Not for an arena death: it took nothing, so what the entry read found
+        // gone didn't go into a pile.
         RoomTracker.UnwitnessedDeathRecorded += () =>
         {
-            if (Profile.Current?.DeathHistory?.LastOrDefault() is { } record) AutoOpen.OnUnwitnessedDeath(record.At);
+            if (Profile.Current?.DeathHistory?.LastOrDefault() is { NothingLost: false } record)
+                AutoOpen.OnUnwitnessedDeath(record.At);
         };
         // Settings → Talk auto-greet. Self name resolves through the
         // PartyManager's LocalCharacterName first (set on connect), then
@@ -10076,7 +10144,14 @@ public sealed class AppServices
                 Game.Health.HangupPenaltyNotice.HpShareTop(ResolveActiveRealm()?.Realm, pvp, inFight),
             stockRealm: () => GameData.ActiveRealm == Game.RealmType.Stock,
             recordDeath: RoomTracker.NoteUnwitnessedDeath,
-            staysOnDeath: EveryItemOfThisNameStaysOnDeath);
+            staysOnDeath: EveryItemOfThisNameStaysOnDeath,
+            // Whether the room the character came back in is where the dead of the
+            // room it hung up in arrive. The list is the Stock map file's, and how
+            // far it goes depends on the game data (HangupArrivalListTrust). The
+            // graph says which rooms the map can't tell an arrival room from.
+            entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.Read(
+                hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion),
+            roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}");
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
         // The lives a `stat` on this connection gave: the count carried over a
@@ -10104,10 +10179,10 @@ public sealed class AppServices
         // life is as spent as in a death that was seen, whenever it is found out;
         // it is asked for under the master switch like everything else this check
         // sends: a `stat` the user types can bring the verdict, and with the switch
-        // off nothing automatic goes out.
+        // off nothing automatic goes out. An arena death spent none.
         RoomTracker.UnwitnessedDeathRecorded += () =>
         {
-            if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath();
+            if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath(RoomTracker.LastDeathTookNothing);
         };
         // The buff timers were only frozen when the link dropped. All of our own are
         // cleared for a death found at the login only: one found later would wipe the

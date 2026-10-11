@@ -27,9 +27,9 @@ public sealed class ScrollbackBuffer
     // mutating it after Append doesn't affect anything since the source row
     // was copied at append time. SoftWrapped marks a row the emulator ended by
     // wrapping a long line at the right margin (not a server LF) — LineExtractor
-    // uses it to stitch the continuation back onto the logical line. The
-    // scrollback ring never sets it (rendering doesn't care); only the
-    // LineCompleted event path populates it.
+    // uses it to stitch the continuation back onto the logical line, and a
+    // reader of the ring (the bug report's chat censor) to tell that the next
+    // row is this line carrying on. Rendering doesn't care.
     public readonly record struct Row(DateTimeOffset Timestamp, Cell[] Cells, bool SoftWrapped = false);
 
     private Row[] _ring;
@@ -65,10 +65,12 @@ public sealed class ScrollbackBuffer
     // which carry the same write time. A default timestamp (a blank row that was
     // never written) falls back to the current instant. The cells are copied; the
     // caller may overwrite the source buffer immediately on return.
-    public void Append(ReadOnlySpan<Cell> row, DateTimeOffset writeTime)
+    // softWrapped: the screen's record that the row was left by a wrap at the
+    // right margin (Row.SoftWrapped).
+    public void Append(ReadOnlySpan<Cell> row, DateTimeOffset writeTime, bool softWrapped = false)
     {
         Cell[] copy = row.ToArray();
-        Row entry = new(writeTime == default ? DateTimeOffset.Now : writeTime, copy);
+        Row entry = new(writeTime == default ? DateTimeOffset.Now : writeTime, copy, softWrapped);
         _ring[_head] = entry;
         _head = (_head + 1) % Capacity;
         if (_count < Capacity) _count++;

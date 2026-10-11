@@ -162,6 +162,77 @@ public sealed class TranscriptSnapshotTests
         Assert.Equal("NEW 2", lines[1].Text);
     }
 
+    // The terminal's record of a wrap travels with the row: on screen, through a
+    // scroll, and into the backscroll. A row the snapshot leaves out ends the
+    // line before it, so the next row kept is never read as its continuation.
+    [Fact]
+    public void Tail_CarriesWhichRowsTheTerminalWrapped_AndARowLeftOutEndsTheLine()
+    {
+        TerminalEmulator emulator = new(20, 3);
+        TerminalScreen screen = emulator.Screen;
+        DateTimeOffset t0 = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        CaptureWindow inGame = new(on: true);
+
+        screen.FeedTimestamp = t0;
+        emulator.Feed("0123456789012345678901234\r\n"u8);       // 25 columns: wraps once
+        Assert.True(screen.RowSoftWrapped(0));
+        Assert.False(screen.RowSoftWrapped(1));
+
+        Assert.Equal(new[] { true, false }, TranscriptSnapshot.Tail(emulator, 0).Select(l => l.SoftWrapped));
+
+        // Erasing the row below from its start (a prompt redrawn in place) ends
+        // the wrapped line above it.
+        screen.ClearRow(1, 0, screen.Cols - 1, default);
+        Assert.False(screen.RowSoftWrapped(0));
+
+        // A wrapped row whose continuation falls outside the window.
+        screen.ClearAll(default);
+        screen.FeedTimestamp = t0.AddSeconds(1);
+        for (int x = 0; x < 20; x++) screen.Put(x, 0, new Cell('a', default));
+        screen.SetRowSoftWrapped(0, true);
+        inGame.Set(false, t0.AddSeconds(2));
+        screen.FeedTimestamp = t0.AddSeconds(2);
+        screen.Put(0, 1, new Cell('b', default));
+        inGame.Set(true, t0.AddSeconds(3));
+        screen.FeedTimestamp = t0.AddSeconds(3);
+        screen.Put(0, 2, new Cell('c', default));
+
+        IReadOnlyList<TranscriptSnapshot.Line> kept = TranscriptSnapshot.Tail(emulator, 0, only: inGame);
+        TranscriptSnapshot.Line wrapped = Assert.Single(kept, l => l.Text.StartsWith('a'));
+        Assert.False(wrapped.SoftWrapped);
+        Assert.DoesNotContain(kept, l => l.Text == "b");
+    }
+
+    // A row the terminal wrapped onto, then written over from its first column
+    // after a bare CR (no erase): the row above no longer wraps onto it. The
+    // line's own CR LF, at the end of the row it carried on to, changes nothing.
+    [Fact]
+    public void ARowWrappedOnto_ThenOverwrittenFromItsStart_IsNoLongerACarryOn()
+    {
+        TerminalEmulator emulator = new(20, 4);
+        TerminalScreen screen = emulator.Screen;
+
+        emulator.Feed("0123456789012345678901234"u8);          // wraps: 5 characters on row 1
+        Assert.True(screen.RowSoftWrapped(0));
+        emulator.Feed("\rprompt>"u8);                           // back to column 0, written over
+        Assert.False(screen.RowSoftWrapped(0));
+        Assert.Equal("prompt>", TranscriptSnapshot.RowText(screen.Row(1)));
+
+        screen.ClearAll(default);
+        screen.CursorX = 0;
+        screen.CursorY = 0;
+        emulator.Feed("0123456789012345678901234\r\nnext line\r\n"u8);
+        Assert.True(screen.RowSoftWrapped(0));
+        Assert.False(screen.RowSoftWrapped(1));
+
+        // At the bottom of the screen, where the wrap scrolls the rows up.
+        emulator.Feed("\n\n"u8);
+        emulator.Feed("abcdefghijklmnopqrstuvwxyz"u8);
+        Assert.True(screen.RowSoftWrapped(screen.CursorY - 1));
+        emulator.Feed("\rover"u8);
+        Assert.False(screen.RowSoftWrapped(screen.CursorY - 1));
+    }
+
     [Fact]
     public void RowText_TrimsTrailingSpaces()
     {
