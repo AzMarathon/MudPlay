@@ -8,26 +8,33 @@ namespace MudPlay.Game.Combat;
 // should hold attacking that target until the user types something to attack it").
 //
 // An attack is any attack word the game takes (AttackCommandWords) or the cast code
-// of an attack spell, aimed at that monster or another. A direction after `bash` or
-// `aa` is a door, as in OutboundAttackObserver.
+// of an attack spell, aimed at that monster or another. A direction after the bash
+// command is a door, as in OutboundAttackObserver.
 //
 // Hooked into the wire-send pipeline by MainWindowViewModel.SendUserInput, which
-// hands it the user's own lines only: typed, or sent by a macro, trigger or event
-// they set up (EngineSendGate.SendingUsersOwnCommand). An engine's `break` (a flee,
-// a room attack broken off for a bystander, the combat toggle going off, `sys
-// goto`) and an engine's attack never reach it. The line is read as it is sent, so
-// a `break` typed ahead of the round that the game answers after it is the user's
-// all the same. Short payloads only: anything past ~64 bytes is no bare command.
+// hands it the user's own lines: typed, or sent by a macro, trigger or event they
+// set up (EngineSendGate.SendingUsersOwnCommand). A command a party member sent
+// with `@do` is handed over too, with that member's name (user, 2026-10-10, asked
+// which breaks sent on someone's behalf hold the attack: "only the @do break"). An
+// engine's `break` (a flee, a room attack broken off for a bystander, the combat
+// toggle going off, `sys goto`) and an engine's attack never reach it. The line is
+// read as it is sent, so a `break` typed ahead of the round that the game answers
+// after it is the user's all the same. Short payloads only: anything past ~64
+// bytes is no bare command.
 public sealed class OutboundBreakObserver
 {
     private const int MaxBytes = 64;
 
     private readonly Func<string, bool> _isAttackSpell;
-    private readonly Action<string> _onBreak;
-    private readonly Action<string, string?> _onAttack;
+    private readonly Action<string, string?> _onBreak;
+    private readonly Action<string, string?, string?> _onAttack;
 
+    // onBreak(word, askedBy) and onAttack(word, target, askedBy): askedBy is the
+    // party member whose `@do` sent the line, null for the user's own.
     public OutboundBreakObserver(
-        Func<string, bool> isAttackSpell, Action<string> onBreak, Action<string, string?> onAttack)
+        Func<string, bool> isAttackSpell,
+        Action<string, string?> onBreak,
+        Action<string, string?, string?> onAttack)
     {
         ArgumentNullException.ThrowIfNull(isAttackSpell);
         ArgumentNullException.ThrowIfNull(onBreak);
@@ -37,7 +44,7 @@ public sealed class OutboundBreakObserver
         _onAttack = onAttack;
     }
 
-    public void ObserveOutbound(ReadOnlySpan<byte> bytes)
+    public void ObserveOutbound(ReadOnlySpan<byte> bytes, string? askedBy = null)
     {
         if (bytes.IsEmpty || bytes.Length > MaxBytes) return;
         string cmd = Encoding.Latin1.GetString(bytes)
@@ -52,12 +59,12 @@ public sealed class OutboundBreakObserver
 
         if (AttackCommandWords.IsBreak(word))
         {
-            _onBreak(word);
+            _onBreak(word, askedBy);
             return;
         }
 
         bool attackWord = AttackCommandWords.IsAttack(word)
             && !AttackCommandWords.IsDoorBash(word, target);
-        if (attackWord || _isAttackSpell(word)) _onAttack(word, target);
+        if (attackWord || _isAttackSpell(word)) _onAttack(word, target, askedBy);
     }
 }

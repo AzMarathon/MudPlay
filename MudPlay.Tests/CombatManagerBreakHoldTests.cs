@@ -122,6 +122,14 @@ public sealed class CombatManagerBreakHoldTests
             DrainPosted();
         }
 
+        // A command a party member's `@do` put on the wire, handed over the same
+        // way with that member's name (DoHandler.SendingFor).
+        public void PartyMemberDoes(string member, string line)
+        {
+            UserCommands.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), member);
+            DrainPosted();
+        }
+
         // The game's answer to a `break` typed in a fight: the echo, then the Off.
         public void GameAnswersBreak()
         {
@@ -272,6 +280,44 @@ public sealed class CombatManagerBreakHoldTests
         Assert.Empty(h.Sent);
         Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);
         Assert.True(h.Combat.AttackHeldByUserBreak);
+    }
+
+    // A party member's `@do break` holds the attack exactly as a typed one does
+    // (user, 2026-10-10, asked which breaks sent on someone's behalf should: "only
+    // the @do break"), and the log and the terminal say who asked.
+    [Fact]
+    public void PartyMembersDoBreak_HoldsTheAttack_AndSaysWhoAsked()
+    {
+        using Harness h = FightingARat();
+        int sent = h.Sent.Count;
+
+        h.PartyMemberDoes("Leader", "break");
+        h.GameAnswersBreak();
+        h.Feed(RatBites);
+        h.Tick();
+
+        Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);
+        Assert.Equal(sent, h.Sent.Count);
+        Assert.Contains("Leader's @do break", Assert.Single(h.Notices));
+        Assert.Contains(h.Log.Snapshot(), e =>
+            e.Severity == LogSeverity.Info && e.Message.Contains("Leader's @do 'break'")
+            && e.Message.Contains($"attack held on '{Rat}'"));
+    }
+
+    // An attack sent the same way lets the hold go, as the user's own would, so the
+    // member who set it can lift it.
+    [Fact]
+    public void PartyMembersDoAttack_EndsTheHold_AndSaysWhoAsked()
+    {
+        using Harness h = FightingARat();
+        h.PartyMemberDoes("Leader", "break");
+        h.GameAnswersBreak();
+
+        h.PartyMemberDoes("Leader", "a rat");
+
+        Assert.Null(h.Combat.UserBreakHoldTarget);
+        Assert.Equal(Rat, h.Combat.CurrentTarget);
+        Assert.Contains("Leader sent 'a rat' by @do", h.Combat.UserBreakHoldSummary);
     }
 
     // ----- no attack path fires under it ---------------------------------

@@ -3829,10 +3829,12 @@ public partial class MainWindowViewModel : ObservableObject
         // the monster it was fighting, and their own attack lets it go: typed, or
         // sent by a macro, trigger or event of theirs. An engine's break or attack is
         // neither, and the raw wire's lines (`sys goto` sends a break ahead of a
-        // jump) are an engine's although nothing wraps them.
-        if (typed && AppServices.Current.EngineGate.SendingUsersOwnCommand
-            && !AppServices.Current.SendingEngineRawCommand)
-            AppServices.Current.OutboundBreak.ObserveOutbound(data);
+        // jump) are an engine's although nothing wraps them. A party member's `@do`
+        // line counts with the user's (user, 2026-10-10) and carries their name.
+        string? doAskedBy = AppServices.Current.Do.SendingFor;
+        if (typed && !AppServices.Current.SendingEngineRawCommand
+            && (AppServices.Current.EngineGate.SendingUsersOwnCommand || doAskedBy is not null))
+            AppServices.Current.OutboundBreak.ObserveOutbound(data, doAskedBy);
         // Sneak — a typed command that ends a sneak (search, gear, a door…) marks it
         // broken, the same as an engine send through the gate. Short lines only: a
         // command, not a paste. A line a wrapped sender is putting out is the gate's

@@ -13,15 +13,17 @@ public sealed class OutboundBreakObserverTests
     {
         public List<string> Breaks { get; } = new();
         public List<(string Word, string? Target)> Attacks { get; } = new();
+        public List<string?> AskedBy { get; } = new();
         public OutboundBreakObserver Observer { get; }
 
         public Seen()
             => Observer = new OutboundBreakObserver(
                 isAttackSpell: c => c.Equals("aslt", StringComparison.OrdinalIgnoreCase),
-                onBreak: Breaks.Add,
-                onAttack: (w, t) => Attacks.Add((w, t)));
+                onBreak: (w, by) => { Breaks.Add(w); AskedBy.Add(by); },
+                onAttack: (w, t, by) => { Attacks.Add((w, t)); AskedBy.Add(by); });
 
-        public void Send(string line) => Observer.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"));
+        public void Send(string line, string? askedBy = null)
+            => Observer.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), askedBy);
     }
 
     [Theory]
@@ -80,6 +82,20 @@ public sealed class OutboundBreakObserverTests
         Assert.Equal(new (string, string?)[] { ("a", "giant rat"), ("kick", null), ("aslt", "kobold thief") },
             s.Attacks);
         Assert.Empty(s.Breaks);
+    }
+
+    // A line a party member's `@do` sent is forwarded with that member's name; the
+    // user's own carries none.
+    [Fact]
+    public void WhoAskedForTheLine_IsForwarded()
+    {
+        Seen s = new();
+
+        s.Send("break", askedBy: "Leader");
+        s.Send("a giant rat", askedBy: "Leader");
+        s.Send("break");
+
+        Assert.Equal(new string?[] { "Leader", "Leader", null }, s.AskedBy);
     }
 
     // A direction after the bash command is the door on that exit, under any of the

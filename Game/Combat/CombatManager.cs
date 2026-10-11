@@ -4199,9 +4199,12 @@ public sealed partial class CombatManager : IDisposable
 
     // The user's own `break` went out (routed by OutboundBreakObserver, at send, so
     // one typed ahead of the round counts although the game answers it later).
-    public void NoteUserBreak(string word)
+    // askedBy names the party member whose `@do break` it was; such a break holds
+    // the attack exactly as the user's own does (user, 2026-10-10).
+    public void NoteUserBreak(string word, string? askedBy = null)
     {
         if (_disposed || _userBreakHold is not null) return;
+        string whose = WhoseCommand(askedBy);
         string? target = _currentTarget ?? _castingSpellTarget;
         if (target is null
             && _userAttackedLast is { } byHand
@@ -4211,7 +4214,7 @@ public sealed partial class CombatManager : IDisposable
         if (target is null)
         {
             _log?.Combat(LogCategory,
-                $"the user's '{word}' — no attack of ours or theirs is on record here, nothing to hold");
+                $"{whose} '{word}' — no attack of ours or theirs is on record here, nothing to hold");
             return;
         }
 
@@ -4225,10 +4228,12 @@ public sealed partial class CombatManager : IDisposable
         _heldRoomCheckOwed = true;
         _heldRoomCheckFrom = _now();
         _log?.Info(LogCategory,
-            $"the user's '{word}' — attack held on '{target}' until the user attacks, it dies or leaves, or we leave the room"
+            $"{whose} '{word}' — attack held on '{target}' until the user attacks, it dies or leaves, or we leave the room"
             + (_userBreakHoldAnnounced ? "" : " (engine off: nothing to hold back for now)"));
         if (_userBreakHoldAnnounced)
-            UserBreakHoldNotice?.Invoke($"Attack on {target} held by your break: attack to carry on");
+            UserBreakHoldNotice?.Invoke(askedBy is null
+                ? $"Attack on {target} held by your break: attack to carry on"
+                : $"Attack on {target} held by {askedBy}'s @do break: attack to carry on");
 
         // Stand the engine down as the Auto-Combat-off branch of OnEntitiesObserved
         // does, now and not at the next room event: a target or spell left standing
@@ -4247,7 +4252,7 @@ public sealed partial class CombatManager : IDisposable
     // engine carries on with what the user attacked: this round is theirs, and the
     // monster they named becomes the target so its death is read and the next one
     // picked as in any fight.
-    public void NoteUserAttack(string word, string? target)
+    public void NoteUserAttack(string word, string? target, string? askedBy = null)
     {
         if (_disposed) return;
         string? held = _userBreakHold;
@@ -4255,9 +4260,12 @@ public sealed partial class CombatManager : IDisposable
         if (aimedAt is { } hit) _userAttackedLast = hit.RawName;
         if (held is null) return;
 
-        EndUserBreakHold($"the user sent '{(target is null ? word : $"{word} {target}")}'");
+        string line = target is null ? word : $"{word} {target}";
+        EndUserBreakHold(askedBy is null
+            ? $"the user sent '{line}'"
+            : $"{askedBy} sent '{line}' by @do");
         if (!Fighting()) return;
-        NoteUserAttackOverride($"the user's '{word}' took the break hold off", target ?? held);
+        NoteUserAttackOverride($"{WhoseCommand(askedBy)} '{word}' took the break hold off", target ?? held);
         if (aimedAt is { } cand
             && MonsterEngagement.IsEngageable(
                 ResolveOverlay(cand.MonsterNumber), _userEngagedInstances.Contains(cand.RawName)))
@@ -4268,6 +4276,9 @@ public sealed partial class CombatManager : IDisposable
             _ensureCombatTickAnchor?.Invoke();
         }
     }
+
+    private static string WhoseCommand(string? askedBy)
+        => askedBy is null ? "the user's" : $"{askedBy}'s @do";
 
     // We are in another room (RoomTracker, on a confirmed change of room). The new
     // room's roster may already have been read under the hold, which stood the engine
