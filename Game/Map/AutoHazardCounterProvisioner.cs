@@ -506,6 +506,8 @@ public sealed class AutoHazardCounterProvisioner
     {
         // Not back in the game yet: whatever is on the screen is not the game's.
         if (_pausedAt is not null) return null;
+        // Ahead of the returns below: a pack seen empty has changed.
+        SweepSetAside();
 
         // A passive immunity guard (the desert sunstone wristband) makes the whole
         // hazard a no-op just by being POSSESSED — carried or worn, no `use` needed
@@ -535,14 +537,27 @@ public sealed class AutoHazardCounterProvisioner
         return pick;
     }
 
-    // The game turned a `use` of this item away for a reason that holds, and the count
-    // carried is what it was then.
+    // The game turned a `use` of this item away for a reason that holds, and the pack
+    // has not been seen to change since.
     private bool StillRefused(int item)
     {
-        if (!_refusedAtCount.TryGetValue(item, out int countThen)) return false;
-        if (_carriedCount(item) == countThen) return true;
-        _refusedAtCount.Remove(item);
-        return false;
+        SweepSetAside();
+        return _refusedAtCount.ContainsKey(item);
+    }
+
+    // An item set aside comes back into use once the count carried is seen to differ
+    // from what it was: more, fewer or none. It has to be caught at fewer or none,
+    // which is why this is asked on every look and not only when a `use` is wanted:
+    // the spent one sold and a fresh one bought brings the count back to where it
+    // was, and the fresh one would stay set aside.
+    private void SweepSetAside()
+    {
+        if (_refusedAtCount.Count == 0) return;
+        List<int>? changed = null;
+        foreach ((int item, int countThen) in _refusedAtCount)
+            if (_carriedCount(item) != countThen) (changed ??= new()).Add(item);
+        if (changed is null) return;
+        foreach (int item in changed) _refusedAtCount.Remove(item);
     }
 
     // True when the client's charge count for the item reads none left: nothing is
@@ -621,6 +636,9 @@ public sealed class AutoHazardCounterProvisioner
         left = null;
         where = null;
         if (_pausedAt is not null) return null;
+        // Asked once a second by the cast pass, wherever the character is: the look
+        // that catches a set-aside item leaving the pack.
+        SweepSetAside();
 
         // Owed from a round refusal: due wherever the character stands, and it can't
         // wait, since it couldn't when it was first sent.
@@ -782,6 +800,7 @@ public sealed class AutoHazardCounterProvisioner
         // the clock said. Taken first and for anyone standing here: when nothing
         // below sends a `use`, the refresh is due again under its usual rules.
         NoteBuffAbsent(counter);
+        SweepSetAside();
 
         // The `use` sent from here is for a live walk — ours, or the leader's we're
         // following: the "out of" say and the halt below are a route's business.

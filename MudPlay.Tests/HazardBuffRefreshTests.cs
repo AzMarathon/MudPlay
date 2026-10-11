@@ -648,6 +648,40 @@ public sealed class HazardBuffRefreshTests : IDisposable
         Assert.Equal(2, f.Wire.Count);
     }
 
+    // The spent one leaves the pack and a fresh one arrives: the count is back to
+    // what it was when the item was set aside, and the fresh one is used all the same,
+    // because the pack was seen without it in between. It used to stay set aside, and
+    // the thirst line then said "out of waterskins" with a full one carried.
+    [Fact]
+    public void SetAsideItem_SeenGoneThenReplaced_IsUsedAgain()
+    {
+        Field f = new() { Charges = 0 };
+        f.Engine.OnApproachingRoom(Dunes);
+        Assert.Empty(f.Wire);                       // empty by the client's count: set aside at 1 carried
+
+        f.Carried = 0;                              // dropped or sold
+        Assert.Null(f.Engine.DueNow());             // the cast pass's look, a second later
+        f.Carried = 1;                              // a fresh one bought
+        f.Charges = 3;
+
+        f.Engine.OnApproachingRoom(Dunes);
+        Assert.Equal(new[] { "use waterskin" }, f.Wire);
+        f.Engine.OnServerLine(SwigLine);
+        Assert.DoesNotContain(f.Wire, w => w.StartsWith(".I'm out of"));
+    }
+
+    // One more carried is a changed pack as well.
+    [Fact]
+    public void SetAsideItem_ASecondOneCarried_IsUsedAgain()
+    {
+        Field f = new() { Charges = 0 };
+        f.Engine.OnApproachingRoom(Dunes);
+        f.Carried = 2;
+        f.Charges = 3;
+        f.Engine.OnApproachingRoom(Dunes);
+        Assert.Equal(new[] { "use waterskin" }, f.Wire);
+    }
+
     // "You don't have ..." answers other commands as well: only one naming the item
     // is taken for the answer to our `use`.
     [Fact]
