@@ -2,14 +2,12 @@
 
 ## 3.177.0
 
-- The client learns where a room's dead arrive from a death it sees, and keeps it with the game-data set for every client on it
-- A death seen in one room stands for its land (the rooms walked to from it on its map); a room's own reading wins, and one that differs is logged
-- Hang-up death check: back in a learned room counts as where the dead arrive, for rooms no list covers; never as "the wrong room", and not enough alone for a character that owned nothing
-- A room seen to send its dead to two rooms is disputed until one reading is seen again; that one stands
-- Stock: a death that ends where the standard list doesn't allow marks the board as having edited rooms; the list then only says yes there
-- Paradigm: the dungeon rooms of map 1 (1/2171 to 1/2188) send their dead to Newhaven's healer (1/2190)
-- Paradigm: Albion takes in the rooms only a room command on the same map reaches (Chamber of Wisdom, Castle Courtyard)
-- Bug report shows the learned arrival rooms, disputes, rooms at odds with their land, and the board's contradictions of the standard list
+- The client learns where a room's dead arrive from a death it sees, keeps it with the game-data set for every client on it, and shows it in the bug report
+- One death stands for its land (the rooms walked to from it on its map); a room's own reading wins
+- Two readings of one room: neither is used until one is seen again, and a reading in use gives way to another seen as often
+- Hang-up death check: back in a learned room counts as where the dead arrive, never as "the wrong room"; with no lives count it also needs HP read at the first prompt
+- Stock: two deaths the standard list doesn't allow mark the board as having edited rooms; the list then only says yes there
+- Paradigm: map 1's dungeon rooms (1/2171 to 1/2188) send their dead to Newhaven's healer; Albion takes in rooms only a same-map room command reaches
 
 ## 3.176.3
 
