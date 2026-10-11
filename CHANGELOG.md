@@ -1,5 +1,11 @@
 # Version history
 
+## 3.179.11
+
+- Game data imported again over the active set: monster spawns, item sources, room floor items, quest flags and the spell-ailment and cure lists now rebuild from the new data, not only after a set switch or a restart
+- Loading a game-data set reads each table file once; Rooms was read twice
+- A lookup caught mid-switch can no longer be answered from the other set's table, and nothing worked out mid-switch from the last set's textblocks, rooms or shop stock is kept for the new set
+
 ## 3.179.9
 
 - Switching game-data sets: the indexes built from each set (monster drops and spawns, room hazards, quest steps and others) build several times faster and allocate a fraction of the memory; the first item window and first room hover after a load no longer pause to read the Rooms table back

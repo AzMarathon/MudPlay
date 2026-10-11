@@ -43,9 +43,13 @@ public sealed class MonsterSpawnIndex
     // One immutable build, published by a single reference assignment. Readers
     // take the current snapshot and work from it, so a rebuild can run on a
     // background thread without ever handing a caller a half-filled map.
+    //
+    // Load is the load of the set it was built from, name and count: a set imported
+    // again over itself keeps its name, and the name alone left the old build
+    // answering until a real switch.
     private sealed class Snapshot
     {
-        public required string? Set { get; init; }
+        public required GameDataCache.Load Load { get; init; }
         public required Dictionary<RoomKey, List<int>> SummonedAt { get; init; }
         public required Dictionary<RoomKey, List<int>> PlacedAt { get; init; }
         public required Dictionary<RoomKey, List<int>> AssignedAt { get; init; }
@@ -129,21 +133,23 @@ public sealed class MonsterSpawnIndex
     // SeeHiddenIndex and friends all evict "Monsters" too.
     private Snapshot EnsureBuilt(bool mayEvictRaw = true)
     {
-        string? active = _cache.ActiveSet;
-        if (_snapshot is { } current && current.Set == active) return current;
+        if (_snapshot is { } current && current.Load == _cache.ActiveLoad) return current;
 
         lock (_buildGate)
         {
-            // Another thread may have published while we waited for the gate.
-            if (_snapshot is { } published && published.Set == active) return published;
-            Snapshot built = Build(active, mayEvictRaw);
+            // Read once the gate is ours and before the build: another thread may
+            // have published while we waited, and the set may have been loaded again.
+            GameDataCache.Load load = _cache.ActiveLoad;
+            if (_snapshot is { } published && published.Load == load) return published;
+            Snapshot built = Build(load, mayEvictRaw);
             _snapshot = built;
             return built;
         }
     }
 
-    private Snapshot Build(string? active, bool mayEvictRaw)
+    private Snapshot Build(GameDataCache.Load load, bool mayEvictRaw)
     {
+        string? active = load.Set;
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
         var summonedAt = new Dictionary<RoomKey, List<int>>();
         var placedAt = new Dictionary<RoomKey, List<int>>();
@@ -220,7 +226,7 @@ public sealed class MonsterSpawnIndex
 
         return new Snapshot
         {
-            Set = active,
+            Load = load,
             SummonedAt = summonedAt,
             PlacedAt = placedAt,
             AssignedAt = assignedAt,

@@ -1548,17 +1548,24 @@ public sealed class AppServices
 
     // What ShopSpellOffers was last built from. The build is an Items scan, a Shops
     // read per selling shop and a pass over the room graph, and both the planner and
-    // the Auto-Trainer tab ask for it repeatedly.
-    private (string? Set, int Class, int Align, int Charm, int Rooms) _shopSpellOffersKey;
+    // the Auto-Trainer tab ask for it repeatedly. The set is told by its load, not
+    // its name: a set imported again over itself keeps the name.
+    private (GameDataCache.Load Set, int Class, int Align, int Charm, int Rooms) _shopSpellOffersKey;
     private IReadOnlyList<Game.Train.ShopSpellOffer> _shopSpellOffers = Array.Empty<Game.Train.ShopSpellOffer>();
 
     // Every spell the loaded character's class can learn from a scroll some shop
     // restocks, with the rooms that sell it and their price at the character's Charm.
     public IReadOnlyList<Game.Train.ShopSpellOffer> ShopSpellOffers()
     {
-        (string?, int, int, int, int) key = (GameData.ActiveSet, Spellbook.ClassNumber, Spellbook.CharAlign,
+        GameDataCache.Load load = GameData.ActiveLoad;
+        (GameDataCache.Load, int, int, int, int) key = (load, Spellbook.ClassNumber, Spellbook.CharAlign,
             PlayerStats.Charm, RoomGraph.Rooms.Count());
         if (key == _shopSpellOffersKey) return _shopSpellOffers;
+        // The cache's load moves before the room graph and the shop stock are
+        // rebuilt for it (the spell book is reseeded ahead of both). Asked in
+        // between, this answers from the last load's rooms and stock and keeps
+        // nothing, so the next ask builds from the load's own.
+        bool roomsAndStockAreThisLoads = RoomGraph.LoadedFor == load && ShopStock.LoadedFor == load;
 
         Dictionary<int, List<Game.Map.RoomKey>> roomsByShop = new();
         foreach (Game.Map.Room room in RoomGraph.Rooms)
@@ -1569,13 +1576,15 @@ public sealed class AppServices
             rooms.Add(room.Key);
         }
 
-        _shopSpellOffers = Game.Train.ShopSpellCatalog.Build(
+        IReadOnlyList<Game.Train.ShopSpellOffer> offers = Game.Train.ShopSpellCatalog.Build(
             GameData, Spellbook.Available, SpellCatalog.GetTeachingItems(Spellbook.ClassNumber),
             Spellbook.ClassNumber, PlayerStats.Charm,
             ShopStock.ShopsSelling,
             shop => roomsByShop.TryGetValue(shop, out List<Game.Map.RoomKey>? rooms)
                 ? rooms
                 : Array.Empty<Game.Map.RoomKey>());
+        if (!roomsAndStockAreThisLoads) return offers;
+        _shopSpellOffers = offers;
         _shopSpellOffersKey = key;
         return _shopSpellOffers;
     }
@@ -1904,11 +1913,13 @@ public sealed class AppServices
 
     // The hit magic the character's class and race carry of their own, from the
     // active game data. Asked on every combat decision, so the last answer is kept
-    // until the class, race or data set changes.
-    private (string? Class, string? Race, string? Set, int Value) _innateHitMagic = (null, null, null, 0);
+    // until the class, race or data set changes. The set is told by its load, not
+    // its name: a set imported again over itself keeps the name.
+    private (string? Class, string? Race, GameDataCache.Load Set, int Value) _innateHitMagic = (null, null, default, 0);
     public int InnateHitMagic()
     {
-        string? cls = PlayerStats.Class, race = PlayerStats.Race, set = GameData.ActiveSet;
+        string? cls = PlayerStats.Class, race = PlayerStats.Race;
+        GameDataCache.Load set = GameData.ActiveLoad;
         if (_innateHitMagic.Class == cls && _innateHitMagic.Race == race && _innateHitMagic.Set == set)
             return _innateHitMagic.Value;
         int value = 0;
@@ -3837,7 +3848,7 @@ public sealed class AppServices
         // MonsterSpawns — reverse RoomKey -> monster-ids index for the room
         // tooltip's Also Here line. Same lazy-but-warmed-in-the-background shape
         // as ItemSourceIndex below: a first build walks every Monsters.json row
-        // and self-invalidates by comparing the cache's ActiveSet to the set it
+        // and self-invalidates by comparing the cache's ActiveLoad to the load it
         // last built from, so there's no explicit invalidation subscription —
         // only the warm trigger below, so a query never pays the build cost on
         // the UI thread at an inconvenient moment (a room hover mid-walk).
@@ -4001,7 +4012,7 @@ public sealed class AppServices
         if (GameData.ActiveSet is not null)
             RoomSpellDamage.OnActiveSetChanged(GameData.ActiveSet);
         // After the last of the per-set indexes timed above.
-        GameData.ActiveSetChanged += LogSetIndexTimes;
+        GameData.ActiveSetChanged += SetIndexTimes.LogLoad;
 
         // Room tracker. Resets to Unknown on every
         // graph reload because per-room references are invalidated
@@ -10630,31 +10641,12 @@ public sealed class AppServices
         }
     }
 
-    // What each per-set index took to rebuild in the set load under way. The
-    // rebuilds run one after another on the thread that switches the set, so the
-    // list needs no lock; the last of them logs the list and empties it.
-    private readonly List<(string Name, double Ms)> _setIndexTimes = new();
+    // Times the per-set index rebuilds of each set load for the program log. Made on
+    // first use: the first of those rebuilds is wired midway through the constructor.
+    private SetIndexTimings? _setIndexTimings;
+    private SetIndexTimings SetIndexTimes => _setIndexTimings ??= new SetIndexTimings(GameData, Log);
 
-    private Action<string?> TimedSetIndex(string name, Action<string?> rebuild) => set =>
-    {
-        long started = System.Diagnostics.Stopwatch.GetTimestamp();
-        rebuild(set);
-        _setIndexTimes.Add((name, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
-    };
-
-    // One line per set load: a "the switch froze the window" report can tell from it
-    // whether these indexes were the time, and which of them.
-    private void LogSetIndexTimes(string? set)
-    {
-        if (set is not null && _setIndexTimes.Count > 0)
-        {
-            static string Ms(double ms) => ms.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
-            Log.Info("GameData",
-                $"Per-set indexes for '{set}' rebuilt in {Ms(_setIndexTimes.Sum(t => t.Ms))} ms on the switching thread: "
-                + string.Join(", ", _setIndexTimes.OrderByDescending(t => t.Ms).Select(t => $"{t.Name} {Ms(t.Ms)}")) + ".");
-        }
-        _setIndexTimes.Clear();
-    }
+    private Action<string?> TimedSetIndex(string name, Action<string?> rebuild) => SetIndexTimes.Timed(name, rebuild);
 
     private void WarmGameDataLists()
     {
@@ -13629,6 +13621,7 @@ public sealed class AppServices
     {
         ActiveSetDamagedCells = 0;
         if (GameData.ActiveSet is not { } set) return;
+        GameDataCache.Load load = GameData.ActiveLoad;
         System.Threading.Tasks.Task.Run(() =>
         {
             int damaged;
@@ -13641,7 +13634,8 @@ public sealed class AppServices
             if (damaged == 0) return;
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                if (!string.Equals(GameData.ActiveSet, set, StringComparison.Ordinal)) return;   // another set by now
+                // Another set by now, or this one imported again: its own scan answers for it.
+                if (GameData.ActiveLoad != load) return;
                 ActiveSetDamagedCells = damaged;
                 Log.Warn("GameData",
                     $"set '{set}' was imported by an older version that damaged long text: {damaged} cell(s) "

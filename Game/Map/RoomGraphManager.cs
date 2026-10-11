@@ -82,6 +82,13 @@ public sealed class RoomGraphManager
     // Set the graph was last built from, or null if empty.
     public string? ActiveSet { get; private set; }
 
+    // The load of the set whose rooms are in place; none while the graph is being
+    // rebuilt. The cache's load moves before the handler that rebuilds the graph
+    // runs, so something asked in that moment that builds from the rooms and keeps
+    // the result for the cache's load checks this first. Written and read on the
+    // thread that switches the set.
+    public GameDataCache.Load LoadedFor { get; private set; }
+
     // Number of rooms in the active graph (0 when no set is active or load failed).
     public int RoomCount => _rooms.Count;
 
@@ -378,13 +385,15 @@ public sealed class RoomGraphManager
     public void OnActiveSetChanged(string? setName)
     {
         long started = Stopwatch.GetTimestamp();
+        GameDataCache.Load load = _cache.ActiveLoad;
+        LoadedFor = GameDataCache.Load.None;
         Clear();
         ActiveSet = setName;
 
         if (string.IsNullOrWhiteSpace(setName))
         {
             _log?.Log(LogSeverity.Info, "RoomGraph", "No active game-data set; room graph cleared.");
-            Reloaded();
+            Reloaded(load);
             return;
         }
 
@@ -393,7 +402,7 @@ public sealed class RoomGraphManager
         {
             _log?.Log(LogSeverity.Warn, "RoomGraph",
                 $"Active set '{setName}' has no Rooms.json; room graph is empty.");
-            Reloaded();
+            Reloaded(load);
             return;
         }
 
@@ -554,7 +563,7 @@ public sealed class RoomGraphManager
             + $" in {totalMs:0} ms (reading the rows {rowsMs:0} ms, "
             + $"doors, teleports, boats and indexes {totalMs - rowsMs:0} ms).");
 
-        Reloaded();
+        Reloaded(load);
     }
 
     // The rooms the build passes have work in, each list in graph order. What puts
@@ -704,8 +713,9 @@ public sealed class RoomGraphManager
 
     // The graph is whole again: anything worked out while it was being rebuilt is
     // dropped before listeners rebuild theirs.
-    private void Reloaded()
+    private void Reloaded(GameDataCache.Load load)
     {
+        LoadedFor = load;
         ForgetDerived();
         GraphReloaded?.Invoke();
     }
