@@ -268,6 +268,16 @@ public sealed partial class GameDataCache
     {
         // Normalize empty → null so the event payload is consistent.
         if (string.IsNullOrWhiteSpace(setName)) setName = null;
+        // A set's name is its folder's, and it arrives from a bbs.json and
+        // global.json as well as the picker. One that can't be a folder directly in
+        // the game-data folder (a plain name, imported yet or not, or a folder
+        // already there) is no set: every store keyed on the active set would read
+        // and write wherever it pointed.
+        if (setName is not null && !PathGuard.Usable(GameDataRoot, setName))
+        {
+            PathGuard.Refuse("Switching the game-data set", "game-data set name", setName);
+            setName = null;
+        }
 
         // One step to every other thread: the old set's tables go, the count moves
         // and the new name arrives under one hold of the lock. Done in stages, a
@@ -779,10 +789,11 @@ public sealed partial class GameDataCache
     // exists.
     private string? ResolveTablePath(string setName, string tableName)
     {
-        string setDir = Path.Combine(GameDataRoot, setName);
-        if (!Directory.Exists(setDir)) return null;
+        // Asked for a set that may not be the active one (a prewarm), and for a
+        // table by whatever name a caller holds: each must be an entry of its folder.
+        if (PathGuard.Child(GameDataRoot, setName) is not { } setDir || !Directory.Exists(setDir)) return null;
 
-        string exact = Path.Combine(setDir, tableName + ".json");
+        if (PathGuard.Child(setDir, tableName + ".json") is not { } exact) return null;
         if (File.Exists(exact)) return exact;
 
         // Case-insensitive fallback — Linux is case-sensitive at the

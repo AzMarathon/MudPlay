@@ -195,6 +195,57 @@ public sealed class ProfileService
         if (!string.IsNullOrWhiteSpace(bbsName)) BbsDeleted?.Invoke(bbsName);
     }
 
+    // ----- Names ---------
+    //
+    // A BBS name and a profile name become two folders, one inside the other, and
+    // some of what follows deletes or moves them whole. Neither is trusted: each
+    // operation asks here first, and one given a name that can't be used
+    // (PathGuard.Usable: a plain name, or a folder already there under an older,
+    // odder name) changes nothing, has the refusal logged, and fails the way it
+    // already failed for a blank name: the ones that threw throw, the ones that
+    // returned return.
+
+    private static bool BbsUsable(string operation, string? bbsName)
+    {
+        if (PathGuard.Usable(AppPaths.BbsDir, bbsName)) return true;
+        PathGuard.Refuse(operation, "BBS name", bbsName);
+        return false;
+    }
+
+    private static bool PairUsable(string operation, string? bbsName, string? profileName)
+    {
+        if (!BbsUsable(operation, bbsName)) return false;
+        if (PathGuard.Usable(AppPaths.BbsProfilesDir(bbsName!), profileName)) return true;
+        PathGuard.Refuse(operation, "profile name", profileName);
+        return false;
+    }
+
+    private static void RequireBbs(string operation, string? bbsName, string parameter)
+    {
+        if (!BbsUsable(operation, bbsName))
+            throw new ArgumentException($"{PathGuard.Show(bbsName)} can't be used as a BBS name.", parameter);
+    }
+
+    private static void RequirePair(string operation, string? bbsName, string? profileName, string parameter)
+    {
+        if (!PairUsable(operation, bbsName, profileName))
+            throw new ArgumentException(
+                $"{PathGuard.Show(profileName)} on {PathGuard.Show(bbsName)} can't be used as a profile.", parameter);
+    }
+
+    // Where a profile is being moved to. Its name there must be usable, or be the
+    // very name it has now: a profile under an older, odder name can change BBS
+    // without first being renamed.
+    private static void RequireMoveTarget(string operation, string toBbs, string toName, string fromName, string parameter)
+    {
+        RequireBbs(operation, toBbs, parameter);
+        string profiles = AppPaths.BbsProfilesDir(toBbs);
+        bool keepsItsName = string.Equals(toName, fromName, StringComparison.Ordinal);
+        if (keepsItsName ? PathGuard.Child(profiles, toName) is not null : PathGuard.Usable(profiles, toName)) return;
+        PathGuard.Refuse(operation, "profile name", toName);
+        throw new ArgumentException($"{PathGuard.Show(toName)} can't be used as a profile name.", parameter);
+    }
+
     // Load the profile stored at
     // Data/BBS/{bbsName}/profiles/{profileName}/profile.json and fire
     // ProfileLoaded. If a different profile is already loaded it is closed
@@ -206,6 +257,7 @@ public sealed class ProfileService
             throw new ArgumentException("BBS name is required.", nameof(bbsName));
         if (string.IsNullOrWhiteSpace(profileName))
             throw new ArgumentException("Profile name is required.", nameof(profileName));
+        RequirePair("Loading a profile", bbsName, profileName, nameof(profileName));
 
         string path = AppPaths.CharacterProfileFile(bbsName, profileName);
         CharacterProfile loaded = JsonStore.Load<CharacterProfile>(path)
@@ -333,7 +385,11 @@ public sealed class ProfileService
 
         Current = profile;
         CurrentProfileName = null;
-        CurrentBbsName = string.IsNullOrWhiteSpace(onBbs) ? null : onBbs;
+        // The BBS a draft is started on is where its BBS-tier settings are read from
+        // and where Save As puts it: one that can't be a BBS's name is no BBS.
+        CurrentBbsName = string.IsNullOrWhiteSpace(onBbs) || !BbsUsable("Starting the default profile on a BBS", onBbs)
+            ? null
+            : onBbs;
         _defaultProfilePersists = true;
         Log?.Info(LogCategory, outgoing is null
             ? "Loaded the default profile (no character loaded)."
@@ -427,6 +483,7 @@ public sealed class ProfileService
         if (string.Equals(newBbs, CurrentBbsName, StringComparison.OrdinalIgnoreCase)
             && string.Equals(targetName, CurrentProfileName, StringComparison.Ordinal))
             return; // no-op move.
+        RequireMoveTarget("Moving the loaded profile", newBbs, targetName, CurrentProfileName, nameof(newName));
 
         string sourceFolder = AppPaths.ProfileFolder(CurrentBbsName, CurrentProfileName);
         string destFolder = AppPaths.ProfileFolder(newBbs, targetName);
@@ -462,6 +519,8 @@ public sealed class ProfileService
     {
         if (string.IsNullOrWhiteSpace(oldBbs) || string.IsNullOrWhiteSpace(newBbs)) return;
         if (string.Equals(oldBbs, newBbs, StringComparison.OrdinalIgnoreCase)) return;
+        // The folder is under newBbs by now, so a name that is not one's is no rename.
+        if (!BbsUsable("Following a BBS's rename", newBbs)) return;
 
         bool currentAffected = string.Equals(CurrentBbsName, oldBbs, StringComparison.OrdinalIgnoreCase);
         if (currentAffected) CurrentBbsName = newBbs;
@@ -500,6 +559,7 @@ public sealed class ProfileService
     {
         ArgumentNullException.ThrowIfNull(reference);
         if (IsCurrent(reference)) return Current?.Realm;
+        if (!PairUsable("Reading a profile's realm", reference.Bbs, reference.Name)) return null;
         return JsonStore.Load<CharacterProfile>(AppPaths.CharacterProfileFile(reference.Bbs, reference.Name))?.Realm;
     }
 
@@ -515,6 +575,7 @@ public sealed class ProfileService
             Save();
             return;
         }
+        if (!PairUsable("Assigning a profile to a realm", reference.Bbs, reference.Name)) return;
         string path = AppPaths.CharacterProfileFile(reference.Bbs, reference.Name);
         if (JsonStore.Load<CharacterProfile>(path) is not { } profile) return;
         profile.Realm = realm;
@@ -532,6 +593,7 @@ public sealed class ProfileService
     public void RenameRealm(string bbs, string oldRealm, string? newRealm)
     {
         if (string.IsNullOrWhiteSpace(bbs) || string.IsNullOrWhiteSpace(oldRealm)) return;
+        if (!BbsUsable("Re-pointing a realm's characters", bbs)) return;
         bool Assigned(CharacterProfile p) =>
             string.Equals(p.Realm, oldRealm, StringComparison.OrdinalIgnoreCase);
         bool currentOnBbs = string.Equals(CurrentBbsName, bbs, StringComparison.OrdinalIgnoreCase);
@@ -704,6 +766,7 @@ public sealed class ProfileService
             throw new ArgumentException("Profile name is required.", nameof(profileName));
         if (Current is null)
             throw new InvalidOperationException("No profile loaded to save.");
+        RequirePair("Saving a profile under a name", bbsName, profileName, nameof(profileName));
 
         // Naming the default profile makes a new character: one that starts from
         // the starters it holds, not from the lists older characters shared.
@@ -732,6 +795,7 @@ public sealed class ProfileService
             throw new ArgumentException("BBS name is required.", nameof(bbsName));
         if (string.IsNullOrWhiteSpace(profileName))
             throw new ArgumentException("Profile name is required.", nameof(profileName));
+        RequirePair("Creating a profile", bbsName, profileName, nameof(profileName));
         if (Exists(bbsName, profileName))
             throw new IOException($"A profile named '{profileName}' already exists on '{bbsName}'.");
 
@@ -771,6 +835,8 @@ public sealed class ProfileService
     {
         if (string.IsNullOrWhiteSpace(bbsName) || string.IsNullOrWhiteSpace(fromName) || string.IsNullOrWhiteSpace(toName))
             throw new ArgumentException("BBS, source and new name are required.");
+        RequirePair("Copying a profile", bbsName, fromName, nameof(fromName));
+        RequirePair("Copying a profile", bbsName, toName, nameof(toName));
         if (Exists(bbsName, toName) || Directory.Exists(AppPaths.ProfileFolder(bbsName, toName)))
             throw new IOException($"A profile named '{toName}' already exists on '{bbsName}'.");
 
@@ -823,7 +889,12 @@ public sealed class ProfileService
     public void DeleteProfile(string bbsName, string profileName)
     {
         if (string.IsNullOrWhiteSpace(bbsName) || string.IsNullOrWhiteSpace(profileName)) return;
+        const string operation = "Deleting a profile";
+        if (!PairUsable(operation, bbsName, profileName)) return;
         string folder = AppPaths.ProfileFolder(bbsName, profileName);
+        // The folder goes with all it holds, so it is checked once more as a path:
+        // only ever a folder inside this BBS's profiles folder.
+        string profiles = AppPaths.BbsProfilesDir(bbsName);
         bool isCurrent = Current is not null
             && string.Equals(CurrentBbsName, bbsName, StringComparison.OrdinalIgnoreCase)
             && string.Equals(CurrentProfileName, profileName, StringComparison.Ordinal);
@@ -831,14 +902,16 @@ public sealed class ProfileService
         if (isCurrent)
         {
             Close();
-            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
-            Log?.Info(LogCategory, $"Deleted the loaded profile '{profileName}' on '{bbsName}'.");
-            ProfileDeleted?.Invoke(new ProfileRef(bbsName, profileName));
+            if (PathGuard.DeleteTree(folder, profiles, operation))
+            {
+                Log?.Info(LogCategory, $"Deleted the loaded profile '{profileName}' on '{bbsName}'.");
+                ProfileDeleted?.Invoke(new ProfileRef(bbsName, profileName));
+            }
             LoadDefaultProfile();
             return;
         }
 
-        if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        if (!PathGuard.DeleteTree(folder, profiles, operation)) return;
         Log?.Info(LogCategory, $"Deleted profile '{profileName}' on '{bbsName}'.");
         ProfileDeleted?.Invoke(new ProfileRef(bbsName, profileName));
     }
@@ -858,6 +931,9 @@ public sealed class ProfileService
         if (string.Equals(fromBbs, toBbs, StringComparison.OrdinalIgnoreCase)
             && string.Equals(fromName, toName, StringComparison.Ordinal))
             return; // no-op
+        const string operation = "Moving a profile";
+        RequirePair(operation, fromBbs, fromName, nameof(fromName));
+        RequireMoveTarget(operation, toBbs, toName, fromName, nameof(toName));
 
         bool isCurrent = Current is not null
             && string.Equals(CurrentBbsName, fromBbs, StringComparison.OrdinalIgnoreCase)
@@ -896,12 +972,16 @@ public sealed class ProfileService
         if (!Directory.Exists(AppPaths.BbsDir)) yield break;
         foreach (string bbsFolder in Directory.EnumerateDirectories(AppPaths.BbsDir))
         {
+            // A folder's own name is one path segment, plain or not, so a profile
+            // under an older, odder name is listed like any other. One that is not
+            // (a listing can only hand back such a name off a broken filesystem) is
+            // left out: nothing listed here may be a name that leads elsewhere.
             string bbs = Path.GetFileName(bbsFolder);
-            if (string.IsNullOrEmpty(bbs)) continue;
+            if (string.IsNullOrEmpty(bbs) || !BbsUsable("Listing profiles", bbs)) continue;
             foreach (string charFolder in ProfileFoldersIn(AppPaths.BbsProfilesDir(bbs)))
             {
                 string name = Path.GetFileName(charFolder);
-                if (string.IsNullOrEmpty(name)) continue;
+                if (string.IsNullOrEmpty(name) || !PairUsable("Listing profiles", bbs, name)) continue;
                 if (!File.Exists(AppPaths.CharacterProfileFile(bbs, name))) continue;
                 yield return new ProfileRef(bbs, name);
             }
@@ -917,9 +997,13 @@ public sealed class ProfileService
         catch (DirectoryNotFoundException) { return Array.Empty<string>(); }
     }
 
-    // True if a saved profile with the given name already exists under the BBS.
+    // True if a saved profile with the given name already exists under the BBS. A
+    // name that can't be one's has none, which is also how an entry of the recent
+    // list or the last-used profile read from global.json is dropped when its
+    // names are not names.
     public bool Exists(string bbsName, string profileName)
         => !string.IsNullOrWhiteSpace(bbsName)
            && !string.IsNullOrWhiteSpace(profileName)
+           && PairUsable("Looking for a profile", bbsName, profileName)
            && File.Exists(AppPaths.CharacterProfileFile(bbsName, profileName));
 }

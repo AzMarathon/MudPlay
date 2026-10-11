@@ -50,14 +50,9 @@ public sealed partial class ProfileNameInputDialogViewModel : ObservableObject, 
     [RelayCommand]
     private void Cancel() => CloseRequested?.Invoke(null);
 
-    private static string? ValidateName(string name)
-    {
-        if (name.Length == 0) return null;
-        foreach (char c in Path.GetInvalidFileNameChars())
-        {
-            if (name.Contains(c)) return $"Name can't contain '{c}'.";
-        }
-        if (name is "." or "..") return "Name reserved by the filesystem.";
-        return null;
-    }
+    // The name becomes a folder's, so what is refused here is exactly what the
+    // stores refuse (PathGuard): the user is told as they type, not after. An empty
+    // box is no error yet; Save is simply not offered.
+    private static string? ValidateName(string name) =>
+        name.Length == 0 ? null : PathGuard.WhyNotPlain(name);
 }

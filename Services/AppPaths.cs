@@ -597,16 +597,39 @@ public static class AppPaths
         catch { /* best-effort; a stale copy is better than a failed launch */ }
     }
 
+    // ----- Paths made from a name ---------
+    //
+    // A set, a BBS, a realm and a character are folders named by the user, and the
+    // names also come out of global.json, a bbs.json and the command line. Every
+    // path below that is made from one is made here, so that whatever the name, the
+    // path is an entry directly inside the folder it belongs in (PathGuard.Child).
+    //
+    // The stores check a name before they act and report a bad one in their own
+    // way; this is what stands behind them for every caller that checked nothing.
+    // It cannot report a failure, so a name that would lead elsewhere gets
+    // RefusedName in its place: a path inside the right folder where nothing is, so
+    // a read finds nothing and a delete removes nothing, with a Warn in the log.
+    private static string Named(string parent, string name, string what)
+    {
+        if (PathGuard.Child(parent, name) is not null) return Path.Combine(parent, name);
+        PathGuard.Refuse($"A path for a {what}", what, name);
+        return Path.Combine(parent, RefusedName);
+    }
+
+    // The entry a refused name is given. Plain, so it can be seen and removed like
+    // any other should something ever be written to it.
+    public const string RefusedName = ".refused-name";
+
     // Path to a single imported game-data set's directory.
     public static string GameDataSetDir(string setName) =>
-        Path.Combine(GameDataRoot, setName);
+        Named(GameDataRoot, setName, "game-data set name");
 
     // Folder holding all files for one BBS — primary settings JSON plus per-set
     // override side-files (monster_overrides.{set}.json,
     // message_overrides.{set}.json, …) and any future helper files (per-BBS
     // favorites list, character roster, etc.).
     public static string BbsFolder(string bbsName) =>
-        Path.Combine(BbsDir, bbsName);
+        Named(BbsDir, bbsName, "BBS name");
 
     // A BBS's emote library: emotes.json plus its images. AppPaths.EmotesDir is the
     // library every BBS used before, and what a BBS with none of its own copies.
@@ -668,7 +691,11 @@ public static class AppPaths
 
     // Folder for one realm of a BBS.
     public static string RealmFolder(string bbsName, string realmName) =>
-        Path.Combine(BbsFolder(bbsName), "Realms", realmName);
+        Named(RealmsDir(bbsName), realmName, "realm name");
+
+    // The folder a BBS's realm folders sit in.
+    public static string RealmsDir(string bbsName) =>
+        Path.Combine(BbsFolder(bbsName), "Realms");
 
     // Observed players. One PlayerObservation per player ever seen on the realm,
     // so the same name on another realm (or board) counts as a different person.
@@ -738,7 +765,7 @@ public static class AppPaths
     // profile JSON plus per-set override side-files and any future per-character
     // helper files (macros, triggers, equipment sets, death history, etc.).
     public static string ProfileFolder(string bbsName, string characterName) =>
-        Path.Combine(BbsProfilesDir(bbsName), characterName);
+        Named(BbsProfilesDir(bbsName), characterName, "profile name");
 
     // Primary character profile file inside ProfileFolder.
     public static string CharacterProfileFile(string bbsName, string characterName) =>
@@ -755,7 +782,7 @@ public static class AppPaths
     // A single death-log file inside DeathLogsFolder. fileName is the bare
     // timestamped name stored on the owning DeathRecord.
     public static string DeathLogFile(string bbsName, string characterName, string fileName) =>
-        Path.Combine(DeathLogsFolder(bbsName, characterName), fileName);
+        Named(DeathLogsFolder(bbsName, characterName), fileName, "death-log file name");
 
     // Per-set game-data override side-file at the given tier. Routes to the
     // right folder: Global → DataRoot/Global, BBS (the "only for this realm" tier)
@@ -776,7 +803,9 @@ public static class AppPaths
             SettingsTier.Character => ProfileFolder(RequireScope(characterBbs, "Character BBS"), RequireScope(tierScopeName, "Character")),
             _ => throw new ArgumentOutOfRangeException(nameof(tier)),
         };
-        return Path.Combine(folder, $"{table.ToLowerInvariant()}_overrides.{setName}.json");
+        // The set's name is part of the file's: one with a separator in it would put
+        // the file in another folder.
+        return Named(folder, $"{table.ToLowerInvariant()}_overrides.{setName}.json", "game-data set name");
     }
 
     private static string RequireScope(string? scope, string label)

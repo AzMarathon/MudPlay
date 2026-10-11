@@ -430,7 +430,11 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
             _dialogs.ShowInfo("BBS not renamed", $"A BBS named “{newName}” already exists.");
             return;
         }
-        _bbs.Rename(oldName, newName);
+        if (!_bbs.Rename(oldName, newName))
+        {
+            _dialogs.ShowInfo("BBS not renamed", $"“{oldName}” couldn't be renamed to “{newName}”.");
+            return;
+        }
         _profile.RenameBbs(oldName, newName);
         RecentProfileList.RekeyBbs(_settings, oldName, newName);
         _log?.Info("BBS", $"Renamed BBS '{oldName}' → '{newName}'.");

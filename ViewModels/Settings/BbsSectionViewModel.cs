@@ -449,11 +449,12 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         // Rename pass: if the Name field differs from the selected key, the
         // user retitled this BBS. Move the on-disk file + cache entry and
         // refresh the selection so the list shows the new name.
+        // The name is a folder's: spaces typed around it are not part of it.
         if (SelectedBbsName is { } oldName
             && !string.IsNullOrWhiteSpace(Name)
-            && !string.Equals(oldName, Name, StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(oldName, Name.Trim(), StringComparison.OrdinalIgnoreCase))
         {
-            RenameSelected(oldName, Name);
+            RenameSelected(oldName, Name.Trim());
         }
 
         foreach (BbsProfile profile in _loaded.Values)
@@ -618,6 +619,19 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             if (profile is null) return;
         }
 
+        // The Name box takes anything typed, and the name becomes a folder's: one
+        // with a slash in it would move the BBS and every character on it out of
+        // the BBS folder. Refused here, where the user can be told why; the BBS
+        // keeps the name it had and the rest of the Apply goes on.
+        if (PathGuard.WhyNotPlain(newName, "BBS name") is { } notPlain)
+        {
+            AppServices.Current.Log.Info("BBS",
+                $"Rename '{oldName}' → {PathGuard.Show(newName)} refused: {notPlain}");
+            AppServices.Current.Dialogs.ShowInfo(
+                "BBS not renamed", $"{notPlain} “{oldName}” keeps its name.");
+            return;
+        }
+
         // Don't trample an existing BBS with the new name. Test the folder, not
         // just a loadable bbs.json: BbsProfileStore.Rename moves the whole folder
         // and Directory.Move throws if the destination folder exists at all —
@@ -638,7 +652,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         // every nested character profile — to the new name. The old
         // Delete+Save pair recursively destroyed the nested profiles and left
         // every reference to the BBS name (credentials, recent list) dangling.
-        _bbsStore.Rename(oldName, newName);
+        if (!_bbsStore.Rename(oldName, newName)) return;
         profile.Name = newName;
         _loaded.Remove(oldName);
         _loaded[newName] = profile;
