@@ -1,6 +1,6 @@
 # Version history
 
-## 3.174.0
+## 3.175.0
 
 - Bug report: your login name, login password and suicide password are masked everywhere in it, and in a crash report
 - Bug report: the `*` the game echoes for a suicide password is masked too, so its length isn't shown
@@ -18,6 +18,33 @@
 - Local API: `/log`, `/scrollback` and `/events` mask the same account details; `/scrollback` sends only rows from inside the game
 - Chat masking follows a chat line onto its next row only where the terminal wrapped it; game text is never changed
 - The last-minutes log never holds the client on a stalled disk, and says what it dropped
+
+## 3.174.3
+
+- Used on also lists the rooms where a command needs the item held to work an exit (lever, rubbed orb, titanium fork), naming the exit it opens
+
+## 3.174.2
+
+- No fight is opened from a room you are stepping out of (a swing at you, a hit line, a room re-run); the attack used to land in the next room
+- A lair entered that way opens with its debuff, then the room attack
+- A step with no landing or refusal within 3 s counts as not taken: the attacker is fought back where you stand
+- Bug report shows an engage held for a move in flight
+- bug reports addressed: paradigm-20261010-231540
+
+## 3.174.1
+
+- Item records show a Used on section listing every exit that names the item as the one needed to pass (a key on a locked door, an item to carry, a ticket): room, map/room and direction, one line per exit
+
+## 3.174.0
+
+- Timers of the buffs on you stop while you are out of the game (dropped link, relog, the board's menu) and run on with the time they had left
+- None of yours is recast for time spent away; a buff on a party member keeps its real end, as before
+- A whole-party buff stands still on you only: in a party it is recast when it would have run out had you not left
+- Your own buffs' time left is saved with the character and put back after MudPlay is closed
+- A client killed while in the game saves none, and buffs afresh
+- Changing profile with a character in the game tosses its buff timers
+- A buff's wear-off line is read after a reconnect or a restart; a hang-up death found late drops the buffs carried over
+- Bug report says whether the timers are running or standing still, and what a load put back
 
 ## 3.173.0
 

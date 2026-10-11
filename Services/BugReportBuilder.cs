@@ -965,6 +965,7 @@ public static class BugReportBuilder
         // screen, a password prompt) was up.
         Kv(sb, "Backstab opener spent", svc.Combat.BackstabOpenerSpent.ToString());
         Kv(sb, "Attack held by send gate", svc.Combat.AttackHeldBySendGate.ToString());
+        Kv(sb, "Engage held for our move in flight", svc.Combat.MoveHoldSummary);
         Kv(sb, "Awaiting backstab resolution", combat.AwaitingBackstabResolution
             ? $"yes (target={combat.PendingBackstabSpecies ?? "(none)"})"
             : "no");
@@ -1278,18 +1279,30 @@ public static class BugReportBuilder
         // it declines to recast a buff that's actually long gone).
         IReadOnlyList<Game.Spells.ActiveBuffTimer> buffs = svc.CastDirector.SnapshotActiveBuffs();
         sb.Append("\n**Active buff timers (CastingDirector)**\n\n");
+        // Running or standing still (out of the game), and what a profile load put
+        // back: a timer that reads long after its cast is explained by one of these.
+        foreach (string line in svc.BuffTimers.Describe())
+            sb.Append($"- {line}\n");
+        sb.Append('\n');
         if (buffs.Count == 0)
         {
             sb.Append("(none)\n");
         }
         else
         {
+            // Standing still, time left is as of the moment they stopped.
+            System.DateTime asOf = svc.CastDirector.PausedAtUtc ?? System.DateTime.UtcNow;
             foreach (Game.Spells.ActiveBuffTimer b in buffs)
             {
                 string target = string.IsNullOrEmpty(b.Target) ? "self" : b.Target;
-                System.TimeSpan remaining = b.Until - System.DateTime.UtcNow;
+                System.TimeSpan remaining = b.Until - asOf;
                 string what = b.Outcome is { Length: > 0 } drawn ? $"{b.Short} ({drawn})" : b.Short;
-                sb.Append($"- {what} on {target}: {(remaining > System.TimeSpan.Zero ? $"{remaining.TotalSeconds:F0}s remaining" : "expired, not yet cleared")} (of {b.TotalSec}s)\n");
+                // Carried over time out of the game: the clock a whole-party buff is
+                // recast by in a party, which reads earlier than the bar on ourselves.
+                string carried = b.RanOnUntil is { } ranOn
+                    ? $"; carried over time out of the game{(b.Restored ? ", from the saved profile" : "")}, ran on for anyone else it covered until {ranOn:HH:mm:ss} UTC"
+                    : "";
+                sb.Append($"- {what} on {target}: {(remaining > System.TimeSpan.Zero ? $"{remaining.TotalSeconds:F0}s remaining" : "expired, not yet cleared")} (of {b.TotalSec}s){carried}\n");
             }
         }
         sb.Append('\n');

@@ -172,4 +172,111 @@ public sealed class ItemMdbViewBuilderTests : IDisposable
         Assert.Equal("Tomb - 17/287", Assert.Single(pry.ShownRooms).Location);
         Assert.Equal("Vault - 17/501", Assert.Single(view.PlacedIn!).Location);
     }
+
+    private IReadOnlyList<PlacedInRow> ExitUsesRows(
+        int item, Func<int, int, bool>? isRoomBlacklisted = null, string rooms = ItemUsedOnIndexTests.Rooms)
+    {
+        string dir = Path.Combine(_root, "exits");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"), rooms);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("exits");
+        IReadOnlyList<PlacedInRow> rows =
+            new ItemMdbViewBuilder(cache, playerCharm: 50, isRoomBlacklisted).ExitUsesOf(item);
+        Assert.All(rows, r => Assert.True(r.CanOpen));
+        return rows;
+    }
+
+    private IReadOnlyList<string> ExitUsesLines(
+        int item, Func<int, int, bool>? isRoomBlacklisted = null, string rooms = ItemUsedOnIndexTests.Rooms)
+        => ExitUsesRows(item, isRoomBlacklisted, rooms).Select(r => r.Location).ToArray();
+
+    // A key some exit names gets a Used on line for each exit, both sides of a door
+    // as two lines; an item no exit names gets none.
+    [Fact]
+    public void ExitUses_ListEveryExitNamingTheItem_AndNothingForAnItemNoExitNames()
+    {
+        Assert.Equal(new[] { "Cell - 1/10 - south (Key)", "Hall - 1/11 - north (Key)" }, ExitUsesLines(100));
+
+        // An item to carry reads the same way, a room with no name by its locator.
+        Assert.Equal("Room 4/1 - up (Item)", Assert.Single(ExitUsesLines(400)));
+
+        Assert.Empty(ExitUsesLines(700));
+    }
+
+    // A room the user blacklisted is left out of Used on, like the other room lines.
+    [Fact]
+    public void ExitUses_LeaveOutABlacklistedRoom()
+    {
+        Assert.Equal("Cell - 1/10 - south (Key)",
+            Assert.Single(ExitUsesLines(100, (map, room) => map == 1 && room == 11)));
+    }
+
+    // A room action that needs the item reads "{room} - {map}/{room} - {commands} opens
+    // {direction} (Action)", with the other room named when the exit is in one, and no
+    // "opens" when the data names no exit the action can be attached to.
+    [Fact]
+    public void ExitUses_ListTheRoomActionsThatNeedTheItem()
+    {
+        const string rooms = ItemUsedOnIndexTests.ActionRooms;
+
+        Assert.Equal(
+            "Catacombs, Broken Stairwell - 9/1032 - use fork east / use titanium fork east / aim fork east opens east (Action)",
+            Assert.Single(ExitUsesLines(983, rooms: rooms)));
+        Assert.Equal(
+            "Underground Lake - 8/398 - rub bloodstone orb / hold bloodstone orb / rub orb opens south (Action)",
+            Assert.Single(ExitUsesLines(807, rooms: rooms)));
+        Assert.Equal(
+            "Guardroom - 7/1 - pull lever / push lever opens north in Gate - 7/5 (Action)",
+            Assert.Single(ExitUsesLines(802, rooms: rooms)));
+        Assert.Equal(
+            new[] { "Cave - 8/1 - rub ring (Action)", "Hut - 8/3 - pull rope (Action)" },
+            ExitUsesLines(803, rooms: rooms));
+    }
+
+    // An item some exit takes and some action needs lists the exit first, then the action;
+    // the blacklist keeps a room off either kind of line.
+    [Fact]
+    public void ExitUses_PutTheExitsBeforeTheActions_AndLeaveOutABlacklistedRoom()
+    {
+        const string rooms = ItemUsedOnIndexTests.ActionRooms;
+
+        Assert.Equal(
+            new[] { "Ledge - 9/1 - up (Item)", "Shaft - 9/2 - use stick opens up (Action)" },
+            ExitUsesLines(804, rooms: rooms));
+        Assert.Equal(
+            "Shaft - 9/2 - use stick opens up (Action)",
+            Assert.Single(ExitUsesLines(804, (map, room) => map == 9 && room == 1, rooms)));
+        Assert.Empty(ExitUsesLines(804, (map, _) => map == 9, rooms));
+    }
+
+    // The cap and its "Show all N uses" count run over the exit lines and the action lines
+    // together.
+    [Fact]
+    public void ExitUses_TheCapCountsExitsAndActionsTogether()
+    {
+        // Item 805: four exits that take it and four rooms with an action that needs it.
+        List<string> rows = new();
+        for (int i = 1; i <= 4; i++)
+        {
+            rows.Add($"{{\"Map Number\":10,\"Room Number\":{i},\"Name\":\"Ledge {i}\",\"U\":\"10/9 (Item: 805)\"}}");
+            rows.Add($"{{\"Map Number\":11,\"Room Number\":{i},\"Name\":\"Shaft {i}\"," +
+                     "\"N\":\"Action [on the U exit of this room]: use stick (Item: 805)\"," +
+                     "\"U\":\"11/9 (Hidden/Needs 1 Actions, any order)\"}");
+        }
+        IReadOnlyList<PlacedInRow> lines = ExitUsesRows(805, rooms: "[" + string.Join(",", rows) + "]");
+        Assert.Equal(8, lines.Count);
+
+        ItemEditDialogViewModel vm = new(
+            wccNoStr: "805", mdbName: "stick", existing: null, currentTier: SettingsTier.Character,
+            mdbInfo: Array.Empty<KeyValuePair<string, string>>(), shops: Array.Empty<ShopSaleRow>(),
+            exitUses: lines);
+
+        Assert.Equal(6, vm.ExitUses!.ShownRooms.Count);
+        Assert.Equal("Show all 8 uses", vm.ExitUses.ToggleLabel);
+        vm.ExitUses.ToggleCommand.Execute(null);
+        Assert.Equal(
+            new[] { "(Item)", "(Item)", "(Item)", "(Item)", "(Action)", "(Action)", "(Action)", "(Action)" },
+            vm.ExitUses.ShownRooms.Select(r => r.Location[(r.Location.LastIndexOf('(')) ..]));
+    }
 }

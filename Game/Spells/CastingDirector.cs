@@ -285,10 +285,10 @@ public sealed class CastingDirector : IDisposable
     // cleared once it goes out. Null when no reroll is pending.
     private string? _pendingManaRegenReroll;
 
-    // Set when the live buff timers are frozen on an unexpected drop (carrier lost /
-    // keep-alive timeout). The Untils are never shifted — each keeps its absolute
-    // expiry, and the reconnect drops only the ones that lapsed while offline.
-    // null = running.
+    // When the buff timers were frozen: the character left the game (the link
+    // dropped, or it went out to the board's menu), or they were put back from a
+    // saved profile. While set, each timer keeps the time it had left at this instant;
+    // the resume moves the expiries on by the time spent away. null = running.
     private DateTime? _pausedAt;
 
     private Func<string, (string Caster, long DurationSec)?>? _buffInfoByShort;
@@ -1071,11 +1071,14 @@ public sealed class CastingDirector : IDisposable
     }
 
     // Clear all buff-duration state (active timers + any pending party-cast
-    // confirmation). Call alongside ConditionTracker.ClearAll on disconnect / death
-    // so stale durations don't suppress a fresh-session recast.
+    // confirmation). For another character becoming the loaded one (ProfileLoaded):
+    // its own saved timers, if it has any, are put back after this. Not for a
+    // disconnect, where the timers are kept and stand still (PauseBuffTimers), nor
+    // for a death, which takes only our own (ClearSelfBuffTracking).
     public void ResetBuffTracking()
     {
         _activeUntil.Clear();
+        _carried.Clear();
         _hiddenTargets.Clear();
         _pendingPartyCast = null;
         _pendingManualCast = null;
@@ -1095,6 +1098,7 @@ public sealed class CastingDirector : IDisposable
     public void ClearSelfBuffTracking()
     {
         int removed = RemoveTimersFor("");
+        _carried.Clear();
         _pendingSelfBuffShort = null;
         _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
@@ -1193,37 +1197,104 @@ public sealed class CastingDirector : IDisposable
         return false;
     }
 
-    // The instant the timers were frozen on a disconnect, or null while running. The
-    // Buff Watchdog reads this so its display freezes at the drop (the heartbeat is a
-    // wall clock that keeps ticking while disconnected). On resume the display catches
-    // up to the true remaining, since the timers ran on their absolute expiry.
+    // The instant the timers were frozen, or null while running. The Buff Watchdog
+    // reads this so its display stands still at that instant (the heartbeat is a wall
+    // clock that keeps ticking while we are out of the game); remaining time is
+    // reckoned against it until the resume moves the expiries on.
     public DateTime? PausedAtUtc => _pausedAt;
 
-    // Freeze the live buff timers on a disconnect — record when so the reconnect resumes
-    // them intact. Used INSTEAD of clearing on ANY disconnect (the buffs persist server-
-    // side through link-death and an auto-reconnect is coming); on resume, only the timers
-    // whose real expiry lapsed while we were away drop and recast. A fresh character
-    // (ProfileLoaded → ResetBuffTracking) is the only path that wipes everything.
+    // The timers on ourselves ran on after a pause: how long the pause was, and the
+    // cast codes whose expiry was moved on by it. For a reader that keeps an expiry of
+    // its own beside a timer (the Buff Watchdog's record of who a whole-party buff
+    // covered), which has to move the same ones and no others.
+    public event Action<TimeSpan, IReadOnlyCollection<string>>? TimersResumed;
+
+    // The timers on ourselves that were carried over time out of the game: across a
+    // pause in this run, or from the profile of an earlier one. Cast code → the
+    // expiry the timer had when it was last carried, and whether it came from a
+    // profile. A recast or the buff's own applied line sets a new expiry, which is
+    // how a carried timer is told from one raised since, with no mark to keep at
+    // every place a timer is armed.
+    //
+    // What is known about a carried buff is only what was known when the game was
+    // left. So a death the client did not see and finds out about late takes exactly
+    // these (ClearCarriedSelfTimers), where wiping every timer would take buffs
+    // raised since.
+    //
+    // RanOnUntil is the expiry the timer would have had with no time out of the
+    // game: where the same cast runs out on anyone else it landed on, who stayed in
+    // the game for all the client knows (CarriedBuffRanOutOnParty).
+    private readonly Dictionary<string, (DateTime Until, bool Restored, DateTime RanOnUntil)> _carried = new(StringComparer.OrdinalIgnoreCase);
+
+    private bool IsCarried(string code, out (DateTime Until, bool Restored, DateTime RanOnUntil) mark)
+    {
+        return _carried.TryGetValue(code, out mark)
+            && _activeUntil.TryGetValue(("", code), out (DateTime Until, int MarginSec, int TotalSec) timer)
+            && timer.Until == mark.Until;
+    }
+
+    // A whole-party buff lands on us and on every member with the one cast, and has
+    // the one timer, keyed to us. Carried over time out of the game, that timer says
+    // what is left on US: it stood still while the members' ran on, "if the party
+    // member is still in the game when we arent, its better to assume their timers
+    // keep ticking" (user, 2026-10-10). So a carried timer vouches for nobody else,
+    // and in a party the buff is due by the clock that did not stop. Without this
+    // the recast came late for the members by exactly the time we were away.
+    private bool CarriedBuffRanOutOnParty(string code)
+    {
+        if (!IsCarried(code, out (DateTime Until, bool Restored, DateTime RanOnUntil) mark)) return false;
+        int margin = EffectiveMargin("", code, _activeUntil[("", code)].MarginSec);
+        return (mark.RanOnUntil - _now()).TotalSeconds <= margin;
+    }
+
+    // The character is out of the game: the link dropped, or it left for the board's
+    // menu. "buffs survive disconnects, relogs", and "as soon as we've disconnected
+    // all timers need to be paused until we're back in the game, then they all
+    // resume" (user, 2026-10-10). So the timers on OUR character stand still from
+    // here. One on a party member does not: the member may have stayed in the game,
+    // where its buff goes on running down, so that timer keeps its real expiry (see
+    // ResumeBuffTimers). A fresh character (ProfileLoaded → ResetBuffTracking) is the
+    // only path that wipes everything.
     public void PauseBuffTimers()
     {
         // Latch the loop off until we're confirmed back in the game world — set
         // unconditionally (even with no armed timers) so a disconnect with nothing
         // active still can't cast into the login/menu. Cleared in ResumeBuffTimers.
         _suspended = true;
-        _pausedAt = _activeUntil.Count > 0 ? _now() : null;
-        if (_pausedAt is not null)
-            _log?.Info(LogCategory, $"buff timers paused (drop) — {_activeUntil.Count} armed, frozen until reconnect");
+        // The first pause stands: a second drop before any prompt is the same stretch
+        // away, and the time since the first has to be given back whole.
+        if (_pausedAt is not null || _activeUntil.Count == 0) return;
+        DateTime now = _now();
+        _pausedAt = now;
+        int ours = 0;
+        foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
+        {
+            if (kv.Key.Target.Length != 0) continue;
+            ours++;
+            // One that had already run out is kept for a recast wait, not for a buff.
+            if (kv.Value.Until <= now) continue;
+            // Carried before and not raised since: its mark stands, with the expiry
+            // it had before the first time away.
+            if (IsCarried(kv.Key.Short, out _)) continue;
+            _carried[kv.Key.Short] = (kv.Value.Until, false, kv.Value.Until);
+        }
+        _log?.Info(LogCategory,
+            $"buff timers paused — {ours} on ourselves keep the time they have left until we are back in the game; "
+            + $"{_activeUntil.Count - ours} on party members run on");
     }
 
-    // Resume after a reconnect. Buffs persist server-side through a link-death + auto-
-    // reconnect, so a brief hang must NOT rebuff — we keep BOTH self and party timers
-    // across the gap and let each ride its real (absolute) expiry. Party members stayed
-    // ONLINE, so theirs already read the correctly reduced remaining; ours were frozen
-    // for the display only (PausedAtUtc), never shifted, so on resume they too reflect
-    // the true elapsed time. Any timer whose absolute expiry passed while we were away —
-    // self or party — is dropped so it shows "not up" and recasts; the rest stay, so the
-    // client doesn't recast buffs that are still up. (Self timers used to be wiped here
-    // wholesale, forcing a full rebuff on every re-entry — report paradigm-20260908-205555.)
+    // Back in the game.
+    //
+    // A timer on ourselves runs on with exactly the time it had left at the pause,
+    // however long that was, and nothing is dropped for the time away. (Until
+    // 2026-10-10 the expiries were left where they were, so the time away counted
+    // against every buff and one that "lapsed" meanwhile was recast on the way in.)
+    //
+    // A timer on a party member keeps its real expiry, and one that passed while we
+    // were away is dropped so the buff is cast again: the member stayed in the game
+    // for all the client knows, and there its buff ran down the whole time (user,
+    // 2026-08-28, and again 2026-10-10: "its better to assume their timers keep
+    // ticking").
     public void ResumeBuffTimers()
     {
         // First in-game prompt after a (re)connect — lift the cast-suspend latch
@@ -1231,18 +1302,140 @@ public sealed class CastingDirector : IDisposable
         // disconnect had no armed timers to unfreeze. Fired on every prompt; harmless
         // to clear repeatedly.
         _suspended = false;
-        if (_pausedAt is null) return;
+        if (_pausedAt is not { } since) return;
         _pausedAt = null;
 
-        List<(string Target, string Short)>? expired = null;
-        foreach ((string Target, string Short) key in _activeUntil.Keys)
-            if (_activeUntil[key].Until <= _now())
-                (expired ??= new()).Add(key);
-        if (expired is not null)
-            foreach ((string, string) key in expired) _activeUntil.Remove(key);
+        DateTime now = _now();
+        TimeSpan away = now - since;
+        List<string> moved = new();
+        List<string> partyClock = new();
+        int lapsed = 0;
+        foreach ((string Target, string Short) key in _activeUntil.Keys.ToList())
+        {
+            (DateTime Until, int MarginSec, int TotalSec) timer = _activeUntil[key];
+            if (key.Target.Length != 0)
+            {
+                if (timer.Until > now) continue;
+                _activeUntil.Remove(key);
+                lapsed++;
+                continue;
+            }
+            // Only what was running at the pause stood still. A buff whose line
+            // showed on the way back in, ahead of the first prompt, started then.
+            if (timer.Until.AddSeconds(-timer.TotalSec) > since) continue;
+            bool carried = IsCarried(key.Short, out (DateTime Until, bool Restored, DateTime RanOnUntil) mark);
+            _activeUntil[key] = (timer.Until + away, timer.MarginSec, timer.TotalSec);
+            moved.Add(key.Short);
+            if (!carried) continue;
+            _carried[key.Short] = (timer.Until + away, mark.Restored, mark.RanOnUntil);
+            LatchAsApplied(key.Short);
+            if (_isPartyWideBuff?.Invoke(key.Short) == true)
+                partyClock.Add($"{key.Short} {Math.Max(0L, (long)(mark.RanOnUntil - now).TotalSeconds)} s");
+        }
 
         _log?.Info(LogCategory,
-            $"buff timers resumed — kept across the drop; dropped {expired?.Count ?? 0} that lapsed while offline.");
+            $"buff timers resumed after {(long)away.TotalSeconds} s out of the game — {moved.Count} on ourselves run on with the time they had left; "
+            + $"{lapsed} on party members ran out meanwhile and were dropped."
+            + (partyClock.Count == 0 ? "" :
+                " Whole-party buffs among them cover only us: in a party each is recast by the time it had left with no time away ("
+                + string.Join(", ", partyClock) + ")."));
+        TimersResumed?.Invoke(away, moved);
+    }
+
+    // The condition tracker holds a buff as applied from its applied line until its
+    // wear-off line, and a wear-off line ends only what it holds (several buffs share
+    // one wear-off text). Its log is cleared when the link drops, and a client started
+    // since never had it, while the buff itself is still on the character and prints
+    // nothing to say so. So for a buff carried over time out of the game the latch is
+    // put back here, or its wear-off line would end nothing and its timer would run
+    // on to the end over a buff that had gone. Re-latching, not keeping the latches
+    // through the drop: a restart has none to keep, and one way serves both.
+    private void LatchAsApplied(string code)
+    {
+        if (_conditions is null) return;
+        if (_drawnOutcome.TryGetValue(code, out string? card) && _drawOutcomes?.Invoke(code) is { } outcomes)
+        {
+            foreach ((int SpellNumber, string Name, long DurationSec) outcome in outcomes)
+                if (string.Equals(outcome.Name, card, StringComparison.OrdinalIgnoreCase))
+                    _conditions.LatchApplied(r => IsOutcomeRecord(r, outcome.SpellNumber, outcome.Name));
+            return;
+        }
+        if (_shortFromAppliedRecord is { } resolve)
+            _conditions.LatchApplied(r => string.Equals(resolve(r), code, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Drop the timers on ourselves that were carried over time out of the game and
+    // have not been raised again since. For a death the client did not see and
+    // learns of after it is back in the game: it wiped the buffs that were on, and
+    // any raised since are not its business. Returns how many went.
+    public int ClearCarriedSelfTimers(string why)
+    {
+        List<string> gone = new();
+        foreach (string code in _carried.Keys.ToList())
+            if (IsCarried(code, out _)) gone.Add(code);
+        _carried.Clear();
+        foreach (string code in gone)
+        {
+            _activeUntil.Remove(("", code));
+            _drawnOutcome.Remove(code);
+        }
+        if (gone.Count == 0) return 0;
+        if (_conditions is not null && _shortFromAppliedRecord is { } resolve)
+            _conditions.ReleaseApplied(r => resolve(r) is { } code && gone.Contains(code, StringComparer.OrdinalIgnoreCase));
+        _log?.Info(LogCategory,
+            $"dropped {gone.Count} buff timer(s) carried over time out of the game ({why}): {string.Join(", ", gone)}");
+        return gone.Count;
+    }
+
+    // The timers on ourselves, for the profile: what each had left at the pause (or
+    // has left now, when running). A timer on a party member is not saved: after a
+    // restart there is no knowing that the member was in the game for the same
+    // stretch, or is the one the name now belongs to.
+    public List<Models.Profile.SavedBuffTimer> SnapshotSelfTimersForSave()
+    {
+        DateTime at = _pausedAt ?? _now();
+        List<Models.Profile.SavedBuffTimer> saved = new();
+        foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
+        {
+            if (kv.Key.Target.Length != 0) continue;
+            saved.Add(new Models.Profile.SavedBuffTimer
+            {
+                Short = kv.Key.Short,
+                RemainingSec = (int)Math.Round((kv.Value.Until - at).TotalSeconds),
+                MarginSec = kv.Value.MarginSec,
+                TotalSec = kv.Value.TotalSec,
+                Outcome = _drawnOutcome.TryGetValue(kv.Key.Short, out string? card) ? card : null,
+                RanOnUntilUtc = IsCarried(kv.Key.Short, out (DateTime Until, bool Restored, DateTime RanOnUntil) mark)
+                    ? mark.RanOnUntil
+                    : kv.Value.Until,
+            });
+        }
+        return saved;
+    }
+
+    // Put back the timers a profile was saved with, standing still until the first
+    // in-game prompt (ResumeBuffTimers). Called on a profile load, after
+    // ResetBuffTracking. Returns how many were put back.
+    public int RestoreSelfTimers(IReadOnlyList<Models.Profile.SavedBuffTimer> saved)
+    {
+        ArgumentNullException.ThrowIfNull(saved);
+        DateTime now = _now();
+        int restored = 0;
+        foreach (Models.Profile.SavedBuffTimer timer in saved)
+        {
+            if (string.IsNullOrWhiteSpace(timer.Short) || timer.TotalSec <= 0) continue;
+            DateTime until = now.AddSeconds(timer.RemainingSec);
+            _activeUntil[("", timer.Short)] = (until, timer.MarginSec, timer.TotalSec);
+            if (!string.IsNullOrWhiteSpace(timer.Outcome)) _drawnOutcome[timer.Short] = timer.Outcome;
+            if (timer.RemainingSec > 0) _carried[timer.Short] = (until, true, timer.RanOnUntilUtc);
+            restored++;
+        }
+        if (restored == 0) return 0;
+        // Standing still, and nothing cast, until the game is entered: a restore is
+        // bookkeeping and sends nothing.
+        _suspended = true;
+        _pausedAt = now;
+        return restored;
     }
 
     // A combat round tick elapsed (wired to TickEngine.CombatTickElapsed) — free the
@@ -1304,9 +1497,16 @@ public sealed class CastingDirector : IDisposable
     {
         List<ActiveBuffTimer> list = new(_activeUntil.Count);
         foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
+        {
+            bool ours = kv.Key.Target.Length == 0;
+            (DateTime Until, bool Restored, DateTime RanOnUntil) mark = default;
+            bool carried = ours && IsCarried(kv.Key.Short, out mark);
             list.Add(new ActiveBuffTimer(kv.Key.Target, kv.Key.Short, kv.Value.Until,
                 EffectiveMargin(kv.Key.Target, kv.Key.Short, kv.Value.MarginSec), kv.Value.TotalSec,
-                kv.Key.Target.Length == 0 && _drawnOutcome.TryGetValue(kv.Key.Short, out string? card) ? card : null));
+                ours && _drawnOutcome.TryGetValue(kv.Key.Short, out string? card) ? card : null,
+                carried && mark.Restored,
+                carried ? mark.RanOnUntil : null));
+        }
         return list;
     }
 
@@ -3047,7 +3247,9 @@ public sealed class CastingDirector : IDisposable
             bool wantSelfCast = partyWide
                 ? slot.WholePartyOn && (inParty ? partyAllowed : slot.CastSolo && selfEligible)
                 : slot.CastOnSelf && selfEligible && (covered is null || !covered.ContainsKey(slot.Spell));
-            if (wantSelfCast && IsRecastDue("", slot.Spell) && CanPayFor(slot.Spell, priority, peek))
+            if (wantSelfCast
+                && (IsRecastDue("", slot.Spell) || (partyWide && inParty && CarriedBuffRanOutOnParty(slot.Spell)))
+                && CanPayFor(slot.Spell, priority, peek))
                 yield return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec,
                     RestoresMana: slot.CastBeforeRestingForMana || _isManaRegenBuff?.Invoke(slot.Spell) == true);
 

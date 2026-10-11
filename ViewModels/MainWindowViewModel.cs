@@ -3651,11 +3651,12 @@ public partial class MainWindowViewModel : ObservableObject
                         AppServices.Current.HangupSignal.AllowNextEntry();
                 }
 
-                // Buff timers: ANY disconnect freezes them (the buffs persist server-side
-                // through link-death) — the first in-game prompt after reconnect resumes
-                // them with the same remaining. A fresh character clears via ProfileLoaded,
-                // and a resume gap longer than the longest buff clears them then; so a
-                // brief manual disconnect keeps the recast clock instead of restarting it.
+                // Buff timers: ANY disconnect stops them (buffs stay on the character
+                // while it is out of the game), and the first in-game prompt lets each
+                // run on with exactly the time it had left, however long the gap. The
+                // cast pass is latched off with them, in the game or not, so nothing is
+                // cast at the board's login. What they had left is saved with the
+                // character by BuffTimerKeeper, when InGameCapture is told below.
                 AppServices.Current.CastDirector.PauseBuffTimers();
                 // A hazard counter's buff is on the character through the drop too.
                 // Its clock stops here and runs on, with what it had left, from the
