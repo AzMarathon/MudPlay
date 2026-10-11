@@ -1244,13 +1244,43 @@ public sealed class CombatManagerBreakHoldTests
         h.Feed($"Also here: {Rat}, {Thief}.");
         Assert.Equal(sent, h.Sent.Count);
 
-        h.Combat.NoteRoomLeft();
+        h.Combat.NoteRoomLeft(lastMoveSentAt: DateTimeOffset.Now);
         h.DrainPosted();
 
         Assert.Null(h.Combat.UserBreakHoldTarget);
         Assert.Contains("left the room", h.Combat.UserBreakHoldSummary);
         Assert.Equal($"a {Rat}", h.LastSent);
         Assert.Equal(sent + 1, h.Sent.Count);
+    }
+
+    // The tracker's room changing with no move of ours since the break is the
+    // tracker correcting where it thinks we stand (a re-localisation in a grid of
+    // like-named rooms): the monster is where it was, the hold stands and nothing
+    // is sent. Never having moved this session, or having last moved before the
+    // break, are the same case.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RoomChangedWithNoMoveSinceTheBreak_IsACorrection_AndTheHoldStands(bool movedBeforeTheBreak)
+    {
+        using Harness h = FightingARat();
+        DateTimeOffset? lastMove = movedBeforeTheBreak ? DateTimeOffset.Now.AddSeconds(-20) : null;
+        h.UserBreaks();
+        int sent = h.Sent.Count;
+
+        h.Combat.NoteRoomLeft(lastMove);
+        h.DrainPosted();
+
+        Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);
+        Assert.Equal(sent, h.Sent.Count);
+
+        // The classifier wiping its roster for that change is no sighting of the
+        // room either; the next display of it lists the monster and nothing is sent.
+        h.Classifier.NoteRoomChanged();
+        h.Feed($"Also here: {Rat}.");
+
+        Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);
+        Assert.Equal(sent, h.Sent.Count);
     }
 
     // ----- a flee still moves us ------------------------------------------
@@ -1319,7 +1349,7 @@ public sealed class CombatManagerBreakHoldTests
             Assert.Contains("break", healthSent);
             Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);    // the flee's own break is no user's attack or break
 
-            h.Combat.NoteRoomLeft();
+            h.Combat.NoteRoomLeft(lastMoveSentAt: DateTimeOffset.Now);
 
             Assert.Null(h.Combat.UserBreakHoldTarget);
             Assert.Contains("left the room", h.Combat.UserBreakHoldSummary);

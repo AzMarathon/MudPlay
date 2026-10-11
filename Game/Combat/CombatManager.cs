@@ -4338,12 +4338,26 @@ public sealed partial class CombatManager : IDisposable
 
     private static string WhoseCommand(string? askedBy) => askedBy ?? "the user's";
 
-    // We are in another room (RoomTracker, on a confirmed change of room). The new
-    // room's roster may already have been read under the hold, which stood the engine
-    // down for it, so it is looked at again once the move's own handlers have run.
-    public void NoteRoomLeft()
+    // The room the tracker has us in changed (RoomTracker.StateChanged), and
+    // lastMoveSentAt is when a move of ours last went out (our own step, a flee's,
+    // a follow behind the leader). Leaving the room ends the hold. A change of
+    // room with no move since the break is not a leaving: the tracker corrected
+    // where it thinks we stand (a re-localisation in a grid of like-named rooms),
+    // the monster is where it was, and the hold stands. Whether a move went out is
+    // the test RoomEntityClassifier makes before it wipes a roster on a room change.
+    //
+    // After a real move the new room's roster may already have been read under the
+    // hold, which stood the engine down for it, so it is looked at again once the
+    // move's own handlers have run.
+    public void NoteRoomLeft(DateTimeOffset? lastMoveSentAt)
     {
         if (_disposed) return;
+        if (_userBreakHold is { } held && !(lastMoveSentAt >= _userBreakHoldSince))
+        {
+            _log?.Combat(LogCategory,
+                $"the tracker's room changed with no move of ours since the break — a position correction; the hold on '{held}' stands");
+            return;
+        }
         _userAttackedLast = null;
         if (_userBreakHold is null) return;
         EndUserBreakHold("we left the room");
@@ -4380,6 +4394,10 @@ public sealed partial class CombatManager : IDisposable
     // stands, and its silence asks for no other look for HeldSilenceReadBackOff.
     private void JudgeUserBreakHoldByRoster(RoomEntitiesObservation obs, string held, bool freshRead)
     {
+        // The roster wiped for a change of room lists nobody because it was emptied,
+        // not because anyone was seen gone. Whether we left is NoteRoomLeft's to
+        // say: it is told of the same change, with the move to judge it by.
+        if (obs.Source == RoomObservationSource.RoomChange) return;
         int listed = CountOfName(obs, held);
         if (listed < _userBreakHoldCount)
         {
