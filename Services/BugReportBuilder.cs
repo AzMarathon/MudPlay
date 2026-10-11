@@ -2002,6 +2002,15 @@ public static class BugReportBuilder
         // what @path reports when idle so a party member can help the player
         // resume the circuit they were on.
         Kv(sb, "Last run loop", loop.LastRunLoopName ?? "(none)");
+        // Whose rooms they are: a loop or marks from before a switch of game data
+        // are refused a save and a restart under another set, and a report of
+        // either needs the set each was stamped with beside the active one.
+        Kv(sb, "Running / last run loop's game data", loop.LastRunLoop is null
+            ? "(no loop run yet)"
+            : $"'{loop.LastRunLoopGameData ?? "(none)"}' (active: '{svc.GameData.ActiveSet ?? "(none)"}')");
+        Kv(sb, "Lair marks' game data", svc.AutoLair.Marked.Count == 0
+            ? "(nothing marked)"
+            : $"'{svc.AutoLair.MarksGameData ?? "(none)"}', {svc.AutoLair.Marked.Count} mark(s)");
         Kv(sb, "Last run auto-lair", svc.AutoLair.LastRunLairName ?? "(none)");
         Kv(sb, "Auto-Lair phase", svc.AutoLair.Phase.ToString());
         Kv(sb, "Auto-Lair active", svc.AutoLair.IsActive.ToString());

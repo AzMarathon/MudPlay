@@ -188,24 +188,32 @@ public sealed class AutoLairMarksOtherGameDataTests : IDisposable
         Assert.Empty(h.Dropped);
     }
 
-    // What an event puts back after taking over from a run: the marks as the game
-    // data's they were placed on, not the set active at the resume.
+    // What an event puts back after taking over from a run: the marks with the stamp
+    // they had, while that game data is still the active one.
     [Fact]
-    public void RestoredMarks_KeepTheStampTheyHad()
+    public void MarksOfTheActiveGameData_ArePutBackWithTheirStamp()
+    {
+        using Harness h = OnAlpha();
+        Dictionary<RoomKey, int?> marks = new() { [new RoomKey(1, 1)] = null, [new RoomKey(1, 3)] = 120 };
+
+        Assert.True(h.Lairs.RestoreMarks(marks, "alpha"));
+
+        Assert.Equal(2, h.Lairs.Marked.Count);
+        Assert.Equal(120, h.Lairs.GetOverride(new RoomKey(1, 3)));
+        Assert.Equal("alpha", h.Lairs.MarksGameData);
+    }
+
+    [Fact]
+    public void MarksOfAnotherGameData_AreNotPutBack()
     {
         using Harness h = OnAlpha();
         Dictionary<RoomKey, int?> marks = new() { [new RoomKey(1, 1)] = null, [new RoomKey(1, 3)] = 120 };
         h.GraphOn("beta");
 
-        h.Lairs.RestoreMarks(marks, "alpha");
+        Assert.False(h.Lairs.RestoreMarks(marks, "alpha"));
 
-        Assert.Equal(2, h.Lairs.Marked.Count);
-        Assert.Equal(120, h.Lairs.GetOverride(new RoomKey(1, 3)));
-        Assert.Equal("alpha", h.Lairs.MarksGameData);
-        Assert.Empty(h.Dropped);
-
-        // And the next room marked under the active set doesn't join them.
-        h.Lairs.Mark(new RoomKey(7, 7));
-        Assert.Equal(new[] { new RoomKey(7, 7) }, h.Lairs.Marked);
+        Assert.Empty(h.Lairs.Marked);
+        Assert.Contains(h.Log.Snapshot(), e => e.Severity == LogSeverity.Info && e.Source == "AutoLair"
+            && e.Message == "2 lair mark(s) not put back: their rooms were game data 'alpha''s and 'beta' is active now");
     }
 }

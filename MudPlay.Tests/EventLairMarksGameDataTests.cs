@@ -10,8 +10,8 @@ using Harness = MudPlay.Tests.EventEngineHarness;
 namespace MudPlay.Tests;
 
 // An event that takes over from an Auto-Lair run puts the run's marks back when it
-// is done. They go back as the game data's they were marked on, not as the set
-// active at the resume; marks read from a saved setup are the active set's.
+// is done. They carry the game data they were marked on and go back only while
+// that set is the active one; marks read from a saved setup are the active set's.
 public sealed class EventLairMarksGameDataTests : IDisposable
 {
     private const string TestBbs = "test-event-lairmarks";
@@ -43,17 +43,37 @@ public sealed class EventLairMarksGameDataTests : IDisposable
     }
 
     [Fact]
-    public void ResumingARun_PutsItsMarksBackWithTheStampTheyHad()
+    public void ResumingARunOnItsOwnGameData_PutsItsMarksBackAndStartsIt()
     {
         using Harness h = Harness.Create(_root, TestBbs);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Dictionary<RoomKey, int?> markers = new() { [new RoomKey(1, 2)] = null, [new RoomKey(1, 3)] = 120 };
 
-        h.Events.ExecuteResume(new EventManager.EventResumePlan.AutoLair(markers, OffARun: true, MarkedOn: "elsewhere"));
+        EventManager.EngineStart started = h.Events.ExecuteResume(
+            new EventManager.EventResumePlan.AutoLair(markers, OffARun: true, MarkedOn: "ALPHA"));
 
+        Assert.Equal(EventManager.EngineStart.Started, started);
         Assert.True(h.AutoLair.IsActive);
         Assert.Equal(2, h.AutoLair.Marked.Count);
-        Assert.Equal("elsewhere", h.AutoLair.MarksGameData);
+        Assert.Equal(120, h.AutoLair.GetOverride(new RoomKey(1, 3)));
+    }
+
+    // The marks are another game data's by the time the event would put them back:
+    // nothing is put back and Auto-Lair is not started on another set's rooms.
+    [Fact]
+    public void ResumingARunUnderAnotherGameData_PutsNothingBackAndStartsNothing()
+    {
+        using Harness h = Harness.Create(_root, TestBbs);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Dictionary<RoomKey, int?> markers = new() { [new RoomKey(1, 2)] = null, [new RoomKey(1, 3)] = 120 };
+
+        EventManager.EngineStart started = h.Events.ExecuteResume(
+            new EventManager.EventResumePlan.AutoLair(markers, OffARun: true, MarkedOn: "elsewhere"));
+
+        Assert.Equal(EventManager.EngineStart.Refused, started);
+        Assert.False(h.AutoLair.IsActive);
+        Assert.Empty(h.AutoLair.Marked);
+        Assert.Empty(h.Sent);
     }
 
     [Fact]

@@ -291,23 +291,32 @@ public sealed class AutoLairManager : IDisposable
     }
 
     // Put back the marks a run had when something took over from it (an event's
-    // snapshot of what it interrupted), as the game data's they were placed on: a
-    // set change in between doesn't make them the active set's.
-    public void RestoreMarks(IReadOnlyDictionary<RoomKey, int?> marks, string? markedOn)
+    // snapshot of what it interrupted), with the stamp they had. False, with
+    // nothing put back, when they are another game data's than the active one's:
+    // a set change in between doesn't make them this set's, and a run isn't
+    // started on another set's rooms.
+    public bool RestoreMarks(IReadOnlyDictionary<RoomKey, int?> marks, string? markedOn)
     {
         ArgumentNullException.ThrowIfNull(marks);
+        if (!string.Equals(markedOn, _graph.ActiveSet, StringComparison.OrdinalIgnoreCase))
+        {
+            _log?.Info("AutoLair",
+                $"{marks.Count} lair mark(s) not put back: their rooms were game data '{markedOn ?? "(none)"}''s and '{_graph.ActiveSet ?? "(none)"}' is active now");
+            return false;
+        }
         _markers.Clear();
         foreach ((RoomKey key, int? overrideRespawnSeconds) in marks) _markers[key] = overrideRespawnSeconds;
         MarksGameData = markedOn;
         _noRoute.Clear();
         _log?.Info("AutoLair", $"restored {_markers.Count} mark(s) of game data '{markedOn ?? "(none)"}'");
         MarkedChanged?.Invoke();
+        return true;
     }
 
     public void Mark(RoomKey key, int? overrideRespawnSeconds = null)
     {
-        // Marks held from another game data than the active one (put back for a run
-        // that outlived a switch) go before a room of this one joins them.
+        // A set of marks is one game data's: any held from another than the active
+        // one go before a room of this one joins them.
         DropMarksOfOtherGameData(_graph.ActiveSet);
         if (_markers.TryGetValue(key, out int? current) && current == overrideRespawnSeconds) return;
         if (_markers.Count == 0) MarksGameData = _graph.ActiveSet;

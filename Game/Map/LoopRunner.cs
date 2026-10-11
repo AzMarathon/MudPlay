@@ -367,6 +367,10 @@ public sealed class LoopRunner : IRecoverableEngine
         StagedLoop = loop;
     }
 
+    // Forget the staged loop: the game data changed to another set, and its rooms
+    // are the last one's.
+    public void Unstage() => StagedLoop = null;
+
     // Rename the loop currently in flight in place, keeping the lap / step
     // position intact. The Save-current chip persists a rename without restarting
     // the runner (a rename doesn't change the path), but the live status readout
@@ -1072,8 +1076,19 @@ public sealed class LoopRunner : IRecoverableEngine
     public string? RefusalFor(Loop loop)
     {
         ArgumentNullException.ThrowIfNull(loop);
-        return ClosedRoomRefusalFor(loop) ?? UnpaidRefusalFor(loop);
+        return OtherGameDataRefusalFor(loop) ?? ClosedRoomRefusalFor(loop) ?? UnpaidRefusalFor(loop);
     }
+
+    // The snapshot of the last run is kept through a switch of game data, and its
+    // rooms are the set's it was run on: under another set it is not run again
+    // ("@loop last", or anything else handing the snapshot back), which would also
+    // make it this set's to save.
+    private string? OtherGameDataRefusalFor(Loop loop) =>
+        ReferenceEquals(loop, LastRunLoop)
+        && !string.Equals(LastRunLoopGameData, _graph?.ActiveSet, StringComparison.OrdinalIgnoreCase)
+            ? $"loop '{loop.Name}' was last run on game data '{LastRunLoopGameData ?? "(none)"}', and "
+              + $"'{_graph?.ActiveSet ?? "(none)"}' is active now: its rooms are that game data's"
+            : null;
 
     private string? ClosedRoomRefusalFor(Loop loop)
     {
@@ -1200,6 +1215,15 @@ public sealed class LoopRunner : IRecoverableEngine
                 $"Start refused: loop '{loop.Name}' has {loop.Waypoints.Count} waypoint(s); need ≥2 for a cycle");
             return false;
         }
+        // Before anything of a run under way is touched: nothing starts, and what is
+        // running is left as it is.
+        if (!isRecovery && OtherGameDataRefusalFor(loop) is { } otherGameData)
+        {
+            _log?.Warn("LoopRunner", $"Start refused: {otherGameData}");
+            return false;
+        }
+        // Handed back to run again, the snapshot keeps the stamp it has.
+        bool keptSnapshot = ReferenceEquals(loop, LastRunLoop);
 
         if (isRecovery)
         {
@@ -1247,7 +1271,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // an avoid-list reroute and a resume after a detour (the two that arrive
         // with the first-waypoint event suppressed) are the same run re-planned: the
         // loop is still the set's it was started on, whatever is active by now.
-        if (!isRecovery && !suppressFirstWaypointEvent) LastRunLoopGameData = _graph?.ActiveSet;
+        if (!isRecovery && !suppressFirstWaypointEvent && !keptSnapshot) LastRunLoopGameData = _graph?.ActiveSet;
         _index = 0;
         _stepInFlight = false;
         _awaitingCommandReplies = false;

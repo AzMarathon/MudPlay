@@ -11,10 +11,11 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // The engines walk by room numbers, which are other rooms under another game-data
-// set. A switch to another set stops a loop, Auto-Lair and a walk-to in progress and
-// starts nothing again; the same set read in again stops nothing. And the set a
+// set and may be after the active one is imported again. Either stops a loop,
+// Auto-Lair and a walk-to in progress, drops what was held to start by itself, and
+// starts nothing again; picking the set already active does nothing. And the set a
 // running loop is stamped with is the one it was started on, through every re-plan
-// of the same run.
+// of the same run, and the snapshot of the last run is not run under another set.
 public sealed class GameDataSwitchStopsMovementTests : IDisposable
 {
     private readonly string _root =
@@ -64,43 +65,62 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         // Every command an engine or the recovery gate put on the wire, in order.
         public List<string> Sent { get; } = new();
 
-        // The graph on another set, as AppServices wires a set change: graph rebuilt,
-        // then the tracker and the path cache told.
+        // What the stop said it ended at the last change of game data, and whether the
+        // handler that makes it is in play.
+        public string? Ended;
+        public bool StopOnChange = true;
+
+        // The graph on another set with no stop made: what the stop is there to
+        // prevent, for the tests of what a run does without it.
         public void GraphOn(string set)
         {
+            StopOnChange = false;
             Cache.SwitchSet(set);
-            Graph.OnActiveSetChanged(set);
-            Tracker.OnGraphReloaded();
-            Bfs.OnGraphReloaded();
+            StopOnChange = true;
         }
 
-        // A set change in the order the app handles it: the stop first, then the
-        // graph, then the marks.
-        public IReadOnlyList<string> SwitchTo(string set)
+        // Another set becomes the active one, handled in the app's order (OnAlpha).
+        public string? SwitchTo(string? set)
         {
-            IReadOnlyList<string> stopped = Controller.StopForOtherGameData(Graph.ActiveSet, set);
-            GraphOn(set);
-            Lairs.DropMarksOfOtherGameData(set);
-            return stopped;
+            Ended = null;
+            Cache.SwitchSet(set);
+            return Ended;
         }
 
-        // What would move a run that was still alive: the character found in a room,
-        // the game naming it, a bonked move, prompts, and every timer the engines keep.
+        // The active set is read in again, as an import over it does.
+        public string? ReadInAgain()
+        {
+            Ended = null;
+            Cache.ReloadActiveSet();
+            return Ended;
+        }
+
+        // What would move a run that was still alive, forty times over: the character
+        // found in a room, the game naming it, a bonked move, prompts, the master
+        // switch coming back on, and every timer the engines keep.
         public void LetTimePass()
         {
-            Tracker.SetLocated(new RoomKey(1, 1));
-            Gate.NoteAuthoritativePosition(new RoomKey(1, 1));
-            Tracker.NoteMoveBlocked();
-            Gate.OnCombatTick();
-            Runner.FirePromptForTests();
-            Runner.FireStallWatchdogForTests();
-            Runner.FireDelayForTests();
-            Walker.FirePromptForTests();
-            Walker.FireStallWatchdogForTests();
-            Lairs.FireRetryForTests();
-            Lairs.FireEntryTimerForTests();
-            Lairs.FireEngageTimerForTests();
-            Tracker.SetLocated(new RoomKey(1, 2));
+            for (int round = 0; round < 40; round++)
+            {
+                RoomKey at = new(1, 1 + round % 3);
+                Tracker.SetLocated(at);
+                Gate.NoteAuthoritativePosition(at);
+                Tracker.NoteMoveBlocked();
+                Gate.OnCombatTick();
+                Runner.FirePromptForTests();
+                Runner.FirePromptObservedForTests();
+                Runner.FireStallWatchdogForTests();
+                Runner.FireDelayForTests();
+                Runner.FireReconnectHoldElapsedForTests();
+                Runner.ResumeAfterMasterSwitch();
+                Walker.FirePromptForTests();
+                Walker.FireStallWatchdogForTests();
+                Lairs.FireRetryForTests();
+                Lairs.FireEntryTimerForTests();
+                Lairs.FireEngageTimerForTests();
+                Controller.Resume();
+                Controller.NoteErrandStateChanged();
+            }
         }
 
         public bool Idle => Runner.State == LoopState.Idle && !Lairs.IsActive && Walker.State == WalkState.Idle
@@ -143,6 +163,23 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         gate.SetWireSender(Send);
         gate.TryResync = _ => true;
         gate.TryResyncOnce = (_, _, _) => false;
+
+        // The subscriptions AppServices makes, in its order: the stop, decided by the
+        // cache's load; the graph, whose reload tells the tracker and the path
+        // cache; then the marks. A copy: the app's own handler can't be built here.
+        GameDataCache.Load walkedOn = cache.ActiveLoad;
+        cache.ActiveSetChanged += set =>
+        {
+            GameDataCache.Load was = walkedOn;
+            walkedOn = cache.ActiveLoad;
+            if (!h.StopOnChange || was == walkedOn) return;
+            h.Ended = controller.StopForGameDataChange(
+                was.Set, set, readInAgain: string.Equals(was.Set, set, StringComparison.OrdinalIgnoreCase));
+        };
+        cache.ActiveSetChanged += graph.OnActiveSetChanged;
+        graph.GraphReloaded += () => tracker.OnGraphReloaded();
+        graph.GraphReloaded += bfs.OnGraphReloaded;
+        cache.ActiveSetChanged += set => lairs.DropMarksOfOtherGameData(set);
         return h;
     }
 
@@ -160,9 +197,9 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         h.Runner.Start(Ab());
         Assert.Equal(LoopState.Running, h.Runner.State);
 
-        IReadOnlyList<string> stopped = h.SwitchTo("beta");
+        string? ended = h.SwitchTo("beta");
 
-        Assert.Equal(new[] { "Loop 'ab'" }, stopped);
+        Assert.Equal("Loop 'ab' stopped", ended);
         Assert.Equal(LoopState.Idle, h.Runner.State);
         Assert.Null(h.Runner.CurrentLoop);
         Assert.Contains(h.Log.Snapshot(), e => e.Severity == LogSeverity.Info && e.Source == "Movement"
@@ -185,9 +222,9 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         h.Lairs.Mark(new RoomKey(1, 3));
         Assert.True(h.Lairs.Start());
 
-        IReadOnlyList<string> stopped = h.SwitchTo("beta");
+        string? ended = h.SwitchTo("beta");
 
-        Assert.Equal(new[] { "Auto-Lair" }, stopped);
+        Assert.Equal("Auto-Lair stopped", ended);
         Assert.False(h.Lairs.IsActive);
         Assert.Empty(h.Lairs.Marked);
         Assert.Contains(h.Log.Snapshot(), e => e.Source == "AutoLair" && e.Message == $"stop: {Reason}");
@@ -207,9 +244,9 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
         Assert.Equal(WalkState.Walking, h.Walker.State);
 
-        IReadOnlyList<string> stopped = h.SwitchTo("beta");
+        string? ended = h.SwitchTo("beta");
 
-        Assert.Equal(new[] { "Walk to 1/3" }, stopped);
+        Assert.Equal("Walk to 1/3 stopped", ended);
         Assert.Equal(WalkState.Idle, h.Walker.State);
         Assert.Null(h.Walker.Journey);
         // The bug report's "Last walk event" line reads this.
@@ -223,46 +260,270 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         Assert.True(h.Idle);
     }
 
+    // The set already active picked again: the cache raises nothing, and the stop
+    // asked with the same name and no fresh load does nothing either.
     [Fact]
-    public void TheSameSetReadInAgain_StopsNothing()
+    public void PickingTheSetAlreadyActive_IsANoOp()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        int stops = 0;
+        h.Controller.Stopping += () => stops++;
+
+        Assert.Null(h.SwitchTo("alpha"));
+        Assert.Null(h.SwitchTo("ALPHA"));
+        Assert.Null(h.Controller.StopForGameDataChange("alpha", "alpha"));
+
+        Assert.Equal(0, stops);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.DoesNotContain(h.Log.Snapshot(), e => e.Source == "Movement");
+    }
+
+    // ----- the active set read in again stops it too --------------------------------
+
+    private const string ReadAgain = "game data 'alpha' was read in again";
+
+    [Fact]
+    public void TheActiveSetReadInAgain_StopsARunningLoop_AndNothingStartsItAgain()
     {
         Harness h = OnAlpha();
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(Ab());
 
-        Assert.Empty(h.Controller.StopForOtherGameData("alpha", "alpha"));
-        Assert.Empty(h.Controller.StopForOtherGameData("alpha", "ALPHA"));
+        string? ended = h.ReadInAgain();
 
-        Assert.Equal(LoopState.Running, h.Runner.State);
-        Assert.DoesNotContain(h.Log.Snapshot(), e => e.Source == "Movement");
+        Assert.Equal("Loop 'ab' stopped", ended);
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Contains(h.Log.Snapshot(), e => e.Severity == LogSeverity.Info && e.Source == "Movement"
+            && e.Message == $"Loop 'ab' stopped: {ReadAgain}");
+
+        string[] sent = h.Sent.ToArray();
+        h.LetTimePass();
+
+        Assert.Equal(sent, h.Sent);
+        Assert.True(h.Idle);
+        // By name it is still this set's: it may be run again when asked.
+        Assert.Equal("alpha", h.Runner.LastRunLoopGameData);
+        Assert.Null(h.Runner.RefusalFor(h.Runner.LastRunLoop!));
     }
 
     [Fact]
-    public void TheSameSetReadInAgain_StopsNoWalkOrAutoLairEither()
+    public void TheActiveSetReadInAgain_StopsAutoLair_AndKeepsItsMarks()
     {
         Harness h = OnAlpha();
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Lairs.Mark(new RoomKey(1, 1));
-        h.Lairs.Mark(new RoomKey(1, 3));
+        h.Lairs.Mark(new RoomKey(1, 3), overrideRespawnSeconds: 90);
         Assert.True(h.Lairs.Start());
 
-        Assert.Empty(h.Controller.StopForOtherGameData("alpha", "alpha"));
+        string? ended = h.ReadInAgain();
 
-        Assert.True(h.Lairs.IsActive);
-        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal("Auto-Lair stopped", ended);
+        Assert.False(h.Lairs.IsActive);
+        Assert.Equal(2, h.Lairs.Marked.Count);
+        Assert.Equal(90, h.Lairs.GetOverride(new RoomKey(1, 3)));
+        Assert.Equal("alpha", h.Lairs.MarksGameData);
+
+        string[] sent = h.Sent.ToArray();
+        h.LetTimePass();
+
+        Assert.Equal(sent, h.Sent);
+        Assert.True(h.Idle);
     }
 
     [Fact]
-    public void WithNothingRunning_ASwitchStopsNothingAndSaysNothing()
+    public void TheActiveSetReadInAgain_StopsAWalkTo_AndNothingStartsItAgain()
     {
         Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
 
-        Assert.Empty(h.SwitchTo("beta"));
-        Assert.Empty(h.Controller.StopForOtherGameData("beta", null));
+        string? ended = h.ReadInAgain();
 
+        Assert.Equal("Walk to 1/3 stopped", ended);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Equal(ReadAgain, h.Walker.LastEvent?.Detail);
+
+        string[] sent = h.Sent.ToArray();
+        h.LetTimePass();
+
+        Assert.Equal(sent, h.Sent);
+        Assert.True(h.Idle);
+    }
+
+    [Fact]
+    public void TheActiveSetReadInAgain_DropsALoopHeldForAReconnect()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        h.Runner.NotifyDisconnected();
+        string[] sent = h.Sent.ToArray();
+
+        string? ended = h.ReadInAgain();
+
+        Assert.Equal("Loop 'ab', held for a reconnect, dropped", ended);
+        Assert.Null(h.Runner.PendingReconnectResumeName);
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.FirePromptForTests();
+        h.LetTimePass();
+
+        Assert.Equal(sent, h.Sent);
+        Assert.True(h.Idle);
+    }
+
+    [Fact]
+    public void WithNothingRunning_TheStopIsStillMade_AndNothingIsSaid()
+    {
+        Harness h = OnAlpha();
+        int stops = 0;
+        string? during = null;
+        List<string> endings = new();
+        h.Controller.Stopping += () => { stops++; during = h.Controller.GameDataChangeStop; };
+        h.Controller.EndingForGameDataChange += (reason, _) => endings.Add(reason);
+
+        Assert.Null(h.SwitchTo("beta"));
+
+        // What the Stop button does with nothing running, with the reason to read.
+        Assert.Equal(1, stops);
+        Assert.Equal(Reason, during);
+        Assert.Null(h.Controller.GameDataChangeStop);
+        Assert.Equal(new[] { Reason }, endings);
         Assert.True(h.Idle);
         Assert.Empty(h.Sent);
         Assert.DoesNotContain(h.Log.Snapshot(), e => e.Source == "Movement");
+    }
+
+    // What a subscriber ended is named with the rest.
+    [Fact]
+    public void WhatASubscriberEnded_IsNamedInTheNotice()
+    {
+        Harness h = OnAlpha();
+        h.Controller.EndingForGameDataChange += (_, stopped) => stopped.Add("the party pick-up");
+
+        Assert.Equal("The party pick-up stopped", h.SwitchTo("beta"));
+    }
+
+    // ----- what would start a run again by itself is dropped ------------------------
+
+    // The link dropped with a loop running; the set changed before the way back in.
+    [Fact]
+    public void ALoopHeldForAReconnect_IsDropped_AndTheFirstPromptBackStartsNothing()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        h.Runner.NotifyDisconnected();
+        Assert.Equal("ab", h.Runner.PendingReconnectResumeName);
+        string[] sent = h.Sent.ToArray();
+
+        string? ended = h.SwitchTo("beta");
+
+        Assert.Equal("Loop 'ab', held for a reconnect, dropped", ended);
+        Assert.Null(h.Runner.PendingReconnectResumeName);
+        Assert.Contains(h.Log.Snapshot(), e => e.Source == "Movement"
+            && e.Message == $"Loop 'ab', held for a reconnect, dropped: {Reason}");
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.FirePromptForTests();
+        h.LetTimePass();
+
+        Assert.Equal(sent, h.Sent);
+        Assert.True(h.Idle);
+    }
+
+    // Back in the game with the master switch off, the restart waits for the switch.
+    [Fact]
+    public void ALoopHeldForTheMasterSwitch_IsDropped_AndTheSwitchComingBackOnStartsNothing()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        h.Runner.NotifyDisconnected();
+        bool off = true;
+        h.Runner.MasterSwitchOff = () => off;
+        h.Runner.FirePromptForTests();
+        Assert.True(h.Runner.ReconnectResumeHeldForMasterSwitch);
+        string[] sent = h.Sent.ToArray();
+
+        string? ended = h.SwitchTo("beta");
+
+        Assert.Equal("Loop 'ab', held for a reconnect, dropped", ended);
+        Assert.False(h.Runner.ReconnectResumeHeldForMasterSwitch);
+
+        off = false;
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.ResumeAfterMasterSwitch();
+        h.LetTimePass();
+
+        Assert.Equal(sent, h.Sent);
+        Assert.True(h.Idle);
+    }
+
+    [Fact]
+    public void ALoopLoadedToStart_IsDropped()
+    {
+        Harness h = OnAlpha();
+        h.Runner.Stage(Ab());
+
+        string? ended = h.SwitchTo("beta");
+
+        Assert.Equal("Loop 'ab', loaded to start, dropped", ended);
+        Assert.Null(h.Runner.StagedLoop);
+    }
+
+    [Fact]
+    public void ARunStopped_AndAnotherHeld_AreBothNamed()
+    {
+        Harness h = OnAlpha();
+        h.Runner.Stage(new Loop("next", new[] { new RoomKey(1, 2), new RoomKey(1, 3) }));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+
+        Assert.Equal("Loop 'ab' stopped; loop 'next', loaded to start, dropped", h.SwitchTo("beta"));
+    }
+
+    // ----- the snapshot of the last run is not run again under another set -----------
+
+    [Fact]
+    public void TheLastRunLoop_IsRefusedUnderAnotherSet_AndKeepsItsStamp()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        h.SwitchTo("beta");
+        Loop last = h.Runner.LastRunLoop!;
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        string[] sent = h.Sent.ToArray();
+
+        // What "@loop last" asks before it starts anything, and replies with.
+        Assert.Equal(
+            "loop 'ab' was last run on game data 'alpha', and 'beta' is active now: its rooms are that game data's",
+            h.Runner.RefusalFor(last));
+        Assert.False(h.Runner.Start(last));
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Equal(sent, h.Sent);
+        Assert.Same(last, h.Runner.LastRunLoop);
+        Assert.Equal("alpha", h.Runner.LastRunLoopGameData);
+    }
+
+    [Fact]
+    public void TheLastRunLoop_RunsAgainOnItsOwnSet()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        h.Runner.Stop();
+        Loop last = h.Runner.LastRunLoop!;
+
+        Assert.Null(h.Runner.RefusalFor(last));
+        Assert.True(h.Runner.Start(last));
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal("alpha", h.Runner.LastRunLoopGameData);
     }
 
     [Fact]
@@ -275,9 +536,9 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Walker.WalkTo(new RoomKey(1, 3));
 
-        IReadOnlyList<string> stopped = h.SwitchTo("beta");
+        string? ended = h.SwitchTo("beta");
 
-        Assert.Equal(new[] { "Walk to 1/3", "the stash transfer" }, stopped);
+        Assert.Equal("Walk to 1/3 and the stash transfer stopped", ended);
         Assert.Equal(new[] { Reason }, abandoned);
         Assert.True(h.Idle);
     }
@@ -295,11 +556,11 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         bool started = false;
         h.Controller.StartUserRun(() => started = true);
 
-        IReadOnlyList<string> stopped = h.SwitchTo("beta");
+        string? ended = h.SwitchTo("beta");
         answer.SetResult(false);
         await Task.Yield();
 
-        Assert.Equal(new[] { "The stash transfer" }, stopped);
+        Assert.Equal("The stash transfer stopped", ended);
         Assert.False(started);
         Assert.Null(h.Controller.SuspendedErrand);
     }
@@ -320,6 +581,24 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         h.Runner.Start(Ab());
 
         Assert.Equal("beta", h.Runner.LastRunLoopGameData);
+    }
+
+    // The graph changes under a run with nothing stopping it (what the stop is there
+    // to prevent): the recovery that re-plans the loop must not make it this set's.
+    [Fact]
+    public void ARecoveryReroute_KeepsTheStampOfTheRun()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+
+        h.GraphOn("beta");
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Gate.NoteAuthoritativePosition(new RoomKey(1, 1));
+
+        Assert.Contains(h.Log.Snapshot(), e => e.Source == "LoopRunner"
+            && e.Message.StartsWith("recovery reroute:", StringComparison.Ordinal));
+        Assert.Equal("alpha", h.Runner.LastRunLoopGameData);
     }
 
     [Fact]

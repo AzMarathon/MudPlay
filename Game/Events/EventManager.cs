@@ -1209,11 +1209,19 @@ public sealed class EventManager : IDisposable
     // The user pressed Stop (MovementController.Stopping, the Navigation window's
     // Stop). The engines say so themselves when one of them is running; this is for
     // a run with none to say it: a wait, a rest, or one suspended behind a detour.
-    public void NoteUserStop()
+    public void NoteUserStop() => NoteStop("stopped by the user");
+
+    // The same stop with its own reason: a change of game data stops everything the
+    // way the user's Stop does (MovementController.StopForGameDataChange).
+    public void NoteStop(string why)
     {
         // Not a Stop this manager's own engine start set off.
-        if (!_driving) EndByUser("stopped by the user");
+        if (!_driving) EndByUser(why);
     }
+
+    // The event running now, by name, or null: for the notice of what a change of
+    // game data ended.
+    public string? RunningEventName => _run is { } run ? Label(run.Event) : null;
 
     // The connection dropped (EventScheduler.NotifyDisconnected, ahead of the
     // engines' own handling of the drop). Everything is kept; see the header.
@@ -2030,7 +2038,8 @@ public sealed class EventManager : IDisposable
                     EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Lair, "event resume");
                     if (al.OffARun)
                     {
-                        _autoLair.RestoreMarks(al.Markers, al.MarkedOn);
+                        // Marked on another game data than the active one: not started.
+                        if (!_autoLair.RestoreMarks(al.Markers, al.MarkedOn)) return EngineStart.Refused;
                     }
                     else
                     {
@@ -2063,9 +2072,9 @@ public sealed class EventManager : IDisposable
             public override string Describe() => $"loop '{SavedLoop.Name}'";
         }
         // OffARun: the markers are what a run had when the event took over from it,
-        // and go back as the game data's they were marked on (MarkedOn) rather than
-        // the set active at the resume. Markers read from a saved setup are the
-        // active set's.
+        // with the game data they were marked on (MarkedOn). They go back only while
+        // that set is the active one. Markers read from a saved setup are the active
+        // set's.
         public sealed record AutoLair(Dictionary<RoomKey, int?> Markers, bool OffARun = false, string? MarkedOn = null) : EventResumePlan
         {
             public override string Describe() => $"auto-lair ({Markers.Count} markers)";

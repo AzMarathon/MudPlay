@@ -398,35 +398,71 @@ public sealed class MovementController : IDisposable
         _coordinator.ClearGate(MovementCoordinator.UserGate, nameof(MovementController));
     }
 
-    // The active game data changed from one set to another. Everything here walks by
-    // room numbers, and under another set those are other rooms: a loop, Auto-Lair,
-    // a walk-to, a puzzle solve or an errand in progress is stopped, the way Stop
-    // stops it, and nothing is resumed afterwards (owner, 2026-10-11). The same set
-    // read in again stops nothing. Returns what was stopped, each as it reads at the
-    // start of a sentence ("Loop 'Ring'"), for the notice; empty when nothing was.
-    public IReadOnlyList<string> StopForOtherGameData(string? was, string? now)
+    // Why the stop under way was made, while it is one for a change of game data
+    // (StopForGameDataChange); null for any other. Stopping carries no detail, so a
+    // subscriber that logs why it stood down reads this while it handles the event.
+    public string? GameDataChangeStop { get; private set; }
+
+    // Raised by StopForGameDataChange ahead of the stop, with the reason, for
+    // whatever holds a run of the old data's rooms that Stop doesn't end by itself
+    // (an event standing in a wait, a party pick-up waiting for its member, a sell
+    // tour at a shop). Each subscriber ends its own and adds what it ended to the
+    // list, as it reads inside a sentence ("the party pick-up").
+    public event Action<string, List<string>>? EndingForGameDataChange;
+
+    // The game data under the engines was read in afresh: another set became the
+    // active one, or the active one was read in again (imported again, rewritten in
+    // Manage Sets; readInAgain). Everything here walks by room numbers, which under
+    // another set are other rooms and after a re-import may be: a loop, Auto-Lair, a
+    // walk-to, a puzzle solve or an errand in progress is stopped, the way Stop
+    // stops it, and whatever would start one again by itself is dropped: a loop held
+    // for a reconnect or for the master switch, a loop loaded to start, a run queued
+    // behind an errand, the "Resume first?" answer still owed, and what the
+    // subscribers of EndingForGameDataChange hold (owner, 2026-10-11). The stop is
+    // made whether or not anything is running, as the Stop button's is. Returns what
+    // ended, as the start of the notice ("Loop 'Ring' stopped"), or null when
+    // nothing was running or held.
+    public string? StopForGameDataChange(string? was, string? now, bool readInAgain = false)
     {
-        if (string.Equals(was, now, StringComparison.OrdinalIgnoreCase)) return Array.Empty<string>();
+        bool sameSet = string.Equals(was, now, StringComparison.OrdinalIgnoreCase);
+        if (sameSet && !readInAgain) return null;
+        string reason = sameSet
+            ? $"game data '{now ?? "(none)"}' was read in again"
+            : $"game data changed from '{was ?? "(none)"}' to '{now ?? "(none)"}'";
 
         List<string> stopped = new();
         // The topmost engine is the run: a loop or Auto-Lair drives the walker.
         if (_autoLair.IsActive) stopped.Add("Auto-Lair");
-        else if (_loops.State != LoopState.Idle) stopped.Add($"Loop '{_loops.CurrentLoop?.Name ?? "?"}'");
+        else if (_loops.State != LoopState.Idle) stopped.Add($"loop '{_loops.CurrentLoop?.Name ?? "?"}'");
         else if (_walker.State != WalkState.Idle || _walker.Journey is not null)
-            stopped.Add((_walker.Journey?.Destination ?? _walker.Destination) is { } to ? $"Walk to {to}" : "Walk");
-        if (_solvers.Any(s => s.Active())) stopped.Add(stopped.Count == 0 ? "Puzzle solve" : "puzzle solve");
+            stopped.Add((_walker.Journey?.Destination ?? _walker.Destination) is { } to ? $"walk to {to}" : "walk");
+        if (_solvers.Any(s => s.Active())) stopped.Add("puzzle solve");
         string? errand = _activeErrand?.Invoke();
-        if (errand is not null) stopped.Add(stopped.Count == 0 ? char.ToUpperInvariant(errand[0]) + errand[1..] : errand);
-        if (stopped.Count == 0 && SuspendedErrand is null && _afterErrand is null && _awaitingAnswer is null)
-            return stopped;
+        if (errand is not null) stopped.Add(errand);
 
-        string reason = $"game data changed from '{was ?? "(none)"}' to '{now ?? "(none)"}'";
-        _log?.Info("Movement", $"{(stopped.Count == 0 ? "Queued run dropped" : string.Join(" and ", stopped) + " stopped")}: {reason}");
+        List<string> dropped = new();
+        if (_loops.PendingReconnectResumeName is { } heldLoop) dropped.Add($"loop '{heldLoop}', held for a reconnect,");
+        if (_loops.StagedLoop is { } staged) dropped.Add($"loop '{staged.Name}', loaded to start,");
+
         // A start waiting on the "Resume first?" answer is a run of the last set's too.
         _awaitingAnswer = null;
         if (errand is not null) _abandonErrand?.Invoke(reason);
-        Stop(reason);
-        return stopped;
+        EndingForGameDataChange?.Invoke(reason, stopped);
+        GameDataChangeStop = reason;
+        try { Stop(reason); }
+        finally { GameDataChangeStop = null; }
+        _loops.ClearPendingReconnectResume();
+        _loops.Unstage();
+
+        if (stopped.Count == 0 && dropped.Count == 0) return null;
+        string what = string.Join("; ", new[]
+        {
+            stopped.Count == 0 ? null : string.Join(" and ", stopped) + " stopped",
+            dropped.Count == 0 ? null : string.Join(" and ", dropped) + " dropped",
+        }.Where(part => part is not null));
+        what = char.ToUpperInvariant(what[0]) + what[1..];
+        _log?.Info("Movement", $"{what}: {reason}");
+        return what;
     }
 
     // Auto-All kill switch engaged: suspend an in-flight navigation the same way a
