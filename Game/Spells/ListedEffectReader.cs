@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MudPlay.Game.Calculators;
 using MudPlay.Models.GameData;
+using MudPlay.Services;
 
 namespace MudPlay.Game.Spells;
 
@@ -20,7 +21,7 @@ public static class ListedEffectReader
 
     public static IReadOnlyList<ListedEffect> Read(
         IReadOnlyList<StatusEffectLine> lines, RealmType realm,
-        IEnumerable<MessageRecord> messages, Func<int, JsonElement?> spellRow)
+        IEnumerable<MessageRecord> messages, Func<int, GameRow?> spellRow)
     {
         ArgumentNullException.ThrowIfNull(lines);
         ArgumentNullException.ThrowIfNull(messages);
@@ -73,7 +74,7 @@ public static class ListedEffectReader
     // zero takes the spell's own magnitude, which is only a known number when the
     // spell has a single fixed one: a min-max range is rolled at the cast, and one
     // that grows per level depends on who cast it and when.
-    public static EffectStatReading StatModifiers(JsonElement spell)
+    public static EffectStatReading StatModifiers(GameRow spell)
     {
         SpellFormulaInput formula = SpellFormulaReader.Read(spell);
         bool fixedMagnitude = formula.MinBase == formula.MaxBase && formula.MinInc == 0 && formula.MaxInc == 0;
@@ -87,7 +88,7 @@ public static class ListedEffectReader
             else if (fixedMagnitude) modifiers[stat] += formula.MinBase;
             else unknown |= (StatSet)(1 << stat);
         }
-        string name = spell.TryGetProperty("Name", out JsonElement n) && n.ValueKind == JsonValueKind.String
+        string name = spell.TryGetProperty("Name", out GameValue n) && n.ValueKind == JsonValueKind.String
             ? n.GetString() ?? string.Empty
             : string.Empty;
         return new EffectStatReading(name.Length > 0 ? name : $"spell {formula.Number}", modifiers, unknown);

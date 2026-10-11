@@ -85,7 +85,7 @@ public static class ItemEquipFilter
     }
 
     // An item's evil-only (98) value, or null when it isn't evil-only.
-    public static int? EvilOnlyValue(JsonElement itemRow)
+    public static int? EvilOnlyValue(GameRow itemRow)
     {
         for (int i = 0; i < ItemAbilSlots; i++)
             if (GetInt(itemRow, $"Abil-{i}") == EvilOnlyCode) return GetInt(itemRow, $"AbilVal-{i}");
@@ -100,7 +100,7 @@ public static class ItemEquipFilter
     {
         ArgumentNullException.ThrowIfNull(cache);
         if (string.IsNullOrWhiteSpace(className)) return ClassEquipProfile.Unknown;
-        if (cache.FindRowByName("Classes", className.Trim()) is not JsonElement r)
+        if (cache.FindRowByName("Classes", className.Trim()) is not GameRow r)
             return ClassEquipProfile.Unknown;
 
         int number = GetInt(r, "Number");
@@ -122,11 +122,9 @@ public static class ItemEquipFilter
     // evilPoints, when known, also gates evil-only gear on its value (Outlaw at
     // least, and N evil points for an EvilOnly N item); a range that straddles the
     // value lets the item through for the game to decide.
-    public static bool CanEquip(JsonElement itemRow, int level, ClassEquipProfile cls, AlignmentBucket? alignment,
+    public static bool CanEquip(GameRow itemRow, int level, ClassEquipProfile cls, AlignmentBucket? alignment,
         RealmType realm = RealmType.ParaMud, EvilPointRange? evilPoints = null)
     {
-        if (itemRow.ValueKind != JsonValueKind.Object) return false;
-
         int minLevel = 0, maxLevel = 0;
         bool goodOnly = false, evilOnly = false, neutralOnly = false;
         int evilOnlyValue = 0;
@@ -214,7 +212,7 @@ public static class ItemEquipFilter
     // ClassRest-N is the allow-list of class ids. A match (or an item Abil-59 ClassOk,
     // handled by the caller) grants the item and bypasses type gating; entries present
     // with no match block; an empty list is neutral (type gating decides).
-    private static ClassRestResult EvalClassRest(JsonElement itemRow, int classNumber)
+    private static ClassRestResult EvalClassRest(GameRow itemRow, int classNumber)
     {
         bool anyRestriction = false;
         for (int i = 0; i < ClassRestSlots; i++)
@@ -230,7 +228,7 @@ public static class ItemEquipFilter
     // Reached only for a known class that the item neither grants nor restricts-in.
     // Armour and weapon rows gate by the class's tier; every other ItemType (worn
     // jewellery, etc.) has no type gate.
-    private static bool PassesItemType(JsonElement itemRow, ClassEquipProfile cls) =>
+    private static bool PassesItemType(GameRow itemRow, ClassEquipProfile cls) =>
         GetInt(itemRow, "ItemType") switch
         {
             ArmourItemType => PassesArmour(itemRow, cls),
@@ -241,7 +239,7 @@ public static class ItemEquipFilter
     // Class ArmourType is a tier ceiling: usable only when it meets the item's tier.
     // An off-hand shield (Worn 12) is additionally barred to one-hand-weapon classes
     // (WeaponType 0/2/4/9) — only reached when the item isn't class-granted.
-    private static bool PassesArmour(JsonElement itemRow, ClassEquipProfile cls)
+    private static bool PassesArmour(GameRow itemRow, ClassEquipProfile cls)
     {
         if (cls.ArmourType < GetInt(itemRow, "ArmourType")) return false;
         if (GetInt(itemRow, "Worn") == ShieldWornCode && cls.WeaponType is 0 or 2 or 4 or 9)
@@ -250,7 +248,7 @@ public static class ItemEquipFilter
     }
 
     // Class WeaponType selects which item WeaponType families are usable.
-    private static bool PassesWeapon(JsonElement itemRow, ClassEquipProfile cls)
+    private static bool PassesWeapon(GameRow itemRow, ClassEquipProfile cls)
     {
         int wt = GetInt(itemRow, "WeaponType");
         return cls.WeaponType switch
@@ -269,13 +267,12 @@ public static class ItemEquipFilter
         };
     }
 
-    private static bool IsStaffWeapon(JsonElement itemRow) =>
+    private static bool IsStaffWeapon(GameRow itemRow) =>
         GetInt(itemRow, "Number") is StaffDaggerNumber or StaffQuarterstaffNumber;
 
-    private static int GetInt(JsonElement row, string property)
+    private static int GetInt(GameRow row, string property)
     {
-        if (row.ValueKind != JsonValueKind.Object) return 0;
-        if (!row.TryGetProperty(property, out JsonElement el)) return 0;
+        if (!row.TryGetProperty(property, out GameValue el)) return 0;
         return el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int v) ? v : 0;
     }
 }

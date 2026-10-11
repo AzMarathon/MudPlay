@@ -10,9 +10,9 @@ namespace MudPlay.Services;
 // slot-filtered name lists (WeaponNames / OffHandNames) for the
 // Settings → Combat typeahead boxes.
 //
-// Subscribes to GameDataCache.ActiveSetChanged, loads the raw Items.json,
+// Subscribes to GameDataCache.ActiveSetChanged, loads the Items table,
 // populates the int → string map plus the slot-filtered name lists in a
-// single pass, then evicts the raw JsonDocument. Only the fields these
+// single pass, then evicts the table. Only the fields these
 // indexes need (Number, Name, ItemType, Worn, Encum) are retained — full
 // item editing is owned by the Game Data browser and reads its own copy.
 // (Gettable is retained too — see _gettableByNumber.)
@@ -248,11 +248,11 @@ public sealed class ItemNameStore
         return s.Trim();
     }
 
-    // Read an integer field from a JSON row, or 0 when the property is
+    // Read an integer field from a row, or 0 when the property is
     // missing / non-numeric. Used for the slot-classifier reads
     // (ItemType / Worn) where absent means "not that slot".
-    private static int ReadInt(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el)
+    private static int ReadInt(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el)
            && el.ValueKind == JsonValueKind.Number
            && el.TryGetInt32(out int v)
             ? v : 0;
@@ -260,8 +260,8 @@ public sealed class ItemNameStore
     // Gettable is the one flag whose absent-means-0 default would be actively
     // wrong: a set without the column would read as "nothing can be picked up".
     // Missing or non-numeric reads as gettable; only an explicit 0 is a fixture.
-    private static bool ReadGettable(JsonElement row)
-        => !row.TryGetProperty("Gettable", out JsonElement el)
+    private static bool ReadGettable(GameRow row)
+        => !row.TryGetProperty("Gettable", out GameValue el)
            || el.ValueKind != JsonValueKind.Number
            || !el.TryGetInt32(out int v)
            || v != 0;
@@ -279,7 +279,7 @@ public sealed class ItemNameStore
             or "six" or "seven" or "eight" or "nine" or "ten";
     }
 
-    private static int PackStealth(JsonElement row)
+    private static int PackStealth(GameRow row)
     {
         int total = 0;
         for (int i = 0; i < ItemAbilitySlots; i++)
@@ -313,7 +313,7 @@ public sealed class ItemNameStore
             return;
         }
 
-        JsonDocument? doc = _cache.GetRawTable("Items");
+        GameTable? doc = _cache.GetTable("Items");
         if (doc is null)
         {
             _log?.Log(LogSeverity.Info, "ItemNameStore",
@@ -325,15 +325,14 @@ public sealed class ItemNameStore
         int parsed = 0;
         SortedSet<string> weapons = new(StringComparer.OrdinalIgnoreCase);
         SortedSet<string> offHands = new(StringComparer.OrdinalIgnoreCase);
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
-            if (!row.TryGetProperty("Number", out JsonElement nEl)
+            if (!row.TryGetProperty("Number", out GameValue nEl)
                 || nEl.ValueKind != JsonValueKind.Number
                 || !nEl.TryGetInt32(out int number)
                 || number <= 0)
                 continue;
-            if (!row.TryGetProperty("Name", out JsonElement nameEl)
+            if (!row.TryGetProperty("Name", out GameValue nameEl)
                 || nameEl.ValueKind != JsonValueKind.String)
                 continue;
             string? name = nameEl.GetString();

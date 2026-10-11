@@ -37,25 +37,25 @@ public sealed class MonsterHpIndex
         if (_maxHp is { } cached) return cached;
 
         Dictionary<int, (int MaxHp, int Regen)> map = new();
-        JsonDocument? doc = _cache.GetRawTable("Monsters");
+        GameTable? doc = _cache.GetTable("Monsters");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Number", out JsonElement numEl)) continue;
+                if (!row.TryGetProperty("Number", out GameValue numEl)) continue;
                 if (numEl.ValueKind != JsonValueKind.Number) continue;
                 if (!numEl.TryGetInt32(out int number)) continue;
-                if (!row.TryGetProperty("HP", out JsonElement hpEl)) continue;
+                if (!row.TryGetProperty("HP", out GameValue hpEl)) continue;
                 if (hpEl.ValueKind != JsonValueKind.Number) continue;
                 if (!hpEl.TryGetInt32(out int hp)) continue;
-                int regen = row.TryGetProperty("HPRegen", out JsonElement rgEl)
+                int regen = row.TryGetProperty("HPRegen", out GameValue rgEl)
                     && rgEl.ValueKind == JsonValueKind.Number && rgEl.TryGetInt32(out int r) ? r : 0;
                 map[number] = (hp, regen);
             }
         }
 
-        // Folded into the map — release the pinned raw Monsters JsonDocument
-        // (GetRawTable re-parses it if another index asks).
+        // Folded into the map — the cache may drop the Monsters table
+        // (GetTable re-reads it if another index asks).
         _cache.EvictTable("Monsters");
         _maxHp = map;
         return map;

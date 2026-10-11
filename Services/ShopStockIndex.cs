@@ -22,7 +22,7 @@ namespace MudPlay.Services;
 // pre-filtered here.
 //
 // Mirrors ItemNameStore: subscribes to GameDataCache.ActiveSetChanged, reads
-// the raw table once, builds the index, and evicts the JsonDocument.
+// the table once, builds the index, and evicts it.
 public sealed class ShopStockIndex
 {
     private const int StockSlots = 20;
@@ -75,7 +75,7 @@ public sealed class ShopStockIndex
             return;
         }
 
-        JsonDocument? doc = _cache.GetRawTable("Shops");
+        GameTable? doc = _cache.GetTable("Shops");
         if (doc is null)
         {
             _log?.Info("ShopStockIndex", $"Active set '{setName}' has no Shops.json; empty.");
@@ -84,9 +84,8 @@ public sealed class ShopStockIndex
         }
 
         int stockedShops = 0;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (!TryReadInt(row, "Number", out int shopNumber) || shopNumber <= 0)
                 continue;
 
@@ -111,10 +110,10 @@ public sealed class ShopStockIndex
         StoreReloaded?.Invoke();
     }
 
-    private static bool TryReadInt(JsonElement row, string property, out int value)
+    private static bool TryReadInt(GameRow row, string property, out int value)
     {
         value = 0;
-        return row.TryGetProperty(property, out JsonElement el)
+        return row.TryGetProperty(property, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out value);
     }

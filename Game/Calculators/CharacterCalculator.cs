@@ -331,8 +331,8 @@ public static class CharacterCalculator
         var result = new EquipmentStatBreakdown();
         foreach (EquippedItem item in equippedItems)
         {
-            JsonElement? row = cache.FindRowByName("Items", item.Name);
-            if (row is JsonElement itemData)
+            GameRow? row = cache.FindRowByName("Items", item.Name);
+            if (row is GameRow itemData)
                 FoldItemRow(result, itemData, item.Name, item.Slot);
         }
 
@@ -341,25 +341,24 @@ public static class CharacterCalculator
 
     // Fold one already-resolved Items row into a fresh EquipmentStatBreakdown —
     // the per-item half of AggregateEquipmentStats, exposed for callers that
-    // already hold the JSON row. The Item Finder enumerates the whole Items
+    // already hold the row. The Item Finder enumerates the whole Items
     // table, so a name round-trip through GameDataCache.FindRowByName per item
     // would be wasteful. slotTag mirrors EquippedItem.Slot: "Weapon Hand"
     // surfaces the weapon-base fields (Min / Max / StrReq / Type / Speed),
     // "Off-Hand" the off-hand accuracy, any other tag folds as generic worn gear.
     public static EquipmentStatBreakdown AggregateItemRow(
-        JsonElement itemRow, string itemName, string slotTag)
+        GameRow itemRow, string itemName, string slotTag)
     {
         ArgumentNullException.ThrowIfNull(itemName);
         ArgumentNullException.ThrowIfNull(slotTag);
 
         var result = new EquipmentStatBreakdown();
-        if (itemRow.ValueKind == JsonValueKind.Object)
-            FoldItemRow(result, itemRow, itemName, slotTag);
+        FoldItemRow(result, itemRow, itemName, slotTag);
         return result;
     }
 
     private static void FoldItemRow(
-        EquipmentStatBreakdown result, JsonElement itemData, string itemName, string slotTag)
+        EquipmentStatBreakdown result, GameRow itemData, string itemName, string slotTag)
     {
         EquipmentStatSummary totals = result.Totals;
 
@@ -430,7 +429,7 @@ public static class CharacterCalculator
     // like item abilities, so the Workshop can show innate racial / class bonuses
     // alongside worn gear.
     public static void ApplyAbilityBonuses(
-        EquipmentStatBreakdown breakdown, JsonElement data, string sourceName)
+        EquipmentStatBreakdown breakdown, GameRow data, string sourceName)
     {
         ArgumentNullException.ThrowIfNull(breakdown);
         EquipmentStatSummary totals = breakdown.Totals;
@@ -494,8 +493,8 @@ public static class CharacterCalculator
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
 
-        JsonElement? classRow = gameData.FindRowByName("Classes", stats.Class);
-        JsonElement? raceRow = gameData.FindRowByName("Races", stats.Race);
+        GameRow? classRow = gameData.FindRowByName("Classes", stats.Class);
+        GameRow? raceRow = gameData.FindRowByName("Races", stats.Race);
 
         var attacks = new List<MudAttackType> { MudAttackType.Normal, MudAttackType.Bash };
 
@@ -526,8 +525,8 @@ public static class CharacterCalculator
         ArgumentNullException.ThrowIfNull(worn);
         ArgumentNullException.ThrowIfNull(gameData);
         EquipmentStatBreakdown combined = AggregateEquipmentStats(worn, gameData);
-        if (gameData.FindRowByName("Races", stats.Race) is JsonElement race) ApplyAbilityBonuses(combined, race, stats.Race);
-        if (gameData.FindRowByName("Classes", stats.Class) is JsonElement cls) ApplyAbilityBonuses(combined, cls, stats.Class);
+        if (gameData.FindRowByName("Races", stats.Race) is GameRow race) ApplyAbilityBonuses(combined, race, stats.Race);
+        if (gameData.FindRowByName("Classes", stats.Class) is GameRow cls) ApplyAbilityBonuses(combined, cls, stats.Class);
         if (questBonuses is not null) ApplyQuestBonuses(combined, questBonuses, "Quests");
         return combined.Totals;
     }
@@ -541,8 +540,8 @@ public static class CharacterCalculator
         ArgumentNullException.ThrowIfNull(worn);
         ArgumentNullException.ThrowIfNull(gameData);
         EquipmentStatBreakdown combined = AggregateEquipmentStats(worn, gameData);
-        if (gameData.FindRowByName("Races", stats.Race) is JsonElement r) ApplyAbilityBonuses(combined, r, stats.Race);
-        if (gameData.FindRowByName("Classes", stats.Class) is JsonElement c) ApplyAbilityBonuses(combined, c, stats.Class);
+        if (gameData.FindRowByName("Races", stats.Race) is GameRow r) ApplyAbilityBonuses(combined, r, stats.Race);
+        if (gameData.FindRowByName("Classes", stats.Class) is GameRow c) ApplyAbilityBonuses(combined, c, stats.Class);
         return combined.Totals.SpellDamageBonus + SpellcastingSpellDamageBonus(stats.Spellcasting, gameData.ActiveRealm);
     }
 
@@ -581,10 +580,10 @@ public static class CharacterCalculator
         ArgumentNullException.ThrowIfNull(gameData);
 
         EquipmentStatBreakdown combined = AggregateEquipmentStats(worn, gameData);
-        JsonElement? classRow = gameData.FindRowByName("Classes", stats.Class);
-        JsonElement? raceRow = gameData.FindRowByName("Races", stats.Race);
-        if (raceRow is JsonElement r) ApplyAbilityBonuses(combined, r, stats.Race);
-        if (classRow is JsonElement c) ApplyAbilityBonuses(combined, c, stats.Class);
+        GameRow? classRow = gameData.FindRowByName("Classes", stats.Class);
+        GameRow? raceRow = gameData.FindRowByName("Races", stats.Race);
+        if (raceRow is GameRow r) ApplyAbilityBonuses(combined, r, stats.Race);
+        if (classRow is GameRow c) ApplyAbilityBonuses(combined, c, stats.Class);
         if (questBonuses is not null) ApplyQuestBonuses(combined, questBonuses, "Quests");
         EquipmentStatSummary t = combined.Totals;
         if (buff.Any)
@@ -600,7 +599,7 @@ public static class CharacterCalculator
         int stealth = stats.Stealth + buff.Stealth;
 
         RealmType realm = gameData.ActiveRealm;
-        int nCombatLevel = classRow is JsonElement cr ? GetInt(cr, "CombatLVL") : 0;
+        int nCombatLevel = classRow is GameRow cr ? GetInt(cr, "CombatLVL") : 0;
         int effectiveAbil22 = realm == RealmType.ParaMud ? t.PlusAccuracy : t.MaxSingleAbil22;
 
         int accuracy;
@@ -828,10 +827,9 @@ public static class CharacterCalculator
 
     // Safe numeric read of an Abil-N / base field off a game-data row: missing
     // or non-numeric properties read as 0.
-    private static int GetInt(JsonElement row, string property)
+    private static int GetInt(GameRow row, string property)
     {
-        if (row.ValueKind != JsonValueKind.Object) return 0;
-        if (!row.TryGetProperty(property, out JsonElement el)) return 0;
+        if (!row.TryGetProperty(property, out GameValue el)) return 0;
         return el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int v) ? v : 0;
     }
 }

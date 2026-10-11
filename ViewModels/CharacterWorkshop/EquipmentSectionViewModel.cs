@@ -481,7 +481,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         // (e.g. an Eyes / Face slot the data leaves empty) so the grid lists only
         // fillable slots. Before any data loads, show every slot rather than an empty
         // grid — a later ActiveSetChanged rebuilds once the table arrives.
-        bool dataLoaded = _gameData.GetRawTable("Items") is not null;
+        bool dataLoaded = _gameData.GetTable("Items") is not null;
         foreach (EquipmentSlot slot in EquipmentSlotMap.DisplayOrder)
         {
             if (dataLoaded && !EquipmentSlotMap.SlotHasItems(_gameData, slot)) continue;
@@ -659,10 +659,10 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     private void RebuildProjectedAc(IReadOnlyList<EquippedItem> worn, EquipmentStatBreakdown itemBreakdown)
     {
         EquipmentStatBreakdown combined = CharacterCalculator.AggregateEquipmentStats(worn, _gameData);
-        JsonElement? raceRow = _gameData.FindRowByName("Races", _stats.Race);
-        JsonElement? classRow = _gameData.FindRowByName("Classes", _stats.Class);
-        if (raceRow is JsonElement r) CharacterCalculator.ApplyAbilityBonuses(combined, r, _stats.Race);
-        if (classRow is JsonElement c) CharacterCalculator.ApplyAbilityBonuses(combined, c, _stats.Class);
+        GameRow? raceRow = _gameData.FindRowByName("Races", _stats.Race);
+        GameRow? classRow = _gameData.FindRowByName("Classes", _stats.Class);
+        if (raceRow is GameRow r) CharacterCalculator.ApplyAbilityBonuses(combined, r, _stats.Race);
+        if (classRow is GameRow c) CharacterCalculator.ApplyAbilityBonuses(combined, c, _stats.Class);
         CharacterCalculator.ApplyQuestBonuses(combined, _questBonuses.Bonuses, "Quests");
 
         // Configured self-applicable buffs, assuming up — the shared roster
@@ -708,11 +708,11 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     }
 
     // Scan an Items / Races / Classes row's Abil-0..N slots for a code.
-    private static bool RowHasAbility(JsonElement? row, int code, int maxSlots)
+    private static bool RowHasAbility(GameRow? row, int code, int maxSlots)
     {
-        if (row is not JsonElement el || el.ValueKind != JsonValueKind.Object) return false;
+        if (row is not GameRow el) return false;
         for (int i = 0; i < maxSlots; i++)
-            if (el.TryGetProperty($"Abil-{i}", out JsonElement a)
+            if (el.TryGetProperty($"Abil-{i}", out GameValue a)
                 && a.ValueKind == JsonValueKind.Number && a.TryGetInt32(out int v) && v == code)
                 return true;
         return false;

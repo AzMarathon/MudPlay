@@ -299,11 +299,11 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
 
     private void PopulateNames(string table, ObservableCollection<string> into)
     {
-        JsonDocument? doc = _gameData.GetRawTable(table);
+        GameTable? doc = _gameData.GetTable(table);
         if (doc is null) return;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.TryGetProperty("Name", out JsonElement n) && n.ValueKind == JsonValueKind.String)
+            if (row.TryGetProperty("Name", out GameValue n) && n.ValueKind == JsonValueKind.String)
             {
                 string? name = n.GetString();
                 if (!string.IsNullOrEmpty(name)) into.Add(name);
@@ -318,9 +318,9 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         RealmType realm = _gameData.ActiveRealm;
         Rows.Clear();
 
-        JsonElement? classOpt = _gameData.FindRowByName("Classes", SelectedClass ?? string.Empty);
-        JsonElement? raceOpt = _gameData.FindRowByName("Races", SelectedRace ?? string.Empty);
-        if (classOpt is not JsonElement classRow || raceOpt is not JsonElement raceRow)
+        GameRow? classOpt = _gameData.FindRowByName("Classes", SelectedClass ?? string.Empty);
+        GameRow? raceOpt = _gameData.FindRowByName("Races", SelectedRace ?? string.Empty);
+        if (classOpt is not GameRow classRow || raceOpt is not GameRow raceRow)
         {
             HasProjection = false;
             return;
@@ -430,10 +430,9 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         return gear.Totals;
     }
 
-    private static int GetInt(JsonElement row, string property)
+    private static int GetInt(GameRow row, string property)
     {
-        if (row.ValueKind != JsonValueKind.Object) return 0;
-        if (!row.TryGetProperty(property, out JsonElement v)) return 0;
+        if (!row.TryGetProperty(property, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 }

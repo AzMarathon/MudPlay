@@ -5,11 +5,10 @@ using MudPlay.Game;
 
 namespace MudPlay.Services;
 
-// Live mirror of the imported MajorMUD game data on disk. Holds the raw
-// JsonDocument per loaded table for the currently active set, exposes set
-// switching with an ActiveSetChanged event, and provides the eviction primitive
-// consumers need to drop raw JSON once it has been folded into typed model
-// collections (the per-tab services own those conversions).
+// Live mirror of the imported MajorMUD game data on disk. Holds one GameTable per
+// loaded table for the currently active set, exposes set switching with an
+// ActiveSetChanged event, and provides the eviction primitive consumers use to say
+// they have folded a table into typed model collections of their own.
 //
 // Storage layout is the one written by MdbImporter:
 // Data/game data/{set-name}/{table-name}.json. Each subdirectory of
@@ -17,24 +16,25 @@ namespace MudPlay.Services;
 // reads AvailableSets.
 //
 // Tables are loaded lazily — SwitchSet only flips the active set name and clears
-// the prior set's table cache; consumers pull tables on demand via GetRawTable.
+// the prior set's table cache; consumers pull tables on demand via GetTable.
 // This keeps the working set small when only a few tables are actually needed
 // for a given subsystem.
 //
-// Memory hygiene: once a per-tab consumer has converted the raw JsonDocument into
-// typed model collections it calls EvictTable to drop the raw bytes — savings on
-// large data sets land in the 150–170 MB range. EvictAll wipes everything
-// without changing the active set. A table nobody has read for IdleEvictAfter is
-// dropped by a background sweep too, so a table some consumer loads and never
-// evicts (Rooms is ~56 MB parsed) doesn't sit in memory for the whole session;
-// the next read simply re-parses it.
+// A table is read straight from its file into a GameTable (see there): the parsed
+// JSON document is never held. Monsters and Items are looked up on every room and
+// combat line, so they stay loaded all session; held as documents they were 31 MB
+// of a Paradigm session, and a set fresh from loading held 94 MB of them.
 //
-// Evicting only DROPS the reference, it never disposes. JsonDocument.Parse rents
-// its metadata buffer from ArrayPool.Shared, and Dispose hands it back — the pool
-// then keeps those multi-MB buffers parked for the life of the process. Dropped
-// instead, the document is ordinary garbage, and a reader still holding one of its
-// JsonElements (a background build mid-scan, a cached row) stays valid rather than
-// hitting a disposed buffer. That's what makes eviction safe from any thread.
+// Memory hygiene: a consumer that has built its own structures from a table calls
+// EvictTable, and a table nobody has read for IdleEvictAfter is dropped by a
+// background sweep, so a table read only while a set loads (Rooms is the largest
+// by far) doesn't sit in memory for the whole session; the next read re-reads it.
+// EvictAll wipes everything without changing the active set.
+//
+// Evicting only drops the cache's reference. A GameTable is immutable, and a
+// reader still holding it or one of its rows (a background build mid-scan, a row
+// kept in a field) reads on unharmed, which is what makes eviction safe from any
+// thread.
 //
 // Wiring: AppServices constructs the cache and subscribes it to
 // ProfileService.ProfileLoaded + ProfileService.BbsPinApplied so the pinned BBS's
@@ -43,16 +43,9 @@ namespace MudPlay.Services;
 // the File → Game Data → Active set menu write back to the resolved BBS profile.
 public sealed class GameDataCache
 {
-    private readonly Dictionary<string, JsonDocument> _tables = new(StringComparer.OrdinalIgnoreCase);
-
-    // Lazy per-table indexes backing FindRowByNumber / FindRowByName / RowNumbers —
-    // built once on first lookup against a table instead of re-walking
-    // EnumerateArray() on every call. A hot per-tick consumer (KnownSpellCatalog's
-    // buff/cast-item resolution) was re-scanning the Spells/Items tables from
-    // scratch on every TickEngine tick, stalling the UI thread; see GetNumberIndex.
-    // Cleared alongside _tables in EvictTable / EvictAll so a reload rebuilds them.
-    private readonly Dictionary<string, Dictionary<int, JsonElement>> _numberIndex = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, Dictionary<string, JsonElement>> _nameIndex = new(StringComparer.OrdinalIgnoreCase);
+    // FindRowByNumber / FindRowByName / RowNumbers go through each table's own
+    // number and name indexes, built on its first lookup; they go when it does.
+    private readonly Dictionary<string, GameTable> _tables = new(StringComparer.OrdinalIgnoreCase);
 
     // Tables whose on-disk JSON failed to parse for the active set (e.g. binary
     // corruption from a pre-fix MDB import — see the multi-page LVAL memo reader
@@ -68,9 +61,9 @@ public sealed class GameDataCache
     // / EvictAll, which only ever own the live set's cache (ReloadActiveSet does
     // purge this set's stale entries after a re-import — see there, and EvictIdle
     // drops a guess nobody claimed).
-    private readonly Dictionary<(string Set, string Table), JsonDocument> _prewarmed = new();
+    private readonly Dictionary<(string Set, string Table), GameTable> _prewarmed = new();
 
-    // Environment.TickCount64 of each cached table's last GetRawTable read (and of
+    // Environment.TickCount64 of each cached table's last GetTable read (and of
     // each prewarm's parse), for the idle sweep. Guarded by the _tables lock.
     private readonly Dictionary<string, long> _lastRead = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string Set, string Table), long> _prewarmedAt = new();
@@ -79,7 +72,7 @@ public sealed class GameDataCache
     // for it (Lazy lets one thread run the parse and the other block on it) rather
     // than parsing the same file a second time on its own thread. Guarded by the
     // _tables lock.
-    private readonly Dictionary<(string Set, string Table), Lazy<JsonDocument?>> _prewarming = new();
+    private readonly Dictionary<(string Set, string Table), Lazy<GameTable?>> _prewarming = new();
 
     // Results worked out from the active set's tables (Derived), and a count bumped
     // whenever the set's tables are dropped for re-reading, so a result built from
@@ -105,18 +98,18 @@ public sealed class GameDataCache
     // table is missing / malformed (Stock is the safe default — most realms are
     // Stock-derived).
     //
-    // Reads through GetRawTable, so the first access lazily loads (and caches)
+    // Reads through GetTable, so the first access lazily loads (and caches)
     // Info.json. The realm only changes when the active set changes, so callers
     // can read this per-calculation cheaply; the Info table is tiny.
     public RealmType ActiveRealm
     {
         get
         {
-            JsonDocument? doc = GetRawTable("Info");
-            if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Array) return RealmType.Stock;
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            GameTable? info = GetTable("Info");
+            if (info is null) return RealmType.Stock;
+            foreach (GameRow row in info.Rows)
             {
-                if (row.TryGetProperty("Legit", out JsonElement legit)
+                if (row.TryGetProperty("Legit", out GameValue legit)
                     && legit.ValueKind == JsonValueKind.Number
                     && legit.TryGetInt32(out int code))
                 {
@@ -177,8 +170,8 @@ public sealed class GameDataCache
             .ToArray();
     }
 
-    // Table names currently held in the raw cache for ActiveSet. Empty before any
-    // GetRawTable call; empty again after EvictAll.
+    // Table names currently held for ActiveSet. Empty before any GetTable call;
+    // empty again after EvictAll.
     public IReadOnlyList<string> LoadedTables
     {
         get
@@ -221,6 +214,23 @@ public sealed class GameDataCache
                 (not null, not null) => $"Swapped game data set '{outgoing}' → '{setName}'.",
             });
         ActiveSetChanged?.Invoke(setName);
+        LogTablesHeld();
+    }
+
+    // What the set's subscribers left loaded once they had all rebuilt, table by
+    // table: the memory the set's tables hold from here until the idle sweep drops
+    // the ones only the rebuild read.
+    private void LogTablesHeld()
+    {
+        if (Log is null || ActiveSet is null) return;
+        (string Table, long Bytes)[] held;
+        lock (_tables)
+            held = _tables.Select(t => (t.Key, t.Value.ResidentBytes)).OrderBy(t => t.Key, StringComparer.Ordinal).ToArray();
+        if (held.Length == 0) return;
+        static string Mb(long bytes) => (bytes / 1048576.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+        Log.Log(LogSeverity.Info, "GameData",
+            $"Tables held for '{ActiveSet}': {string.Join(", ", held.Select(t => $"{t.Table} {Mb(t.Bytes)} MB"))} "
+            + $"({Mb(held.Sum(t => t.Bytes))} MB in all).");
     }
 
     // Reload the raw cache for the current set. Cheaper than SwitchSet(null) →
@@ -261,26 +271,26 @@ public sealed class GameDataCache
         }
         Log?.Log(LogSeverity.Info, "GameData", $"Re-ingested game data set '{ActiveSet}'.");
         ActiveSetChanged?.Invoke(ActiveSet);
+        LogTablesHeld();
     }
 
-    // Lazy-load (or return the cached) JsonDocument for tableName in the active
-    // set. Returns null when no set is active or the table file does not exist on
-    // disk. The table name is matched case-insensitively against the JSON
-    // filename.
-    public JsonDocument? GetRawTable(string tableName)
+    // Lazy-load (or return the cached) table tableName of the active set. Returns
+    // null when no set is active or the table file does not exist on disk. The
+    // table name is matched case-insensitively against the JSON filename.
+    public GameTable? GetTable(string tableName)
     {
         if (ActiveSet is null) return null;
         ArgumentNullException.ThrowIfNull(tableName);
 
         bool notifyParseFailed = false;
-        JsonDocument? result = null;
+        GameTable? result = null;
         string set;
         string? path;
         long generation;
-        Lazy<JsonDocument?>? inFlight;
+        Lazy<GameTable?>? inFlight;
         lock (_tables)
         {
-            if (_tables.TryGetValue(tableName, out JsonDocument? cached))
+            if (_tables.TryGetValue(tableName, out GameTable? cached))
             {
                 _lastRead[tableName] = Environment.TickCount64;
                 return cached;
@@ -289,7 +299,7 @@ public sealed class GameDataCache
 
             // A PrewarmAsync call already parsed this table for the set that's now
             // active, ahead of the switch — claim it instead of re-reading the file.
-            if (_prewarmed.Remove((ActiveSet, tableName), out JsonDocument? warmed))
+            if (_prewarmed.Remove((ActiveSet, tableName), out GameTable? warmed))
             {
                 _prewarmedAt.Remove((ActiveSet, tableName));
                 _tables[tableName] = warmed;
@@ -309,12 +319,10 @@ public sealed class GameDataCache
         // Read and parse outside the lock: Rooms takes half a second, and holding the
         // lock that long stalled every other table lookup, the UI thread's included,
         // behind a background read. Two threads may parse the same table at once;
-        // the first to publish wins and the other copy is dropped. ReadAllBytes is
-        // fine — these JSON files are tens of MB at most and we don't want to hold a
-        // FileStream while Parse walks the buffer.
-        JsonDocument? parsed = null;
+        // the first to publish wins and the other copy is dropped.
+        GameTable? parsed = null;
         JsonException? failure = null;
-        int kilobytes = 0;
+        long kilobytes = 0;
         // A prewarm is already parsing this table: take its result. A failed one
         // (null) falls through to the read below, which reports the failure.
         if (inFlight is not null)
@@ -326,9 +334,7 @@ public sealed class GameDataCache
         if (!fromPrewarm)
         {
             using PerformanceMonitor.Scope? parse = Performance?.Measure($"parse {tableName}");
-            byte[] bytes = File.ReadAllBytes(path);
-            kilobytes = bytes.Length / 1024;
-            try { parsed = JsonDocument.Parse(bytes); }
+            try { parsed = ReadTable(path, out kilobytes); }
             catch (JsonException ex) { failure = ex; }
         }
 
@@ -337,7 +343,7 @@ public sealed class GameDataCache
             // The set was switched or reloaded meanwhile: hand the caller what it
             // asked for, as if the read had finished first, but don't keep it.
             if (generation != _generation) return parsed;
-            if (_tables.TryGetValue(tableName, out JsonDocument? won))
+            if (_tables.TryGetValue(tableName, out GameTable? won))
             {
                 _lastRead[tableName] = Environment.TickCount64;
                 return won;
@@ -349,7 +355,7 @@ public sealed class GameDataCache
                 _lastRead[tableName] = Environment.TickCount64;
                 Log?.Log(LogSeverity.Debug, "GameData", fromPrewarm
                     ? $"'{tableName}' taken from the prewarm in flight for '{set}'."
-                    : $"'{tableName}' loaded for '{set}' ({kilobytes} KB).");
+                    : $"'{tableName}' loaded for '{set}' ({kilobytes} KB on disk, {result.ResidentBytes / 1024} KB held).");
             }
             else if (failure is { } ex)
             {
@@ -373,17 +379,40 @@ public sealed class GameDataCache
         return result;
     }
 
+    // INTERIM, for the room-graph builder alone until it reads GameRows: a table
+    // parsed afresh on every call and never kept.
+    public JsonDocument? GetRawTable(string tableName)
+    {
+        if (ActiveSet is null) return null;
+        string? path;
+        lock (_tables) path = ResolveTablePath(ActiveSet, tableName);
+        if (path is null || !File.Exists(path)) return null;
+        try { return JsonDocument.Parse(File.ReadAllBytes(path)); }
+        catch (JsonException) { return null; }
+    }
+
+    // One table file into its compact form, a block at a time: the file is never
+    // whole in memory. The stream does no buffering of its own; the reader's block
+    // is the buffer.
+    private static GameTable ReadTable(string path, out long kilobytes)
+    {
+        using FileStream file = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+            bufferSize: 0, FileOptions.SequentialScan);
+        kilobytes = file.Length / 1024;
+        return GameTableReader.Read(file);
+    }
+
     // Parse tableNames for setName on background threads, ahead of setName actually
     // becoming ActiveSet. Startup's biggest latency sink is the synchronous Rooms.json
     // parse + graph rebuild GameData.SwitchSet triggers the moment the auto-loaded
-    // profile resolves its BBS's game-data set — kicking the raw-JSON parse off early
+    // profile resolves its BBS's game-data set — kicking the file read off early
     // lets it run concurrently with the rest of AppServices construction and the BBS
     // connect handshake that follows, instead of serially in front of both.
     //
     // Speculative and best-effort: if setName never becomes active (auto-load off, or
-    // the guess was wrong), the parsed documents sit in _prewarmed unclaimed until the
-    // idle sweep drops them. GetRawTable claims a match by exact (setName, tableName); a
-    // read/parse failure here is silently dropped — the real GetRawTable call a moment
+    // the guess was wrong), the read tables sit in _prewarmed unclaimed until the
+    // idle sweep drops them. GetTable claims a match by exact (setName, tableName); a
+    // read/parse failure here is silently dropped — the real GetTable call a moment
     // later hits the same failure through its normal (unprewarmed) path and reports it
     // there instead of duplicating that handling on a background thread nobody's
     // watching.
@@ -400,11 +429,11 @@ public sealed class GameDataCache
                 string? path = ResolveTablePath(setName, tableName);
                 if (path is null || !File.Exists(path)) return Task.CompletedTask;
 
-                Lazy<JsonDocument?> parse = new(() =>
+                Lazy<GameTable?> parse = new(() =>
                 {
                     try
                     {
-                        return JsonDocument.Parse(File.ReadAllBytes(path));
+                        return ReadTable(path, out _);
                     }
                     catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
                     {
@@ -419,17 +448,17 @@ public sealed class GameDataCache
                 }
                 return Task.Run(() =>
                 {
-                    JsonDocument? doc = parse.Value;
+                    GameTable? table = parse.Value;
                     lock (_tables)
                     {
                         // Still ours to file: a lookup that claimed it meanwhile
                         // publishes it itself.
-                        if (!_prewarming.TryGetValue((setName, tableName), out Lazy<JsonDocument?>? pending)
+                        if (!_prewarming.TryGetValue((setName, tableName), out Lazy<GameTable?>? pending)
                             || !ReferenceEquals(pending, parse))
                             return;
                         _prewarming.Remove((setName, tableName));
-                        if (doc is null) return;
-                        _prewarmed[(setName, tableName)] = doc;
+                        if (table is null) return;
+                        _prewarmed[(setName, tableName)] = table;
                         _prewarmedAt[(setName, tableName)] = Environment.TickCount64;
                     }
                 });
@@ -468,22 +497,15 @@ public sealed class GameDataCache
         }
     }
 
-    // Try-get variant of GetRawTable.
-    public bool TryGetRawTable(string tableName, out JsonDocument? doc)
-    {
-        doc = GetRawTable(tableName);
-        return doc is not null;
-    }
-
     // Lookup the Name field of the row in tableName whose Number field equals
     // number. Returns null when the table isn't in the active set, the row isn't
     // found, or either field is missing on the matched row. Used by edit dialogs
     // to render GameDataLink back-references as human-readable labels.
     public string? FindNameByNumber(string tableName, int number)
     {
-        JsonElement? row = FindRowByNumber(tableName, number);
+        GameRow? row = FindRowByNumber(tableName, number);
         if (row is null) return null;
-        return row.Value.TryGetProperty("Name", out JsonElement nameEl) ? nameEl.GetString() : null;
+        return row.Value.TryGetProperty("Name", out GameValue nameEl) ? nameEl.GetString() : null;
     }
 
     // The set of Number values present in tableName for the active set (empty when the
@@ -491,35 +513,29 @@ public sealed class GameDataCache
     // scan per lookup — e.g. the Messages tab hiding records claimed by a real spell.
     public HashSet<int> RowNumbers(string tableName)
     {
-        JsonDocument? doc = GetRawTable(tableName);
-        if (doc is null) return new HashSet<int>();
-        return new HashSet<int>(GetNumberIndex(tableName, doc).Keys);
+        GameTable? table = GetTable(tableName);
+        return table is null ? new HashSet<int>() : new HashSet<int>(table.Numbers);
     }
 
     // Return the full row in tableName whose Number field equals number, or
     // null when the table isn't in the active set or no row matches. Mirrors
-    // FindNameByNumber but hands back the whole JsonElement so a caller can
-    // read arbitrary fields (Abil-N / NegateSpell-N / Action …), not just Name.
-    // The returned JsonElement stays valid for as long as the caller holds it.
-    // Backs the room-hazard index's Spells / Items / TBInfo record reads.
-    public JsonElement? FindRowByNumber(string tableName, int number)
-    {
-        JsonDocument? doc = GetRawTable(tableName);
-        if (doc is null) return null;
-        return GetNumberIndex(tableName, doc).TryGetValue(number, out JsonElement row) ? row : null;
-    }
+    // FindNameByNumber but hands back the whole row so a caller can read
+    // arbitrary fields (Abil-N / NegateSpell-N / Action …), not just Name. Ties go
+    // to the first row in the file. The returned row stays valid for as long as
+    // the caller holds it.
+    public GameRow? FindRowByNumber(string tableName, int number) =>
+        GetTable(tableName)?.FindByNumber(number);
 
     // Return the row in tableName whose Name field equals name (case-insensitive),
-    // or null when the table isn't in the active set or no row matches. The
-    // returned JsonElement stays valid for the lifetime of the cached
-    // JsonDocument (until the next SwitchSet / EvictTable). Used by the
-    // trap-delegation capability lookup to resolve a party member's class / race
-    // row before scanning its abilities.
-    public JsonElement? FindRowByName(string tableName, string name)
+    // or null when the table isn't in the active set or no row matches. Ties go to
+    // the first row in the file. The returned row stays valid for as long as the
+    // caller holds it. Used by the trap-delegation capability lookup to resolve a
+    // party member's class / race row before scanning its abilities.
+    public GameRow? FindRowByName(string tableName, string name)
     {
         ArgumentNullException.ThrowIfNull(name);
-        JsonDocument? doc = GetRawTable(tableName);
-        if (doc is null) return null;
+        GameTable? table = GetTable(tableName);
+        if (table is null) return null;
         // Normalise the lookup key: trim and collapse internal whitespace runs to a
         // single space. Game-data names are canonical (no stray spacing), but a name
         // passed in from an inventory parse can carry a doubled or trailing space —
@@ -527,61 +543,11 @@ public sealed class GameDataCache
         // back as "silvery skullcap " / "silvery  skullcap". Without this, the exact
         // match silently misses and the caller reads item 0 (e.g. @uses reporting a
         // charged item as "isn't a limited-use item").
-        string key = NormalizeLookupName(name);
-        return GetNameIndex(tableName, doc).TryGetValue(key, out JsonElement row) ? row : null;
+        return table.FindByName(NormalizeLookupName(name));
     }
 
     private static string NormalizeLookupName(string name)
         => System.Text.RegularExpressions.Regex.Replace(name.Trim(), @"\s+", " ");
-
-    // Build (or return the cached) Number → row index for tableName. Ties are
-    // resolved first-match-wins, matching the linear scan this replaced. Built
-    // once per table load; invalidated alongside _tables.
-    private Dictionary<int, JsonElement> GetNumberIndex(string tableName, JsonDocument doc)
-    {
-        lock (_tables)
-        {
-            if (_numberIndex.TryGetValue(tableName, out Dictionary<int, JsonElement>? index)) return index;
-
-            index = new Dictionary<int, JsonElement>();
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
-            {
-                if (!row.TryGetProperty("Number", out JsonElement numEl)) continue;
-                if (numEl.ValueKind != JsonValueKind.Number) continue;
-                if (numEl.TryGetInt32(out int n)) index.TryAdd(n, row);
-            }
-            if (IsCurrent(tableName, doc)) _numberIndex[tableName] = index;
-            return index;
-        }
-    }
-
-    // Build (or return the cached) Name → row index for tableName, case-insensitive.
-    // Ties are resolved first-match-wins, matching the linear scan this replaced.
-    // Built once per table load; invalidated alongside _tables.
-    private Dictionary<string, JsonElement> GetNameIndex(string tableName, JsonDocument doc)
-    {
-        lock (_tables)
-        {
-            if (_nameIndex.TryGetValue(tableName, out Dictionary<string, JsonElement>? index)) return index;
-
-            index = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
-            {
-                if (!row.TryGetProperty("Name", out JsonElement nameEl)) continue;
-                if (nameEl.ValueKind != JsonValueKind.String) continue;
-                string? name = nameEl.GetString();
-                if (name is not null) index.TryAdd(name, row);
-            }
-            if (IsCurrent(tableName, doc)) _nameIndex[tableName] = index;
-            return index;
-        }
-    }
-
-    // An eviction (the idle sweep runs on a timer thread) can land between a caller's
-    // GetRawTable and its index build. Caching that index would pin the evicted
-    // document behind a table the cache no longer holds, so it's only served once.
-    private bool IsCurrent(string tableName, JsonDocument doc)
-        => _tables.TryGetValue(tableName, out JsonDocument? cached) && ReferenceEquals(cached, doc);
 
     // A consumer is done with tableName: it has folded the rows into an index of its
     // own. The table is left for the idle sweep to drop at its next pass (within a
@@ -600,22 +566,20 @@ public sealed class GameDataCache
         }
     }
 
-    // Drop the cached JsonDocument for one table now.
+    // Drop one cached table now.
     private bool DropTable(string tableName)
     {
         lock (_tables)
         {
             _failedTables.Remove(tableName);
-            _numberIndex.Remove(tableName);
-            _nameIndex.Remove(tableName);
             _lastRead.Remove(tableName);
             return _tables.Remove(tableName);
         }
     }
 
     // Drop every cached table (and unclaimed prewarm) not read within idle. Runs off
-    // the production idle-sweep timer; safe from any thread because eviction never
-    // disposes (see the class comment).
+    // the production idle-sweep timer; safe from any thread because a dropped table
+    // stays readable to whoever still holds it (see the class comment).
     internal void EvictIdle(TimeSpan idle)
     {
         long cutoff = Environment.TickCount64 - (long)idle.TotalMilliseconds;
@@ -652,8 +616,6 @@ public sealed class GameDataCache
             _generation++;
             _tables.Clear();
             _failedTables.Clear();
-            _numberIndex.Clear();
-            _nameIndex.Clear();
             _lastRead.Clear();
         }
     }

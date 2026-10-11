@@ -44,10 +44,10 @@ public static class ShopInventoryReader
         ArgumentNullException.ThrowIfNull(cache);
         if (shopNumber <= 0) return null;
 
-        JsonDocument? shops = cache.GetRawTable("Shops");
+        GameTable? shops = cache.GetTable("Shops");
         if (shops is null) return null;
 
-        JsonElement? rowOpt = FindByNumber(shops, shopNumber);
+        GameRow? rowOpt = FindByNumber(shops, shopNumber);
         if (rowOpt is not { } row) return null;
 
         string name = ReadString(row, "Name");
@@ -96,10 +96,10 @@ public static class ShopInventoryReader
         var result = new Dictionary<int, (string, double)>();
         if (ids.Count == 0) return result;
 
-        JsonDocument? items = cache.GetRawTable("Items");
+        GameTable? items = cache.GetTable("Items");
         if (items is null) return result;
 
-        foreach (JsonElement row in items.RootElement.EnumerateArray())
+        foreach (GameRow row in items.Rows)
         {
             int number = ReadInt(row, "Number");
             if (number <= 0 || !ids.Contains(number)) continue;
@@ -110,25 +110,24 @@ public static class ShopInventoryReader
         return result;
     }
 
-    private static JsonElement? FindByNumber(JsonDocument doc, int number)
+    private static GameRow? FindByNumber(GameTable doc, int number)
     {
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             if (ReadInt(row, "Number") == number) return row;
         }
         return null;
     }
 
-    private static int ReadInt(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el)
+    private static int ReadInt(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el)
             && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out int v)
             ? v
             : 0;
 
-    private static string ReadString(JsonElement row, string property)
-        => row.TryGetProperty(property, out JsonElement el) && el.ValueKind == JsonValueKind.String
+    private static string ReadString(GameRow row, string property)
+        => row.TryGetProperty(property, out GameValue el) && el.ValueKind == JsonValueKind.String
             ? el.GetString() ?? string.Empty
             : string.Empty;
 }

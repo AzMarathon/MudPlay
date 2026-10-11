@@ -76,9 +76,9 @@ public sealed class CureSpellIndex
     private static List<CureSpell> Build(GameDataCache cache, IReadOnlySet<int> diseaseApply)
     {
         List<CureSpell> result = new();
-        JsonDocument? doc = cache.GetRawTable("Spells");
+        GameTable? doc = cache.GetTable("Spells");
         if (doc is null) return result;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             int num = ReadInt(row, "Number");
             if (num <= 0) continue;
@@ -120,11 +120,11 @@ public sealed class CureSpellIndex
         return cured;
     }
 
-    private static int ReadInt(JsonElement row, string prop)
-        => row.TryGetProperty(prop, out JsonElement e)
+    private static int ReadInt(GameRow row, string prop)
+        => row.TryGetProperty(prop, out GameValue e)
            && e.ValueKind == JsonValueKind.Number && e.TryGetInt32(out int n) ? n : 0;
 
-    private static string ReadString(JsonElement row, string prop)
-        => row.TryGetProperty(prop, out JsonElement e) && e.ValueKind == JsonValueKind.String
+    private static string ReadString(GameRow row, string prop)
+        => row.TryGetProperty(prop, out GameValue e) && e.ValueKind == JsonValueKind.String
            ? (e.GetString() ?? string.Empty) : string.Empty;
 }

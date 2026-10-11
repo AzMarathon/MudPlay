@@ -45,18 +45,18 @@ public sealed class SpellReqLevelIndex
 
         Dictionary<string, int> map = new(StringComparer.OrdinalIgnoreCase);
         HashSet<string> learnedKeys = new(StringComparer.OrdinalIgnoreCase);
-        JsonDocument? doc = _cache.GetRawTable("Spells");
+        GameTable? doc = _cache.GetTable("Spells");
         if (doc is not null)
         {
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Short", out JsonElement shortEl)) continue;
+                if (!row.TryGetProperty("Short", out GameValue shortEl)) continue;
                 if (shortEl.ValueKind != JsonValueKind.String) continue;
                 string? code = shortEl.GetString();
                 if (string.IsNullOrWhiteSpace(code)) continue;
 
                 int reqLevel = 0;
-                if (row.TryGetProperty("ReqLevel", out JsonElement lvlEl)
+                if (row.TryGetProperty("ReqLevel", out GameValue lvlEl)
                     && lvlEl.ValueKind == JsonValueKind.Number
                     && lvlEl.TryGetInt32(out int parsed))
                     reqLevel = parsed;
@@ -75,7 +75,7 @@ public sealed class SpellReqLevelIndex
                 // paradigm-20260814-210613): once a Learnable row has set a code's
                 // level, later non-learnable duplicates for that code are ignored.
                 string key = code.Trim();
-                bool learnable = row.TryGetProperty("Learnable", out JsonElement learnEl)
+                bool learnable = row.TryGetProperty("Learnable", out GameValue learnEl)
                     && learnEl.ValueKind == JsonValueKind.Number
                     && learnEl.TryGetInt32(out int learnVal) && learnVal != 0;
 
@@ -85,7 +85,7 @@ public sealed class SpellReqLevelIndex
             }
         }
 
-        // Folded into the map — release the pinned raw Spells JsonDocument.
+        // Folded into the map — the cache may drop the Spells table.
         _cache.EvictTable("Spells");
         _byShort = map;
         return map;

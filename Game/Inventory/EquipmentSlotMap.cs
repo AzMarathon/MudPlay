@@ -180,11 +180,11 @@ public static class EquipmentSlotMap
         EvilPointRange? evilPoints = null)
     {
         ArgumentNullException.ThrowIfNull(cache);
-        JsonDocument? doc = cache.GetRawTable("Items");
+        GameTable? doc = cache.GetTable("Items");
         if (doc is null || SlotMatcher(slot) is not { } matches) return Array.Empty<string>();
 
         var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             string? name = GetString(row, "Name");
             if (string.IsNullOrEmpty(name)) continue;
@@ -200,7 +200,7 @@ public static class EquipmentSlotMap
     // ItemType). The paired Finger / Wrist codes resolve to slot 1 — the Item
     // Finder groups by slot family, not physical position — and the off-hand
     // code resolves to OffHand over its Alt twin (both share code 12).
-    public static EquipmentSlot? SlotForItem(JsonElement row)
+    public static EquipmentSlot? SlotForItem(GameRow row)
     {
         if (GetInt(row, "ItemType") == WeaponItemType) return EquipmentSlot.Weapon;
         int worn = GetInt(row, "Worn");
@@ -221,10 +221,10 @@ public static class EquipmentSlotMap
     public static bool SlotHasItems(GameDataCache cache, EquipmentSlot slot)
     {
         ArgumentNullException.ThrowIfNull(cache);
-        JsonDocument? doc = cache.GetRawTable("Items");
+        GameTable? doc = cache.GetTable("Items");
         if (doc is null || SlotMatcher(slot) is not { } matches) return false;
 
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
             if (!string.IsNullOrEmpty(GetString(row, "Name")) && matches(row))
                 return true;
         return false;
@@ -232,7 +232,7 @@ public static class EquipmentSlotMap
 
     // The item-membership test for a slot: weapon slots match ItemType == 1, physical
     // slots match one of their Worn codes. Null when the slot has no membership rule.
-    private static Func<JsonElement, bool>? SlotMatcher(EquipmentSlot slot)
+    private static Func<GameRow, bool>? SlotMatcher(EquipmentSlot slot)
     {
         if (slot is EquipmentSlot.Weapon or EquipmentSlot.AlternateWeapon)
             return row => GetInt(row, "ItemType") == WeaponItemType;
@@ -241,17 +241,15 @@ public static class EquipmentSlotMap
             : null;
     }
 
-    private static int GetInt(JsonElement row, string property)
+    private static int GetInt(GameRow row, string property)
     {
-        if (row.ValueKind != JsonValueKind.Object) return 0;
-        if (!row.TryGetProperty(property, out JsonElement el)) return 0;
+        if (!row.TryGetProperty(property, out GameValue el)) return 0;
         return el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int v) ? v : 0;
     }
 
-    private static string? GetString(JsonElement row, string property)
+    private static string? GetString(GameRow row, string property)
     {
-        if (row.ValueKind != JsonValueKind.Object) return null;
-        if (!row.TryGetProperty(property, out JsonElement el)) return null;
+        if (!row.TryGetProperty(property, out GameValue el)) return null;
         return el.ValueKind == JsonValueKind.String ? el.GetString() : null;
     }
 }

@@ -692,7 +692,7 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
     // Row-level filter applied while populating from the raw table. Default keeps every
     // row; a section (e.g. Monsters, which leaves out the rows the game marks out of play)
     // overrides to include only the rows it wants without duplicating the whole populate loop.
-    protected virtual bool IncludeRow(JsonElement element) => true;
+    protected virtual bool IncludeRow(GameRow element) => true;
 
     // Column whose value identifies the record for tier-override lookup (default: the
     // primary-key column, typically "Number" on MajorMUD MDB tables). Subclasses can override
@@ -743,27 +743,27 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
     protected override void PopulateRows(IList<GameDataRow> rows)
         => AddTableRows(rows, TableName, IncludeRow, ComputeRowCells);
 
-    // Append the rows of one raw table that pass `include`, shaped with this section's
+    // Append the rows of one table that pass `include`, shaped with this section's
     // columns and formatters. PopulateRows uses it for the section's own table; a derived
     // view that gathers rows from more than one table (Unobtainable) calls it once per table.
     protected void AddTableRows(
         IList<GameDataRow> rows,
         string tableName,
-        Func<JsonElement, bool> include,
-        Func<JsonElement, IReadOnlyDictionary<string, string?>?> computeCells)
+        Func<GameRow, bool> include,
+        Func<GameRow, IReadOnlyDictionary<string, string?>?> computeCells)
     {
-        JsonDocument? doc = _cache.GetRawTable(tableName);
+        GameTable? doc = _cache.GetTable(tableName);
         if (doc is null) return;
 
         IReadOnlyDictionary<string, Func<string?, string?>>? formatters = ColumnFormatters;
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        foreach (GameRow el in doc.Rows)
         {
             if (!include(el)) continue;
             // Sections may inject synthesised cells that aren't backed
             // by a real MDB field (e.g. Races / Classes synthesise an
             // "Abilities" column from Abil-N / AbilVal-N pairs).
             IReadOnlyDictionary<string, string?>? computed = computeCells(el);
-            GameDataRow row = GameDataRow.FromJson(el, ValueColumns, formatters, computed);
+            GameDataRow row = GameDataRow.FromRow(el, ValueColumns, formatters, computed);
             // Per-row tier resolution: look up the record by its primary
             // key column value (typically Number) and ask the resolver
             // which tier owns the highest-priority override, if any.
@@ -778,10 +778,10 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
     }
 
     // Optional per-row computed-cell hook. Returned values are merged into the row, taking
-    // precedence over any same-named raw JSON cell. Use this for columns that aren't backed by
+    // precedence over any same-named cell of the table. Use this for columns that aren't backed by
     // a real MDB field — e.g. the Race / Class tabs synthesise an "Abilities" column from each
     // row's Abil-N / AbilVal-N pairs. Default implementation returns null (no extras).
-    protected virtual IReadOnlyDictionary<string, string?>? ComputeRowCells(JsonElement element) => null;
+    protected virtual IReadOnlyDictionary<string, string?>? ComputeRowCells(GameRow element) => null;
 }
 
 // One row loaded from a game-data source: each column's value as a string. Numbers /
@@ -854,12 +854,12 @@ public sealed class GameDataRow
         return cells;
     }
 
-    // Build a row from a JSON element. Columns missing from the source render as null in the
+    // Build a row from a table row. Columns missing from the source render as null in the
     // resulting row so subclasses see a uniform shape regardless of schema drift. The raw cell
     // value drives Get (so search/filter sees the underlying data) while the optional
     // formatters map shapes the displayed value in Cells.
-    public static GameDataRow FromJson(
-        JsonElement element,
+    public static GameDataRow FromRow(
+        GameRow element,
         IReadOnlyList<string> columns,
         IReadOnlyDictionary<string, Func<string?, string?>>? formatters = null,
         IReadOnlyDictionary<string, string?>? computedCells = null)
@@ -867,7 +867,7 @@ public sealed class GameDataRow
         string?[] raw = new string?[columns.Count];
         for (int i = 0; i < raw.Length; i++)
         {
-            // Computed cells take precedence over raw JSON when present —
+            // Computed cells take precedence over the table's own when present —
             // sections use this to surface synthesised columns ("Abilities")
             // that aren't backed by a real MDB field.
             string column = columns[i];
@@ -879,7 +879,7 @@ public sealed class GameDataRow
     }
 
     // Build a row from an arbitrary column-name → raw-value dictionary (engine-backed tabs
-    // that don't have an MDB JSON source). The same formatter contract as FromJson applies —
+    // that don't have an MDB table behind them). The same formatter contract as FromRow applies —
     // formatted strings render in the grid, raw strings drive search.
     public static GameDataRow FromDictionary(
         IReadOnlyDictionary<string, string?> source,
@@ -912,35 +912,20 @@ public sealed class GameDataRow
         return display ?? raw;
     }
 
-    private static string? ReadValue(JsonElement row, string column)
+    // A number comes back as the file wrote it ("7.0" stays "7.0"); the table hands
+    // out one shared string per small whole number, which is what most cells are.
+    private static string? ReadValue(GameRow row, string column)
     {
-        if (!row.TryGetProperty(column, out JsonElement el)) return null;
+        if (!row.TryGetProperty(column, out GameValue el)) return null;
         return el.ValueKind switch
         {
             JsonValueKind.Null      => null,
             JsonValueKind.Undefined => null,
             JsonValueKind.String    => el.GetString(),
-            JsonValueKind.Number    => NumberText(el),
             JsonValueKind.True      => "true",
             JsonValueKind.False     => "false",
             _                        => el.ToString(),
         };
-    }
-
-    // Most cells are small whole numbers, and most of those are 0: one shared string
-    // each instead of a new one per cell.
-    private static readonly string[] SmallNumbers = Enumerable.Range(0, 1024)
-        .Select(n => n.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
-
-    private static string NumberText(JsonElement number)
-    {
-        if (number.TryGetInt32(out int n) && n >= 0 && n < SmallNumbers.Length)
-        {
-            string text = SmallNumbers[n];
-            // Only when the JSON wrote it the plain way ("7", not "7.0" or "7e0").
-            if (System.Runtime.InteropServices.JsonMarshal.GetRawUtf8Value(number).Length == text.Length) return text;
-        }
-        return number.ToString();
     }
 
     // A table's columns and where each sits, shared by all its rows. Keyed by the

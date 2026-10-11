@@ -124,15 +124,12 @@ public sealed class MonsterSpawnIndex
         }
     }
 
-    // mayEvictRaw gates the post-build EvictTable("Monsters"). GameDataCache
-    // DISPOSES the JsonDocument on evict, and ~20 other consumers read that same
-    // shared document from the UI thread — so evicting from the warm's worker
-    // thread can pull it out from under a UI-thread enumeration mid-flight
-    // (ObjectDisposedException on whichever index happened to be mid-build).
-    // Reading it off-thread is what ItemSourceIndex's warm already does and is
-    // safe; disposing it isn't. Only a build on the caller's own thread evicts —
-    // and the raw table still gets reclaimed either way, since MonsterCatalog,
-    // RoomGraphManager, SeeHiddenIndex and friends all evict "Monsters" too.
+    // mayEvictRaw gates the post-build EvictTable("Monsters"): only a build on the
+    // caller's own thread hands the table back to the cache's idle sweep. The
+    // warm-up's worker thread leaves that to the ~20 other consumers reading the
+    // same table from the UI thread; it is reclaimed either way, since
+    // MonsterCatalog, RoomGraphManager, SeeHiddenIndex and friends all evict
+    // "Monsters" too.
     private Snapshot EnsureBuilt(bool mayEvictRaw = true)
     {
         string? active = _cache.ActiveSet;
@@ -154,7 +151,7 @@ public sealed class MonsterSpawnIndex
         var placedAt = new Dictionary<RoomKey, List<int>>();
         var assignedAt = new Dictionary<RoomKey, List<int>>();
 
-        JsonDocument? doc = string.IsNullOrWhiteSpace(active) ? null : _cache.GetRawTable("Monsters");
+        GameTable? doc = string.IsNullOrWhiteSpace(active) ? null : _cache.GetTable("Monsters");
         if (doc is null)
         {
             _log?.Log(LogSeverity.Info, "MonsterSpawnIndex",
@@ -174,12 +171,12 @@ public sealed class MonsterSpawnIndex
             var assignedSeen = new Dictionary<RoomKey, HashSet<int>>();
 
             int linked = 0;
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            foreach (GameRow row in doc.Rows)
             {
-                if (!row.TryGetProperty("Number", out JsonElement numEl)
+                if (!row.TryGetProperty("Number", out GameValue numEl)
                     || numEl.ValueKind != JsonValueKind.Number
                     || !numEl.TryGetInt32(out int id)) continue;
-                if (!row.TryGetProperty("Summoned By", out JsonElement summonEl)
+                if (!row.TryGetProperty("Summoned By", out GameValue summonEl)
                     || summonEl.ValueKind != JsonValueKind.String) continue;
                 string? text = summonEl.GetString();
                 if (string.IsNullOrEmpty(text)) continue;
@@ -207,8 +204,8 @@ public sealed class MonsterSpawnIndex
                 }
             }
 
-            // Folded into the spawn maps — release the pinned raw Monsters
-            // JsonDocument, but only when it's safe to dispose it here.
+            // Folded into the spawn maps — the cache may drop the Monsters table,
+            // when this build is the one to say so.
             if (mayEvictRaw) _cache.EvictTable("Monsters");
             _log?.Log(LogSeverity.Info, "MonsterSpawnIndex",
                 $"Built spawn index — {summonedAt.Count} room(s) host {linked} monster reference(s) "

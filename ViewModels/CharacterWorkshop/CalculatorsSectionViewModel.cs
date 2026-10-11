@@ -490,7 +490,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // MageryType (1 mage / 2 priest / 3 druid) and tier for the selected class.
     private (int Type, int Level) ResolveManaMagery()
     {
-        if (SelectedManaClass is { } cls && _gameData.FindRowByName("Classes", cls) is JsonElement row)
+        if (SelectedManaClass is { } cls && _gameData.FindRowByName("Classes", cls) is GameRow row)
             return (GetInt(row, "MageryType"), GetInt(row, "MageryLVL"));
         return (1, 0);
     }
@@ -600,8 +600,8 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private void ComputeStatFloors()
     {
         int minInt = int.MaxValue, minWil = int.MaxValue, maxInt = 0, maxWil = 0;
-        if (_gameData.GetRawTable("Races") is { } doc)
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        if (_gameData.GetTable("Races") is { } doc)
+            foreach (GameRow row in doc.Rows)
             {
                 minInt = Math.Min(minInt, GetInt(row, "mINT"));
                 minWil = Math.Min(minWil, GetInt(row, "mWIL"));
@@ -620,11 +620,11 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private void RebuildManaClassOptions()
     {
         var names = new List<string>();
-        if (_gameData.GetRawTable("Classes") is { } doc)
-            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        if (_gameData.GetTable("Classes") is { } doc)
+            foreach (GameRow row in doc.Rows)
             {
                 if (GetInt(row, "MageryType") is not (1 or 2 or 3)) continue;
-                if (row.TryGetProperty("Name", out JsonElement nameEl)
+                if (row.TryGetProperty("Name", out GameValue nameEl)
                     && nameEl.GetString() is { Length: > 0 } n
                     && ManaArchetypeClasses.Contains(n, StringComparer.OrdinalIgnoreCase))
                     names.Add(n);
@@ -872,10 +872,10 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         {
             IReadOnlyList<EquippedItem> worn = _inventory.Snapshot.EquippedItems;
             EquipmentStatBreakdown combined = CharacterCalculator.AggregateEquipmentStats(worn, _gameData);
-            JsonElement? classRow = _gameData.FindRowByName("Classes", _stats.Class);
-            JsonElement? raceRow = _gameData.FindRowByName("Races", _stats.Race);
-            if (raceRow is JsonElement r) CharacterCalculator.ApplyAbilityBonuses(combined, r, _stats.Race);
-            if (classRow is JsonElement c) CharacterCalculator.ApplyAbilityBonuses(combined, c, _stats.Class);
+            GameRow? classRow = _gameData.FindRowByName("Classes", _stats.Class);
+            GameRow? raceRow = _gameData.FindRowByName("Races", _stats.Race);
+            if (raceRow is GameRow r) CharacterCalculator.ApplyAbilityBonuses(combined, r, _stats.Race);
+            if (classRow is GameRow c) CharacterCalculator.ApplyAbilityBonuses(combined, c, _stats.Class);
             CharacterCalculator.ApplyQuestBonuses(combined, _questBonuses.Bonuses, "Quests");
             EquipmentStatSummary t = combined.Totals;
 
@@ -1124,17 +1124,17 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private void EnsureMonsterNames()
     {
         if (MonsterNames.Count > 0) return;
-        JsonDocument? doc = _gameData.GetRawTable("Monsters");
+        GameTable? doc = _gameData.GetTable("Monsters");
         if (doc is null) return;
 
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (!row.TryGetProperty("Name", out JsonElement nameEl)) continue;
+            if (!row.TryGetProperty("Name", out GameValue nameEl)) continue;
             if (nameEl.ValueKind != JsonValueKind.String) continue;
             string? name = nameEl.GetString();
             if (string.IsNullOrEmpty(name)) continue;
 
-            int number = row.TryGetProperty("Number", out JsonElement numEl)
+            int number = row.TryGetProperty("Number", out GameValue numEl)
                          && numEl.ValueKind == JsonValueKind.Number && numEl.TryGetInt32(out int n)
                 ? n : 0;
             string label = string.Create(CultureInfo.InvariantCulture, $"{name} (#{number})");
@@ -1149,13 +1149,13 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private void EnsureWeaponNames()
     {
         if (WeaponNames.Count > 0) return;
-        JsonDocument? doc = _gameData.GetRawTable("Items");
+        GameTable? doc = _gameData.GetTable("Items");
         if (doc is null) return;
 
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
             if (GetInt(row, "ItemType") != 1) continue;
-            if (!row.TryGetProperty("Name", out JsonElement nameEl)) continue;
+            if (!row.TryGetProperty("Name", out GameValue nameEl)) continue;
             if (nameEl.ValueKind != JsonValueKind.String) continue;
             string? name = nameEl.GetString();
             if (string.IsNullOrEmpty(name)) continue;
@@ -1169,13 +1169,13 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
     // Resolve an Items record by its Number — names aren't unique, so the
     // typeahead label carries the number and we look up against it.
-    private JsonElement? FindItemRowByNumber(int number)
+    private GameRow? FindItemRowByNumber(int number)
     {
-        JsonDocument? doc = _gameData.GetRawTable("Items");
+        GameTable? doc = _gameData.GetTable("Items");
         if (doc is null) return null;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.TryGetProperty("Number", out JsonElement n)
+            if (row.TryGetProperty("Number", out GameValue n)
                 && n.ValueKind == JsonValueKind.Number && n.TryGetInt32(out int v) && v == number)
                 return row;
         }
@@ -1184,13 +1184,13 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
     // Resolve the exact monster record by its Number — names aren't unique, so
     // the typeahead label carries the number and we look up against it.
-    private JsonElement? FindMonsterRowByNumber(int number)
+    private GameRow? FindMonsterRowByNumber(int number)
     {
-        JsonDocument? doc = _gameData.GetRawTable("Monsters");
+        GameTable? doc = _gameData.GetTable("Monsters");
         if (doc is null) return null;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.TryGetProperty("Number", out JsonElement n)
+            if (row.TryGetProperty("Number", out GameValue n)
                 && n.ValueKind == JsonValueKind.Number && n.TryGetInt32(out int v) && v == number)
                 return row;
         }
@@ -1225,7 +1225,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     {
         if (SelectedWeaponName is not null
             && _weaponNumberByLabel.TryGetValue(SelectedWeaponName, out int number)
-            && FindItemRowByNumber(number) is JsonElement row)
+            && FindItemRowByNumber(number) is GameRow row)
         {
             _selWeaponMin = GetInt(row, "Min");
             _selWeaponMax = GetInt(row, "Max");
@@ -1256,7 +1256,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
         if (string.IsNullOrEmpty(SelectedMonsterName)
             || !_monsterNumberByLabel.TryGetValue(SelectedMonsterName, out int monsterNumber)
-            || FindMonsterRowByNumber(monsterNumber) is not JsonElement row)
+            || FindMonsterRowByNumber(monsterNumber) is not GameRow row)
         {
             _monsterIsEvil = _monsterIsGood = false;
             MonsterAc = MonsterDr = MonsterDodge = 0;
@@ -1465,7 +1465,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     {
         if (SelectedSwingWeaponName is not null
             && _weaponNumberByLabel.TryGetValue(SelectedSwingWeaponName, out int number)
-            && FindItemRowByNumber(number) is JsonElement row)
+            && FindItemRowByNumber(number) is GameRow row)
         {
             _swingWeaponSpeed = GetInt(row, "Speed");
             _swingWeaponStrReq = GetInt(row, "StrReq");
@@ -1545,7 +1545,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     {
         if (SelectedBackstabWeaponName is not null
             && _weaponNumberByLabel.TryGetValue(SelectedBackstabWeaponName, out int number)
-            && FindItemRowByNumber(number) is JsonElement row)
+            && FindItemRowByNumber(number) is GameRow row)
         {
             _bsWeaponMin = GetInt(row, "Min");
             _bsWeaponMax = GetInt(row, "Max");
@@ -1600,8 +1600,8 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     {
         string? itemName = BackstabSetWeaponName();
         if (itemName is null) return null;
-        if (_gameData.FindRowByName("Items", itemName) is not JsonElement el) return null;
-        if (!el.TryGetProperty("Name", out JsonElement nameEl) || nameEl.ValueKind != JsonValueKind.String)
+        if (_gameData.FindRowByName("Items", itemName) is not GameRow el) return null;
+        if (!el.TryGetProperty("Name", out GameValue nameEl) || nameEl.ValueKind != JsonValueKind.String)
             return null;
         string realName = nameEl.GetString() ?? itemName;
         int number = GetInt(el, "Number");
@@ -1613,17 +1613,17 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // when there's no profile / set / weapon slot filled.
     private string? BackstabSetWeaponName() => _profile.Current?.Equipment?.BackstabSetWeapon();
 
-    private static int GetInt(JsonElement? row, string property)
+    private static int GetInt(GameRow? row, string property)
     {
-        if (row is not JsonElement el || el.ValueKind != JsonValueKind.Object) return 0;
-        if (!el.TryGetProperty(property, out JsonElement v)) return 0;
+        if (row is not GameRow el) return 0;
+        if (!el.TryGetProperty(property, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 
     // Scan a monster's ability slots (Abil-0..9) for the given code and return
     // its paired AbilVal, or 0 when absent — how monsters carry Dodge (34) and
     // other stat-style perks that aren't top-level columns.
-    private static int GetAbilityValue(JsonElement row, int code)
+    private static int GetAbilityValue(GameRow row, int code)
     {
         for (int i = 0; i < 10; i++)
         {
@@ -1728,14 +1728,14 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         bool prev = _suppressAggroRecompute;
         _suppressAggroRecompute = true;
         string query = (AggroMonsterQuery ?? string.Empty).Trim();
-        JsonElement? found = query.Length == 0 ? null
+        GameRow? found = query.Length == 0 ? null
             : int.TryParse(query, NumberStyles.Integer, CultureInfo.InvariantCulture, out int num) && num > 0
                 ? FindMonsterRowByNumber(num)
                 : FindMonsterRowByName(query);
-        if (found is JsonElement row)
+        if (found is GameRow row)
         {
             AggroMonsterNumber = GetInt(row, "Number");
-            AggroMonsterName = row.TryGetProperty("Name", out JsonElement ne)
+            AggroMonsterName = row.TryGetProperty("Name", out GameValue ne)
                                && ne.ValueKind == JsonValueKind.String && ne.GetString() is { Length: > 0 } nm
                 ? nm : "—";
             AggroMonsterAlign = GetInt(row, "Align");
@@ -1754,14 +1754,14 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // Best-match monster lookup by name for the aggro query box: an exact
     // (case-insensitive) name wins; else the first name that STARTS WITH the query;
     // else the first that CONTAINS it. Null when nothing matches / no table loaded.
-    private JsonElement? FindMonsterRowByName(string query)
+    private GameRow? FindMonsterRowByName(string query)
     {
-        JsonDocument? doc = _gameData.GetRawTable("Monsters");
+        GameTable? doc = _gameData.GetTable("Monsters");
         if (doc is null) return null;
-        JsonElement? startsWith = null, contains = null;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        GameRow? startsWith = null, contains = null;
+        foreach (GameRow row in doc.Rows)
         {
-            if (!row.TryGetProperty("Name", out JsonElement ne)
+            if (!row.TryGetProperty("Name", out GameValue ne)
                 || ne.ValueKind != JsonValueKind.String
                 || ne.GetString() is not { Length: > 0 } name)
                 continue;
@@ -1776,9 +1776,9 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
     // Guard proxy: a monster that casts jail (583) is a guard. Name-agnostic —
     // scans every numeric property whose name mentions "Spell" for the id.
-    private static bool MonsterReferencesSpell(JsonElement row, int spellId)
+    private static bool MonsterReferencesSpell(GameRow row, int spellId)
     {
-        foreach (JsonProperty p in row.EnumerateObject())
+        foreach (GameField p in row.Fields)
         {
             if (p.Name.IndexOf("Spell", StringComparison.OrdinalIgnoreCase) < 0) continue;
             if (p.Value.ValueKind == JsonValueKind.Number && p.Value.TryGetInt32(out int v) && v == spellId)

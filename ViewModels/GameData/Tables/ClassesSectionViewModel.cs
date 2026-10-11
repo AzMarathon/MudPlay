@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text.Json;
 using MudPlay.Game.GameData;
 using MudPlay.Services;
 
@@ -77,7 +76,7 @@ public sealed class ClassesSectionViewModel : JsonTableSectionViewModel
     // the only stock class with an entry, AbilVal=74 with no user-facing meaning.
     private static readonly int[] _skipInClassContext = { 59 };
 
-    protected override IReadOnlyDictionary<string, string?> ComputeRowCells(JsonElement element)
+    protected override IReadOnlyDictionary<string, string?> ComputeRowCells(GameRow element)
         => new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             ["Abilities"] = AbilityNames.SummarizeAbilities(element, skipCodes: _skipInClassContext),

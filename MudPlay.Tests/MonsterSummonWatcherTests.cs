@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
@@ -42,10 +41,10 @@ public sealed class MonsterSummonWatcherTests
     [Fact]
     public void SummonSpells_AreTheSpellsWithTheSummonAbility()
     {
-        using JsonDocument doc = JsonDocument.Parse(
+        GameTable doc = TestRows.Table(
             "[{\"Number\":593,\"Name\":\"summon orc warrior\",\"Abil-0\":12,\"AbilVal-0\":480}," +
             " {\"Number\":35,\"Name\":\"poison bolt\",\"Abil-0\":19,\"AbilVal-0\":5}]");
-        Assert.Equal(new[] { 593 }, SummonLineSet.SummonSpells(doc.RootElement));
+        Assert.Equal(new[] { 593 }, SummonLineSet.SummonSpells(doc));
     }
 
     private sealed class Harness : IDisposable

@@ -77,7 +77,7 @@ public sealed class ItemMdbViewBuilder
         if (!int.TryParse(wccNoStr, out int wccNo))
             return new ItemMdbView(otherInfo, shops);
 
-        JsonDocument? doc = _cache.GetRawTable("Items");
+        GameTable? doc = _cache.GetTable("Items");
         if (doc is null)
             return new ItemMdbView(otherInfo, shops);
 
@@ -106,9 +106,9 @@ public sealed class ItemMdbViewBuilder
             return rendered == "—" ? string.Empty : rendered;
         }
 
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        foreach (GameRow el in doc.Rows)
         {
-            if (!el.TryGetProperty("Number", out JsonElement numProp)) continue;
+            if (!el.TryGetProperty("Number", out GameValue numProp)) continue;
             if (numProp.ValueKind != JsonValueKind.Number) continue;
             if (numProp.GetInt32() != wccNo) continue;
 
@@ -457,7 +457,7 @@ public sealed class ItemMdbViewBuilder
         (min == 0 && max == 0) ? string.Empty : $"{min}-{max}";
 
     // AC Bonus in MegaMUD's slash-pair form (ArmourClass ÷ 10), or empty when both are zero.
-    private static string FormatAcBonusOrEmpty(JsonElement el)
+    private static string FormatAcBonusOrEmpty(GameRow el)
     {
         int ac = ReadInt(el, "ArmourClass");
         int dr = ReadInt(el, "DamageResist");
@@ -472,14 +472,14 @@ public sealed class ItemMdbViewBuilder
             list.Add(new KeyValuePair<string, string>(label, value));
     }
 
-    private static int ReadInt(JsonElement el, string field)
+    private static int ReadInt(GameRow el, string field)
     {
-        if (!el.TryGetProperty(field, out JsonElement v)) return 0;
+        if (!el.TryGetProperty(field, out GameValue v)) return 0;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 
     // True when any Abil-N (N = 0..19) on the row equals code.
-    private static bool HasAbility(JsonElement el, int code)
+    private static bool HasAbility(GameRow el, int code)
     {
         for (int i = 0; i < 20; i++)
             if (ReadInt(el, $"Abil-{i}") == code) return true;
@@ -496,9 +496,9 @@ public sealed class ItemMdbViewBuilder
             : name;
     }
 
-    private static string ReadString(JsonElement el, string field)
+    private static string ReadString(GameRow el, string field)
     {
-        if (!el.TryGetProperty(field, out JsonElement v)) return string.Empty;
+        if (!el.TryGetProperty(field, out GameValue v)) return string.Empty;
         return v.ValueKind switch
         {
             JsonValueKind.Null      => string.Empty,
@@ -607,14 +607,14 @@ public sealed class ItemMdbViewBuilder
     private (int Markup, List<(string? RoomName, int Map, int Room)> Rooms) LookupShopRooms(int shopId)
     {
         var rooms = new List<(string?, int, int)>();
-        JsonDocument? shopsDoc = _cache.GetRawTable("Shops");
+        GameTable? shopsDoc = _cache.GetTable("Shops");
         if (shopsDoc is null) return (0, rooms);
 
         string? assigned = null;
         int markup = 0;
-        foreach (JsonElement el in shopsDoc.RootElement.EnumerateArray())
+        foreach (GameRow el in shopsDoc.Rows)
         {
-            if (!el.TryGetProperty("Number", out JsonElement n)) continue;
+            if (!el.TryGetProperty("Number", out GameValue n)) continue;
             if (n.ValueKind != JsonValueKind.Number) continue;
             if (n.GetInt32() != shopId) continue;
             assigned = ReadString(el, "Assigned To");
@@ -751,11 +751,11 @@ public sealed class ItemMdbViewBuilder
     // TBInfo stores Number as a string ("9649") in some sets, so match either kind.
     private string? GetTbInfoAction(int number)
     {
-        JsonDocument? doc = _cache.GetRawTable("TBInfo");
+        GameTable? doc = _cache.GetTable("TBInfo");
         if (doc is null) return null;
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        foreach (GameRow el in doc.Rows)
         {
-            if (!el.TryGetProperty("Number", out JsonElement n)) continue;
+            if (!el.TryGetProperty("Number", out GameValue n)) continue;
             int num = n.ValueKind == JsonValueKind.Number && n.TryGetInt32(out int vi) ? vi
                 : n.ValueKind == JsonValueKind.String && int.TryParse(n.GetString(), out int vs) ? vs
                 : 0;

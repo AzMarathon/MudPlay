@@ -223,7 +223,7 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
     // The Toggles column: a compact summary of the auto-* / carry flags this character
     // has turned on for the item, resolved from the same 4-tier overlay the engines read.
     // Null (blank cell) when the item has no overlay layer (headless tests) or no flags set.
-    protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(JsonElement element)
+    protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(GameRow element)
     {
         if (_resolverRef is null) return null;
         string? wcc = ReadNumber(element);
@@ -248,9 +248,9 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
 
     // Read the item's Number as a string from the raw MDB element (numeric in the MDB, but
     // tolerate a string kind too). null when the field is missing or an unexpected shape.
-    private static string? ReadNumber(JsonElement el)
+    private static string? ReadNumber(GameRow el)
     {
-        if (!el.TryGetProperty("Number", out JsonElement v)) return null;
+        if (!el.TryGetProperty("Number", out GameValue v)) return null;
         return v.ValueKind switch
         {
             JsonValueKind.Number => v.ToString(),

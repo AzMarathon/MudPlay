@@ -39,9 +39,8 @@ public static class CompletedQuestBonuses
     public static int? ResolveClassId(GameDataCache gameData, string? className)
     {
         if (string.IsNullOrEmpty(className)) return null;
-        if (gameData.FindRowByName("Classes", className) is not JsonElement row
-            || row.ValueKind != JsonValueKind.Object) return null;
-        return row.TryGetProperty("Number", out JsonElement v)
+        if (gameData.FindRowByName("Classes", className) is not GameRow row) return null;
+        return row.TryGetProperty("Number", out GameValue v)
             && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) && n > 0
                 ? n : null;
     }

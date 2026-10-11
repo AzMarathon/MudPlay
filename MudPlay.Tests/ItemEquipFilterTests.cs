@@ -1,6 +1,6 @@
-using System.Text.Json;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Inventory;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -56,36 +56,36 @@ public sealed class ItemEquipFilterTests
     [Fact]
     public void CanEquip_NoRestrictions_AllowsAnyCharacter()
     {
-        using JsonDocument doc = JsonDocument.Parse("{}");
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 40, Cls(3), AlignmentBucket.Evil));
+        GameRow doc = TestRows.Row("{}");
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 40, Cls(3), AlignmentBucket.Evil));
     }
 
     [Fact]
     public void CanEquip_MinLevel_BlocksBelowAllowsAtOrAbove()
     {
-        using JsonDocument doc = JsonDocument.Parse("""{ "Abil-0": 135, "AbilVal-0": 10 }""");
+        GameRow doc = TestRows.Row("""{ "Abil-0": 135, "AbilVal-0": 10 }""");
 
-        Assert.False(ItemEquipFilter.CanEquip(doc.RootElement, level: 5, ClassEquipProfile.Unknown, null));
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 10, ClassEquipProfile.Unknown, null));
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 25, ClassEquipProfile.Unknown, null));
+        Assert.False(ItemEquipFilter.CanEquip(doc, level: 5, ClassEquipProfile.Unknown, null));
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 10, ClassEquipProfile.Unknown, null));
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 25, ClassEquipProfile.Unknown, null));
     }
 
     [Fact]
     public void CanEquip_MaxLevel_BlocksAboveAllowsAtOrBelow()
     {
-        using JsonDocument doc = JsonDocument.Parse("""{ "Abil-0": 136, "AbilVal-0": 20 }""");
+        GameRow doc = TestRows.Row("""{ "Abil-0": 136, "AbilVal-0": 20 }""");
 
-        Assert.False(ItemEquipFilter.CanEquip(doc.RootElement, level: 25, ClassEquipProfile.Unknown, null));
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 20, ClassEquipProfile.Unknown, null));
+        Assert.False(ItemEquipFilter.CanEquip(doc, level: 25, ClassEquipProfile.Unknown, null));
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 20, ClassEquipProfile.Unknown, null));
     }
 
     [Fact]
     public void CanEquip_UnknownLevel_SkipsLevelFilter()
     {
-        using JsonDocument doc = JsonDocument.Parse("""{ "Abil-0": 135, "AbilVal-0": 30 }""");
+        GameRow doc = TestRows.Row("""{ "Abil-0": 135, "AbilVal-0": 30 }""");
 
         // level <= 0 means the character hasn't been stat'd — don't hide the item.
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 0, ClassEquipProfile.Unknown, null));
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 0, ClassEquipProfile.Unknown, null));
     }
 
     // ===== CanEquip — alignment =====
@@ -93,29 +93,29 @@ public sealed class ItemEquipFilterTests
     [Fact]
     public void CanEquip_GoodOnly_AllowsGoodBlocksEvil()
     {
-        using JsonDocument doc = JsonDocument.Parse("""{ "Abil-0": 97 }""");
+        GameRow doc = TestRows.Row("""{ "Abil-0": 97 }""");
 
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 0, ClassEquipProfile.Unknown, AlignmentBucket.Good));
-        Assert.False(ItemEquipFilter.CanEquip(doc.RootElement, level: 0, ClassEquipProfile.Unknown, AlignmentBucket.Evil));
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 0, ClassEquipProfile.Unknown, AlignmentBucket.Good));
+        Assert.False(ItemEquipFilter.CanEquip(doc, level: 0, ClassEquipProfile.Unknown, AlignmentBucket.Evil));
     }
 
     [Fact]
     public void CanEquip_NotEvil_BlocksEvilAllowsGoodAndNeutral()
     {
-        using JsonDocument doc = JsonDocument.Parse("""{ "Abil-0": 111 }""");
+        GameRow doc = TestRows.Row("""{ "Abil-0": 111 }""");
 
-        Assert.False(ItemEquipFilter.CanEquip(doc.RootElement, level: 0, ClassEquipProfile.Unknown, AlignmentBucket.Evil));
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 0, ClassEquipProfile.Unknown, AlignmentBucket.Good));
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 0, ClassEquipProfile.Unknown, AlignmentBucket.Neutral));
+        Assert.False(ItemEquipFilter.CanEquip(doc, level: 0, ClassEquipProfile.Unknown, AlignmentBucket.Evil));
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 0, ClassEquipProfile.Unknown, AlignmentBucket.Good));
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 0, ClassEquipProfile.Unknown, AlignmentBucket.Neutral));
     }
 
     [Fact]
     public void CanEquip_UnknownAlignment_SkipsAlignmentFilter()
     {
-        using JsonDocument doc = JsonDocument.Parse("""{ "Abil-0": 97 }""");
+        GameRow doc = TestRows.Row("""{ "Abil-0": 97 }""");
 
         // A null bucket (no who-word seen) shouldn't hide an aligned item.
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 0, ClassEquipProfile.Unknown, null));
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 0, ClassEquipProfile.Unknown, null));
     }
 
     // ===== CanEquip — class allow-list =====
@@ -123,33 +123,33 @@ public sealed class ItemEquipFilterTests
     [Fact]
     public void CanEquip_ClassRestriction_AllowsListedBlocksOthers()
     {
-        using JsonDocument doc = JsonDocument.Parse("""{ "ClassRest-0": 3, "ClassRest-1": 7 }""");
+        GameRow doc = TestRows.Row("""{ "ClassRest-0": 3, "ClassRest-1": 7 }""");
 
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 0, Cls(3), null));
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 0, Cls(7), null));
-        Assert.False(ItemEquipFilter.CanEquip(doc.RootElement, level: 0, Cls(5), null));
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 0, Cls(3), null));
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 0, Cls(7), null));
+        Assert.False(ItemEquipFilter.CanEquip(doc, level: 0, Cls(5), null));
     }
 
     [Fact]
     public void CanEquip_UnknownClass_SkipsClassFilter()
     {
-        using JsonDocument doc = JsonDocument.Parse("""{ "ClassRest-0": 3 }""");
+        GameRow doc = TestRows.Row("""{ "ClassRest-0": 3 }""");
 
         // An Unknown class means the class name didn't resolve — don't hide the item.
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 0, ClassEquipProfile.Unknown, null));
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 0, ClassEquipProfile.Unknown, null));
     }
 
     [Fact]
     public void CanEquip_AllDimensionsTogether_RequiresEachToPass()
     {
         // Level 10-20, good-only, class 3 only.
-        using JsonDocument doc = JsonDocument.Parse(
+        GameRow doc = TestRows.Row(
             """{ "Abil-0": 135, "AbilVal-0": 10, "Abil-1": 136, "AbilVal-1": 20, "Abil-2": 97, "ClassRest-0": 3 }""");
 
-        Assert.True(ItemEquipFilter.CanEquip(doc.RootElement, level: 15, Cls(3), AlignmentBucket.Good));
-        Assert.False(ItemEquipFilter.CanEquip(doc.RootElement, level: 25, Cls(3), AlignmentBucket.Good)); // level
-        Assert.False(ItemEquipFilter.CanEquip(doc.RootElement, level: 15, Cls(5), AlignmentBucket.Good)); // class
-        Assert.False(ItemEquipFilter.CanEquip(doc.RootElement, level: 15, Cls(3), AlignmentBucket.Evil)); // alignment
+        Assert.True(ItemEquipFilter.CanEquip(doc, level: 15, Cls(3), AlignmentBucket.Good));
+        Assert.False(ItemEquipFilter.CanEquip(doc, level: 25, Cls(3), AlignmentBucket.Good)); // level
+        Assert.False(ItemEquipFilter.CanEquip(doc, level: 15, Cls(5), AlignmentBucket.Good)); // class
+        Assert.False(ItemEquipFilter.CanEquip(doc, level: 15, Cls(3), AlignmentBucket.Evil)); // alignment
     }
 
     // ===== CanEquip — weapon type gating =====
@@ -162,13 +162,13 @@ public sealed class ItemEquipFilterTests
         // quarterstaff (#100) without a class grant.
         ClassEquipProfile mystic = Cls(15, weaponType: 9, armourType: 1);
 
-        using JsonDocument longsword = JsonDocument.Parse("""{ "Number": 1740, "ItemType": 1, "WeaponType": 2 }""");
-        using JsonDocument dagger = JsonDocument.Parse("""{ "Number": 68, "ItemType": 1, "WeaponType": 2 }""");
-        using JsonDocument quarterstaff = JsonDocument.Parse("""{ "Number": 100, "ItemType": 1, "WeaponType": 1 }""");
+        GameRow longsword = TestRows.Row("""{ "Number": 1740, "ItemType": 1, "WeaponType": 2 }""");
+        GameRow dagger = TestRows.Row("""{ "Number": 68, "ItemType": 1, "WeaponType": 2 }""");
+        GameRow quarterstaff = TestRows.Row("""{ "Number": 100, "ItemType": 1, "WeaponType": 1 }""");
 
-        Assert.False(ItemEquipFilter.CanEquip(longsword.RootElement, level: 0, mystic, null));
-        Assert.True(ItemEquipFilter.CanEquip(dagger.RootElement, level: 0, mystic, null));
-        Assert.True(ItemEquipFilter.CanEquip(quarterstaff.RootElement, level: 0, mystic, null));
+        Assert.False(ItemEquipFilter.CanEquip(longsword, level: 0, mystic, null));
+        Assert.True(ItemEquipFilter.CanEquip(dagger, level: 0, mystic, null));
+        Assert.True(ItemEquipFilter.CanEquip(quarterstaff, level: 0, mystic, null));
     }
 
     [Fact]
@@ -177,13 +177,13 @@ public sealed class ItemEquipFilterTests
         // WeaponType 4 = Any 1H → item WeaponType 0 (1H Blunt) or 2 (1H Sharp) only.
         ClassEquipProfile any1h = Cls(3, weaponType: 4);
 
-        using JsonDocument blunt1h = JsonDocument.Parse("""{ "ItemType": 1, "WeaponType": 0 }""");
-        using JsonDocument sharp1h = JsonDocument.Parse("""{ "ItemType": 1, "WeaponType": 2 }""");
-        using JsonDocument sharp2h = JsonDocument.Parse("""{ "ItemType": 1, "WeaponType": 3 }""");
+        GameRow blunt1h = TestRows.Row("""{ "ItemType": 1, "WeaponType": 0 }""");
+        GameRow sharp1h = TestRows.Row("""{ "ItemType": 1, "WeaponType": 2 }""");
+        GameRow sharp2h = TestRows.Row("""{ "ItemType": 1, "WeaponType": 3 }""");
 
-        Assert.True(ItemEquipFilter.CanEquip(blunt1h.RootElement, level: 0, any1h, null));
-        Assert.True(ItemEquipFilter.CanEquip(sharp1h.RootElement, level: 0, any1h, null));
-        Assert.False(ItemEquipFilter.CanEquip(sharp2h.RootElement, level: 0, any1h, null));
+        Assert.True(ItemEquipFilter.CanEquip(blunt1h, level: 0, any1h, null));
+        Assert.True(ItemEquipFilter.CanEquip(sharp1h, level: 0, any1h, null));
+        Assert.False(ItemEquipFilter.CanEquip(sharp2h, level: 0, any1h, null));
     }
 
     [Fact]
@@ -193,8 +193,8 @@ public sealed class ItemEquipFilterTests
 
         for (int wt = 0; wt <= 3; wt++)
         {
-            using JsonDocument weapon = JsonDocument.Parse($$"""{ "ItemType": 1, "WeaponType": {{wt}} }""");
-            Assert.True(ItemEquipFilter.CanEquip(weapon.RootElement, level: 0, allWeapons, null));
+            GameRow weapon = TestRows.Row($$"""{ "ItemType": 1, "WeaponType": {{wt}} }""");
+            Assert.True(ItemEquipFilter.CanEquip(weapon, level: 0, allWeapons, null));
         }
     }
 
@@ -203,10 +203,10 @@ public sealed class ItemEquipFilterTests
     {
         // Same longsword, but Abil-59 grants class 15 — weapon type gating is skipped.
         ClassEquipProfile mystic = Cls(15, weaponType: 9, armourType: 1);
-        using JsonDocument granted = JsonDocument.Parse(
+        GameRow granted = TestRows.Row(
             """{ "Number": 1740, "ItemType": 1, "WeaponType": 2, "Abil-0": 59, "AbilVal-0": 15 }""");
 
-        Assert.True(ItemEquipFilter.CanEquip(granted.RootElement, level: 0, mystic, null));
+        Assert.True(ItemEquipFilter.CanEquip(granted, level: 0, mystic, null));
     }
 
     [Fact]
@@ -214,10 +214,10 @@ public sealed class ItemEquipFilterTests
     {
         // A ClassRest naming the class also grants it past the weapon type gate.
         ClassEquipProfile mystic = Cls(15, weaponType: 9, armourType: 1);
-        using JsonDocument granted = JsonDocument.Parse(
+        GameRow granted = TestRows.Row(
             """{ "ItemType": 1, "WeaponType": 2, "ClassRest-0": 15 }""");
 
-        Assert.True(ItemEquipFilter.CanEquip(granted.RootElement, level: 0, mystic, null));
+        Assert.True(ItemEquipFilter.CanEquip(granted, level: 0, mystic, null));
     }
 
     // ===== CanEquip — armour tier & shield =====
@@ -228,28 +228,28 @@ public sealed class ItemEquipFilterTests
         // Class ArmourType is a ceiling: usable only when it meets the item's tier.
         ClassEquipProfile mystic = Cls(15, weaponType: 9, armourType: 1);
 
-        using JsonDocument plate = JsonDocument.Parse("""{ "ItemType": 0, "ArmourType": 8 }""");
-        using JsonDocument robe = JsonDocument.Parse("""{ "ItemType": 0, "ArmourType": 1 }""");
+        GameRow plate = TestRows.Row("""{ "ItemType": 0, "ArmourType": 8 }""");
+        GameRow robe = TestRows.Row("""{ "ItemType": 0, "ArmourType": 1 }""");
 
-        Assert.False(ItemEquipFilter.CanEquip(plate.RootElement, level: 0, mystic, null));
-        Assert.True(ItemEquipFilter.CanEquip(robe.RootElement, level: 0, mystic, null));
+        Assert.False(ItemEquipFilter.CanEquip(plate, level: 0, mystic, null));
+        Assert.True(ItemEquipFilter.CanEquip(robe, level: 0, mystic, null));
     }
 
     [Fact]
     public void CanEquip_OffHandShield_BarredToOneHandWeaponClassUnlessGranted()
     {
-        using JsonDocument shield = JsonDocument.Parse("""{ "ItemType": 0, "ArmourType": 1, "Worn": 12 }""");
+        GameRow shield = TestRows.Row("""{ "ItemType": 0, "ArmourType": 1, "Worn": 12 }""");
 
         // A one-hand-weapon class (WeaponType 4) can't take an off-hand shield without a grant.
-        Assert.False(ItemEquipFilter.CanEquip(shield.RootElement, level: 0, Cls(3, weaponType: 4, armourType: 9), null));
+        Assert.False(ItemEquipFilter.CanEquip(shield, level: 0, Cls(3, weaponType: 4, armourType: 9), null));
 
         // A two-hand-weapon class (WeaponType 5) isn't subject to the shield bar.
-        Assert.True(ItemEquipFilter.CanEquip(shield.RootElement, level: 0, Cls(3, weaponType: 5, armourType: 9), null));
+        Assert.True(ItemEquipFilter.CanEquip(shield, level: 0, Cls(3, weaponType: 5, armourType: 9), null));
 
         // A ClassRest grant bypasses the shield bar for the 1H class.
-        using JsonDocument granted = JsonDocument.Parse(
+        GameRow granted = TestRows.Row(
             """{ "ItemType": 0, "ArmourType": 1, "Worn": 12, "ClassRest-0": 3 }""");
-        Assert.True(ItemEquipFilter.CanEquip(granted.RootElement, level: 0, Cls(3, weaponType: 4, armourType: 9), null));
+        Assert.True(ItemEquipFilter.CanEquip(granted, level: 0, Cls(3, weaponType: 4, armourType: 9), null));
     }
 
     // ===== CanEquip — anti-magic =====
@@ -259,11 +259,11 @@ public sealed class ItemEquipFilterTests
     {
         // A magical item (Abil-28) granted to the class via ClassRest — an anti-magic
         // class (e.g. Witchunter) is still barred; a normal class can wear it.
-        using JsonDocument magical = JsonDocument.Parse(
+        GameRow magical = TestRows.Row(
             """{ "ItemType": 0, "ArmourType": 1, "Abil-0": 28, "ClassRest-0": 20 }""");
 
-        Assert.False(ItemEquipFilter.CanEquip(magical.RootElement, level: 0, Cls(20, antiMagic: true), null));
-        Assert.True(ItemEquipFilter.CanEquip(magical.RootElement, level: 0, Cls(20), null));
+        Assert.False(ItemEquipFilter.CanEquip(magical, level: 0, Cls(20, antiMagic: true), null));
+        Assert.True(ItemEquipFilter.CanEquip(magical, level: 0, Cls(20), null));
     }
 
     // The Stock engine's gear check: Seedy wears as Neutral (its Evil gear bucket
@@ -275,10 +275,10 @@ public sealed class ItemEquipFilterTests
         Assert.Equal(AlignmentBucket.Evil, ItemEquipFilter.GearBucketForWord("Seedy", MudPlay.Game.RealmType.ParaMud));
         Assert.Equal(AlignmentBucket.Evil, ItemEquipFilter.GearBucketForWord("Outlaw", MudPlay.Game.RealmType.Stock));
 
-        using JsonDocument notNeutral = JsonDocument.Parse("""{ "Abil-0": 113 }""");
-        Assert.True(ItemEquipFilter.CanEquip(notNeutral.RootElement, 0, ClassEquipProfile.Unknown,
+        GameRow notNeutral = TestRows.Row("""{ "Abil-0": 113 }""");
+        Assert.True(ItemEquipFilter.CanEquip(notNeutral, 0, ClassEquipProfile.Unknown,
             AlignmentBucket.Neutral, MudPlay.Game.RealmType.Stock));
-        Assert.False(ItemEquipFilter.CanEquip(notNeutral.RootElement, 0, ClassEquipProfile.Unknown,
+        Assert.False(ItemEquipFilter.CanEquip(notNeutral, 0, ClassEquipProfile.Unknown,
             AlignmentBucket.Neutral, MudPlay.Game.RealmType.ParaMud));
     }
 }

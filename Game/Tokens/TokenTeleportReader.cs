@@ -31,26 +31,25 @@ public static class TokenTeleportReader
         ArgumentNullException.ThrowIfNull(cache);
         var result = new Dictionary<string, TokenTeleportInfo>();
 
-        JsonDocument? items = cache.GetRawTable("Items");
-        JsonDocument? spells = cache.GetRawTable("Spells");
-        JsonDocument? tbinfo = cache.GetRawTable("TBInfo");
+        GameTable? items = cache.GetTable("Items");
+        GameTable? spells = cache.GetTable("Spells");
+        GameTable? tbinfo = cache.GetTable("TBInfo");
         if (items is null || spells is null || tbinfo is null) return result;
 
         var spellRows = BuildByNumber(spells);
         var tbRows = BuildByNumber(tbinfo);
 
-        foreach (JsonElement item in items.RootElement.EnumerateArray())
+        foreach (GameRow item in items.Rows)
         {
-            if (item.ValueKind != JsonValueKind.Object) continue;
             if (ReadInt(item, "ItemType") != ContainerlessTokenItemType) continue;
             int number = ReadInt(item, "Number");
             if (number <= 0) continue;
             if (TokenCatalog.PlaceOf(ReadString(item, "Name")) is not { } place) continue;
 
             int spellNo = FirstAbilValue(item, CastsSpAbility);
-            if (spellNo <= 0 || !spellRows.TryGetValue(spellNo, out JsonElement spell)) continue;
+            if (spellNo <= 0 || !spellRows.TryGetValue(spellNo, out GameRow spell)) continue;
             int tbNo = FirstAbilValue(spell, TextBlockAbility);
-            if (tbNo <= 0 || !tbRows.TryGetValue(tbNo, out JsonElement tb)) continue;
+            if (tbNo <= 0 || !tbRows.TryGetValue(tbNo, out GameRow tb)) continue;
 
             string action = ReadString(tb, "Action");
             if (!TryReadTeleportLine(action, out RoomKey dest, out long cost, out int minLevel)) continue;
@@ -90,30 +89,29 @@ public static class TokenTeleportReader
         return 0;
     }
 
-    private static Dictionary<int, JsonElement> BuildByNumber(JsonDocument doc)
+    private static Dictionary<int, GameRow> BuildByNumber(GameTable doc)
     {
-        var map = new Dictionary<int, JsonElement>();
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        var map = new Dictionary<int, GameRow>();
+        foreach (GameRow row in doc.Rows)
         {
-            if (row.ValueKind != JsonValueKind.Object) continue;
             int n = ReadInt(row, "Number");
             if (n > 0) map[n] = row;
         }
         return map;
     }
 
-    private static int FirstAbilValue(JsonElement row, int code)
+    private static int FirstAbilValue(GameRow row, int code)
     {
         for (int i = 0; i < AbilSlots; i++)
             if (ReadInt(row, $"Abil-{i}") == code) return ReadInt(row, $"AbilVal-{i}");
         return 0;
     }
 
-    private static int ReadInt(JsonElement row, string prop)
-        => row.TryGetProperty(prop, out JsonElement el) && el.ValueKind == JsonValueKind.Number
+    private static int ReadInt(GameRow row, string prop)
+        => row.TryGetProperty(prop, out GameValue el) && el.ValueKind == JsonValueKind.Number
             && el.TryGetInt32(out int v) ? v : 0;
 
-    private static string ReadString(JsonElement row, string prop)
-        => row.TryGetProperty(prop, out JsonElement el) && el.ValueKind == JsonValueKind.String
+    private static string ReadString(GameRow row, string prop)
+        => row.TryGetProperty(prop, out GameValue el) && el.ValueKind == JsonValueKind.String
             ? el.GetString() ?? string.Empty : string.Empty;
 }

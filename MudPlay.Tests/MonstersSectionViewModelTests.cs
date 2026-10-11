@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
+using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
 using MudPlay.ViewModels.GameData.Tables;
 using Xunit;
@@ -281,5 +281,5 @@ public sealed class MonstersSectionViewModelTests
         Assert.Empty(Labels("""{ "CreateSpell": 7, "MidSpell-0": 8, "MidSpell%-0": 50 }"""));
     }
 
-    private static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement;
+    private static GameRow Parse(string json) => TestRows.Row(json);
 }
