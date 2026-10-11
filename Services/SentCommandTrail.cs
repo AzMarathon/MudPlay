@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace MudPlay.Services;
 
@@ -174,9 +175,14 @@ public sealed class SentCommandTrail
 
     // The rule TypedAtGamePrompt applies to a cursor row: the statline prompt,
     // with nothing after it but what the game has echoed of the line being typed.
-    public static bool RowIsGamePrompt(string? cursorRow, string typedLine)
+    // statline is the pattern built from Settings -> Statline (the one the prompt
+    // scanner reads HP with); left out, it is the class default that same scanner
+    // uses until a custom statline is installed. A row the pattern doesn't read
+    // is not the game's prompt, whatever it looks like.
+    public static bool RowIsGamePrompt(string? cursorRow, string typedLine, Regex? statline = null)
     {
-        if (!Terminal.LineExtractor.TrySplitPrompt(cursorRow?.TrimStart(), out string rest)) return false;
+        statline ??= Game.StatlinePromptRegexBuilder.Default;
+        if (!Game.StatlinePromptRegexBuilder.TrySplitPromptRow(statline, cursorRow?.TrimStart(), out string rest)) return false;
         rest = rest.Trim();
         return rest.Length == 0 || typedLine.Trim().StartsWith(rest, StringComparison.OrdinalIgnoreCase);
     }

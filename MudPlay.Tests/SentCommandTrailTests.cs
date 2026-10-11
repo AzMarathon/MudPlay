@@ -152,6 +152,40 @@ public sealed class SentCommandTrailTests
     public void RowIsGamePrompt_OnlyTheStatlinePrompt(string row, string typed, bool expected) =>
         Assert.Equal(expected, SentCommandTrail.RowIsGamePrompt(row, typed));
 
+    // Settings -> Statline decides what the prompt looks like, so the row is read
+    // with the pattern built from that setting: a statline with no "[HP=" in it
+    // is still the game's prompt, and the class-default shape is not once the
+    // setting says otherwise.
+    [Theory]
+    [InlineData("<100 hp / 50 ma>", "look", true)]
+    [InlineData("<100 hp / 50 ma> lo", "look", true)]
+    [InlineData("<100 hp / 50 ma> (Resting)", "look", true)]
+    [InlineData("<100 hp / 50 ma> Enter your suicide password:", "x", false)]
+    [InlineData("Bob gossips: <100 hp / 50 ma>", "look", false)]
+    [InlineData("[HP=100/MA=50]:", "look", false)]
+    [InlineData("Enter New Password:", "x", false)]
+    public void RowIsGamePrompt_ReadsTheConfiguredStatline(string row, string typed, bool expected) =>
+        Assert.Equal(expected, SentCommandTrail.RowIsGamePrompt(
+            row, typed, MudPlay.Game.StatlinePromptRegexBuilder.Build("full custom <%h hp / %m ma>%r ")));
+
+    [Fact]
+    public void TypedAtACustomStatline_IsKept_AndAPasswordAfterItIsNot()
+    {
+        System.Text.RegularExpressions.Regex statline =
+            MudPlay.Game.StatlinePromptRegexBuilder.Build("full custom %h/%Hhp %m/%Mma> ");
+        string row = "212/212hp 40/90ma>";
+        SentCommandTrail trail = new() { TypedAtGamePrompt = line => SentCommandTrail.RowIsGamePrompt(row, line, statline) };
+
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("suicide\r"));
+        row = "212/212hp 40/90ma> Enter your suicide password:";
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("s3cretpw\r"));
+        row = "212/212hp 40/90ma>";
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("look\r"));
+
+        Assert.Equal(new[] { "suicide", SentCommandTrail.WithheldAtPrompt, "look" },
+            trail.Snapshot().Select(e => e.Text));
+    }
+
     [Fact]
     public void KeysPressedWhileNothingIsKept_DoNotHeadTheFirstLineTypedInTheGame()
     {

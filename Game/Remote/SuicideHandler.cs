@@ -230,14 +230,16 @@ public sealed class SuicideHandler : IDisposable
 
     // The row must BE the prompt: alone, or straight after the game's statline.
     // The prompt's words inside anything else (a telepath quoting them) are a
-    // player's text, and never a reason to send a password.
-    private static bool ShowsPasswordPrompt(string? rowText)
+    // player's text, and never a reason to send a password. The statline is the
+    // one Settings -> Statline set, so the prompt scanner's own pattern says
+    // where it ends; a statline that pattern doesn't read is "anything else".
+    private bool ShowsPasswordPrompt(string? rowText)
     {
         if (string.IsNullOrWhiteSpace(rowText)) return false;
         if (Terminal.ChatLineDetector.IsChat(rowText)) return false;
         string text = rowText.Trim();
         if (text.Equals(PasswordPromptText, StringComparison.Ordinal)) return true;
-        return Terminal.LineExtractor.TrySplitPrompt(text, out string rest)
+        return _promptScanner.TrySplitPromptRow(text, out string rest)
             && rest.Trim().Equals(PasswordPromptText, StringComparison.Ordinal);
     }
 

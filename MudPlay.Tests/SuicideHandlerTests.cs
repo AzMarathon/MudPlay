@@ -119,6 +119,51 @@ public sealed class SuicideHandlerTests
         Assert.Equal("hunter2\r", Encoding.Latin1.GetString(h.Wire[^1]));
     }
 
+    // The statline is the user's own (Settings -> Statline), so where it ends on
+    // the row is asked of the prompt scanner's pattern, not of an "[HP=" shape.
+    [Fact]
+    public void StoredPassword_PromptAfterACustomStatline_SendsPassword()
+    {
+        using Harness h = new();
+        h.PromptScanner.InstallRegex(StatlinePromptRegexBuilder.Build("full custom <%h hp / %m ma>%r "));
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Handler.ObserveCursorRow("<100 hp / 50 ma> suicide");
+        Assert.True(h.Handler.AwaitingPasswordPrompt);
+        h.Handler.ObserveCursorRow("<100 hp / 50 ma> Enter your suicide password:");
+
+        Assert.Equal("hunter2\r", Encoding.Latin1.GetString(h.Wire[^1]));
+        Assert.False(h.Handler.AwaitingPasswordPrompt);
+    }
+
+    // A statline the configured pattern doesn't read is not known to be the
+    // game's: the password stays unsent and the wait runs out.
+    [Fact]
+    public void StoredPassword_PromptAfterAStatlineTheSettingDoesNotDescribe_SendsNothingAndGivesUp()
+    {
+        using Harness h = new();
+        h.PromptScanner.InstallRegex(StatlinePromptRegexBuilder.Build("full custom <%h hp / %m ma>%r "));
+        GrantElevated(h.Players, "Trusted");
+        h.Profile.Current!.EncryptedSuicidePassword = h.Protector.Protect("hunter2");
+        DateTimeOffset now = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        h.Handler.Clock = () => now;
+
+        DispatchTelepath(h.Router, "Trusted", "@suicide");
+        h.Wire.Clear();
+        h.Handler.ObserveCursorRow("[HP=100/MA=50]:Enter your suicide password:");
+        Assert.Empty(h.Wire);
+        Assert.True(h.Handler.AwaitingPasswordPrompt);
+
+        now += SuicideHandler.PromptWait + TimeSpan.FromSeconds(1);
+        h.Handler.CheckTimeout();
+
+        Assert.False(h.Handler.AwaitingPasswordPrompt);
+        Assert.Equal("/Trusted {suicide failed, the game did not ask for the password}\r",
+            Encoding.Latin1.GetString(Assert.Single(h.Wire)));
+    }
+
     [Theory]
     [InlineData("Bob telepaths: ]: Enter your suicide password:")]
     [InlineData("Bob telepaths: Enter your suicide password:")]

@@ -851,8 +851,11 @@ public partial class MainWindowViewModel : ObservableObject
         // A typed line is kept in the sent-command trail only when it was typed
         // at the game's own prompt: what answers any other prompt may be a
         // password, and the game's prompts for those reach us too late to know.
+        // The prompt is whatever Settings -> Statline makes it, so the row is
+        // asked of the pattern built from that setting.
         AppServices.Current.SentCommands.TypedAtGamePrompt =
-            line => SentCommandTrail.RowIsGamePrompt(CursorRowText(), line);
+            line => SentCommandTrail.RowIsGamePrompt(
+                CursorRowText(), line, AppServices.Current.CurrentStatlinePromptRegex);
 
         // Feed the crash reporter a live-state snapshot so a fatal fault's
         // Crash-<timestamp>.md carries the same scrollback / log / engine dump a
