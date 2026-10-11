@@ -888,8 +888,15 @@ public partial class MainWindowViewModel : ObservableObject
         {
             Interval = EngineStateWatch.SampleInterval,
         };
-        _engineStateSample.Tick += (_, _) => AppServices.Current.StateWatch.Sample(DateTimeOffset.Now);
+        _engineStateSample.Tick += (_, _) =>
+        {
+            DateTimeOffset now = DateTimeOffset.Now;
+            AppServices.Current.StateWatch.Sample(now);
+            AppServices.Current.Heartbeat.Tick(now);
+        };
         _engineStateSample.Start();
+        AppServices.Current.Heartbeat.LogStartup(
+            AppServices.Current.GameData.ActiveSet, AppServices.Current.Settings.Current.LastUsedProfile?.Name);
         RefreshStatusBarTicks();
 
         // Mirror RoomTracker into the status-bar location slot so the

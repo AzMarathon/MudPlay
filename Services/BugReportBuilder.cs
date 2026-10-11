@@ -107,6 +107,7 @@ public static class BugReportBuilder
         List<Section> sections =
         [
             new("Session", SafeSection(() => BuildSession(svc, realm, now) + AccountDetailNote(scrubber))),
+            new(BugReportContext.Heading, SafeSection(() => BugReportContext.Build(svc, emulator, now))),
             new(BugReportHoldsAndWaits.Heading, SafeSection(() => BugReportHoldsAndWaits.Build(svc, now))),
             new("Player state", SafeSection(() => BuildPlayerState(svc))),
             new("Statline", SafeSection(() => BuildStatline(svc))),
@@ -2700,15 +2701,58 @@ public static class BugReportBuilder
     private static string BuildRawWire(AppServices svc)
     {
         if (svc.InGameCapture.WireMark is not { } enteredAt) return NotInGame;
-        // The total first: bytes read between the two calls then only shorten what
-        // is kept, never reach back past the mark.
-        long sinceEntry = svc.Wire.TotalBytes - enteredAt;
-        byte[] bytes = svc.Wire.Snapshot();
-        if (sinceEntry < bytes.Length) bytes = bytes[^(int)Math.Max(0, sinceEntry)..];
-        string raw = WireFormatter.RenderRaw(bytes);
-        string tail = LastLines(raw, WireLines);
-        if (tail.Length == 0) return "_(no wire captured)_";
-        return "```\n" + string.Join('\n', tail.Split('\n').Select(Censor.CensorRawWireLine)) + "\n```";
+        byte[] bytes = svc.Wire.Snapshot(out long start, out WireBuffer.ArrivalMark[] marks);
+        // Nothing from before the game was entered, whatever the buffer holds.
+        if (enteredAt > start)
+        {
+            int skip = (int)Math.Min(bytes.Length, enteredAt - start);
+            bytes = bytes[skip..];
+            start += skip;
+        }
+        return RenderRawWire(bytes, start, marks, svc.Wire.LastClearedAt, Censor);
+    }
+
+    // The raw wire as lines, the last WireLines of them, with the time a read
+    // arrived written before the line it landed in: the wire has no clock of its
+    // own, and without one nothing in it can be matched to the log.
+    internal static string RenderRawWire(byte[] bytes, long start, IReadOnlyList<WireBuffer.ArrivalMark> marks,
+        DateTimeOffset? clearedAt, BugReportChatCensor censor)
+    {
+        List<(long Offset, int From, int Length)> lines = new();
+        int lineStart = 0;
+        for (int i = 0; i <= bytes.Length; i++)
+        {
+            if (i < bytes.Length && bytes[i] != 0x0A) continue;
+            if (i > lineStart || i < bytes.Length) lines.Add((start + lineStart, lineStart, i - lineStart));
+            lineStart = i + 1;
+        }
+        if (lines.Count == 0) return "_(no wire captured)_";
+
+        StringBuilder sb = new();
+        sb.Append("A `--- HH:mm:ss.fff ---` row is the time the bytes after it arrived (one at most every 250 ms).");
+        if (clearedAt is { } cleared)
+            sb.Append(" The Wire Inspector was cleared at ").Append(cleared.ToString("HH:mm:ss")).Append(": nothing before that survives.");
+        sb.Append("\n\n```\n");
+        int first = Math.Max(0, lines.Count - WireLines);
+        int mark = 0;
+        while (mark < marks.Count && marks[mark].Offset < lines[first].Offset) mark++;
+        // The first line shown starts mid-read as often as not: it takes the time
+        // of the read it belongs to.
+        if (mark > 0) mark--;
+        for (int l = first; l < lines.Count; l++)
+        {
+            (long offset, int from, int length) = lines[l];
+            DateTimeOffset? arrived = null;
+            while (mark < marks.Count && marks[mark].Offset < offset + length + 1)
+            {
+                arrived = marks[mark].At;
+                mark++;
+            }
+            if (arrived is { } at) sb.Append("--- ").Append(at.ToString("HH:mm:ss.fff")).Append(" ---\n");
+            sb.Append(censor.CensorRawWireLine(WireFormatter.RenderRaw(bytes.AsSpan(from, length)))).Append('\n');
+        }
+        sb.Append("```");
+        return sb.ToString();
     }
 
     // The classified combat trace, last WireLines combat-window lines each tagged
@@ -2719,15 +2763,6 @@ public static class BugReportBuilder
         string log = svc.CombatClassifier.RenderLog(WireLines).TrimEnd('\n');
         if (log.Length == 0) return "_(no combat lines classified yet)_";
         return "```\n" + string.Join('\n', log.Split('\n').Select(Censor.CensorIfChat)) + "\n```";
-    }
-
-    // The last n newline-delimited lines of s (trailing blank line ignored).
-    private static string LastLines(string s, int n)
-    {
-        if (string.IsNullOrEmpty(s)) return string.Empty;
-        string[] lines = s.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
-        int skip = Math.Max(0, lines.Length - n);
-        return string.Join('\n', lines.Skip(skip));
     }
 
     private const string NotInGame =

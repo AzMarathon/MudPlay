@@ -135,6 +135,14 @@ public static class CrashReporter
         Kv(sb, "Source", source);
         Kv(sb, "OS", Safe(() => RuntimeInformation.OSDescription));
         Kv(sb, "Runtime", Safe(() => RuntimeInformation.FrameworkDescription));
+        Kv(sb, "Build", Safe(() => ClientEnvironment.Build));
+        Kv(sb, "Client started", Safe(() => $"{ClientEnvironment.ProcessStart:yyyy-MM-dd HH:mm:ss}, process {ClientEnvironment.ProcessId}"));
+        // The log files outlive the process: say where they are, in case this
+        // document's own state dump below could not be made.
+        Kv(sb, "Log folder", Safe(() => BugReportContext.HomeRelative(AppPaths.LogsDir)));
+        Kv(sb, "Last-minutes log", Safe(() => AppServices.CurrentOrNull?.RecentLog.CurrentFiles is { Count: > 0 } files
+            ? string.Join(" and ", files.Select(Path.GetFileName))
+            : "(none written: Auto-collect logs is on and the full program log is the record, or nothing was logged)"));
         sb.Append('\n');
 
         sb.Append("## Exception\n\n");
