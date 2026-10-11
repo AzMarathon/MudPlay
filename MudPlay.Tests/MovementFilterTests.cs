@@ -1396,6 +1396,52 @@ public sealed class MovementFilterTests
         });
     }
 
+    // A negating item works only worn. Carried, it opens the room to a route when
+    // the client will put it on before the step, and not when that is switched off
+    // (the setting, the master switch) or the character can't wear it.
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void IsExitBlocked_Hazard_CarriedNegator_OpensTheRoomOnlyWhenItWillBeWorn(bool usable, bool blocked)
+    {
+        WithHazards(index =>
+        {
+            (_, MovementFilter filter) = NewPair();
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 2) ? 700 : 0;
+            SetInventory(filter, 42);
+            filter.NegatingItemUsableProbe = id => id == 42 && usable;
+
+            Assert.Equal(blocked, filter.IsExitBlocked(PlainExitTo(new RoomKey(1, 2))));
+        });
+    }
+
+    // Standing in an uncountered hazard room (a wear the game refused part-way along
+    // a route), the rooms of that same hazard are the way on: a re-plan from the
+    // middle of them must not find every exit shut. A plan from anywhere else still
+    // finds them shut.
+    [Theory]
+    [InlineData(1, false)]    // standing in room 1/1, which carries the hazard too
+    [InlineData(9, true)]     // standing somewhere ordinary
+    [InlineData(null, true)]  // the room stood in isn't known
+    public void IsExitBlocked_Hazard_TheSameHazardAsTheRoomStoodIn_StaysLeavable(int? standingIn, bool blocked)
+    {
+        WithHazards(index =>
+        {
+            (_, MovementFilter filter) = NewPair();
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key.Room is 1 or 2 ? 700 : 0;
+            SetInventory(filter);   // no counter in the pack
+            filter.StandingRoomProbe = () => standingIn is { } room ? new RoomKey(1, room) : null;
+
+            RoomExit exit = PlainExitTo(new RoomKey(1, 2));
+            Assert.Equal(blocked, filter.IsExitBlocked(exit));
+            Assert.Equal(blocked, filter.DescribeExitBlock(exit).HasFlag(ExitBlockReason.Hazard));
+            // What a route card and the rest rules ask is unchanged: the room is uncountered.
+            Assert.True(filter.IsUncounteredHazardRoom(new RoomKey(1, 2)));
+        });
+    }
+
     [Fact]
     public void IsExitBlocked_Hazard_BenignRoom_DoesNotBlock()
     {
