@@ -54,6 +54,11 @@ public static class RoomSpellDamageClassifier
         [684] = 712,   // desert spell 2
     };
 
+    // The follow-on the user has named for a room spell, 0 when none: for the other
+    // reader of the same link, the hazard index, whose lapse prompt is that spell's
+    // line.
+    internal static int ConfirmedFollowOn(int roomSpell) => ConfirmedFollowOns.GetValueOrDefault(roomSpell);
+
     // spellOf resolves a spell number to its record, textblock a TBInfo number to its
     // entry; either returns null for a number the set doesn't have.
     public static RoomSpellDamageReading Classify(
