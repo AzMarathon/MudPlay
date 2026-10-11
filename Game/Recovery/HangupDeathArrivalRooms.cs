@@ -53,6 +53,11 @@ public static class HangupDeathArrivalRooms
         3463, 2964, 788, 3, 25, 3289, 1531, 1854, 1432, 306, 45, 2384, 39, 28, 2331, 2892, 3346,
     };
 
+    // The two rooms whose leave-the-game room is also where their dead arrive
+    // (17/2415, An Open Grave): a character that hangs up in one comes back there
+    // dead or alive, so the room it comes back in says nothing.
+    private static readonly RoomKey[] LeftThroughTheirArrivalRoom = { new(17, 785), new(17, 1773) };
+
     // Where a room that names none sends its dead: the Temple, Halls of the Dead,
     // or the Earthen Tomb for a character with 40 evil points or more.
     public static readonly RoomKey Temple = new(1, 2189);
@@ -77,7 +82,8 @@ public static class HangupDeathArrivalRooms
     //   - Nothing for a hang-up in an arena room: it is free there, and the death
     //     the engine gives a dropped character in one takes neither a life nor an
     //     item, though it moves the character like any other.
-    //   - Nothing for a hang-up in a room that is its own dead's arrival room.
+    //   - Nothing for a hang-up in a room that is its own dead's arrival room, or
+    //     whose leave-the-game room is.
     //   - Standing in the room it left: no death moved it.
     //   - Anywhere else that is not an arrival room: no death by this hang-up, on
     //     Stock. On Paradigm nothing, the list being Stock's.
@@ -86,6 +92,7 @@ public static class HangupDeathArrivalRooms
         if (hungUpIn is not { } left || enteredIn is not { } entered) return null;
         if (ArenaDeathRooms.Contains(left)) return null;
         if (For(left) is not { } arrivals || arrivals.Contains(left)) return null;
+        if (Array.IndexOf(LeftThroughTheirArrivalRoom, left) >= 0) return null;
         if (entered == left) return false;
         if (arrivals.Contains(entered)) return true;
         return stock ? false : null;

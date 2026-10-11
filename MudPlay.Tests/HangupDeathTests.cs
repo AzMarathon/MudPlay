@@ -222,6 +222,109 @@ public sealed class HangupDeathTests
         Assert.Equal(recognised ? 1 : 0, seen);
     }
 
+    // ----- The room it came back in --------------------------------------
+    //
+    // The first room confirmed on the way back in, before the character has moved
+    // (HangupDeathArrivalRooms.EntrySays): true where the dead of the room it hung
+    // up in arrive, false where a death by this hang-up would not have left it.
+
+    private const string InTheTemple =
+        "Temple, Halls of the Dead (1/2189), where the dead of Darkwood Forest (1/109) arrive";
+
+    private static (HangupDeathVerdict Verdict, string Why) RoomVerdict(
+        bool? entryRoom, string? entryRoomText = InTheTemple, int? hpAtEntry = 200, int? livesBefore = 7, int? livesNow = 6,
+        bool? worn = false, bool? loginLines = true, bool? takenStillHeld = false) =>
+        HangupDeath.Judge(-5, 200, 50, hpAtEntry, livesBefore, livesNow, worn, loginLines, takenStillHeld,
+            entryRoom, entryRoomText);
+
+    // The owner's example: hung up low, back in the Halls of the Dead, a life down.
+    [Fact]
+    public void ALifeFewer_BackWhereItsDeadArrive_IsADeath_AndTheWordingNamesTheRoom()
+    {
+        (HangupDeathVerdict verdict, string why) = RoomVerdict(entryRoom: true);
+
+        Assert.Equal(HangupDeathVerdict.Died, verdict);
+        Assert.Equal($"lives went from 7 to 6, and it came back in {InTheTemple}", why);
+    }
+
+    // The room is one more mark that must agree: a life lost by a character that
+    // comes back where it left, or in a room its dead don't arrive in, was lost
+    // somewhere else.
+    [Fact]
+    public void ALifeFewer_BackInARoomADeathWouldNotLeaveItIn_IsNotThisHangUps()
+    {
+        (HangupDeathVerdict verdict, string why) =
+            RoomVerdict(entryRoom: false, entryRoomText: "Darkwood Forest (1/109), the room it left the game in");
+
+        Assert.Equal(HangupDeathVerdict.Unsure, verdict);
+        Assert.Contains("a life was lost (lives 7 to 6)", why);
+        Assert.Contains("it came back in Darkwood Forest (1/109), the room it left the game in", why);
+        Assert.Contains("lost somewhere else", why);
+    }
+
+    // A room that says nothing leaves the lives rule as it was.
+    [Fact]
+    public void ARoomThatSaysNothing_ChangesNoVerdict()
+    {
+        Assert.Equal(HangupDeath.Judge(-5, 200, 50, 200, 7, 6, false, true, false),
+            RoomVerdict(entryRoom: null, entryRoomText: null));
+        Assert.Equal(HangupDeath.Judge(-5, 200, 50, 200, null, 6, false, true, false),
+            RoomVerdict(entryRoom: null, entryRoomText: "room 1/110", livesBefore: null));
+    }
+
+    // With no count from before the hang-up, the room says it when the character
+    // also came back stripped of what a death takes.
+    [Fact]
+    public void LivesNotReadBefore_BackStrippedWhereItsDeadArrive_IsADeath()
+    {
+        (HangupDeathVerdict verdict, string why) = RoomVerdict(entryRoom: true, livesBefore: null);
+
+        Assert.Equal(HangupDeathVerdict.Died, verdict);
+        Assert.Contains($"it came back in {InTheTemple}", why);
+        Assert.Contains("its lives weren't read on the connection it left the game on", why);
+        // Not Stock: no login lines to ask for, and a death isn't known to unequip.
+        Assert.Equal(HangupDeathVerdict.Died,
+            RoomVerdict(entryRoom: true, livesBefore: null, worn: null, loginLines: null).Verdict);
+        // The record carries the lives it has now, so a `stat` is still waited for.
+        Assert.Equal(HangupDeathVerdict.NeedsLives, RoomVerdict(entryRoom: true, livesBefore: null, livesNow: null).Verdict);
+    }
+
+    // The room alone never records a death: a character that walked to the temple
+    // on another client and left the game there still holds its gear, and one
+    // whose list had nothing a death takes can't be told from it.
+    [Theory]
+    [InlineData(true, false, true)]     // something a death takes is still held
+    [InlineData(null, false, true)]     // the list had nothing a death takes, or isn't known
+    [InlineData(false, true, true)]     // something is still worn
+    [InlineData(false, false, false)]   // Stock, and the board's lines weren't printed
+    public void LivesNotReadBefore_TheRoomAlone_IsNotEnough(bool? takenStillHeld, bool? worn, bool? loginLines) =>
+        Assert.Equal(HangupDeathVerdict.Unsure,
+            RoomVerdict(entryRoom: true, livesBefore: null, worn: worn, loginLines: loginLines,
+                takenStillHeld: takenStillHeld).Verdict);
+
+    // With no life known lost, a room a death wouldn't have left it in closes the
+    // question, as HP at the first prompt does.
+    [Theory]
+    [InlineData(null, 6)]
+    [InlineData(null, null)]
+    [InlineData(7, null)]
+    public void BackInARoomADeathWouldNotLeaveItIn_ClosesTheQuestion_WhileNoLifeIsKnownLost(int? livesBefore, int? livesNow)
+    {
+        (HangupDeathVerdict verdict, string why) =
+            RoomVerdict(entryRoom: false, entryRoomText: "Darkwood Forest (1/110)", livesBefore: livesBefore, livesNow: livesNow);
+
+        Assert.Equal(HangupDeathVerdict.Alive, verdict);
+        Assert.Contains("it came back in Darkwood Forest (1/110), which is not where a death by this hang-up puts it", why);
+    }
+
+    // The room can't make a death of what HP at the first prompt rules out.
+    [Fact]
+    public void BackWhereItsDeadArrive_ButStillDropped_IsNoDeath()
+    {
+        Assert.Equal(HangupDeathVerdict.Alive, RoomVerdict(entryRoom: true, hpAtEntry: -5, livesBefore: null).Verdict);
+        Assert.Equal(HangupDeathVerdict.Unsure, RoomVerdict(entryRoom: true, hpAtEntry: -5).Verdict);
+    }
+
     // ----- The pile ------------------------------------------------------
 
     private static InventorySnapshot Snap((string Name, string Slot)[]? worn = null, params string[] carried) =>
