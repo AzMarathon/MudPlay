@@ -297,7 +297,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         PlacedIn     = placedIn  ?? Array.Empty<PlacedInRow>();
         RoomCommands = roomCommands ?? Array.Empty<RoomCommandRow>();
         ExitUses     = exitUses is { Count: > 0 } ? new RoomCommandRow(Array.Empty<string>(), string.Empty, exitUses, "uses") : null;
-        CastsSpells = castsSpells ?? Array.Empty<CastsSpellRow>();
+        CastsSpells  = castsSpells ?? Array.Empty<CastsSpellRow>();
         Summons      = summons ?? Array.Empty<DroppedByRow>();
         TeleportsTo  = teleportsTo ?? Array.Empty<PlacedInRow>();
         CanBuySell   = !isLight;
