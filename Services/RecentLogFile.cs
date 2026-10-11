@@ -19,6 +19,13 @@ namespace MudPlay.Services;
 // file, and a UI thread that has hung doesn't stop what it already logged from
 // reaching the disk. A killed process loses at most the batch in flight.
 //
+// The queue holds QueueDepth entries. While a write is stuck (a disk that has
+// stalled, a network folder gone quiet) the oldest waiting entries make room for
+// the newest, and the file says how many went when writing resumes. A failure
+// nothing here expects is noted once in the program log, the file is closed, and
+// the writing is tried again after RetryDelay: the pump itself never ends before
+// the client does.
+//
 // Not written while Auto-collect logs is on: the full program log is then on
 // disk from whenever it was switched on, and is the record.
 public sealed class RecentLogFile : IAsyncDisposable
@@ -43,9 +50,17 @@ public sealed class RecentLogFile : IAsyncDisposable
     private readonly LogDiagnosticState _diagnostics;
     private readonly string[] _paths;
     private readonly Func<IReadOnlyList<string>> _header;
+    // Entries that may wait for the disk. About what one file holds at the size
+    // of an ordinary entry, so more would only be rolled away again; at a couple
+    // of hundred bytes each it is also the most memory a stalled disk can pin.
+    public const int QueueDepth = 8192;
+
+    // The source of this class's own notices in the program log.
+    public const string LogSource = "RecentLog";
+
     private readonly Func<string, TextWriter> _open;
-    private readonly Channel<Item> _queue = Channel.CreateUnbounded<Item>(
-        new UnboundedChannelOptions { SingleReader = true });
+    private readonly Channel<Item> _queue;
+    private readonly CancellationTokenSource _stopping = new();
     private readonly Task _pump;
 
     // Touched only by the pump.
@@ -54,8 +69,23 @@ public sealed class RecentLogFile : IAsyncDisposable
     private long _segmentBytes;
     private DateTimeOffset _segmentStart;
     private bool _broken;
+    private bool _failureNoted;
+    private string? _reopenedAfter;
     private volatile bool _paused;
     private volatile int _filesWritten;
+
+    // Entries the full queue let go of since the last one written. Counted on the
+    // threads that log, taken by the pump.
+    private int _dropped;
+
+    // True on a thread while it is putting this class's own notice in the program
+    // log: that entry must not come back here to be written to the file whose
+    // failure it reports.
+    [ThreadStatic] private static bool t_noting;
+
+    // How long the pump waits after a failure it didn't expect before it writes
+    // again.
+    internal TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(5);
 
     private readonly record struct Item(LogEntry? Entry, TaskCompletionSource? Barrier);
 
@@ -77,6 +107,12 @@ public sealed class RecentLogFile : IAsyncDisposable
         _header = header ?? throw new ArgumentNullException(nameof(header));
         _open = open ?? OpenTruncated;
         _paused = diagnostics.AutoCollectLogs;
+        // DropOldest: a write to a full queue always succeeds at once, so the
+        // thread that logs never waits for the disk, and what is kept is the end
+        // of the log, which is the part a hang report needs.
+        _queue = Channel.CreateBounded<Item>(
+            new BoundedChannelOptions(QueueDepth) { SingleReader = true, FullMode = BoundedChannelFullMode.DropOldest },
+            OnDroppedFromQueue);
         _pump = Task.Run(PumpAsync);
         _log.EntryAdded += OnEntryAdded;
         _diagnostics.Changed += OnDiagnosticsChanged;
@@ -109,17 +145,29 @@ public sealed class RecentLogFile : IAsyncDisposable
         _queue.Writer.TryWrite(default);
     }
 
-    private void OnEntryAdded(LogEntry entry) => Enqueue(entry);
+    private void OnEntryAdded(LogEntry entry)
+    {
+        if (t_noting) return;
+        Enqueue(entry);
+    }
 
-    // On the producer's thread: nothing here but the hand-off.
+    // On the producer's thread: nothing here but the hand-off, which never waits.
     internal void Enqueue(LogEntry entry)
     {
         if (_paused) return;
         _queue.Writer.TryWrite(new Item(entry, null));
     }
 
+    // The queue was full and let its oldest item go, on the thread that logged.
+    private void OnDroppedFromQueue(Item item)
+    {
+        if (item.Entry is not null) Interlocked.Increment(ref _dropped);
+        // Nothing waits for ever on a barrier the queue no longer holds.
+        item.Barrier?.TrySetResult();
+    }
+
     // Completes once everything queued before the call has been written and
-    // flushed.
+    // flushed (or let go of: see QueueDepth).
     internal Task WhenWrittenAsync()
     {
         TaskCompletionSource barrier = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -133,17 +181,49 @@ public sealed class RecentLogFile : IAsyncDisposable
         while (await reader.WaitToReadAsync().ConfigureAwait(false))
         {
             List<TaskCompletionSource>? barriers = null;
-            while (reader.TryRead(out Item item))
+            Exception? unexpected = null;
+            try
             {
-                if (item.Barrier is { } barrier) (barriers ??= new()).Add(barrier);
-                else if (item.Entry is { } entry) Write(entry);
+                while (reader.TryRead(out Item item))
+                {
+                    if (item.Barrier is { } barrier) (barriers ??= new()).Add(barrier);
+                    else if (item.Entry is { } entry) Write(entry);
+                }
+                if (_paused) Close();
+                else Flush();
             }
-            if (_paused) Close();
-            else Flush();
+            catch (Exception ex)
+            {
+                // Write and Flush deal with what a disk does. Anything else (the
+                // header's maker, a writer that misbehaves) ended this task for
+                // good, silently, with the queue still filling behind it.
+                unexpected = ex;
+            }
             if (barriers is not null)
                 foreach (TaskCompletionSource barrier in barriers) barrier.TrySetResult();
+            if (unexpected is null) continue;
+
+            Close();
+            _reopenedAfter = unexpected.GetType().Name;
+            NoteFailureOnce($"the last-minutes log file could not be written ({unexpected.GetType().Name}: {unexpected.Message}); "
+                + $"it is tried again every {RetryDelay.TotalSeconds:0.#} s, and this is the only notice of it");
+            try { await Task.Delay(RetryDelay, _stopping.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* the client is closing: write what is left, once, and end */ }
         }
         Close();
+    }
+
+    // One notice in the program log for this session's first failure. The entry
+    // is kept out of this file (t_noting): written here it would fail the same
+    // way and report itself again.
+    private void NoteFailureOnce(string message)
+    {
+        if (_failureNoted) return;
+        _failureNoted = true;
+        t_noting = true;
+        try { _log.Warn(LogSource, message); }
+        catch (Exception) { /* a reader of the log threw; the entry is in the ring, and the pump must go on */ }
+        finally { t_noting = false; }
     }
 
     private void Write(LogEntry entry)
@@ -151,30 +231,47 @@ public sealed class RecentLogFile : IAsyncDisposable
         if (_broken || _paused) return;
         try
         {
-            string line = $"{entry.Timestamp:HH:mm:ss.fff} [{entry.Severity}] {entry.Source}: {entry.Message}";
-            int bytes = Encoding.UTF8.GetByteCount(line) + 1;
-            bool roll = _writer is null
-                || entry.Timestamp - _segmentStart >= SegmentSpan
-                || _segmentBytes + bytes > SegmentMaxBytes;
-            if (roll) Roll(entry.Timestamp);
-            _writer!.Write(line);
-            _writer.Write('\n');
-            _segmentBytes += bytes;
+            if (Interlocked.Exchange(ref _dropped, 0) is > 0 and int dropped)
+                WriteLine($"# {(dropped == 1 ? "1 entry" : $"{dropped} entries")} dropped while the disk was busy", entry.Timestamp);
+            if (_reopenedAfter is { } failure)
+            {
+                WriteLine($"# writing failed ({failure}) and starts again here: entries before this line may be missing", entry.Timestamp);
+                _reopenedAfter = null;
+            }
+            WriteLine($"{entry.Timestamp:HH:mm:ss.fff} [{entry.Severity}] {entry.Source}: {entry.Message}", entry.Timestamp);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            // Disk full, folder gone, no permission. Logging it would come
-            // straight back here; the file is given up for this session.
+            // Disk full, folder gone, no permission: the file is given up for
+            // this session.
             _broken = true;
             Close();
+            NoteFailureOnce($"the last-minutes log file is no longer written this session ({ex.GetType().Name}: {ex.Message})");
         }
+    }
+
+    // One line into the file being written, rolling to the other first when this
+    // one has had its span or its size.
+    private void WriteLine(string line, DateTimeOffset at)
+    {
+        int bytes = Encoding.UTF8.GetByteCount(line) + 1;
+        bool roll = _writer is null
+            || at - _segmentStart >= SegmentSpan
+            || _segmentBytes + bytes > SegmentMaxBytes;
+        if (roll) Roll(at);
+        _writer!.Write(line);
+        _writer.Write('\n');
+        _segmentBytes += bytes;
     }
 
     private void Roll(DateTimeOffset at)
     {
         Close();
-        _active = _active == 0 ? 1 : 0;
-        _writer = _open(_paths[_active]);
+        // The other file becomes the one being written only once it has opened:
+        // CurrentFiles must not name a file that was never made.
+        int next = _active == 0 ? 1 : 0;
+        _writer = _open(_paths[next]);
+        _active = next;
         _segmentStart = at;
         _segmentBytes = 0;
         if (_filesWritten < 2) _filesWritten++;
@@ -197,6 +294,7 @@ public sealed class RecentLogFile : IAsyncDisposable
         {
             _broken = true;
             Close();
+            NoteFailureOnce($"the last-minutes log file is no longer written this session ({ex.GetType().Name}: {ex.Message})");
         }
     }
 
@@ -206,15 +304,19 @@ public sealed class RecentLogFile : IAsyncDisposable
         _writer = null;
         if (writer is null) return;
         try { writer.Dispose(); }
-        catch (IOException) { /* a failed last flush loses its batch; nothing more to do with a closing file */ }
+        catch (Exception) { /* a failed last flush loses its batch; nothing more to do with a closing file, whatever it threw */ }
     }
 
     public async ValueTask DisposeAsync()
     {
         _log.EntryAdded -= OnEntryAdded;
         _diagnostics.Changed -= OnDiagnosticsChanged;
-        _queue.Writer.TryComplete();
+        if (!_queue.Writer.TryComplete()) return;   // disposed already
+        // A pump waiting to retry stops waiting: what is queued gets its one
+        // last try now.
+        _stopping.Cancel();
         await _pump.ConfigureAwait(false);
+        _stopping.Dispose();
     }
 
     // Delete the last-minutes files of all but the newest `keep` client processes
