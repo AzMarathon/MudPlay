@@ -1623,12 +1623,12 @@ Both are taken on any of the three channels.
 | `backtrack path failed - going idle` | The walk back failed on the way. |
 | `couldn't find you after backtracking - going idle` | You walked the whole trail back and did not see them. |
 | `didn't find you where the trip left you - @comeback with your room and I'll come` | After a train trip, they were not in the room it left them in. |
-| `I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you` | In Auto-Lair, where an exit on your way turned them away. Said once. |
-| `I can't yet, I'm on a train trip. I'll come for you when the training is done` | You are on a train trip. Said once; they are fetched when it ends. |
+| `I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you` | **Refusal:** in Auto-Lair, where an exit on your way turned them away. Said once. They are invited when your next pass finds them, answered or not. |
+| `I can't yet, I'm on a train trip. I'll come for you when the training is done` | **Refusal:** you are on a train trip. Said once. They are fetched when it ends, answered or not. |
 | `I can't, my loop goes through an exit you can't pass` | **Refusal:** your loop goes through an exit that turned them away. The loop carries on. |
 | the Failure message | **Refusal:** the sender is not one of the players listed above. |
 
-**Every row but the last two is sent whatever the Warn setting says.** The follower's client reads these answers: a "can't" (`I can't`, `my party is full`, `can't find a path`, `can't come`, `forget me`, `going idle`) ends its wait at once, a pickup that failed (`can't reach`, `path failed`, `follow timed out`) ends it too, and anything else, `I can't yet` included, tells it to keep waiting. Left unanswered, it would wait out its whole window. That is why the words in those answers never change.
+**Every row but the last four is sent whatever the Warn setting says.** The follower's client reads these answers: a "can't" (`I can't`, `my party is full`, `can't find a path`, `can't come`, `forget me`, `going idle`) ends its wait at once, a pickup that failed (`can't reach`, `path failed`, `follow timed out`) ends it too, and anything else, `I can't yet` included, tells it to keep waiting. Left unanswered, it would wait out its whole window. That is why the words in those answers never change. The last four are refusals like any other: with the Warn setting off the follower hears nothing, and its own wait runs out as if the leader were away.
 
 | Reply to `@forget` | When |
 |---|---|
@@ -5798,7 +5798,7 @@ Settings → Talk.
 ### Warn sender on invalid / denied remote command
 
 **Default:** On
-**What it does:** The master gate for replies to a refused `@`-command: one the sender may not use, one that was mistyped or missing a word, and one your client could not carry out. When on, every refusal sends a reply back (a specific reason when there is one, otherwise the generic message below); when off, every refusal is silent. Some things are never answered, whatever this is set to: an `@` word that is no command at all, the hard-blocked ones (anything with `reroll` in it, and `@party set suicide`), and every command while the master switch (Auto-All) is off. And a few answers are always sent, because another MudPlay client is waiting on them to carry on: a leader's answers to `@comeback`, and the answers to `@trap`, `@wealth`, `@level`, `@have`, `@get-stash` and `@deposit-all`. Which replies of each command count as refusals is in its topic under *Remote @-commands*.
+**What it does:** The master gate for replies to a refused `@`-command: one the sender may not use, one that was mistyped or missing a word, and one your client could not carry out. When on, every refusal sends a reply back (a specific reason when there is one, otherwise the generic message below); when off, every refusal is silent. Some things are never answered, whatever this is set to: an `@` word that is no command at all, the hard-blocked ones (anything with `reroll` in it, and `@party set suicide`), and every command while the master switch (Auto-All) is off. And a few answers are always sent, because another MudPlay client is waiting on them to carry on: a leader's answers to `@comeback` (all but a loop's `I can't` at an exit and the two `I can't yet` answers, which are refusals), and the answers to `@trap`, `@wealth`, `@level`, `@have`, `@get-stash` and `@deposit-all`. Which replies of each command count as refusals is in its topic under *Remote @-commands*.
 
 ### Failure message
 

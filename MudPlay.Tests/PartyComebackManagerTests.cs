@@ -255,9 +255,10 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.False(Sent(h, "bg @forget"));
     }
 
-    // "I can't yet" is the word the follower's client waits on, not a refusal.
+    // "I can't yet" follows the Warn setting like the loop's refusal (user,
+    // 2026-10-10); the member is still kept for the fetch when the trip ends.
     [Fact]
-    public void TrainTrip_WithDenialsSilenced_StillSaysICantYet()
+    public void TrainTrip_WithDenialsSilenced_SaysNothing()
     {
         using Harness h = NewHarness(GatedGraphJson);
         h.Comeback.SetWireSender(_ => { });
@@ -268,10 +269,11 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Router.Dispatch(Line("Tank started to follow you."));
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Router.Dispatch(Line("Tank is no longer following you."));
+        int sentBefore = h.Engine.LastSentForTests.Count;
 
         h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
 
-        Assert.Contains(PartyComebackManager.TrainTripReply, h.LastReply);
+        Assert.Equal(sentBefore, h.Engine.LastSentForTests.Count);
     }
 
     [Fact]

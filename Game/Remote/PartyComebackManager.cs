@@ -338,14 +338,14 @@ public sealed class PartyComebackManager : IDisposable
         {
             // The trip's own walk is not stopped for anyone (user, 2026-10-10:
             // "train trips should be excluded"); they are fetched when the training
-            // is done, from the room they name. Said once. It is not a refusal but
-            // the word their client waits on (ComebackRequester reads "I can't yet"
-            // as "keep waiting"), so the Warn setting doesn't silence it.
+            // is done, from the room they name. Said once, and only when denials
+            // are (user, 2026-10-10: it "should match whether the refusals are
+            // verbose or silent").
             bool firstWord = _answeredOnTrip.Add(given);
             NoteLeftOnTrip(given, target, named: true);
             _log?.Info(LogCategory,
                 $"{given} asked to be fetched{(target is { } t ? $" from {t.Map}/{t.Room}" : "")} during the train trip — kept until the training is done");
-            if (firstWord) ctx.Reply(TrainTripReply);
+            if (firstWord) ctx.Refuse(TrainTripReply);
             return;
         }
         // Someone a train trip of ours came back without, saying where they are.
@@ -365,19 +365,19 @@ public sealed class PartyComebackManager : IDisposable
                 // Going back would only leave them at the same exit on the next lap
                 // (user, 2026-10-10: on a loop the leader "should not accept a comback
                 // for them, it should reject them"). A denial, so it is said only when
-                // denials are (the remote-command reply policy), and a test pins that.
-                // It is also an answer the follower's client reads to give the follow
-                // up at once (ComebackRequester), unlike the other refusals here,
-                // which go whatever the Warn setting says for that reason.
+                // denials are, though the follower's client reads it to give the
+                // follow up at once (user, 2026-10-10: it "should match whether the
+                // refusals are verbose or silent"). Unanswered, the follower gives
+                // up when its own window runs out.
                 _log?.Info(LogCategory,
                     $"{given} asked to be fetched{(from is { } f ? $" from {f.Map}/{f.Room}" : "")}, where our loop goes through an exit they can't pass — refused, the loop carries on");
                 ctx.Refuse(LoopGateRefusal);
                 return;
             case GateVerdict.LairInvitesOnSight:
-                // Auto-Lair doesn't break off for them. Said once: the word their
-                // client waits on, so the Warn setting doesn't silence it.
+                // Auto-Lair doesn't break off for them. Said once, and only when
+                // denials are.
                 LeaveToTheNextPass(given, from);
-                if (_lairAnswered.Add(given)) ctx.Reply(LairGateReply);
+                if (_lairAnswered.Add(given)) ctx.Refuse(LairGateReply);
                 return;
             case GateVerdict.WalkEnds when step is { } gate:
                 // Stock: the request is the first we hear of the second drop. The

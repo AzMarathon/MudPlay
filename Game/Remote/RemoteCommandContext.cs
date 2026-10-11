@@ -50,7 +50,9 @@ public readonly record struct RemoteCommandContext(
     //   - PartyComebackManager's answers to @comeback, the "can't come" ones
     //     included: the follower's ComebackRequester reads every one, to give the
     //     follow up at once, to give up after a failed pickup, or to keep waiting.
-    //     (The loop's refusal alone is still sent as a refusal.)
+    //     (Three are refusals all the same, by the user's ruling of 2026-10-10:
+    //     a loop's "I can't" at a gate, and the "I can't yet" of a train trip and
+    //     of Auto-Lair.)
     //   - @trap's acceptance and result, a failed disarm included: the asking
     //     client's walk reads TrapReply.
     //   - @wealth's "wealth unknown" and @level's "level unknown": the leader's
