@@ -8334,7 +8334,7 @@ public sealed class AppServices
             },
             log: Log,
             buffsDue: priority => CastDirector.BuffsDue(priority),
-            stillWanted: () => LairEntryDebuffModeForNextStep(out _) != Game.Map.LairEntryDebuffMode.Off,
+            stillWanted: LairWaitStillWanted,
             healOrCureDue: () => CastDirector.HealOrCureDue(),
             debuffMana: LairEntryDebuffMana);
         CastDirector.SetLairEntryBuffHold(
@@ -11357,6 +11357,21 @@ public sealed class AppServices
         bool debuffConfigured = !string.IsNullOrWhiteSpace(combat.AreaDebuffSpell.SpellName)
                                 || !string.IsNullOrWhiteSpace(combat.SingleTargetDebuffSpell.SpellName);
         return debuffConfigured ? loop.LairEntryDebuff : Game.Map.LairEntryDebuffMode.Off;
+    }
+
+    // Asked by a lair wait that already stands: is the loop still about to enter the
+    // lair it waits outside? No once the loop is gone, its option or Auto-Combat (the
+    // master switch with it) is off, or its next step is known and is no longer into
+    // a lair it fights in. A room the tracker can't place at the moment says nothing
+    // either way: ending the wait on that would restart it, and its counts, at once.
+    private bool LairWaitStillWanted()
+    {
+        if (LoopRunner.CurrentLoop is not { LairEntryDebuff: not Game.Map.LairEntryDebuffMode.Off } loop
+            || !IsAutoCombatEnabled)
+            return false;
+        if (NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()) is not { } next) return true;
+        return RoomGraph.GetRoom(next) is { HasLair: true }
+            && !Game.Map.LoopCombatSuppression.IsSuppressed(loop, next, currentIsLair: true);
     }
 
     // The debuff a lair wait is for and the mana its slot's "min mana per cast" asks
