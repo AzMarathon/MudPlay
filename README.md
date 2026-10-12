@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.12**
-> - Opening the map on a room (a Game Data double-click, a room link, a search pick, a favourite) while walking stays on that room; it flashed there and went back to your own area
+> **Version 3.180.16**
+> - A walk whose route was still being worked out when the game data changed is not started on the old data's room; the terminal says why
+> - Loading another profile that changes the game data on the way says the profile was closed or loaded, not that the game data was changed
+> - After a switch to another game data set, route items still wanted and the party's counts and hand-overs for them are forgotten: nothing is picked up or handed round by an old item number
+> - Edit Loop's two error lines wrap instead of running off the window
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
