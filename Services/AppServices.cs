@@ -2783,8 +2783,10 @@ public sealed class AppServices
     // seed, the user's record overrides), remembering content hashes between asks.
     private readonly RankingStampReader _rankingStamps = new();
 
-    // The data of set was replaced (an import over it, a Manage Sets change): what the
-    // Simulator ranked on the old data is stale, whichever set is active.
+    // The data of set was replaced by a Manage Sets change (its deletion, the
+    // user's edits copied or moved into or out of it): what the Simulator ranked on
+    // the old data is stale, whichever set is active. An import over a set is not
+    // told here: the rankings' own table stamps say whether its files changed.
     public void ForgetSimulatorRankings(string set, string why) =>
         LogStaleSimulatorRankings(set, why, SimulatorRankings.ForgetSet(set));
 
@@ -6315,6 +6317,11 @@ public sealed class AppServices
         EngineGate.Trail = SentCommands;
         SentCommands.Withhold = () =>
             !InGameCapture.InGame || SuicidePassword.PasswordEntryLikely || Suicide.SendingPassword;
+        // A line typed at the terminal is the user's own send. The chat log is told
+        // of it from the keys typed, never from the row the board shows back: it
+        // pairs a telepath with its confirmation, and remembers whose send it was.
+        SentCommands.TypedLineEntered = line =>
+            Chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
         // Out to the board's menu with the link still up: nothing automatic may be
         // sent (it would be a menu selection), a typed selection isn't a move, the
         // menu's lines aren't unknown game lines, and its prompt isn't a broken
@@ -8558,15 +8565,27 @@ public sealed class AppServices
         }
 
         // The Simulator's rankings follow the set too, but nothing reloads: a switch
-        // leaves each set's where they are. The active set's name coming round again
-        // is that set read in afresh, and what was ranked on its old tables is stale.
+        // leaves each set's where they are. A set made active, by a switch to it or by
+        // its name coming round again, is a new load of it, with the same tables or
+        // other ones: the store is told, and compares each ranking's tables with the
+        // new load's when it is next listed. Only one that carries no record of its
+        // tables goes here, at any new load of its set.
         // Each ranking is also kept in a file in its set's folder, so it is there
         // after a restart; what a read finds is handed back on the UI thread.
         SimulatorRankings = new Game.Simulation.AreaRankingStore(
             new AreaRankingFiles(), act => Avalonia.Threading.Dispatcher.UIThread.Post(act), Log);
         SimulatorRankings.NoteActiveSet(GameData.ActiveSet);
+        // Once the launch has nothing left to do: old ranking files go, off this
+        // thread, for characters that may never be loaded again.
+        Avalonia.Threading.Dispatcher.UIThread.Post(
+            SimulatorRankings.SweepOld, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
         GameData.ActiveSetChanged += setName =>
-            LogStaleSimulatorRankings(setName, "was read in again", SimulatorRankings.NoteActiveSet(setName));
+        {
+            int dropped = SimulatorRankings.NoteActiveSet(setName);
+            if (dropped > 0)
+                Log.Info("Simulator",
+                    $"game data '{setName}' was loaded afresh: {dropped} area ranking(s) made on it with no record of its tables dropped, there being nothing to compare them by");
+        };
         // A saved ranking is stamped with the table files this client read, and the
         // watch has to see each table's first read of a load before the cache can
         // drop the table and read it again: once a second is far inside that.

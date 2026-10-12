@@ -1,11 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.6**
-> - A learned room name is kept per realm and put back on the map each session; `Rooms.json` is no longer written
-> - A room the game data leaves unnamed takes a new name when the board prints one as you walk in, and asks once whether to save it in place of the old
-> - A learned name shows in the trainer, bank, quest, item and spell lists
-> - Saving a learned name says in the terminal when it could not be kept, and why
+> **Version 3.180.10**
+> - Remote commands are read on the broadcast channel when "Disallow @commands from broadcast" is unticked, under each player's permissions, and answered there: once a minute per player, four players a minute
+> - A relay-back (`&@command`) heard on broadcast is sent back on broadcast
+> - Sync Timers, one player asked by telepath: their timer is merged in when you hold none and synced when it differs
+> - Sync Timers on gang, say or broadcast: replies are gathered for 10 seconds and judged together; merged in only if all agree, listed for you to pick otherwise
+> - A timer of yours that changed after you asked is never replaced by a sync answer; the boss is listed instead
+> - Only a `@timer sync`, `@roomba sync` or `@loop send yes` you sent yourself counts as your request; one your client sent for another player's remote command merges nothing
+> - Picking the active game-data set again keeps its saved Simulator rankings; one is dropped when its tables changed, or at the next load when it has no record of them
+> - Saved Simulator rankings older than 180 days are deleted at each start, for every character
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

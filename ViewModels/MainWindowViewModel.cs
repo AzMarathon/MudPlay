@@ -3896,6 +3896,10 @@ public partial class MainWindowViewModel : ObservableObject
         // line that goes out first is what the game takes as the password, so
         // the stored one must not follow it.
         AppServices.Current.Suicide.NoteLineSent(data);
+        // Keys from the terminal: a whole line at once, or one key at a time while
+        // a form owns the keyboard. The trail makes lines of them either way, and
+        // tells the chat log each one as the user's own send (TypedLineEntered).
+        bool typedAtTerminal = !sendGate.SendingClientCommand && sendGate.CurrentSender is null && _userLineOrigin is null;
         if (!sendGate.SendingClientCommand)
         {
             if (sendGate.CurrentSender is { } pastGate)
@@ -3969,11 +3973,20 @@ public partial class MainWindowViewModel : ObservableObject
             // at the same point and for the same reason: once per command.
             AppServices.Current.NoteSentForRoomCommand(sent);
         }
-        // Chat router — capture engine-sent telepath "/<recipient> <message>"
-        // bursts (party @-command broadcasts / nags) so the outgoing
-        // conversation entry is attributed. Typed telepaths render on-screen
-        // and are caught by the router's line sniff instead.
-        AppServices.Current.Chat.ObserveOutbound(data);
+        // Chat router — every whole line on its way out, so an outgoing telepath's
+        // conversation entry has its text, and with whose send it was: one the
+        // client sends by itself or for another player (a relay-back, a `@do`, a
+        // `@party` relay, a sender going round the gate) is told from the user's
+        // own (a window's button, a macro, a trigger, an event, an alias) when its
+        // confirmation comes, or when a request is seen to come back on a channel.
+        // What was typed at the terminal has been told already, line by line, from
+        // the keys themselves (above): these bytes may be one key of a line.
+        if (!typedAtTerminal)
+            AppServices.Current.Chat.ObserveOutbound(data,
+                usersOwn: AppServices.Current.EngineGate.SendingUsersOwnCommand
+                    && sendGate.CurrentSender is null
+                    && AppServices.Current.Do.SendingFor is null
+                    && AppServices.Current.PartyEssentials.RelayingFor is null);
         // Auto-party — every outbound `invite X` (whoever sent it) starts X's invite
         // cooldown, so two re-invite paths firing together send one invite.
         AppServices.Current.AutoParty.ObserveOutbound(data);
@@ -4073,10 +4086,11 @@ public partial class MainWindowViewModel : ObservableObject
     // (rather than via the Bosses-tab "Sync Timers…" button) — otherwise nothing is
     // collecting and the responders' `@timerdata` replies vanish, the "I got a string
     // back but nothing happened" report. Only our own outbound request should trigger
-    // it: TelepathOutgoing is always ours, and a Local "You say" line has a null speaker
-    // (the self-say form), so an inbound request we're merely responding to is excluded.
-    // A hand-typed gang request ("You gangpath:" — unclassified) isn't caught; that path
-    // uses the button.
+    // it: TelepathOutgoing is always ours, a Local "You say" line has a null speaker
+    // (the self-say form), and a gang or broadcast line a board shows us back carries
+    // our own name, so an inbound request we're merely responding to is excluded. On
+    // a board that does not show us our own line on a channel, a request typed there
+    // isn't caught; that path uses the button.
     //
     // The same watcher serves the other two transfers. Our own `@roomba sync` opens
     // the receiver's adopt window, so the responders' `@roombadata` replies are
@@ -4112,21 +4126,41 @@ public partial class MainWindowViewModel : ObservableObject
                 "[the broadcast channel is switched off for @commands: Settings → Talk → Disallow @commands from broadcast]"));
             return;
         }
+        // Whose request it was. The client also sends these lines for other
+        // players (a `@do /name @roomba sync`, a relay-back): taken as the user's,
+        // such a send would have this client accept data nobody here asked for.
+        // Asked of the one place that knows, for every transfer and channel: the
+        // lines the user sent, as they went out. The line coming back shows only
+        // that this client said it.
+        bool usersOwn = Game.Remote.TransferChannels.IsUsersOwn(e, asked.Channel, AppServices.Current.Chat);
         switch (asked.Transfer)
         {
             case Game.Remote.Transfer.TimerSync:
-                OpenTimerSyncWindow(asked.Channel);
+                // A telepath's confirmation names the player it reached: the one
+                // whose answer is an answer to that request, when the request was
+                // the user's (ChatRouter pairs the confirmation with the send
+                // addressed to that player, and says whose it was). One the client
+                // sent for another player (a relay-back, a `@do`) still opens the
+                // window, which says so, and every answer to it is only listed.
+                OpenTimerSyncWindow(asked.Channel,
+                    asked.Channel == Game.Remote.RemoteChannel.Telepath && usersOwn ? e.Speaker : null, usersOwn);
                 break;
             case Game.Remote.Transfer.RoombaSync:
-                AppServices.Current.RoombaSync.NoteSyncRequested();
+                if (usersOwn) AppServices.Current.RoombaSync.NoteSyncRequested();
+                else LogTransferNotTheUsers(e);
                 break;
             case Game.Remote.Transfer.LoopSend:
                 string[] words = e.Message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (words.Length == 3 && Game.Remote.LoopShareHandler.IsConfirm(words[2]) && e.Speaker is { Length: > 0 } to)
-                    AppServices.Current.LoopShareInbox.NoteSendConfirmed(to);
+                if (words.Length != 3 || !Game.Remote.LoopShareHandler.IsConfirm(words[2]) || e.Speaker is not { Length: > 0 } to)
+                    break;
+                if (usersOwn) AppServices.Current.LoopShareInbox.NoteSendConfirmed(to);
+                else LogTransferNotTheUsers(e);
                 break;
         }
     }
+
+    private static void LogTransferNotTheUsers(MudPlay.Game.ChatLogEntry e) => AppServices.Current.Log.Info("Transfers",
+        $"our {e.Message.Trim()} seen on {e.Channel} was not a line the user sent in the last few seconds (the client sends such lines for another player's remote command): nothing is taken for it.");
 
     private static bool IsSelfName(string speaker)
     {
@@ -4137,7 +4171,10 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // askedOn: the channel our request went out on, the one its answers are taken on.
-    private async void OpenTimerSyncWindow(Game.Remote.RemoteChannel askedOn)
+    // telepathedTo: the player it was telepathed to, when it was.
+    // byUser: the request was the user's own, not one the client sent for another
+    // player's remote command.
+    private async void OpenTimerSyncWindow(Game.Remote.RemoteChannel askedOn, string? telepathedTo, bool byUser)
     {
         // Already collecting: the open window's collector sees the request go out
         // too, and takes answers on its channel as well.
@@ -4148,7 +4185,9 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.GameData,
             AppServices.Current.Chat,
             AppServices.Current.SendTypedInput,
-            preArmedOn: askedOn);
+            preArmedOn: askedOn,
+            preArmedTo: telepathedTo,
+            preArmedByUser: byUser);
         await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.CharacterWorkshop.BossTimerSyncViewModel, bool>(vm);
     }
@@ -5519,10 +5558,9 @@ public partial class MainWindowViewModel : ObservableObject
             // switch to the set, so the ensuing set-switch loads the seeded files.
             // Once-only per set (marker), additive, best-effort.
             NavSeedBootstrapper.SeedIfNeeded(result.FolderName, AppServices.Current.Log);
-            // The set's tables are new whether or not it was the active one, and only
-            // an import over the active set reads as "read in again" to what follows
-            // the switch below.
-            AppServices.Current.ForgetSimulatorRankings(result.FolderName, "was imported again");
+            // The Simulator's rankings for the set are not deleted for the import:
+            // each carries the stamps of the table files it was made on, and is
+            // dropped when it is next listed if the import changed one of them.
             SwitchActiveGameDataSet(result.FolderName);
             Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionGameDataImported);
         }

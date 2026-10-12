@@ -193,6 +193,422 @@ public sealed class ChatRouterTests
             && l.Message.Contains("martial", StringComparison.Ordinal));
     }
 
+    // ----- whose confirmation a "Telepath sent" line is ----------------------
+
+    private static byte[] Wire(string line) => System.Text.Encoding.Latin1.GetBytes(line + "\r");
+
+    // The entries raised, each with whether it was the user's own telepath at the
+    // moment it was raised.
+    private static List<(ChatLogEntry Entry, bool Users)> Watch(ChatRouter chat)
+    {
+        List<(ChatLogEntry, bool)> seen = new();
+        chat.EntryClassified += e => seen.Add((e, chat.OutgoingTelepathWasUsers));
+        return seen;
+    }
+
+    // A confirmation names the player the telepath reached, in full. It is the
+    // confirmation of the pending send addressed to that player: the name as sent
+    // begins the name confirmed, whatever capitals were typed.
+    [Theory]
+    [InlineData("/bo @timer sync", "Bob")]
+    [InlineData("/BOB @timer sync", "Bob")]
+    [InlineData("/Bob @timer sync", "Bob")]
+    public void TelepathOut_AShortenedName_IsConfirmedByThePlayerItReached(string sent, string confirmed)
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire(sent), usersOwn: true);
+        router.Dispatch(Line($"--- Telepath sent to {confirmed} ---"));
+
+        (ChatLogEntry e, bool users) = Assert.Single(seen);
+        Assert.Equal((confirmed, "@timer sync"), (e.Speaker, e.Message));
+        Assert.True(users);
+        Assert.False(chat.OutgoingTelepathWasUsers);   // only while the entry is being raised
+    }
+
+    // A send whose own reply was not a confirmation (no such player, letters that
+    // fit two players, the telepath not sent) is not handed to the confirmation of
+    // a later telepath to someone else. That confirmation is its own send's.
+    [Theory]
+    [InlineData("/qq @timer sync", "/Mallory {ok}", "Mallory", "{ok}")]
+    [InlineData("/bo @timer sync", "/Sue hello", "Sue", "hello")]
+    [InlineData("/Bob @timer sync", "/Sue @health", "Sue", "@health")]
+    public void TelepathOut_AnUnconfirmedSend_IsNotHandedToAnotherPlayersConfirmation(
+        string unconfirmed, string next, string confirmed, string message)
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire(unconfirmed), usersOwn: true);
+        chat.ObserveOutbound(Wire(next), usersOwn: true);
+        router.Dispatch(Line($"--- Telepath sent to {confirmed} ---"));
+
+        (ChatLogEntry e, _) = Assert.Single(seen);
+        Assert.Equal((confirmed, message), (e.Speaker, e.Message));
+
+        // A second confirmation for that player has no send left to be for.
+        router.Dispatch(Line($"--- Telepath sent to {confirmed} ---"));
+        Assert.Equal(string.Empty, seen[1].Entry.Message);
+        Assert.False(seen[1].Users);
+    }
+
+    // A confirmation for another player arriving between a send and its own does
+    // not take that send: each is paired by the name it carries.
+    [Fact]
+    public void TelepathOut_AConfirmationForAnotherPlayerInBetween_LeavesTheSendForItsOwn()
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/bo @timer sync"), usersOwn: true);
+        chat.ObserveOutbound(Wire("/Sue @health"));
+        router.Dispatch(Line("--- Telepath sent to Sue ---"));
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+
+        Assert.Equal(new[] { ("Sue", "@health", false), ("Bob", "@timer sync", true) },
+            seen.Select(s => (s.Entry.Speaker!, s.Entry.Message, s.Users)));
+    }
+
+    // A confirmation is first the confirmation of a send addressed to exactly the
+    // name it carries. The user typed letters that fit two players and reached
+    // nobody; then the client telepaths a player whose name those letters begin
+    // (a reply to her own remote command). Her confirmation is the reply's, not
+    // the user's request's: she was never asked.
+    [Fact]
+    public void TelepathOut_AConfirmation_TakesTheSendAddressedToExactlyThatName_BeforeAShortenedOne()
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/b @timer sync"), usersOwn: true);
+        chat.ObserveOutbound(Wire("/Betty {command invalid or not allowed}"));
+        router.Dispatch(Line("--- Telepath sent to Betty ---"));
+
+        (ChatLogEntry e, bool users) = Assert.Single(seen);
+        Assert.Equal(("Betty", "{command invalid or not allowed}"), (e.Speaker, e.Message));
+        Assert.False(users);
+    }
+
+    // The same when the later telepath is itself addressed by a shortened name, as
+    // one sent for another player's `@do` may be: it has more letters than the
+    // request the game refused, so the confirmation is its own.
+    [Theory]
+    [InlineData("/bel hi")]
+    [InlineData("/Bella hi")]
+    public void TelepathOut_AConfirmation_IsNotHandedToAShorterSendThatReachedNobody(string later)
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/b @timer sync"), usersOwn: true);
+        chat.ObserveOutbound(Wire(later));
+        router.Dispatch(Line("--- Telepath sent to Bella ---"));
+
+        (ChatLogEntry e, bool users) = Assert.Single(seen);
+        Assert.Equal(("Bella", "hi"), (e.Speaker, e.Message));
+        Assert.False(users);
+    }
+
+    // Of the pending sends whose addressed name begins the name confirmed, a
+    // confirmation takes the one addressed by the most letters, and the oldest of
+    // those addressed alike, whatever order they went out in.
+    [Fact]
+    public void TelepathOut_AConfirmation_TakesTheSendAddressedByTheMostLetters_TheOldestOfEquals()
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/b one letter"), usersOwn: true);
+        chat.ObserveOutbound(Wire("/bel three, first"));
+        chat.ObserveOutbound(Wire("/be two letters"));
+        chat.ObserveOutbound(Wire("/BEL three, second"));
+        chat.ObserveOutbound(Wire("/Bob another player"));
+        for (int i = 0; i < 5; i++) router.Dispatch(Line("--- Telepath sent to Bella ---"));
+
+        Assert.Equal(
+            new[] { "three, first", "three, second", "two letters", "one letter", string.Empty },
+            seen.Select(s => s.Entry.Message));
+        Assert.Equal(new[] { false, false, false, true, false }, seen.Select(s => s.Users));
+    }
+
+    // A shortened request that did reach its player, with a telepath of the
+    // client's to the same player going out before or after it: the two
+    // confirmations take the two sends, the full-name one first, and the request
+    // is confirmed as the user's exactly once.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TelepathOut_AShortenedRequestAndAFullNameSendToTheSamePlayer_AreEachConfirmedOnce(bool requestFirst)
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        if (requestFirst) chat.ObserveOutbound(Wire("/bo @timer sync"), usersOwn: true);
+        chat.ObserveOutbound(Wire("/Bob @health"));
+        if (!requestFirst) chat.ObserveOutbound(Wire("/bo @timer sync"), usersOwn: true);
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+
+        Assert.Equal(new[] { ("Bob", "@health", false), ("Bob", "@timer sync", true) },
+            seen.Select(s => (s.Entry.Speaker!, s.Entry.Message, s.Users)));
+
+        // A third confirmation has no send left to be for.
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+        Assert.False(seen[2].Users);
+        Assert.Equal(string.Empty, seen[2].Entry.Message);
+    }
+
+    // The notice for a pending send that was never confirmed quotes the send only
+    // when it was the client's own line. What the user sent, and a row known only
+    // from the screen, are the user's words: the log says one went unconfirmed
+    // and keeps none of it, neither the message nor the name it was addressed to.
+    [Fact]
+    public void TelepathOut_StaleEntryDiscard_KeepsNoneOfTheUsersWords()
+    {
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        LogService log = new();
+        List<LogEntry> lines = new();
+        log.EntryAdded += lines.Add;
+        var (router, chat, _) = Setup(log: log, clock: () => now);
+
+        chat.ObserveOutbound(Wire("/hunter 2secret"), usersOwn: true);
+        router.Dispatch(Line("/swordfish 3secret"));
+        chat.ObserveOutbound(Wire("/Farmer {no record of \"martial\"}"));
+        now = now.AddSeconds(30);   // well past PendingCaptureStaleAfter
+        router.Dispatch(Line("--- Telepath sent to Farmer ---"));
+
+        string[] warned = lines.Where(l => l.Severity == LogSeverity.Warn && l.Source == "ChatRouter")
+            .Select(l => l.Message).ToArray();
+        Assert.Equal(3, warned.Length);
+        Assert.Contains(warned, m => m.Contains("a telepath the user sent (its words are not kept)", StringComparison.Ordinal));
+        Assert.Contains(warned, m => m.Contains("a row shown on screen (its words are not kept)", StringComparison.Ordinal));
+        Assert.Contains(warned, m => m.Contains("martial", StringComparison.Ordinal));
+        Assert.DoesNotContain(warned, m => m.Contains("secret", StringComparison.Ordinal)
+            || m.Contains("hunter", StringComparison.Ordinal) || m.Contains("swordfish", StringComparison.Ordinal));
+    }
+
+    // Whose send it was goes with it to its confirmation, and comes only from the
+    // line as it went out: the user's own (typed at the terminal, or sent by
+    // something of theirs), or one the client made by itself or for another player.
+    // A telepath known only from the row the board showed has its text, for the
+    // Conversation window, and is nobody's.
+    [Fact]
+    public void TelepathOut_WhoseSendItWas_IsToldWithItsConfirmation_AndNeverFromTheScreen()
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/Bob @timer sync"), usersOwn: true);  // typed, or a window's button
+        router.Dispatch(Line("/Bob @timer sync"));                       // and shown on screen
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+        chat.ObserveOutbound(Wire("/Mallory @timer sync"));              // for another player
+        router.Dispatch(Line("/Mallory @timer sync"));
+        router.Dispatch(Line("--- Telepath sent to Mallory ---"));
+        router.Dispatch(Line("/Sue @timer sync"));                       // a row, with no send seen
+        router.Dispatch(Line("--- Telepath sent to Sue ---"));
+
+        Assert.Equal(new[] { true, false, false }, seen.Select(s => s.Users));
+        Assert.All(seen, s => Assert.Equal("@timer sync", s.Entry.Message));
+    }
+
+    // The same words to two players, one after the other, are two sends: each is
+    // confirmed with its message.
+    [Fact]
+    public void TelepathOut_TheSameMessageToTwoPlayers_IsTwoSends()
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/Bob @timer sync"), usersOwn: true);
+        chat.ObserveOutbound(Wire("/Sue @timer sync"), usersOwn: true);
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+        router.Dispatch(Line("--- Telepath sent to Sue ---"));
+
+        Assert.Equal(new[] { ("Bob", "@timer sync", true), ("Sue", "@timer sync", true) },
+            seen.Select(s => (s.Entry.Speaker!, s.Entry.Message, s.Users)));
+    }
+
+    // ----- a screen row that is the copy of a line the client sent ------------
+
+    // A board shows each line the client sends back as a row of its own. `@do`
+    // sends two telepaths in one go (the relayed line, then its `{ok}`), so the
+    // first line's copy arrives with another send already made after it. The copy
+    // is not a telepath the user typed: however the copies and confirmations fall,
+    // and however many such lines follow, no send of the user's comes of them.
+    [Theory]
+    [InlineData("S1 S2 R1 C R2 C")]         // copy, confirmation, copy, confirmation
+    [InlineData("S1 S2 C R1 C R2")]         // each copy after its confirmation
+    [InlineData("S1 S2 R2 R1 C C")]         // the copies the other way round
+    [InlineData("S1 S2 R1 R2 C C S2 R2 C")] // and a further `@do` after it
+    [InlineData("S1 R1 C S1 R1 C S2 R2 C")] // the same request relayed twice
+    [InlineData("S1 S2 R1 C R2 C S2 R2 C S2 C R2 R1 R1")]
+    public void TelepathOut_TheScreenCopyOfAClientSend_IsNeverASendOfTheUsers(string script)
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+        const string request = "/Mallory @timer sync", ok = "/Mallory {ok}";
+
+        foreach (string step in script.Split(' '))
+            switch (step)
+            {
+                case "S1": chat.ObserveOutbound(Wire(request)); break;
+                case "S2": chat.ObserveOutbound(Wire(ok)); break;
+                case "R1": router.Dispatch(Line(request)); break;
+                case "R2": router.Dispatch(Line(ok)); break;
+                default: router.Dispatch(Line("--- Telepath sent to Mallory ---")); break;
+            }
+        // Whatever else she is then sent and confirmed.
+        chat.ObserveOutbound(Wire("/Mallory @health"));
+        router.Dispatch(Line("--- Telepath sent to Mallory ---"));
+        router.Dispatch(Line("--- Telepath sent to Mallory ---"));
+
+        Assert.DoesNotContain(seen, s => s.Users);
+        Assert.Equal(script.Split(' ').Count(s => s == "S1"), seen.Count(s => s.Entry.Message == "@timer sync"));
+    }
+
+    // A copy does not always come whole: a long line wraps onto a second row, an
+    // incoming line cuts it short, or it comes with something after it. A row that
+    // begins a line sent lately, or that one begins, is its copy all the same.
+    [Theory]
+    [InlineData("/Mallory @timer sy")]
+    [InlineData("/Mallory @")]
+    [InlineData("/Mallory @timer sync  ")]
+    [InlineData("/Mallory @timer sync[HP=10/MA=10]:")]
+    public void TelepathOut_ACopyThatIsNotExact_IsStillACopy(string row)
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/Mallory @timer sync"));
+        chat.ObserveOutbound(Wire("/Mallory {ok}"));
+        router.Dispatch(Line(row));
+        router.Dispatch(Line("nc"));   // the rest of a wrapped row reads as no telepath
+        router.Dispatch(Line("--- Telepath sent to Mallory ---"));
+        router.Dispatch(Line("--- Telepath sent to Mallory ---"));
+        router.Dispatch(Line("--- Telepath sent to Mallory ---"));
+
+        Assert.Equal(new[] { "@timer sync", "{ok}", "" }, seen.Select(s => s.Entry.Message));
+        Assert.DoesNotContain(seen, s => s.Users);
+    }
+
+    // A telepath the user typed is told as it goes out, as theirs. With lines of
+    // the client's own awaiting their copies and confirmations, it is confirmed as
+    // the user's by the player it reached.
+    [Fact]
+    public void TelepathOut_ATypedTelepath_IsTheUsers_WithClientSendsPending()
+    {
+        var (router, chat, _) = Setup();
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/Sue @health"));
+        chat.ObserveOutbound(Wire("/Mallory {ok}"));
+        chat.ObserveOutbound(Wire("/bo @timer sync"), usersOwn: true);   // typed
+        router.Dispatch(Line("/bo @timer sync"));
+        router.Dispatch(Line("/Sue @health"));                           // the client's copies
+        router.Dispatch(Line("--- Telepath sent to Sue ---"));
+        router.Dispatch(Line("/Mallory {ok}"));
+        router.Dispatch(Line("--- Telepath sent to Mallory ---"));
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+
+        Assert.Equal(new[] { ("Sue", "@health", false), ("Mallory", "{ok}", false), ("Bob", "@timer sync", true) },
+            seen.Select(s => (s.Entry.Speaker!, s.Entry.Message, s.Users)));
+    }
+
+    // The screen is never the word on whose send a line was. A row is shown for
+    // what the client sent for another player the same as for what the user typed,
+    // and not always as it went out. Each of these rows fails to match the line
+    // that was sent, so it is queued for the Conversation window's sake and paired
+    // with a later confirmation; none of them is the user's send.
+    //   - an 8-bit character the terminal draws as another one;
+    //   - a copy that comes after the send has gone stale;
+    //   - a copy cut by an incoming row just before a second slash.
+    [Theory]
+    [InlineData("eight-bit")]
+    [InlineData("late")]
+    [InlineData("cut")]
+    public void TelepathOut_ARowThatDoesNotMatchWhatWasSent_IsStillNotTheUsers(string door)
+    {
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        var (router, chat, _) = Setup(clock: () => now);
+        var seen = Watch(chat);
+        void Confirmed() => router.Dispatch(Line("--- Telepath sent to Mallory ---"));
+
+        switch (door)
+        {
+            case "eight-bit":
+                chat.ObserveOutbound(Wire("/Mallory @timer sync \u0081"));
+                router.Dispatch(Line("/Mallory @timer sync ü"));   // the same byte, as the terminal draws it
+                break;
+            case "late":
+                chat.ObserveOutbound(Wire("/Mallory @timer sync"));
+                now = now.AddSeconds(20);
+                router.Dispatch(Line("/Mallory @timer sync"));
+                break;
+            default:
+                chat.ObserveOutbound(Wire("/Mallory x /Mallory @timer sync"));
+                router.Dispatch(Line("/Mallory x "));
+                router.Dispatch(Line("Sue gossips: hello"));
+                router.Dispatch(Line("/Mallory @timer sync"));
+                break;
+        }
+        Confirmed();
+        // One more line to her, as any answer of the client's would be, and its
+        // confirmation: this is the one the mis-read row used to be credited by.
+        chat.ObserveOutbound(Wire("/Mallory {ok}"));
+        Confirmed();
+        Confirmed();
+
+        Assert.NotEmpty(seen);
+        Assert.DoesNotContain(seen, s => s.Users);
+    }
+
+    // A row in the words of a line just sent is that line's copy and is not queued
+    // again; once the line is no longer lately sent the row is queued, for its
+    // text, and is still nobody's send.
+    [Fact]
+    public void TelepathOut_ARowInTheWordsOfALineJustSent_IsNotQueuedAgain_AndIsNeverTheUsers()
+    {
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        var (router, chat, _) = Setup(clock: () => now);
+        var seen = Watch(chat);
+
+        chat.ObserveOutbound(Wire("/Bob @timer sync"));
+        router.Dispatch(Line("/Bob @timer sync"));
+        router.Dispatch(Line("/Bob @timer sync"));
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+        Assert.Equal(new[] { ("@timer sync", false), ("", false) }, seen.Select(s => (s.Entry.Message, s.Users)));
+
+        now = now.AddSeconds(30);
+        router.Dispatch(Line("/Bob @timer sync"));
+        router.Dispatch(Line("--- Telepath sent to Bob ---"));
+        Assert.Equal(("@timer sync", false), (seen[2].Entry.Message, seen[2].Users));
+    }
+
+    // The user's own lines of every kind are remembered for a few seconds as they
+    // go out, for a subscriber that sees a request come back on a shared channel
+    // and has to know whether the user sent it. A line the client sent by itself,
+    // and a row on the screen, are not among them.
+    [Fact]
+    public void UserSentLately_KnowsOnlyTheUsersOwnLines_AndOnlyForAWhile()
+    {
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        var (router, chat, _) = Setup(clock: () => now);
+        bool Sent(string line) => chat.UserSentLately(l => l == line);
+
+        chat.ObserveOutbound(Wire("bg @roomba sync"));
+        router.Dispatch(Line("bg @roomba sync"));
+        Assert.False(Sent("bg @roomba sync"));
+
+        chat.ObserveOutbound(Wire("bg @roomba sync"), usersOwn: true);
+        Assert.True(Sent("bg @roomba sync"));
+        Assert.False(Sent("bg @timer sync"));
+
+        now = now.AddSeconds(20);
+        Assert.False(Sent("bg @roomba sync"));
+    }
+
     [Fact]
     public void ObserveOutbound_NonTelepathBytes_LeaveMessageEmpty()
     {

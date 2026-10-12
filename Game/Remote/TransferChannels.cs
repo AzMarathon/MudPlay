@@ -118,7 +118,62 @@ public static class TransferChannels
         return (transfer, channel);
     }
 
-    private static string NameOf(RemoteChannel channel) => channel switch
+    // Whether a request of ours, seen in the chat log as echo, was the user's own
+    // doing, as against one the client sent for another player (their `@do`, their
+    // relay-back). The one place that says so, for every transfer and channel; it
+    // is asked while the chat log is raising echo.
+    //
+    // The echo itself never tells: it shows that this client sent the line. Whose
+    // send it was is known only from the line as it went out, which the chat log
+    // remembers for the user's own lines.
+    //   - A telepath: its confirmation was paired with a send of the user's
+    //     (ChatRouter.OutgoingTelepathWasUsers).
+    //   - A line on a shared channel: the user sent, in the last few seconds, a
+    //     line that carries the same words on that channel (CarriesOn).
+    public static bool IsUsersOwn(ChatLogEntry echo, RemoteChannel channel, ChatRouter chat)
+    {
+        ArgumentNullException.ThrowIfNull(chat);
+        return channel == RemoteChannel.Telepath
+            ? chat.OutgoingTelepathWasUsers
+            : chat.UserSentLately(line => CarriesOn(line, channel, echo.Message ?? string.Empty));
+    }
+
+    // Whether a line as it went out says words on a shared channel. The line ends
+    // with the words, after the channel's speak form. A form known to belong to
+    // another channel is not it; a form not known here (a board's own say
+    // character, a verb spelled another way) is taken to be, so that a request the
+    // user typed in a form nobody listed still counts as theirs.
+    internal static bool CarriesOn(string line, RemoteChannel channel, string words)
+    {
+        words = words.Trim();
+        line = line.Trim();
+        if (words.Length == 0 || !line.EndsWith(words, StringComparison.OrdinalIgnoreCase)) return false;
+        return SpokenOn(line[..^words.Length]) is not { } known || known == channel;
+    }
+
+    // The channel a speak form puts its words on, where the form is one recorded
+    // in GAME_MECHANICS: "Telepath throttle and per-telepath acknowledgement" (the
+    // slash), "Gang channel speak verb (`bg`)", "Channel broadcast (`'`, `-`, `br`)
+    // and `join`", "Talk modes are per-realm configuration" (the period, and no
+    // form at all in talk fast). Null for any other, the letters `bro`, `broa` and
+    // `broad` included: they begin both long verbs, and which the game takes them
+    // for is not recorded.
+    private static RemoteChannel? SpokenOn(string form)
+    {
+        if (form.StartsWith('/')) return RemoteChannel.Telepath;
+        string verb = form.Trim();
+        if (verb.Length == 0 || verb == ".") return RemoteChannel.Local;
+        if (verb is "'" or "-") return RemoteChannel.Broadcast;
+        bool Begins(string longVerb) => verb.Length >= 6 && longVerb.StartsWith(verb, StringComparison.OrdinalIgnoreCase);
+        if (verb.Equals("bg", StringComparison.OrdinalIgnoreCase) || verb.Equals("gb", StringComparison.OrdinalIgnoreCase)
+            || Begins("broadgang"))
+            return RemoteChannel.Gangpath;
+        if (verb.Equals("br", StringComparison.OrdinalIgnoreCase) || Begins("broadcast")) return RemoteChannel.Broadcast;
+        return null;
+    }
+
+    // A channel as the log and a refusal name it.
+    public static string NameOf(RemoteChannel channel) => channel switch
     {
         RemoteChannel.Telepath => "telepath",
         RemoteChannel.Gangpath => "gangpath",

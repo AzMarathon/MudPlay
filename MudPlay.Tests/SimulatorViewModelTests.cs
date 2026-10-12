@@ -562,15 +562,43 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.Equal("Ranking cancelled.", h.Simulator.RankStatus);
     }
 
+    // An import of alpha made from another set, then the switch to it that an import
+    // ends with. Nothing is deleted for the import: the ranking's own table stamps
+    // say whether its files changed. With a table changed nothing is listed on the
+    // way back; with the tables as they were the ranking is still alpha's.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AGameDataSetImportedAgainFromAnotherSet_IsListedOnTheWayBackOnlyIfItsTablesAreUnchanged(bool changed)
+    {
+        using Harness h = Build(saveLoops: true);
+        AreaRanking hills = Ranking("Hills");
+        h.Finish(hills);
+        h.Cache.SwitchSet("beta");
+
+        if (changed) h.World = WithAnotherMonstersTable;
+        h.Cache.SwitchSet("alpha");
+
+        if (!changed)
+        {
+            Assert.Equal(hills.Rows, h.Simulator.Rankings);
+            return;
+        }
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal("", h.Simulator.RankStatus);
+        Assert.False(h.Simulator.SaveRankingAsLoopCommand.CanExecute(null));
+        Assert.Null(h.Rankings.Get(new SimulatorOwner("alpha", One)));
+    }
+
+    // What Manage Sets does to a set whose data it replaced, from another set: its
+    // rankings are deleted outright, and nothing is listed on the way back.
     [Fact]
-    public void AGameDataSetImportedAgainFromAnotherSetListsNothingOnTheWayBack()
+    public void AGameDataSetWhoseDataWasReplacedFromAnotherSetListsNothingOnTheWayBack()
     {
         using Harness h = Build(saveLoops: true);
         h.Finish(Ranking("Hills"));
         h.Cache.SwitchSet("beta");
 
-        // What an import of alpha does when it finishes, whichever set is active;
-        // it then switches to the imported set.
         h.Rankings.ForgetSet("alpha");
         h.Cache.SwitchSet("alpha");
 
@@ -579,23 +607,100 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.False(h.Simulator.SaveRankingAsLoopCommand.CanExecute(null));
     }
 
+    private static readonly RankingWorld WithAnotherMonstersTable = SameWorld with
+    {
+        Tables = SameWorld.Tables.ToDictionary(t => t.Key, t => t.Key == "Monsters" ? "99:9" : t.Value),
+    };
+
+    // The set picked again with nothing changed: its rankings stay, for the
+    // character on show and for the others, and the one listed stays listed. No row
+    // is left picked, as after any re-list.
     [Fact]
-    public void GameDataReadInAgainDropsEveryRankingMadeOnItAndKeepsTheSketch()
+    public void GameDataReadInAgainWithTheSameTablesKeepsItsRankingsAndTheSketch()
+    {
+        using Harness h = Build();
+        h.Rankings.Keep(new SimulatorOwner("alpha", Two), Ranking("Marsh"));
+        h.Rankings.Keep(new SimulatorOwner("beta", One), Ranking("Fen"));
+        AreaRanking hills = Ranking("Hills");
+        h.Finish(hills);
+        h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
+
+        h.Cache.ReloadActiveSet();
+
+        Assert.Equal(hills.Rows, h.Simulator.Rankings);
+        AssertListedAsKept(hills, h.Simulator.RankStatus);
+        Assert.Null(h.Simulator.SelectedRanking);
+        Assert.Equal(3, h.Rankings.Count);
+        // Still this game data's rooms.
+        Assert.Equal(2, h.Session.Clicks.Count);
+        // The other character's is compared when it is next shown, and stands.
+        h.Load(Two);
+        Assert.Equal(new[] { "Marsh" }, h.Simulator.Rankings.Select(r => r.Area));
+    }
+
+    // Read in again with a table that did change: the ranking listed was made on
+    // tables that are gone. It is dropped by the comparison a saved one is read
+    // back through, with that reason, and the other set's is left alone. Another
+    // character's on the same set goes the same way when it is next shown.
+    [Fact]
+    public void GameDataReadInAgainWithAChangedTableDropsTheRankingsMadeOnTheOldOne()
     {
         using Harness h = Build();
         h.Rankings.Keep(new SimulatorOwner("alpha", Two), Ranking("Marsh"));
         h.Rankings.Keep(new SimulatorOwner("beta", One), Ranking("Fen"));
         h.Finish(Ranking("Hills"));
-        h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
+
+        h.World = WithAnotherMonstersTable;
+        h.Cache.ReloadActiveSet();
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal("", h.Simulator.RankStatus);
+        Assert.Equal(2, h.Rankings.Count);
+        Assert.Contains(h.Rankings.DiskNotes, n => n.Contains("was dropped: the game data's Monsters table has changed since"));
+
+        h.Load(Two);
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal(1, h.Rankings.Count);
+        Assert.NotNull(h.Rankings.Get(new SimulatorOwner("beta", One)));
+    }
+
+    // A ranking that carries no record of its tables (made while the load could not
+    // be stamped) can be compared with nothing: it goes when its set is read in
+    // again, as every ranking on the set used to.
+    [Fact]
+    public void GameDataReadInAgainDropsARankingWithNoRecordOfItsTables()
+    {
+        using Harness h = Build();
+        h.Finish(Ranking("Hills") with { World = null });
 
         h.Cache.ReloadActiveSet();
 
         Assert.Empty(h.Simulator.Rankings);
-        Assert.Null(h.Simulator.SelectedRanking);
-        Assert.Equal(1, h.Rankings.Count);
-        Assert.NotNull(h.Rankings.Get(new SimulatorOwner("beta", One)));
-        // Still this game data's rooms.
-        Assert.Equal(2, h.Session.Clicks.Count);
+        Assert.Equal(0, h.Rankings.Count);
+    }
+
+    // The same ranking does not come back after a switch away either. The set's
+    // files may have been replaced from the other set (another client's import, or
+    // an import made there, which ends with the switch back): with no record of its
+    // tables it would be listed over them, pickable and saveable as a loop. It is
+    // gone whether or not they changed, there being no telling.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARankingWithNoRecordOfItsTables_IsNotListedAfterASwitchAwayAndBack(bool tablesChanged)
+    {
+        using Harness h = Build(saveLoops: true);
+        h.Finish(Ranking("Hills") with { World = null });
+        Assert.Single(h.Simulator.Rankings);
+
+        h.Cache.SwitchSet("beta");
+        if (tablesChanged) h.World = WithAnotherMonstersTable;
+        h.Cache.SwitchSet("alpha");
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal("", h.Simulator.RankStatus);
+        Assert.False(h.Simulator.SaveRankingAsLoopCommand.CanExecute(null));
+        Assert.Null(h.Rankings.Get(new SimulatorOwner("alpha", One)));
     }
 
     [Fact]
@@ -957,22 +1062,33 @@ public sealed class SimulatorViewModelTests : IDisposable
     }
 
     // The read of a saved ranking is out when the set is read in again under the same
-    // name. The pairing is unchanged and the list is empty afterwards, which is the
-    // state a late arrival is listed in: it must not be, having been made on the
-    // tables that were just replaced.
-    [Fact]
-    public void ASavedRankingStillBeingReadWhenItsGameDataIsReadInAgain_IsNotListed()
+    // name. That read was compared with the load that has gone, so what it found is
+    // not listed; the one asked for the new load is. With the tables as they were
+    // the ranking is listed and its file stays; with a table changed it is dropped,
+    // file and all, and the late arrival of the first read lists nothing.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ASavedRankingStillBeingReadWhenItsGameDataIsReadInAgain_IsComparedWithTheNewLoad(bool changed)
     {
         string set = SetWithASavedRanking(Ranking("Hills"));
+        var owner = new SimulatorOwner(set, One);
 
         using Harness h = Build(set: set, onDisk: true);
+        if (changed) h.World = WithAnotherMonstersTable;
         h.Cache.ReloadActiveSet();
         h.Settle();
 
+        if (!changed)
+        {
+            Assert.Equal(new[] { "Hills" }, h.Simulator.Rankings.Select(r => r.Area));
+            Assert.True(File.Exists(AreaRankingFiles.FileFor(owner)));
+            return;
+        }
         Assert.Empty(h.Simulator.Rankings);
         Assert.Equal("", h.Simulator.RankStatus);
-        Assert.Null(h.Rankings.Get(new SimulatorOwner(set, One)));
-        Assert.False(File.Exists(AreaRankingFiles.FileFor(new SimulatorOwner(set, One))));
+        Assert.Null(h.Rankings.Get(owner));
+        Assert.False(File.Exists(AreaRankingFiles.FileFor(owner)));
     }
 
     [Fact]

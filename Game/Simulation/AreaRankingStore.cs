@@ -18,11 +18,17 @@ namespace MudPlay.Game.Simulation;
 //
 // What is told here is when a ranking stops being true, and it then goes from both
 // places, whether or not its set is active and whether or not a Simulator is open:
-// a set's data replaced (NoteActiveSet, ForgetSet), a character renamed, moved or
-// deleted (RenameCharacter, ForgetCharacter, RenameBbs). What can't be told (the
-// character re-geared, the tables replaced while the client was closed) is caught
-// when a ranking is listed again, from what it carries of the world and character it
-// was made for.
+// a set's data replaced (ForgetSet), a character renamed, moved or deleted
+// (RenameCharacter, ForgetCharacter, RenameBbs). What can't be told (the character
+// re-geared, the tables replaced while the client was closed) is caught when a
+// ranking is listed again, from what it carries of the world and character it was
+// made for.
+//
+// A set read in again (picked again from the menu, imported over itself) is not a
+// set whose data was replaced: its tables may be the very same files. Nothing goes
+// for that (user, 2026-10-11). The world a ranking carries is compared with the new
+// load's when it is next asked for, from memory (Get) as from disk (Load), and only
+// one whose tables did change is dropped.
 //
 // The memory side is the UI thread's alone, as the Simulator's view-model is. File
 // work runs off it, one piece at a time in the order asked, so a delete asked after
@@ -62,15 +68,48 @@ public sealed class AreaRankingStore
     public IReadOnlyList<string> DiskNotes => _diskNotes.ToArray();
 
     // The ranking held in memory for owner, or null. Asking counts as showing it.
-    public AreaRanking? Get(SimulatorOwner owner)
+    //
+    // worldNow is the game data as it is (null: it can't be read, or the caller has
+    // none to compare with). A ranking made in another world is dropped, from memory
+    // and from disk, with the reason a read from disk would give: memory never
+    // hands back what the file would be refused for. One held since before the
+    // set's load in hand began and that can't be compared now (no world in hand) is
+    // not handed back either, and stays for the next ask.
+    public AreaRanking? Get(SimulatorOwner owner, RankingWorld? worldNow = null)
     {
         int at = _kept.FindIndex(k => k.Owner == owner);
         if (at < 0) return null;
         (SimulatorOwner, AreaRanking Ranking) found = _kept[at];
+        // worldNow is the active set's. Asked for a pairing of another set, it says
+        // nothing about that set's tables.
+        bool ofActiveSet = _activeSet is null || string.Equals(owner.Set, _activeSet, StringComparison.OrdinalIgnoreCase);
+        if (ofActiveSet && worldNow is not null && found.Ranking.World is { } made)
+        {
+            if (worldNow.DiffersFrom(made) is { } why)
+            {
+                _epoch++;
+                _kept.RemoveAt(at);
+                _madeBeforeReload.Remove(found.Ranking);
+                if (_files is { } files) Enqueue(() => files.Delete(owner));
+                Note($"the saved area ranking for {owner.Label} was dropped: {why}");
+                return null;
+            }
+            _madeBeforeReload.Remove(found.Ranking);
+        }
+        else if (_madeBeforeReload.TryGetValue(found.Ranking, out _))
+        {
+            return null;
+        }
         _kept.RemoveAt(at);
         _kept.Add(found);
         return found.Ranking;
     }
+
+    // The rankings held since before their set's load in hand began, and not yet
+    // compared with it. By reference: a ranking keeps its mark through a rename,
+    // and one let go from memory takes its mark with it.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<AreaRanking, object> _madeBeforeReload = new();
+    private static readonly object Marked = new();
 
     // Keep owner's ranking, just made, in place of any it had, in memory and on
     // disk. Returns the pairing whose ranking was let go from memory to stay within
@@ -134,12 +173,18 @@ public sealed class AreaRankingStore
     // ranking into memory and onto the list. _epoch moves with every such change;
     // a read that comes back to another epoch is thrown away and asked again, which
     // by the order of the queue sees the files as the change left them.
+    //
+    // A read that comes back after a new load of its set began (LoadsBegun) was
+    // compared with the world of a load that is gone. It is thrown away and not
+    // asked again: its file is as it was, and whoever shows the pairing next asks
+    // with the world as it then is.
     public void Load(SimulatorOwner owner, RankingWorld worldNow, Action<AreaRanking?> found)
     {
         ArgumentNullException.ThrowIfNull(worldNow);
         ArgumentNullException.ThrowIfNull(found);
         if (_files is not { } files || !HasFile(owner)) return;
         long epoch = _epoch;
+        long loadsBegun = LoadsBegun(owner.Set);
         Enqueue(() =>
         {
             AreaRankingFiles.ReadResult read = files.Read(owner, worldNow);
@@ -147,6 +192,7 @@ public sealed class AreaRankingStore
             {
                 if (read.Dropped is { } why)
                     Note($"the saved area ranking for {owner.Label} was dropped: {why}");
+                if (loadsBegun != LoadsBegun(owner.Set)) return;
                 if (epoch != _epoch)
                 {
                     Load(owner, worldNow, found);
@@ -242,20 +288,38 @@ public sealed class AreaRankingStore
     // The set last told active.
     private string? _activeSet;
 
-    // The active game-data set is now set. Another name is a switch and drops
-    // nothing. The same name again is that set read in afresh: its tables may
-    // differ, so every character's ranking made on it goes. Returns how many went
-    // from memory.
+    // How many loads of each set have begun. A read from disk is compared with the
+    // world of the load it was asked in; see Load.
+    private readonly Dictionary<string, long> _loadsBegun = new(StringComparer.OrdinalIgnoreCase);
+
+    private long LoadsBegun(string? set) => set is not null && _loadsBegun.TryGetValue(set, out long n) ? n : 0;
+
+    // The active game-data set is now set: a load of it has just begun, by a switch
+    // to it or by the same name again (the set read in afresh). Its tables may be
+    // the files a ranking held for it was made on or other ones, and nothing says
+    // which, so nothing is deleted: each ranking held for the set is marked, and
+    // compared with the new load's world when it is next asked for (Get).
+    //
+    // The one kind that goes here is a ranking with no record of the tables it was
+    // made on (it was made while the load could not be stamped, and was never
+    // written). There is nothing to compare it by, so it cannot outlive the load it
+    // was made in: it goes at every new load of its set, a switch back to the set
+    // as much as the same name again. The set's files may have been replaced while
+    // another set was active, and such a ranking would be listed over them. Returns
+    // how many of those went from memory.
     public int NoteActiveSet(string? set)
     {
-        bool readAgain = string.Equals(set, _activeSet, StringComparison.OrdinalIgnoreCase);
         _activeSet = set;
-        return readAgain ? ForgetSet(set) : 0;
+        if (set is not null) _loadsBegun[set] = LoadsBegun(set) + 1;
+        foreach ((SimulatorOwner owner, AreaRanking ranking) in _kept)
+            if (ranking.World is not null && string.Equals(owner.Set, set, StringComparison.OrdinalIgnoreCase))
+                _madeBeforeReload.AddOrUpdate(ranking, Marked);
+        return _kept.RemoveAll(k => k.Ranking.World is null && string.Equals(k.Owner.Set, set, StringComparison.OrdinalIgnoreCase));
     }
 
-    // The data of set was replaced (an import over it, its deletion, a copy or move
-    // of the user's edits into or out of it): drop every character's ranking made on
-    // it, from memory and from disk. Returns how many went from memory.
+    // The data of set was replaced (its deletion, a copy or move of the user's
+    // edits into or out of it): drop every character's ranking made on it, from
+    // memory and from disk. Returns how many went from memory.
     //
     // A Simulator that is listing one of them is not told from here. Each of those
     // changes, made to the active set, also reads the set in again or switches away
@@ -271,6 +335,32 @@ public sealed class AreaRankingStore
                     _post(() => Note($"deleted {deleted} saved area ranking(s) made on game data '{set}': its data was replaced"));
             });
         return _kept.RemoveAll(k => string.Equals(k.Owner.Set, set, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Once each client start: delete the ranking files too old to be read back, for
+    // every set, BBS and profile, loaded or not. It runs on the file queue like
+    // every other piece of file work, so it can't fall between a write and the
+    // delete or move asked after it. The files of the rankings held in memory are
+    // left: one on show is not taken from under the list.
+    public void SweepOld()
+    {
+        if (_files is not { } files) return;
+        string[] held = _kept.Select(k => AreaRankingFiles.FileFor(k.Owner)).OfType<string>().ToArray();
+        Enqueue(() =>
+        {
+            var skipped = new List<string>();
+            int deleted = files.SweepOld(held, skipped.Add);
+            _post(() =>
+            {
+                // One line for the pass: with another client sweeping at the same
+                // moment nearly every old file is one of these.
+                if (skipped.Count > 0)
+                    _log?.Log(LogSeverity.Debug, "Simulator",
+                        $"the sweep of saved area rankings left {skipped.Count} file(s) it could not read, judge or take; the first: {skipped[0]}");
+                if (deleted > 0)
+                    Note($"deleted {deleted} saved area ranking(s) made more than {AreaRankingFiles.MaxAge.Days} days ago");
+            });
+        });
     }
 
     // Done when every piece of file work asked for so far has run.
