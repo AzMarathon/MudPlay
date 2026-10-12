@@ -2124,6 +2124,24 @@ public sealed class CombatManagerTests
         Assert.Equal("\r", Encoding.Latin1.GetString(h.Sent[^1]));
     }
 
+    // Whoever swung is in the room and on no roster: a roster read as empty is no
+    // longer the whole of who is here, until the room is read again.
+    [Fact]
+    public void CombatLine_WithNoEngageable_LeavesTheRosterShortOfSomeone()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "kobold thief", killable: true);
+        h.AddPlayer("Someone");
+        h.Feed("Also here: Someone.");
+        Assert.True(h.Classifier.RosterIsWhole);
+
+        h.Feed("The kobold thief swings at you but misses!");
+        Assert.False(h.Classifier.RosterIsWhole);
+
+        h.Feed("Also here: Someone, kobold thief.");
+        Assert.True(h.Classifier.RosterIsWhole);
+    }
+
     // Report paradigm-20261009-120757, 12:07:41 and 12:07:53: the room's heat hit in
     // an empty room and the Enter went out for a monster that wasn't there.
     [Fact]

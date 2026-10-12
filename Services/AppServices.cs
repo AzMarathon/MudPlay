@@ -1920,6 +1920,11 @@ public sealed class AppServices
     // by CastingDirector's Tier-2 cure path.
     public Game.Conditions.ConditionTracker Conditions { get; private set; } = null!;
 
+    // Who can cast each spell of the active set (monsters, rooms, or something the
+    // client can't see). Conditions reads an applied line several spells share by
+    // it. Rebuilt on a worker each time a set's room graph has loaded.
+    public Game.GameData.SpellCasterIndex SpellCasters { get; private set; } = null!;
+
     // Outbound ailment-sync engine — on a local curable ailment it
     // announces on say (.@poisoned etc.) so other MudPlay
     // clients mirror our state, and @waits the leader; on clear it @oks.
@@ -5260,6 +5265,18 @@ public sealed class AppServices
         // Stock's `stat` lists each active effect as its bare applied line; the stat
         // screen around it is what marks it a readout, not a cast.
         Conditions.SetStatScreenProbe(() => Stats.InStatScreen);
+        // An applied line several spells print is read by which of them the room or
+        // a monster in it casts. What of the room and its roster can be gone by is
+        // CastReach.Standing's to say.
+        SpellCasters = new Game.GameData.SpellCasterIndex(GameData, () => RoomGraph.Rooms, Log);
+        RoomGraph.GraphReloaded += () => Task.Run(SpellCasters.Warm);
+        if (GameData.ActiveSet is not null) Task.Run(SpellCasters.Warm);
+        Conditions.SetCastReach(new Game.Conditions.CastReach(SpellCasters, () =>
+            Game.Conditions.CastReach.Standing(
+                RoomTracker.State.Confidence, RoomTracker.State.CurrentRoom,
+                inDarkRoom: RoomTracker.IsInDarkRoom, enteredBlind: RoomTracker.EnteredBlind,
+                blinded: Conditions.IsBlinded,
+                RoomClassifier.Current, RoomClassifier.RosterIsWhole, SpellCasters.KnowsMonster)));
         // Watches the same wire for lines neither the message catalogue above nor any
         // registered Router pattern recognizes, staging them as review candidates.
         // AttachLineExtractor lands in MainWindowViewModel alongside the other line

@@ -45,6 +45,17 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     private List<(string Pattern, MessageRecord Record)> _appliedIndex = new();
     // Applied text → the longer applied texts that hold it (BuildLongerApplied).
     private Dictionary<string, string[]> _longerApplied = new(StringComparer.Ordinal);
+    // Applied record → the cast lines of other spells that hold its applied text
+    // (BuildCastLinesHolding). Keyed by the record and not its text: which lines
+    // are another spell's depends on the record's own spells.
+    private Dictionary<MessageRecord, HoldingLine[]> _castLinesHolding = new(ReferenceEqualityComparer.Instance);
+
+    // Who could have cast a spell where the character stands. Unset, every record a
+    // line matches is latched.
+    private CastReach? _castReach;
+
+    // Record name → the records of that name, to say which spell a negated cast was.
+    private Dictionary<string, List<MessageRecord>> _recordsByName = new(StringComparer.OrdinalIgnoreCase);
 
     // Built from MessageStore on every CollectionChanged. Maps an ends-with
     // string to records — only records whose EndsWith is non-empty get indexed.
@@ -140,6 +151,16 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // as a readout but Paradigm's countdown form.
     private Func<bool>? _inStatScreen;
     public void SetStatScreenProbe(Func<bool> inStatScreen) => _inStatScreen = inStatScreen;
+
+    // Several spells print one applied line, and all of their records used to latch
+    // on it whichever was cast. With this set, a record whose spell only monsters and
+    // rooms cast, none of them here, is left out when another of the matched records
+    // is one the room or a monster in it does cast (KeepWhatCouldBeCastHere).
+    public void SetCastReach(CastReach reach)
+    {
+        ArgumentNullException.ThrowIfNull(reach);
+        _castReach = reach;
+    }
 
     // Bind to the per-session LineExtractor so every inbound line is scanned.
     // Idempotent — re-attaching to the same extractor is a no-op.
@@ -265,12 +286,21 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         List<(string, MessageRecord)> ends = new();
         Dictionary<string, List<MessageRecord>> aliases = new(StringComparer.Ordinal);
         List<(string Norm, MessageRecord Record)> fumbles = new();
+        Dictionary<string, List<MessageRecord>> byName = new(StringComparer.OrdinalIgnoreCase);
         foreach (MessageRecord r in _messages.Messages)
         {
             // 'Disabled (don't use)' — ignore the record wholesale: it never indexes,
             // so it can't latch a condition, set a flag, contribute a fumble wording,
             // or fire ActionFailed. Any active copy is dropped in the prune below.
             if (r.Flags.HasFlag(MessageFlags.Disabled)) continue;
+
+            string name = r.Name.Trim();
+            if (name.Length > 0)
+            {
+                if (!byName.TryGetValue(name, out List<MessageRecord>? named))
+                    byName[name] = named = new List<MessageRecord>();
+                named.Add(r);
+            }
 
             // A slot holding a {null}/{void}/{empty} sentinel means "this spell has no such
             // line" — treat it as absent so it never compiles into a matcher (IsBlankOrAbsent),
@@ -311,7 +341,9 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         _appliedAliases = aliases;
         BuildCastLineIndex(applied);
         _longerApplied = BuildLongerApplied(aliases.Keys);
+        _castLinesHolding = BuildCastLinesHolding(applied, _messages.Messages);
         _confuseFumbleIndex = fumbles;
+        _recordsByName = byName;
         _log?.Debug(LogCategory,
             $"index built — applied={applied.Count} endsWith={ends.Count} totalRecords={_messages.Messages.Count}");
 
@@ -374,6 +406,25 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         _castSeenAt.Clear();
     }
 
+    // The conditions KeepWhatCouldBeCastHere never leaves out on the roster's word.
+    // A caster has to be in the room for its spell to land (user, 2026-10-11:
+    // "monsters or players can only affect you with spells/lines, IF they are in
+    // your room"), but a few monsters follow in with no line at all (the same day:
+    // "only very very few monsters in the game can follow you silently", the dark
+    // goblin archer for one), and nothing in the game data is known to say which.
+    // So the roster can never be proven whole, and what stops the character moving,
+    // fighting or seeing is not ruled out by it: missed, such a condition costs far
+    // more than one latched in error, which its wear-off or Reset States clears.
+    private const MessageFlags NeverNarrowed =
+        MessageFlags.MovementPrevented | MessageFlags.AttackPrevented | MessageFlags.Blinded;
+
+    // The record's own cast line came just ahead of the line being read. Only records
+    // whose applied text is shared across differing flags have their cast lines
+    // watched (BuildCastLineIndex).
+    private bool CastLineJustSeen(MessageRecord record, DateTimeOffset when) =>
+        _ambiguousApplied.Contains(record.Id)
+        && _castSeenAt.TryGetValue(record.Id, out DateTimeOffset seen) && when - seen <= CastLineWindow;
+
     // Of the records one applied line matched, the ones to leave unlatched: a record
     // sharing its applied text with another whose cast line was just seen, when its
     // own was not. Null when no cast line was seen, and every match latches.
@@ -381,8 +432,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     {
         List<MessageRecord>? announced = null;
         foreach (MessageRecord r in matched)
-            if (_ambiguousApplied.Contains(r.Id)
-                && _castSeenAt.TryGetValue(r.Id, out DateTimeOffset seen) && when - seen <= CastLineWindow)
+            if (CastLineJustSeen(r, when))
                 (announced ??= new List<MessageRecord>()).Add(r);
         if (announced is null) return null;
 
@@ -412,6 +462,14 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         if (line.IsPromptLine) return;
         string text = line.Text;
         if (string.IsNullOrEmpty(text)) return;
+
+        // A cast the target threw off names its spell and brings none of its effect:
+        // nothing on such a line starts or ends a condition.
+        if (NegatedCastLine.TryRead(text, out NegatedCastLine.Cast negated))
+        {
+            LogNegatedCast(negated);
+            return;
+        }
 
         foreach ((Func<string, bool> matches, string recordId) in _castLineIndex)
             if (matches(text)) _castSeenAt[recordId] = line.Timestamp;
@@ -506,17 +564,28 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         if (!StatusEffectLine.HasCountdown(text) && _inStatScreen?.Invoke() != true)
         {
             List<MessageRecord> matched = new();
+            List<(MessageRecord Record, HoldingLine Line)>? shadowed = null;
             foreach ((string pattern, MessageRecord r) in _appliedIndex)
             {
                 if (!text.Contains(pattern, StringComparison.Ordinal)) continue;
                 if (IsPartOfALongerMessage(text, pattern)) continue;
+                if (CastLineOfAnotherSpell(text, pattern, r) is { } castLine)
+                {
+                    (shadowed ??= new()).Add((r, castLine));
+                    continue;
+                }
                 matched.Add(r);
             }
+            if (shadowed is not null) LogShadowed(shadowed);
+            // The spell's own cast line is the better witness, so it speaks first: who
+            // could have cast what is asked only of the records it leaves standing.
             HashSet<string>? outranked = matched.Count > 1 && _ambiguousApplied.Count > 0
                 ? OutrankedByAnnouncedCast(matched, line.Timestamp) : null;
+            if (outranked is not null) matched = matched.FindAll(r => !outranked.Contains(r.Id));
+            if (matched.Count > 1 && _castReach is { } reach)
+                matched = KeepWhatCouldBeCastHere(matched, reach, line.Timestamp);
             foreach (MessageRecord r in matched)
             {
-                if (outranked?.Contains(r.Id) == true) continue;
                 // Capture a LastActionFailed match BEFORE the active-set dedup below —
                 // a failure line can recur while its record stays "applied" only once,
                 // so ActionFailed must ride the raw line, not the deduped apply. First
@@ -557,6 +626,28 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             ActionFailed?.Invoke(af);
     }
 
+    // Says in the log which spell a negated cast was, by the message records of the
+    // spell's name and the spells they are for; a name no record has is said so.
+    private void LogNegatedCast(NegatedCastLine.Cast cast)
+    {
+        if (_log is not { IsDebugEnabled: true }) return;
+        string records = _recordsByName.TryGetValue(cast.Spell.Trim(), out List<MessageRecord>? named)
+            ? "spell record " + string.Join(", ", named.Select(DescribeRecordSpells).Distinct())
+            : "no spell record of that name";
+        _log.Debug(LogCategory,
+            $"negated cast — {cast.Caster} cast '{cast.Spell}' at {cast.Target} and it did nothing "
+            + $"({records}); no condition applied");
+    }
+
+    private static string DescribeRecordSpells(MessageRecord record)
+    {
+        IEnumerable<string> spells = (record.Links ?? Array.Empty<GameDataLink>())
+            .Where(static link => link.Table.Equals("Spells", StringComparison.OrdinalIgnoreCase))
+            .Select(static link => $"#{link.Number}");
+        string numbers = string.Join(" ", spells);
+        return numbers.Length > 0 ? $"'{record.Name}' ({numbers})" : $"'{record.Name}'";
+    }
+
     // The applied text matched, but only as part of a longer applied text the line
     // also holds: the line is that longer message, and this record's condition was
     // never applied. "You are stunned by electrical shock!" (a hold) holds "You are
@@ -567,10 +658,9 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // never indexed as longer; a shorter text that also stands on its own elsewhere
     // in the line still counts.
     //
-    // Only applied texts are compared. A record's own cast line often holds its
-    // applied text with more words after it ("You are poisoned for 12 damage!",
-    // "You are mesmerized by the movements!"), and the condition is rightly read off
-    // that line too.
+    // This half compares applied texts with each other. The cast lines that hold an
+    // applied text are CastLineOfAnotherSpell's, which has to tell a spell's own cast
+    // line from another's.
     private bool IsPartOfALongerMessage(string text, string pattern)
     {
         if (!_longerApplied.TryGetValue(pattern, out string[]? longer)) return false;
@@ -624,6 +714,225 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             if (!covered) return true;
         }
         return false;
+    }
+
+    // The shorter text occurs in the line somewhere outside the span given.
+    private static bool StandsOutside(string text, string shorter, int start, int length)
+    {
+        for (int i = text.IndexOf(shorter, StringComparison.Ordinal); i >= 0;
+             i = text.IndexOf(shorter, i + 1, StringComparison.Ordinal))
+            if (i < start || i + shorter.Length > start + length) return true;
+        return false;
+    }
+
+    // A cast, target or witness line that holds an applied text with more words
+    // around it. Template is set when the line carries placeholders; Owners names the
+    // records it belongs to, for the log.
+    private sealed record HoldingLine(string Text, CasterMessageMatcher? Template, string Owners);
+
+    // The applied text matched, but the line is the cast line of a different spell,
+    // which holds that text among its own words: the room spell freezing water prints
+    // "You are freezing cold!", and "You are freezing" is the applied text of glacial
+    // mist (a confusion) and the ice storms. Every one of them latched in the
+    // Underwater Passage rooms, and Confused stood with no wear-off ever to come
+    // (report paradigm-20261011-165726). The line is that other spell's message, and
+    // this record's condition was never applied. As with a longer applied text, the
+    // shorter one standing by itself elsewhere in the line still counts.
+    //
+    // Null for a line of the record's own spell, which is where its condition is
+    // rightly read ("You are mesmerized by the movements!"): BuildCastLinesHolding
+    // leaves those out.
+    private HoldingLine? CastLineOfAnotherSpell(string text, string pattern, MessageRecord record)
+    {
+        if (!_castLinesHolding.TryGetValue(record, out HoldingLine[]? lines)) return null;
+        foreach (HoldingLine line in lines)
+        {
+            if (line.Template is { } template)
+            {
+                if (!template.TryMatchSpan(text, out int start, out int length)) continue;
+                if (StandsOutside(text, pattern, start, length)) continue;
+            }
+            else
+            {
+                if (!text.Contains(line.Text, StringComparison.Ordinal)) continue;
+                if (StandsOutside(text, pattern, line.Text)) continue;
+            }
+            return line;
+        }
+        return null;
+    }
+
+    private void LogShadowed(List<(MessageRecord Record, HoldingLine Line)> shadowed)
+    {
+        if (_log is not { IsDebugEnabled: true }) return;
+        foreach (IGrouping<HoldingLine, (MessageRecord Record, HoldingLine Line)> byLine in shadowed.GroupBy(s => s.Line))
+            _log.Debug(LogCategory,
+                $"applied text '{byLine.First().Record.AppliedMessage}' matched only inside '{byLine.Key.Text}', "
+                + $"the line of {byLine.Key.Owners} — not latched: {string.Join(", ", byLine.Select(s => $"'{s.Record.Name}'").Distinct())}");
+    }
+
+    // For each record with an applied text, the cast, target and witness lines of
+    // OTHER spells that hold that text and add words to it. A line is left out when
+    // any record carrying it is the record itself, is for one of the same spells,
+    // has the same applied text or carries the same conditions (IsTheSameEffect):
+    // then the line is this effect's own announcement (web entangle's "You are
+    // entangled in sticky strands of webbing." entangles as surely as the other
+    // entangles' "You are entangled").
+    //
+    // Each cast line is walked once and looked up by the opening characters of the
+    // applied texts, so a rebuild stays a few milliseconds over the whole catalogue.
+    private static Dictionary<MessageRecord, HoldingLine[]> BuildCastLinesHolding(
+        List<(string Pattern, MessageRecord Record)> applied, IEnumerable<MessageRecord> records)
+    {
+        Dictionary<MessageRecord, HoldingLine[]> result = new(ReferenceEqualityComparer.Instance);
+        if (applied.Count == 0) return result;
+
+        // An indexed applied text is never shorter than this (IsTooShortToMatch).
+        const int prefixLength = MessageRecord.MinRecognitionPatternLength;
+        Dictionary<string, List<string>> appliedByPrefix = new(StringComparer.Ordinal);
+        foreach ((string pattern, _) in applied)
+        {
+            string prefix = pattern[..prefixLength];
+            if (!appliedByPrefix.TryGetValue(prefix, out List<string>? texts))
+                appliedByPrefix[prefix] = texts = new List<string>();
+            if (!texts.Contains(pattern)) texts.Add(pattern);
+        }
+        Dictionary<string, List<string>>.AlternateLookup<ReadOnlySpan<char>> byPrefix =
+            appliedByPrefix.GetAlternateLookup<ReadOnlySpan<char>>();
+
+        Dictionary<string, List<MessageRecord>> owners = new(StringComparer.Ordinal);
+        foreach (MessageRecord r in records)
+        {
+            if (r.Flags.HasFlag(MessageFlags.Disabled)) continue;
+            foreach (string? slot in new[] { r.CasterMessage, r.TargetMessage, r.WitnessMessage })
+            {
+                if (MessageRecord.IsBlankOrAbsent(slot)) continue;
+                // A witness slot can hold several wordings, one to a line.
+                foreach (string wording in slot!.Split('\n'))
+                {
+                    if (MessageRecord.IsBlankOrAbsent(wording) || MessageRecord.IsTooShortToMatch(wording)) continue;
+                    string line = wording.Trim();
+                    if (!owners.TryGetValue(line, out List<MessageRecord>? from))
+                        owners[line] = from = new List<MessageRecord>();
+                    if (!from.Contains(r)) from.Add(r);
+                }
+            }
+        }
+
+        Dictionary<string, List<string>> holding = new(StringComparer.Ordinal);
+        foreach (string line in owners.Keys)
+            for (int at = 0; at + prefixLength <= line.Length; at++)
+            {
+                if (!byPrefix.TryGetValue(line.AsSpan(at, prefixLength), out List<string>? texts)) continue;
+                foreach (string text in texts)
+                {
+                    if (line.Length <= text.Length
+                        || !line.AsSpan(at).StartsWith(text, StringComparison.Ordinal)
+                        || !AddsWords(line, at, text.Length)) continue;
+                    if (!holding.TryGetValue(text, out List<string>? lines))
+                        holding[text] = lines = new List<string>();
+                    if (!lines.Contains(line)) lines.Add(line);
+                }
+            }
+
+        Dictionary<string, HoldingLine> built = new(StringComparer.Ordinal);
+        foreach ((string pattern, MessageRecord record) in applied)
+        {
+            if (!holding.TryGetValue(pattern, out List<string>? lines)) continue;
+            List<HoldingLine>? others = null;
+            foreach (string line in lines)
+            {
+                List<MessageRecord> from = owners[line];
+                if (from.Exists(owner => IsTheSameEffect(owner, record))) continue;
+                if (!built.TryGetValue(line, out HoldingLine? holder))
+                    built[line] = holder = new HoldingLine(
+                        line, CasterMessageMatcher.TryCreate(line, compiled: false),
+                        string.Join(" / ", from.Select(o => $"'{o.Name}'").Distinct()));
+                (others ??= new List<HoldingLine>()).Add(holder);
+            }
+            if (others is not null) result[record] = others.ToArray();
+        }
+        return result;
+    }
+
+    // Whether a line carried by owner brings on what record stands for: the record
+    // itself, a record for one of the same spells, one with the same applied text,
+    // or one that carries every condition record does.
+    //
+    // The last is for a line whose own spell really applies that condition: hypnotic
+    // hands' "You are mesmerized by the hypnotic movements!" holds the applied text
+    // of mesmerize and strut, and all three are confusions, so the line confuses
+    // whichever record it is read through. Its own applied line ("You are
+    // confused!") does not always follow at once (user, 2026-10-11), and waiting for
+    // it left the character confused and not known to be. A record with no condition
+    // has nothing a line could bring on in its place, so it is not let through this
+    // way: freezing water's line still latches no ice storm.
+    private static bool IsTheSameEffect(MessageRecord owner, MessageRecord record)
+    {
+        if (ReferenceEquals(owner, record) || owner.Id == record.Id) return true;
+        if (!MessageRecord.IsBlankOrAbsent(owner.AppliedMessage)
+            && ApplyTextKey(owner.AppliedMessage) == ApplyTextKey(record.AppliedMessage)) return true;
+        MessageFlags conditions = record.Flags & ConditionFlags;
+        if (conditions != MessageFlags.None && (owner.Flags & conditions) == conditions) return true;
+        if (owner.Links is null || record.Links is null) return false;
+        foreach (GameDataLink link in owner.Links)
+            if (record.Links.Contains(link)) return true;
+        return false;
+    }
+
+    // The flags that say what state a line puts the character in. The others say
+    // what to do about a line (resend the action) or switch a record off.
+    private const MessageFlags ConditionFlags =
+        MessageFlags.Blinded | MessageFlags.Confused | MessageFlags.Poisoned | MessageFlags.Fear
+        | MessageFlags.MovementPrevented | MessageFlags.AttackPrevented | MessageFlags.Diseased;
+
+    // Of the records one applied line matched, the ones a caster here could have
+    // applied. Several spells print the same applied line, and every record carrying
+    // it used to latch whichever was cast, their flags added together: an ice storm
+    // set Confused through the mists' records. Who can cast a spell is in the game
+    // data, and the room and the monsters in it are known, so a record is left out
+    // when its spell is cast only by monsters and rooms, none of them here, AND some
+    // other matched record is one this room or a monster in it does cast. With no
+    // caster in sight for any of them nothing is left out (a dark room, a hidden
+    // monster), and a spell a player, an item or a textblock can also cast is never
+    // left out. (User, 2026-10-11: "it should also be able to discriminate spells
+    // being cast based on monsters in the room, spells they have available and what
+    // spells the room casts as well".)
+    //
+    // Two kinds of record are never left out, whoever is here. One that holds,
+    // stops attacks or blinds (NeverNarrowed). And one whose own cast line was just
+    // seen while another's was not: the line says which was cast, and that outweighs
+    // who is listed. A cast line every one of them shares says nothing of which, so
+    // it protects none of them (the three plagues print one line).
+    private List<MessageRecord> KeepWhatCouldBeCastHere(
+        List<MessageRecord> matched, CastReach reach, DateTimeOffset when)
+    {
+        if (reach.Now() is not { } here) return matched;
+
+        bool castLineTellsApart = matched.Exists(r => CastLineJustSeen(r, when))
+            && matched.Exists(r => !CastLineJustSeen(r, when));
+        List<string>? castHere = null;
+        HashSet<MessageRecord>? outOfReach = null;
+        foreach (MessageRecord r in matched)
+            switch (reach.Of(r, here, out string? by))
+            {
+                case CastReach.Verdict.InReach:
+                    (castHere ??= new List<string>()).Add($"'{r.Name}' ({by})");
+                    break;
+                case CastReach.Verdict.OutOfReach:
+                    if ((r.Flags & NeverNarrowed) != MessageFlags.None) break;
+                    if (castLineTellsApart && CastLineJustSeen(r, when)) break;
+                    (outOfReach ??= new HashSet<MessageRecord>(ReferenceEqualityComparer.Instance)).Add(r);
+                    break;
+            }
+        if (castHere is null || outOfReach is null) return matched;
+
+        if (_log is { IsDebugEnabled: true })
+            _log.Debug(LogCategory,
+                $"applied line shared by several spells — cast here: {string.Join(", ", castHere.Distinct())}; "
+                + "not applying, no monster or room that casts them being here: "
+                + string.Join(", ", outOfReach.Select(r => $"'{r.Name}' ({r.Flags})").Distinct()));
+        return matched.FindAll(r => !outOfReach.Contains(r));
     }
 
     // A single game line can match many catalogue records that share the same

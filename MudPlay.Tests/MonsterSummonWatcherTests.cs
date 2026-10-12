@@ -84,6 +84,25 @@ public sealed class MonsterSummonWatcherTests
         Assert.Single(h.Refreshes);
     }
 
+    // The summoned monster is in the room and on no roster until the room is read
+    // again, so the roster is known to be short from the summon line on.
+    [Fact]
+    public void ASummon_LeavesTheRosterShortOfSomeone_UntilTheRoomIsReadAgain()
+    {
+        using Harness h = new();
+        h.Feed("Also here: fat half-orc sentry.");
+        Assert.True(h.Classifier.RosterIsWhole);
+
+        h.Feed("The fat half-orc sentry shouts for aid!");
+        Assert.False(h.Classifier.RosterIsWhole);
+
+        h.Feed("Also here: fat half-orc sentry, orc warrior.");
+        Assert.True(h.Classifier.RosterIsWhole);
+
+        h.Feed("The burly dwarven guard shouts for aid!");      // a summoner the roster doesn't even list
+        Assert.False(h.Classifier.RosterIsWhole);
+    }
+
     [Fact]
     public void SummonByNoOneOnTheRoster_SendsNothing()
     {

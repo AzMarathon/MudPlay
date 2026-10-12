@@ -1,15 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.10**
-> - Remote commands are read on the broadcast channel when "Disallow @commands from broadcast" is unticked, under each player's permissions, and answered there: once a minute per player, four players a minute
-> - A relay-back (`&@command`) heard on broadcast is sent back on broadcast
-> - Sync Timers, one player asked by telepath: their timer is merged in when you hold none and synced when it differs
-> - Sync Timers on gang, say or broadcast: replies are gathered for 10 seconds and judged together; merged in only if all agree, listed for you to pick otherwise
-> - A timer of yours that changed after you asked is never replaced by a sync answer; the boss is listed instead
-> - Only a `@timer sync`, `@roomba sync` or `@loop send yes` you sent yourself counts as your request; one your client sent for another player's remote command merges nothing
-> - Picking the active game-data set again keeps its saved Simulator rankings; one is dropped when its tables changed, or at the next load when it has no record of them
-> - Saved Simulator rankings older than 180 days are deleted at each start, for every character
+> **Version 3.180.11**
+> - A room spell's own line no longer sets another spell's condition: the Underwater Passage's "You are freezing cold!" was read as confusion and held navigation
+> - "You are poisoned for N damage!" is read as damage, not as being poisoned
+> - A line several spells share is read by which of them the room or a monster present can cast, while the room's occupants are fully known; a hold, blindness or attack-stop is never ruled out
+> - Negated and resisted cast lines are recognised and tied to their spell; no condition is read off them
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

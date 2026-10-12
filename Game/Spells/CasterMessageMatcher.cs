@@ -239,6 +239,18 @@ public sealed class CasterMessageMatcher
         return true;
     }
 
+    // Match the line and say where in it the message sits, for a caller that has to
+    // know whether some other text of the line lies inside the message or beside it.
+    public bool TryMatchSpan(string? line, out int start, out int length)
+    {
+        start = 0;
+        length = 0;
+        if (MatchLine(line) is not { } m) return false;
+        start = m.Index;
+        length = m.Length;
+        return true;
+    }
+
     // Match the line and surface the first numeric ({d} / {dmg} / {damage}) capture
     // as damage. Returns true when the line matches the template — even if the
     // template has no numeric slot, in which case damage stays 0 (a recognised cast
