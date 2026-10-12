@@ -252,6 +252,25 @@ public sealed class MovementController : IDisposable
         _solvers.Add((active, held, stop));
     }
 
+    // ----- Starts held elsewhere ---------------------------------------
+    // What would start a run by itself later and is no engine here to stop: the
+    // loop, Auto-Lair or walk a fight with a player stood down to put back at its
+    // end, the default task waiting out the party-rebuild window. Every engine is
+    // idle while one is held, so a stop that looks at the engines finds nothing.
+    // A change of game data asks each (StopForGameDataChange): what it holds is of
+    // the old data's rooms, and is let go and named with the rest.
+    //
+    // held answers what it holds as it reads in the notice ("loop 'Ring', held for
+    // a fight,"), or null for nothing; drop lets it go, with the reason.
+    private readonly List<(Func<string?> Held, Action<string> Drop)> _heldStarts = new();
+
+    public void AddHeldStart(Func<string?> held, Action<string> drop)
+    {
+        ArgumentNullException.ThrowIfNull(held);
+        ArgumentNullException.ThrowIfNull(drop);
+        _heldStarts.Add((held, drop));
+    }
+
     // A solver started, ended, or went into or out of a hold.
     public void NoteSolverStateChanged() => StateChanged?.Invoke();
 
@@ -417,18 +436,24 @@ public sealed class MovementController : IDisposable
     // walk-to, a puzzle solve or an errand in progress is stopped, the way Stop
     // stops it, and whatever would start one again by itself is dropped: a loop held
     // for a reconnect or for the master switch, a loop loaded to start, a run queued
-    // behind an errand, the "Resume first?" answer still owed, and what the
-    // subscribers of EndingForGameDataChange hold (owner, 2026-10-11). The stop is
+    // behind an errand, the "Resume first?" answer still owed, the starts held
+    // elsewhere (AddHeldStart), and what the subscribers of EndingForGameDataChange
+    // hold (owner, 2026-10-11). The stop is
     // made whether or not anything is running, as the Stop button's is. Returns what
     // ended, as the start of the notice ("Loop 'Ring' stopped"), or null when
     // nothing was running or held.
-    public string? StopForGameDataChange(string? was, string? now, bool readInAgain = false)
+    //
+    // because: what brought the change about when the user did not change the game
+    // data: a profile closed or loaded whose realm runs on another set. The reason
+    // then leads with it, so the log and every cancel say what the user did.
+    public string? StopForGameDataChange(string? was, string? now, bool readInAgain = false, string? because = null)
     {
         bool sameSet = string.Equals(was, now, StringComparison.OrdinalIgnoreCase);
         if (sameSet && !readInAgain) return null;
         string reason = sameSet
             ? $"game data '{now ?? "(none)"}' was read in again"
             : $"game data changed from '{was ?? "(none)"}' to '{now ?? "(none)"}'";
+        if (because is not null) reason = $"{because}, and with it {reason}";
 
         List<string> stopped = new();
         // The topmost engine is the run: a loop or Auto-Lair drives the walker.
@@ -443,6 +468,12 @@ public sealed class MovementController : IDisposable
         List<string> dropped = new();
         if (_loops.PendingReconnectResumeName is { } heldLoop) dropped.Add($"loop '{heldLoop}', held for a reconnect,");
         if (_loops.StagedLoop is { } staged) dropped.Add($"loop '{staged.Name}', loaded to start,");
+        foreach ((Func<string?> held, Action<string> drop) in _heldStarts)
+        {
+            if (held() is not { } heldStart) continue;
+            dropped.Add(heldStart);
+            drop(reason);
+        }
 
         // A start waiting on the "Resume first?" answer is a run of the last set's too.
         _awaitingAnswer = null;

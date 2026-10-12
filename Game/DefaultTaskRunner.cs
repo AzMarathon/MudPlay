@@ -284,18 +284,46 @@ public sealed class DefaultTaskRunner : IDisposable
             _log?.Info("DefaultTask",
                 $"reconnect after a party session — holding {window.TotalSeconds:0}s for party rebuild before starting {label}.");
             CancelHold();
+            _held = (label, start);
             _holdTimer = new DispatcherTimer { Interval = window };
-            _holdTimer.Tick += (_, _) =>
-            {
-                CancelHold();
-                if (_isConnected) start();
-                else _log?.Info("DefaultTask", $"party-rebuild hold elapsed but no longer connected — skipping {label}.");
-            };
+            _holdTimer.Tick += (_, _) => OnHoldElapsed();
             _holdTimer.Start();
             return;
         }
 
         start();
+    }
+
+    // The task waiting out the hold: its name ("loop 'Ring'") and its start. Null
+    // when none is, and once it was called off.
+    private (string Label, Action Start)? _held;
+
+    // The party-rebuild window is over: start what was held, if it still is.
+    private void OnHoldElapsed()
+    {
+        if (_held is not { } held) return;
+        CancelHold();
+        if (_isConnected) held.Start();
+        else _log?.Info("DefaultTask", $"party-rebuild hold elapsed but no longer connected — skipping {held.Label}.");
+    }
+
+    internal void FireHoldElapsedForTests() => OnHoldElapsed();
+
+    // The task waiting out the hold, as it reads in the notice of what a stop
+    // dropped ("loop 'Ring', held for the party to rebuild,"); null when none is.
+    public string? HeldStart => _held is { } held ? $"{held.Label}, held for the party to rebuild," : null;
+
+    // The game data was read in afresh while the task waited: it is called off for
+    // this connection, not started when the window ends. The loop or the lair setup
+    // it holds was picked by name from the catalogue of the game data active then
+    // (loops and lair setups are kept with each set), and its rooms are that
+    // data's; looked up again under another set the name is another loop, or none.
+    // The user is told what was dropped, and starts what they want.
+    public void DropHold(string reason)
+    {
+        if (_held is not { } held) return;
+        CancelHold();
+        _log?.Info("DefaultTask", $"{held.Label} is not started when the party-rebuild hold ends: {reason}.");
     }
 
     // The master switch, asked with what is about to start (true = off;
@@ -348,6 +376,7 @@ public sealed class DefaultTaskRunner : IDisposable
 
     private void CancelHold()
     {
+        _held = null;
         if (_holdTimer is null) return;
         _holdTimer.Stop();
         _holdTimer = null;

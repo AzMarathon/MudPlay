@@ -1453,6 +1453,12 @@ public sealed class AppServices
         ChestSellTour.Cancel(reason);
         if (GhSweep.Phase != Game.Map.GhSweepManager.SweepPhase.Idle) stopped.Add("the Roomba sweep");
         GhSweep.Stop(reason);
+        // A leader's party training trip waits for minutes between its walks (the
+        // members' trains), and walks on to the next trainer it planned when the
+        // wait ends. The errand hook has named it ("the training trip") and ended
+        // the trainer's side; this ends the trip itself.
+        if (PartyTrain.CallOffTrip(reason) && !stopped.Contains("the training trip"))
+            stopped.Add("the party training trip");
         // Detours that hold a room to walk to, or back to, afterwards.
         MonsterDropRouter.Cancel();
         ShortcutSource.Cancel();
@@ -1461,6 +1467,28 @@ public sealed class AppServices
         // "Resume first?" question is about a run of them.
         ViewModels.Navigation.RouteChoicePrompt.CloseOpenCards();
         _resumeFirstQuestion?.NoCommand.Execute(null);
+    }
+
+    // Another game-data set became the active one, and the stop for it has been
+    // made (StopOnGameDataChange). What a route still wanted, and what the party
+    // was counted to hold or was handed for one, is kept by item number, and under
+    // another set a number is another item: left standing, a need had the floor
+    // pickup `get` whatever now carries its number, and a party count still out
+    // went on to hand that item round. The same set read in again keeps its
+    // numbers, and these with them.
+    //
+    // After the stop, not with what is ended ahead of it
+    // (EndHeldRunsForGameDataChange): forgetting the party count lets go of the
+    // walk it holds, which would take a step before its stop reached it.
+    private void ForgetRouteItemsOfOtherGameData(Game.Map.GameDataLoadChange change)
+    {
+        if (change.ReadInAgain) return;
+        string reason = change.Why;
+        int needs = Needs.Clear(NeedKind.PathItem);
+        if (needs > 0) Log.Info("Needs", $"{needs} route item need(s) dropped: {reason}");
+        PartyPathItemGate.Clear();
+        PartyHandOvers.Clear(reason);
+        ClearPartyShortGateItems(reason);
     }
 
     // The errand a user's Stop holds instead of ending, as it reads in a sentence;
@@ -3838,10 +3866,10 @@ public sealed class AppServices
         // Re-resolve on every signal that could change the answer:
         // a fresh profile load, an explicit BBS pin from Settings →
         // BBS Apply, a re-pin via ProfileMutated, and profile close.
-        Profile.ProfileLoaded  += _ => ApplyActiveGameDataSet();
+        Profile.ProfileLoaded  += _ => ApplyActiveGameDataSet("a profile was loaded");
         Profile.BbsPinApplied  += _ => ApplyActiveGameDataSet();
         Profile.ProfileMutated += _ => ApplyActiveGameDataSet();
-        Profile.ProfileClosed  += ApplyActiveGameDataSet;
+        Profile.ProfileClosed  += () => ApplyActiveGameDataSet("the profile was closed");
 
         // Messages catalogue is paired per game-data set on disk
         // (Data/Global/Messages/{set-name}.json) — reload whenever the
@@ -4005,32 +4033,22 @@ public sealed class AppServices
             Task.Run(() => WarmQuestData(className));
         };
         // Game data read in afresh stops whatever is walking by the old data's room
-        // numbers: another set become the active one, or the active one imported again
-        // or rewritten in Manage Sets, which may have changed its rooms (owner,
-        // 2026-10-11). Told by the cache's load, which moves on both. The Game Data
-        // menu's pick of the set already active reads it in again (ReloadActiveSet),
-        // so it stops like an import; only a SwitchSet to the active name, which the
-        // cache answers without a new load, raises nothing. Subscribed ahead of the room graph's own
-        // handler below, so the stop comes before the graph is rebuilt and nothing
-        // re-plans those numbers on the new rooms first. The movement controller is
-        // built further down: before it exists nothing is running.
-        GameDataCache.Load walkedOn = GameData.ActiveLoad;
-        GameData.ActiveSetChanged += set =>
+        // numbers (Game.Map.StopOnGameDataChange decides which changes those are, and
+        // makes the stop). Subscribed ahead of the room graph's own handler below,
+        // so the stop comes before the graph is rebuilt and nothing re-plans those
+        // numbers on the new rooms first. The movement controller is built further
+        // down: before it exists nothing is running.
+        Game.Map.StopOnGameDataChange gameDataStop = new(
+            () => GameData.ActiveLoad, () => MovementControl, ForgetRouteItemsOfOtherGameData);
+        GameData.ActiveSetChanged += _ =>
         {
-            GameDataCache.Load was = walkedOn;
-            walkedOn = GameData.ActiveLoad;
-            if (MovementControl is null || was == walkedOn) return;
-            bool readInAgain = string.Equals(was.Set, set, StringComparison.OrdinalIgnoreCase);
-            if (MovementControl.StopForGameDataChange(was.Set, set, readInAgain) is not { } ended) return;
-            string why = readInAgain
-                ? $"game data '{set ?? "(none)"}' was read in again"
-                : $"the game data changed from '{was.Set ?? "(none)"}' to '{set ?? "(none)"}'";
+            if (gameDataStop.OnActiveSetChanged(_gameDataSwitchCause) is not { } stop) return;
             // Posted: a set change can come from inside the line pump, where writing
             // to the terminal re-enters it.
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice($"[{ended}: {why}]"));
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(stop.Notice));
             // The client is left as the Stop button leaves it: the autos a Run or
             // Sprint start turned off for the trip are settled, as for any stop.
-            NoteGameDataStop?.Invoke(why);
+            NoteGameDataStop?.Invoke(stop.Why);
         };
         GameData.ActiveSetChanged += RoomGraph.OnActiveSetChanged;
         if (GameData.ActiveSet is not null)
@@ -8981,6 +8999,8 @@ public sealed class AppServices
             Walker, LoopRunner, AutoLair, pacedReplyScheduler,
             startSprint: () => ApplyRunStartMode?.Invoke(Game.Map.RunStartMode.Sprint),
             Log);
+        _pvpFightHeld = new Game.Map.HeldDetourResume(
+            Walker, LoopRunner, AutoLair, heldFor: "a fight", stillWaiting: () => PvpFight.IsActive, Log);
         PvpFight = new Game.Pvp.PvpFight(
             Router, RoomClassifier,
             pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
@@ -8995,16 +9015,10 @@ public sealed class AppServices
             exitsHere: PvpChaseExits,
             // Stop-and-restart, as for the errand detours: the fight may walk (a
             // chase), which a movement gate would hold.
-            suspendEngines: why =>
-            {
-                Game.Map.DetourResume resume =
-                    Game.Map.DetourResume.Snapshot(Walker, LoopRunner, AutoLair, includeWalk: true);
-                resume.Stop(Walker, LoopRunner, AutoLair, why);
-                _pvpFightInterrupted = resume.Kind;
-                return () => resume.Resume(Walker, LoopRunner, AutoLair);
-            },
-            // A fight that interrupted nothing has nothing to get back to.
-            backOnTask: () => _pvpFightInterrupted == Game.Map.DetourResumeKind.None
+            suspendEngines: why => _pvpFightHeld.Suspend(why),
+            // A fight that interrupted nothing has nothing to get back to, and nor
+            // has one whose way back a change of game data dropped.
+            backOnTask: () => _pvpFightHeld.Interrupted == Game.Map.DetourResumeKind.None
                 || MovementControl.State != Game.Map.MovementEngineState.Idle,
             leadingParty: () => PartyState.SelfIsLeader && PartyState.Members.Count > 1,
             schedule: pacedReplyScheduler,
@@ -9952,6 +9966,9 @@ public sealed class AppServices
             },
             post: run => Avalonia.Threading.Dispatcher.UIThread.Post(run));
         MovementControl.EndingForGameDataChange += EndHeldRunsForGameDataChange;
+        // The same stop lets go of what a fight with a player would put back at
+        // its end: the engines are idle for the fight, so the stop finds nothing.
+        MovementControl.AddHeldStart(() => _pvpFightHeld.Held, reason => _pvpFightHeld.Drop(reason));
         StashTransfer.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainerWalk.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainFunding.Finished += _ => MovementControl.NoteErrandStateChanged();
@@ -10463,6 +10480,10 @@ public sealed class AppServices
         {
             BlockedByMasterSwitch = what => AutoModeController.Blocks("Default task", what),
         };
+        // A change of game data calls off a task still waiting out the party-rebuild
+        // window: the loop or Auto-Lair it would start was picked from the old
+        // data's catalogue.
+        MovementControl.AddHeldStart(() => DefaultTaskRunner.HeldStart, reason => DefaultTaskRunner.DropHold(reason));
 
         // Where the dead of a room arrive, learned from the deaths this client sees
         // and kept with the game-data set, which every board and character on it
@@ -11637,8 +11658,10 @@ public sealed class AppServices
         return ways;
     }
 
-    // What the last fight with a player stopped, for telling when we are back at it.
-    private Game.Map.DetourResumeKind _pvpFightInterrupted;
+    // What the fight with a player stopped and puts back at its end, for telling
+    // when we are back at it, and for a change of game data to drop. Set where the
+    // fight is built, ahead of anything that could suspend.
+    private Game.Map.HeldDetourResume _pvpFightHeld = null!;
 
     // One step after a player who left, walked through the walker so a door on the
     // way is handled like any other.
@@ -15068,7 +15091,7 @@ public sealed class AppServices
             $"party gate count: item {itemId} handed out — its gates are open to the party again");
     }
 
-    private void ClearPartyShortGateItems(string why)
+    internal void ClearPartyShortGateItems(string why)
     {
         _cardCounts.Clear();
         if (_partyGateCounts.Count == 0) return;
@@ -16253,7 +16276,24 @@ public sealed class AppServices
     // default) and flip GameData if it differs. Idempotent — the cache
     // short-circuits no-op switches so calling this on every profile / BBS /
     // mutate signal is cheap.
-    private void ApplyActiveGameDataSet() => GameData.SwitchSet(ProfileGameDataSet());
+    //
+    // because: the profile event that asked, when it is one that changes whose
+    // game data this is (a close, a load). Loading another profile closes the one
+    // loaded, and with no profile the set is the first BBS's (ResolveActiveBbs), so
+    // a swap can switch the set twice, even between two characters on one set. What
+    // the stop for such a switch drops (StopOnGameDataChange) was held for the
+    // character that left, and is said to have gone with the profile: the user
+    // changed that, not the game data.
+    private void ApplyActiveGameDataSet(string? because = null)
+    {
+        string? outer = _gameDataSwitchCause;
+        _gameDataSwitchCause = because;
+        try { GameData.SwitchSet(ProfileGameDataSet()); }
+        finally { _gameDataSwitchCause = outer; }
+    }
+
+    // Set while a profile event is switching the set, for the stop that switch makes.
+    private string? _gameDataSwitchCause;
 
     // The game-data set the loaded profile runs on: its realm's, else the default.
     // Read straight from the settings, so it is right inside a profile-load handler
