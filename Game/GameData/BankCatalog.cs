@@ -29,23 +29,22 @@ public static class BankCatalog
     // Shops.ShopType value for a bank.
     public const int BankShopType = 7;
 
+    // The list keeps each bank's room name, a learned one included, so it is
+    // dropped when those change (GameDataCache.LearnedRoomNamesChanged).
+    public const string DerivedKey = "banks";
+
     // Built once per game-data set (GameDataCache.Derived).
     public static IReadOnlyList<BankShop> Enumerate(GameDataCache gameData)
     {
         ArgumentNullException.ThrowIfNull(gameData);
-        return gameData.Derived("banks", () => Build(gameData));
+        return gameData.Derived(DerivedKey, () => Build(gameData));
     }
 
     private static List<BankShop> Build(GameDataCache gameData)
     {
         var banks = new List<BankShop>();
-
-        IReadOnlyDictionary<(int Map, int Room), string> roomNames = RoomNameIndex.For(gameData);
         foreach ((int number, string name, int map, int room) in EnumerateRaw(gameData))
-        {
-            string roomName = roomNames.TryGetValue((map, room), out string? rn) ? rn : string.Empty;
-            banks.Add(new BankShop(number, name, map, room, roomName));
-        }
+            banks.Add(new BankShop(number, name, map, room, RoomNameIndex.NameOf(gameData, map, room)));
         return banks;
     }
 

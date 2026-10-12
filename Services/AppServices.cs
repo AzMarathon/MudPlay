@@ -1424,6 +1424,45 @@ public sealed class AppServices
         return givens;
     }
 
+    // The "Resume first?" question while it is on screen.
+    private ViewModels.ConfirmDialogViewModel? _resumeFirstQuestion;
+
+    // The game data was read in afresh, another set or the active one again
+    // (MovementController.StopForGameDataChange, ahead of its stop): end what holds a
+    // run of the old data's rooms that the stop doesn't end by itself, so nothing
+    // walks those numbers again unasked. Each is ended through its own cancel, with
+    // the reason, and named for the notice when it was under way. The money and
+    // training errands are ended by the controller through the errand hook, and the
+    // token route, the loop hand-off, the path-item routers and a deferred corpse
+    // sweep by its Stopping event. Reset States does more than this (exit FSMs,
+    // outstanding needs, party waits, stealth, combat and gear latches, a flee):
+    // none of those puts a stopped run back, and new game data is no reason to
+    // reset them.
+    private void EndHeldRunsForGameDataChange(string reason, List<string> stopped)
+    {
+        // An event standing in a wait or a rest, or suspended behind a detour, with
+        // its Then and everything queued behind it.
+        if (Events.RunningEventName is { } running) stopped.Add($"event '{running}'");
+        Events.NoteStop(reason);
+        // Waiting for its member, the pick-up holds the loop, Auto-Lair or walk it
+        // interrupted and puts it back when they join.
+        if (PartyComeback.RecoveringMember is not null) stopped.Add("the party pick-up");
+        PartyComeback.Cancel(reason);
+        // Selling at a shop, the tour walks to its next one when the sales are in.
+        if (ChestSellTour.IsRunning) stopped.Add("the sell tour");
+        ChestSellTour.Cancel(reason);
+        if (GhSweep.Phase != Game.Map.GhSweepManager.SweepPhase.Idle) stopped.Add("the Roomba sweep");
+        GhSweep.Stop(reason);
+        // Detours that hold a room to walk to, or back to, afterwards.
+        MonsterDropRouter.Cancel();
+        ShortcutSource.Cancel();
+        AutoLightShopRouter.Cancel();
+        // Route cards on screen were planned on the last set's rooms, and the
+        // "Resume first?" question is about a run of them.
+        ViewModels.Navigation.RouteChoicePrompt.CloseOpenCards();
+        _resumeFirstQuestion?.NoCommand.Execute(null);
+    }
+
     // The errand a user's Stop holds instead of ending, as it reads in a sentence;
     // null when none is under way. The money and training trips only: a party
     // comeback or a key detour is over in a few steps and is simply stopped.
@@ -2460,11 +2499,10 @@ public sealed class AppServices
     // per-session by MainWindowViewModel after connect.
     public Game.Map.PyramidSolver PyramidSolver { get; private set; } = null!;
 
-    // Writer that persists tracker-learned room names back into the
-    // active set's Rooms.json. Consumed by the
-    // MainWindowViewModel name-learned prompt handler after the user
-    // confirms the rename.
-    public RoomNamePersistence RoomNamePersist { get; private set; } = null!;
+    // The names seen on the realm for rooms the game data gives none, kept in the
+    // realm's folder and put back on the room map each time it is built. The
+    // MainWindowViewModel name-learned prompt hands it a name the user keeps.
+    public Game.Map.LearnedRoomNameStore LearnedRoomNames { get; private set; } = null!;
 
     // Sniffs outbound user-typed commands and tells
     // RoomTracker about look <dir> peeks
@@ -2750,8 +2788,10 @@ public sealed class AppServices
     // seed, the user's record overrides), remembering content hashes between asks.
     private readonly RankingStampReader _rankingStamps = new();
 
-    // The data of set was replaced (an import over it, a Manage Sets change): what the
-    // Simulator ranked on the old data is stale, whichever set is active.
+    // The data of set was replaced by a Manage Sets change (its deletion, the
+    // user's edits copied or moved into or out of it): what the Simulator ranked on
+    // the old data is stale, whichever set is active. An import over a set is not
+    // told here: the rankings' own table stamps say whether its files changed.
     public void ForgetSimulatorRankings(string set, string why) =>
         LogStaleSimulatorRankings(set, why, SimulatorRankings.ForgetSet(set));
 
@@ -2779,6 +2819,11 @@ public sealed class AppServices
     // A remote @stop paused movement. Set by MainWindowViewModel, which resets the
     // auto toggles to the character's base modes as it does for the Stop button.
     public Action? NoteRemoteStop { get; set; }
+
+    // A change of game data stopped or dropped a run (the reason, as it reads in a
+    // log line). Set by MainWindowViewModel, which settles the auto toggles as it
+    // does for the Stop button.
+    public Action<string>? NoteGameDataStop { get; set; }
 
     // Folder CRUD over the shared per-BBS Loops directory that holds
     // both Loops and Lairs. Create / rename
@@ -3882,12 +3927,16 @@ public sealed class AppServices
         // and left purely lazy that lands on whichever walk first crosses a gate —
         // a stall exactly when the user is watching the character move. The warm
         // builds into locals and publishes by reference, and GameDataCache guards its
-        // own tables, so it's safe off-thread. Subscribed AFTER TBInfo above so the
-        // store has reloaded by the time the build reads it; a query that beats the
-        // warm simply builds it itself.
+        // own tables, so it's safe off-thread. A query that beats the warm simply
+        // builds it itself.
+        //
+        // The warm is queued where the room graph is built, further down, on its
+        // GraphReloaded: after TBInfo above has reloaded, and after the learned
+        // room names are on the map, since a giver in a room the data leaves
+        // unnamed is labelled with the name learned for it. Queued at the set
+        // switch itself, the build read the map before those names went on and was
+        // done a second time.
         ItemSources = new ItemSourceIndex(GameData, TBInfo, Log);
-        GameData.ActiveSetChanged += _ => Task.Run(ItemSources.Warm);
-        if (GameData.ActiveSet is not null) Task.Run(ItemSources.Warm);
 
         // RoomFloorItemIndex — the room→floor-item (`roomitem`) mapping for the
         // Navigation Room Info panel. Reads TBInfo's typed entries like ItemSources;
@@ -3907,6 +3956,42 @@ public sealed class AppServices
         // so the build can promote CMD-teleport-shadowed door exits to Teleport,
         // and SpellCatalog so a cast-based CMD teleport becomes a routable edge.
         RoomGraph = new Game.Map.RoomGraphManager(GameData, Log, TBInfo, SpellCatalog);
+        // The realm's learned room names go on the map before anything else hears
+        // of a rebuilt graph: this must stay the first GraphReloaded subscription,
+        // so every later listener (the list warm-up below, the tracker, the map
+        // layout, the maze index, room search) is handed rooms already named. The
+        // profile handlers sit here too, ahead of the tracker's, so a loaded
+        // character's last room is looked up under the name its realm has for it.
+        //
+        // The lists that label rooms from the Rooms table (item, spell and quest
+        // records, the trainer and bank lists, item givers) ask the map for a room
+        // the table leaves unnamed, and the ones that keep the answer are told when
+        // a realm's names go on or come off. Both are set before the store is
+        // built, so its first apply already reaches them; ItemSources exists above.
+        GameData.RoomNameWhenDataHasNone = (map, room) =>
+            RoomGraph.LearnedNames.GetValueOrDefault(new Game.Map.RoomKey(map, room));
+        RoomGraph.LearnedNamesChanged += () =>
+        {
+            GameData.LearnedRoomNamesChanged(
+                Game.GameData.TrainerCatalog.DerivedKey, Game.GameData.BankCatalog.DerivedKey);
+            // Rebuilt off the UI thread, as at a set switch, so the next walk that
+            // asks who gives an item doesn't pay for it.
+            Task.Run(ItemSources.Warm);
+        };
+        LearnedRoomNames = new Game.Map.LearnedRoomNameStore(RoomGraph, ActiveRealmFolder, Log);
+        RoomGraph.GraphReloaded += LearnedRoomNames.OnGraphReloaded;
+        // After the store's, so the names are on the map: one build per set load.
+        // (A second warm queued by LearnedNamesChanged finds the first's result.)
+        RoomGraph.GraphReloaded += () => Task.Run(ItemSources.Warm);
+        Profile.ProfileLoaded += _ => LearnedRoomNames.OnRealmChanged();
+        Profile.BbsPinApplied += _ => LearnedRoomNames.OnRealmChanged();
+        Profile.ProfileClosed += LearnedRoomNames.OnRealmChanged;
+        // A BBS renamed from Profile Management raises no pin: the realm's folder
+        // moved under the new name, and the store goes with it.
+        Profile.BbsRenamed += (from, to) =>
+            LearnedRoomNames.OnFolderRenamed(AppPaths.BbsFolder(from), AppPaths.BbsFolder(to));
+        LearnedRoomNames.OnRealmChanged();
+        Tick.HeartbeatElapsed += () => LearnedRoomNames.TakeInOutsideChanges();
         // Once a set's graph is loaded, build the lists Navigation, Settings and the
         // map's right-click menu show, off the UI thread, so the first open doesn't
         // pay for them (the trainer list alone re-read the 22 MB Rooms table).
@@ -3918,6 +4003,34 @@ public sealed class AppServices
         {
             string? className = profile.LastKnownStats?.Class;
             Task.Run(() => WarmQuestData(className));
+        };
+        // Game data read in afresh stops whatever is walking by the old data's room
+        // numbers: another set become the active one, or the active one imported again
+        // or rewritten in Manage Sets, which may have changed its rooms (owner,
+        // 2026-10-11). Told by the cache's load, which moves on both. The Game Data
+        // menu's pick of the set already active reads it in again (ReloadActiveSet),
+        // so it stops like an import; only a SwitchSet to the active name, which the
+        // cache answers without a new load, raises nothing. Subscribed ahead of the room graph's own
+        // handler below, so the stop comes before the graph is rebuilt and nothing
+        // re-plans those numbers on the new rooms first. The movement controller is
+        // built further down: before it exists nothing is running.
+        GameDataCache.Load walkedOn = GameData.ActiveLoad;
+        GameData.ActiveSetChanged += set =>
+        {
+            GameDataCache.Load was = walkedOn;
+            walkedOn = GameData.ActiveLoad;
+            if (MovementControl is null || was == walkedOn) return;
+            bool readInAgain = string.Equals(was.Set, set, StringComparison.OrdinalIgnoreCase);
+            if (MovementControl.StopForGameDataChange(was.Set, set, readInAgain) is not { } ended) return;
+            string why = readInAgain
+                ? $"game data '{set ?? "(none)"}' was read in again"
+                : $"the game data changed from '{was.Set ?? "(none)"}' to '{set ?? "(none)"}'";
+            // Posted: a set change can come from inside the line pump, where writing
+            // to the terminal re-enters it.
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice($"[{ended}: {why}]"));
+            // The client is left as the Stop button leaves it: the autos a Run or
+            // Sprint start turned off for the trip are settled, as for any stop.
+            NoteGameDataStop?.Invoke(why);
         };
         GameData.ActiveSetChanged += RoomGraph.OnActiveSetChanged;
         if (GameData.ActiveSet is not null)
@@ -4075,11 +4188,6 @@ public sealed class AppServices
         // at app scope like the tracker. The solver that consumes it is built
         // after the Walker below.
         MazeIndex = new Game.Map.TeleportMazeIndex(RoomGraph, Log);
-
-        // Writer that persists tracker-learned names back to
-        // Rooms.json. The MainWindowVM subscribes to NameLearned to
-        // prompt the user, then calls this on accept.
-        RoomNamePersist = new RoomNamePersistence(GameData, Log);
 
         // Hand the loaded profile to the tracker so it can hydrate
         // LastKnownRoom + RecentSteps (replay-from-last-Confirmed
@@ -6227,6 +6335,11 @@ public sealed class AppServices
         EngineGate.Trail = SentCommands;
         SentCommands.Withhold = () =>
             !InGameCapture.InGame || SuicidePassword.PasswordEntryLikely || Suicide.SendingPassword;
+        // A line typed at the terminal is the user's own send. The chat log is told
+        // of it from the keys typed, never from the row the board shows back: it
+        // pairs a telepath with its confirmation, and remembers whose send it was.
+        SentCommands.TypedLineEntered = line =>
+            Chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
         // Out to the board's menu with the link still up: nothing automatic may be
         // sent (it would be a menu selection), a typed selection isn't a move, the
         // menu's lines aren't unknown game lines, and its prompt isn't a broken
@@ -8470,15 +8583,27 @@ public sealed class AppServices
         }
 
         // The Simulator's rankings follow the set too, but nothing reloads: a switch
-        // leaves each set's where they are. The active set's name coming round again
-        // is that set read in afresh, and what was ranked on its old tables is stale.
+        // leaves each set's where they are. A set made active, by a switch to it or by
+        // its name coming round again, is a new load of it, with the same tables or
+        // other ones: the store is told, and compares each ranking's tables with the
+        // new load's when it is next listed. Only one that carries no record of its
+        // tables goes here, at any new load of its set.
         // Each ranking is also kept in a file in its set's folder, so it is there
         // after a restart; what a read finds is handed back on the UI thread.
         SimulatorRankings = new Game.Simulation.AreaRankingStore(
             new AreaRankingFiles(), act => Avalonia.Threading.Dispatcher.UIThread.Post(act), Log);
         SimulatorRankings.NoteActiveSet(GameData.ActiveSet);
+        // Once the launch has nothing left to do: old ranking files go, off this
+        // thread, for characters that may never be loaded again.
+        Avalonia.Threading.Dispatcher.UIThread.Post(
+            SimulatorRankings.SweepOld, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
         GameData.ActiveSetChanged += setName =>
-            LogStaleSimulatorRankings(setName, "was read in again", SimulatorRankings.NoteActiveSet(setName));
+        {
+            int dropped = SimulatorRankings.NoteActiveSet(setName);
+            if (dropped > 0)
+                Log.Info("Simulator",
+                    $"game data '{setName}' was loaded afresh: {dropped} area ranking(s) made on it with no record of its tables dropped, there being nothing to compare them by");
+        };
         // A saved ranking is stamped with the table files this client read, and the
         // watch has to see each table's first read of a load before the cache can
         // drop the table and read it again: once a second is far inside that.
@@ -8840,6 +8965,14 @@ public sealed class AppServices
         // at a wait-room one hop short, then steps in on the tick.
         AutoLair = new Game.Map.AutoLairManager(
             Walker, RoomTracker, RoomGraph, Bfs, LairTimers, Log, MovementCoordinator);
+        // Nothing made of one game data's room numbers is saved under another: lair
+        // marks on the map are dropped, with a notice, when the set changes to another,
+        // as a loop being built is. Posted: a set change can come from inside the line
+        // pump, where writing to the terminal re-enters it.
+        GameData.ActiveSetChanged += set => AutoLair.DropMarksOfOtherGameData(set);
+        AutoLair.MarksOfOtherGameDataDropped += (markedOn, active) =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(
+                $"[Lair marks were dropped: their rooms belonged to game data '{markedOn ?? "(none)"}', and '{active ?? "(none)"}' is active now]"));
 
         // Auto-Lair beginning a run is a loop-start for gear purposes — swap to the
         // Default set, same as LoopRunner's ReachedFirstWaypoint above.
@@ -9806,13 +9939,20 @@ public sealed class AppServices
                 SellDetour.Cancel();
                 AutoDeposit.Cancel();
             },
-            askResume: errand => Dialogs.OpenWindowAsync<ViewModels.ConfirmDialogViewModel, bool>(
-                new ViewModels.ConfirmDialogViewModel(
+            askResume: async errand =>
+            {
+                ViewModels.ConfirmDialogViewModel question = new(
                     "Resume first?",
                     $"Stop is holding {errand}.\n\nResume it first? What you just started will begin when it is done.\n\n"
                     + $"No ends {errand} and starts this now.",
-                    yesLabel: "Resume it first", noLabel: "No, drop it")),
+                    yesLabel: "Resume it first", noLabel: "No, drop it");
+                // Kept while it is up, so a change of game data can take it down.
+                _resumeFirstQuestion = question;
+                try { return await Dialogs.OpenWindowAsync<ViewModels.ConfirmDialogViewModel, bool>(question); }
+                finally { if (ReferenceEquals(_resumeFirstQuestion, question)) _resumeFirstQuestion = null; }
+            },
             post: run => Avalonia.Threading.Dispatcher.UIThread.Post(run));
+        MovementControl.EndingForGameDataChange += EndHeldRunsForGameDataChange;
         StashTransfer.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainerWalk.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainFunding.Finished += _ => MovementControl.NoteErrandStateChanged();
@@ -10101,7 +10241,7 @@ public sealed class AppServices
         MovementControl.Stopping += TokenRoute.Cancel;
         // A stash transfer is between walks while it searches, collects or deposits,
         // so the walker's own Stopped wouldn't reach it there.
-        MovementControl.Stopping += () => StashTransfer.Cancel("stopped by the user");
+        MovementControl.Stopping += () => StashTransfer.Cancel(MovementControl.GameDataChangeStop ?? "stopped by the user");
         // So is a walk between two of its legs: standing at a giver, a shop or an
         // item's source, with the coordinator that brought it there about to issue
         // the next leg. The walker says Stopped for a journey left standing, which
@@ -10299,7 +10439,7 @@ public sealed class AppServices
         // Stop with no engine running to report it (an event waiting or resting, or
         // suspended behind a detour) still ends the event and its queue. Wired here,
         // after Events exists; MovementControl is built further up.
-        MovementControl.Stopping += Events.NoteUserStop;
+        MovementControl.Stopping += () => Events.NoteStop(MovementControl.GameDataChangeStop ?? "stopped by the user");
         Events.SetStatsReader(ReadEventReadings);
         GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
         BossTimers.BossKilled += def => Events.NoteBossKilled(def.Name);

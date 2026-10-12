@@ -352,7 +352,7 @@ public static class KnownPatterns
     public const string ConversationGangpath    = "conversation.gangpath";
     public const string ConversationTelepathIn  = "conversation.telepath-in";    // incoming "X telepaths: msg"
     public const string ConversationTelepathOut = "conversation.telepath-out";   // outgoing "--- Telepath sent to X ---"
-    public const string ConversationYell        = "conversation.yell";           // both "X yells" and "You yell"
+    public const string ConversationYell        = "conversation.yell";           // "You yell", "From X (Yelling):", "Someone yells from …", "X yells"
     public const string ConversationLocal       = "conversation.local";
     public const string ConversationDirectedSayOut = "conversation.directed-say-out";  // outgoing "--- Message Directed to X ---"
     // Paradigm-only server PvP announcements — every one leads with the

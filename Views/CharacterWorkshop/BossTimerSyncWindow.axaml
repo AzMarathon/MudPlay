@@ -31,7 +31,7 @@
 
         <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource ChromeFgMutedBrush}"
-                       Text="Request boss timers from other clients on a channel. A timer for a boss you're not tracking yet is folded in automatically, and one that matches yours is left alone — only a boss where someone's timer conflicts with one you already hold needs a pick. Nothing overwrites a timer you hold unless you choose it. Timers heard on the broadcast channel are always a pick, since anyone can join that channel."/>
+                       Text="Request boss timers from other clients on a channel. Each answer to your request is compared with the timer you hold. Asked of a single player by telepath, that player's answer is taken as it arrives: a timer for a boss you track and hold none for is merged in, one that matches yours is left alone, and one that differs is synced (it replaces yours). Asked where several players can answer (gang, say, broadcast, or more than one player), the replies are gathered first: for a boss you hold no timer for, it is merged in only if every reply agrees; where replies differ from each other, or any differs from yours, they are listed and you pick which to keep, then Apply Selected. Timers that answer no request of yours are only ever listed."/>
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <ComboBox ItemsSource="{Binding Channels}" SelectedIndex="{Binding ChannelIndex}" Width="150"/>
                 <TextBox Text="{Binding TelepathTarget}" PlaceholderText="player" Width="120"
@@ -62,16 +62,16 @@
                                 <StackPanel Spacing="4">
                                     <TextBlock Text="{Binding BossName}" FontWeight="SemiBold"
                                                Foreground="{StaticResource ChromeFgBrush}"/>
-                                    <!-- A resolved row (auto-adopted / already in sync) just shows its status. -->
+                                    <!-- A resolved row (merged in / synced / already in sync) just shows its status. -->
                                     <TextBlock Text="{Binding ResolvedStatus}" FontSize="12"
                                                IsVisible="{Binding !HasConflict}"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                    <!-- A conflict row shows keep-ours plus a pick per differing responder. -->
+                                    <!-- A conflict row shows keep-ours (take-none when we hold no timer) plus a pick per differing responder. -->
                                     <WrapPanel Orientation="Horizontal" IsVisible="{Binding HasConflict}">
                                         <Button Classes="pick" Classes.selected="{Binding KeepOursSelected}"
                                                 Command="{Binding KeepOursCommand}">
                                             <StackPanel>
-                                                <TextBlock Text="Keep ours" FontWeight="SemiBold"
+                                                <TextBlock Text="{Binding KeepOursLabel}" FontWeight="SemiBold"
                                                            Foreground="{StaticResource ChromeFgBrush}"/>
                                                 <TextBlock Text="{Binding OursText}" FontSize="11"
                                                            Foreground="{StaticResource ChromeFgMutedBrush}"/>

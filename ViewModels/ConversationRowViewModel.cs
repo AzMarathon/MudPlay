@@ -73,6 +73,11 @@ public sealed class ConversationRowViewModel
         if (!string.IsNullOrEmpty(entry.DirectedTo))
             return $"{speaker} (to {entry.DirectedTo}):";
 
+        // A yell from the next room names no one, so say where it came from instead:
+        // "Someone (from the north):".
+        if (!string.IsNullOrEmpty(entry.HeardFrom))
+            return $"{speaker} (from {entry.HeardFrom}):";
+
         // RealmEvent rows read as a sentence ("Raijin entered the Realm")
         // so the trailing colon would feel wrong. Every other channel
         // pairs "<who>" with the message body and gets the colon.

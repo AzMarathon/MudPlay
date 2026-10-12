@@ -8,6 +8,36 @@
 - Negated and resisted cast lines are recognised and tied to their spell; no condition is read off them
 - bug reports addressed: paradigm-20261011-165726
 
+## 3.180.10
+
+- Remote commands are read on the broadcast channel when "Disallow @commands from broadcast" is unticked, under each player's permissions, and answered there: once a minute per player, four players a minute
+- A relay-back (`&@command`) heard on broadcast is sent back on broadcast
+- Sync Timers, one player asked by telepath: their timer is merged in when you hold none and synced when it differs
+- Sync Timers on gang, say or broadcast: replies are gathered for 10 seconds and judged together; merged in only if all agree, listed for you to pick otherwise
+- A timer of yours that changed after you asked is never replaced by a sync answer; the boss is listed instead
+- Only a `@timer sync`, `@roomba sync` or `@loop send yes` you sent yourself counts as your request; one your client sent for another player's remote command merges nothing
+- Picking the active game-data set again keeps its saved Simulator rankings; one is dropped when its tables changed, or at the next load when it has no record of them
+- Saved Simulator rankings older than 180 days are deleted at each start, for every character
+
+## 3.180.6
+
+- A learned room name is kept per realm and put back on the map each session; `Rooms.json` is no longer written
+- A room the game data leaves unnamed takes a new name when the board prints one as you walk in, and asks once whether to save it in place of the old
+- A learned name shows in the trainer, bank, quest, item and spell lists
+- Saving a learned name says in the terminal when it could not be kept, and why
+
+## 3.180.4
+
+- Switching to another game data set, or reading the active one in again (an import, Manage Sets, or picking it again), stops a loop, Auto-Lair or walk in progress and anything held to restart one
+- The Auto-Lair setup editor and the .mp import review won't save, verify or take a room until the game data they were opened on is active again; their add-room list, and Edit Loop's, lists no rooms meanwhile
+- Lair marks on the map are dropped, with a notice, when the game data changes to another set, and a set of marks is never mixed across sets
+- `@loop last` won't run a loop last run on other game data
+
+## 3.180.2
+
+- Yells from other players are read as chat and show in the Conversation window; before, only your own yell was
+- A yell heard from the next room shows as from Someone with where it came from, e.g. Someone (from the north), and the talk log keeps that
+
 ## 3.180.1
 
 - A BBS renamed by capitals only keeps its characters' saved Simulator rankings

@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 using Xunit;
@@ -116,52 +115,5 @@ public sealed class NullNameLearningTests : IDisposable
         Assert.Equal(new RoomKey(15, 861), hits[0]);
     }
 
-    // ----- Persistence ---------------------------------------------
-
-    [Fact]
-    public void Persist_WritesNameBackToRoomsJson()
-    {
-        (_, _, GameDataCache cache) = NewTracker();
-        RoomNamePersistence persister = new(cache);
-
-        bool ok = persister.Persist(new RoomKey(15, 861), "Shop White House Room");
-        Assert.True(ok);
-
-        // Re-read the file and confirm Name was updated.
-        string json = File.ReadAllText(Path.Combine(_root, "alpha", "Rooms.json"));
-        JsonDocument doc = JsonDocument.Parse(json);
-        bool found = false;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            int mn = row.GetProperty("Map Number").GetInt32();
-            int rn = row.GetProperty("Room Number").GetInt32();
-            if (mn != 15 || rn != 861) continue;
-            Assert.Equal("Shop White House Room", row.GetProperty("Name").GetString());
-            found = true;
-            break;
-        }
-        Assert.True(found, "15/861 must be present after persist");
-    }
-
-    [Fact]
-    public void Persist_UnknownKey_ReturnsFalseAndLeavesFileIntact()
-    {
-        (_, _, GameDataCache cache) = NewTracker();
-        string before = File.ReadAllText(Path.Combine(_root, "alpha", "Rooms.json"));
-
-        RoomNamePersistence persister = new(cache);
-        bool ok = persister.Persist(new RoomKey(99, 99), "Phantom Room");
-
-        Assert.False(ok);
-        Assert.Equal(before, File.ReadAllText(Path.Combine(_root, "alpha", "Rooms.json")));
-    }
-
-    [Fact]
-    public void Persist_EmptyName_ReturnsFalse()
-    {
-        (_, _, GameDataCache cache) = NewTracker();
-        RoomNamePersistence persister = new(cache);
-        Assert.False(persister.Persist(new RoomKey(15, 861), ""));
-        Assert.False(persister.Persist(new RoomKey(15, 861), "   "));
-    }
+    // Keeping a learned name between sessions: LearnedRoomNameStoreTests.
 }

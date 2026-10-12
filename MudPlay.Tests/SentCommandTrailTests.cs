@@ -101,6 +101,102 @@ public sealed class SentCommandTrailTests
         Assert.All(entries, e => Assert.Equal(SentCommandTrail.Origin.Typed, e.Origin));
     }
 
+    // Each line the user types is told as its Enter goes out, as the line their keys
+    // made up: sent whole by the terminal, or a key at a time with a backspace and
+    // an arrow key among them. It is told whether or not the trail keeps it (a line
+    // typed at a prompt other than the game's is not kept), since it is what was
+    // typed either way. A line any part of which went by while nothing is kept is
+    // not told: it may be a password.
+    [Fact]
+    public void TypedLineEntered_IsToldTheLineTheKeysMadeUp_InEitherInputMode()
+    {
+        SentCommandTrail trail = new();
+        List<string> told = new();
+        trail.TypedLineEntered = told.Add;
+        trail.TypedAtGamePrompt = _ => true;    // typed at the game's own prompt
+
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("/bo @timer sync\r"));
+        foreach (char key in "/suu") trail.ObserveTyped([(byte)key]);
+        trail.ObserveTyped([0x7F]);                        // delete the second u
+        trail.ObserveTyped([0x1B, (byte)'[', (byte)'D']);  // an arrow key
+        foreach (char key in "e @timer sync") trail.ObserveTyped([(byte)key]);
+        trail.ObserveTyped([(byte)'\r']);
+        trail.ObserveTyped([(byte)'\r']);                  // a bare Enter is no line
+
+        Assert.Equal(new[] { "/bo @timer sync", "/sue @timer sync" }, told);
+        Assert.Equal(told, trail.Snapshot().Select(e => e.Text));
+    }
+
+    // A line typed at a prompt that is not the game's own may be a password: the
+    // trail keeps only that something was typed there, and tells the line to
+    // nobody. A telepath typed at the game's prompt afterwards is still told.
+    [Fact]
+    public void TypedLineEntered_IsNotToldALineTheTrailWithholdsAtAPrompt()
+    {
+        SentCommandTrail trail = new();
+        List<string> told = new();
+        trail.TypedLineEntered = told.Add;
+        bool atGamePrompt = false;
+        trail.TypedAtGamePrompt = _ => atGamePrompt;
+
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("hunter2\r"));
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("/hunter 2\r"));   // one shaped like a telepath
+
+        Assert.Empty(told);
+        Assert.All(trail.Snapshot(), e => Assert.Equal(SentCommandTrail.WithheldAtPrompt, e.Text));
+        Assert.Equal(2, trail.Snapshot().Length);
+
+        atGamePrompt = true;
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("/bo @timer sync\r"));
+        Assert.Equal("/bo @timer sync", Assert.Single(told));
+    }
+
+    // A typed line longer than the game takes is not kept by the trail, which
+    // holds only its head: it is told to nobody either. One of the full length is.
+    [Fact]
+    public void TypedLineEntered_IsNotToldALineLongerThanTheTrailKeeps()
+    {
+        SentCommandTrail trail = new();
+        List<string> told = new();
+        trail.TypedLineEntered = told.Add;
+        trail.TypedAtGamePrompt = _ => true;
+
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("/bo " + new string('x', SentCommandTrail.MaxTextLength) + "\r"));
+        Assert.Empty(told);
+        Assert.Equal(SentCommandTrail.TooLong, Assert.Single(trail.Snapshot()).Text);
+
+        string full = "/bo " + new string('x', SentCommandTrail.MaxTextLength - 4);
+        trail.ObserveTyped(Encoding.Latin1.GetBytes(full + "\r"));
+        Assert.Equal(full, Assert.Single(told));
+    }
+
+    [Fact]
+    public void TypedLineEntered_IsNotToldALineTypedWhileNothingIsKept()
+    {
+        SentCommandTrail trail = new();
+        List<string> told = new();
+        trail.TypedLineEntered = told.Add;
+        bool withhold = true;
+        trail.Withhold = () => withhold;
+
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("secret\r"));
+        // Begun while nothing is kept, finished after: still not told.
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("/bo @ti"));
+        withhold = false;
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("mer sync\r"));
+        Assert.Empty(told);
+
+        // Typed while lines are kept, its Enter while they are not.
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("/bo @timer sync"));
+        withhold = true;
+        trail.ObserveTyped([(byte)'\r']);
+        Assert.Empty(told);
+
+        withhold = false;
+        trail.ObserveTyped(Encoding.Latin1.GetBytes("/bo @timer sync\r"));
+        Assert.Equal("/bo @timer sync", Assert.Single(told));
+    }
+
     // The five ways a typed suicide password could reach the trail. The line is
     // judged at its Enter by the terminal's cursor row: only a line typed at the
     // game's own prompt is kept.

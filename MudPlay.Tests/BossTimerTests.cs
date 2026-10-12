@@ -604,9 +604,11 @@ public sealed class BossTimerTests : IDisposable
         engine.DispatchForTests(Asks("Bob"));
         Assert.Empty(Sent());
 
-        // The several lines were one answer: the others on the channel still have
-        // theirs this minute, up to the channel's few.
-        for (int i = 1; i < BroadcastAnswerBudget.AnswersPerWindow; i++)
+        // The several lines were one answer, and an answer to a player who holds the
+        // permission: the refusals to those who don't are counted apart, so the
+        // others on the channel still have all of theirs this minute, the channel's
+        // few, and no more.
+        for (int i = 1; i <= BroadcastAnswerBudget.AnswersPerWindow; i++)
         {
             engine.DispatchForTests(Asks($"Passerby{i}"));
             Assert.Equal("br {command invalid or not allowed}\r", Sent().Single());
@@ -642,31 +644,119 @@ public sealed class BossTimerTests : IDisposable
 
     private static readonly DateTimeOffset Killed = new(2026, 8, 3, 21, 30, 0, TimeSpan.Zero);
 
-    // The merge window over real stores, tracking one boss it holds no timer for:
-    // the case in which an offered timer is adopted outright.
-    private (BossTimerSyncViewModel window, BossTimerStore timers) NewSyncWindow()
+    // A timer of ours, when a test holds one before the answers come.
+    private static readonly DateTimeOffset Held = Killed.AddHours(-10);
+
+    // The merge window over real stores, tracking one boss it holds no timer for.
+    // askedOn: the channel of the request that opened the window (null: opened from
+    // the Bosses tab, nothing asked yet); to: who a telepathed one reached; byUser:
+    // the request was the user's own. What the window sends goes out through the
+    // chat log as a line of the user's, as it does in the app.
+    private (BossTimerSyncViewModel window, BossTimerStore timers) NewSyncWindow(
+        RemoteChannel? askedOn = RemoteChannel.Broadcast, string? to = null, bool byUser = true,
+        DateTimeOffset? heldWhenAsked = null)
     {
-        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
+        // The golem is in the game data and not on our list.
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1), ("guardian golem", 51, 24, 1));
         SeedBosses(Boss("ogre king", number: 50, rooms: "1/1"));
         var (bosses, timers, cache) = NewStores();
-        MessageRouter router = new();
-        DefaultPatterns.Seed(router);
-        BossTimerSyncViewModel window = new(bosses, timers, cache, new ChatRouter(router), send: _ => { },
-            preArmedOn: RemoteChannel.Broadcast, new LogService(), broadcastOff: () => false,
-            isOurName: _ => false, windowActive: _ => { });
+        // A window opened by a request is opened with that request already out: a
+        // timer of ours it is to find held is marked before it opens.
+        if (heldWhenAsked is { } held) timers.MarkKilled("ogre king", held);
+        _syncBosses = bosses;
+        _syncRouter = new MessageRouter();
+        DefaultPatterns.Seed(_syncRouter);
+        _syncChat = new ChatRouter(_syncRouter, clock: _syncClock);
+        _syncSent.Clear();
+        _syncTimers.Clear();
+        BossTimerSyncViewModel window = new(bosses, timers, cache, _syncChat,
+            send: line =>
+            {
+                _syncSent.Add(line);
+                _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
+            },
+            preArmedOn: askedOn, _syncLog = new LogService(), broadcastOff: () => false,
+            isOurName: name => name == "Us", windowActive: _ => { }, preArmedTo: to, onUiThread: act => act(),
+            preArmedByUser: byUser, armTimer: (delay, fire) => _syncTimers.Add((delay, fire)));
         return (window, timers);
     }
 
-    private static BossTimerSyncResponse Offers(string sender, RemoteChannel heardOn) =>
-        new(sender, new[] { new BossTimerSyncRecord(50, null, Killed) }, heardOn);
+    // The quiet-period timers the window has armed and that have not run out yet.
+    private readonly List<(TimeSpan Delay, Action Fire)> _syncTimers = new();
 
-    // Anyone can join the broadcast channel, and a request there tells every
-    // listener that a collection is open. A timer a player with no standing sends
-    // on it, for a boss we track and hold no timer for, is written nowhere: it is a
-    // row to pick, naming who sent it and where it was heard, with "keep ours"
-    // chosen. Closing the window leaves the timers as they were.
+    // The quiet period runs out with no reply in it: every timer armed so far
+    // fires, oldest first. Only the last one armed judges anything.
+    private void QuietPasses()
+    {
+        var due = _syncTimers.ToList();
+        _syncTimers.Clear();
+        foreach ((_, Action fire) in due) fire();
+    }
+
+    // What the merge window put on the wire, the boss list it works on, the chat
+    // log it reads, and that log's clock (null: the real one).
+    private readonly List<string> _syncSent = new();
+    private LogService _syncLog = null!;        // these four set by NewSyncWindow
+    private BossStore _syncBosses = null!;
+    private MessageRouter _syncRouter = null!;
+    private ChatRouter _syncChat = null!;
+    private Func<DateTimeOffset>? _syncClock;
+
+    private static MudPlay.Terminal.LineExtractor.EmittedLine Shown(string text) =>
+        new(text, new MudPlay.Terminal.CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
+
+    // What the user types at the terminal is told as it goes out, as the user's
+    // own; the board then shows the line back.
+    private void UserTypes(string line)
+    {
+        _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
+        BoardShows(line);
+    }
+
+    // A line the client put on the wire by itself or for another player.
+    private void ClientSends(string line) =>
+        _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: false);
+
+    // A row on the screen: the board showing back a line that was sent, whoever
+    // sent it and however it comes out.
+    private void BoardShows(string row) => _syncRouter.Dispatch(Shown(row));
+
+    // The game's `--- Telepath Sent to <name> ---`.
+    private void GameConfirms(string name) => BoardShows($"--- Telepath sent to {name} ---");
+
+    // One responder's timer for the boss, and what it is to the user's requests.
+    private static BossTimerSyncResponse Offers(
+        string sender, RemoteChannel heardOn, TimerSyncStanding standing = TimerSyncStanding.OneOfSeveral, double hoursLater = 0) =>
+        new(sender, new[] { new BossTimerSyncRecord(50, null, Killed.AddHours(hoursLater)) }, heardOn, standing);
+
+    // The same timer as the chat lines the window's own collector reads, heard on a
+    // channel from a player.
+    private static void Hears(BossTimerSyncViewModel window, ChatChannel channel, string sender, double hoursLater = 0)
+    {
+        string blob = BossTimerSyncCodec.Encode(new[] { new BossTimerSyncRecord(50, null, Killed.AddHours(hoursLater)) });
+        string line = $"{{{BossTimerQueryHandler.SyncResponseToken} 1/1 {blob}}}";
+        window.CollectorForTests.Ingest(new ChatLogEntry(Now, channel, sender, line, line));
+    }
+
+    // Our own request coming back on a shared channel, as the chat log shows it.
+    private static void SeesUsAsk(BossTimerSyncViewModel window, ChatChannel channel) =>
+        window.CollectorForTests.Ingest(new ChatLogEntry(Now, channel, "Us", "@timer sync", "raw"));
+
+    // The window's Request Timers button. 0 gang, 1 telepath, 2 say, 3 broadcast.
+    private static void Requests(BossTimerSyncViewModel window, int channelIndex, string target = "")
+    {
+        window.ChannelIndex = channelIndex;
+        window.TelepathTarget = target;
+        window.SendRequestCommand.Execute(null);
+    }
+
+    // A timer for a boss we track and hold no timer for is merged in on the
+    // broadcast channel too, like on any channel we asked on: anyone who answers
+    // our request there with well-formed data is compared like anyone else. Not as
+    // it arrives, since several can answer there: once the replies have settled.
+    // Closing the window then keeps it and says a timer was written.
     [Fact]
-    public void SyncWindow_ATimerHeardOnBroadcast_IsOfferedAsAPick_AndNothingIsWritten()
+    public void SyncWindow_ATimerHeardOnBroadcast_IsMergedInLikeOnAnyChannel()
     {
         var (window, timers) = NewSyncWindow();
         using (window)
@@ -675,54 +765,68 @@ public sealed class BossTimerTests : IDisposable
             window.CloseRequested += wrote => closedWithWrites = wrote;
 
             window.Fold(Offers("Stranger", RemoteChannel.Broadcast));
-
             Assert.Null(timers.KilledAt("ogre king"));
+            QuietPasses();
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.HasConflict);
+            Assert.True(row.WasAutoMerged);
+            Assert.Empty(row.Responders);
+            Assert.Contains("Stranger", row.ResolvedStatus);
+            Assert.Contains("0 to pick, 1 merged in, 0 synced, 0 already in sync", window.Status);
+
+            window.CancelCommand.Execute(null);
+
+            Assert.True(closedWithWrites);
+        }
+    }
+
+    // A timer heard there that differs from one we hold is listed, marked with
+    // where it was heard, with "keep ours" chosen and nothing written. Picked, it
+    // is written by Apply like any other.
+    [Fact]
+    public void SyncWindow_ADifferingTimerHeardOnBroadcast_IsListedMarked_AndWrittenWhenPicked()
+    {
+        var (window, timers) = NewSyncWindow();
+        using (window)
+        {
+            timers.MarkKilled("ogre king", Held);
+
+            window.Fold(Offers("Stranger", RemoteChannel.Broadcast));
+
+            Assert.Equal(Held, timers.KilledAt("ogre king"));
             BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
             Assert.True(row.HasConflict);
-            Assert.False(row.WasAutoMerged);
             Assert.True(row.KeepOursSelected);
             Assert.Null(row.SelectedKilledAt);
             BossTimerSyncCellViewModel offer = Assert.Single(row.Responders);
             Assert.Equal("Stranger", offer.Responder);
             Assert.False(offer.IsSelected);
             Assert.EndsWith("heard on broadcast", offer.Text);
-            Assert.Contains("never adopted without a pick", window.Status);
+            Assert.Contains("1 to pick, 0 merged in, 0 synced", window.Status);
 
-            window.ApplyCommand.Execute(null);   // nothing picked
-
-            Assert.Null(timers.KilledAt("ogre king"));
-            Assert.False(closedWithWrites);
-        }
-    }
-
-    // Picked, the same row is merged like any other.
-    [Fact]
-    public void SyncWindow_APickedBroadcastRow_IsMergedOnApply()
-    {
-        var (window, timers) = NewSyncWindow();
-        using (window)
-        {
-            window.Fold(Offers("Stranger", RemoteChannel.Broadcast));
-            Assert.Null(timers.KilledAt("ogre king"));
-
-            Assert.Single(Assert.Single(window.Rows).Responders).AdoptCommand.Execute(null);
+            offer.AdoptCommand.Execute(null);
             window.ApplyCommand.Execute(null);
 
             Assert.Equal(Killed, timers.KilledAt("ogre king"));
         }
     }
 
-    // On the other channels the same timer is adopted as it arrives, as before.
+    // On the other channels the same timer, one of several that may come, is merged
+    // in the same way: not as it arrives, but once the replies have settled.
     [Theory]
     [InlineData(RemoteChannel.Gangpath)]
     [InlineData(RemoteChannel.Local)]
     [InlineData(RemoteChannel.Telepath)]
-    public void SyncWindow_TheSameTimerOnAnotherChannel_IsAdoptedOutright(RemoteChannel heardOn)
+    public void SyncWindow_TheSameTimerOnAnotherChannel_IsMergedInOnceTheRepliesSettle(RemoteChannel heardOn)
     {
         var (window, timers) = NewSyncWindow();
         using (window)
         {
             window.Fold(Offers("Bob", heardOn));
+            Assert.Null(timers.KilledAt("ogre king"));
+            QuietPasses();
 
             Assert.Equal(Killed, timers.KilledAt("ogre king"));
             Assert.True(Assert.Single(window.Rows).WasAutoMerged);
@@ -730,16 +834,1466 @@ public sealed class BossTimerTests : IDisposable
         }
     }
 
-    // On the broadcast channel only the sync is followed: the readable report is an
-    // ordinary remote command, and none of those is taken there.
+    // ----- the merge window: each answer compared with the timer we hold ------
+
+    // A timer that is the same as ours (co-kills seconds apart) is left alone,
+    // whoever it is from and whatever it is to our requests.
+    [Theory]
+    [InlineData(TimerSyncStanding.TheOneAsked)]
+    [InlineData(TimerSyncStanding.OneOfSeveral)]
+    [InlineData(TimerSyncStanding.NotAsked)]
+    public void SyncWindow_TheSameTimerAsOurs_IsLeftAlone(TimerSyncStanding standing)
+    {
+        var (window, timers) = NewSyncWindow();
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            timers.MarkKilled("ogre king", Killed.AddSeconds(-20));
+
+            window.Fold(Offers("Bob", RemoteChannel.Telepath, standing));
+
+            Assert.Equal(Killed.AddSeconds(-20), timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.HasConflict);
+            Assert.Contains("in sync with Bob", row.ResolvedStatus);
+            Assert.Contains("0 to pick, 0 merged in, 0 synced, 1 already in sync", window.Status);
+            window.CancelCommand.Execute(null);
+            Assert.False(closedWithWrites);
+        }
+    }
+
+    // A timer that differs from ours syncs when it is the answer of the one player
+    // asked: ours is replaced as it arrives, with no pick, and closing keeps it.
     [Fact]
-    public void TimerReport_OnTheBroadcastChannel_IsNotAnswered()
+    public void SyncWindow_ADifferingTimerFromTheOnePlayerAsked_Syncs()
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Telepath, to: "Bob", heldWhenAsked: Held);
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+
+            window.Fold(Offers("Bob", RemoteChannel.Telepath, TimerSyncStanding.TheOneAsked));
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.HasConflict);
+            Assert.True(row.WasSynced);
+            Assert.False(row.WasAutoMerged);
+            Assert.Empty(row.Responders);
+            Assert.StartsWith("Synced to Bob's timer", row.ResolvedStatus);
+            Assert.Contains("0 to pick, 0 merged in, 1 synced, 0 already in sync", window.Status);
+            window.CancelCommand.Execute(null);
+            Assert.True(closedWithWrites);
+        }
+    }
+
+    // Where several can or did answer, a timer that differs from ours is listed:
+    // nothing is written for that boss until one is picked and applied.
+    [Theory]
+    [InlineData(RemoteChannel.Gangpath)]
+    [InlineData(RemoteChannel.Local)]
+    [InlineData(RemoteChannel.Telepath)]
+    [InlineData(RemoteChannel.Broadcast)]
+    public void SyncWindow_ADifferingTimerWhereSeveralCanAnswer_IsListed(RemoteChannel heardOn)
+    {
+        var (window, timers) = NewSyncWindow();
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            timers.MarkKilled("ogre king", Held);
+
+            window.Fold(Offers("Bob", heardOn));
+            window.Fold(Offers("Sue", heardOn, hoursLater: 3));
+
+            Assert.Equal(Held, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.False(row.WasSynced);
+            Assert.Equal("Keep ours", row.KeepOursLabel);
+            Assert.Equal(new[] { "Bob", "Sue" }, row.Responders.Select(c => c.Responder));
+            Assert.Contains("1 to pick, 0 merged in, 0 synced", window.Status);
+
+            // The replies settling changes nothing: no outcome here writes.
+            QuietPasses();
+            Assert.Equal(Held, timers.KilledAt("ogre king"));
+            Assert.Contains("2 responder(s): 1 to pick, 0 merged in, 0 synced", window.Status);
+
+            row.Responders[1].AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(Killed.AddHours(3), timers.KilledAt("ogre king"));
+            Assert.True(closedWithWrites);
+        }
+    }
+
+    // Two responders with different timers for a boss we hold none for: neither is
+    // merged in, as they come or once the replies have settled. Both are listed,
+    // with "take none" chosen. A third who agrees with one of them does not make
+    // all of them agree.
+    [Fact]
+    public void SyncWindow_TwoRespondersWhoDiffer_WithNoneHeld_AreBothListed_AndNothingIsWritten()
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Gangpath);
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            window.Fold(Offers("Bob", RemoteChannel.Gangpath));
+            window.Fold(Offers("Sue", RemoteChannel.Gangpath, hoursLater: 3));
+            Assert.Null(timers.KilledAt("ogre king"));
+            QuietPasses();
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.WasAutoMerged);
+            Assert.True(row.HasConflict);
+            Assert.True(row.KeepOursSelected);
+            Assert.Equal("Take none", row.KeepOursLabel);
+            Assert.Equal(new[] { "Bob", "Sue" }, row.Responders.Select(c => c.Responder));
+            Assert.Equal("2 responder(s): 1 to pick, 0 merged in, 0 synced, 0 already in sync.", window.Status);
+
+            window.Fold(Offers("Ann", RemoteChannel.Gangpath, hoursLater: 10.0 / 3600));
+            QuietPasses();
+            Assert.Equal(3, row.Responders.Count);
+            Assert.Null(timers.KilledAt("ogre king"));
+            window.CancelCommand.Execute(null);
+            Assert.False(closedWithWrites);
+        }
+    }
+
+    // What answers no request of the user's is left out of that judgment: the
+    // replies to the user's request agree and are merged in, and the other stays
+    // listed, against the timer merged in.
+    [Fact]
+    public void SyncWindow_WhatAnswersNoRequestOfTheUsers_IsLeftOutOfTheGather()
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Gangpath);
+        using (window)
+        {
+            window.Fold(Offers("Mallory", RemoteChannel.Telepath, TimerSyncStanding.NotAsked, hoursLater: 3));
+            window.Fold(Offers("Bob", RemoteChannel.Gangpath));
+            window.Fold(Offers("Sue", RemoteChannel.Gangpath, hoursLater: 20.0 / 3600));
+            Assert.Null(timers.KilledAt("ogre king"));
+            QuietPasses();
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.Equal("Mallory", Assert.Single(row.Responders).Responder);
+            Assert.Equal("Keep ours", row.KeepOursLabel);
+            Assert.EndsWith("merged in from Bob, Sue", row.OursText);
+            Assert.Equal("3 responder(s): 1 to pick, 1 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // What answers no request of the user's is only ever listed: not merged in when
+    // we hold no timer, not synced when ours differs. Closing writes nothing.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SyncWindow_WhatAnswersNoRequestOfTheUsers_IsOnlyEverListed(bool weHoldOne)
+    {
+        var (window, timers) = NewSyncWindow();
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            DateTimeOffset? ours = weHoldOne ? Held : null;
+            if (weHoldOne) timers.MarkKilled("ogre king", Held);
+
+            window.Fold(Offers("Mallory", RemoteChannel.Telepath, TimerSyncStanding.NotAsked));
+
+            Assert.Equal(ours, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.False(row.WasAutoMerged);
+            Assert.False(row.WasSynced);
+            Assert.True(row.KeepOursSelected);
+            Assert.Equal(weHoldOne ? "Keep ours" : "Take none", row.KeepOursLabel);
+            Assert.Contains("1 to pick, 0 merged in, 0 synced", window.Status);
+
+            window.ApplyCommand.Execute(null);   // nothing picked
+            Assert.Equal(ours, timers.KilledAt("ogre king"));
+            Assert.False(closedWithWrites);
+        }
+    }
+
+    // ----- the merge window: what each kind of request makes of its answers ---
+
+    // Asked by telepath of one player, through the button: the player the game says
+    // the telepath reached is the one asked (the name typed may be the first
+    // letters of theirs). From them a timer we hold none for is merged in and one
+    // that differs syncs. A telepath from anyone else, a player called exactly what
+    // was typed included, answers no request: listed, nothing written.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SyncWindow_AskedByTelepathOfOnePlayer_MergesAndSyncsOnlyFromThePlayerItReached(bool weHoldOne)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            DateTimeOffset? ours = weHoldOne ? Held : null;
+            if (weHoldOne) timers.MarkKilled("ogre king", Held);
+            Requests(window, 1, "bo");
+            Assert.Equal("/bo @timer sync", _syncSent.Single());
+            GameConfirms("Bob");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bo", hoursLater: 2);
+            Hears(window, ChatChannel.TelepathIncoming, "Sue", hoursLater: 3);
+            Assert.Equal(ours, timers.KilledAt("ogre king"));
+            Assert.Equal(new[] { "Bo", "Sue" }, Assert.Single(window.Rows).Responders.Select(c => c.Responder));
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Contains(weHoldOne ? "1 to pick, 0 merged in, 1 synced" : "1 to pick, 1 merged in, 0 synced", window.Status);
+        }
+    }
+
+    // Until the game shows the telepath sent (its letters fitted two players, or
+    // nobody; or it was not sent), nobody was asked: a telepathed timer answers no
+    // request, even from a player whose name is exactly what was typed.
+    [Fact]
+    public void SyncWindow_ATelepathTheGameNeverShowedSent_AsksNobody()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, "Bob");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal("Bob", Assert.Single(Assert.Single(window.Rows).Responders).Responder);
+            Assert.Contains("1 to pick, 0 merged in, 0 synced", window.Status);
+        }
+    }
+
+    // A telepath goes to one word, and to somebody: with no name, or with two
+    // words, nothing is sent and nothing is collected.
+    [Theory]
+    [InlineData("", "Enter a player name")]
+    [InlineData("   ", "Enter a player name")]
+    [InlineData("Sir Bob", "A telepath goes to one name")]
+    [InlineData("Bob\tSmith", "A telepath goes to one name")]
+    public void SyncWindow_ATelepathWithNoNameOrTwoWords_IsNotSent(string target, string status)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, target);
+
+            Assert.Empty(_syncSent);
+            Assert.False(window.Requested);
+            Assert.StartsWith(status, window.Status);
+            Hears(window, ChatChannel.TelepathIncoming, "Sir");
+            Assert.Empty(window.Rows);
+            Assert.Null(timers.KilledAt("ogre king"));
+        }
+    }
+
+    // ----- the merge window: where several can answer, the replies are gathered --
+
+    // The requests several players can answer, each with the channel its answers
+    // come by: gang, say, a say answered by telepath (a sneaking client answers
+    // that way), broadcast, and (button 1) three players asked by telepath.
+    public static TheoryData<int, ChatChannel> WhereSeveralCanAnswer => new()
+    {
+        { 0, ChatChannel.Gangpath },
+        { 2, ChatChannel.Local },
+        { 2, ChatChannel.TelepathIncoming },
+        { 3, ChatChannel.Broadcast },
+        { 1, ChatChannel.TelepathIncoming },
+    };
+
+    // Such a request, made with the window's button. The players telepathed are
+    // the three who answer in these tests.
+    private void AsksSeveral(BossTimerSyncViewModel window, int button)
+    {
+        if (button != 1) { Requests(window, button); return; }
+        foreach (string name in new[] { "Bob", "Sue", "Ann" })
+        {
+            Requests(window, 1, name);
+            GameConfirms(name);
+        }
+    }
+
+    // We hold no timer and every reply agrees (co-kills seconds apart): nothing is
+    // written as they arrive, each is shown and can be picked, and the status says
+    // the replies are being gathered. Once they have settled the timer is merged
+    // in, and closing the window keeps it.
+    [Theory]
+    [MemberData(nameof(WhereSeveralCanAnswer))]
+    public void SyncWindow_Gathered_WithNoneHeld_RepliesThatAgree_AreMergedInAtTheSettle_NotBefore(
+        int button, ChatChannel answeredOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            AsksSeveral(window, button);
+
+            Hears(window, answeredOn, "Bob");
+            Hears(window, answeredOn, "Sue", hoursLater: 20.0 / 3600);
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.Equal("Take none", row.KeepOursLabel);
+            Assert.Equal(new[] { "Bob", "Sue" }, row.Responders.Select(c => c.Responder));
+            Assert.StartsWith("2 responder(s) so far, replies still being gathered: 1 waiting for every reply, 0 to pick, 0 merged in", window.Status);
+            Assert.Contains("no reply has come for 10 seconds", window.Status);
+            Assert.All(_syncTimers, t => Assert.Equal(TimeSpan.FromSeconds(10), t.Delay));
+
+            QuietPasses();
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.False(row.HasConflict);
+            Assert.True(row.WasAutoMerged);
+            Assert.Empty(row.Responders);
+            Assert.StartsWith("Merged in from Bob, Sue", row.ResolvedStatus);
+            Assert.Equal("2 responder(s): 0 to pick, 1 merged in, 0 synced, 0 already in sync.", window.Status);
+            window.CancelCommand.Execute(null);
+            Assert.True(closedWithWrites);
+        }
+    }
+
+    // We hold no timer and the replies differ: nothing is written, as they arrive
+    // or once they have settled. Every reply is listed with "take none" chosen,
+    // and the one picked is written by Apply.
+    [Theory]
+    [MemberData(nameof(WhereSeveralCanAnswer))]
+    public void SyncWindow_Gathered_WithNoneHeld_RepliesThatDiffer_AreListed_AndNothingIsWritten(
+        int button, ChatChannel answeredOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            AsksSeveral(window, button);
+
+            Hears(window, answeredOn, "Bob");
+            Hears(window, answeredOn, "Sue", hoursLater: 3);
+            QuietPasses();
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.False(row.WasAutoMerged);
+            Assert.True(row.KeepOursSelected);
+            Assert.Equal("Take none", row.KeepOursLabel);
+            Assert.Equal(new[] { "Bob", "Sue" }, row.Responders.Select(c => c.Responder));
+            Assert.Equal(answeredOn == ChatChannel.Broadcast, row.Responders[0].Text.EndsWith("heard on broadcast"));
+            Assert.Equal("2 responder(s): 1 to pick, 0 merged in, 0 synced, 0 already in sync.", window.Status);
+
+            row.Responders[1].AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+            Assert.Equal(Killed.AddHours(3), timers.KilledAt("ogre king"));
+        }
+    }
+
+    // A single reply where several could have answered, and no timer held: all one
+    // of them agree, so it is merged in, but only once the replies have settled.
+    [Theory]
+    [MemberData(nameof(WhereSeveralCanAnswer))]
+    public void SyncWindow_Gathered_WithNoneHeld_ASingleReply_IsMergedInAtTheSettle(int button, ChatChannel answeredOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            AsksSeveral(window, button);
+
+            Hears(window, answeredOn, "Bob");
+            Assert.Null(timers.KilledAt("ogre king"));
+            QuietPasses();
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Equal("1 responder(s): 0 to pick, 1 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // We hold a timer and every reply matches it: nothing happens, then or later.
+    [Theory]
+    [MemberData(nameof(WhereSeveralCanAnswer))]
+    public void SyncWindow_Gathered_WithATimerHeld_RepliesThatAllMatchOurs_ChangeNothing(int button, ChatChannel answeredOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            timers.MarkKilled("ogre king", Killed);
+            AsksSeveral(window, button);
+
+            Hears(window, answeredOn, "Bob", hoursLater: 20.0 / 3600);
+            Hears(window, answeredOn, "Sue", hoursLater: -30.0 / 3600);
+            QuietPasses();
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.HasConflict);
+            Assert.Empty(row.Responders);
+            Assert.Equal("2 responder(s): 0 to pick, 0 merged in, 0 synced, 1 already in sync.", window.Status);
+            window.CancelCommand.Execute(null);
+            Assert.False(closedWithWrites);
+        }
+    }
+
+    // We hold a timer and one reply of three differs from it: the boss is listed,
+    // with ours as the default and the one that differs. Ours is untouched.
+    [Theory]
+    [MemberData(nameof(WhereSeveralCanAnswer))]
+    public void SyncWindow_Gathered_WithATimerHeld_OneReplyOfThreeThatDiffers_IsListedWithOurs(
+        int button, ChatChannel answeredOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            timers.MarkKilled("ogre king", Killed);
+            AsksSeveral(window, button);
+
+            Hears(window, answeredOn, "Bob", hoursLater: 20.0 / 3600);
+            Hears(window, answeredOn, "Sue", hoursLater: 3);
+            Hears(window, answeredOn, "Ann");
+            QuietPasses();
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.True(row.KeepOursSelected);
+            Assert.Equal("Keep ours", row.KeepOursLabel);
+            Assert.Equal("Sue", Assert.Single(row.Responders).Responder);
+            Assert.Equal("3 responder(s): 1 to pick, 0 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // A reply that comes after the others were judged is compared with what we hold
+    // then. It differs from the timer merged in: the boss is listed with it, beside
+    // our timer and whose it was. One that matches adds nothing.
+    [Theory]
+    [MemberData(nameof(WhereSeveralCanAnswer))]
+    public void SyncWindow_Gathered_ALateReplyThatDiffers_IsListedAgainstTheTimerMergedIn(int button, ChatChannel answeredOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            AsksSeveral(window, button);
+            Hears(window, answeredOn, "Bob");
+            QuietPasses();
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+
+            Hears(window, answeredOn, "Sue", hoursLater: 3);
+            Hears(window, answeredOn, "Ann", hoursLater: 20.0 / 3600);
+
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.Equal("Keep ours", row.KeepOursLabel);
+            Assert.EndsWith("merged in from Bob", row.OursText);
+            Assert.Equal("Sue", Assert.Single(row.Responders).Responder);
+
+            QuietPasses();
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Equal("Sue", Assert.Single(row.Responders).Responder);
+            Assert.Equal("3 responder(s): 1 to pick, 1 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // One responder's set of timers, as the chat lines the window's collector
+    // reads, cut into pieces of pieceChars.
+    private static string[] SetLines(int pieceChars, params BossTimerSyncRecord[] records)
+    {
+        IReadOnlyList<string> pieces = BossTimerSyncCodec.Chunk(BossTimerSyncCodec.Encode(records), pieceChars);
+        return pieces.Select((p, i) => $"{{{BossTimerQueryHandler.SyncResponseToken} {i + 1}/{pieces.Count} {p}}}").ToArray();
+    }
+
+    private static void HearsLine(BossTimerSyncViewModel window, ChatChannel channel, string sender, string line) =>
+        window.CollectorForTests.Ingest(new ChatLogEntry(Now, channel, sender, line, line));
+
+    // A late reply that is the first to name a boss starts a gather of its own:
+    // nothing is written for that boss until the replies have settled again.
+    [Fact]
+    public void SyncWindow_Gathered_ALateReplyThatIsTheFirstToNameABoss_IsGatheredInItsTurn()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            _syncBosses.Save(_syncBosses.Resolve().Append(Boss("guardian golem", number: 51, rooms: "1/2")).ToList());
+            Requests(window, 0);
+            Hears(window, ChatChannel.Gangpath, "Bob");
+            QuietPasses();
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+
+            foreach (string line in SetLines(200,
+                         new BossTimerSyncRecord(50, null, Killed.AddSeconds(20)),
+                         new BossTimerSyncRecord(51, null, Killed.AddHours(1))))
+                HearsLine(window, ChatChannel.Gangpath, "Sue", line);
+
+            Assert.Null(timers.KilledAt("guardian golem"));
+            Assert.Contains("1 waiting for every reply", window.Status);
+            QuietPasses();
+
+            Assert.Equal(Killed.AddHours(1), timers.KilledAt("guardian golem"));
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Equal("2 responder(s): 0 to pick, 2 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // Every line of every reply starts the quiet period again: a timer armed before
+    // the latest line judges nothing when it runs out, so a set still arriving is
+    // never judged without its last line.
+    [Fact]
+    public void SyncWindow_Gathered_ALineOfAReplyStillArriving_HoldsTheSettleBack()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 0);
+            Hears(window, ChatChannel.Gangpath, "Bob");
+            string[] sues = SetLines(6, new BossTimerSyncRecord(50, null, Killed.AddHours(3)));
+            Assert.True(sues.Length >= 2);
+            HearsLine(window, ChatChannel.Gangpath, "Sue", sues[0]);
+            var armedBeforeTheLastLine = _syncTimers.ToList();
+            _syncTimers.Clear();
+            foreach (string line in sues.Skip(1)) HearsLine(window, ChatChannel.Gangpath, "Sue", line);
+
+            foreach ((_, Action fire) in armedBeforeTheLastLine) fire();
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Contains("replies still being gathered", window.Status);
+
+            QuietPasses();
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal(new[] { "Bob", "Sue" }, Assert.Single(window.Rows).Responders.Select(c => c.Responder));
+        }
+    }
+
+    // A pick made before the replies have settled is written by Apply like any
+    // other, and the window closes as it always did; what the quiet period would
+    // have judged afterwards is judged by nobody.
+    [Theory]
+    [MemberData(nameof(WhereSeveralCanAnswer))]
+    public void SyncWindow_Gathered_ApplyBeforeTheSettle_WritesThePick_AndNothingMore(int button, ChatChannel answeredOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            _syncBosses.Save(_syncBosses.Resolve().Append(Boss("guardian golem", number: 51, rooms: "1/2")).ToList());
+            AsksSeveral(window, button);
+            foreach (string line in SetLines(200,
+                         new BossTimerSyncRecord(50, null, Killed),
+                         new BossTimerSyncRecord(51, null, Killed.AddHours(1))))
+                HearsLine(window, answeredOn, "Bob", line);
+            Hears(window, answeredOn, "Sue", hoursLater: 3);
+
+            RowOf(window, "ogre king").Responders[1].AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(Killed.AddHours(3), timers.KilledAt("ogre king"));
+            Assert.Null(timers.KilledAt("guardian golem"));
+            Assert.True(closedWithWrites);
+            window.Dispose();
+            QuietPasses();
+            Assert.Null(timers.KilledAt("guardian golem"));
+            Assert.Equal(Killed.AddHours(3), timers.KilledAt("ogre king"));
+        }
+    }
+
+    // Closed before the replies have settled: the gather is abandoned. Nothing is
+    // written then or when the quiet period would have run out, and the program
+    // log says which bosses were left.
+    [Theory]
+    [MemberData(nameof(WhereSeveralCanAnswer))]
+    public void SyncWindow_Gathered_ClosedBeforeTheSettle_WritesNothing(int button, ChatChannel answeredOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            AsksSeveral(window, button);
+            Hears(window, answeredOn, "Bob");
+            Hears(window, answeredOn, "Sue", hoursLater: 20.0 / 3600);
+            Assert.Contains("closing the window writes nothing more", window.Status);
+
+            window.CancelCommand.Execute(null);
+            window.Dispose();
+            QuietPasses();
+
+            Assert.False(closedWithWrites);
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Contains(_syncLog.Snapshot(), e => e.Message.Contains(
+                "closed while replies were still being gathered: nothing was merged in for 1 boss(es) whose replies had not settled (ogre king)"));
+        }
+    }
+
+    // With one player asked by telepath nothing waits: no quiet period is started,
+    // and that player's timer is merged in as it arrives.
+    [Fact]
+    public void SyncWindow_WithOnePlayerAsked_NothingWaitsForAQuietPeriod()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, "bo");
+            GameConfirms("Bob");
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Empty(_syncTimers);
+            Assert.Equal("1 responder(s): 0 to pick, 1 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // A request the client sent for another player gathers nothing: its answers
+    // are listed, and no quiet period ever merges them in, however well they agree.
+    [Theory]
+    [InlineData(RemoteChannel.Gangpath, ChatChannel.Gangpath)]
+    [InlineData(RemoteChannel.Local, ChatChannel.Local)]
+    [InlineData(RemoteChannel.Local, ChatChannel.TelepathIncoming)]
+    [InlineData(RemoteChannel.Broadcast, ChatChannel.Broadcast)]
+    public void SyncWindow_OpenedForARequestTheClientSentForAnotherPlayer_GathersNothing(
+        RemoteChannel sentOn, ChatChannel answeredOn)
+    {
+        var (window, timers) = NewSyncWindow(sentOn, to: null, byUser: false);
+        using (window)
+        {
+            Hears(window, answeredOn, "Mallory");
+            Hears(window, answeredOn, "Sue", hoursLater: 20.0 / 3600);
+            Assert.Empty(_syncTimers);
+            QuietPasses();
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal("2 responder(s): 1 to pick, 0 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // With a timer of ours held, on each channel: an answer with the same timer is
+    // left alone; asked again, an answer that differs syncs from the one player
+    // telepathed and is listed everywhere else, with ours untouched.
+    [Theory]
+    [InlineData(1, ChatChannel.TelepathIncoming, true)]
+    [InlineData(0, ChatChannel.Gangpath, false)]
+    [InlineData(2, ChatChannel.Local, false)]
+    [InlineData(2, ChatChannel.TelepathIncoming, false)]
+    [InlineData(3, ChatChannel.Broadcast, false)]
+    public void SyncWindow_WithATimerHeld_TheSameIsLeftAlone_AndWhatDiffersSyncsOrIsListed(
+        int button, ChatChannel answeredOn, bool syncs)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            timers.MarkKilled("ogre king", Held);
+            Requests(window, button, "Bob");
+            if (button == 1) GameConfirms("Bob");
+
+            Hears(window, answeredOn, "Bob", hoursLater: -10 + 20.0 / 3600);   // ours, marked 20 s later
+            Assert.Equal(Held, timers.KilledAt("ogre king"));
+            Assert.Contains("0 to pick, 0 merged in, 0 synced, 1 already in sync", window.Status);
+
+            Requests(window, button, "Bob");
+            if (button == 1) GameConfirms("Bob");
+            Hears(window, answeredOn, "Bob");
+
+            Assert.Equal(syncs ? Killed : Held, timers.KilledAt("ogre king"));
+            Assert.Contains(syncs ? "0 to pick, 0 merged in, 1 synced" : "1 to pick, 0 merged in, 0 synced", window.Status);
+            Assert.Equal(!syncs, Assert.Single(window.Rows).HasConflict);
+        }
+    }
+
+    // More than one player asked by telepath in one window: each is asked, and
+    // several did answer. Their replies are judged together: they differ, so both
+    // are listed, and neither is merged in or synced.
+    [Fact]
+    public void SyncWindow_TwoPlayersAskedByTelepath_AreBothAsked_AndWhatDiffersIsListed()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, "Bob");
+            Requests(window, 1, "Sue");
+            GameConfirms("Bob");
+            GameConfirms("Sue");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Sue");
+            Assert.Null(timers.KilledAt("ogre king"));
+            Hears(window, ChatChannel.TelepathIncoming, "Bob", hoursLater: 3);
+            QuietPasses();
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.WasSynced);
+            Assert.False(row.WasAutoMerged);
+            Assert.Equal(new[] { "Sue", "Bob" }, row.Responders.Select(c => c.Responder));
+        }
+    }
+
+    // One player asked by telepath and a shared channel asked as well, in either
+    // order: several can answer, so the telepathed player's differing timer is
+    // listed too, and no telepath syncs.
+    [Theory]
+    [InlineData(2, 1)]   // say, then telepath
+    [InlineData(1, 2)]   // telepath, then say
+    [InlineData(0, 1)]   // gang, then telepath
+    [InlineData(1, 3)]   // telepath, then broadcast
+    public void SyncWindow_OnceASharedChannelWasAsked_NoTelepathSyncs(int first, int second)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            timers.MarkKilled("ogre king", Held);
+            Requests(window, first, "Bob");
+            Requests(window, second, "Bob");
+            Assert.Equal(2, _syncSent.Count);
+            GameConfirms("Bob");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Equal(Held, timers.KilledAt("ogre king"));
+            Assert.Equal("Bob", Assert.Single(Assert.Single(window.Rows).Responders).Responder);
+            Assert.Contains("1 to pick, 0 merged in, 0 synced", window.Status);
+        }
+    }
+
+    // A second request by the button adds its channel: answers to the first are
+    // still read, and a player who answered the first may answer the second.
+    [Fact]
+    public void SyncWindow_ASecondRequestByTheButton_AddsItsChannel()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            timers.MarkKilled("ogre king", Held);
+            Requests(window, 0);
+            Hears(window, ChatChannel.Gangpath, "Bob");
+            Requests(window, 2);
+
+            Hears(window, ChatChannel.Gangpath, "Sue", hoursLater: 3);   // a late answer to the first
+            Hears(window, ChatChannel.Local, "Bob", hoursLater: 5);      // Bob again, to the second
+
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.Equal(new[] { "Sue", "Bob" }, row.Responders.Select(c => c.Responder));
+            Assert.Equal(Killed.AddHours(5), row.Responders[1].KilledAt);
+        }
+    }
+
+    // A request typed at the terminal is the user's like the button's: the window
+    // it opens is told who the telepath reached, and that player's differing timer
+    // syncs.
+    [Fact]
+    public void SyncWindow_OpenedByATelepathTheUserTyped_SyncsFromThePlayerItReached()
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Telepath, to: "Bob", heldWhenAsked: Held);
+        using (window)
+        {
+            Assert.Contains("from the player your telepath reached", window.Status);
+
+            Hears(window, ChatChannel.TelepathIncoming, "Sue", hoursLater: 3);
+            Assert.Equal(Held, timers.KilledAt("ogre king"));
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Contains("1 to pick, 0 merged in, 1 synced", window.Status);
+        }
+    }
+
+    // Typed on a shared channel with the window open, the request is asked there:
+    // its answers are gathered and merged in once they have settled, and with the
+    // gang asked too the telepathed player's differing timer is listed.
+    [Fact]
+    public void SyncWindow_ARequestTypedOnASharedChannelWhileOpen_IsAskedThere()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, "Sue");
+            GameConfirms("Sue");
+            UserTypes("bg @timer sync");
+            SeesUsAsk(window, ChatChannel.Gangpath);
+
+            Hears(window, ChatChannel.Gangpath, "Ann");
+            Assert.Null(timers.KilledAt("ogre king"));
+            QuietPasses();
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Hears(window, ChatChannel.TelepathIncoming, "Sue", hoursLater: 3);
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Equal("Sue", Assert.Single(Assert.Single(window.Rows).Responders).Responder);
+        }
+    }
+
+    // With lines of the client's own going out around it, a telepath the user typed
+    // is still the user's request, and the player the game confirms it reached is
+    // the one asked.
+    [Fact]
+    public void SyncWindow_ATypedRequestAmongClientSends_StillAsksThePlayerItReached()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            window.CollectorForTests.Begin(RemoteChannel.Telepath, byUser: false);   // open and listening, nobody asked
+            ClientSends("/Sue @health");
+            ClientSends("/Mallory {ok}");
+            UserTypes("/bo @timer sync");
+            BoardShows("/Sue @health");
+            GameConfirms("Sue");
+            BoardShows("/Mallory {ok}");
+            GameConfirms("Mallory");
+            GameConfirms("Bob");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Sue", hoursLater: 3);
+            Assert.Null(timers.KilledAt("ogre king"));
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+        }
+    }
+
+    // ----- the merge window: a request the user did not make ------------------
+
+    // The client also sends `@timer sync` for other players: a relay-back, a `@do`.
+    // The window opens for it, says the request was not the user's, and listens;
+    // nothing that answers it is merged in or synced, on any channel, whether we
+    // hold a timer or not. Closing writes nothing.
+    [Theory]
+    [InlineData(RemoteChannel.Telepath, ChatChannel.TelepathIncoming, false)]
+    [InlineData(RemoteChannel.Telepath, ChatChannel.TelepathIncoming, true)]
+    [InlineData(RemoteChannel.Gangpath, ChatChannel.Gangpath, false)]
+    [InlineData(RemoteChannel.Gangpath, ChatChannel.Gangpath, true)]
+    [InlineData(RemoteChannel.Local, ChatChannel.Local, false)]
+    [InlineData(RemoteChannel.Local, ChatChannel.TelepathIncoming, true)]
+    [InlineData(RemoteChannel.Broadcast, ChatChannel.Broadcast, false)]
+    public void SyncWindow_OpenedForARequestTheClientSentForAnotherPlayer_WritesNothing(
+        RemoteChannel sentOn, ChatChannel answeredOn, bool weHoldOne)
+    {
+        var (window, timers) = NewSyncWindow(sentOn, to: null, byUser: false);
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            DateTimeOffset? ours = weHoldOne ? Held : null;
+            if (weHoldOne) timers.MarkKilled("ogre king", Held);
+            Assert.Contains("this client sent for another player's remote command", window.Status);
+            Assert.DoesNotContain("your @timer sync", window.Status);
+
+            Hears(window, answeredOn, "Mallory");
+            Hears(window, answeredOn, "Sue", hoursLater: 3);
+
+            Assert.Equal(ours, timers.KilledAt("ogre king"));
+            Assert.Equal(new[] { "Mallory", "Sue" }, Assert.Single(window.Rows).Responders.Select(c => c.Responder));
+            Assert.Contains("1 to pick, 0 merged in, 0 synced", window.Status);
+            window.CancelCommand.Execute(null);
+            Assert.False(closedWithWrites);
+        }
+    }
+
+    // The same with a window already open for a request of the user's: the channel
+    // the client asked on for another player is listened on, and what comes on it
+    // is listed. The player the user did ask is still an answer to the user: taken
+    // as it arrives while that player is the one thing asked, and with the others'
+    // once the replies have settled when a shared channel is listened on as well.
+    [Theory]
+    [InlineData("/Mallory @timer sync", ChatChannel.TelepathIncoming)]
+    [InlineData("bg @timer sync", ChatChannel.Gangpath)]
+    public void SyncWindow_ARequestTheClientSendsForAnotherPlayerWhileOpen_AsksNobody(string sent, ChatChannel answeredOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, "Bob");
+            GameConfirms("Bob");
+
+            ClientSends(sent);
+            if (answeredOn == ChatChannel.Gangpath) SeesUsAsk(window, ChatChannel.Gangpath);
+            else GameConfirms("Mallory");
+            Hears(window, answeredOn, "Mallory", hoursLater: 3);
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal("Mallory", Assert.Single(Assert.Single(window.Rows).Responders).Responder);
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+            if (answeredOn == ChatChannel.Gangpath)
+            {
+                Assert.Null(timers.KilledAt("ogre king"));
+                QuietPasses();
+            }
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+        }
+    }
+
+    // A player holding Execute commands sends `@do /<her> @timer sync`, and the
+    // board shows each line the client sends back as a row; any number of further
+    // `@do` lines follow, each with its `{ok}` confirmed. No row on the screen is a
+    // send of the user's, so she was never asked: her data is listed, never written.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void SyncWindow_WhatTheBoardShowsOfTheClientsOwnSends_NeverMakesAnyoneAsked(int furtherDos)
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Telepath, to: null, byUser: false);
+        using (window)
+        {
+            ClientSends("/Mallory @timer sync");
+            ClientSends("/Mallory {ok}");
+            BoardShows("/Mallory @timer sync");
+            GameConfirms("Mallory");
+            BoardShows("/Mallory {ok}");
+            GameConfirms("Mallory");
+            for (int i = 0; i < furtherDos; i++)
+            {
+                ClientSends("/Mallory {ok}");
+                BoardShows("/Mallory {ok}");
+                GameConfirms("Mallory");
+            }
+
+            Hears(window, ChatChannel.TelepathIncoming, "Mallory");
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal("Mallory", Assert.Single(Assert.Single(window.Rows).Responders).Responder);
+            Assert.Contains("1 to pick, 0 merged in, 0 synced", window.Status);
+        }
+    }
+
+    // The three ways a row on the screen fails to match what the client sent for
+    // her (an 8-bit character drawn as another, a copy that comes late, a copy cut
+    // just before a second slash), each followed by one more line to her and its
+    // confirmation. The row is nobody's send: nothing of hers is ever written.
+    [Theory]
+    [InlineData("eight-bit")]
+    [InlineData("late")]
+    [InlineData("cut")]
+    public void SyncWindow_ARowThatDoesNotMatchWhatTheClientSent_NeverMakesAnyoneAsked(string door)
+    {
+        DateTimeOffset now = new(2026, 8, 4, 12, 0, 0, TimeSpan.Zero);
+        _syncClock = () => now;
+        var (window, timers) = NewSyncWindow(RemoteChannel.Telepath, to: null, byUser: false);
+        using (window)
+        {
+            switch (door)
+            {
+                case "eight-bit":
+                    ClientSends("/Mallory @timer sync \u0081");
+                    BoardShows("/Mallory @timer sync ü");
+                    break;
+                case "late":
+                    ClientSends("/Mallory @timer sync");
+                    now = now.AddSeconds(20);
+                    BoardShows("/Mallory @timer sync");
+                    break;
+                default:
+                    ClientSends("/Mallory x /Mallory @timer sync");
+                    BoardShows("/Mallory x ");
+                    BoardShows("Sue gossips: hello");
+                    BoardShows("/Mallory @timer sync");
+                    break;
+            }
+            GameConfirms("Mallory");
+            ClientSends("/Mallory {ok}");
+            GameConfirms("Mallory");
+            GameConfirms("Mallory");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Mallory");
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal("Mallory", Assert.Single(Assert.Single(window.Rows).Responders).Responder);
+            Assert.Contains("1 to pick, 0 merged in, 0 synced", window.Status);
+        }
+    }
+
+    // A confirmation is its own telepath's. The user's request reached nobody; then
+    // a telepath to someone else is confirmed, the user's own or the client's, or
+    // the client's reply to a player whose `@do` sent a request to nobody. None of
+    // those players was asked: nothing of theirs is written.
+    [Theory]
+    [InlineData("/bo @timer sync", true, "/Sue hello", true, "Sue")]
+    [InlineData("/Bob @timer sync", true, "/Sue @health", false, "Sue")]
+    [InlineData("/qq @timer sync", false, "/Mallory {ok}", false, "Mallory")]
+    public void SyncWindow_AConfirmationForAnotherTelepath_AsksNobody(
+        string request, bool requestIsUsers, string other, bool otherIsUsers, string confirmed)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            window.CollectorForTests.Begin(RemoteChannel.Telepath, byUser: false);   // listening
+            if (requestIsUsers) UserTypes(request); else ClientSends(request);
+            if (otherIsUsers) UserTypes(other); else ClientSends(other);
+            GameConfirms(confirmed);
+
+            Hears(window, ChatChannel.TelepathIncoming, confirmed);
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal(confirmed, Assert.Single(Assert.Single(window.Rows).Responders).Responder);
+        }
+    }
+
+    // Another player's confirmation arriving between the request and its own does
+    // not take the request's place.
+    [Fact]
+    public void SyncWindow_AConfirmationForAnotherPlayerInBetween_DoesNotTakeTheRequestsPlace()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, "bo");
+            ClientSends("/Sue @health");
+            GameConfirms("Sue");
+            GameConfirms("Bob");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Sue", hoursLater: 3);
+            Assert.Null(timers.KilledAt("ogre king"));
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+        }
+    }
+
+    // ----- the merge window: a timer of ours that moved while it was open ----
+
+    // A pick is made against the timer the row showed as ours. We kill the boss
+    // while the window is open; the pick, an older time, is not written over that
+    // kill. The row is shown against our timer as it is now and the window stays
+    // open. Picked again, it is written.
+    [Fact]
+    public void SyncWindow_APickIsNotWrittenOverATimerOfOursThatChangedSince()
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Gangpath);
+        using (window)
+        {
+            int closes = 0;
+            window.CloseRequested += _ => closes++;
+            timers.MarkKilled("ogre king", Held);
+            window.Fold(Offers("Bob", RemoteChannel.Gangpath));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            row.Responders[0].AdoptCommand.Execute(null);
+
+            DateTimeOffset ownKill = Killed.AddHours(6);
+            timers.MarkKilled("ogre king", ownKill);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(ownKill, timers.KilledAt("ogre king"));
+            Assert.Equal(0, closes);
+            Assert.Contains("Applied 0 timer update(s). Not written: ogre king", window.Status);
+            Assert.Equal(ownKill, row.OursKilledAt);
+            Assert.True(row.KeepOursSelected);
+            Assert.Null(row.SelectedKilledAt);
+
+            // Picked again, against our timer as it now is, the pick is written.
+            row.Responders[0].AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Equal(1, closes);
+        }
+    }
+
+    // On arrival too the comparison is with what we hold at that moment, and a
+    // timer of ours that changed after the user asked is never written over: a row
+    // built while we held no timer, then a kill of our own, then the asked player's
+    // older timer. It differs from our kill. Our kill stands and the boss is listed,
+    // from the one player asked as from one of several.
+    [Theory]
+    [InlineData(TimerSyncStanding.TheOneAsked)]
+    [InlineData(TimerSyncStanding.OneOfSeveral)]
+    public void SyncWindow_AnArrivingTimerIsComparedWithWhatWeHoldThen(TimerSyncStanding standing)
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Gangpath);
+        using (window)
+        {
+            window.Fold(Offers("Mallory", RemoteChannel.Telepath, TimerSyncStanding.NotAsked, hoursLater: 3));   // builds the row
+            DateTimeOffset ownKill = Killed.AddHours(6);
+            timers.MarkKilled("ogre king", ownKill);
+
+            window.Fold(Offers("Bob", RemoteChannel.Telepath, standing));
+            QuietPasses();
+
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.WasAutoMerged);
+            Assert.False(row.WasSynced);
+            Assert.Equal(ownKill, timers.KilledAt("ogre king"));
+            Assert.Equal(new[] { "Mallory", "Bob" }, row.Responders.Select(c => c.Responder));
+            Assert.EndsWith("changed since you asked", row.OursText);
+        }
+    }
+
+    // ----- the merge window: a timer of ours that changed after asking --------
+
+    // One player asked by telepath, and the game shows it sent. Then we kill the
+    // boss ourselves, and then the player's set arrives with an older timer. Our
+    // kill is not replaced: the boss is listed, ours shown as changed since asking,
+    // with "keep ours" chosen. A reply that matches our kill is left alone.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SyncWindow_AKillOfOursAfterAsking_IsNotReplacedByTheAskedPlayersTimer(bool heldWhenAsked)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            bool? closedWithWrites = null;
+            window.CloseRequested += wrote => closedWithWrites = wrote;
+            if (heldWhenAsked) timers.MarkKilled("ogre king", Held);
+            Requests(window, 1, "bo");
+            GameConfirms("Bob");
+            DateTimeOffset ownKill = Killed.AddHours(6);
+            timers.MarkKilled("ogre king", ownKill);
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Equal(ownKill, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.False(row.WasSynced);
+            Assert.False(row.WasAutoMerged);
+            Assert.True(row.KeepOursSelected);
+            Assert.Equal("Keep ours", row.KeepOursLabel);
+            Assert.EndsWith("changed since you asked", row.OursText);
+            Assert.Equal("Bob", Assert.Single(row.Responders).Responder);
+            Assert.Equal("1 responder(s): 1 to pick, 0 merged in, 0 synced, 0 already in sync.", window.Status);
+            window.CancelCommand.Execute(null);
+            Assert.False(closedWithWrites);
+        }
+    }
+
+    // A timer of ours cleared after asking is a change of ours too: the asked
+    // player's timer is not merged into its place as it arrives. It is listed.
+    [Fact]
+    public void SyncWindow_ATimerOfOursClearedAfterAsking_IsNotMergedOver()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            timers.MarkKilled("ogre king", Held);
+            Requests(window, 1, "bo");
+            GameConfirms("Bob");
+            timers.Reset("ogre king");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.False(row.WasAutoMerged);
+            Assert.Equal("Take none", row.KeepOursLabel);
+            Assert.EndsWith("changed since you asked", row.OursText);
+        }
+    }
+
+    // What the window itself merged in or synced is no change of ours: the asked
+    // player's next set is compared with it like any timer held when asked.
+    [Fact]
+    public void SyncWindow_WhatTheWindowWroteItself_IsNotAChangeOfOurs()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, "bo");
+            GameConfirms("Bob");
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+
+            Requests(window, 1, "bo");
+            GameConfirms("Bob");
+            Hears(window, ChatChannel.TelepathIncoming, "Bob", hoursLater: 3);
+
+            Assert.Equal(Killed.AddHours(3), timers.KilledAt("ogre king"));
+            Assert.True(Assert.Single(window.Rows).WasSynced);
+        }
+    }
+
+    // The same where several can answer. A kill of ours made while the replies are
+    // being gathered is what we hold when they are judged: replies that differ from
+    // it are listed, and it stands. A timer of ours cleared after asking is not
+    // merged over either, however well the replies agree.
+    [Theory]
+    [MemberData(nameof(WhereSeveralCanAnswer))]
+    public void SyncWindow_Gathered_ATimerOfOursThatChangedAfterAsking_IsNeverWrittenOver(int button, ChatChannel answeredOn)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            AsksSeveral(window, button);
+            Hears(window, answeredOn, "Bob");
+            DateTimeOffset ownKill = Killed.AddHours(6);
+            timers.MarkKilled("ogre king", ownKill);
+            Hears(window, answeredOn, "Sue", hoursLater: 20.0 / 3600);
+            QuietPasses();
+
+            Assert.Equal(ownKill, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.WasAutoMerged);
+            Assert.Equal("Keep ours", row.KeepOursLabel);
+            Assert.EndsWith("changed since you asked", row.OursText);
+            Assert.Equal(new[] { "Bob", "Sue" }, row.Responders.Select(c => c.Responder));
+
+            // Cleared: replies that agree are still not merged into its place.
+            timers.Reset("ogre king");
+            Hears(window, answeredOn, "Ann");
+            QuietPasses();
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Equal(3, row.Responders.Count);
+        }
+    }
+
+    // A stranger cannot become the one asked. The user types letters that fit two
+    // players, which reaches nobody; inside the same quarter minute the client
+    // telepaths a player whose name those letters begin (a refusal of her own
+    // remote command), and the game confirms that telepath. She was not asked:
+    // her timers are listed, never merged in or synced.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SyncWindow_AClientTelepathToAPlayerTheTypedLettersBegin_DoesNotMakeHerTheOneAsked(bool weHoldOne)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            DateTimeOffset? ours = weHoldOne ? Held : null;
+            if (weHoldOne) timers.MarkKilled("ogre king", Held);
+            window.CollectorForTests.Begin(RemoteChannel.Telepath, byUser: false);   // open and listening, nobody asked
+            UserTypes("/b @timer sync");
+            BoardShows("Please be more specific.  You could have meant any of these:");
+            ClientSends("/Betty {command invalid or not allowed}");
+            GameConfirms("Betty");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Betty");
+
+            Assert.Equal(ours, timers.KilledAt("ogre king"));
+            Assert.False(window.CollectorForTests.OnePlayerAsked);
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.WasAutoMerged);
+            Assert.False(row.WasSynced);
+            Assert.Equal("Betty", Assert.Single(row.Responders).Responder);
+            Assert.Equal("1 responder(s): 1 to pick, 0 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // Nor can a player with Execute commands choose who is. The window's request
+    // goes to letters that fit two players and reaches nobody; she then has the
+    // client telepath one of them (`@do /bel hi`), by more letters or by the full
+    // name, and the game confirms that telepath. The confirmation is that send's,
+    // not the request's: the player it names was not asked, and the timers she
+    // then sends are listed, never merged in or synced.
+    [Theory]
+    [InlineData("/bel hi", true)]
+    [InlineData("/Bella hi", true)]
+    [InlineData("/bel hi", false)]
+    [InlineData("/Bella hi", false)]
+    public void SyncWindow_ATelepathSentForAnotherPlayerAfterARequestThatReachedNobody_AsksNobody(
+        string sentForHer, bool weHoldOne)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            DateTimeOffset? ours = weHoldOne ? Held : null;
+            if (weHoldOne) timers.MarkKilled("ogre king", Held);
+            Requests(window, 1, "b");
+            Assert.Equal("/b @timer sync", _syncSent.Single());
+            BoardShows("Please be more specific.  You could have meant any of these:");
+            ClientSends(sentForHer);
+            BoardShows(sentForHer);
+            GameConfirms("Bella");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bella");
+
+            Assert.Equal(ours, timers.KilledAt("ogre king"));
+            Assert.False(window.CollectorForTests.OnePlayerAsked);
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.WasAutoMerged);
+            Assert.False(row.WasSynced);
+            Assert.True(row.KeepOursSelected);
+            Assert.Equal("Bella", Assert.Single(row.Responders).Responder);
+            Assert.Equal("1 responder(s): 1 to pick, 0 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // A shortened request that really reached its player, with a telepath of the
+    // client's to the same player going out around it, in either order: the player
+    // is the one asked, once, and their timer is merged in.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SyncWindow_AShortenedRequestWithAClientTelepathToTheSamePlayer_StillAsksThatPlayer(bool requestFirst)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            window.CollectorForTests.Begin(RemoteChannel.Telepath, byUser: false);   // open and listening, nobody asked
+            if (requestFirst) UserTypes("/bo @timer sync");
+            ClientSends("/Bob @health");
+            if (!requestFirst) UserTypes("/bo @timer sync");
+            GameConfirms("Bob");
+            Assert.False(window.CollectorForTests.OnePlayerAsked);   // the first is the client's own
+            GameConfirms("Bob");
+            Assert.True(window.CollectorForTests.OnePlayerAsked);
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Empty(_syncTimers);
+            Assert.Equal("1 responder(s): 0 to pick, 1 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // ----- the merge window: a boss that was not on our list -----------------
+
+    private static BossTimerSyncResponse OffersBoth(string sender, RemoteChannel heardOn) => new(sender, new[]
+    {
+        new BossTimerSyncRecord(50, null, Killed),
+        new BossTimerSyncRecord(51, "guardian golem", Killed),
+    }, heardOn, TimerSyncStanding.OneOfSeveral);
+
+    private static BossTimerSyncRowViewModel RowOf(BossTimerSyncViewModel window, string boss) =>
+        window.Rows.Single(r => r.BossName == boss);
+
+    // A boss we do not track always asks, whoever offers it. Its pick is spent once
+    // it is written: the boss is on the list now and the row shows the timer as
+    // ours, so a second Apply does not write the offered time again over a kill
+    // made since.
+    [Fact]
+    public void SyncWindow_AnAdoptedBossIsNotWrittenAgainByASecondApply()
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Gangpath);
+        using (window)
+        {
+            int closes = 0;
+            window.CloseRequested += _ => closes++;
+            timers.MarkKilled("ogre king", Held);
+            window.Fold(OffersBoth("Bob", RemoteChannel.Gangpath));
+            Assert.Null(timers.KilledAt("guardian golem"));
+            foreach (BossTimerSyncRowViewModel row in window.Rows) row.Responders[0].AdoptCommand.Execute(null);
+
+            // Our own kill of the tracked boss keeps the window open after Apply.
+            timers.MarkKilled("ogre king", Killed.AddHours(6));
+            window.ApplyCommand.Execute(null);
+
+            Assert.Contains("Applied 1 timer update(s). Not written: ogre king", window.Status);
+            Assert.Equal(0, closes);
+            Assert.Equal(Killed, timers.KilledAt("guardian golem"));
+            BossTimerSyncRowViewModel golem = RowOf(window, "guardian golem");
+            Assert.Equal("guardian golem", golem.MatchName);
+            Assert.Equal(Killed, golem.OursKilledAt);
+            Assert.Equal("Keep ours", golem.KeepOursLabel);
+            Assert.Null(golem.SelectedKilledAt);
+            Assert.False(golem.Responders[0].IsSelected);
+
+            DateTimeOffset fresh = Killed.AddHours(8);
+            timers.MarkKilled("guardian golem", fresh);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(fresh, timers.KilledAt("guardian golem"));
+            Assert.Equal(Killed.AddHours(6), timers.KilledAt("ogre king"));
+            Assert.Equal("Applied 0 timer update(s).", window.Status);
+            Assert.Equal(1, closes);
+        }
+    }
+
+    // The same guard for a row built while the boss was off our list: we add the
+    // boss and kill it while the window is open, and the pick, an older time, is
+    // not written over that kill. The row and the status name the boss as our
+    // list does, and a later offer for it lands on the same row.
+    [Fact]
+    public void SyncWindow_APickForABossAddedSinceIsNotWrittenOverOurKillOfIt()
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Gangpath);
+        using (window)
+        {
+            int closes = 0;
+            window.CloseRequested += _ => closes++;
+            window.Fold(new BossTimerSyncResponse("Bob",
+                new[] { new BossTimerSyncRecord(51, null, Killed) }, RemoteChannel.Gangpath, TimerSyncStanding.OneOfSeveral));
+            BossTimerSyncRowViewModel golem = Assert.Single(window.Rows);
+            Assert.Equal("Monster #51", golem.BossName);
+            Assert.Null(golem.MatchName);
+
+            _syncBosses.Save(_syncBosses.Resolve().Append(Boss("guardian golem", number: 51, rooms: "1/2")).ToList());
+            DateTimeOffset fresh = Killed.AddHours(8);
+            timers.MarkKilled("guardian golem", fresh);
+            golem.Responders[0].AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(fresh, timers.KilledAt("guardian golem"));
+            Assert.Contains("Not written: guardian golem", window.Status);
+            Assert.Equal(0, closes);
+            Assert.Equal("guardian golem", golem.BossName);
+            Assert.Equal("guardian golem", golem.MatchName);
+            Assert.Equal(fresh, golem.OursKilledAt);
+            Assert.Null(golem.SelectedKilledAt);
+
+            window.Fold(new BossTimerSyncResponse("Sue",
+                new[] { new BossTimerSyncRecord(51, "guardian golem", Killed.AddHours(3)) }, RemoteChannel.Gangpath, TimerSyncStanding.OneOfSeveral));
+            Assert.Same(golem, Assert.Single(window.Rows));
+            Assert.Equal(new[] { "Bob", "Sue" }, golem.Responders.Select(c => c.Responder));
+        }
+    }
+
+    // Added to our list with no timer yet, the boss is a tracked one we hold none
+    // for: the pick is written, as the user chose.
+    [Fact]
+    public void SyncWindow_APickForABossAddedSinceWithNoTimerIsWritten()
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Gangpath);
+        using (window)
+        {
+            window.Fold(new BossTimerSyncResponse("Bob",
+                new[] { new BossTimerSyncRecord(51, "guardian golem", Killed) }, RemoteChannel.Gangpath, TimerSyncStanding.OneOfSeveral));
+            BossTimerSyncRowViewModel golem = Assert.Single(window.Rows);
+            Assert.True(golem.HasConflict);
+            _syncBosses.Save(_syncBosses.Resolve().Append(Boss("guardian golem", number: 51, rooms: "1/2")).ToList());
+
+            golem.Responders[0].AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(Killed, timers.KilledAt("guardian golem"));
+        }
+    }
+
+    // A number that is no boss anywhere, with no name sent: listed, and a pick of it
+    // is skipped, since there is nothing to add to the list.
+    [Fact]
+    public void SyncWindow_ATimerForAMonsterThatIsNoBoss_IsNeverWritten()
+    {
+        var (window, timers) = NewSyncWindow(RemoteChannel.Gangpath);
+        using (window)
+        {
+            window.Fold(new BossTimerSyncResponse("Bob",
+                new[] { new BossTimerSyncRecord(9999, null, Killed) }, RemoteChannel.Gangpath, TimerSyncStanding.OneOfSeveral));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+
+            row.Responders[0].AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal("Applied 0 timer update(s).", window.Status);
+            Assert.Single(_syncBosses.Resolve());
+        }
+    }
+
+    // The readable report is an ordinary remote command, and with the broadcast
+    // channel opened those are read there too: it is answered on the channel, once
+    // a minute to each asker like everything said there.
+    [Fact]
+    public void TimerReport_OnTheBroadcastChannel_IsAnsweredThere_OnceAMinute()
     {
         var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
         timers.MarkKilled("ogre king");
 
         engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer", "raw"));
         engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer ogre", "raw"));
+
+        Assert.StartsWith("br {ogre king - ", Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests)));
+
+        _engineNow += BroadcastAnswerBudget.Window;
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer ogre", "raw"));
+        Assert.Equal(2, engine.LastSentForTests.Count);
+    }
+
+    // With the box ticked the report is not read there, like everything else.
+    [Fact]
+    public void TimerReport_OnTheBroadcastChannelSwitchedOff_IsNotAnswered()
+    {
+        var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
+        timers.MarkKilled("ogre king");
+        engine.DisableBroadcastChannel = true;
+
+        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer", "raw"));
 
         Assert.Empty(engine.LastSentForTests);
     }

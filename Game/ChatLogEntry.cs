@@ -10,7 +10,8 @@ namespace MudPlay.Game;
 //   the recipient instead), broadcasts (operator's name lives in Speaker),
 //   realm-events with no named subject, or own yells where the speaker is the
 //   local player. Specific semantics per channel are documented inline in
-//   ChatRouter.
+//   ChatRouter. A yell heard from the next room does not name the yeller; its
+//   Speaker is the word the game prints, "Someone".
 // Message: the message text. For realm events this is a short verb phrase
 //   ("entered the Realm" / "left the Realm" / "disconnected").
 // RawText: the original LineExtractor.EmittedLine.Text so downstream consumers
@@ -19,10 +20,15 @@ namespace MudPlay.Game;
 // DirectedTo: for a directed say (`X says (to Target) "msg"`, or our own outgoing
 //   `>Target msg`), the target the say is aimed at. null for an undirected say and
 //   every other channel. The conversation window renders it as `X (to Target)`.
+// HeardFrom: for a yell heard from the next room, where it came from in the game's
+//   own words ("above", "below", "the north"). null for every other line, including
+//   a same-room or our own yell. Kept apart from DirectedTo because that one is a
+//   player's name. The conversation window renders it as `Someone (from the north)`.
 public readonly record struct ChatLogEntry(
     DateTimeOffset Timestamp,
     ChatChannel Channel,
     string? Speaker,
     string Message,
     string RawText,
-    string? DirectedTo = null);
+    string? DirectedTo = null,
+    string? HeardFrom = null);
