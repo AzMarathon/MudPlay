@@ -33,6 +33,8 @@ namespace MudPlay.Game.Map;
 //     cast there before they are held again. See GivingTheOwedCast.
 //   - A fight where the loop stands waiting holds nothing: the debuff is for the lair,
 //     and the character fights at the doorstep with every buff it has.
+//   - A monster swinging at the character where the loop stands, in a room the loop
+//     is set not to fight in, is no such fight: see FightingNow.
 //
 // What is asked of the hold (BlockingBuffs and the rest of ILairEntryBuffHold's
 // questions, Describe) only reads. Its state moves at three places: the loop's ask,
@@ -94,6 +96,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     private readonly Func<bool>? _inCombat;
     private readonly Func<bool>? _manaIsFull;
     private readonly Func<RoomKey?>? _fightRoom;
+    private readonly Func<bool>? _fightAnswered;
 
     private LairEntryDebuffMode _mode;
     private bool _waiting;
@@ -103,6 +106,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     private DateTimeOffset _waitStarted;
     private bool _waitLineSaid;
     private bool _doorFightSaid;
+    private bool _unansweredSaid;
     private bool _blockWhileWaiting;
     private bool _blockOrdinaryWhileWaiting;
     private WaitLimit _limitReached;
@@ -167,13 +171,17 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     // the game will take it, whatever maximum the client believes in. fightRoom: the
     // room a fight now is in, as the combat engine judges it (the room a loop step
     // in flight is entering, else the one the character stands in); without it the
-    // hold can't tell a fight at the door from one in the lair.
+    // hold can't tell a fight at the door from one in the lair. fightAnswered: the
+    // client fights in that room. False where the loop is set not to attack (the
+    // room's "do not attack", or "only attack in lair rooms" outside a lair) and
+    // nothing else has the combat engine fighting there.
     public LairEntryDebuffHold(MovementCoordinator coordinator, Func<bool> slotUsed, Func<bool> castDue,
         Action<TimeSpan, Action> scheduleAfter, Func<DateTimeOffset>? now = null, LogService? log = null,
         Func<bool, IReadOnlyList<string>>? buffsDue = null, Func<bool>? stillWanted = null,
         Func<string?>? healOrCureDue = null,
         Func<(string Spell, int Needed, int Mana, int MaxMana, bool IsSpellCost)?>? debuffMana = null,
-        Func<bool>? inCombat = null, Func<bool>? manaIsFull = null, Func<RoomKey?>? fightRoom = null)
+        Func<bool>? inCombat = null, Func<bool>? manaIsFull = null, Func<RoomKey?>? fightRoom = null,
+        Func<bool>? fightAnswered = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(slotUsed);
@@ -192,6 +200,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
         _inCombat = inCombat;
         _manaIsFull = manaIsFull;
         _fightRoom = fightRoom;
+        _fightAnswered = fightAnswered;
     }
 
     // ----- What is asked ----------------------------------------------
@@ -219,13 +228,26 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
 
     // A fight is on: the cast scheduler reads it so, or the combat gate is up.
     private bool FightingNow =>
-        _inCombat?.Invoke() == true || _coordinator.IsGateAsserted(MovementCoordinator.CombatGate);
+        InAFightOfOurs || _coordinator.IsGateAsserted(MovementCoordinator.CombatGate);
+
+    // "In combat" is latched by a monster's swings alone. Where the loop is set not
+    // to fight, nothing answers them and nothing ends them: a wait that stood until
+    // such a fight was over stood until the loop was stopped by hand (report
+    // paradigm-20261012-080902: seven minutes at a doorstep under "only attack in
+    // lair rooms", a monster that had followed the loop swinging all the while). So
+    // it is no fight to this hold. The loop steps in as it would with nothing there,
+    // and what followed it is fought in the lair.
+    private bool InAFightOfOurs => _inCombat?.Invoke() == true && _fightAnswered?.Invoke() != false;
+
+    private bool AttackedUnanswered =>
+        _inCombat?.Invoke() == true && _fightAnswered?.Invoke() == false
+        && !_coordinator.IsGateAsserted(MovementCoordinator.CombatGate);
 
     private bool FightingWhereItWaits => _waiting && FightingNow;
 
     // The combat engine has engaged: "in combat" where that is known, since the combat
     // gate goes up at the room's roster, a moment before.
-    private bool Engaged => _inCombat is null ? FightingNow : _inCombat();
+    private bool Engaged => _inCombat is null ? FightingNow : InAFightOfOurs;
 
     // Where a fight now is, against the lair this hold is for. Neither is true when
     // either room isn't known.
@@ -244,7 +266,10 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     // What the hold is doing and how its last wait ended, for the bug report.
     public string Describe()
     {
-        string last = (_lastRelease is null ? string.Empty : $"; buffs last released: {_lastRelease}")
+        string last = (AttackedUnanswered
+                ? "; a monster is attacking where the loop stands, in a room it doesn't fight in: not waited out"
+                : string.Empty)
+            + (_lastRelease is null ? string.Empty : $"; buffs last released: {_lastRelease}")
             + (_lastOutcome is null ? string.Empty : $"; last wait: {_lastOutcome}");
         DateTimeOffset now = _now();
         if (!_waiting)
@@ -512,6 +537,23 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
         _log?.Info("Loop", "a fight at the door: buffs are free, the wait resumes after");
     }
 
+    // A monster is swinging at the character where the loop stands and the loop
+    // doesn't fight there: said once while it lasts, since the step that follows
+    // walks into a lair with it in tow.
+    private void SayAnAttackGoesUnanswered()
+    {
+        if (!AttackedUnanswered)
+        {
+            _unansweredSaid = false;
+            return;
+        }
+        if (_unansweredSaid) return;
+        _unansweredSaid = true;
+        _log?.Info("Loop",
+            "a monster is attacking at the door and the loop doesn't fight in this room — not waited out: "
+            + "the loop enters the lair as it would without it");
+    }
+
     // ----- Deciding ------------------------------------------------------
 
     // True when the step may go. Told apart from the poll's own look by _deciding:
@@ -551,6 +593,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
             return false;
         }
         _doorFightSaid = false;
+        SayAnAttackGoesUnanswered();
 
         if (GivingTheOwedCast(now, used)) return false;
 

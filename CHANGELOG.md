@@ -1,5 +1,10 @@
 # Version history
 
+## 3.180.18
+
+- A loop waiting at a lair's doorstep to debuff no longer stands there while a monster it won't fight in that room swings at you: it enters the lair on a free cast and fights it there
+- bug reports addressed: paradigm-20261012-080902
+
 ## 3.180.17
 
 - A walk whose route was still being worked out when the game data changed is not started on the old data's room; the terminal says why

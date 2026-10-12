@@ -8827,7 +8827,11 @@ public sealed class AppServices
             manaIsFull: () => Health.ManaIsAtGameFull,
             // Where the combat engine itself judges a fight to be: the room a loop
             // step in flight is entering, else the one the tracker has us in.
-            fightRoom: () => CombatSuppressionVerdict().Room);
+            fightRoom: () => CombatSuppressionVerdict().Room,
+            // The loop's own "do not attack" / "only attack in lair rooms" alone: a
+            // fight with a player reads as suppressed to the engage gates too, and is
+            // a fight all the same. A force-clear fights where the loop doesn't.
+            fightAnswered: () => !CombatSuppressionVerdict().Suppressed || Combat.ForceClearActive);
         CastDirector.SetLairEntryBuffHold(LairDebuffHold);
         CastDirector.SetManaRegenBuffProbe(IsManaRegenRollSpell);
         // An engage with no debuff to cast first: the hold has nothing to keep the
