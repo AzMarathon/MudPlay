@@ -929,6 +929,29 @@ public sealed class PartyPathItemGateTests
         Assert.Equal(1, h.Count("release"));
     });
 
+    // A stop only tells the gate its walk ended, and the count runs on to its
+    // decision. With the game data become another set meanwhile, the item of that
+    // number is another item, and it is that one the party is told to hand round:
+    // why the count is cleared after the stop for another set (AppServices).
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ACountOutWhenTheWalkEnded_ActsOnWhateverCarriesItsNumberByThen_UnlessCleared(bool cleared) => Inline(() =>
+    {
+        var h = new Harness { IsLeader = false };
+        h.Names[1] = "rope";
+        var open = h.HoldCountsOpen(1);
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        h.Gate.OnWalkEnded();
+        h.Names[1] = "silver ring";
+        if (cleared) h.Gate.Clear();
+        open[1].SetResult(Answer(1, ("Bob", 3)));
+
+        if (cleared) Assert.Empty(h.Sent);
+        else Assert.Contains(h.Sent, s => s.Contains("silver ring", StringComparison.Ordinal));
+    });
+
     [Fact]
     public void Clear_ThenANewCount_IsNotCutShortByTheOldOne() => Inline(() =>
     {
