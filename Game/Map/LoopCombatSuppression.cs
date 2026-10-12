@@ -41,8 +41,15 @@ internal static class LoopCombatSuppression
     // paused loop left behind, with the character now following a party leader
     // somewhere else entirely, went on switching combat off in every non-lair room
     // the party fought in (report paradigm-20261007-125915).
-    public static bool LoopIsDriving(LoopState state, bool heldByUser, bool following) =>
-        state != LoopState.Idle && !heldByUser && !following;
+    //
+    // Nor is a loop standing at a lair's door until there is mana for the debuff:
+    // that wait has no time limit, and what is in the room with it is fought (user,
+    // 2026-10-12: "if we get held for having not enough mana to debuff, we should
+    // fight.. if we're just waiting on the open cast round to be free to debuff, we
+    // should not fight"). The wait for the cast is over within a round or so and
+    // the loop walks on, so that one suppresses as any step does.
+    public static bool LoopIsDriving(LoopState state, bool heldByUser, bool following, bool standingForMana) =>
+        state != LoopState.Idle && !heldByUser && !following && !standingForMana;
 
     public static bool IsSuppressed(Loop loop, RoomKey current, bool currentIsLair)
     {

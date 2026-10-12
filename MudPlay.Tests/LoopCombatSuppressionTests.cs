@@ -118,14 +118,17 @@ public sealed class LoopCombatSuppressionTests
 
     // Suppression means "skip the fight and walk on", so it needs a loop that is
     // walking: not one the user stopped, and not one left paused while the character
-    // follows a party leader.
+    // follows a party leader. Nor one standing at a lair's door for the debuff's
+    // mana (report paradigm-20261012-080902; user, 2026-10-12).
     [Theory]
-    [InlineData(LoopState.Running, false, false, true)]
-    [InlineData(LoopState.Paused, false, false, true)]     // paused by its own fight, say
-    [InlineData(LoopState.Paused, true, false, false)]     // Pause, or an @stop
-    [InlineData(LoopState.Paused, false, true, false)]     // following a leader
-    [InlineData(LoopState.Idle, false, false, false)]
+    [InlineData(LoopState.Running, false, false, false, true)]
+    [InlineData(LoopState.Paused, false, false, false, true)]     // paused by its own fight, say
+    [InlineData(LoopState.Paused, true, false, false, false)]     // Pause, or an @stop
+    [InlineData(LoopState.Paused, false, true, false, false)]     // following a leader
+    [InlineData(LoopState.Paused, false, false, true, false)]     // at a lair's door for mana
+    [InlineData(LoopState.Idle, false, false, false, false)]
     public void LoopIsDriving_OnlyWhileTheLoopMovesTheCharacter(
-        LoopState state, bool heldByUser, bool following, bool expected)
-        => Assert.Equal(expected, LoopCombatSuppression.LoopIsDriving(state, heldByUser, following));
+        LoopState state, bool heldByUser, bool following, bool standingForMana, bool expected)
+        => Assert.Equal(expected,
+            LoopCombatSuppression.LoopIsDriving(state, heldByUser, following, standingForMana));
 }

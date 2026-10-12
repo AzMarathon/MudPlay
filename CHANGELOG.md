@@ -3,6 +3,7 @@
 ## 3.180.18
 
 - A loop waiting at a lair's doorstep to debuff no longer stands there while a monster it won't fight in that room swings at you: it enters the lair on a free cast and fights it there
+- Held at the doorstep for the debuff's mana, the loop fights a monster in the room, whatever its attack settings for that room
 - bug reports addressed: paradigm-20261012-080902
 
 ## 3.180.17

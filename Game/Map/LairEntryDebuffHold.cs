@@ -34,7 +34,8 @@ namespace MudPlay.Game.Map;
 //   - A fight where the loop stands waiting holds nothing: the debuff is for the lair,
 //     and the character fights at the doorstep with every buff it has.
 //   - A monster swinging at the character where the loop stands, in a room the loop
-//     is set not to fight in, is no such fight: see FightingNow.
+//     is set not to fight in, is no such fight while the wait is for the cast: see
+//     InAFightOfOurs. Once the wait is for mana the room is fought in, and it is.
 //
 // What is asked of the hold (BlockingBuffs and the rest of ILairEntryBuffHold's
 // questions, Describe) only reads. Its state moves at three places: the loop's ask,
@@ -217,6 +218,14 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
 
     public bool HoldingForMana => _waiting && _forMana is not null && !FightingNow;
 
+    // The loop stands at the door until there is mana for the debuff, a fight there
+    // or not. While it does, the room is fought in whatever the loop's attack
+    // settings say (LoopCombatSuppression.LoopIsDriving).
+    public bool WaitingForMana => _waiting && _forMana is not null;
+
+    // A wait has come to stand for mana: the engage gates are to be asked again.
+    public event Action? ManaWaitStarted;
+
     public bool SkipsUnpayableBuffs => _waiting || _deciding;
 
     // A buff this doorstep's wait has given up on (it went out as often as one may),
@@ -236,7 +245,8 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     // paradigm-20261012-080902: seven minutes at a doorstep under "only attack in
     // lair rooms", a monster that had followed the loop swinging all the while). So
     // it is no fight to this hold. The loop steps in as it would with nothing there,
-    // and what followed it is fought in the lair.
+    // and what followed it is fought in the lair. A wait that comes to stand for
+    // mana has the room fought in (WaitingForMana), which makes it a fight again.
     private bool InAFightOfOurs => _inCombat?.Invoke() == true && _fightAnswered?.Invoke() != false;
 
     private bool AttackedUnanswered =>
@@ -290,7 +300,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
         if (_forMana is { } need)
             return $"waiting for mana ({LairEntryDebuffModes.Label(_mode)}; {(now - _waitStarted).TotalSeconds:0}s; "
                 + $"mana {need.Mana} of the {need.Needed} the debuff {need.Spell} needs, {Basis(need.IsSpellCost)}; "
-                + "every buff held bar the ones that bring mana back)" + last;
+                + "every buff held bar the ones that bring mana back; a monster in this room is fought)" + last;
         string held = _blockWhileWaiting ? "every buff held"
             : _blockOrdinaryWhileWaiting ? "buffs not ticked priority held"
             : "nothing held";
@@ -752,8 +762,10 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
             _manaSaidAt = now;
             _log?.Info("Loop",
                 $"waiting outside the lair for mana: {need.Mana} of the {need.Needed} the debuff {need.Spell} needs "
-                + $"({Basis(need.IsSpellCost)}) — buffs held back meanwhile, bar the ones that bring mana back");
+                + $"({Basis(need.IsSpellCost)}) — buffs held back meanwhile, bar the ones that bring mana back; "
+                + "a monster in this room is fought");
         }
+        if (!saidBefore) ManaWaitStarted?.Invoke();
         return true;
     }
 

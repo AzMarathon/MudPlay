@@ -479,6 +479,45 @@ public sealed class LairEntryDebuffHoldTests
         Assert.DoesNotContain("a fight at the door: buffs are free, the wait resumes after", h.LoopLog);
     }
 
+    // User, 2026-10-12: "if we get held for having not enough mana to debuff, we should
+    // fight.. if we're just waiting on the open cast round to be free to debuff, we
+    // should not fight". The wait for mana says so once as it starts, so the engage
+    // gates are asked again, and stands as a wait for mana through the fight.
+    [Fact]
+    public void StandingForMana_TheRoomIsFoughtIn_FromTheMomentTheWaitIsForMana()
+    {
+        Harness h = new()
+        {
+            SlotUsed = true, InCombat = true, FightAnswered = false, DebuffMana = ("dbuf", 60, 35, 100),
+        };
+        int gatesAsked = 0;
+        h.Hold.ManaWaitStarted += () => gatesAsked++;
+
+        Assert.False(h.Hold.ReadyToEnter(LairEntryDebuffMode.BlockSpells, new RoomKey(1, 100)));
+        Assert.False(h.Hold.WaitingForMana);        // for the cast: the attack goes unanswered
+        Assert.Equal(0, gatesAsked);
+
+        h.SlotUsed = false;                         // the cast is free, and mana is short
+        h.Poll();
+        Assert.True(h.Hold.WaitingForMana);
+        Assert.True(h.HeldForMana);
+        Assert.Equal(1, gatesAsked);
+        Assert.Contains(h.LoopLog, m => m.EndsWith("a monster in this room is fought"));
+
+        h.FightAnswered = true;                     // the room is fought in now
+        h.Poll();
+        Assert.True(h.Hold.WaitingForMana);         // through the fight, so the room stays fought in
+        Assert.True(h.HeldForMana);
+        Assert.False(h.Hold.BlockingBuffs);
+        Assert.Equal(1, gatesAsked);
+
+        h.InCombat = false;                         // the kill
+        h.SetMana(80);
+        h.Poll();
+        Assert.False(h.Hold.WaitingForMana);
+        Assert.False(h.Hold.IsWaiting);
+    }
+
     // The same monster once something does fight it there (a rest that has to clear
     // the room first): a fight at the door like any other, waited out.
     [Fact]
@@ -775,7 +814,7 @@ public sealed class LairEntryDebuffHoldTests
         Assert.False(h.Held);                       // its own gate, so the window says "for mana"
         Assert.True(h.Hold.BlockingBuffs);          // a buff now would spend what it waits for
         const string Why = "waiting outside the lair for mana: 35 of the 60 the debuff dbuf needs "
-            + "(its min mana per cast) — buffs held back meanwhile, bar the ones that bring mana back";
+            + "(its min mana per cast) — buffs held back meanwhile, bar the ones that bring mana back; a monster in this room is fought";
         Assert.True(h.Hold.HoldingForMana);
         Assert.Equal(new[] { Why }, h.LoopLog);
         Assert.StartsWith("waiting for mana (", h.Hold.Describe());
@@ -816,7 +855,7 @@ public sealed class LairEntryDebuffHoldTests
         Assert.Equal(new[]
         {
             "waiting outside the lair for mana: 5 of the 12 the debuff dbuf needs "
-                + "(its mana cost) — buffs held back meanwhile, bar the ones that bring mana back",
+                + "(its mana cost) — buffs held back meanwhile, bar the ones that bring mana back; a monster in this room is fought",
         }, h.LoopLog);
         Assert.Contains("mana 5 of the 12 the debuff dbuf needs, its mana cost", h.Hold.Describe());
     }

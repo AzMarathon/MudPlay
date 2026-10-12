@@ -685,7 +685,7 @@ public sealed class LairEntryPriorityBuffWaitTests
         Assert.True(h.Coordinator.IsGateAsserted(MovementCoordinator.LairDebuffManaGate));
         Assert.False(h.Held);
         Assert.Contains("waiting outside the lair for mana: 25 of the 40 the debuff dbuf needs "
-            + "(its min mana per cast) — buffs held back meanwhile, bar the ones that bring mana back", h.InfoLog("Loop"));
+            + "(its min mana per cast) — buffs held back meanwhile, bar the ones that bring mana back; a monster in this room is fought", h.InfoLog("Loop"));
 
         h.AddBuff("late", priority: true);                  // comes due while it stands there
         h.NextRound(seconds: 30);
