@@ -1,4 +1,6 @@
-using Avalonia.Media;
+using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using SkiaSharp;
 
 namespace MudPlay.Services;
@@ -13,16 +15,42 @@ namespace MudPlay.Services;
 //     plain wrapped text with no grid and no ANSI art to keep aligned, so nothing
 //     is ruled out; a letter the chosen face lacks falls back to another font.
 //
-// Built once, then cached for the app's lifetime — probing every installed
-// family is too costly to repeat each time Settings opens. Detection reads glyph
-// advances straight from Skia (no glyph typeface, no FormattedText layout pass),
-// which is both far cheaper and safe to run off the UI thread, so Warm() can
-// pre-build the list on a background thread at startup and the first Settings
-// open pays nothing.
+// Telling the two apart means opening every installed family, and Skia keeps
+// each face it has opened for the life of the process, whatever is disposed or
+// purged afterwards: on a machine with 687 families the scan left about 80 MB of
+// native memory and 677 mapped font files in every client, for two pickers most
+// sessions never open (measured 2026-10-12). So the client does not scan. Listing
+// the family names opens nothing; a stamp of them keys a catalogue saved on disk,
+// and when the installed fonts no longer match it, a copy of the program started
+// with ProbeArgument scans, saves the catalogue and exits, taking that memory
+// with it. Only when that can't be done is the scan run in this process, and
+// outside the client (tests, the XAML previewer) it always is: nothing there
+// should start a process or write to the data folder.
+//
+// Built once, then cached for the app's lifetime. Detection reads glyph advances
+// straight from Skia (no glyph typeface, no FormattedText layout pass), which is
+// safe to run off the UI thread, so Warm() builds the lists on a background
+// thread at startup and the first Settings open pays nothing.
 public static class InstalledFontCatalog
 {
+    // Starts the program as the helper that scans and saves the catalogue.
+    public const string ProbeArgument = "--probe-fonts";
+
+    // Raised when what makes a family usable or fixed-pitch changes, so a
+    // catalogue saved by the older rule is not believed.
+    private const int ProbeVersion = 1;
+
+    // A scan of several hundred families takes a second or two; a helper that
+    // has not finished in this long is stuck on a font and is stopped.
+    private static readonly TimeSpan HelperTimeout = TimeSpan.FromSeconds(90);
+
     private static readonly object _gate = new();
     private static (IReadOnlyList<string> Monospace, IReadOnlyList<string> Text)? _lists;
+    private static string? _cataloguePath;
+
+    // Where the lists came from and how long that took, for the program log and
+    // the bug report.
+    public static string Source { get; private set; } = "not built yet";
 
     // Family names of every installed monospace font, sorted case-insensitively
     // and de-duplicated across weights.
@@ -42,6 +70,14 @@ public static class InstalledFontCatalog
         }
     }
 
+    // The client's entry point says where the catalogue is saved. Until it does,
+    // none is read or written and no helper is started.
+    public static void UseSavedCatalogue(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        _cataloguePath = path;
+    }
+
     // Pre-build the catalogue off the UI thread so opening Settings doesn't stall
     // on the first enumeration. Safe to call before any window exists — it only
     // touches the font subsystem. Failures are swallowed: the lazy getter simply
@@ -52,21 +88,148 @@ public static class InstalledFontCatalog
         catch { /* best-effort pre-warm; the picker rebuilds lazily if this fails */ }
     }
 
+    // The helper's whole run: scan, save, and say by the exit code whether a
+    // catalogue for the installed fonts is now on disk.
+    public static int RunProbe()
+    {
+        try
+        {
+            if (_cataloguePath is not { } path) return 2;
+            string[] families = InstalledFamilies();
+            Save(path, Stamp(families), Probe(families));
+            return 0;
+        }
+        catch
+        {
+            // Nothing to report to: the client that started this reads the exit
+            // code, and scans for itself.
+            return 1;
+        }
+    }
+
     // The probe letters, in the order IsFixedPitch reads them.
     private const string ProbeText = "aiMW ";
 
     private static (IReadOnlyList<string> Monospace, IReadOnlyList<string> Text) Build()
     {
+        Stopwatch clock = Stopwatch.StartNew();
+        string[] families = InstalledFamilies();
+        if (_cataloguePath is not { } path)
+        {
+            var scanned = Probe(families);
+            Source = $"scanned in this process in {clock.ElapsedMilliseconds} ms";
+            return scanned;
+        }
+
+        string stamp = Stamp(families);
+        if (TryRead(path, stamp) is { } saved)
+        {
+            Source = $"read from the saved catalogue in {clock.ElapsedMilliseconds} ms";
+            return saved;
+        }
+
+        string? helperFailed = RunHelper();
+        if (helperFailed is null && TryRead(path, stamp) is { } rebuilt)
+        {
+            Source = $"scanned by a helper process in {clock.ElapsedMilliseconds} ms "
+                + "(no catalogue was saved for the fonts now installed)";
+            return rebuilt;
+        }
+
+        var here = Probe(families);
+        string kept = "saved for next time";
+        try { Save(path, stamp, here); }
+        catch (Exception ex) { kept = $"not saved: {ex.Message}"; }
+        Source = $"scanned in this process in {clock.ElapsedMilliseconds} ms, and its memory kept: the helper process "
+            + $"{helperFailed ?? "left no catalogue for these fonts"}; {kept}";
+        return here;
+    }
+
+    // Names only: listing them opens no font file.
+    private static string[] InstalledFamilies() =>
+        SKFontManager.Default.GetFontFamilies()
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToArray();
+
+    private static (IReadOnlyList<string> Monospace, IReadOnlyList<string> Text) Probe(IEnumerable<string> families)
+    {
         SortedSet<string> mono = new(StringComparer.OrdinalIgnoreCase);
         SortedSet<string> text = new(StringComparer.OrdinalIgnoreCase);
-        foreach (FontFamily family in FontManager.Current.SystemFonts)
+        foreach (string family in families)
         {
-            if (string.IsNullOrWhiteSpace(family.Name)) continue;
-            (bool usable, bool fixedPitch) = ProbeFamily(family.Name);
-            if (usable) text.Add(family.Name);
-            if (fixedPitch) mono.Add(family.Name);
+            (bool usable, bool fixedPitch) = ProbeFamily(family);
+            if (usable) text.Add(family);
+            if (fixedPitch) mono.Add(family);
         }
         return (mono.ToArray(), text.ToArray());
+    }
+
+    // What the saved catalogue is good for: these family names, scanned by this
+    // rule. The order the system lists them in is not part of it.
+    internal static string Stamp(IEnumerable<string> families)
+    {
+        StringBuilder all = new($"v{ProbeVersion}\n");
+        foreach (string family in families.Order(StringComparer.Ordinal))
+            all.Append(family).Append('\n');
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(all.ToString())));
+    }
+
+    // The saved lists, when the file is there, whole, and for this stamp.
+    internal static (IReadOnlyList<string> Monospace, IReadOnlyList<string> Text)? TryRead(string path, string stamp)
+    {
+        try
+        {
+            return JsonStore.Load<Saved>(path) is { Monospace: { } mono, Text: { } text } saved
+                   && saved.Stamp == stamp
+                ? (mono, text)
+                : null;
+        }
+        catch
+        {
+            // A catalogue that can't be read is one that isn't there: it is rebuilt.
+            return null;
+        }
+    }
+
+    internal static void Save(string path, string stamp,
+        (IReadOnlyList<string> Monospace, IReadOnlyList<string> Text) lists) =>
+        JsonStore.Save(path, new Saved
+        {
+            Stamp = stamp,
+            Monospace = lists.Monospace.ToArray(),
+            Text = lists.Text.ToArray(),
+        });
+
+    // Null when the helper ran to the end; else what went wrong, for Source.
+    private static string? RunHelper()
+    {
+        try
+        {
+            if (Environment.ProcessPath is not { Length: > 0 } exe)
+                return "could not be started (the program's own path is not known)";
+            ProcessStartInfo start = new(exe) { UseShellExecute = false, CreateNoWindow = true };
+            start.ArgumentList.Add(ProbeArgument);
+            using Process? helper = Process.Start(start);
+            if (helper is null) return "could not be started";
+            if (!helper.WaitForExit(HelperTimeout))
+            {
+                try { helper.Kill(entireProcessTree: true); }
+                catch { /* it ended by itself between the wait and the kill */ }
+                return $"was still running after {HelperTimeout.TotalSeconds:0} s and was stopped";
+            }
+            return helper.ExitCode == 0 ? null : $"ended with exit code {helper.ExitCode}";
+        }
+        catch (Exception ex)
+        {
+            return $"could not be started ({ex.Message})";
+        }
+    }
+
+    private sealed class Saved
+    {
+        public string? Stamp { get; set; }
+        public string[]? Monospace { get; set; }
+        public string[]? Text { get; set; }
     }
 
     // Deliberately not through FontManager.TryGetGlyphTypeface: for a family whose

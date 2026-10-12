@@ -64,6 +64,19 @@ public static class AppPaths
     // BBS-tier files (one per BBS).
     public static string BbsDir { get; }
 
+    // The installed-font catalogue (InstalledFontCatalog). The fonts are this
+    // machine's and a data folder can be one several machines share, so each
+    // machine keeps its own.
+    public static string FontCatalogueFile
+    {
+        get
+        {
+            string machine = string.Concat(
+                Environment.MachineName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+            return Path.Combine(DataRoot, "Global", $"font-catalogue.{machine}.json");
+        }
+    }
+
     // Debug logs from DebugLogWriter.
     public static string LogsDir { get; }
 

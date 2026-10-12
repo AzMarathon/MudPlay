@@ -31,7 +31,8 @@ public partial class App : Application
             InstalledFontCatalog.Warm();
             AppServices.Current.Log.Info("Fonts",
                 $"{InstalledFontCatalog.Monospace.Count} monospace system fonts for the terminal picker, "
-                + $"{InstalledFontCatalog.Text.Count} text fonts for the Conversation picker");
+                + $"{InstalledFontCatalog.Text.Count} text fonts for the Conversation picker; "
+                + InstalledFontCatalog.Source);
         });
 
         // On classic desktop platforms (Windows / Linux / macOS) the

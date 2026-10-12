@@ -1,5 +1,10 @@
 # Version history
 
+## 3.180.20
+
+- Each client uses much less memory when many fonts are installed: the installed fonts are no longer all opened at every launch (about 200 MB less on a machine with 687 font families); the font pickers offer the same fonts
+- Program log and bug report say where the font lists came from
+
 ## 3.180.19
 
 - Greeting an NPC no longer starts a fight: a reply worded like a swing ("The old man looks at you curiously, …") is not taken for an attack
