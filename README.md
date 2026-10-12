@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.11**
-> - A room spell's own line no longer sets another spell's condition: the Underwater Passage's "You are freezing cold!" was read as confusion and held navigation
-> - "You are poisoned for N damage!" is read as damage, not as being poisoned
-> - A line several spells share is read by which of them the room or a monster present can cast, while the room's occupants are fully known; a hold, blindness or attack-stop is never ruled out
-> - Negated and resisted cast lines are recognised and tied to their spell; no condition is read off them
+> **Version 3.180.12**
+> - Opening the map on a room (a Game Data double-click, a room link, a search pick, a favourite) while walking stays on that room; it flashed there and went back to your own area
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
