@@ -74,4 +74,66 @@ public sealed class InstalledFontCatalogTests
     {
         Assert.False(InstalledFontCatalog.WidthsUniform(System.Array.Empty<double>()));
     }
+
+    // ----- The saved catalogue -----------------------------------------
+    //
+    // A client reads the lists from disk instead of opening every installed font,
+    // so the stamp is what keeps a stale catalogue from being believed.
+
+    [Fact]
+    public void Stamp_IsTheSameWhateverOrderTheFamiliesAreListedIn()
+    {
+        Assert.Equal(
+            InstalledFontCatalog.Stamp(new[] { "Hack", "Noto Sans", "DejaVu Sans Mono" }),
+            InstalledFontCatalog.Stamp(new[] { "DejaVu Sans Mono", "Hack", "Noto Sans" }));
+    }
+
+    [Theory]
+    [InlineData("Hack", "Noto Sans", "Fira Code")]      // one installed
+    [InlineData("Hack")]                                // one removed
+    [InlineData("Hack", "Noto sans")]                   // a different family by its letters' case
+    public void Stamp_ChangesWithTheInstalledFamilies(params string[] now)
+    {
+        Assert.NotEqual(InstalledFontCatalog.Stamp(new[] { "Hack", "Noto Sans" }), InstalledFontCatalog.Stamp(now));
+    }
+
+    [Fact]
+    public void SavedCatalogue_IsReadBackForItsOwnStamp_AndForNoOther()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"mudplay-font-catalogue-{Guid.NewGuid():N}.json");
+        try
+        {
+            Assert.Null(InstalledFontCatalog.TryRead(path, "A"));   // nothing saved yet
+
+            InstalledFontCatalog.Save(path, "A", (new[] { "Hack" }, new[] { "Hack", "Noto Sans" }));
+
+            var read = InstalledFontCatalog.TryRead(path, "A");
+            Assert.NotNull(read);
+            Assert.Equal(new[] { "Hack" }, read!.Value.Monospace);
+            Assert.Equal(new[] { "Hack", "Noto Sans" }, read.Value.Text);
+            Assert.Null(InstalledFontCatalog.TryRead(path, "B"));   // the installed fonts changed
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("{ not json")]
+    [InlineData("{\"Stamp\":\"A\"}")]                               // the lists are missing
+    public void SavedCatalogue_ThatCannotBeRead_IsTakenAsNotThere(string content)
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"mudplay-font-catalogue-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, content);
+            Assert.Null(InstalledFontCatalog.TryRead(path, "A"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

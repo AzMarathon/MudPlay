@@ -43,6 +43,15 @@ internal static class Program
         // out-of-band CLR failure channels. Either way a fatal error lands a
         // Crash-<timestamp>.md on the Desktop instead of vanishing.
         CrashReporter.Install();
+
+        // A copy started to scan the installed fonts does that and nothing else: no
+        // window and no profile (it is given no --profile, so it started no sibling
+        // above). It exists so the fonts it opens are gone with it instead of
+        // staying in a client (InstalledFontCatalog).
+        InstalledFontCatalog.UseSavedCatalogue(AppPaths.FontCatalogueFile);
+        if (args.Contains(InstalledFontCatalog.ProbeArgument))
+            Environment.Exit(InstalledFontCatalog.RunProbe());
+
         Services.Update.UpdatePlatform.DeleteReplacedExecutables();
         CrashReporter.Guard(() =>
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args));

@@ -31,6 +31,11 @@ public static class BugReportContext
         Kv(sb, "Time zone", $"{TimeZoneInfo.Local.Id} (UTC{now:zzz}); every time in this report is local unless it ends in Z");
         Part(sb, () => Kv(sb, "Memory", $"{GC.GetTotalMemory(false) / (1024 * 1024)} MB managed, "
             + $"{Environment.WorkingSet / (1024 * 1024)} MB working set"));
+        // Whether this client opened every installed font itself, which stays in
+        // its memory, or took the lists from the saved catalogue.
+        Part(sb, () => Kv(sb, "Installed fonts",
+            $"{InstalledFontCatalog.Monospace.Count} monospace, {InstalledFontCatalog.Text.Count} text; "
+            + InstalledFontCatalog.Source));
 
         Part(sb, () =>
         {

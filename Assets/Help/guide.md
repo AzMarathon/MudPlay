@@ -7086,6 +7086,7 @@ MudPlay has a small command-line interface:
 
 - **`--profile`** — launches straight into one or more saved profiles (see *Launch straight into a profile* under **Profiles** for the full syntax, quoting, and multi-instance behavior).
 - **`--reconnect`** — connects on startup even when *Auto-connect when profile loads* is off. It exists for **Update the Client** to restore a session it interrupted, and it's only honoured for the profile loaded at startup.
+- **`--probe-fonts`** — not for you to use: the client starts a copy of itself with it, with no window, to work out which installed fonts are monospace. That copy saves the answer and exits within a second or two. It runs the first time, and again only after you install or remove a font; every other launch reads the saved list (`Global/font-catalogue.<computer name>.json` in the data folder, safe to delete). Opening every installed font inside the client itself used to keep them all in its memory for the whole session, on the order of 200 MB on a machine with several hundred fonts. The font pickers offer exactly what they did; a font installed while the client is running appears after a restart, as before.
 - There is **no** `--data-dir` flag — to relocate the data folder use the `MUDPLAY_DATA_ROOT` environment variable below.
 
 Any other startup arguments are the standard ones Avalonia consumes; the app does nothing further with them.
