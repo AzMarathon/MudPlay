@@ -1,5 +1,13 @@
 # Version history
 
+## 3.180.11
+
+- A room spell's own line no longer sets another spell's condition: the Underwater Passage's "You are freezing cold!" was read as confusion and held navigation
+- "You are poisoned for N damage!" is read as damage, not as being poisoned
+- A line several spells share is read by which of them the room or a monster present can cast
+- Negated and resisted cast lines are recognised and tied to their spell; no condition is read off them
+- bug reports addressed: paradigm-20261011-165726
+
 ## 3.180.1
 
 - A BBS renamed by capitals only keeps its characters' saved Simulator rankings
