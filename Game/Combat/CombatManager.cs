@@ -4795,9 +4795,21 @@ public sealed partial class CombatManager : IDisposable
     // Friend is never auto-engageable on its own and, after a buff dropped combat,
     // nothing re-engaged it. Re-runs the room dispatch on a genuinely new mark so a
     // stuck / idle engine picks it up immediately.
+    //
+    // A line with no damage in it is a swing only when the game printed it as one.
+    // The miss pattern is a shape ("The <monster> <verb> at you") that an NPC's
+    // greeting has too, and on the shape alone a greeted Friend was bashed (report
+    // paradigm-20261012-132421: "The old man looks at you curiously, …").
     private void OnAttackedInSelfDefense(MatchResult match)
     {
         if (_disposed || !Fighting()) return;
+        if (match.PatternId == KnownPatterns.MobMisses && !MonsterAttackLine.IsOnUs(match.Line))
+        {
+            _log?.Combat(LogCategory,
+                $"self-defense: '{match.Text.Trim()}' has a swing's shape but not a miss's colour — "
+                + "not taken for an attack");
+            return;
+        }
         // Running a walk-to through a hostile town (e.g. an evil character in a guarded
         // city): keep running rather than turning to fight. Looping / Auto-Lair / idle
         // still defend.

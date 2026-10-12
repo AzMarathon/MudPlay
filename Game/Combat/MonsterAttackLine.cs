@@ -18,6 +18,18 @@ public static class MonsterAttackLine
 {
     private const string DodgedAttackFrom = " just dodged an attack from ";
 
+    // Whether the game printed a line as an attack on us: damage dealt to us, or a
+    // miss, a dodge or a blow our armour turned, each in its own colour. For a line
+    // that has only the shape of a swing ("The <monster> <verb> at you"), which an
+    // NPC's talk and manner have too: "The old man looks at you curiously, as if not
+    // expecting to see you here." comes in the default colour, his "spins and kicks
+    // at you, but misses!" in a miss's dark cyan (report paradigm-20261012-132421).
+    public static bool IsOnUs(LineExtractor.EmittedLine line) =>
+        !line.IsPromptLine && !line.IsChat
+        && CombatLineClassifier.ClassifyAsCombat(line) is
+            CombatLineKind.MonsterHitYou or CombatLineKind.MonsterMissYou
+            or CombatLineKind.DodgeYou or CombatLineKind.ArmorBlockYou;
+
     // names maps every name the room's occupants go by to the name the roster lists
     // them under, so "orc captain" is never read as "orc".
     public static bool IsBy(LineExtractor.EmittedLine line, string monster, Dictionary<string, string> names)

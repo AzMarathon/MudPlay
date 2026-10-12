@@ -195,6 +195,15 @@ public sealed class CombatManagerSpellsTests
             Router.Dispatch(emitted);
         }
 
+        // A line in the dark cyan the game prints a monster's miss in.
+        public void FeedMiss(string line)
+        {
+            CellAttributes cyan = CellAttributes.Default with { Foreground = TerminalColor.Indexed(6) };
+            Router.Dispatch(new LineExtractor.EmittedLine(
+                line, Enumerable.Repeat(cyan, line.Length).ToArray(),
+                DateTimeOffset.UtcNow, IsPromptLine: false));
+        }
+
         // A command as the server echoes it: the prompt row, then its trailing
         // text as a second line carrying the same timestamp.
         public void FeedEchoed(string command)
@@ -3492,9 +3501,27 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: grumpy badger.");                   // passive neutral → left alone
         Assert.DoesNotContain(h.AllSent, s => s.Contains("badger"));
 
-        h.Feed("The grumpy badger claws at you!");             // a miss still names the attacker
+        h.FeedMiss("The grumpy badger claws at you!");         // a miss still names the attacker
 
         Assert.Equal("a grumpy badger", h.LastSent);
+    }
+
+    // Report paradigm-20261012-132421: `greet old man` was answered with "The old man
+    // looks at you curiously, …", which has a miss's shape, and the client bashed a
+    // Friend. The game prints that in the default colour and a miss in dark cyan.
+    [Fact]
+    public void SelfDefense_AnNpcsWordsShapedLikeAMiss_AreNoAttack_ItsRealMissIs()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "old man");
+        h.SetOverlay(1, relationship: MonsterRelationship.Friend);
+        h.Feed("Also here: old man.");
+
+        h.Feed("The old man looks at you curiously, as if not expecting to see you here.");
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("old man"));
+
+        h.FeedMiss("The old man kicks at you, but misses!");
+        Assert.Equal("a old man", h.LastSent);
     }
 
     // A Flee monster is run from on sight, so while a run is under way or on its

@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.18**
-> - A loop waiting at a lair's doorstep to debuff no longer stands there while a monster it won't fight in that room swings at you: it enters the lair on a free cast and fights it there
-> - Held at the doorstep for the debuff's mana, the loop fights a monster in the room, whatever its attack settings for that room
+> **Version 3.180.19**
+> - Greeting an NPC no longer starts a fight: a reply worded like a swing ("The old man looks at you curiously, …") is not taken for an attack
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
