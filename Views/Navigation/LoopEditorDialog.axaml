@@ -251,6 +251,7 @@
                            Text="{Binding AddWaypointError}"
                            IsVisible="{Binding HasAddWaypointError}"
                            FontSize="10"
+                           TextWrapping="Wrap"
                            Foreground="{StaticResource AccentRedBrush}"/>
             </Grid>
 
@@ -271,6 +272,7 @@
                            IsVisible="{Binding HasSaveError}"
                            VerticalAlignment="Center"
                            FontSize="11"
+                           TextWrapping="Wrap"
                            Foreground="{StaticResource AccentRedBrush}"/>
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
