@@ -8827,7 +8827,20 @@ public sealed class AppServices
             manaIsFull: () => Health.ManaIsAtGameFull,
             // Where the combat engine itself judges a fight to be: the room a loop
             // step in flight is entering, else the one the tracker has us in.
-            fightRoom: () => CombatSuppressionVerdict().Room);
+            fightRoom: () => CombatSuppressionVerdict().Room,
+            // The loop's own "do not attack" / "only attack in lair rooms" alone: a
+            // fight with a player reads as suppressed to the engage gates too, and is
+            // a fight all the same. A force-clear fights where the loop doesn't.
+            fightAnswered: () => !CombatSuppressionVerdict().Suppressed || Combat.ForceClearActive);
+        // The room at the door is fought in while the loop stands there for mana
+        // (LoopCombatSuppression.LoopIsDriving), and nothing re-asks the engage gates
+        // when that starts: a monster already in the room would be left until its
+        // next swing. Posted: the hold says so from inside the loop's own step check.
+        LairDebuffHold.ManaWaitStarted += () => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            CombatTracker.OnAutoAttackChanged();
+            RoomClassifier.ReemitCurrent();
+        });
         CastDirector.SetLairEntryBuffHold(LairDebuffHold);
         CastDirector.SetManaRegenBuffProbe(IsManaRegenRollSpell);
         // An engage with no debuff to cast first: the hold has nothing to keep the
@@ -11724,7 +11737,8 @@ public sealed class AppServices
             Game.Map.LoopCombatSuppression.LoopIsDriving(
                 LoopRunner.State,
                 heldByUser: MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate),
-                following: MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.FollowerGate))
+                following: MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.FollowerGate),
+                standingForMana: LairDebuffHold is { WaitingForMana: true })
             && LoopRunner.CurrentLoop is { } loop
             && evalKey is { } key
             && Game.Map.LoopCombatSuppression.IsSuppressed(loop, key, evalIsLair);

@@ -1401,7 +1401,7 @@ public sealed partial class CombatManager : IDisposable
 
     // A force-clear is making the engine fight this room with Auto-Combat off: a
     // stealth runner's see-hidden or failed-sneak clear, or a rest-blocker clear.
-    private bool ForceClearActive() =>
+    public bool ForceClearActive =>
         _seeHiddenClearActive?.Invoke() == true || _restClearActive?.Invoke() == true;
 
     // Whether the engine is fighting: Auto-Combat is on, or a force-clear has it
@@ -1814,7 +1814,7 @@ public sealed partial class CombatManager : IDisposable
         // blocking a needed rest with Auto-Combat OFF makes us engage-to-clear it
         // anyway, on the same footing as the see-hidden override — both bypass the
         // disabled gate here and the Min/Max gate below.
-        bool forceClearOverride = ForceClearActive();
+        bool forceClearOverride = ForceClearActive;
         if (_userBreakHold is { } standingDownFor)
             _log?.Combat(LogCategory,
                 $"attack held by the user's break on '{standingDownFor}' — not engaging ({obs.Source})");
@@ -4382,7 +4382,7 @@ public sealed partial class CombatManager : IDisposable
         }
     }
 
-    private bool EngineOn() => _isEnabled() || ForceClearActive();
+    private bool EngineOn() => _isEnabled() || ForceClearActive;
 
     // The user's own `break` went out (routed by OutboundBreakObserver, at send, so
     // one typed ahead of the round counts although the game answers it later).
