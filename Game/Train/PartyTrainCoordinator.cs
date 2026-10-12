@@ -784,9 +784,54 @@ public sealed class PartyTrainCoordinator : IDisposable
         return list;
     }
 
+    // Why the trip running was called off from outside (CallOffTrip); null while
+    // it was not.
+    private string? _calledOff;
+
+    private sealed class TripCalledOff(string why) : Exception(why);
+
+    // Asked after every wait of a trip, and ahead of each walk and order: a trip
+    // called off meanwhile goes no further.
+    private void GoOnUnlessCalledOff()
+    {
+        if (_calledOff is { } why) throw new TripCalledOff(why);
+    }
+
+    // End the trip running where it stands, from outside: the game data was read in
+    // afresh under it. The trip plans its bank and its trainer stops up front and
+    // then lives for minutes in its waits (the settle after coin changes hands, a
+    // walk, the members' trains), and nothing that stops the engines ends those:
+    // left alone it walked on to its next stop, and told the members to train at
+    // it, by the old data's room numbers. The wait in hand is ended, and the trip
+    // goes no further: no walk, no withdrawal, no order to a member. The trainer's
+    // side goes with it, with nothing put back (TrainerWalkManager.Cancel), and the
+    // members are told only that the trip is off. False when no trip is running.
+    //
+    // This is the one caller of a trip's end from outside. A Stop, a death or a
+    // drop of the line end a trip only through the walk they stop; in a wait it
+    // goes on as before.
+    public bool CallOffTrip(string why)
+    {
+        if (!_tripRunning || _calledOff is not null) return false;
+        _calledOff = why;
+        _tripTakenOver = true;
+        _trainer.Cancel(why);
+        _delayTcs?.TrySetResult(true);
+        TaskCompletionSource<bool>? walk = _walkTcs;
+        _walkTcs = null;
+        walk?.TrySetResult(false);
+        _doneTcs?.TrySetResult(false);
+        _selfTrainTcs?.TrySetResult((0, "the trip was called off"));
+        return true;
+    }
+
+    internal Task RunTripForTests(PartyTrainDecision decision, List<PartyTrainParticipant> participants) =>
+        RunTripAsync(decision, participants);
+
     private async Task RunTripAsync(PartyTrainDecision decision, List<PartyTrainParticipant> participants)
     {
         _tripRunning = true;
+        _calledOff = null;
         _soloReform = [];   // this trip re-forms the party itself
         bool started = false;
         try
@@ -876,11 +921,11 @@ public sealed class PartyTrainCoordinator : IDisposable
                     _send($"/{t.From} @ptrain give {t.Copper} {t.To}");
                 }
             }
-            if (gave) await DelayAsync(SettleDelay);
+            if (gave) await TripDelayAsync(SettleDelay);
 
             if (bankRoom is { } bank)
             {
-                if (!await WalkAsync(bank))
+                if (!await TripWalkAsync(bank))
                 {
                     EndTrip("couldn't reach the bank.");
                     started = false;
@@ -892,13 +937,13 @@ public sealed class PartyTrainCoordinator : IDisposable
                     if (string.Equals(w.Name, self, StringComparison.OrdinalIgnoreCase)) _send($"with {w.Copper}");
                     else _send($"/{w.Name} @ptrain with {w.Copper}");
                 }
-                await DelayAsync(SettleDelay);
+                await TripDelayAsync(SettleDelay);
             }
 
             foreach (PartyTrainStop stop in stops)
             {
                 RoomKey room = new(stop.Trainer.Map, stop.Trainer.Room);
-                if (!await WalkAsync(room))
+                if (!await TripWalkAsync(room))
                 {
                     EndTrip($"couldn't reach {stop.Trainer.Name} ({room.Map}/{room.Room}).");
                     started = false;
@@ -919,7 +964,11 @@ public sealed class PartyTrainCoordinator : IDisposable
 
                 if (stop.LeaderTrains && leader is { } l)
                 {
-                    if (stop.Members.Count > 0) await TelepathsDeliveredAsync();
+                    if (stop.Members.Count > 0)
+                    {
+                        await TelepathsDeliveredAsync();
+                        GoOnUnlessCalledOff();
+                    }
                     // Our train disbands the party, so note who to pull back first —
                     // everyone who set out, not just who's in the roster now: a member
                     // shut out of the trainer's room mid-fight is left in an [Invited]
@@ -927,11 +976,16 @@ public sealed class PartyTrainCoordinator : IDisposable
                     List<string> followers = ActiveMemberGivens()
                         .Union(setOut, StringComparer.OrdinalIgnoreCase).ToList();
                     (int levels, string report) = await TrainSelfAsync(l.TargetLevel);
+                    GoOnUnlessCalledOff();
                     _log?.Info(LogCategory, $"Leader train: {report}");
                     if (levels > 0 && followers.Count > 0) _reformParty(followers);
                 }
 
-                if (stop.Members.Count > 0) await AwaitMembersDoneAsync();
+                if (stop.Members.Count > 0)
+                {
+                    await AwaitMembersDoneAsync();
+                    GoOnUnlessCalledOff();
+                }
             }
 
             EndTrip("all stops done.");
@@ -941,6 +995,11 @@ public sealed class PartyTrainCoordinator : IDisposable
             // change — no retrying the same failed trip every cooldown.
             foreach (string name in trainees) _reports.Remove(name);
             RefreshTrainInfo();
+        }
+        catch (TripCalledOff off)
+        {
+            _log?.Info(LogCategory,
+                $"Party train trip called off: {off.Message}. No further stop is walked to and no further order is sent.");
         }
         catch (Exception ex)
         {
@@ -954,6 +1013,8 @@ public sealed class PartyTrainCoordinator : IDisposable
             _walkTcs = null;
             _awaitingDone = null;
             _doneTcs = null;
+            _delayTcs = null;
+            _selfTrainTcs = null;
             bool byItself = !_tripTakenOver;
             _tripTakenOver = false;
             // Last, with the engine put back and the trip no longer running: the
@@ -980,6 +1041,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     // Arm the `done` wait, then order each member at this stop to train here.
     private void SendTrainOrders(IReadOnlyList<string> names, List<PartyTrainee> members, RoomKey room)
     {
+        GoOnUnlessCalledOff();
         _awaitingDone = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
         _seenGone.Clear();
         _doneTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -994,7 +1056,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     {
         if (_doneTcs is not { } done) return;
         _armTimer(MemberTrainTimeout, () => done.TrySetResult(false));
-        if (!await done.Task && _awaitingDone is { Count: > 0 } missing)
+        if (!await done.Task && _calledOff is null && _awaitingDone is { Count: > 0 } missing)
             _log?.Info(LogCategory, $"No word from {string.Join(", ", missing)} after {MemberTrainTimeout.TotalSeconds:0}s — moving on.");
         _awaitingDone = null;
         _doneTcs = null;
@@ -1005,14 +1067,37 @@ public sealed class PartyTrainCoordinator : IDisposable
     private async Task TelepathsDeliveredAsync()
     {
         DateTimeOffset giveUp = _now() + OrdersDeliveredTimeout;
-        while (_telepathsPending() && _now() < giveUp) await DelayAsync(TimeSpan.FromMilliseconds(250));
+        while (_calledOff is null && _telepathsPending() && _now() < giveUp)
+            await DelayAsync(TimeSpan.FromMilliseconds(250));
     }
+
+    // The leader's own train, while it is out: the trainer never answers one it was
+    // told to cancel, so a trip called off ends this wait itself.
+    private TaskCompletionSource<(int, string)>? _selfTrainTcs;
 
     private Task<(int Levels, string Report)> TrainSelfAsync(int targetLevel)
     {
+        GoOnUnlessCalledOff();
         TaskCompletionSource<(int, string)> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        _selfTrainTcs = tcs;
         _trainer.TrainForParty(targetLevel, (levels, report) => tcs.TrySetResult((levels, report)));
         return tcs.Task;
+    }
+
+    // A trip's own walk and its settle wait: not begun once the trip is called off,
+    // and called off meanwhile they hand nothing back to go on with.
+    private async Task<bool> TripWalkAsync(RoomKey room)
+    {
+        GoOnUnlessCalledOff();
+        bool there = await WalkAsync(room);
+        GoOnUnlessCalledOff();
+        return there;
+    }
+
+    private async Task TripDelayAsync(TimeSpan delay)
+    {
+        await DelayAsync(delay);
+        GoOnUnlessCalledOff();
     }
 
     private Task<bool> WalkAsync(RoomKey room)
@@ -1047,9 +1132,13 @@ public sealed class PartyTrainCoordinator : IDisposable
         }
     }
 
+    // The trip's settle wait in hand, for calling the trip off to end.
+    private TaskCompletionSource<bool>? _delayTcs;
+
     private Task DelayAsync(TimeSpan delay)
     {
         TaskCompletionSource<bool> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        _delayTcs = tcs;
         _armTimer(delay, () => tcs.TrySetResult(true));
         return tcs.Task;
     }

@@ -1453,6 +1453,12 @@ public sealed class AppServices
         ChestSellTour.Cancel(reason);
         if (GhSweep.Phase != Game.Map.GhSweepManager.SweepPhase.Idle) stopped.Add("the Roomba sweep");
         GhSweep.Stop(reason);
+        // A leader's party training trip waits for minutes between its walks (the
+        // members' trains), and walks on to the next trainer it planned when the
+        // wait ends. The errand hook has named it ("the training trip") and ended
+        // the trainer's side; this ends the trip itself.
+        if (PartyTrain.CallOffTrip(reason) && !stopped.Contains("the training trip"))
+            stopped.Add("the party training trip");
         // Detours that hold a room to walk to, or back to, afterwards.
         MonsterDropRouter.Cancel();
         ShortcutSource.Cancel();
@@ -8993,6 +8999,8 @@ public sealed class AppServices
             Walker, LoopRunner, AutoLair, pacedReplyScheduler,
             startSprint: () => ApplyRunStartMode?.Invoke(Game.Map.RunStartMode.Sprint),
             Log);
+        _pvpFightHeld = new Game.Map.HeldDetourResume(
+            Walker, LoopRunner, AutoLair, heldFor: "a fight", stillWaiting: () => PvpFight.IsActive, Log);
         PvpFight = new Game.Pvp.PvpFight(
             Router, RoomClassifier,
             pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
@@ -9007,16 +9015,10 @@ public sealed class AppServices
             exitsHere: PvpChaseExits,
             // Stop-and-restart, as for the errand detours: the fight may walk (a
             // chase), which a movement gate would hold.
-            suspendEngines: why =>
-            {
-                Game.Map.DetourResume resume =
-                    Game.Map.DetourResume.Snapshot(Walker, LoopRunner, AutoLair, includeWalk: true);
-                resume.Stop(Walker, LoopRunner, AutoLair, why);
-                _pvpFightInterrupted = resume.Kind;
-                return () => resume.Resume(Walker, LoopRunner, AutoLair);
-            },
-            // A fight that interrupted nothing has nothing to get back to.
-            backOnTask: () => _pvpFightInterrupted == Game.Map.DetourResumeKind.None
+            suspendEngines: why => _pvpFightHeld.Suspend(why),
+            // A fight that interrupted nothing has nothing to get back to, and nor
+            // has one whose way back a change of game data dropped.
+            backOnTask: () => _pvpFightHeld.Interrupted == Game.Map.DetourResumeKind.None
                 || MovementControl.State != Game.Map.MovementEngineState.Idle,
             leadingParty: () => PartyState.SelfIsLeader && PartyState.Members.Count > 1,
             schedule: pacedReplyScheduler,
@@ -9964,6 +9966,9 @@ public sealed class AppServices
             },
             post: run => Avalonia.Threading.Dispatcher.UIThread.Post(run));
         MovementControl.EndingForGameDataChange += EndHeldRunsForGameDataChange;
+        // The same stop lets go of what a fight with a player would put back at
+        // its end: the engines are idle for the fight, so the stop finds nothing.
+        MovementControl.AddHeldStart(() => _pvpFightHeld.Held, reason => _pvpFightHeld.Drop(reason));
         StashTransfer.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainerWalk.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainFunding.Finished += _ => MovementControl.NoteErrandStateChanged();
@@ -10475,6 +10480,10 @@ public sealed class AppServices
         {
             BlockedByMasterSwitch = what => AutoModeController.Blocks("Default task", what),
         };
+        // A change of game data calls off a task still waiting out the party-rebuild
+        // window: the loop or Auto-Lair it would start was picked from the old
+        // data's catalogue.
+        MovementControl.AddHeldStart(() => DefaultTaskRunner.HeldStart, reason => DefaultTaskRunner.DropHold(reason));
 
         // Where the dead of a room arrive, learned from the deaths this client sees
         // and kept with the game-data set, which every board and character on it
@@ -11649,8 +11658,10 @@ public sealed class AppServices
         return ways;
     }
 
-    // What the last fight with a player stopped, for telling when we are back at it.
-    private Game.Map.DetourResumeKind _pvpFightInterrupted;
+    // What the fight with a player stopped and puts back at its end, for telling
+    // when we are back at it, and for a change of game data to drop. Set where the
+    // fight is built, ahead of anything that could suspend.
+    private Game.Map.HeldDetourResume _pvpFightHeld = null!;
 
     // One step after a player who left, walked through the walker so a door on the
     // way is handled like any other.
