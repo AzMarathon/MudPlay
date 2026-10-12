@@ -293,7 +293,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // Selection before Layout: MapControl centres on SelectedRoomKey when the
         // layout swaps (see OnFloorChangeRequested).
         SelectedRoomKey = rooms[0];
-        Layout = _services.Bfs.BuildLayout(rooms[0]);
+        JumpTo(rooms[0]);
         return null;
     }
 
@@ -1700,7 +1700,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     partial void OnSelectedGotoHistoryChanged(GotoHistoryRowViewModel? value)
     {
         if (value is null) return;
-        Layout = _services.Bfs.BuildLayout(value.Key);
+        JumpTo(value.Key);
         SelectedRoomKey = value.Key;
         QueuedDestination = value.Key;
         SelectedGotoHistory = null;
@@ -1795,7 +1795,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // Re-layout from the selected room so the map pans to it AND
         // arm the Run button by queuing the destination — clicking Run
         // walks there, mirroring the right-click → "Walk here" path.
-        Layout = _services.Bfs.BuildLayout(result.Key);
+        JumpTo(result.Key);
         SelectedRoomKey = result.Key;
         QueuedDestination = result.Key;
         SearchQuery = string.Empty;
@@ -1806,7 +1806,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Same arming as a search-result pick: pan the map and light the Run button.
     public void QueueDestination(RoomKey key)
     {
-        Layout = _services.Bfs.BuildLayout(key);
+        JumpTo(key);
         SelectedRoomKey = key;
         QueuedDestination = key;
     }
@@ -2356,7 +2356,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void GoToFavorite(FavoriteRowViewModel? row)
     {
         if (row is null) return;
-        Layout = _services.Bfs.BuildLayout(row.Key);
+        JumpTo(row.Key);
         SelectedRoomKey = row.Key;
         QueuedDestination = row.Key;
     }
@@ -3325,7 +3325,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // layout swaps (see OnFloorChangeRequested).
         RoomKey firstRoom = loop.Waypoints[0].Key;
         SelectedRoomKey = firstRoom;
-        Layout = _services.Bfs.BuildLayout(firstRoom);
+        JumpTo(firstRoom);
     }
 
     // "Load loop…" in the estimator collapsible → browse to a saved .loop file
@@ -3603,6 +3603,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // jump. The newest request wins; an older one finishing late is dropped.
     private int _reRootRequest;
 
+    // A jump the user asked for, drawn at once. It counts as the newest request, so
+    // a build still running in the background (the map following the player's last
+    // step, or an earlier jump) is dropped when it lands rather than drawn over this
+    // one: opening the map on a room while walking showed that room for an instant
+    // and then the player's own area again.
+    private void JumpTo(RoomKey key)
+    {
+        _reRootRequest++;
+        Layout = _services.Bfs.BuildLayout(key);
+    }
+
     private async Task ReRootAsync(RoomKey origin)
     {
         int request = ++_reRootRequest;
@@ -3630,7 +3641,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         if (_services.RoomGraph.GetRoom(key) is null) return;
         SelectedRoomKey = key;
-        Layout = _services.Bfs.BuildLayout(key);
+        JumpTo(key);
         RoomInfo.Show(key);
         IsRoomInfoExpanded = true;
     }

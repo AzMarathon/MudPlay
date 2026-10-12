@@ -1,5 +1,10 @@
 # Version history
 
+## 3.180.12
+
+- Opening the map on a room (a Game Data double-click, a room link, a search pick, a favourite) while walking stays on that room; it flashed there and went back to your own area
+- bug reports addressed: paradigm-20261011-191624
+
 ## 3.180.11
 
 - A room spell's own line no longer sets another spell's condition: the Underwater Passage's "You are freezing cold!" was read as confusion and held navigation
