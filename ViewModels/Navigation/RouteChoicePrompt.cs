@@ -130,9 +130,14 @@ public static class RouteChoicePrompt
         // reach here, so they stay out of the history exactly as before.
         if (!askOnlyOverAvoids && remember) services.GotoHistory.Record(destination);
 
+        // The game data this walk is asked for and planned on: asked again after
+        // every wait below, before the plan becomes a walk or a card (PlanOvertaken).
+        RoutePlanInFlight inFlight = new(destination, () => services.GameData.ActiveLoad, services.Log, LogCat);
+
         // Let the nav-map right-click menu that launched this walk close before we do
         // anything heavy.
         await Task.Yield();
+        if (PlanOvertaken(services, inFlight, calcVm: null)) return false;
 
         Room? source = services.RoomTracker.State.CurrentRoom;
         if (source is null)
@@ -190,6 +195,9 @@ public static class RouteChoicePrompt
                 // walker, not those. Rather than let such a race surface as a crash, log
                 // it and re-plan inline on the UI thread (safe; just a one-off brief
                 // freeze). Not silent — the walk still proceeds from the re-plan.
+                // Game data read in afresh is the one such change with nothing to
+                // re-plan: the walk is dropped.
+                if (PlanOvertaken(services, inFlight, calcVm)) return false;
                 services.Log.Warn(LogCat,
                     $"route pick {src} -> {destination}: off-thread plan faulted ({ex.GetType().Name}: {ex.Message}); re-planning on the UI thread");
                 plan = PlanRouteChoice(services, src, destination, bossStopRooms);
@@ -198,8 +206,10 @@ public static class RouteChoicePrompt
         else
         {
             await services.CountPartyGateItemsAsync(src, destination);
+            if (PlanOvertaken(services, inFlight, calcVm)) return false;
             plan = PlanRouteChoice(services, src, destination, bossStopRooms);
         }
+        if (PlanOvertaken(services, inFlight, calcVm)) return false;
 
         // Nav lifecycle stays Info for a fork that surfaces; a plain no-fork walk is
         // Debug so an ordinary GOTO doesn't spam the log.
@@ -220,7 +230,7 @@ public static class RouteChoicePrompt
                 services.Log.Info(LogCat,
                     $"route pick {src} -> {destination}: the shortest route crosses {avoid.AvoidedRoomCount} room(s) you marked Avoid "
                     + $"({RouteChoicePlanner.ListAvoided(avoid.AvoidedRoomNames)}); showing picker");
-                return await RunPickerAsync(services, destination, src, avoid, previewSink, calcVm, calcDialogTask, startMode);
+                return await RunPickerAsync(services, destination, src, avoid, inFlight, previewSink, calcVm, calcDialogTask, startMode);
             }
             if (TakesDefaultRouteUnasked(plan))
             {
@@ -245,7 +255,7 @@ public static class RouteChoicePrompt
                 string bossLabel = (services.BossInRoom(bossRoom) is { } bossName ? $"{bossName}'s room" : "a boss room")
                     + $" ({bossRoom.Map}/{bossRoom.Room})";
                 return await RunPickerAsync(services, destination, src,
-                    bossChoice with { BossRoomLabel = bossLabel }, previewSink, calcVm, calcDialogTask, startMode);
+                    bossChoice with { BossRoomLabel = bossLabel }, inFlight, previewSink, calcVm, calcDialogTask, startMode);
             case RoutePlanKind.ItemGate when plan.Choice is { UnprotectedRoomNames.Count: > 0 } crossing
                 && services.Movement.TeleportsOnArrival(destination):
                 // The card that crosses the lake's teleporting rooms to a room that
@@ -261,7 +271,7 @@ public static class RouteChoicePrompt
                 string? goalSpell = services.RoomGraph.GetRoom(destination)?.Spell is > 0 and int goal
                     ? services.GameData.FindNameByNumber("Spells", goal) ?? $"spell {goal}" : null;
                 return await RunPickerAsync(services, destination, src,
-                    crossing with { CrossingGoalSpell = goalSpell }, previewSink, calcVm, calcDialogTask, startMode);
+                    crossing with { CrossingGoalSpell = goalSpell }, inFlight, previewSink, calcVm, calcDialogTask, startMode);
             case RoutePlanKind.AutoObtainSole:
                 calcVm?.Close();
                 ApplyStartMode(services, startMode);
@@ -285,7 +295,7 @@ public static class RouteChoicePrompt
                     shownOnCard: false, fetch: soleFetch);
                 return true;
             default:
-                return await RunPickerAsync(services, destination, src, plan.Choice!, previewSink, calcVm, calcDialogTask, startMode);
+                return await RunPickerAsync(services, destination, src, plan.Choice!, inFlight, previewSink, calcVm, calcDialogTask, startMode);
         }
     }
 
@@ -303,6 +313,23 @@ public static class RouteChoicePrompt
     {
         await services.CountPartyGateItemsAsync(src, destination);
         return await Task.Run(() => PlanRouteChoice(services, src, destination, bossStopRooms));
+    }
+
+    // The game data was read in afresh while this walk was being planned or asked
+    // about: its destination and its route are the old data's numbers, so no walk
+    // starts and no card goes up (RoutePlanInFlight, which writes the log line). A
+    // "Calculating…" card still up is closed, and the user is told, in the words of
+    // the stop that change makes. Posted: the party's answers the plan waits on are
+    // read inside the line pump, where writing to the terminal re-enters it. The
+    // party's count for the plan goes with it: it was taken for this walk, and
+    // one that came back after the change is by the old data's item numbers.
+    private static bool PlanOvertaken(AppServices services, RoutePlanInFlight inFlight, RouteChoiceDialogViewModel? calcVm)
+    {
+        if (inFlight.Dropped() is not { } notice) return false;
+        calcVm?.Close();
+        services.ClearPartyShortGateItems("the game data changed while the route was being planned");
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => services.WriteTerminalNotice(notice));
+        return true;
     }
 
     private static bool TakesDefaultRouteUnasked(RoutePlan plan) => plan.Kind switch
@@ -515,6 +542,7 @@ public static class RouteChoicePrompt
         RoomKey destination,
         RoomKey source,
         RouteChoice choice,
+        RoutePlanInFlight inFlight,
         Action<IReadOnlyList<RoomKey>?>? previewSink,
         // When the idle path pre-opened a "Calculating…" window (planning ran long),
         // it's passed here to populate in place; calcDialogTask is that window's
@@ -650,6 +678,9 @@ public static class RouteChoicePrompt
         Game.Map.RouteBuyEconomy? economy = buys.Count > 0
             ? await services.AssessRouteBuyAsync(buys, neededItems, source)
             : null;
+        // The bank and the party were asked meanwhile: no card for a plan of rooms
+        // the game data no longer holds.
+        if (PlanOvertaken(services, inFlight, calcVm)) return false;
         string? economyNote = economy is { } eco
             ? (eco.PartyItemHolder is { } holder
                 ? $"{holder} in your party has it — will hand it over on the way"
@@ -753,6 +784,9 @@ public static class RouteChoicePrompt
         {
             previewSink?.Invoke(null);
         }
+        // A change of game data closes the cards without a pick. A pick that got in
+        // ahead of that is of the old data's rooms all the same.
+        if (result is not null && PlanOvertaken(services, inFlight, calcVm: null)) return false;
         if (result is not null)
             ApplyStartMode(services, vm.StartMode != RunStartMode.Normal ? vm.StartMode : startMode);
         else

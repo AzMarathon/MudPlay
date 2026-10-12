@@ -422,13 +422,18 @@ public sealed class MovementController : IDisposable
     // made whether or not anything is running, as the Stop button's is. Returns what
     // ended, as the start of the notice ("Loop 'Ring' stopped"), or null when
     // nothing was running or held.
-    public string? StopForGameDataChange(string? was, string? now, bool readInAgain = false)
+    //
+    // because: what brought the change about when the user did not change the game
+    // data: a profile closed or loaded whose realm runs on another set. The reason
+    // then leads with it, so the log and every cancel say what the user did.
+    public string? StopForGameDataChange(string? was, string? now, bool readInAgain = false, string? because = null)
     {
         bool sameSet = string.Equals(was, now, StringComparison.OrdinalIgnoreCase);
         if (sameSet && !readInAgain) return null;
         string reason = sameSet
             ? $"game data '{now ?? "(none)"}' was read in again"
             : $"game data changed from '{was ?? "(none)"}' to '{now ?? "(none)"}'";
+        if (because is not null) reason = $"{because}, and with it {reason}";
 
         List<string> stopped = new();
         // The topmost engine is the run: a loop or Auto-Lair drives the walker.

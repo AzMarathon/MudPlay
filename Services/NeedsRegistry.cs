@@ -223,6 +223,17 @@ public sealed class NeedsRegistry
         lock (_gate) { _slots.Clear(); }
     }
 
+    // Drop every outstanding need of one kind, claimed or not, and say how many
+    // went. For the needs that name a game-data record (a route item's number)
+    // when the game data becomes another set, under which the number is another
+    // item; a need that names none (a light source) is still a need.
+    public int Clear(NeedKind kind)
+    {
+        int dropped;
+        lock (_gate) { dropped = _slots.RemoveAll(s => s.Need.Kind == kind); }
+        return dropped;
+    }
+
     private Slot? Find(NeedKind kind, string descriptor)
         => _slots.FirstOrDefault(
             s => s.Need.Kind == kind &&

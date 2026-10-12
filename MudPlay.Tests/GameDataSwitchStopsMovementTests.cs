@@ -71,6 +71,18 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         public string? Ended;
         public bool StopOnChange = true;
 
+        // The whole of what the last change of game data came to (null when there
+        // was nothing to say), and the profile event the next one is made for.
+        public StopOnGameDataChange.Outcome? Outcome;
+        public string? Because;
+
+        // The item needs of a route, which the app forgets after the stop for another
+        // set (ForgetNeeds false leaves that out), and each call made after a stop,
+        // with whether every engine was at rest by then.
+        public NeedsRegistry Needs { get; } = new();
+        public bool ForgetNeeds = true;
+        public List<(GameDataLoadChange Change, bool AtRest)> AfterStops { get; } = new();
+
         // The graph on another set with no stop made: what the stop is there to
         // prevent, for the tests of what a run does without it.
         public void GraphOn(string set)
@@ -84,14 +96,17 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         public string? SwitchTo(string? set)
         {
             Ended = null;
+            Outcome = null;
             Cache.SwitchSet(set);
             return Ended;
         }
 
-        // The active set is read in again, as an import over it does.
+        // The active set is read in again, as an import over it does, and as the
+        // Game Data menu's pick of the set already ticked does.
         public string? ReadInAgain()
         {
             Ended = null;
+            Outcome = null;
             Cache.ReloadActiveSet();
             return Ended;
         }
@@ -128,7 +143,9 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
             && Controller.IsIdle;
     }
 
-    private Harness OnAlpha()
+    // startOn null: a client with no game data yet, as it is built at start, ahead
+    // of the first set its profile applies.
+    private Harness OnAlpha(string? startOn = "alpha")
     {
         foreach ((string set, string rooms) in new[] { ("alpha", Alpha), ("beta", Beta) })
         {
@@ -136,9 +153,9 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
             File.WriteAllText(Path.Combine(_root, set, "Rooms.json"), rooms);
         }
         GameDataCache cache = new(_root);
-        cache.SwitchSet("alpha");
+        if (startOn is not null) cache.SwitchSet(startOn);
         RoomGraphManager graph = new(cache);
-        graph.OnActiveSetChanged("alpha");
+        if (startOn is not null) graph.OnActiveSetChanged(startOn);
         BfsMapper bfs = new(graph);
         RoomTracker tracker = new(graph);
         MovementCoordinator coord = new();
@@ -165,17 +182,22 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         gate.TryResync = _ => true;
         gate.TryResyncOnce = (_, _, _) => false;
 
-        // The subscriptions AppServices makes, in its order: the stop, decided by the
-        // cache's load; the graph, whose reload tells the tracker and the path
-        // cache; then the marks. A copy: the app's own handler can't be built here.
-        GameDataCache.Load walkedOn = cache.ActiveLoad;
-        cache.ActiveSetChanged += set =>
+        // The subscriptions AppServices makes, in its order: the stop, which is the
+        // decision the app's own handler asks (StopOnGameDataChange); the graph, whose
+        // reload tells the tracker and the path cache; then the marks. Only the
+        // subscribing is a copy: the app itself can't be built here.
+        // What the app does after the stop is a copy too (its
+        // ForgetRouteItemsOfOtherGameData): the item needs go when the set is another.
+        StopOnGameDataChange stop = new(() => cache.ActiveLoad, () => h.StopOnChange ? controller : null,
+            afterStop: change =>
+            {
+                h.AfterStops.Add((change, h.Idle));
+                if (h.ForgetNeeds && !change.ReadInAgain) h.Needs.Clear(NeedKind.PathItem);
+            });
+        cache.ActiveSetChanged += _ =>
         {
-            GameDataCache.Load was = walkedOn;
-            walkedOn = cache.ActiveLoad;
-            if (!h.StopOnChange || was == walkedOn) return;
-            h.Ended = controller.StopForGameDataChange(
-                was.Set, set, readInAgain: string.Equals(was.Set, set, StringComparison.OrdinalIgnoreCase));
+            h.Outcome = stop.OnActiveSetChanged(h.Because);
+            h.Ended = h.Outcome?.Ended;
         };
         cache.ActiveSetChanged += graph.OnActiveSetChanged;
         graph.GraphReloaded += () => tracker.OnGraphReloaded();
@@ -565,6 +587,344 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         Assert.Equal("The stash transfer stopped", ended);
         Assert.False(started);
         Assert.Null(h.Controller.SuspendedErrand);
+    }
+
+    // ----- a walk still being planned is not started on the old data's room ----------
+
+    // The route cards plan off the UI thread and wait on the party and the bank
+    // (RouteChoicePrompt, which needs the whole app and can't be built here). This
+    // is the shape of it: the plan is awaited, then asked whether the game data
+    // overtook it, and only then made a walk. The stop the change makes finds no
+    // walk to stop while the plan is out, and the walker itself takes any room
+    // number: without the question the walk below starts, on the new set's rooms.
+    private static async Task<string?> PlanThenWalk(Harness h, RoomKey destination, Task planned, bool ask = true)
+    {
+        RoutePlanInFlight inFlight = new(destination, () => h.Cache.ActiveLoad, h.Log);
+        await planned;
+        if (ask && inFlight.Dropped() is { } notice) return notice;
+        h.Walker.WalkTo(destination);
+        return null;
+    }
+
+    [Fact]
+    public async Task APlanInFlightAcrossASwitch_StartsNoWalk_AndSaysWhy()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TaskCompletionSource planned = new();
+        Task<string?> walk = PlanThenWalk(h, new RoomKey(1, 3), planned.Task);
+
+        // Nothing is walking yet, so the stop has nothing to say.
+        Assert.Null(h.SwitchTo("beta"));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        planned.SetResult();
+
+        Assert.Equal(
+            "[Walk to 1/3 not started: the game data changed from 'alpha' to 'beta' while its route was being planned]",
+            await walk);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Empty(h.Sent);
+        Assert.Single(h.Log.Snapshot(), e => e.Severity == LogSeverity.Info && e.Source == "RoutePick"
+            && e.Message == "route pick -> 1/3: dropped, no walk started: the game data changed from 'alpha' to 'beta' while its route was being planned");
+        h.LetTimePass();
+        Assert.Empty(h.Sent);
+        Assert.True(h.Idle);
+    }
+
+    [Fact]
+    public async Task APlanInFlightAcrossAReimport_StartsNoWalk_AndSaysWhy()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TaskCompletionSource planned = new();
+        Task<string?> walk = PlanThenWalk(h, new RoomKey(1, 3), planned.Task);
+
+        Assert.Null(h.ReadInAgain());
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        planned.SetResult();
+
+        Assert.Equal(
+            "[Walk to 1/3 not started: game data 'alpha' was read in again while its route was being planned]",
+            await walk);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Empty(h.Sent);
+    }
+
+    // Away to another set and back is not the load the plan was made on either.
+    [Fact]
+    public async Task APlanInFlightAcrossASwitchAwayAndBack_StartsNoWalk()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TaskCompletionSource planned = new();
+        Task<string?> walk = PlanThenWalk(h, new RoomKey(1, 3), planned.Task);
+
+        h.SwitchTo("beta");
+        h.SwitchTo("alpha");
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        planned.SetResult();
+
+        Assert.NotNull(await walk);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public async Task APlanInFlightWithNoChangeOfGameData_StartsItsWalk()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TaskCompletionSource planned = new();
+        Task<string?> walk = PlanThenWalk(h, new RoomKey(1, 3), planned.Task);
+
+        // A SwitchSet to the name already active is no new load.
+        h.SwitchTo("alpha");
+        h.SwitchTo("ALPHA");
+        planned.SetResult();
+
+        Assert.Null(await walk);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+        Assert.Equal(new[] { "n" }, h.Sent);
+        Assert.DoesNotContain(h.Log.Snapshot(), e => e.Source == "RoutePick");
+    }
+
+    // What the question is there for: the same plan, not asked, walks off on the
+    // other set's rooms after the stop has been and gone.
+    [Fact]
+    public async Task WithoutThatQuestion_ThePlanStartsAWalkOnTheOtherSetsRooms()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TaskCompletionSource planned = new();
+        Task<string?> walk = PlanThenWalk(h, new RoomKey(1, 3), planned.Task, ask: false);
+
+        Assert.Null(h.SwitchTo("beta"));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        planned.SetResult();
+        await walk;
+
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(new[] { "e" }, h.Sent);
+    }
+
+    // ----- which changes of game data the stop is made for ---------------------------
+
+    // The client is built with no game data, and the first set arrives with the
+    // profile it loads at start: nothing is running or held, and nothing is said.
+    [Fact]
+    public void TheFirstSetAppliedAtStart_SaysNothing()
+    {
+        Harness h = OnAlpha(startOn: null);
+
+        Assert.Null(h.SwitchTo("alpha"));
+
+        Assert.Null(h.Outcome);
+        Assert.True(h.Idle);
+        Assert.Empty(h.Sent);
+        Assert.DoesNotContain(h.Log.Snapshot(), e => e.Source == "Movement");
+    }
+
+    [Fact]
+    public void ASwitch_IsSaidAsAChangeFromOneSetToTheOther()
+    {
+        Harness h = OnAlpha();
+        h.Runner.Stage(Ab());
+
+        h.SwitchTo("beta");
+
+        Assert.Equal(
+            new StopOnGameDataChange.Outcome("Loop 'ab', loaded to start, dropped", "the game data changed from 'alpha' to 'beta'"),
+            h.Outcome);
+        Assert.Equal(
+            "[Loop 'ab', loaded to start, dropped: the game data changed from 'alpha' to 'beta']", h.Outcome?.Notice);
+    }
+
+    // An import over the active set, a rewrite of it in Manage Sets and the Game Data
+    // menu's pick of the set already ticked all reach the cache as ReloadActiveSet.
+    [Fact]
+    public void TheActiveSetReadInAgain_IsSaidAsReadInAgain()
+    {
+        Harness h = OnAlpha();
+        h.Runner.Stage(Ab());
+
+        h.ReadInAgain();
+
+        Assert.Equal(
+            "[Loop 'ab', loaded to start, dropped: game data 'alpha' was read in again]", h.Outcome?.Notice);
+    }
+
+    [Fact]
+    public void TheGameDataUnloaded_IsSaidAsAChangeToNone()
+    {
+        Harness h = OnAlpha();
+        h.Runner.Stage(Ab());
+
+        h.SwitchTo(null);
+
+        Assert.Equal("the game data changed from 'alpha' to '(none)'", h.Outcome?.Why);
+    }
+
+    // Until the movement controller is built nothing is running and no stop is made,
+    // but the load is followed: the first change it does see is told from the set
+    // that was active then, not from the one the client came up on.
+    [Fact]
+    public void AChangeBeforeTheControllerExists_IsFollowed_SoTheNextIsToldFromIt()
+    {
+        Harness h = OnAlpha();
+        h.GraphOn("beta");
+        h.Runner.Stage(Ab());
+
+        Assert.Null(h.SwitchTo("BETA"));
+        Assert.Equal("ab", h.Runner.StagedLoop?.Name);
+
+        h.SwitchTo("alpha");
+        Assert.Equal("the game data changed from 'beta' to 'alpha'", h.Outcome?.Why);
+    }
+
+    // ----- what is let go once the stop has been made --------------------------------
+
+    [Fact]
+    public void AfterTheStop_TheCallFindsEveryEngineAtRest_AndIsToldTheChange()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+
+        h.SwitchTo("beta");
+        h.ReadInAgain();
+        h.SwitchTo("BETA");
+
+        Assert.Equal(
+            new[]
+            {
+                (new GameDataLoadChange(GameDataLoadChange.Kind.AnotherSet, "alpha", "beta"), true),
+                // Made with nothing running too, as the stop itself is.
+                (new GameDataLoadChange(GameDataLoadChange.Kind.ReadInAgain, "beta", "beta"), true),
+            },
+            h.AfterStops);
+    }
+
+    // A route's item need is kept by item number, and the floor pickup `get`s
+    // whatever carries a wanted number when it is seen on the floor. Under another
+    // set number 42 is another item.
+    private static PathItemFloorCollector FloorPickup(Harness h, List<string> got) =>
+        new(h.Needs,
+            isOnFloor: _ => true,
+            itemName: id => h.Cache.ActiveSet == "alpha" ? $"brass key {id}" : $"silver ring {id}",
+            send: got.Add);
+
+    [Fact]
+    public void ARouteItemNeed_IsForgottenUnderAnotherSet_AndNothingIsPickedUpForIt()
+    {
+        Harness h = OnAlpha();
+        List<string> got = new();
+        PathItemFloorCollector pickup = FloorPickup(h, got);
+        h.Needs.Post(NeedKind.PathItem, "42", "test");
+        h.Needs.Post(NeedKind.LightSource, "any", "test");
+
+        h.SwitchTo("beta");
+        pickup.CollectRevealed();
+
+        Assert.Empty(got);
+        Assert.Empty(h.Needs.Outstanding(NeedKind.PathItem));
+        // A need that names no record of the game data is still a need.
+        Assert.Single(h.Needs.Outstanding(NeedKind.LightSource));
+    }
+
+    // What forgetting it guards: the need left standing has the other set's item
+    // of that number picked up off the floor, with nothing running.
+    [Fact]
+    public void WithoutThat_TheNeedHasTheOtherSetsItemPickedUp()
+    {
+        Harness h = OnAlpha();
+        h.ForgetNeeds = false;
+        List<string> got = new();
+        PathItemFloorCollector pickup = FloorPickup(h, got);
+        h.Needs.Post(NeedKind.PathItem, "42", "test");
+
+        h.SwitchTo("beta");
+        pickup.CollectRevealed();
+
+        Assert.Equal(new[] { "get silver ring 42" }, got);
+    }
+
+    // The same set read in again keeps its item numbers, and the need with them.
+    [Fact]
+    public void ARouteItemNeed_IsKeptWhenTheSameSetIsReadInAgain()
+    {
+        Harness h = OnAlpha();
+        List<string> got = new();
+        PathItemFloorCollector pickup = FloorPickup(h, got);
+        h.Needs.Post(NeedKind.PathItem, "42", "test");
+
+        h.ReadInAgain();
+        pickup.CollectRevealed();
+
+        Assert.Equal(new[] { "get brass key 42" }, got);
+        Assert.Single(h.Needs.Outstanding(NeedKind.PathItem));
+    }
+
+    // ----- a profile closed or loaded switches the set too ---------------------------
+
+    // Loading another profile closes the one loaded, and with no profile the set is
+    // the first BBS's: a swap between two characters on alpha can pass through
+    // beta. What was held for the character that left is dropped at the close, and
+    // said to have gone with the profile; coming back to alpha finds nothing left.
+    [Fact]
+    public void ASwapThroughAnotherSet_DropsWhatWasHeld_AndSaysItWasTheProfile()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        h.Runner.NotifyDisconnected();
+        h.Runner.Stage(new Loop("next", new[] { new RoomKey(1, 2), new RoomKey(1, 3) }));
+        string[] sent = h.Sent.ToArray();
+
+        h.Because = "the profile was closed";
+        h.SwitchTo("beta");
+
+        Assert.Equal(
+            "[Loop 'ab', held for a reconnect, and loop 'next', loaded to start, dropped: "
+            + "the profile was closed, and with it the game data changed from 'alpha' to 'beta']",
+            h.Outcome?.Notice);
+        Assert.Contains(h.Log.Snapshot(), e => e.Severity == LogSeverity.Info && e.Source == "Movement"
+            && e.Message == "Loop 'ab', held for a reconnect, and loop 'next', loaded to start, dropped: "
+                + "the profile was closed, and with it game data changed from 'alpha' to 'beta'");
+        Assert.Null(h.Runner.PendingReconnectResumeName);
+        Assert.Null(h.Runner.StagedLoop);
+
+        h.Because = "a profile was loaded";
+        Assert.Null(h.SwitchTo("alpha"));
+        Assert.Null(h.Outcome);
+
+        // The next character's first prompt in the game starts nothing of the last one's.
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.FirePromptForTests();
+        h.LetTimePass();
+
+        Assert.Equal(sent, h.Sent);
+        Assert.True(h.Idle);
+    }
+
+    // The reason every cancel is given, and the walk's last event keeps, leads with
+    // the profile too.
+    [Fact]
+    public void AStopMadeForAProfileEvent_GivesThatReasonToWhatItEnds()
+    {
+        Harness h = OnAlpha();
+        List<string> endings = new();
+        h.Controller.EndingForGameDataChange += (reason, _) => endings.Add(reason);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
+
+        h.Because = "a profile was loaded";
+        h.SwitchTo("beta");
+
+        const string reason = "a profile was loaded, and with it game data changed from 'alpha' to 'beta'";
+        Assert.Equal(new[] { reason }, endings);
+        Assert.Equal(reason, h.Walker.LastEvent?.Detail);
+        Assert.Equal("Walk to 1/3 stopped", h.Ended);
     }
 
     // ----- the stamp of a running loop is the run's ---------------------------------
