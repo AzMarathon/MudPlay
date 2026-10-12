@@ -54,6 +54,10 @@ public sealed class MonsterSummonWatcher : IDisposable
         _lines ??= _build();
         if (!_lines.TryMatch(line.Text, out string? source) || source is null) return;
 
+        // Whoever was summoned is in the room and on no roster until it is read
+        // again, whether or not the re-display below goes out.
+        _classifier.NoteUnlistedArrival($"a summon: '{line.Text}'");
+
         RoomEntity? summoner = FindMonster(room, source);
         if (summoner is null)
         {

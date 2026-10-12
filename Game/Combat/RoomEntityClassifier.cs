@@ -103,6 +103,26 @@ public sealed class RoomEntityClassifier : IDisposable
     // this session.
     public RoomEntitiesObservation? Current { get; private set; }
 
+    // Whether Current can be taken for everyone the room would list. True from a
+    // read of the room: its "Also here:" line, or an arrival whose display listed
+    // nobody. False again as soon as someone may be here that Current doesn't name:
+    // an arrival line that names nobody (a follow, a directionless spawn, a summon),
+    // an arrival under a name the game data can't place, a swing from nobody listed,
+    // a room entered unseen, or the roster emptied on some other ground than a
+    // display. The next read of the room sets it again.
+    //
+    // For whoever has to rule a monster OUT by its absence (CastReach). The combat
+    // gate asks who is here to fight, and a roster that is short does it no harm.
+    public bool RosterIsWhole { get; private set; }
+
+    // Someone may be in the room whom the roster does not name.
+    public void NoteUnlistedArrival(string why)
+    {
+        if (!RosterIsWhole) return;
+        RosterIsWhole = false;
+        _log?.Debug(LogCategory, $"roster no longer known to be whole — {why}");
+    }
+
     public RoomEntityClassifier(
         MessageRouter router,
         MonsterMessageStore monsters,
@@ -238,6 +258,7 @@ public sealed class RoomEntityClassifier : IDisposable
         RoomEntitiesObservation obs = new(rawFirst, entities, DateTimeOffset.Now);
         Current = obs;
         _lastAlsoHereAt = obs.At;
+        RosterIsWhole = true;
         EntitiesObserved?.Invoke(obs);
     }
 
@@ -267,6 +288,7 @@ public sealed class RoomEntityClassifier : IDisposable
         RoomEntitiesObservation obs = new(rawLine, entities, DateTimeOffset.Now);
         Current = obs;
         _lastAlsoHereAt = obs.At;
+        RosterIsWhole = true;
         EntitiesObserved?.Invoke(obs);
     }
 
@@ -661,7 +683,14 @@ public sealed class RoomEntityClassifier : IDisposable
             return;
         }
 
-        NoteRoomChanged();
+        // The roster is emptied either way. It is the new room as read only when a
+        // display of that room decided the move and printed no "Also here:" of its
+        // own: one read since the move and then lost (the listed monster died ahead
+        // of the exits line) leaves others the roster no longer names.
+        bool shownEmpty = transition.Displayed
+            && _roomTracker is { LastMoveSentAt: { } sentAt }
+            && !(_lastAlsoHereAt is { } readAt && readAt >= sentAt);
+        WipeRoster(shownEmpty);
     }
 
     // Remove ONE entity matching monsterName (case-insensitive match against
@@ -783,6 +812,7 @@ public sealed class RoomEntityClassifier : IDisposable
             At: DateTimeOffset.Now,
             Source: RoomObservationSource.RoomChange);
         Current = obs;
+        RosterIsWhole = false;
         _log?.Debug(LogCategory, keep is { } kept
             ? $"dark advance — roster reset, kept active target {kept.ResolvedName}"
             : "dark advance — roster reset to empty");
@@ -796,7 +826,12 @@ public sealed class RoomEntityClassifier : IDisposable
     // room and CombatManager picks afresh. Public so callers other than
     // RoomTracker can drive the wipe (tests, forced-refresh paths). Idempotent on
     // already-empty observations.
-    public void NoteRoomChanged()
+    public void NoteRoomChanged() => WipeRoster(shownEmpty: false);
+
+    // shownEmpty: the wipe follows a display of the room that listed nobody, so the
+    // empty roster is the room as read. Any other wipe is a roster dropped as stale,
+    // which says nothing of who is here.
+    private void WipeRoster(bool shownEmpty)
     {
         RoomEntitiesObservation wiped = new(
             RawAlsoHereLine: string.Empty,
@@ -804,6 +839,7 @@ public sealed class RoomEntityClassifier : IDisposable
             At: DateTimeOffset.Now,
             Source: RoomObservationSource.RoomChange);
         Current = wiped;
+        RosterIsWhole = shownEmpty;
         EntitiesObserved?.Invoke(wiped);
     }
 
@@ -825,6 +861,7 @@ public sealed class RoomEntityClassifier : IDisposable
         _alsoHereRawFirst = null;
         _lastAlsoHereAt = null;
         Current = null;
+        RosterIsWhole = false;
     }
 
     // Look again at the names the roster couldn't place. A player we had no record

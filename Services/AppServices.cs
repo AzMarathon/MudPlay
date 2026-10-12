@@ -5266,18 +5266,17 @@ public sealed class AppServices
         // screen around it is what marks it a readout, not a cast.
         Conditions.SetStatScreenProbe(() => Stats.InStatScreen);
         // An applied line several spells print is read by which of them the room or
-        // a monster in it casts. The room counts only while the position is
-        // confirmed, the roster only while the room can be seen.
+        // a monster in it casts. What of the room and its roster can be gone by is
+        // CastReach.Standing's to say.
         SpellCasters = new Game.GameData.SpellCasterIndex(GameData, () => RoomGraph.Rooms, Log);
         RoomGraph.GraphReloaded += () => Task.Run(SpellCasters.Warm);
         if (GameData.ActiveSet is not null) Task.Run(SpellCasters.Warm);
         Conditions.SetCastReach(new Game.Conditions.CastReach(SpellCasters, () =>
-            RoomTracker.State is { Confidence: Game.Map.RoomConfidence.Confirmed, CurrentRoom: { } room }
-                ? new Game.Conditions.CastReach.Here(room.Spell, Game.Conditions.CastReach.MonstersSeen(
-                    RoomClassifier.Current,
-                    cannotSee: RoomTracker.IsInDarkRoom || RoomTracker.EnteredBlind || Conditions.IsBlinded,
-                    SpellCasters.KnowsMonster))
-                : null));
+            Game.Conditions.CastReach.Standing(
+                RoomTracker.State.Confidence, RoomTracker.State.CurrentRoom,
+                inDarkRoom: RoomTracker.IsInDarkRoom, enteredBlind: RoomTracker.EnteredBlind,
+                blinded: Conditions.IsBlinded,
+                RoomClassifier.Current, RoomClassifier.RosterIsWhole, SpellCasters.KnowsMonster)));
         // Watches the same wire for lines neither the message catalogue above nor any
         // registered Router pattern recognizes, staging them as review candidates.
         // AttachLineExtractor lands in MainWindowViewModel alongside the other line

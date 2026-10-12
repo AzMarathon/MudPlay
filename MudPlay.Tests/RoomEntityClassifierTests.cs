@@ -1026,6 +1026,45 @@ public sealed class RoomEntityClassifierTests
             """;
     }
 
+    // ----- whether the roster is the whole of who is here --------------
+
+    // A room walked into whose display lists nobody: the roster is empty, and that
+    // is the room as read.
+    [Fact]
+    public void AMoveIntoARoomThatListsNobody_LeavesAnEmptyRosterKnownWhole()
+    {
+        using TrackerHarness h = new();
+        h.AddMonster(1, "giant rat");
+        h.Tracker.NoteRoomObserved(new RoomObservation("Town Gates", new HashSet<Direction> { Direction.N }));
+        h.FeedAlsoHere("Also here: giant rat.");
+        Assert.True(h.Classifier.RosterIsWhole);
+
+        h.Tracker.NoteMoveSent(Direction.N, DateTimeOffset.UtcNow.AddMilliseconds(50));
+        h.Tracker.NoteRoomObserved(new RoomObservation("North Square", new HashSet<Direction> { Direction.S }));
+
+        Assert.Empty(h.Classifier.Current!.Value.Entities);
+        Assert.True(h.Classifier.RosterIsWhole);
+    }
+
+    // The new room listed two, one died ahead of the exits line, and the roster is
+    // emptied as stale. The other is still here: empty is not the room as read.
+    [Fact]
+    public void ARosterReadSinceTheMove_AndThenEmptied_IsNotKnownWhole()
+    {
+        using TrackerHarness h = new();
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(404, "zombie");
+        h.Tracker.NoteRoomObserved(new RoomObservation("Town Gates", new HashSet<Direction> { Direction.N }));
+
+        h.Tracker.NoteMoveSent(Direction.N, DateTimeOffset.UtcNow.AddSeconds(-1));
+        h.FeedAlsoHere("Also here: giant rat, zombie.");
+        Assert.True(h.Classifier.RemoveDeadEntity("giant rat"));
+        h.Tracker.NoteRoomObserved(new RoomObservation("North Square", new HashSet<Direction> { Direction.S }));
+
+        Assert.Empty(h.Classifier.Current!.Value.Entities);
+        Assert.False(h.Classifier.RosterIsWhole);
+    }
+
     [Fact]
     public void MoveConfirm_FreshNewRoomOccupants_NotWiped()
     {

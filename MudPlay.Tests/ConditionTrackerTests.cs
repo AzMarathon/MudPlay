@@ -424,10 +424,13 @@ public sealed class ConditionTrackerTests
         Assert.True(h.Tracker.IsConfused);
     }
 
-    // Hypnotic hands' cast line holds mesmerize's applied text. It is a confusion in
-    // its own right, read off its own applied line, which follows.
+    // Hypnotic hands' cast line holds mesmerize's applied text, and hypnotic hands is
+    // a confusion as mesmerize is: the line confuses whichever record it is read
+    // through, so it still latches, at once. Its own applied line does not always
+    // follow straight away (user, 2026-10-11), and a character confused and not
+    // known to be walks on.
     [Fact]
-    public void AnotherSpellsCastLine_StillLatchesThatSpellOffItsOwnAppliedLine()
+    public void AnotherSpellsCastLine_ThatBringsTheSameCondition_StillLatchesAtOnce()
     {
         using Harness h = new();
         h.Messages.Messages.Add(Full("hypnotic hands", MessageFlags.Confused,
@@ -439,14 +442,100 @@ public sealed class ConditionTrackerTests
             "You are mesmerized", "You are no longer mesmerized", 1391));
 
         h.Feed("You are mesmerized by the hypnotic movements!");
-        Assert.Empty(h.Applied);
+        Assert.Equal(new[] { "mesmerize" }, h.Applied.Select(r => r.Name));
+        Assert.True(h.Tracker.IsConfused);
 
         h.Feed("You are confused!");
-        Assert.Equal(new[] { "hypnotic hands" }, h.Applied.Select(r => r.Name));
-        Assert.True(h.Tracker.IsConfused);
+        Assert.Equal(new[] { "mesmerize", "hypnotic hands" }, h.Applied.Select(r => r.Name));
 
         h.Feed("The effect of hypnotic hands wears off.");
         Assert.False(h.Tracker.IsConfused);
+        Assert.DoesNotContain(h.Applied, h.Tracker.IsActive);
+    }
+
+    // The line's own spell has to carry EVERY condition of the record it is read
+    // through. A confusion's line does not bring on a hold that shares its words.
+    [Fact]
+    public void AnotherSpellsCastLine_ThatBringsOnlyPartOfTheCondition_DoesNotLatch()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(Full("hypnotic hands", MessageFlags.Confused,
+            "{null}", "You are mesmerized by the hypnotic movements!", "{null}",
+            "You are confused!", "The effect of hypnotic hands wears off.", 300));
+        h.Messages.Messages.Add(Full("deep trance (test)", MessageFlags.Confused | MessageFlags.MovementPrevented,
+            "{null}", "{null}", "{null}", "You are mesmerized", "You are no longer mesmerized", 31001));
+        h.Messages.Messages.Add(Full("fumbled (test)", MessageFlags.LastActionFailed,
+            "{null}", "{null}", "{null}", "by the hypnotic", "{null}", 31002));
+
+        h.Feed("You are mesmerized by the hypnotic movements!");
+
+        Assert.Empty(h.Applied);
+        Assert.Empty(h.ActionFailed);
+        Assert.Equal(MessageFlags.None, h.Tracker.ActiveFlags);
+    }
+
+    // The same sequence over the shipped records. What latches and what ends is
+    // what it was before any line was held back as another spell's (run both ways,
+    // 2026-10-11: the same records applied and ended, line for line, on both seeds).
+    [Theory]
+    [InlineData("paradigm")]
+    [InlineData("stock")]
+    public void ShippedSeed_HypnoticHands_ConfusesOnItsCastLine(string realm)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-seed-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            List<MessageRecord> seed = JsonStore.Load<List<MessageRecord>>(
+                Path.Combine(dir, $"Messages.{realm}.seed.json"))!;
+            using Harness h = new();
+            h.Messages.Messages.ReplaceAll(seed);
+
+            h.Feed("You are mesmerized by the hypnotic movements!");
+            Assert.Equal(new[] { "mesmerize", "strut" }, h.Applied.Select(r => r.Name));
+            Assert.Equal(MessageFlags.Confused, h.Tracker.ActiveFlags);
+
+            h.Feed("You are confused!");
+            Assert.Contains(h.Applied, r => r.Name == "hypnotic hands");
+            Assert.All(h.Applied, r => Assert.True(r.Flags.HasFlag(MessageFlags.Confused)));
+
+            h.Feed("The effect of hypnotic hands wears off.");
+            Assert.Equal(new[] { "hypnotic hands" }, h.Ended.Select(r => r.Name));
+            Assert.Equal(MessageFlags.None, h.Tracker.ActiveFlags);
+            Assert.DoesNotContain(h.Applied, h.Tracker.IsActive);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    // What the condition exemption must not let through: freezing water and poison
+    // hits carry no condition, so their lines bring on nothing in another's name.
+    [Theory]
+    [InlineData("paradigm")]
+    [InlineData("stock")]
+    public void ShippedSeed_APoisonHitsLine_AndAColdHitsLine_LatchNothing(string realm)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-seed-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            List<MessageRecord> seed = JsonStore.Load<List<MessageRecord>>(
+                Path.Combine(dir, $"Messages.{realm}.seed.json"))!;
+            using Harness h = new();
+            h.Messages.Messages.ReplaceAll(seed);
+
+            h.Feed("You are poisoned for 3 damage!");
+            h.Feed("You are chilled for 2 damage!");
+
+            Assert.Empty(h.Applied);
+            Assert.Equal(MessageFlags.None, h.Tracker.ActiveFlags);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
     }
 
     // ----- a cast the target negated ---------------------------------

@@ -69,8 +69,26 @@ public sealed class SpellCasterIndexTests : IDisposable
             "Casted By": "Item #406" },
           { "Number": 5257, "Name": "ocean drowning", "Learnable": 0, "Learned From": "\u0000",
             "Casted By": "\u0000" },
+          { "Number": 179, "Name": "heavy black rod", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "Monster #2756, Item #462" },
+          { "Number": 212, "Name": "chaos storm", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "Room 14/491, Room 14/492, Room 14/493, Room 14/494, Room 14/495, Room 14/496, Room 14/497, Monster #122" },
           { "Number": 9100, "Name": "(not from the set)", "Learnable": 0, "Learned From": "\u0000",
-            "Casted By": "Monster #108, Monster #7777" }
+            "Casted By": "Monster #108, Monster #7777" },
+          { "Number": 9199, "Name": "(not from the set: the ice sorceress alone)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108" },
+          { "Number": 9101, "Name": "(9199 and a textblock)", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "Monster #108, Textblock #2500(8%)" },
+          { "Number": 9102, "Name": "(9199 with its list cut off)", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "Monster #108, Mons+\u0000" },
+          { "Number": 9103, "Name": "(9199 and a room whose own spell it is not)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108, Room 6/1138" },
+          { "Number": 9104, "Name": "(9199 and an enchantment's on-hit spell)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108, Spell #5535" },
+          { "Number": 9105, "Name": "(9199, learnable)", "Learnable": 1, "Learned From": "\u0000",
+            "Casted By": "Monster #108" },
+          { "Number": 9106, "Name": "(9199, taught by an item)", "Learnable": 0, "Learned From": "Item #119",
+            "Casted By": "Monster #108" }
         ]
         """;
 
@@ -89,6 +107,8 @@ public sealed class SpellCasterIndexTests : IDisposable
           { "Number": 2661, "Name": "Fallen King", "MidSpell-1": 1363, "MidSpell-3": 1042, "MidSpell-4": 771 },
           { "Number": 637,  "Name": "storm giant king", "DeathSpell": 5522,
             "AttType-4": 2, "AttAcc-4": 5019, "Att%-4": 100 },
+          { "Number": 2756, "Name": "Jareth", "AttType-4": 2, "Att%-4": 100, "AttHitSpell-4": 179 },
+          { "Number": 122,  "Name": "high druid", "AttType-4": 2, "AttAcc-4": 212, "Att%-4": 100 },
           { "Number": 9001, "Name": "sleeper", "AttType-0": 2, "AttAcc-0": 1336, "Att%-0": 0 }
         ]
         """;
@@ -101,6 +121,10 @@ public sealed class SpellCasterIndexTests : IDisposable
         RoomAt(12, 72, "Desert", 515),
         RoomAt(16, 498, "Training Grounds", 829),
         RoomAt(16, 519, "Training Grounds", 829),
+        RoomAt(14, 491, "Chaos Storm", 212), RoomAt(14, 492, "Chaos Storm", 212),
+        RoomAt(14, 493, "Chaos Storm", 212), RoomAt(14, 494, "Chaos Storm", 212),
+        RoomAt(14, 495, "Chaos Storm", 212), RoomAt(14, 496, "Chaos Storm", 212),
+        RoomAt(14, 497, "Chaos Storm", 212),
     };
 
     private static Room RoomAt(int map, int room, string name, int spell) => new()
@@ -154,16 +178,50 @@ public sealed class SpellCasterIndexTests : IDisposable
         Assert.False(mist.OnlyMonstersAndRooms);
     }
 
+    // Each row here has a monster for a caster and one thing more, and is kept open
+    // by that one thing alone: #9199, the same row without it, is closed. The rows
+    // numbered 91xx are made for this and are not the set's (its own rows with these
+    // sources mostly carry two of them at once); #179 and #5522 are.
     [Theory]
-    [InlineData(156)]    // an item casts it
-    [InlineData(512)]    // a textblock casts it, and a room whose own spell it is not
-    [InlineData(511)]    // the list was cut off
-    [InlineData(5522)]   // a death spell: its caster is gone when it lands
-    [InlineData(5257)]   // nothing is listed as casting it
+    [InlineData(179)]    // an item casts it too (the heavy black rod, beside Jareth)
+    [InlineData(9101)]   // a textblock casts it too
+    [InlineData(9102)]   // its list was cut off at the column's 250 characters
+    [InlineData(9103)]   // a room is listed whose own spell it is not: an exit's or a command's cast
+    [InlineData(9104)]   // another spell casts it otherwise than by ending in it
+    [InlineData(9105)]   // a player can learn it
+    [InlineData(9106)]   // an item teaches it
     [InlineData(9100)]   // it lists a monster the set has no row for
-    [InlineData(5536)]   // another spell casts it otherwise than by ending in it
-    public void ASpellWithACasterNotInView_IsNeverClosed(int spell)
+    [InlineData(5522)]   // a death spell: its caster is gone from the roster when it lands
+    public void AMonstersSpell_WithOneCasterNotInView_IsNeverClosed(int spell)
+    {
+        (_, SpellCasterIndex index) = NewIndex(_root);
+
+        Assert.True(index.Of(9199)!.OnlyMonstersAndRooms);
+        Assert.NotEmpty(index.Of(spell)!.Monsters);
+        Assert.False(index.Of(spell)!.OnlyMonstersAndRooms);
+    }
+
+    // The set's own rows: an item alone, a textblock and a foreign room together, a
+    // list cut off, nothing listed, a spell tied to another that doesn't end in it.
+    [Theory]
+    [InlineData(156)]
+    [InlineData(512)]
+    [InlineData(511)]
+    [InlineData(5257)]
+    [InlineData(5536)]
+    public void ASpellWithNoMonsterOrRoomOfItsOwnToGoBy_IsNeverClosed(int spell)
         => Assert.False(Of(spell).OnlyMonstersAndRooms);
+
+    // Chaos storm is the spell of seven rooms and of the high druid.
+    [Fact]
+    public void ASpellOfRoomsAndAMonster_IsClosedOnBoth()
+    {
+        SpellCasterIndex.Casters storm = Of(212);
+
+        Assert.Equal(new[] { "high druid" }, storm.Monsters);
+        Assert.Equal(new[] { 212 }, storm.RoomSpells);
+        Assert.True(storm.OnlyMonstersAndRooms);
+    }
 
     [Fact]
     public void ASpellARoomCarries_IsClosedOnTheRoom()

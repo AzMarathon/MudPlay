@@ -55,6 +55,7 @@ public sealed class RoomEntryWatcher : IDisposable
     private readonly LogService? _log;
     private readonly IDisposable _arrivalSub;
     private readonly IDisposable _sneakArrivalSub;
+    private readonly IDisposable _namelessArrivalSub;
     private bool _disposed;
 
     // Fires after each arrival is parsed + classified + appended to the
@@ -75,6 +76,11 @@ public sealed class RoomEntryWatcher : IDisposable
         _log = log;
         _arrivalSub = router.Subscribe(KnownPatterns.RoomEntryArrival, OnArrival);
         _sneakArrivalSub = router.Subscribe(KnownPatterns.SneakArrivalNotice, OnSneakArrival);
+        // An arrival worded without a name the pattern can lift out ("The banshee
+        // floats after you!", "A shade materializes in the room."): nobody is added
+        // to the roster, and from here it is known to be short of someone.
+        _namelessArrivalSub = router.Subscribe(KnownPatterns.RoomSpawnArrival,
+            match => _classifier.NoteUnlistedArrival($"an arrival that names nobody: '{match.Text}'"));
         // Colour-scan fallback for custom, unstructured spawn lines (see class note).
         _router.LineDispatched += OnLineScan;
     }
@@ -151,6 +157,9 @@ public sealed class RoomEntryWatcher : IDisposable
             _log?.Warn(LogCategory,
                 $"unknown arrival '{name}' — treating as {finalKind} ({(colorHint == EntityKind.Unknown ? "no colour hint" : "colour hint")})",
                 context: match.Text);
+            // It goes on the roster under a name nothing can be looked up by.
+            if (finalKind == EntityKind.Monster)
+                _classifier.NoteUnlistedArrival($"an arrival the game data has no monster for: '{name}'");
         }
 
         _classifier.AppendArrivalEntity(classified, rawWireLine: match.Text);
@@ -356,5 +365,6 @@ public sealed class RoomEntryWatcher : IDisposable
         _router.LineDispatched -= OnLineScan;
         _arrivalSub.Dispose();
         _sneakArrivalSub.Dispose();
+        _namelessArrivalSub.Dispose();
     }
 }

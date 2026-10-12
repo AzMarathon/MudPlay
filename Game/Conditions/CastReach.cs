@@ -82,15 +82,30 @@ public sealed class CastReach
         return anySpell && ruledOut ? Verdict.OutOfReach : Verdict.Unknown;
     }
 
+    // Where the character stands, from what the client holds of it; null while the
+    // position is not confirmed, and then nothing is ruled out at all. The room's
+    // spell is read off the map, so it stands whenever the position does. The
+    // monsters stand only when the room can be seen and its roster is whole.
+    public static Here? Standing(
+        Map.RoomConfidence confidence, Map.Room? room,
+        bool inDarkRoom, bool enteredBlind, bool blinded,
+        RoomEntitiesObservation? roster, bool rosterIsWhole, Func<string, bool> isMonsterOfTheSet)
+    {
+        if (confidence != Map.RoomConfidence.Confirmed || room is null) return null;
+        return new Here(room.Spell, MonstersSeen(
+            roster, cannotSee: inDarkRoom || enteredBlind || blinded, rosterIsWhole, isMonsterOfTheSet));
+    }
+
     // The names of the monsters the roster lists, or null when it can't be taken for
     // everyone in the room: nothing was read (no roster since the game was entered),
-    // the room can't be seen (dark, or the character blind), or it lists a name the
-    // set has no monster for, which could be anything.
+    // the room can't be seen (dark, or the character blind), someone may have come
+    // in since it was read whom it doesn't name (RoomEntityClassifier.RosterIsWhole),
+    // or it lists a name the set has no monster for, which could be anything.
     public static IReadOnlyCollection<string>? MonstersSeen(
-        RoomEntitiesObservation? roster, bool cannotSee, Func<string, bool> isMonsterOfTheSet)
+        RoomEntitiesObservation? roster, bool cannotSee, bool rosterIsWhole, Func<string, bool> isMonsterOfTheSet)
     {
         ArgumentNullException.ThrowIfNull(isMonsterOfTheSet);
-        if (cannotSee || roster is not { } seen) return null;
+        if (cannotSee || !rosterIsWhole || roster is not { } seen) return null;
 
         List<string> names = new();
         foreach (RoomEntity entity in seen.Entities)

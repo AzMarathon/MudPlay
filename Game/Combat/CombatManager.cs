@@ -3476,6 +3476,8 @@ public sealed partial class CombatManager : IDisposable
 
         if (_classifier.Current is { } cur && HasEngageable(cur)) return;
 
+        // Whoever swung is on no roster, whether or not the re-display goes out.
+        _classifier.NoteUnlistedArrival("a combat line with nobody on the roster to fight");
         if (TrySendRoomRefresh("combat line, room appears empty"))
         {
             _log?.Combat(LogCategory,
