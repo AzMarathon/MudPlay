@@ -9133,11 +9133,16 @@ public sealed class AppServices
         // *Combat Engaged*, to be refused (GAME_MECHANICS "Hiding — sneak vs hide,
         // the hide state machine, and search reveals"). The combat gate is up from
         // the room's roster and the engine's target from the attack, both before that.
+        //
+        // Nor one sharing the room with a monster that could attack: the game
+        // refuses that hide on both realms, whether or not we fight it (same topic;
+        // user, 2026-10-12). Told off the room's hostiles with Auto-Combat on or off.
         Stealth.SetHideDwell(
             isAtRest: () => MovementControl.State != Game.Map.MovementEngineState.Running
                             && RoomTracker.State.Confidence != Game.Map.RoomConfidence.Pending
                             && !MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.CombatGate)
-                            && Combat.CurrentTarget is null && Combat.CastingSpellTarget is null,
+                            && Combat.CurrentTarget is null && Combat.CastingSpellTarget is null
+                            && !CombatTracker.HasHostileMonster,
             hideAfter: (delay, action) => ScheduleOnce(delay, action));
         MovementControl.StateChanged += () =>
         {
