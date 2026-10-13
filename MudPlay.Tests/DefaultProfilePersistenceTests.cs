@@ -199,8 +199,85 @@ public sealed class DefaultProfilePersistenceTests
         }
     }
 
+    // The update that stops the default profile being written puts it back to the
+    // installed defaults, once (user, 2026-10-12). What it held is kept as a file
+    // and handed back, to be loaded as an unnamed draft that asks to be named.
+    [Fact]
+    public void ResetDefaultProfileOnce_PutsItBackToInstalledDefaults_KeepsWhatItHeld_AndRunsOnce()
+    {
+        DeleteDefaultProfileFile();
+        try
+        {
+            Models.Profile.CharacterProfile played = new()
+            {
+                Settings = new() { ["Probe"] = JsonSerializer.SerializeToElement(new { Flag = true }) },
+            };
+            JsonStore.Save(AppPaths.DefaultProfileFile, played);
+
+            ProfileService updated = new();
+            Models.Profile.CharacterProfile? held = updated.ResetDefaultProfileOnce();
+
+            Assert.NotNull(held);
+            Assert.True(held!.Settings!.ContainsKey("Probe"));
+            Assert.False(File.Exists(AppPaths.DefaultProfileFile));               // installed defaults: no file
+            Assert.True(File.Exists(AppPaths.DefaultProfileBeforeResetFile));     // the copy
+            Assert.True(File.Exists(AppPaths.DefaultProfileResetMarker));
+
+            // Loaded as the unnamed draft: the setup is there, and it asks to be kept.
+            updated.LoadDraftFromBeforeTheReset(held);
+            Assert.Null(updated.CurrentProfileName);
+            Assert.True(updated.Current!.Settings!.ContainsKey("Probe"));
+            Assert.True(updated.UnnamedDraftHasChanges);
+
+            // A new draft is the installed defaults, and no later launch resets again.
+            ProfileService later = new();
+            later.LoadDefaultProfile();
+            Assert.False(later.Current!.Settings?.ContainsKey("Probe") == true);
+            JsonStore.Save(AppPaths.DefaultProfileFile, played);                  // (a hand edit, say)
+            Assert.Null(later.ResetDefaultProfileOnce());
+            Assert.True(File.Exists(AppPaths.DefaultProfileFile));
+        }
+        finally { DeleteDefaultProfileFile(); }
+    }
+
+    // The startup animation switch is the one install-wide setting kept in this file.
+    [Fact]
+    public void ResetDefaultProfileOnce_KeepsTheStartupAnimationSetting()
+    {
+        DeleteDefaultProfileFile();
+        try
+        {
+            ProfileService before = new();
+            before.WriteDefaultProfileStartupAnimation(false);
+
+            Assert.NotNull(new ProfileService().ResetDefaultProfileOnce());
+
+            Assert.False(new ProfileService().ReadDefaultProfileStartupAnimation());
+        }
+        finally { DeleteDefaultProfileFile(); }
+    }
+
+    // A fresh install has nothing to reset; it is marked done all the same.
+    [Fact]
+    public void ResetDefaultProfileOnce_OnAFreshInstall_ResetsNothing()
+    {
+        DeleteDefaultProfileFile();
+        try
+        {
+            Assert.Null(new ProfileService().ResetDefaultProfileOnce());
+            Assert.True(File.Exists(AppPaths.DefaultProfileResetMarker));
+            Assert.False(File.Exists(AppPaths.DefaultProfileBeforeResetFile));
+        }
+        finally { DeleteDefaultProfileFile(); }
+    }
+
+    // The default profile's file, and what the one-time reset leaves beside it.
     private static void DeleteDefaultProfileFile()
     {
-        if (File.Exists(AppPaths.DefaultProfileFile)) File.Delete(AppPaths.DefaultProfileFile);
+        foreach (string file in new[]
+                 {
+                     AppPaths.DefaultProfileFile, AppPaths.DefaultProfileBeforeResetFile, AppPaths.DefaultProfileResetMarker,
+                 })
+            if (File.Exists(file)) File.Delete(file);
     }
 }

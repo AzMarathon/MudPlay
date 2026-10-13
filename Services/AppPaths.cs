@@ -61,6 +61,12 @@ public static class AppPaths
     // Distinct from GlobalSettingsFile (the settings tier).
     public static string DefaultProfileFile { get; }
 
+    // What the default profile held before it was put back to the installed
+    // defaults, and the marker that this was done (ProfileService.ResetDefaultProfileOnce).
+    public static string DefaultProfileBeforeResetFile => Path.Combine(DataRoot, "Global", "default-profile.before-reset.json");
+
+    public static string DefaultProfileResetMarker => Path.Combine(DataRoot, "Global", ".default-profile-reset");
+
     // BBS-tier files (one per BBS).
     public static string BbsDir { get; }
 

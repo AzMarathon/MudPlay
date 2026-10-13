@@ -375,7 +375,56 @@ public sealed class ProfileService
     // unnamed draft that is never written back (see Save): Save As makes it a
     // character. Any outgoing named profile is auto-saved first so per-session
     // edits aren't dropped.
-    public CharacterProfile LoadDefaultProfile(string? onBbs = null)
+    public CharacterProfile LoadDefaultProfile(string? onBbs = null) =>
+        LoadUnnamedDraft(ReadDefaultProfileFile(), onBbs, somethingToKeep: false);
+
+    // The default profile was, until 3.180.23, whatever the last session on it had
+    // saved: for someone who never named a character, their whole setup. The update
+    // that stops it being written also puts it back to the installed defaults, once
+    // (user, 2026-10-12: "returns existing defaults back to the actual defaults when
+    // they update to this"). What it held is kept beside it as
+    // AppPaths.DefaultProfileBeforeResetFile and handed back, so the launch that
+    // did the reset can load it as an unnamed draft with something to keep
+    // (LoadDraftFromBeforeTheReset): nobody's setup is lost, it only has to be
+    // named. The startup-animation setting, which lives in this file, is carried
+    // over. Null when there was nothing to reset, or it was done before.
+    public CharacterProfile? ResetDefaultProfileOnce()
+    {
+        string marker = AppPaths.DefaultProfileResetMarker;
+        if (File.Exists(marker)) return null;
+
+        CharacterProfile? held = null;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
+            if (File.Exists(AppPaths.DefaultProfileFile))
+            {
+                held = ReadDefaultProfileFile();
+                bool animate = ReadGeneralSection(held).ShowStartupMudAnimation;
+                File.Move(AppPaths.DefaultProfileFile, AppPaths.DefaultProfileBeforeResetFile, overwrite: true);
+                if (animate != ReadGeneralSection(new CharacterProfile()).ShowStartupMudAnimation)
+                    WriteDefaultProfileStartupAnimation(animate);
+                Log?.Info(LogCategory,
+                    "The default profile was put back to the installed defaults (once, with this version); "
+                    + $"what it held is kept as '{AppPaths.DefaultProfileBeforeResetFile}'.");
+            }
+            File.WriteAllText(marker, $"default profile reset by {AppInfo.Version} on {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Left for the next launch: with no marker written it is tried again.
+            Log?.Warn(LogCategory, $"The default profile could not be put back to the installed defaults: {ex.Message}");
+            return null;
+        }
+        return held;
+    }
+
+    // Load what the default profile held before the reset as the unnamed draft, with
+    // something to keep: Save names it, and leaving it asks.
+    public CharacterProfile LoadDraftFromBeforeTheReset(CharacterProfile held) =>
+        LoadUnnamedDraft(held, onBbs: null, somethingToKeep: true);
+
+    private CharacterProfile LoadUnnamedDraft(CharacterProfile profile, string? onBbs, bool somethingToKeep)
     {
         string? outgoing = CurrentProfileName;
         if (Current is not null)
@@ -387,7 +436,6 @@ public sealed class ProfileService
             ProfileClosed?.Invoke();
         }
 
-        CharacterProfile profile = ReadDefaultProfileFile();
         NormalizeForLoad(profile);
         ProfileMigrations.Apply(profile, Log);
 
@@ -398,11 +446,13 @@ public sealed class ProfileService
         CurrentBbsName = string.IsNullOrWhiteSpace(onBbs) || !BbsUsable("Starting the default profile on a BBS", onBbs)
             ? null
             : onBbs;
-        Log?.Info(LogCategory, outgoing is null
-            ? "Loaded the default profile (no character loaded)."
-            : $"Closed profile '{outgoing}'; loaded the default profile.");
+        Log?.Info(LogCategory, somethingToKeep
+            ? "Loaded what the default profile held before it was reset, as an unnamed profile to be named."
+            : outgoing is null
+                ? "Loaded the default profile (no character loaded)."
+                : $"Closed profile '{outgoing}'; loaded the default profile.");
         ProfileLoaded?.Invoke(profile);
-        _draftSaveWanted = false;   // as in LoadBlank
+        _draftSaveWanted = somethingToKeep;   // set after the handlers, as in LoadBlank
         return profile;
     }
 
