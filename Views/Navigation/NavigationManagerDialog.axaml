@@ -95,17 +95,26 @@
                     <Border Grid.Row="0"
                             Background="{StaticResource ChromeBgElevBrush}"
                             Padding="6,3">
-                        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
+                        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6">
                             <TextBlock Grid.Column="0"
                                        Text="Loops &amp; Auto-Lairs"
                                        FontSize="11" FontWeight="SemiBold"
                                        Foreground="{StaticResource ChromeFgBrush}"
                                        VerticalAlignment="Center"/>
+                            <!-- Restore defaults: puts back the packaged loops
+                                 this game data no longer has. Kept apart from
+                                 the "New …" buttons, at the far left. -->
+                            <Button Grid.Column="1"
+                                    Content="Restore defaults"
+                                    FontSize="10"
+                                    Padding="8,2"
+                                    Command="{Binding RestoreDefaultLoopsCommand}"
+                                    ToolTip.Tip="Put back the packaged loops this game data no longer has (deleted, or never added). Loops that are there are left as they are. Asks first."/>
                             <!-- New Folder: creates an empty root folder
                                  (shared between loops and Auto-Lair setups).
                                  Subfolders / rename / delete live on the
                                  per-folder right-click menu. -->
-                            <Button Grid.Column="1"
+                            <Button Grid.Column="2"
                                     Content="New Folder"
                                     FontSize="10"
                                     Padding="8,2"
@@ -114,7 +123,7 @@
                             <!-- New Loop: opens the LoopEditor in create
                                  mode. Away-from-the-map flow — type a name
                                  + add rooms via the editor's search box. -->
-                            <Button Grid.Column="2"
+                            <Button Grid.Column="3"
                                     Content="New Loop"
                                     FontSize="10"
                                     Padding="8,2"
@@ -123,7 +132,7 @@
                             <!-- New Lair: opens the LairEditor in create
                                  mode. Distinct editor so the correct
                                  walking-file type is authored. -->
-                            <Button Grid.Column="3"
+                            <Button Grid.Column="4"
                                     Content="New Lair"
                                     FontSize="10"
                                     Padding="8,2"
@@ -132,7 +141,7 @@
                             <!-- Import .mp: file picker → MegaMUD .mp loop
                                  file → anchor resolver → LoopEditor with
                                  the imported loop pre-filled. -->
-                            <Button Grid.Column="4"
+                            <Button Grid.Column="5"
                                     Content="Import .mp"
                                     FontSize="10"
                                     Padding="8,2"
@@ -498,18 +507,23 @@
                             <Border Grid.Row="0"
                                     Background="{StaticResource ChromeBgElevBrush}"
                                     Padding="6,3">
-                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
                                     <TextBlock Grid.Column="0"
                                                Text="GOTO favourites"
                                                FontSize="11" FontWeight="SemiBold"
                                                Foreground="{StaticResource ChromeFgBrush}"
                                                VerticalAlignment="Center"/>
                                     <Button Grid.Column="1"
+                                            Content="Restore defaults"
+                                            FontSize="10" Padding="8,2"
+                                            Command="{Binding RestoreDefaultGotosCommand}"
+                                            ToolTip.Tip="Add the default GOTOs for this game data that this character doesn't have. Your own GOTOs and folders are left as they are. Asks first."/>
+                                    <Button Grid.Column="2"
                                             Content="New Folder"
                                             FontSize="10" Padding="8,2"
                                             Command="{Binding NewGotoFolderCommand}"
                                             ToolTip.Tip="Create a new GOTO folder at the root."/>
-                                    <Button Grid.Column="2"
+                                    <Button Grid.Column="3"
                                             Content="Add"
                                             FontSize="10" Padding="8,2"
                                             Command="{Binding AddFavoriteCommand}"
@@ -525,7 +539,7 @@
                                              PlaceholderText="Filter favourites…"
                                              FontSize="11" Margin="0,0,0,3"
                                              IsVisible="{Binding HasFavorites}"/>
-                                    <TextBlock Text="No favourites yet — click Add, or right-click a room on the map → Add to favorites."
+                                    <TextBlock Text="No favourites yet — click Add, or right-click a room on the map → Add to favorites. Restore defaults adds the starter GOTOs for this game data."
                                                Padding="8" FontSize="11" TextWrapping="Wrap"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                IsVisible="{Binding !HasFavorites}"/>

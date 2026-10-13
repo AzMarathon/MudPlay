@@ -237,13 +237,19 @@ public partial class MainWindow : Window
         // the current in-memory state so any per-session edits (BBS
         // pin, settings tab changes, etc.) survive a relaunch without
         // requiring the user to remember Ctrl+S.
+        //
+        // An unnamed draft with something to keep is asked about the same way: it
+        // is never written, so closing would lose it (name it, discard it, or stay).
         Closing += async (_, e) =>
         {
-            if (!_exitConfirmed && AppServices.Current.Confirm.Settings.ConfirmExit)
+            MainWindowViewModel? closing = DataContext as MainWindowViewModel;
+            bool confirmExit = AppServices.Current.Confirm.Settings.ConfirmExit;
+            bool unnamedDraft = closing?.UnnamedDraftNeedsSettling == true;
+            if (!_exitConfirmed && (confirmExit || unnamedDraft))
             {
                 e.Cancel = true;
-                bool ok = await AppServices.Current.Confirm.ConfirmExitAsync();
-                if (!ok) return;
+                if (confirmExit && !await AppServices.Current.Confirm.ConfirmExitAsync()) return;
+                if (unnamedDraft && !await closing!.SettleUnnamedDraftAsync("closing the client")) return;
                 _exitConfirmed = true;
                 Close();
                 return;

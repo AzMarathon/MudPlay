@@ -1,5 +1,13 @@
 # Version history
 
+## 3.180.23
+
+- New characters and the default profile start with the starter GOTOs for their game data again
+- Navigation Management: **Restore defaults** on the Go To tab adds the starter GOTOs a character doesn't have, and on the Loops tab puts back the packaged loops the game data no longer has; your own are left as they are
+- **Save** on an unnamed profile asks for a name and saves it as a character; the default profile can no longer be changed from the client
+- Closing the client, or loading another profile, with an unnamed profile you set something up on asks first: name it, discard it, or stay
+- Updating puts an existing default profile back to the installed defaults, once; if that launch starts on the unnamed profile, what it held is loaded there to be named
+
 ## 3.180.20
 
 - Each client uses much less memory when many fonts are installed: the installed fonts are no longer all opened at every launch (about 200 MB less on a machine with 687 font families); the font pickers offer the same fonts

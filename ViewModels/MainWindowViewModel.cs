@@ -4321,6 +4321,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (AppServices.Current.Confirm.Settings.ConfirmExit
             && !await AppServices.Current.Confirm.ConfirmExitAsync())
             return;
+        if (!await SettleUnnamedDraftAsync("closing the client")) return;
         ShutdownNow();
     }
 
@@ -4369,6 +4370,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     private async Task<Services.Update.UpdateRelaunch> StandDownForUpdateAsync()
     {
+        // The update is going ahead whatever is answered here, so backing out of
+        // the question is the same as discarding.
+        await SettleUnnamedDraftAsync("restarting for the update");
         bool wasLive = IsConnected || IsConnecting;
         if (IsConnected) await DisconnectInternalAsync();
         else if (IsConnecting) _connectCts?.Cancel();
@@ -4605,7 +4609,7 @@ public partial class MainWindowViewModel : ObservableObject
         ProfileManagerWindow window = new()
         {
             DataContext = new ProfileManagerViewModel(
-                () => IsDisconnected, SwapToProfileRef, NewProfile, SaveProfile, SaveProfileAsAsync,
+                () => IsDisconnected, SwapToProfileRefAsync, NewProfileAsync, SaveLoadedProfileAsync, SaveProfileAsAsync,
                 OpenBbsSettingsFor),
         };
         window.Closed += (_, _) => _profileManager = null;
@@ -4679,7 +4683,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     public string SaveProfileLabel => HasNamedProfile
         ? $"_Save profile  ·  {AppServices.Current.Profile.CurrentProfileName}"
-        : "_Save default profile";
+        : "_Save profile…";
 
     // True while it's safe to swap the active profile — only when the wire
     // is down. Loading a different (or blank) profile mid-session would fire
@@ -4689,11 +4693,20 @@ public partial class MainWindowViewModel : ObservableObject
     // Save doesn't swap the active profile, so it stays available.
     private bool CanSwapProfile => IsDisconnected;
 
-    // File → Save. Persists the loaded profile in place: a named character to its
-    // own file, the default profile to the Global default-profile file. Naming a
-    // brand-new character is done through the Profile Management window.
+    // File → Save. A named character is saved in place.
+    //
+    // The default profile is not a character, and Save on it asks for a name (user,
+    // 2026-10-12: "if someone hits just save, with the default profile.. it should
+    // pop up save as.. so they have a proper named profile"; a new player had
+    // played, saved and loaded for days on the unnamed default and had no profile
+    // of his own). With no name given nothing is saved: the default profile itself
+    // is no longer written (ProfileService.Save).
     [RelayCommand]
-    private void SaveProfile()
+    private Task SaveProfileAsync() => SaveLoadedProfileAsync(selectedBbs: null);
+
+    // selectedBbs: the BBS picked in Profile Management, where a default draft is
+    // named under it (as its Save As does).
+    private async Task SaveLoadedProfileAsync(string? selectedBbs)
     {
         ProfileService profile = AppServices.Current.Profile;
         if (profile.Current is null)
@@ -4701,19 +4714,68 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Log.Warn("Profile", "Nothing to save — no profile loaded.");
             return;
         }
-        profile.Save();
-        AppServices.Current.Log.Info("Profile", profile.CurrentProfileName is { } name
-            ? $"Saved profile '{name}'."
-            : "Saved the default profile.");
+        if (profile.CurrentProfileName is { } name)
+        {
+            profile.Save();
+            AppServices.Current.Log.Info("Profile", $"Saved profile '{name}'.");
+            return;
+        }
+        if (BbsToSaveUnder(selectedBbs) is not { } bbs)
+        {
+            ShowInfoDialog("Save profile",
+                "Add a BBS first (Settings → BBS). Profiles are saved under a BBS.");
+            return;
+        }
+        if (await NameAndSaveAsync(bbs,
+                $"This profile has no name yet, so it can't be saved. Give it a name to save it as a character "
+                + $"on {bbs}.") != DraftNaming.Named)
+            AppServices.Current.Log.Info("Profile", "Not saved: the unnamed profile was given no name.");
+    }
+
+    // How a request to name the loaded profile ended.
+    private enum DraftNaming { Named, Discarded, BackedOut }
+
+    // True while closing the client or loading another profile would lose what an
+    // unnamed draft holds.
+    public bool UnnamedDraftNeedsSettling => AppServices.Current.Profile.UnnamedDraftHasChanges;
+
+    // The unnamed draft is never written, so before it is left behind (the client
+    // closing, another profile loading) the user is asked once: name it, discard
+    // it, or stay (user, 2026-10-12: "Ask when closing"). True when the caller may
+    // go ahead. A draft nothing was changed on is left without a word.
+    public async Task<bool> SettleUnnamedDraftAsync(string before)
+    {
+        ProfileService profile = AppServices.Current.Profile;
+        if (!profile.UnnamedDraftHasChanges) return true;
+
+        DraftNaming outcome;
+        if (BbsToSaveUnder(selectedBbs: null) is { } bbs)
+            outcome = await NameAndSaveAsync(bbs,
+                $"This profile has no name, so what you set up on it is lost by {before}. Give it a name to "
+                + $"keep it as a character on {bbs}, or discard it.", offerDiscard: true);
+        else
+            outcome = await AppServices.Current.Confirm.ConfirmAsync("Unnamed profile",
+                $"This profile has no name, and there is no BBS to save a character under, so what you set up on "
+                + $"it is lost by {before}. Discard it?", "Discard")
+                ? DraftNaming.Discarded : DraftNaming.BackedOut;
+
+        if (outcome == DraftNaming.Discarded)
+        {
+            profile.DiscardUnnamedDraftChanges();
+            AppServices.Current.Log.Info("Profile", $"The unnamed profile's changes were discarded before {before}.");
+        }
+        return outcome != DraftNaming.BackedOut;
     }
 
     // Return to the default (blank) profile — the "new blank character" action
-    // exposed by the Profile Management window. The outgoing profile is auto-saved
-    // first (inside LoadDefaultProfile), then Current becomes the Global default.
+    // exposed by the Profile Management window. An outgoing named profile is
+    // auto-saved first (inside LoadDefaultProfile); an outgoing unnamed draft with
+    // something to keep is asked about. Then Current becomes the Global default.
     // Not a menu/keybind command any more; Profile Management gates it on its own
     // disconnected check.
-    private void NewProfile(string? onBbs)
+    private async Task NewProfileAsync(string? onBbs)
     {
+        if (!await SettleUnnamedDraftAsync("starting a new one")) return;
         AppServices.Current.Profile.LoadDefaultProfile(onBbs);
         // The active BBS just changed with it — connection info, title, BBS-tier
         // settings and game-data set follow the pin.
@@ -4732,29 +4794,43 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        // Profiles are BBS-scoped. Prefer the explicitly-pinned BBS, but fall
-        // back to the active BBS shown in the title bar (ResolveActiveBbs) so a
-        // fresh {default} draft can be named against the BBS the user is looking
-        // at. Only a truly BBS-less install has nowhere to save.
-        // A default draft saves under the BBS picked in Profile Management; a named
-        // character stays on its own BBS.
-        string? bbs = profile.CurrentProfileName is null
-            ? selectedBbs ?? profile.CurrentBbsName ?? ResolveActiveBbs()?.Name
-            : profile.CurrentBbsName ?? ResolveActiveBbs()?.Name;
-        if (string.IsNullOrWhiteSpace(bbs))
+        if (BbsToSaveUnder(selectedBbs) is not { } bbs)
         {
             ShowInfoDialog("Save profile",
                 "Add a BBS first (Settings → BBS). Profiles are saved under a BBS.");
             return;
         }
+        await NameAndSaveAsync(bbs, note: null);
+    }
 
+    // Profiles are BBS-scoped. Prefer the explicitly-pinned BBS, but fall back to
+    // the active BBS shown in the title bar (ResolveActiveBbs) so a fresh {default}
+    // draft can be named against the BBS the user is looking at. Only a truly
+    // BBS-less install has nowhere to save. A default draft saves under the BBS
+    // picked in Profile Management; a named character stays on its own BBS.
+    private string? BbsToSaveUnder(string? selectedBbs)
+    {
+        ProfileService profile = AppServices.Current.Profile;
+        string? bbs = profile.CurrentProfileName is null
+            ? selectedBbs ?? profile.CurrentBbsName ?? ResolveActiveBbs()?.Name
+            : profile.CurrentBbsName ?? ResolveActiveBbs()?.Name;
+        return string.IsNullOrWhiteSpace(bbs) ? null : bbs;
+    }
+
+    // Ask for a name and save the loaded profile under it on bbs.
+    private async Task<DraftNaming> NameAndSaveAsync(string bbs, string? note, bool offerDiscard = false)
+    {
+        ProfileService profile = AppServices.Current.Profile;
         MudPlay.ViewModels.Profile.ProfileNameInputDialogViewModel vm = new(
             suggestedName: profile.CurrentProfileName ?? "character",
-            exists:        name => profile.Exists(bbs, name));
+            exists:        name => profile.Exists(bbs, name),
+            note:          note,
+            offerDiscard:  offerDiscard);
 
         string? name = await AppServices.Current.Dialogs.OpenWindowAsync<
             MudPlay.ViewModels.Profile.ProfileNameInputDialogViewModel, string>(vm);
-        if (string.IsNullOrWhiteSpace(name)) return;
+        if (string.IsNullOrWhiteSpace(name))
+            return vm.Discarded ? DraftNaming.Discarded : DraftNaming.BackedOut;
 
         profile.SaveAs(bbs, name);
         // SaveAs changes the loaded profile's identity (CurrentProfileName) but
@@ -4765,10 +4841,11 @@ public partial class MainWindowViewModel : ObservableObject
         PromoteRecent(new ProfileRef(bbs, name));
         SyncProfileMenuState();
         AppServices.Current.Log.Info("Profile", $"Saved profile '{name}' on '{bbs}'.");
+        return DraftNaming.Named;
     }
 
     [RelayCommand(CanExecute = nameof(CanSwapProfile))]
-    private void OpenRecentProfile(ProfileRef? recent)
+    private async Task OpenRecentProfileAsync(ProfileRef? recent)
     {
         if (recent is null) return;
         ProfileService profile = AppServices.Current.Profile;
@@ -4782,7 +4859,7 @@ public partial class MainWindowViewModel : ObservableObject
             PruneMissingRecentProfiles();
             return;
         }
-        SwapToProfileRef(recent);
+        await SwapToProfileRefAsync(recent);
     }
 
     // Load a profile by ref, promote it to recent, and sync the profile menu.
@@ -4791,23 +4868,24 @@ public partial class MainWindowViewModel : ObservableObject
     // the main window (WindowLayoutStore restores saved bounds on ProfileLoaded);
     // running that synchronously would move the window while the menu popup is
     // still open, stranding the flyout. Posting lets the menu close first.
-    private void SwapToProfileRef(ProfileRef target)
+    //
+    // An unnamed draft with something to keep is settled first (name it, discard
+    // it, or stay on it).
+    private async Task SwapToProfileRefAsync(ProfileRef target)
     {
-        ProfileService profile = AppServices.Current.Profile;
-        Dispatcher.UIThread.Post(() =>
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        if (!await SettleUnnamedDraftAsync("loading another profile")) return;
+        try
         {
-            try
-            {
-                profile.Load(target.Bbs, target.Name);
-                PromoteRecent(target);
-                SyncProfileMenuState();
-            }
-            catch (Exception ex)
-            {
-                AppServices.Current.Log.Error("Profile",
-                    $"Failed to load '{target.Name}' on '{target.Bbs}': {ex.Message}");
-            }
-        });
+            AppServices.Current.Profile.Load(target.Bbs, target.Name);
+            PromoteRecent(target);
+            SyncProfileMenuState();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Current.Log.Error("Profile",
+                $"Failed to load '{target.Name}' on '{target.Bbs}': {ex.Message}");
+        }
     }
 
     private void PromoteRecent(ProfileRef profileRef)

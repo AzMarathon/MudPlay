@@ -61,10 +61,20 @@ public sealed class FavoritesStoreTests : IDisposable
             $$"""{ "Name": "{{name}}", "SchemaVersion": 7 }""");
     }
 
+    // The starters the program ships for the set's realm, stood in for by a file in
+    // the scratch set.
+    private string StarterFile => Path.Combine(AppPaths.GameDataRoot, _setName, "bundled-starters.json");
+
+    private void WriteStarters(params (int Map, int Room, string Label, string? Folder)[] rooms) =>
+        JsonStore.Save(StarterFile, new
+        {
+            Favorites = rooms.Select(r => new FavoriteRoom { Map = r.Map, Room = r.Room, Label = r.Label, Folder = r.Folder }).ToList(),
+        });
+
     private (ProfileService Profile, FavoritesStore Store) LoadCharacter(string name)
     {
         ProfileService profile = new();
-        FavoritesStore store = new(profile, new GameDataCache(), () => _setName);
+        FavoritesStore store = new(profile, new GameDataCache(), () => _setName, starterFile: _ => StarterFile);
         profile.Load(_bbs, name);
         return (profile, store);
     }
@@ -96,18 +106,80 @@ public sealed class FavoritesStoreTests : IDisposable
         Assert.False(betaAgain.IsFavorite(new RoomKey(2, 10)));
     }
 
-    // A character made now starts with no favourites, not with whatever the
-    // characters before it had collected in the shared list.
+    // A character made now starts with the starters the program ships for its realm
+    // (user, 2026-10-12), not with whatever the characters before it had collected
+    // in the shared list. From 2026-10-06 it started with none, and a new player's
+    // GOTO pane came up empty.
     [Fact]
-    public void NewCharacter_DoesNotTakeTheSharedList()
+    public void NewCharacter_StartsWithTheBundledStarters_NotTheSharedList()
     {
         WriteSharedList((99, 9999, "someone else's"));
+        WriteStarters((1, 45, "Bank", "Silvermere"), (2, 10, "Trainer", null));
         new ProfileService().CreateProfile(_bbs, "Fresh");
 
         (ProfileService profile, FavoritesStore store) = LoadCharacter("Fresh");
 
-        Assert.Empty(store.All);
+        Assert.Equal(2, store.All.Count);
+        Assert.True(store.IsFavorite(new RoomKey(1, 45)));
+        Assert.Equal("Silvermere", store.FolderOf(new RoomKey(1, 45)));
+        Assert.False(store.IsFavorite(new RoomKey(99, 9999)));
         Assert.NotNull(profile.Current!.Favorites);   // it has its own list now
+    }
+
+    // The default profile takes them too, so a character saved from it has them.
+    [Fact]
+    public void DefaultProfile_StartsWithTheBundledStarters()
+    {
+        WriteStarters((1, 45, "Bank", null));
+        ProfileService profile = new();
+        FavoritesStore store = new(profile, new GameDataCache(), () => _setName, starterFile: _ => StarterFile);
+
+        profile.LoadBlank();
+
+        Assert.True(store.IsFavorite(new RoomKey(1, 45)));
+    }
+
+    // "Restore defaults": every starter the character has no favourite for comes
+    // back, one it deleted included. A room it bookmarked under its own label stays
+    // as it made it, and nothing of its own is removed.
+    [Fact]
+    public void AddStarters_AddsOnlyTheRoomsTheCharacterLacks_AndLeavesItsOwnAlone()
+    {
+        WriteStarters((1, 45, "Bank", "Silvermere"), (2, 10, "Trainer", null), (3, 7, "Healer", null));
+        new ProfileService().CreateProfile(_bbs, "Pruner");
+        (_, FavoritesStore store) = LoadCharacter("Pruner");
+        store.Remove(new RoomKey(2, 10));                        // a starter it deleted
+        store.Rename(new RoomKey(3, 7), "my healer");            // a starter it relabelled
+        store.Add(new RoomKey(50, 500), "my own");
+        Assert.Equal(1, store.MissingStarterCount);
+
+        Assert.Equal(1, store.AddStarters());
+
+        Assert.True(store.IsFavorite(new RoomKey(2, 10)));
+        Assert.Equal("my healer", store.All.Single(f => f.Map == 3 && f.Room == 7).Label);
+        Assert.True(store.IsFavorite(new RoomKey(50, 500)));
+        Assert.Equal(4, store.All.Count);
+        Assert.Equal(0, store.MissingStarterCount);
+        Assert.Equal(0, store.AddStarters());                    // nothing left to add
+
+        // And it is saved: the character reloads with them.
+        (_, FavoritesStore again) = LoadCharacter("Pruner");
+        Assert.Equal(4, again.All.Count);
+    }
+
+    // A character that was saved with an empty list while new characters started
+    // with none: the button is how it gets the starters.
+    [Fact]
+    public void AddStarters_FillsACharacterSavedWithAnEmptyList()
+    {
+        WriteStarters((1, 45, "Bank", null), (2, 10, "Trainer", null));
+        Directory.CreateDirectory(AppPaths.ProfileFolder(_bbs, "Empty"));
+        new ProfileService().CreateProfile(_bbs, "Empty", p => p.Favorites = new());
+        (_, FavoritesStore store) = LoadCharacter("Empty");
+        Assert.Empty(store.All);                                 // an empty list is a list: not seeded again
+
+        Assert.Equal(2, store.AddStarters());
+        Assert.Equal(2, store.All.Count);
     }
 
     // With no game data there is nothing to copy from yet: the list is left untaken

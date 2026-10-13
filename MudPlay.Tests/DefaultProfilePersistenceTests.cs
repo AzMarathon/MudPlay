@@ -5,36 +5,67 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// Pins the "default profile lives in the Global folder" behaviour: the persisted
-// default (LoadDefaultProfile) round-trips through Save, while the in-memory
-// scratch draft (LoadBlank) never writes. Both tests share the process-wide
+// Pins what the default profile is: the template in the Global folder that a new
+// character starts from, and never something a session writes. A session on it
+// (LoadDefaultProfile) or on a scratch draft (LoadBlank) is an unnamed draft whose
+// Save writes nothing; naming it is what keeps it. The tests share the process-wide
 // AppPaths.DefaultProfileFile, so they live in one class (xUnit runs a class's
 // tests serially) and each brackets itself with delete-before / delete-after.
 public sealed class DefaultProfilePersistenceTests
 {
+    // A player who never named a character used to have every save go into the
+    // template, so their setup became what each new character started from and
+    // they had no profile of their own (user, 2026-10-12). The template is not
+    // written from a session any more; that a save was wanted is remembered, so
+    // the client can ask before the draft is lost.
     [Fact]
-    public void LoadDefaultProfile_SaveThenReload_PersistsSettings()
+    public void LoadDefaultProfile_Save_WritesNothing_AndRemembersThereIsSomethingToKeep()
     {
+        string board = "defprof-test-" + Path.GetRandomFileName();
         DeleteDefaultProfileFile();
         try
         {
-            ProfileService writer = new();
-            writer.LoadDefaultProfile();          // absent file → fresh installed defaults
-            writer.Current!.Settings ??= new();
-            writer.Current.Settings["Probe"] =
-                JsonSerializer.SerializeToElement(new { Flag = true });
-            writer.Save();
+            ProfileService session = new();
+            session.LoadDefaultProfile();
+            Assert.False(session.UnnamedDraftHasChanges);       // nothing done yet
 
-            Assert.True(File.Exists(AppPaths.DefaultProfileFile),
-                "Save on the default profile should have written the Global default-profile file.");
+            session.Current!.Settings ??= new();
+            session.Current.Settings["Probe"] = JsonSerializer.SerializeToElement(new { Flag = true });
+            session.Save();
 
-            ProfileService reader = new();
-            reader.LoadDefaultProfile();          // now reads the file the writer produced
-            Assert.NotNull(reader.Current!.Settings);
-            Assert.True(reader.Current.Settings!.TryGetValue("Probe", out JsonElement probe));
-            Assert.True(probe.GetProperty("Flag").GetBoolean());
+            Assert.False(File.Exists(AppPaths.DefaultProfileFile));
+            Assert.True(session.UnnamedDraftHasChanges);
+
+            // Named, it is a character holding what was set up, and nothing is owed.
+            session.SaveAs(board, "Named");
+            Assert.False(session.UnnamedDraftHasChanges);
+            Assert.True(JsonStore.Load<Models.Profile.CharacterProfile>(
+                AppPaths.CharacterProfileFile(board, "Named"))!.Settings!.ContainsKey("Probe"));
+
+            // The next draft starts from the template as it was, not from that session.
+            ProfileService next = new();
+            next.LoadDefaultProfile();
+            Assert.False(next.Current!.Settings?.ContainsKey("Probe") == true);
         }
-        finally { DeleteDefaultProfileFile(); }
+        finally
+        {
+            DeleteDefaultProfileFile();
+            if (Directory.Exists(AppPaths.BbsFolder(board))) Directory.Delete(AppPaths.BbsFolder(board), recursive: true);
+        }
+    }
+
+    // Discarding is the user saying the draft need not be kept: nothing asks again.
+    [Fact]
+    public void DiscardingTheDraftsChanges_LeavesNothingToAskAbout()
+    {
+        ProfileService session = new();
+        session.LoadDefaultProfile();
+        session.Save();
+        Assert.True(session.UnnamedDraftHasChanges);
+
+        session.DiscardUnnamedDraftChanges();
+
+        Assert.False(session.UnnamedDraftHasChanges);
     }
 
     [Fact]
@@ -69,7 +100,7 @@ public sealed class DefaultProfilePersistenceTests
         {
             ProfileService writer = new();
             writer.LoadDefaultProfile();                       // default is Current
-            writer.WriteDefaultProfileStartupAnimation(false); // edits Current + Saves the Global file
+            writer.WriteDefaultProfileStartupAnimation(false); // edits Current, and writes the Global file itself
             Assert.False(writer.ReadDefaultProfileStartupAnimation()); // Current branch
 
             // A separate service with NO profile loaded reads the Global file — the
@@ -102,13 +133,14 @@ public sealed class DefaultProfilePersistenceTests
         DeleteDefaultProfileFile();
         try
         {
-            ProfileService writer = new();
-            writer.LoadDefaultProfile();
-            writer.Current!.HeldAtDisconnect = new Models.Profile.HeldAtDisconnect
+            // A template from when a session on the default profile was saved into it.
+            JsonStore.Save(AppPaths.DefaultProfileFile, new Models.Profile.CharacterProfile
             {
-                Items = { new Models.Profile.HeldItem("silver chalice", 1) },
-            };
-            writer.Save();
+                HeldAtDisconnect = new Models.Profile.HeldAtDisconnect
+                {
+                    Items = { new Models.Profile.HeldItem("silver chalice", 1) },
+                },
+            });
 
             new ProfileService().CreateProfile(board, "Newcomer");
 
@@ -122,8 +154,128 @@ public sealed class DefaultProfilePersistenceTests
         }
     }
 
+    // New profiles started with no GOTO favourites for a while, and a session on the
+    // default profile saved that empty list into the template. The template can't be
+    // changed now, so an empty list on it reads as "not taken": the draft, and a
+    // character made from it, take the starters. A list with something in it is kept.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TemplateWithAnEmptyFavouritesList_LeavesTheListForTheStartersToFill(bool templateHasFavourites)
+    {
+        string board = "defprof-test-" + Path.GetRandomFileName();
+        DeleteDefaultProfileFile();
+        try
+        {
+            JsonStore.Save(AppPaths.DefaultProfileFile, new Models.Profile.CharacterProfile
+            {
+                Favorites = templateHasFavourites
+                    ? new() { new Models.Profile.FavoriteRoom { Map = 1, Room = 45, Label = "Bank" } }
+                    : new(),
+                FavoriteFolders = new(),
+            });
+
+            ProfileService draft = new();
+            draft.LoadDefaultProfile();
+            new ProfileService().CreateProfile(board, "Newcomer");
+            Models.Profile.CharacterProfile made = JsonStore.Load<Models.Profile.CharacterProfile>(
+                AppPaths.CharacterProfileFile(board, "Newcomer"))!;
+
+            if (templateHasFavourites)
+            {
+                Assert.Single(draft.Current!.Favorites!);
+                Assert.Single(made.Favorites!);
+            }
+            else
+            {
+                Assert.Null(draft.Current!.Favorites);
+                Assert.Null(made.Favorites);
+            }
+        }
+        finally
+        {
+            DeleteDefaultProfileFile();
+            if (Directory.Exists(AppPaths.BbsFolder(board))) Directory.Delete(AppPaths.BbsFolder(board), recursive: true);
+        }
+    }
+
+    // The update that stops the default profile being written puts it back to the
+    // installed defaults, once (user, 2026-10-12). What it held is handed back, to
+    // be loaded as an unnamed draft that asks to be named; no copy is left on disk.
+    [Fact]
+    public void ResetDefaultProfileOnce_PutsItBackToInstalledDefaults_HandsBackWhatItHeld_AndRunsOnce()
+    {
+        DeleteDefaultProfileFile();
+        try
+        {
+            Models.Profile.CharacterProfile played = new()
+            {
+                Settings = new() { ["Probe"] = JsonSerializer.SerializeToElement(new { Flag = true }) },
+            };
+            JsonStore.Save(AppPaths.DefaultProfileFile, played);
+
+            ProfileService updated = new();
+            Models.Profile.CharacterProfile? held = updated.ResetDefaultProfileOnce();
+
+            Assert.NotNull(held);
+            Assert.True(held!.Settings!.ContainsKey("Probe"));
+            Assert.False(File.Exists(AppPaths.DefaultProfileFile));               // installed defaults: no file
+            Assert.True(File.Exists(AppPaths.DefaultProfileResetMarker));
+            Assert.Equal(new[] { Path.GetFileName(AppPaths.DefaultProfileResetMarker) },
+                Directory.GetFiles(Path.GetDirectoryName(AppPaths.DefaultProfileFile)!, "*default-profile*")
+                    .Select(Path.GetFileName));                                   // and no copy beside it
+
+            // Loaded as the unnamed draft: the setup is there, and it asks to be kept.
+            updated.LoadDraftFromBeforeTheReset(held);
+            Assert.Null(updated.CurrentProfileName);
+            Assert.True(updated.Current!.Settings!.ContainsKey("Probe"));
+            Assert.True(updated.UnnamedDraftHasChanges);
+
+            // A new draft is the installed defaults, and no later launch resets again.
+            ProfileService later = new();
+            later.LoadDefaultProfile();
+            Assert.False(later.Current!.Settings?.ContainsKey("Probe") == true);
+            JsonStore.Save(AppPaths.DefaultProfileFile, played);                  // (a hand edit, say)
+            Assert.Null(later.ResetDefaultProfileOnce());
+            Assert.True(File.Exists(AppPaths.DefaultProfileFile));
+        }
+        finally { DeleteDefaultProfileFile(); }
+    }
+
+    // The startup animation switch is the one install-wide setting kept in this file.
+    [Fact]
+    public void ResetDefaultProfileOnce_KeepsTheStartupAnimationSetting()
+    {
+        DeleteDefaultProfileFile();
+        try
+        {
+            ProfileService before = new();
+            before.WriteDefaultProfileStartupAnimation(false);
+
+            Assert.NotNull(new ProfileService().ResetDefaultProfileOnce());
+
+            Assert.False(new ProfileService().ReadDefaultProfileStartupAnimation());
+        }
+        finally { DeleteDefaultProfileFile(); }
+    }
+
+    // A fresh install has nothing to reset; it is marked done all the same.
+    [Fact]
+    public void ResetDefaultProfileOnce_OnAFreshInstall_ResetsNothing()
+    {
+        DeleteDefaultProfileFile();
+        try
+        {
+            Assert.Null(new ProfileService().ResetDefaultProfileOnce());
+            Assert.True(File.Exists(AppPaths.DefaultProfileResetMarker));
+        }
+        finally { DeleteDefaultProfileFile(); }
+    }
+
+    // The default profile's file, and what the one-time reset leaves beside it.
     private static void DeleteDefaultProfileFile()
     {
-        if (File.Exists(AppPaths.DefaultProfileFile)) File.Delete(AppPaths.DefaultProfileFile);
+        foreach (string file in new[] { AppPaths.DefaultProfileFile, AppPaths.DefaultProfileResetMarker })
+            if (File.Exists(file)) File.Delete(file);
     }
 }

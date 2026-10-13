@@ -504,6 +504,58 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         if (chosen is { } key) _favorites.Add(key);
     }
 
+    // "Restore defaults" on the Go To tab: the bundled starter GOTOs this character
+    // doesn't have, added back. Asked first, since on a list the user has pruned
+    // it can add hundreds.
+    [RelayCommand]
+    private async Task RestoreDefaultGotosAsync()
+    {
+        if (_favorites is null) return;
+        const string Title = "Restore default GOTOs";
+        int missing = _favorites.MissingStarterCount;
+        if (missing == 0)
+        {
+            await _confirm.ConfirmAsync(Title,
+                "This character already has every default GOTO for its game data (or no game data is loaded). "
+                + "There is nothing to add.", "OK");
+            return;
+        }
+        bool ok = await _confirm.ConfirmAsync(Title,
+            $"Add the {missing} default GOTO(s) this character doesn't have? "
+            + "Your own GOTOs and folders are kept as they are.", "Add them");
+        if (ok) _favorites.AddStarters();
+    }
+
+    // The same for the packaged loops. Loops belong to the game data, so what is
+    // put back is put back for every character on it.
+    [RelayCommand]
+    private async Task RestoreDefaultLoopsAsync()
+    {
+        const string Title = "Restore default loops";
+        int missing = _loops.SetName is { } loaded ? NavSeedBootstrapper.MissingLoopCount(loaded) : 0;
+        if (_loops.SetName is not { } set || missing == 0)
+        {
+            await _confirm.ConfirmAsync(Title,
+                "This game data already has every packaged loop (or no game data is loaded). "
+                + "There is nothing to put back.", "OK");
+            return;
+        }
+        bool ok = await _confirm.ConfirmAsync(Title,
+            $"Put back the {missing} packaged loop(s) that '{set}' no longer has? Loops are shared by every "
+            + "character on this game data. The loops that are there, edited or not, are kept as they are.",
+            "Put them back");
+        if (!ok) return;
+        try
+        {
+            NavSeedBootstrapper.RestoreLoops(set, _log);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log?.Warn("NavSeed", $"Restore defaults on set '{set}' stopped part-way: {ex.Message}");
+        }
+        _loops.TakeInOutsideChanges();
+    }
+
     // ----- Loop row commands -----------------------------------------
 
     // Open the existing LoopEditorDialogViewModel for the selected loop. The

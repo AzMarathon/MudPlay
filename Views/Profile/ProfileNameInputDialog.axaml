@@ -7,36 +7,45 @@
         x:Class="MudPlay.Views.Profile.ProfileNameInputDialog"
         x:DataType="vm:ProfileNameInputDialogViewModel"
         Title="Save profile as"
-        Width="380" Height="200"
+        Width="380" MinHeight="200" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
-        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="8">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="8">
 
             <TextBlock Grid.Row="0"
+                       Text="{Binding Note}"
+                       FontSize="11" TextWrapping="Wrap"
+                       Foreground="{StaticResource ChromeFgBrush}"
+                       IsVisible="{Binding HasNote}"/>
+
+            <TextBlock Grid.Row="1"
                        Text="Profile name"
                        Foreground="{StaticResource ChromeFgMutedBrush}"
                        FontSize="11"/>
 
-            <TextBox Grid.Row="1"
+            <TextBox Grid.Row="2"
                      Name="NameBox"
                      Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
-            <TextBlock Grid.Row="2"
+            <TextBlock Grid.Row="3"
                        Text="{Binding ErrorMessage}"
                        Foreground="#FFE06D6D" FontSize="11"
                        IsVisible="{Binding HasError}"/>
 
-            <TextBlock Grid.Row="3"
+            <TextBlock Grid.Row="4"
                        Text="A profile with this name already exists — saving will overwrite it."
                        Foreground="#FFE2C46D" FontSize="11" TextWrapping="Wrap"
                        VerticalAlignment="Top"
                        IsVisible="{Binding WillOverwrite}"/>
 
-            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
                 <Button Content="Save"   Command="{Binding SaveCommand}"
                         IsEnabled="{Binding CanSave}"
                         IsDefault="True" MinWidth="80"/>
+                <Button Content="Discard" Command="{Binding DiscardCommand}"
+                        IsVisible="{Binding OfferDiscard}" MinWidth="80"
+                        ToolTip.Tip="Don't keep what this unnamed profile holds."/>
                 <Button Content="Cancel" Command="{Binding CancelCommand}"
                         IsCancel="True"  MinWidth="80"/>
             </StackPanel>

@@ -10709,6 +10709,11 @@ public sealed class AppServices
             if (!Nullable.Equals(t.PreviousRoom?.Key, t.NewRoom?.Key)) HangupItems.OnRoomChanged();
         };
 
+        // Once, with the version that stopped the default profile being written: it
+        // goes back to the installed defaults. Ahead of the load below, which may be
+        // of that profile.
+        Models.Profile.CharacterProfile? defaultProfileBeforeReset = Profile.ResetDefaultProfileOnce();
+
         // Startup profile priority: a --profile launch argument wins over the
         // "Auto-load last profile" setting, which wins over a blank draft. The CLI
         // token is resolved here (not in Program.Main) because resolving a bare
@@ -10776,6 +10781,18 @@ public sealed class AppServices
                 Log.Warn("Startup", StartupOptions.ProfileNotice);
                 Profile.LoadDefaultProfile();
             }
+        }
+        // Coming up on the unnamed draft in the launch that reset the default
+        // profile: what it held is loaded as that draft, so whoever was playing on
+        // it finds their setup where it was and is asked to name it.
+        else if (defaultProfileBeforeReset is { } held)
+        {
+            Profile.LoadDraftFromBeforeTheReset(held);
+            StartupOptions.ProfileNotice =
+                "The default profile has been put back to the installed defaults, and can no longer be changed. "
+                + "What yours held is loaded here as an unnamed profile: Save (Ctrl+S) names it and keeps it as a "
+                + "character, and closing the client will ask. Discarded, it is gone.";
+            Log.Info("Startup", StartupOptions.ProfileNotice);
         }
         else
         {
