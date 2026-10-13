@@ -1234,6 +1234,86 @@ public sealed class StealthManagerTests
         Assert.False(h.State.IsHidden);
     }
 
+    // A solo character with Auto-Hide on sent `hid` in every room a walk or a loop
+    // took it through, ahead of the next step: each arrival was taken for being
+    // idle. An arrival, or the walk stopping, only starts a dwell now, and the hide
+    // goes out if the character is still there and at rest when it runs out.
+    private sealed class Dwell
+    {
+        public bool AtRest = true;
+        public List<Action> Timers { get; } = new();
+        public List<TimeSpan> Delays { get; } = new();
+
+        public void WireInto(StealthManager stealth) =>
+            stealth.SetHideDwell(() => AtRest, (delay, fire) => { Delays.Add(delay); Timers.Add(fire); });
+
+        public void RunOut()
+        {
+            Action[] due = Timers.ToArray();
+            Timers.Clear();
+            foreach (Action fire in due) fire();
+        }
+    }
+
+    [Fact]
+    public void AutoHide_WithADwell_AnArrivalHidesNothingUntilTheCharacterHasStoodStill()
+    {
+        using AutoHarness h = new() { AutoHideOn = true };
+        Dwell dwell = new();
+        dwell.WireInto(h.Stealth);
+
+        h.Stealth.NoteIdleOpportunity();
+
+        Assert.Empty(h.Sent);                               // not on arrival
+        Assert.True(h.Stealth.AutoHideWaitingOutTheDwell);
+        Assert.Equal(StealthManager.HideDwell, Assert.Single(dwell.Delays));
+
+        dwell.RunOut();                                     // still here, nothing walking it
+
+        Assert.Equal("hid", h.LastSent());
+        Assert.False(h.Stealth.AutoHideWaitingOutTheDwell);
+    }
+
+    [Fact]
+    public void AutoHide_WithADwell_ARoomPassedThroughIsNotHiddenIn()
+    {
+        using AutoHarness h = new() { AutoHideOn = true };
+        Dwell dwell = new();
+        dwell.WireInto(h.Stealth);
+
+        // A walk through three rooms: each arrival replaces the one before, and the
+        // walk is still running when the first two dwells run out.
+        h.Stealth.NoteIdleOpportunity();
+        h.Stealth.NoteIdleOpportunity();
+        dwell.AtRest = false;
+        h.Stealth.NoteIdleOpportunity();
+        dwell.RunOut();
+
+        Assert.Empty(h.Sent);
+
+        // The walk stops in the third room: that is an opportunity of its own.
+        dwell.AtRest = true;
+        h.Stealth.NoteIdleOpportunity();
+        dwell.RunOut();
+
+        Assert.Single(h.Sent);
+        Assert.Equal("hid", h.LastSent());
+    }
+
+    [Fact]
+    public void AutoHide_WithADwell_SwitchedOffMeanwhile_SendsNothing()
+    {
+        using AutoHarness h = new() { AutoHideOn = true };
+        Dwell dwell = new();
+        dwell.WireInto(h.Stealth);
+        h.Stealth.NoteIdleOpportunity();
+
+        h.AutoHideOn = false;
+        dwell.RunOut();
+
+        Assert.Empty(h.Sent);
+    }
+
     [Fact]
     public void AutoHide_NoteIdle_SendsHide()
     {

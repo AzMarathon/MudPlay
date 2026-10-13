@@ -957,14 +957,64 @@ public sealed class StealthManager : IDisposable
         return true;
     }
 
-    // Called when the player goes idle (e.g. enters a safe room and the walker
-    // stops). Drives the auto-hide engine. Wire from AppServices on whatever
-    // "idle" signal is appropriate — for v1, fire it from the same
-    // RoomTracker.StateChanged hook as auto-sneak; hide is silent on failure and
-    // the server rate-limits attempts.
+    // How long the character has to have stood where it is, with nothing walking it,
+    // before auto-hide takes it for idle. MudPlay's own figure: long enough that a
+    // step typed by hand, or an engine's hold of a second or two, is not a stop.
+    public static readonly TimeSpan HideDwell = TimeSpan.FromSeconds(3);
+
+    private Func<bool>? _isAtRest;
+    private Action<TimeSpan, Action>? _hideAfter;
+    private int _hideOpportunity;
+
+    // True between an opportunity to hide and its dwell running out.
+    public bool AutoHideWaitingOutTheDwell { get; private set; }
+
+    // What "idle" is to auto-hide. isAtRest: nothing is walking the character (no
+    // walk, loop or Auto-Lair is running) and no move of its own is unanswered.
+    // hideAfter: a one-shot timer. Until wired, an opportunity hides at once.
+    public void SetHideDwell(Func<bool> isAtRest, Action<TimeSpan, Action> hideAfter)
+    {
+        ArgumentNullException.ThrowIfNull(isAtRest);
+        ArgumentNullException.ThrowIfNull(hideAfter);
+        _isAtRest = isAtRest;
+        _hideAfter = hideAfter;
+    }
+
+    // A moment auto-hide may have become due: the character arrived in a room, or
+    // whatever was walking it stopped or was held.
+    //
+    // It hid on every arrival, which with a walk or a loop running was a `hid` in
+    // each room it passed through, sent ahead of the next step (seen on a solo
+    // character; in a party auto-hide is off, which hid the fault). So an
+    // opportunity only starts the dwell: the hide goes out if, HideDwell later, the
+    // character is in the same room and at rest. Each new opportunity (the next
+    // room, the next stop) replaces the one before.
     public void NoteIdleOpportunity()
     {
         if (_isAutoHideEnabled?.Invoke() != true) return;
+        if (_isAtRest is null || _hideAfter is null)
+        {
+            TryAutoHide();
+            return;
+        }
+        int opportunity = ++_hideOpportunity;
+        AutoHideWaitingOutTheDwell = true;
+        _hideAfter(HideDwell, () =>
+        {
+            if (_disposed || opportunity != _hideOpportunity) return;
+            AutoHideWaitingOutTheDwell = false;
+            if (_isAutoHideEnabled?.Invoke() != true) return;
+            if (!_isAtRest())
+            {
+                _log?.Debug(LogCategory, "auto-hide: still on the move after the dwell; waiting for the next stop");
+                return;
+            }
+            TryAutoHide();
+        });
+    }
+
+    private void TryAutoHide()
+    {
         if (_state.InCombat) return;
         // Already hidden, or a hid is in flight waiting on the ambiguous
         // "Attempting to hide..." line — don't stack another attempt.

@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.23**
-> - New characters and the default profile start with the starter GOTOs for their game data again
-> - Navigation Management: **Restore defaults** on the Go To tab adds the starter GOTOs a character doesn't have, and on the Loops tab puts back the packaged loops the game data no longer has; your own are left as they are
-> - **Save** on an unnamed profile asks for a name and saves it as a character; the default profile can no longer be changed from the client
-> - Closing the client, or loading another profile, with an unnamed profile you set something up on asks first: name it, discard it, or stay
-> - Updating puts an existing default profile back to the installed defaults, once; if that launch starts on the unnamed profile, what it held is loaded there to be named
+> **Version 3.180.24**
+> - Auto-Hide hides only once you have stood still for three seconds with nothing walking you; a walk or loop no longer sends `hid` in every room it passes through
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
