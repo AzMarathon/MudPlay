@@ -1073,6 +1073,10 @@ public static class BugReportBuilder
         // engaging a monster in the room (combat stands down while true).
         Kv(sb, "ShadowRest holding", svc.Health.ShadowRestHolding.ToString());
         Kv(sb, "Sneak-cooldown hold", svc.Stealth.IsHoldingForSneakCooldown.ToString());
+        // Auto-hide hides only a character that has stood still for the dwell.
+        Kv(sb, "Auto-hide", svc.Stealth.AutoHideWaitingOutTheDwell
+            ? $"an opportunity is waiting out the {Game.Stealth.StealthManager.HideDwell.TotalSeconds:0} s dwell"
+            : "no hide pending");
         Game.Stealth.CarriedStealthPenalty.Verdict carried = svc.CarriedStealth.Current();
         Kv(sb, "Auto-Sneak stood down for a carried item", svc.Stealth.StoodDownFor ?? "no");
         Kv(sb, "Carried Stealth penalty", carried.Modifier >= 0

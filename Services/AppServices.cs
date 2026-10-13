@@ -6150,8 +6150,9 @@ public sealed class AppServices
             if (ReferenceEquals(t.PreviousRoom, t.NewRoom)) return;
             if (t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;
             Stealth.NoteRoomChanged();
-            // Same hook drives the idle-hide opportunity for v1.
-            // Refine when a dedicated walker-idle signal lands.
+            // An arrival is a chance to hide, taken only if the character is still
+            // here and at rest once StealthManager.HideDwell has passed. The other
+            // chance, whatever was walking it stopping, is wired with the dwell below.
             Stealth.NoteIdleOpportunity();
         };
 
@@ -9122,6 +9123,32 @@ public sealed class AppServices
         MovementControl.Stopping += DeathRecovery.DropDeferredSweep;
 
         // Gear driven by movement + room, for the While Moving / Bossing sets. Both
+        // Auto-hide hides a character that has come to rest, not one being walked:
+        // at rest is no walk, loop or Auto-Lair running (held for a rest or a lair
+        // wait counts as stopped) and no move of ours still unanswered. Whatever was
+        // walking it stopping is a chance to hide, as an arrival is.
+        //
+        // Nor one with a fight on or about to start. "In combat" comes up only when
+        // the game answers the attack, so a `hid` went out between our attack and its
+        // *Combat Engaged*, to be refused (GAME_MECHANICS "Hiding — sneak vs hide,
+        // the hide state machine, and search reveals"). The combat gate is up from
+        // the room's roster and the engine's target from the attack, both before that.
+        //
+        // Nor one sharing the room with a monster that could attack: the game
+        // refuses that hide on both realms, whether or not we fight it (same topic;
+        // user, 2026-10-12). Told off the room's hostiles with Auto-Combat on or off.
+        Stealth.SetHideDwell(
+            isAtRest: () => MovementControl.State != Game.Map.MovementEngineState.Running
+                            && RoomTracker.State.Confidence != Game.Map.RoomConfidence.Pending
+                            && !MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.CombatGate)
+                            && Combat.CurrentTarget is null && Combat.CastingSpellTarget is null
+                            && !CombatTracker.HasHostileMonster,
+            hideAfter: (delay, action) => ScheduleOnce(delay, action));
+        MovementControl.StateChanged += () =>
+        {
+            if (MovementControl.State != Game.Map.MovementEngineState.Running) Stealth.NoteIdleOpportunity();
+        };
+
         // no-op unless the user enabled + filled the set (AutoEquipCoordinator guards).
         // The coalesced run-state drives the movement set: Running = travelling (a
         // pause for combat/rest is Paused, not Idle, so those keep their own gear);
