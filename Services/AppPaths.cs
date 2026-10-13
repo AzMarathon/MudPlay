@@ -54,11 +54,11 @@ public static class AppPaths
     // Global-tier settings file (one per install).
     public static string GlobalSettingsFile { get; }
 
-    // The "default profile" — a full CharacterProfile persisted in the Global
-    // folder, loaded on startup / File → New when no named character is chosen.
-    // Its settings are the install-wide defaults (what loads before any profile),
-    // and File → Save As copies it into named profiles, so a new character starts
-    // from these defaults. Distinct from GlobalSettingsFile (the settings tier).
+    // The "default profile" — a full CharacterProfile in the Global folder, loaded
+    // on startup / New when no named character is chosen, and the template a new
+    // character starts from. A session never writes it (ProfileService.Save): the
+    // one thing the program still changes in it is the startup-animation setting.
+    // Distinct from GlobalSettingsFile (the settings tier).
     public static string DefaultProfileFile { get; }
 
     // BBS-tier files (one per BBS).

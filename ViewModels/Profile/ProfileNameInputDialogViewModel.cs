@@ -34,10 +34,33 @@ public sealed partial class ProfileNameInputDialogViewModel : ObservableObject, 
 
     public bool CanSave => !HasError && NormalizedName.Length > 0;
 
-    public ProfileNameInputDialogViewModel(string suggestedName, Func<string, bool> exists)
+    // A line above the box saying why a name is being asked for, when the user
+    // didn't ask to name anything (a plain Save on the default profile).
+    public string? Note { get; }
+
+    public bool HasNote => !string.IsNullOrEmpty(Note);
+
+    // A third way out, "Discard", for when the name is asked for because what the
+    // unnamed draft holds is about to be lost. The dialog still returns no name;
+    // Discarded tells that apart from backing out with Cancel.
+    public bool OfferDiscard { get; }
+
+    public bool Discarded { get; private set; }
+
+    public ProfileNameInputDialogViewModel(string suggestedName, Func<string, bool> exists, string? note = null,
+        bool offerDiscard = false)
     {
         _exists = exists;
         Name    = suggestedName;
+        Note    = note;
+        OfferDiscard = offerDiscard;
+    }
+
+    [RelayCommand]
+    private void Discard()
+    {
+        Discarded = true;
+        CloseRequested?.Invoke(null);
     }
 
     [RelayCommand]

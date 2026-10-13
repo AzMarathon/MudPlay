@@ -25,9 +25,9 @@ namespace MudPlay.ViewModels;
 public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposable
 {
     private readonly Func<bool> _isDisconnected;
-    private readonly Action<ProfileRef> _swapToProfile;
-    private readonly Action<string?> _newProfile;
-    private readonly Action _saveCurrent;
+    private readonly Func<ProfileRef, Task> _swapToProfile;
+    private readonly Func<string?, Task> _newProfile;
+    private readonly Func<string?, Task> _saveCurrent;
     private readonly Func<string?, Task> _saveCurrentAs;
     private readonly Action<string, string?> _editBbsSettings;
     private readonly RealmCatalog _realms;
@@ -100,9 +100,9 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
 
     public ProfileManagerViewModel(
         Func<bool> isDisconnected,
-        Action<ProfileRef> swapToProfile,
-        Action<string?> newProfile,
-        Action saveCurrent,
+        Func<ProfileRef, Task> swapToProfile,
+        Func<string?, Task> newProfile,
+        Func<string?, Task> saveCurrent,
         Func<string?, Task> saveCurrentAs,
         Action<string, string?> editBbsSettings)
     {
@@ -191,8 +191,8 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
             ? "No character loaded"
             : _profile.CurrentProfileName is null
                 ? (_profile.CurrentBbsName is { } draftBbs
-                    ? $"{{default}} on {draftBbs} — Save updates the default template, Save As names it"
-                    : "{default} — Use Save to update the default profile template")
+                    ? $"{{default}} on {draftBbs} — not a character yet: nothing is kept until Save names it"
+                    : "{default} — not a character yet: nothing is kept until Save names it")
                 : $"{_profile.CurrentBbsName} / {_profile.CurrentProfileName}";
 
     private void ReloadBbses()
@@ -599,7 +599,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     //     selection opens in its own new client, instead of the jarring
     //     disconnect → swap → reconnect the old flow would force.
     [RelayCommand]
-    private void Load()
+    private async Task LoadAsync()
     {
         List<ProfileManagerRow> targets = SelectedProfiles.Count > 0
             ? SelectedProfiles.OrderBy(r => Profiles.IndexOf(r)).ToList()
@@ -615,7 +615,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
             // Idle client: the first selection loads here (already loaded → no-op),
             // the rest open new.
             ProfileManagerRow first = targets[0];
-            if (!first.IsCurrent) _swapToProfile(first.Ref);
+            if (!first.IsCurrent) await _swapToProfile(first.Ref);
             if (targets.Count > 1) LaunchNewClients(targets.Skip(1).ToList());
         }
         CloseRequested?.Invoke();
@@ -693,19 +693,21 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     // ----- Current-profile lifecycle (the collapsed File-menu actions) ----
 
     [RelayCommand]
-    private void NewCurrent()
+    private async Task NewCurrentAsync()
     {
         if (!EnsureDisconnected("start a new character")) return;
         // The draft lands on the BBS picked here, not the first one on disk.
-        _newProfile(SelectedBbs);
+        await _newProfile(SelectedBbs);
         RefreshAfterCurrentChange();
     }
 
+    // On the default draft this asks for a name, under the BBS selected here, and
+    // the list gains a character.
     [RelayCommand]
-    private void SaveCurrent()
+    private async Task SaveCurrentAsync()
     {
-        _saveCurrent();
-        RefreshCurrentLabel();
+        await _saveCurrent(SelectedBbs);
+        RefreshAfterCurrentChange();
     }
 
     [RelayCommand]
