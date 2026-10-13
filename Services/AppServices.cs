@@ -9127,9 +9127,17 @@ public sealed class AppServices
         // at rest is no walk, loop or Auto-Lair running (held for a rest or a lair
         // wait counts as stopped) and no move of ours still unanswered. Whatever was
         // walking it stopping is a chance to hide, as an arrival is.
+        //
+        // Nor one with a fight on or about to start. "In combat" comes up only when
+        // the game answers the attack, so a `hid` went out between our attack and its
+        // *Combat Engaged*, to be refused (GAME_MECHANICS "Hiding — sneak vs hide,
+        // the hide state machine, and search reveals"). The combat gate is up from
+        // the room's roster and the engine's target from the attack, both before that.
         Stealth.SetHideDwell(
             isAtRest: () => MovementControl.State != Game.Map.MovementEngineState.Running
-                            && RoomTracker.State.Confidence != Game.Map.RoomConfidence.Pending,
+                            && RoomTracker.State.Confidence != Game.Map.RoomConfidence.Pending
+                            && !MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.CombatGate)
+                            && Combat.CurrentTarget is null && Combat.CastingSpellTarget is null,
             hideAfter: (delay, action) => ScheduleOnce(delay, action));
         MovementControl.StateChanged += () =>
         {

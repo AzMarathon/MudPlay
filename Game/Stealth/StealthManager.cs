@@ -970,8 +970,9 @@ public sealed class StealthManager : IDisposable
     public bool AutoHideWaitingOutTheDwell { get; private set; }
 
     // What "idle" is to auto-hide. isAtRest: nothing is walking the character (no
-    // walk, loop or Auto-Lair is running) and no move of its own is unanswered.
-    // hideAfter: a one-shot timer. Until wired, an opportunity hides at once.
+    // walk, loop or Auto-Lair is running), no move of its own is unanswered, and no
+    // fight is on or about to start. hideAfter: a one-shot timer. Until wired, an
+    // opportunity hides at once.
     public void SetHideDwell(Func<bool> isAtRest, Action<TimeSpan, Action> hideAfter)
     {
         ArgumentNullException.ThrowIfNull(isAtRest);

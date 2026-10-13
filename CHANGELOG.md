@@ -2,7 +2,7 @@
 
 ## 3.180.24
 
-- Auto-Hide hides only once you have stood still for three seconds with nothing walking you; a walk or loop no longer sends `hid` in every room it passes through
+- Auto-Hide hides only once you have stood still for three seconds with nothing walking you; a walk or loop no longer sends `hid` in every room it passes through, nor as a fight opens
 
 ## 3.180.23
 
