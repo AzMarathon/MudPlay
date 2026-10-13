@@ -173,4 +173,60 @@ public sealed class NavSeedBootstrapperTests : IDisposable
         Apply();
         Assert.False(File.Exists(Path.Combine(LoopsDest, "Zone", "A.loop")));
     }
+
+    // ----- Restore defaults (asked for by hand) -------------------------
+
+    private string BundleLoops => Path.Combine(Bundle, "Loops");
+
+    // The pass that runs by itself never brings a deleted loop back; the button does,
+    // and the pass after it still doesn't undo or double anything.
+    [Fact]
+    public void RestoreLoops_PutsBackWhatWasDeleted_AndLeavesTheRestAsItIs()
+    {
+        BundleLoop("Zone/A.loop");
+        BundleLoop("Zone/B.loop");
+        Apply();
+        File.Delete(Path.Combine(LoopsDest, "Zone", "A.loop"));               // deleted
+        File.WriteAllText(Path.Combine(LoopsDest, "Zone", "B.loop"), "edited by the user");
+        File.WriteAllText(Path.Combine(LoopsDest, "Mine.loop"), "the user's own");
+
+        Assert.Equal(new[] { Path.Combine("Zone", "A.loop") }, NavSeedBootstrapper.MissingLoops(BundleLoops, LoopsDest));
+        Assert.Equal(1, NavSeedBootstrapper.RestoreLoops(BundleLoops, LoopsDest));
+
+        Assert.Equal("loop-body", File.ReadAllText(Path.Combine(LoopsDest, "Zone", "A.loop")));
+        Assert.Equal("edited by the user", File.ReadAllText(Path.Combine(LoopsDest, "Zone", "B.loop")));
+        Assert.Equal("the user's own", File.ReadAllText(Path.Combine(LoopsDest, "Mine.loop")));
+        Assert.Equal(0, NavSeedBootstrapper.RestoreLoops(BundleLoops, LoopsDest));   // nothing left
+
+        Apply();                                                              // the next activate
+        Assert.Empty(Directory.GetFiles(LoopsDest, "*.bak", SearchOption.AllDirectories));
+        Assert.Equal(3, Directory.GetFiles(LoopsDest, "*.loop", SearchOption.AllDirectories).Length);
+    }
+
+    // A packaged loop the user moved to a folder of their own is still theirs: the
+    // bundle's copy is not put beside it, which would list the loop twice.
+    [Fact]
+    public void RestoreLoops_LeavesALoopTheUserMovedToAnotherFolder()
+    {
+        BundleLoop("Zone/A.loop");
+        Apply();
+        Directory.CreateDirectory(Path.Combine(LoopsDest, "Favourites"));
+        File.Move(Path.Combine(LoopsDest, "Zone", "A.loop"), Path.Combine(LoopsDest, "Favourites", "A.loop"));
+
+        Assert.Empty(NavSeedBootstrapper.MissingLoops(BundleLoops, LoopsDest));
+        Assert.Equal(0, NavSeedBootstrapper.RestoreLoops(BundleLoops, LoopsDest));
+        Assert.False(File.Exists(Path.Combine(LoopsDest, "Zone", "A.loop")));
+    }
+
+    // A set that was never seeded (no Loops folder at all) gets the whole bundle.
+    [Fact]
+    public void RestoreLoops_OnASetWithNoLoopsFolder_CopiesEveryPackagedLoop()
+    {
+        BundleLoop("Zone/A.loop");
+        BundleLoop("B.loop");
+
+        Assert.Equal(2, NavSeedBootstrapper.RestoreLoops(BundleLoops, LoopsDest));
+        Assert.True(File.Exists(Path.Combine(LoopsDest, "Zone", "A.loop")));
+        Assert.True(File.Exists(Path.Combine(LoopsDest, "B.loop")));
+    }
 }

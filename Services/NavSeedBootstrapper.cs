@@ -105,6 +105,65 @@ public static class NavSeedBootstrapper
         }
     }
 
+    // "Restore defaults", asked for by hand: how many bundled loops the set has no
+    // file for, and putting them back. The ledger's "a deleted loop stays deleted"
+    // is for the pass that runs by itself on every activate; here the user is the
+    // one asking. A loop that is there is left as it is, edited or not, and so is
+    // one moved to another folder (told by its file name, at a path the bundle
+    // doesn't use): putting the bundle's copy beside it would list the loop twice.
+    public static int MissingLoopCount(string setName) =>
+        string.IsNullOrWhiteSpace(setName) ? 0
+            : MissingLoops(BundledLoops(setName), AppPaths.GameDataSetLoopsFolder(setName)).Count;
+
+    public static int RestoreLoops(string setName, LogService? log = null)
+    {
+        if (string.IsNullOrWhiteSpace(setName)) return 0;
+        int restored = RestoreLoops(BundledLoops(setName), AppPaths.GameDataSetLoopsFolder(setName));
+        log?.Log(LogSeverity.Info, "NavSeed",
+            $"Restore defaults on set '{setName}' ({GameDataRealm.Resolve(setName)}): {restored} packaged loop(s) put back.");
+        return restored;
+    }
+
+    private static string BundledLoops(string setName) =>
+        Path.Combine(AppPaths.BundledNavSeedDir(GameDataRealm.Resolve(setName)), "Loops");
+
+    // The path-resolved core (public for tests, as Apply is).
+    public static int RestoreLoops(string srcLoops, string dstLoops)
+    {
+        List<string> missing = MissingLoops(srcLoops, dstLoops);
+        foreach (string rel in missing)
+        {
+            string target = Path.Combine(dstLoops, rel);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(Path.Combine(srcLoops, rel), target);
+        }
+        return missing.Count;
+    }
+
+    // Relative paths, in the bundle's own separators.
+    public static List<string> MissingLoops(string srcLoops, string dstLoops)
+    {
+        List<string> missing = new();
+        if (!Directory.Exists(srcLoops)) return missing;
+        List<string> bundled = Directory.EnumerateFiles(srcLoops, "*.loop", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(srcLoops, file))
+            .ToList();
+
+        HashSet<string> movedNames = new(StringComparer.OrdinalIgnoreCase);
+        if (Directory.Exists(dstLoops))
+        {
+            HashSet<string> bundledPaths = new(bundled, StringComparer.OrdinalIgnoreCase);
+            foreach (string file in Directory.EnumerateFiles(dstLoops, "*.loop", SearchOption.AllDirectories))
+                if (!bundledPaths.Contains(Path.GetRelativePath(dstLoops, file)))
+                    movedNames.Add(Path.GetFileName(file));
+        }
+
+        foreach (string rel in bundled)
+            if (!File.Exists(Path.Combine(dstLoops, rel)) && !movedNames.Contains(Path.GetFileName(rel)))
+                missing.Add(rel);
+        return missing;
+    }
+
     // Copy each bundled *.loop whose relative path isn't already in the ledger into
     // dst (preserving the sub-folder tree, NEVER overwriting an existing file), and
     // record it as offered. A loop already in the ledger is skipped — deletions stay

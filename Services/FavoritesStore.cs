@@ -13,8 +13,11 @@ namespace MudPlay.Services;
 //
 // A profile takes its list the first time it loads (Favorites is null until then):
 // a character from before the move takes a copy of the list its game data carried,
-// which needs its game-data set, so one loaded with none waits for it. A character
-// made since, or the default profile, starts with no favourites (user, 2026-10-06).
+// and a character made since, or the default profile, takes the bundled starters
+// for its realm (user, 2026-10-12; from 2026-10-06 until then it started with
+// none, and a new player's GOTO pane came up empty). Either needs the profile's
+// game-data set, so a profile loaded with none waits for one. AddStarters puts
+// the starters back for a character that has lost or never had them.
 //
 // Singleton in AppServices. Consumers (Navigation view-model) subscribe to
 // Changed for refresh; the store doesn't push a sorted view itself — sort order
@@ -31,6 +34,7 @@ public sealed class FavoritesStore
 
     private readonly ProfileService _profile;
     private readonly Func<string?> _profileSet;
+    private readonly Func<string, string> _starterFile;
     private readonly LogService? _log;
     private readonly Dictionary<RoomKey, FavoriteRoom> _favorites = new();
 
@@ -38,15 +42,18 @@ public sealed class FavoritesStore
     private readonly HashSet<string> _emptyFolders = new(StringComparer.OrdinalIgnoreCase);
 
     // profileSet names the game-data set the loaded profile runs on (its realm's,
-    // else the default), which is where a first list is copied from.
+    // else the default), which is where a first list is copied from. starterFile
+    // gives the file of bundled starters for a set; left out, it is the one the
+    // program ships for the set's realm.
     public FavoritesStore(ProfileService profile, GameDataCache cache, Func<string?> profileSet,
-        LogService? log = null)
+        LogService? log = null, Func<string, string>? starterFile = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(profileSet);
         _profile = profile;
         _profileSet = profileSet;
+        _starterFile = starterFile ?? BundledStarterFile;
         _log = log;
 
         _profile.ProfileLoaded += Hydrate;
@@ -308,27 +315,76 @@ public sealed class FavoritesStore
     private void TakeFirstList(CharacterProfile profile)
     {
         bool shared = profile.PredatesOwnLists && _profile.CurrentProfileName is not null;
-        if (!shared)
-        {
-            profile.Favorites = new List<FavoriteRoom>();
-            profile.FavoriteFolders = new List<string>();
-            return;
-        }
         if (_profileSet() is not { Length: > 0 } set) return;
 
-        string source = AppPaths.GameDataSetFavoritesFile(set);
-        FavoritesFile? file = null;
-        try { file = JsonStore.Load<FavoritesFile>(source); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
-        {
-            // Unreadable — start empty rather than fail the load.
-            _log?.Warn("Favorites", $"couldn't read '{source}' for a first list ({ex.Message}); starting empty");
-        }
-
+        FavoritesFile? file = ReadList(shared ? AppPaths.GameDataSetFavoritesFile(set) : _starterFile(set));
         profile.Favorites = file?.Favorites ?? new List<FavoriteRoom>();
         profile.FavoriteFolders = file?.FavoriteFolders ?? new List<string>();
-        _log?.Info("Favorites",
-            $"took a copy of the {profile.Favorites.Count} favourite(s) shared on game data '{set}'");
+        _log?.Info("Favorites", shared
+            ? $"took a copy of the {profile.Favorites.Count} favourite(s) shared on game data '{set}'"
+            : $"started with the {profile.Favorites.Count} bundled favourite(s) for game data '{set}'");
+    }
+
+    // ----- The bundled starters ------------------------------------------
+
+    private static string BundledStarterFile(string set) =>
+        Path.Combine(AppPaths.BundledNavSeedDir(GameDataRealm.Resolve(set)), "Favorites.json");
+
+    // A favourites file, or null when it is not there or can't be read: the caller
+    // starts empty rather than fail the load.
+    private FavoritesFile? ReadList(string source)
+    {
+        try { return JsonStore.Load<FavoritesFile>(source); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
+                                       or System.Text.Json.JsonException)
+        {
+            _log?.Warn("Favorites", $"couldn't read '{source}' ({ex.Message}); taken as empty");
+            return null;
+        }
+    }
+
+    // The bundled starters this character has no favourite for, by room: a room
+    // it bookmarked under its own label or folder is its own and is not doubled.
+    private List<FavoriteRoom> MissingStarters()
+    {
+        if (_profile.Current is null || _profileSet() is not { Length: > 0 } set) return [];
+        return (ReadList(_starterFile(set))?.Favorites ?? [])
+            .Where(f => !_favorites.ContainsKey(new RoomKey(f.Map, f.Room)))
+            .DistinctBy(f => new RoomKey(f.Map, f.Room))
+            .ToList();
+    }
+
+    // How many favourites AddStarters would add now.
+    public int MissingStarterCount => MissingStarters().Count;
+
+    // Put back every bundled starter this character lacks, with its label and
+    // folder. Nothing it has is changed or removed. Returns how many were added.
+    public int AddStarters()
+    {
+        List<FavoriteRoom> missing = MissingStarters();
+        if (missing.Count == 0) return 0;
+        foreach (FavoriteRoom f in missing)
+        {
+            string folder = NavFolders.Normalize(f.Folder);
+            _favorites[new RoomKey(f.Map, f.Room)] =
+                new FavoriteRoom(f.Map, f.Room, f.Label, folder.Length == 0 ? null : folder);
+            if (folder.Length != 0) _emptyFolders.Remove(folder);
+        }
+        // The folders the starters come with that hold nothing: the tree the bundle
+        // lays out, as a new character gets it.
+        if (_profileSet() is { Length: > 0 } set)
+        {
+            HashSet<string> have = new(AllFolders, StringComparer.OrdinalIgnoreCase);
+            foreach (string raw in ReadList(_starterFile(set))?.FavoriteFolders ?? [])
+            {
+                string folder = NavFolders.Normalize(raw);
+                if (folder.Length != 0 && have.Add(folder)) _emptyFolders.Add(folder);
+            }
+        }
+        Persist();
+        _log?.Info("Favorites", $"added {missing.Count} bundled favourite(s) the character did not have");
+        Changed?.Invoke();
+        return missing.Count;
     }
 }
 
