@@ -200,10 +200,10 @@ public sealed class DefaultProfilePersistenceTests
     }
 
     // The update that stops the default profile being written puts it back to the
-    // installed defaults, once (user, 2026-10-12). What it held is kept as a file
-    // and handed back, to be loaded as an unnamed draft that asks to be named.
+    // installed defaults, once (user, 2026-10-12). What it held is handed back, to
+    // be loaded as an unnamed draft that asks to be named; no copy is left on disk.
     [Fact]
-    public void ResetDefaultProfileOnce_PutsItBackToInstalledDefaults_KeepsWhatItHeld_AndRunsOnce()
+    public void ResetDefaultProfileOnce_PutsItBackToInstalledDefaults_HandsBackWhatItHeld_AndRunsOnce()
     {
         DeleteDefaultProfileFile();
         try
@@ -220,8 +220,10 @@ public sealed class DefaultProfilePersistenceTests
             Assert.NotNull(held);
             Assert.True(held!.Settings!.ContainsKey("Probe"));
             Assert.False(File.Exists(AppPaths.DefaultProfileFile));               // installed defaults: no file
-            Assert.True(File.Exists(AppPaths.DefaultProfileBeforeResetFile));     // the copy
             Assert.True(File.Exists(AppPaths.DefaultProfileResetMarker));
+            Assert.Equal(new[] { Path.GetFileName(AppPaths.DefaultProfileResetMarker) },
+                Directory.GetFiles(Path.GetDirectoryName(AppPaths.DefaultProfileFile)!, "*default-profile*")
+                    .Select(Path.GetFileName));                                   // and no copy beside it
 
             // Loaded as the unnamed draft: the setup is there, and it asks to be kept.
             updated.LoadDraftFromBeforeTheReset(held);
@@ -266,7 +268,6 @@ public sealed class DefaultProfilePersistenceTests
         {
             Assert.Null(new ProfileService().ResetDefaultProfileOnce());
             Assert.True(File.Exists(AppPaths.DefaultProfileResetMarker));
-            Assert.False(File.Exists(AppPaths.DefaultProfileBeforeResetFile));
         }
         finally { DeleteDefaultProfileFile(); }
     }
@@ -274,10 +275,7 @@ public sealed class DefaultProfilePersistenceTests
     // The default profile's file, and what the one-time reset leaves beside it.
     private static void DeleteDefaultProfileFile()
     {
-        foreach (string file in new[]
-                 {
-                     AppPaths.DefaultProfileFile, AppPaths.DefaultProfileBeforeResetFile, AppPaths.DefaultProfileResetMarker,
-                 })
+        foreach (string file in new[] { AppPaths.DefaultProfileFile, AppPaths.DefaultProfileResetMarker })
             if (File.Exists(file)) File.Delete(file);
     }
 }

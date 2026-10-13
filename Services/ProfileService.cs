@@ -382,12 +382,13 @@ public sealed class ProfileService
     // saved: for someone who never named a character, their whole setup. The update
     // that stops it being written also puts it back to the installed defaults, once
     // (user, 2026-10-12: "returns existing defaults back to the actual defaults when
-    // they update to this"). What it held is kept beside it as
-    // AppPaths.DefaultProfileBeforeResetFile and handed back, so the launch that
-    // did the reset can load it as an unnamed draft with something to keep
-    // (LoadDraftFromBeforeTheReset): nobody's setup is lost, it only has to be
-    // named. The startup-animation setting, which lives in this file, is carried
-    // over. Null when there was nothing to reset, or it was done before.
+    // they update to this"). What it held is handed back, so the launch that did
+    // the reset can load it as an unnamed draft with something to keep
+    // (LoadDraftFromBeforeTheReset): whoever was playing on it finds their setup
+    // where it was, and it only has to be named. No copy is kept on disk (user,
+    // 2026-10-12), so a launch that comes up on a named profile lets it go. The
+    // startup-animation setting, which lives in this file, is carried over. Null
+    // when there was nothing to reset, or it was done before.
     public CharacterProfile? ResetDefaultProfileOnce()
     {
         string marker = AppPaths.DefaultProfileResetMarker;
@@ -401,12 +402,11 @@ public sealed class ProfileService
             {
                 held = ReadDefaultProfileFile();
                 bool animate = ReadGeneralSection(held).ShowStartupMudAnimation;
-                File.Move(AppPaths.DefaultProfileFile, AppPaths.DefaultProfileBeforeResetFile, overwrite: true);
+                File.Delete(AppPaths.DefaultProfileFile);
                 if (animate != ReadGeneralSection(new CharacterProfile()).ShowStartupMudAnimation)
                     WriteDefaultProfileStartupAnimation(animate);
                 Log?.Info(LogCategory,
-                    "The default profile was put back to the installed defaults (once, with this version); "
-                    + $"what it held is kept as '{AppPaths.DefaultProfileBeforeResetFile}'.");
+                    "The default profile was put back to the installed defaults (once, with this version).");
             }
             File.WriteAllText(marker, $"default profile reset by {AppInfo.Version} on {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
         }

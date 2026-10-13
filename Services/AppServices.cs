@@ -10791,8 +10791,7 @@ public sealed class AppServices
             StartupOptions.ProfileNotice =
                 "The default profile has been put back to the installed defaults, and can no longer be changed. "
                 + "What yours held is loaded here as an unnamed profile: Save (Ctrl+S) names it and keeps it as a "
-                + "character, and closing the client will ask. A copy is in "
-                + $"'{AppPaths.DefaultProfileBeforeResetFile}'.";
+                + "character, and closing the client will ask. Discarded, it is gone.";
             Log.Info("Startup", StartupOptions.ProfileNotice);
         }
         else
