@@ -138,7 +138,7 @@
                         <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
                                 Classes.tutTarget="{Binding HighlightAddCharacter}"
                                 Command="{Binding AddProfileCommand}" IsEnabled="{Binding HasBbsSelection}"
-                                ToolTip.Tip="Create a character on this BBS, playing the selected realm."/>
+                                ToolTip.Tip="Create a character on this BBS, playing the selected realm. On the unnamed default profile, what is loaded becomes that character and this window closes."/>
                         <Button Grid.Column="1" Content="Rename" HorizontalAlignment="Stretch"
                                 Command="{Binding RenameProfileCommand}" IsEnabled="{Binding HasProfileSelection}"/>
                         <Button Grid.Column="2" Content="Copy" HorizontalAlignment="Stretch"

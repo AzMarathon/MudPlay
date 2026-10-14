@@ -47,6 +47,7 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
     private readonly Func<bool> _hasGameData;
     private readonly Func<bool> _hasBbs;
     private readonly Func<bool> _hasCharacter;
+    private readonly Func<bool> _characterLoaded;
     private readonly Func<bool> _isConnected;
     private readonly Action _persistDismiss;
 
@@ -65,15 +66,18 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private int _currentIndex;
 
+    // characterLoaded: a named character is the loaded profile. Left out, having
+    // one counts.
     public FirstRunTutorialViewModel(
         Func<bool> hasGameData, Func<bool> hasBbs, Func<bool> hasCharacter,
-        Func<bool> isConnected, Action persistDismiss)
+        Func<bool> isConnected, Action persistDismiss, Func<bool>? characterLoaded = null)
     {
         _hasGameData = hasGameData ?? throw new ArgumentNullException(nameof(hasGameData));
         _hasBbs = hasBbs ?? throw new ArgumentNullException(nameof(hasBbs));
         _hasCharacter = hasCharacter ?? throw new ArgumentNullException(nameof(hasCharacter));
         _isConnected = isConnected ?? throw new ArgumentNullException(nameof(isConnected));
         _persistDismiss = persistDismiss ?? throw new ArgumentNullException(nameof(persistDismiss));
+        _characterLoaded = characterLoaded ?? _hasCharacter;
     }
 
     public bool AnyPrerequisiteMissing => !_hasGameData() || !_hasBbs() || !_hasCharacter();
@@ -122,13 +126,20 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
                 Action("Click OK", ActionBbsSaved),
             }, "FileMenu", _hasBbs));
 
+        // Added on the unnamed default profile, the character is loaded and Profile
+        // Management closes (ProfileManagerViewModel.AddProfileAsync). The step ends
+        // there, not at the add: a new player used to go on playing the unnamed
+        // profile, with that window left open over the main one (user, 2026-10-14).
         if (demo || !_hasCharacter())
             _steps.Add(new TutorialStep("Add a character", new[]
             {
                 Action("File → Profile Management", ActionProfileManagement),
                 Action("Click Add (under Characters)", ActionAddCharacter),
-                Action("Name it, then Save", ActionCharacterAdded),
-            }, "FileMenu", _hasCharacter));
+                // Ticked by the load, not the click: a step whose lines are all ticked
+                // is done, and this one is done when the character is loaded.
+                new SubStep("Name it, then Save (it's loaded, and Profile Management closes)",
+                    _characterLoaded, ActionCharacterAdded),
+            }, "FileMenu", () => _hasCharacter() && _characterLoaded()));
 
         if (demo || !_hasGameData())
             _steps.Add(new TutorialStep("Import game data", new[]

@@ -10,7 +10,35 @@ public sealed class FirstRunTutorialViewModelTests
 {
     private sealed class Flags
     {
-        public bool GameData, Bbs, Character, Connected, Dismissed;
+        public bool GameData, Bbs, Character, Connected, Dismissed, Loaded;
+    }
+
+    // The step used to end at the add, and a new player went on playing the unnamed
+    // default profile with Profile Management still open (user, 2026-10-14). It
+    // ends when a named character is loaded, which Add on that profile now does.
+    [Fact]
+    public void AddACharacter_EndsWhenTheCharacterIsLoaded_NotWhenItIsAdded()
+    {
+        Flags f = new() { Bbs = true };
+        FirstRunTutorialViewModel vm = new(
+            hasGameData: () => f.GameData,
+            hasBbs: () => f.Bbs,
+            hasCharacter: () => f.Character,
+            isConnected: () => f.Connected,
+            persistDismiss: () => f.Dismissed = true,
+            characterLoaded: () => f.Loaded);
+        vm.Start();
+        Assert.Equal("Add a character", vm.CurrentTitle);
+
+        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
+        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionAddCharacter);
+        f.Character = true;                                  // added, not loaded
+        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionCharacterAdded);
+        Assert.Equal("Add a character", vm.CurrentTitle);       // every line ticked, but nothing loaded yet
+
+        f.Loaded = true;
+        vm.Refresh();
+        Assert.Equal("Import game data", vm.CurrentTitle);
     }
 
     private static (FirstRunTutorialViewModel vm, Flags f) Make()

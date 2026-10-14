@@ -1,5 +1,13 @@
 # Version history
 
+## 3.180.27
+
+- Importing game data with Profile Management open no longer looks frozen: the import closes that window first
+- Profile Management: **Add** on the unnamed default profile makes it the new character (anything set up on it is kept) and closes the window; on a named character Add only adds
+- First-time setup tour: the character step ends with that character loaded, so a new player isn't left on the unnamed default profile
+- Closing the client again while its close questions are up no longer stacks a second copy of them
+- bug reports addressed: paradigm-20261013-173505
+
 ## 3.180.24
 
 - Auto-Hide hides only once you have stood still for three seconds with nothing walking you; a walk or loop no longer sends `hid` in every room it passes through, nor with a monster that could attack in the room

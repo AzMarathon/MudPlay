@@ -136,6 +136,7 @@ public partial class MainWindowViewModel : ObservableObject
             System.Linq.Enumerable.Select(AppServices.Current.Bbs.ListNames(), AppServices.Current.Bbs.Get),
             b => b is not null && !string.IsNullOrWhiteSpace(b.Host)),
         hasCharacter: () => System.Linq.Enumerable.Any(AppServices.Current.Profile.ListAll()),
+        characterLoaded: () => AppServices.Current.Profile.CurrentProfileName is not null,
         isConnected: () => AppServices.Current.Connection.Connected,
         persistDismiss: () =>
         {
@@ -4610,7 +4611,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             DataContext = new ProfileManagerViewModel(
                 () => IsDisconnected, SwapToProfileRefAsync, NewProfileAsync, SaveLoadedProfileAsync, SaveProfileAsAsync,
-                OpenBbsSettingsFor),
+                OpenBbsSettingsFor, NameCurrentDraft),
         };
         window.Closed += (_, _) => _profileManager = null;
         _profileManager = window;
@@ -4747,7 +4748,29 @@ public partial class MainWindowViewModel : ObservableObject
     {
         ProfileService profile = AppServices.Current.Profile;
         if (!profile.UnnamedDraftHasChanges) return true;
+        // Asked once at a time: a close pressed again from the taskbar while the
+        // question is up stacked a second copy of it (user's report, 2026-10-14).
+        // The repeat waits on the open question's answer instead.
+        if (_settlingDraft is { } open) return await open;
+        TaskCompletionSource<bool> answer = new();
+        _settlingDraft = answer.Task;
+        try
+        {
+            bool goAhead = await AskAboutTheUnnamedDraftAsync(profile, before);
+            answer.SetResult(goAhead);
+            return goAhead;
+        }
+        finally
+        {
+            _settlingDraft = null;
+            answer.TrySetResult(false);
+        }
+    }
 
+    private Task<bool>? _settlingDraft;
+
+    private async Task<bool> AskAboutTheUnnamedDraftAsync(ProfileService profile, string before)
+    {
         DraftNaming outcome;
         if (BbsToSaveUnder(selectedBbs: null) is { } bbs)
             outcome = await NameAndSaveAsync(bbs,
@@ -4815,6 +4838,18 @@ public partial class MainWindowViewModel : ObservableObject
             ? selectedBbs ?? profile.CurrentBbsName ?? ResolveActiveBbs()?.Name
             : profile.CurrentBbsName ?? ResolveActiveBbs()?.Name;
         return string.IsNullOrWhiteSpace(bbs) ? null : bbs;
+    }
+
+    // Name the loaded unnamed profile, with no question: Profile Management's Add
+    // on the unnamed profile, where the name was just typed.
+    private void NameCurrentDraft(ProfileRef target)
+    {
+        AppServices.Current.Profile.SaveAs(target.Bbs, target.Name);
+        // As NameAndSaveAsync: SaveAs fires no load, so the chrome is refreshed here.
+        RefreshBbsBindings();
+        PromoteRecent(target);
+        SyncProfileMenuState();
+        AppServices.Current.Log.Info("Profile", $"Saved profile '{target.Name}' on '{target.Bbs}'.");
     }
 
     // Ask for a name and save the loaded profile under it on bbs.
@@ -5599,6 +5634,18 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Tick the first-run tour's "Import .mdb" line the moment the import runs.
         Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionImportMdb);
+
+        // With Profile Management open, as the first-run guide used to leave it, the
+        // client sat looking frozen at this point until the user tried to close it
+        // from the taskbar, and worked with that window closed (user's report,
+        // 2026-10-14: the file picker, which belongs to the main window, was out of
+        // reach). That window applies its edits as they are made, so closing it
+        // here loses nothing.
+        if (_profileManager is { } openManager)
+        {
+            openManager.Close();
+            AppServices.Current.Log.Info("MDB", "Profile Management closed ahead of the import's file picker");
+        }
 
         IReadOnlyList<IStorageFile> files = await main.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {

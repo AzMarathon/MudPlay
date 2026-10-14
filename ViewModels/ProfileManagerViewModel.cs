@@ -29,6 +29,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     private readonly Func<string?, Task> _newProfile;
     private readonly Func<string?, Task> _saveCurrent;
     private readonly Func<string?, Task> _saveCurrentAs;
+    private readonly Action<ProfileRef> _nameCurrentDraft;
     private readonly Action<string, string?> _editBbsSettings;
     private readonly RealmCatalog _realms;
     private bool _suppressRealmEdits;
@@ -104,7 +105,8 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         Func<string?, Task> newProfile,
         Func<string?, Task> saveCurrent,
         Func<string?, Task> saveCurrentAs,
-        Action<string, string?> editBbsSettings)
+        Action<string, string?> editBbsSettings,
+        Action<ProfileRef> nameCurrentDraft)
     {
         _isDisconnected = isDisconnected;
         _swapToProfile = swapToProfile;
@@ -112,6 +114,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         _saveCurrent = saveCurrent;
         _saveCurrentAs = saveCurrentAs;
         _editBbsSettings = editBbsSettings;
+        _nameCurrentDraft = nameCurrentDraft;
         _profile = AppServices.Current.Profile;
         _bbs = AppServices.Current.Bbs;
         _dialogs = AppServices.Current.Dialogs;
@@ -458,9 +461,31 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
                 $"A character named “{name}” already exists on “{bbs}”.");
             return;
         }
+        ProfileRef added = new(bbs, name);
+
+        // On the unnamed default profile, the character added is the one to play
+        // (user, 2026-10-14: "if they're on default and they hit add ... that
+        // profile should just be loaded and then it closes the profile management
+        // after the load"). Adding used to leave the client on the unnamed profile,
+        // where a new player stayed. It is done by naming what is loaded: the same
+        // character a fresh one would be, plus anything already set up on the
+        // unnamed profile, which naming keeps and loading another would have asked
+        // about. On a named character, Add only adds, and the window stays open.
+        if (_profile.Current is not null && _profile.CurrentProfileName is null)
+        {
+            _nameCurrentDraft(added);
+            if (SelectedRealm is { } playing) _profile.AssignRealm(added, playing);
+            RepinIfLoadedOn(bbs);
+            AppServices.Current.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionCharacterAdded);
+            AppServices.Current.Log.Info("Profile",
+                $"Added '{name}' on '{bbs}' from the unnamed profile, which it now is; Profile Management closed.");
+            CloseRequested?.Invoke();
+            return;
+        }
+
         _profile.CreateProfile(bbs, name);
         // A new character plays the realm selected in the middle column.
-        if (SelectedRealm is { } realm) _profile.AssignRealm(new ProfileRef(bbs, name), realm);
+        if (SelectedRealm is { } realm) _profile.AssignRealm(added, realm);
         AppServices.Current.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionCharacterAdded);
         ReloadProfiles();
         SelectedProfile = Profiles.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal));
