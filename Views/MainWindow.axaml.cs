@@ -28,6 +28,9 @@ public partial class MainWindow : Window
     // the prompt would appear over a dying app AND swallow the save below it.
     public void MarkExitConfirmed() => _exitConfirmed = true;
 
+    // The close questions (confirm exit, the unnamed profile) are up.
+    private bool _askingToClose;
+
     // The free-floating first-run setup card (shown left of the main window).
     private FirstRunTutorialWindow? _tutorialWindow;
 
@@ -248,8 +251,16 @@ public partial class MainWindow : Window
             if (!_exitConfirmed && (confirmExit || unnamedDraft))
             {
                 e.Cancel = true;
-                if (confirmExit && !await AppServices.Current.Confirm.ConfirmExitAsync()) return;
-                if (unnamedDraft && !await closing!.SettleUnnamedDraftAsync("closing the client")) return;
+                // A close pressed again while these questions are up adds nothing:
+                // it used to stack another copy of them (user's report, 2026-10-14).
+                if (_askingToClose) return;
+                _askingToClose = true;
+                try
+                {
+                    if (confirmExit && !await AppServices.Current.Confirm.ConfirmExitAsync()) return;
+                    if (unnamedDraft && !await closing!.SettleUnnamedDraftAsync("closing the client")) return;
+                }
+                finally { _askingToClose = false; }
                 _exitConfirmed = true;
                 Close();
                 return;

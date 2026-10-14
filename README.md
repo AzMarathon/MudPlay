@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.24**
-> - Auto-Hide hides only once you have stood still for three seconds with nothing walking you; a walk or loop no longer sends `hid` in every room it passes through, nor with a monster that could attack in the room
+> **Version 3.180.26**
+> - Importing game data with Profile Management open no longer looks frozen: the import closes that window first
+> - First-time setup tour: adding a character now ends with loading it, so a new player isn't left on the unnamed default profile
+> - Closing the client again while its close questions are up no longer stacks a second copy of them
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

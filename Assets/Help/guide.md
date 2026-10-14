@@ -7,8 +7,8 @@ New to MudPlay? Here's the short path from launch to playing — and where the r
 On a brand-new install — no BBS, no character, or no game data imported yet — a **guided setup tour** appears in a small **floating card just left of the main window** (it never covers or shrinks the terminal). It walks you through each step click-by-click: it **glows the exact control to use next** — the menu item, the **Add** button, the **host/port** fields, the **OK** button — and as you do each one it **ticks that line (☑)** and moves the glow to the next. When a step's checklist is complete the tour **advances to the next step on its own**. **Back / Next** move between steps manually. Only the steps you're missing show (plus a final **Connect**). The usual order:
 
 1. **Add a BBS** — File → Profile Management → **Add BBS**. That opens Settings; fill in the host/IP + port and click **OK**.
-2. **Add a character** — back in Profile Management, add a character under your BBS, name it, and **Save**.
-3. **Import game data** — Game Data → **Import .mdb**, then pick your MajorMUD `.mdb` file. That's all it takes — it's what the automation reads from.
+2. **Add a character** — back in Profile Management, add a character under your BBS, name it, and **Save**. Then **select it and click Load**: adding a character doesn't load it, and until you load one you are on the unnamed default profile, which keeps nothing. Load also closes Profile Management.
+3. **Import game data** — Game Data → **Import .mdb**, then pick your MajorMUD `.mdb` file. That's all it takes — it's what the automation reads from. If Profile Management is still open, the import closes it first: with it open the import's file picker could end up out of reach, and the client looked frozen.
 
 Don't want it? Click **Skip — don't show this again** and it won't return on launch. You can replay your own outstanding steps any time from **Help → First-time setup…**, or walk the whole thing as a demo (as if nothing were set up) from the **Program Log → "Run setup tutorial"** button. The rest of this page is the same ground at your own pace.
 
