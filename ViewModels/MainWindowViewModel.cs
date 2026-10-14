@@ -4611,7 +4611,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             DataContext = new ProfileManagerViewModel(
                 () => IsDisconnected, SwapToProfileRefAsync, NewProfileAsync, SaveLoadedProfileAsync, SaveProfileAsAsync,
-                OpenBbsSettingsFor),
+                OpenBbsSettingsFor, NameCurrentDraft),
         };
         window.Closed += (_, _) => _profileManager = null;
         _profileManager = window;
@@ -4838,6 +4838,18 @@ public partial class MainWindowViewModel : ObservableObject
             ? selectedBbs ?? profile.CurrentBbsName ?? ResolveActiveBbs()?.Name
             : profile.CurrentBbsName ?? ResolveActiveBbs()?.Name;
         return string.IsNullOrWhiteSpace(bbs) ? null : bbs;
+    }
+
+    // Name the loaded unnamed profile, with no question: Profile Management's Add
+    // on the unnamed profile, where the name was just typed.
+    private void NameCurrentDraft(ProfileRef target)
+    {
+        AppServices.Current.Profile.SaveAs(target.Bbs, target.Name);
+        // As NameAndSaveAsync: SaveAs fires no load, so the chrome is refreshed here.
+        RefreshBbsBindings();
+        PromoteRecent(target);
+        SyncProfileMenuState();
+        AppServices.Current.Log.Info("Profile", $"Saved profile '{target.Name}' on '{target.Bbs}'.");
     }
 
     // Ask for a name and save the loaded profile under it on bbs.

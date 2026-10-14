@@ -1,9 +1,10 @@
 # Version history
 
-## 3.180.26
+## 3.180.27
 
 - Importing game data with Profile Management open no longer looks frozen: the import closes that window first
-- First-time setup tour: adding a character now ends with loading it, so a new player isn't left on the unnamed default profile
+- Profile Management: **Add** on the unnamed default profile makes it the new character (anything set up on it is kept) and closes the window; on a named character Add only adds
+- First-time setup tour: the character step ends with that character loaded, so a new player isn't left on the unnamed default profile
 - Closing the client again while its close questions are up no longer stacks a second copy of them
 - bug reports addressed: paradigm-20261013-173505
 

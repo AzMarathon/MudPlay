@@ -54,6 +54,35 @@ public sealed class DefaultProfilePersistenceTests
         }
     }
 
+    // Profile Management's Add on the unnamed profile names what is loaded and puts
+    // it on the selected realm (user, 2026-10-14): the loaded profile is then that
+    // character, on disk with its realm, and nothing is owed.
+    [Fact]
+    public void NamingTheDraft_ThenAssigningARealm_LeavesTheLoadedCharacterOnThatRealm()
+    {
+        string board = "defprof-test-" + Path.GetRandomFileName();
+        DeleteDefaultProfileFile();
+        try
+        {
+            ProfileService session = new();
+            session.LoadDefaultProfile();
+            session.Save();                                   // something set up on it
+
+            session.SaveAs(board, "Newcomer");
+            session.AssignRealm(new Models.Profile.ProfileRef(board, "Newcomer"), "PVP");
+
+            Assert.Equal("Newcomer", session.CurrentProfileName);
+            Assert.False(session.UnnamedDraftHasChanges);
+            Assert.Equal("PVP", JsonStore.Load<Models.Profile.CharacterProfile>(
+                AppPaths.CharacterProfileFile(board, "Newcomer"))!.Realm);
+        }
+        finally
+        {
+            DeleteDefaultProfileFile();
+            if (Directory.Exists(AppPaths.BbsFolder(board))) Directory.Delete(AppPaths.BbsFolder(board), recursive: true);
+        }
+    }
+
     // Discarding is the user saying the draft need not be kept: nothing asks again.
     [Fact]
     public void DiscardingTheDraftsChanges_LeavesNothingToAskAbout()

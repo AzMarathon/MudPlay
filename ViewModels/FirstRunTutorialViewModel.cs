@@ -126,17 +126,19 @@ public sealed partial class FirstRunTutorialViewModel : ObservableObject
                 Action("Click OK", ActionBbsSaved),
             }, "FileMenu", _hasBbs));
 
-        // Adding a character doesn't load it, and the step used to end there: a new
-        // player went on playing the unnamed default profile, and left Profile
-        // Management open over the main window, where the import's file picker
-        // then couldn't be reached (user, 2026-10-14). Load closes the window.
+        // Added on the unnamed default profile, the character is loaded and Profile
+        // Management closes (ProfileManagerViewModel.AddProfileAsync). The step ends
+        // there, not at the add: a new player used to go on playing the unnamed
+        // profile, with that window left open over the main one (user, 2026-10-14).
         if (demo || !_hasCharacter())
             _steps.Add(new TutorialStep("Add a character", new[]
             {
                 Action("File → Profile Management", ActionProfileManagement),
                 Action("Click Add (under Characters)", ActionAddCharacter),
-                Action("Name it, then Save", ActionCharacterAdded),
-                new SubStep("Select it, then click Load (Profile Management closes)", _characterLoaded),
+                // Ticked by the load, not the click: a step whose lines are all ticked
+                // is done, and this one is done when the character is loaded.
+                new SubStep("Name it, then Save (it's loaded, and Profile Management closes)",
+                    _characterLoaded, ActionCharacterAdded),
             }, "FileMenu", () => _hasCharacter() && _characterLoaded()));
 
         if (demo || !_hasGameData())

@@ -13,9 +13,9 @@ public sealed class FirstRunTutorialViewModelTests
         public bool GameData, Bbs, Character, Connected, Dismissed, Loaded;
     }
 
-    // Adding a character doesn't load it. The step used to end at the add, and a
-    // new player went on playing the unnamed default profile with Profile
-    // Management still open (user, 2026-10-14). It ends when the character is loaded.
+    // The step used to end at the add, and a new player went on playing the unnamed
+    // default profile with Profile Management still open (user, 2026-10-14). It
+    // ends when a named character is loaded, which Add on that profile now does.
     [Fact]
     public void AddACharacter_EndsWhenTheCharacterIsLoaded_NotWhenItIsAdded()
     {
@@ -34,8 +34,7 @@ public sealed class FirstRunTutorialViewModelTests
         vm.NotifyActionDone(FirstRunTutorialViewModel.ActionAddCharacter);
         f.Character = true;                                  // added, not loaded
         vm.NotifyActionDone(FirstRunTutorialViewModel.ActionCharacterAdded);
-        Assert.Equal("Add a character", vm.CurrentTitle);
-        Assert.Contains(vm.CurrentSubs, s => s.Text.StartsWith("Select it, then click Load") && s.IsCurrent);
+        Assert.Equal("Add a character", vm.CurrentTitle);       // every line ticked, but nothing loaded yet
 
         f.Loaded = true;
         vm.Refresh();
