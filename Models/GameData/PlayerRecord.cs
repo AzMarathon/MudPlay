@@ -103,6 +103,19 @@ public sealed record PlayerObservation(
     // first space as the family name; single-word names get an empty
     // family. null / empty input returns empty strings so observation
     // writes don't fail on garbage.
+    // A room-listing name with no record that reads as a player's: capitalised, one
+    // or two words of letters, where monsters are listed in lower case. A client
+    // heuristic, not engine data.
+    public static bool LooksLikePlayerName(string rawName)
+    {
+        string[] words = rawName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length is < 1 or > 2 || !char.IsUpper(words[0][0])) return false;
+        foreach (string word in words)
+            foreach (char c in word)
+                if (!char.IsLetter(c) && c != '\'' && c != '-') return false;
+        return true;
+    }
+
     public static (string Given, string Family) SplitName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return (string.Empty, string.Empty);

@@ -44,7 +44,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // waypoint list to the current room at Start, so a positional diff against
     // it would false-positive; a restart re-rotates anyway, making rotation
     // irrelevant to whether the run would differ.
-    private readonly List<(string Room, string? Command, int DelayMs, bool DoNotRest, bool DoNotAttack, bool RestHereHp, bool RestHereMana)> _openedSteps;
+    private readonly List<(string Room, string? Command, long DelayMs, bool DoNotRest, bool DoNotAttack, bool RestHereHp, bool RestHereMana)> _openedSteps;
 
     // Window title — flips between "Create Loop" (when the dialog was opened
     // on a fresh empty loop) and "Edit Loop" (mutating an existing saved
@@ -439,7 +439,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
             // command AND its delay (a delay only fires around a command step),
             // mirroring the build-time dialog's convention.
             string? cmd = string.IsNullOrWhiteSpace(row.Command) ? null : row.Command.Trim();
-            int delay = cmd is null ? 0 : Math.Max(0, row.DelayMs);
+            long delay = cmd is null ? 0 : Math.Max(0, row.DelayMs);
             waypoints.Add(new LoopWaypoint(row.Key, cmd, delay, row.DoNotRest, row.DoNotAttack)
             {
                 RestHereHp = row.RestHereHp,
@@ -522,7 +522,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         if (current.Count != _openedSteps.Count) return true;
         for (int i = 0; i < current.Count; i++)
         {
-            (string room, string? command, int delayMs, bool doNotRest, bool doNotAttack, bool restHp, bool restMana) = _openedSteps[i];
+            (string room, string? command, long delayMs, bool doNotRest, bool doNotAttack, bool restHp, bool restMana) = _openedSteps[i];
             if (!string.Equals(current[i].Room, room, StringComparison.OrdinalIgnoreCase))
                 return true;
             if (!string.Equals(current[i].Command ?? string.Empty, command ?? string.Empty,
@@ -557,7 +557,7 @@ public sealed partial class LoopWaypointRowViewModel : ObservableObject
     [ObservableProperty] private int _index;
     [ObservableProperty] private string _displayLabel = string.Empty;
     [ObservableProperty] private string? _command;
-    [ObservableProperty] private int _delayMs;
+    [ObservableProperty] private long _delayMs;
     [ObservableProperty] private bool _doNotRest;
     [ObservableProperty] private bool _doNotAttack;
     [ObservableProperty] private bool _restHereHp;

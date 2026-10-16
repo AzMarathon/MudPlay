@@ -56,7 +56,7 @@ public static class LoopShareCodec
     private sealed record Waypoint(
         [property: JsonPropertyName("r")] string Room,
         [property: JsonPropertyName("c")] string? Command,
-        [property: JsonPropertyName("d")] int DelayMs,
+        [property: JsonPropertyName("d")] long DelayMs,
         [property: JsonPropertyName("nr")] bool DoNotRest,
         [property: JsonPropertyName("na")] bool DoNotAttack,
         // Added after the first share format; an older client just ignores them.

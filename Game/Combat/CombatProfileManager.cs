@@ -109,8 +109,31 @@ public sealed class CombatProfileManager
         if (MigrateToFullLoadout(store)) changed = true;
         if (MigrateActionOrderPerProfile(store)) changed = true;
         if (MigrateRunBlessPartyPerProfile(store)) changed = true;
+        if (CaptureActiveWeapons(store)) changed = true;
         if (changed) _save();
         Changed?.Invoke();
+    }
+
+    // The active profile's weapons ARE the Default set's, so a Workshop edit to that
+    // set (Update from live, a row edit) changes them. Copy them back into its stored
+    // fields whenever the set is edited, so Settings, the engaged log and a bug report
+    // read the weapon actually in use rather than the one from the last switch.
+    public void SyncActiveWeaponsFromGear()
+    {
+        if (Store() is { } s && CaptureActiveWeapons(s)) _save();
+    }
+
+    private bool CaptureActiveWeapons(CombatProfileSettings store)
+    {
+        int i = IndexOfActive(store);
+        if (i < 0 || _equipment() is not { } eq || !EquipmentWeaponSync.HasDefaultSet(eq)) return false;
+        CombatSpellProfile a = store.Profiles[i];
+        var before = (a.NormalWeapon, a.NormalOffHand, a.AlternateWeapon, a.AlternateOffHand);
+        EquipmentWeaponSync.CaptureDefaultWeapons(eq, a);
+        if (before == (a.NormalWeapon, a.NormalOffHand, a.AlternateWeapon, a.AlternateOffHand)) return false;
+        _log?.Log(LogSeverity.Info, "CombatProfiles",
+            $"Active profile's weapons updated from the Default gear set: {a.NormalWeapon ?? "(none)"}");
+        return true;
     }
 
     // One-time back-fill for profiles created before the action-order / backstab /

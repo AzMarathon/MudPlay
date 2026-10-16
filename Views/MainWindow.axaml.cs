@@ -130,6 +130,13 @@ public partial class MainWindow : Window
                 Height = (double.IsNaN(Height) ? ClientSize.Height : Height) + (b.Height - was);
             }));
 
+        // A shortcut added to a horizontal toolbar widens the window by what the strip
+        // outgrew, so the new button shows instead of being clipped past the right
+        // edge. Like the status bar, the first layout only records the width, so a
+        // saved window size is never overridden at launch.
+        WatchToolbarWidth(TopToolbarItems);
+        WatchToolbarWidth(BottomToolbarItems);
+
         // Subscribe to VM PropertyChanged so we can react to IsConnected.
         // Hooking via DataContextChanged covers the case where the VM is
         // swapped at runtime — even though today it's set once in App.
@@ -390,6 +397,29 @@ public partial class MainWindow : Window
             Command = vm.OpenAboutCommand,
         });
     }
+
+    private void WatchToolbarWidth(ItemsControl strip)
+    {
+        double last = 0;
+        strip.LayoutUpdated += (_, _) =>
+        {
+            // Measured in an Auto column, the strip's desired width is its full natural
+            // width even when the window clips it.
+            double now = strip.DesiredSize.Width;
+            double was = last;
+            last = now;
+            if (was <= 0 || now <= was || WindowState != WindowState.Normal || !strip.IsEffectivelyVisible) return;
+            double overflow = now - (ClientSize.Width - ToolbarPadding);
+            if (overflow <= 0) return;
+            double cap = Screens.ScreenFromWindow(this) is { } screen
+                ? screen.WorkingArea.Width / screen.Scaling
+                : double.MaxValue;
+            Width = Math.Min(cap, (double.IsNaN(Width) ? ClientSize.Width : Width) + overflow);
+        };
+    }
+
+    // Border.Toolbar's horizontal padding, both sides (Themes/Controls.axaml).
+    private const double ToolbarPadding = 16;
 
     // ----- Customizable terminal right-click menu -----------------------------
     // The ContextMenu's first three items (Favorites submenu, Recent submenu, and

@@ -417,6 +417,17 @@ public sealed class PartyPathItemGate
         lock (_gate) _counted[id] = new Counted(journey, selfTotal, forward, _now(), unanswered);
     }
 
+    // How many copies of an item our own pack must hold for the trip under way: ours
+    // plus those owed to members, while this trip's count of it stands. 0 otherwise.
+    public int CopiesToCarryFor(int itemId)
+    {
+        Counted? known;
+        lock (_gate) known = _counted.GetValueOrDefault(itemId);
+        if (known is null || known.Forward <= 0) return 0;
+        if (!ReferenceEquals(known.Journey, _journey()) || _now() - known.At > CountStandsFor) return 0;
+        return known.Forward;
+    }
+
     // The party changed: every count was of the roster that was.
     public void ForgetCounts()
     {

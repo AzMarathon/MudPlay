@@ -225,6 +225,86 @@ public sealed class AutoEquipCoordinatorTests
         Assert.Equal(new[] { "default-set" }, applied);
     }
 
+    // A rest typed by hand gets its gear after the sit, and that wear stands the
+    // character up: rest again once the gear is on, and don't take the stand for
+    // the end of the rest (report paradigm-20261015-202943).
+    [Fact]
+    public void HandTypedRest_TheGearsWearStandsUsUp_RestsAgain_InsteadOfRevertingToDefault()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestHp, enabled: true, "hp-set"));
+        var applied = new List<string>();
+        string? worn = null;
+        int reRests = 0;
+        DateTimeOffset t = DateTimeOffset.UnixEpoch;
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: id =>
+            {
+                if (worn == id) return EquipResult.NoChange;
+                worn = id;
+                applied.Add(id);
+                return EquipResult.Applied;
+            },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true,
+            now: () => t,
+            resumeRest: () => reRests++);
+
+        player.Position = PlayerPosition.Resting;          // typed `rest`
+        Assert.Equal(new[] { "hp-set" }, applied);
+        Assert.True(coord.ReRestOwed);
+
+        t += TimeSpan.FromMilliseconds(50);
+        player.Position = PlayerPosition.Standing;         // the wear stood us up
+        coord.OnPreRestSetStreamed();                      // the set has gone out
+        Assert.Equal(1, reRests);
+        Assert.Equal(new[] { "hp-set" }, applied);         // no Default revert
+
+        player.Position = PlayerPosition.Resting;          // the re-sent rest lands
+        Assert.Equal(1, reRests);
+        Assert.False(coord.ReRestOwed);
+
+        t += TimeSpan.FromSeconds(30);
+        player.Position = PlayerPosition.Standing;         // a real stand still reverts
+        Assert.Equal(new[] { "hp-set", "default-set" }, applied);
+    }
+
+    [Fact]
+    public void HandTypedRest_ThenAMoveTyped_IsAStand_NotAReRest()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestHp, enabled: true, "hp-set"));
+        var applied = new List<string>();
+        int reRests = 0;
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true,
+            resumeRest: () => reRests++);
+
+        player.Position = PlayerPosition.Resting;
+        coord.OnMoveSent();
+        player.Position = PlayerPosition.Standing;
+        coord.OnPreRestSetStreamed();
+
+        Assert.Equal(0, reRests);
+        Assert.Equal(new[] { "hp-set", "default-set" }, applied);
+    }
+
     // By default (SwapToDefaultOnCombat off) combat entry does NOT swap to Default —
     // a fight interrupting a rest leaves the pre-rest loadout on until recovery
     // completes (the long-standing rule).

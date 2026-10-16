@@ -123,7 +123,7 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
 
     [ObservableProperty] private string _roomText;
     [ObservableProperty] private string? _command;
-    [ObservableProperty] private int _delayMs;
+    [ObservableProperty] private long _delayMs;
 
     // Add this room to the character's stash rooms on Accept. Ticked for a step
     // MegaMUD marked as a stash point.
@@ -137,8 +137,8 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
 
     // The row's command, delay and ticks, and what they were as translated, to tell
     // what the user changed from what the translation put there.
-    private readonly (string? Command, int DelayMs, bool Stash, bool NoRest, bool NoAttack, bool RestHp, bool RestMana) _asTranslated;
-    private (string? Command, int DelayMs, bool Stash, bool NoRest, bool NoAttack, bool RestHp, bool RestMana) Settings =>
+    private readonly (string? Command, long DelayMs, bool Stash, bool NoRest, bool NoAttack, bool RestHp, bool RestMana) _asTranslated;
+    private (string? Command, long DelayMs, bool Stash, bool NoRest, bool NoAttack, bool RestHp, bool RestMana) Settings =>
         (string.IsNullOrWhiteSpace(Command) ? null : Command.Trim(), DelayMs, MarkStash, DoNotRest, DoNotAttack, RestHereHp, RestHereMana);
 
     // True when the user changed this row's command, delay or ticks and rebuilt, the
@@ -165,7 +165,7 @@ public sealed partial class MpTranslatedRowViewModel : ObservableObject
         if (IsRemoved || EffectiveRoom is not { } k) return null;
         string? cmd = string.IsNullOrWhiteSpace(Command) ? null : Command.Trim();
         // A delay only runs around a command, as in the loop editor.
-        int delay = cmd is null ? 0 : Math.Max(0, DelayMs);
+        long delay = cmd is null ? 0 : Math.Max(0, DelayMs);
         return new LoopWaypoint(k, cmd, delay, DoNotRest, DoNotAttack) { RestHereHp = RestHereHp, RestHereMana = RestHereMana };
     }
 }

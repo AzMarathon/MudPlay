@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.Navigation"
+        xmlns:ctl="using:MudPlay.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="380" d:DesignHeight="220"
@@ -31,18 +32,15 @@
             </Grid>
 
             <Grid Grid.Row="2" ColumnDefinitions="80,Auto,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="Delay (ms)" FontSize="11"
+                <TextBlock Grid.Column="0" Text="Delay" FontSize="11"
                            Foreground="{StaticResource ChromeFgMutedBrush}"
                            VerticalAlignment="Center"/>
-                <NumericUpDown Grid.Column="1"
-                               Value="{Binding DelayMs, Mode=TwoWay}"
-                               Minimum="0" Maximum="600000" Increment="100"
-                               FormatString="0"
-                               Width="140"
-                               ShowButtonSpinner="True"
-                               ToolTip.Tip="Milliseconds to wait after sending the command before resuming the loop."/>
+                <ctl:LoopDelayEditor Grid.Column="1"
+                                     DelayMs="{Binding DelayMs, Mode=TwoWay}"
+                                     FontSize="11"
+                                     ToolTip.Tip="How long to wait after the command before the loop moves on, counted in real time from the command (sent once the room is clear). A fight during the wait doesn't stop the clock; the loop still moves only when the room is clear."/>
                 <TextBlock Grid.Column="2"
-                           Text="0 = default per-step delay"
+                           Text="0 = move on once the command is answered"
                            FontSize="11"
                            Foreground="{StaticResource ChromeFgMutedBrush}"
                            VerticalAlignment="Center"/>

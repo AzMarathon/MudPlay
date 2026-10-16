@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.Navigation"
+        xmlns:ctl="using:MudPlay.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="660" d:DesignHeight="540"
@@ -78,13 +79,13 @@
                  fixed (not Auto) so the empty header cells don't collapse and widen
                  the * column, and the Margin matches the row's ListBox-border +
                  WaypointRow-border + padding inset (1+1+6). -->
-            <Grid Grid.Row="2" ColumnDefinitions="32,*,150,72,50,50,50,50,30,30,30" ColumnSpacing="4"
+            <Grid Grid.Row="2" ColumnDefinitions="32,*,150,132,50,50,50,50,30,30,30" ColumnSpacing="4"
                   Margin="8,4,8,0">
                 <TextBlock Grid.Column="1" Text="Waypoints" FontSize="11"
                            Foreground="{StaticResource ChromeFgMutedBrush}"/>
                 <TextBlock Grid.Column="2" Text="Command" FontSize="10"
                            Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                <TextBlock Grid.Column="3" Text="Delay ms" FontSize="10"
+                <TextBlock Grid.Column="3" Text="Delay (min / s)" FontSize="10"
                            Foreground="{StaticResource ChromeFgMutedBrush}"/>
                 <TextBlock Grid.Column="4" Text="No rest" FontSize="10"
                            HorizontalAlignment="Center"
@@ -119,7 +120,7 @@
                         <Border Classes="WaypointRow">
                             <!-- ColumnDefinitions must stay identical to the header grid
                                  above (fixed ↑↓✕ widths, not Auto) so headers line up. -->
-                            <Grid ColumnDefinitions="32,*,150,72,50,50,50,50,30,30,30" ColumnSpacing="4">
+                            <Grid ColumnDefinitions="32,*,150,132,50,50,50,50,30,30,30" ColumnSpacing="4">
                                 <TextBlock Grid.Column="0"
                                            Text="{Binding Index}"
                                            HorizontalAlignment="Right"
@@ -138,14 +139,12 @@
                                          VerticalAlignment="Center"
                                          PlaceholderText="cmd on arrival"
                                          ToolTip.Tip="Command sent when the loop reaches this waypoint (chain with ; or ^M). Blank = none."/>
-                                <NumericUpDown Grid.Column="3"
-                                               Value="{Binding DelayMs, Mode=TwoWay}"
-                                               Minimum="0" Maximum="600000" Increment="100"
-                                               FormatString="0"
-                                               ShowButtonSpinner="False"
-                                               FontSize="10"
-                                               VerticalAlignment="Center"
-                                               ToolTip.Tip="Milliseconds to wait after the command before resuming. Ignored with no command."/>
+                                <ctl:LoopDelayEditor Grid.Column="3"
+                                                     DelayMs="{Binding DelayMs, Mode=TwoWay}"
+                                                     ShowSpinners="False"
+                                                     FontSize="10"
+                                                     VerticalAlignment="Center"
+                                                     ToolTip.Tip="Minutes and seconds to wait after the command before moving on, in real time from the command. Ignored with no command."/>
                                 <CheckBox Grid.Column="4"
                                           IsChecked="{Binding DoNotRest, Mode=TwoWay}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"

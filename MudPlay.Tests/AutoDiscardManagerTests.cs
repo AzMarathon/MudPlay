@@ -66,6 +66,8 @@ public sealed class AutoDiscardManagerTests
         public bool Enabled { get; set; } = true;
         public bool Paradigm { get; set; }
         public DateTimeOffset Now { get; set; } = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        // Copies of an item the trip under way carries for the party, by item Number.
+        public Dictionary<int, int> ForJourney { get; } = new();
 
         // A command waiting in the stand-in pacer: whose it is, and the check its
         // sender wants made just before it goes.
@@ -90,7 +92,8 @@ public sealed class AutoDiscardManagerTests
                 isParadigm: () => Paradigm,
                 wornItems: () => Worn,
                 litLight: () => Lit,
-                now: () => Now);
+                now: () => Now,
+                carriedForJourney: id => ForJourney.GetValueOrDefault(id));
             Discard.SetWireSender(b => Sent.Add(b));
         }
 
@@ -231,6 +234,24 @@ public sealed class AutoDiscardManagerTests
         h.Discard.OnInventoryChanged();
 
         Assert.Equal(2, h.SentText.Count);   // 3 carried − 1 keep
+    }
+
+    // A rope bought for a party member is kept until the trip hands it over, over a
+    // keep amount of 1 (report paradigm-20261016-031735).
+    [Fact]
+    public void KeepFloor_RaisedByWhatTheTripCarriesForTheParty()
+    {
+        using Harness h = new();
+        h.Map("rope and grapple", 191, discard: true, keep: 1);
+        h.Carried.Set("rope and grapple", 2);
+        h.ForJourney[191] = 2;
+
+        h.Discard.OnInventoryChanged();
+        Assert.Empty(h.SentText);
+
+        h.ForJourney.Clear();                // handed over: the trip's count is gone
+        h.Discard.OnInventoryChanged();
+        Assert.Single(h.SentText);
     }
 
     // The engine counts copies, not pack entries: a pile is one entry however many

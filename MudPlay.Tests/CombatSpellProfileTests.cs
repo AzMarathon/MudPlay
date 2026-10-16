@@ -460,6 +460,48 @@ public sealed class CombatSpellProfileTests
         Assert.Equal(88, profile.CombatProfiles.Profiles[0].Health.RestMaxHp);
     }
 
+    [Fact]
+    public void ActiveProfileWeapons_FollowTheDefaultSet_WhenTheWorkshopChangesIt()
+    {
+        var profile = new CharacterProfile
+        {
+            CombatProfiles = new CombatProfileSettings
+            {
+                Profiles = { new CombatSpellProfile { NormalWeapon = "shortsword" }, new CombatSpellProfile { NormalWeapon = "club" } },
+                SchemaVersion = CombatProfileSettings.PerProfileRunBlessPartyVersion,
+            },
+        };
+        profile.CombatProfiles.ActiveId = profile.CombatProfiles.Profiles[0].Id;
+        var equip = new EquipmentSettings();
+        EquipmentWeaponSync.WriteProfileWeapons(equip, new CombatSpellProfile { NormalWeapon = "ice crystal falchion" });
+        int saves = 0;
+        var mgr = new CombatProfileManager(
+            profile: () => profile,
+            readCombat: () => new CombatSettings(),
+            writeCombat: _ => { },
+            readHealth: () => new HealthSettings(),
+            writeHealth: _ => { },
+            readSpells: () => new SpellsSettings(),
+            writeSpells: _ => { },
+            equipment: () => equip,
+            save: () => saves++);
+
+        // A profile saved stale (the set changed while Settings was closed) is repaired on load.
+        mgr.EnsureSeeded();
+        Assert.Equal("ice crystal falchion", profile.CombatProfiles.Profiles[0].NormalWeapon);
+        Assert.Equal("club", profile.CombatProfiles.Profiles[1].NormalWeapon);
+
+        // A later Workshop edit to the Default set carries over too.
+        EquipmentWeaponSync.WriteProfileWeapons(equip, new CombatSpellProfile { NormalWeapon = "silver longsword" });
+        saves = 0;
+        mgr.SyncActiveWeaponsFromGear();
+        Assert.Equal("silver longsword", profile.CombatProfiles.Profiles[0].NormalWeapon);
+        Assert.Equal(1, saves);
+
+        mgr.SyncActiveWeaponsFromGear();
+        Assert.Equal(1, saves);
+    }
+
     // A manager over a swappable character, with the log's entries collected. Each
     // character carries the same two profiles, the first active.
     private static (CombatProfileManager Mgr, List<MudPlay.Services.LogEntry> Entries,

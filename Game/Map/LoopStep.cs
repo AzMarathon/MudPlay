@@ -36,12 +36,11 @@ public sealed record MoveLoopStep(Direction Direction) : LoopStep
 }
 
 // A free-text in-room command (e.g. dep 100, ask barmaid pie). DelayMs is
-// the runner's wait between sending the command and proceeding to the next
-// step; 0 means "advance as soon as the next prompt fires" (the same
-// PromptObserved confirmation the walker uses for CommandStep).
-public sealed record CommandLoopStep(string Command, int DelayMs = 0) : LoopStep
+// the runner's wait, in real time, between sending the command and proceeding
+// to the next step; 0 means "advance once the game has answered the command".
+public sealed record CommandLoopStep(string Command, long DelayMs = 0) : LoopStep
 {
     public override string Display => DelayMs > 0
-        ? $"{Command} (wait {DelayMs}ms)"
+        ? $"{Command} (wait {LoopDelay.Describe(DelayMs)})"
         : Command;
 }

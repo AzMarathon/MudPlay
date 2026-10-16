@@ -283,7 +283,8 @@ public sealed class AutoDiscardManager : IDisposable
         Func<bool>? isParadigm = null,
         Func<IEnumerable<string>>? wornItems = null,
         Func<string?>? litLight = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        Func<int, int>? carriedForJourney = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(carriedItems);
@@ -293,6 +294,7 @@ public sealed class AutoDiscardManager : IDisposable
         // Unbound (tests that wear nothing): only the pack counts.
         _worn = wornItems ?? (static () => Array.Empty<string>());
         _lit = litLight ?? (static () => null);
+        _carriedForJourney = carriedForJourney ?? (static _ => 0);
         _now = now ?? (static () => DateTimeOffset.UtcNow);
         _resolve = resolve;
         _isEnabled = isEnabled;
@@ -390,7 +392,14 @@ public sealed class AutoDiscardManager : IDisposable
     // is worn. Worn copies count toward keeping, so a piece just taken off is not
     // an extra; and only pack copies are ever asked for, since a discard for more
     // than the pack holds would take the worn one off.
-    private int PackFloor(ResolvedDiscard item) => Math.Max(0, item.KeepCount - WornCopies(item.Number));
+    // Copies a walk under way has fetched for the party to cross its gates with (its
+    // own and those it hands to members) stay too: dropped, the copy bought for a
+    // member was bought again every trip (report paradigm-20261016-031735; user,
+    // 2026-10-16).
+    private int PackFloor(ResolvedDiscard item) =>
+        Math.Max(Math.Max(0, item.KeepCount - WornCopies(item.Number)), _carriedForJourney(item.Number));
+
+    private readonly Func<int, int> _carriedForJourney;
 
     // A pile is one command on Paradigm and one per copy on Stock, which is why
     // the engine's commands share the pacer with the by-hand sweeps.

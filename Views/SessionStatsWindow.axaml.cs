@@ -139,7 +139,12 @@ public partial class SessionStatsWindow : Window
             PixelRect area = screen.WorkingArea;
             int heightPx = (int)Math.Ceiling(target * screen.Scaling);
             if (Position.Y + heightPx > area.Bottom)
-                Position = new PixelPoint(Position.X, Math.Max(area.Y, area.Bottom - heightPx));
+            {
+                PixelPoint fitted = new(Position.X, Math.Max(area.Y, area.Bottom - heightPx));
+                // Our own move, not a drag: snapping isn't to treat it as one.
+                Services.AppServices.Current.WindowSnap.ExpectMove("session-stats", fitted);
+                Position = fitted;
+            }
         }
     }
 

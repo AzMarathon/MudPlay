@@ -77,6 +77,9 @@ public static class EquipmentWeaponSync
         profile.AlternateOffHand = Slot(def, EquipmentSlot.AlternateOffHand);
     }
 
+    public static bool HasDefaultSet(EquipmentSettings equipment)
+        => Find(equipment, EquipTriggerType.Default) is not null;
+
     private static EquipmentSet? Find(EquipmentSettings equipment, EquipTriggerType trigger)
         => equipment.Sets.FirstOrDefault(s => s.Trigger == trigger);
 

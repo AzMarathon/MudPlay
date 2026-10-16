@@ -596,6 +596,60 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
     }
 
+    // A room command's delay counts real time from the command: a fight during it
+    // doesn't stop the clock, so the loop moves on as soon as the fight ends if the
+    // delay ran out meanwhile (report paradigm-20261014-180148).
+    [Fact]
+    public void CommandDelay_RunsOnThroughAFight()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("arena", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "remove torch", 30),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        }));
+        Assert.Single(h.Sent);
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Thread.Sleep(80);
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        h.Drain();
+
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    [Fact]
+    public void CommandDelay_FightEndingBeforeItRunsOut_StillWaits()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("arena", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "remove torch", 60_000),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        }));
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        h.Drain();
+
+        Assert.Single(h.Sent);
+        Assert.NotNull(h.Runner.CommandDelayRemaining);
+    }
+
+    [Theory]
+    [InlineData(0, 18, 18_000)]
+    [InlineData(3, 0, 180_000)]
+    [InlineData(99999, 99999, 6_099_939_000)]   // past an int of milliseconds
+    public void LoopDelay_MinutesAndSeconds_AddUp(long minutes, long seconds, long ms)
+    {
+        Assert.Equal(ms, LoopDelay.ToMs(minutes, seconds));
+        (long m, long s) = LoopDelay.Split(ms);
+        Assert.Equal(ms, LoopDelay.ToMs(m, s));
+    }
+
     // Reports paradigm-20260914-054046 / -054501: a gear swap asserted and cleared
     // the GearSwap gate in the same server-line burst that carried the previous
     // step's arrival. The arrival advanced and dispatched the next step, then the
@@ -2989,6 +3043,40 @@ public sealed class LoopRunnerTests : IDisposable
 
         Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Started);
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.ReachedFirstWaypoint);
+    }
+
+    // A bank trip that rejoins the loop at another waypoint keeps counting steps
+    // from where the run did: "step 1 of 8" before the trip isn't "7 of 8" after.
+    [Fact]
+    public void ResumeAfterDetour_AtAnotherWaypoint_KeepsTheRunsStepNumbering()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.Stop("auto-deposit reroute", willResume: true);
+        h.Sent.Clear();
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        Assert.True(h.Runner.ResumeAfterDetour(AbCycle()));
+
+        Assert.Equal(new RoomKey(1, 1), h.Runner.CircleStartRoom);
+        Assert.Equal(1, h.Runner.CurrentIndex);                       // B's step, the move back to A
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    [Fact]
+    public void Start_AfterAStopNotForAResume_AnchorsAtTheRoomItStartsIn()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.Stop("user stop");
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Runner.ResumeAfterDetour(AbCycle());
+
+        Assert.Equal(new RoomKey(1, 2), h.Runner.CircleStartRoom);
+        Assert.Equal(0, h.Runner.CurrentIndex);
     }
 
     [Fact]

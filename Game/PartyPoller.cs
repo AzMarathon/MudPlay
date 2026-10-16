@@ -135,7 +135,9 @@ public sealed partial class PartyPoller : IDisposable
 
     // Canonical reply regex for the @health round-trip. Matches the shape
     // PartyEssentialHandlers.OnHealth produces —
-    // {HP=cur/max,MA=cur/max[, Resting|Meditating]}. The leading { + trailing }
+    // {HP=cur/max,MA=cur/max[, Resting|Meditating]}; a MegaMUD member's reply can
+    // carry several words of status there (", Losing HPs", ", Resting, Cant move"),
+    // so anything up to the closing brace is accepted. The leading { + trailing }
     // are the brace-wrap the engine adds at SendReply time per the
     // remote-command meta-line convention. Mana group is optional (warriors
     // reply HP-only); position suffix is optional and ignored — we only need the
@@ -149,7 +151,7 @@ public sealed partial class PartyPoller : IDisposable
         // BaselineHp stays 0, and PartyPoller's nag retries until
         // max-total instead of cancelling on first valid reply.
         // Max halves stay `\d+` — max HP / MA are always positive.
-        @"^\{?HP=(?<hp>-?\d+)/(?<hpmax>\d+)(?:,(?<mpkind>MA|KAI)=(?<mp>-?\d+)/(?<mpmax>\d+))?(?:,\s*\w+)?\}?\s*$",
+        @"^\{?HP=(?<hp>-?\d+)/(?<hpmax>\d+)(?:,(?<mpkind>MA|KAI)=(?<mp>-?\d+)/(?<mpmax>\d+))?(?:,[^}]*)?\}?\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex HealthReply();
 

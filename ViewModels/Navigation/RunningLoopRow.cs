@@ -9,7 +9,7 @@ namespace MudPlay.ViewModels.Navigation;
 // Add / remove / reorder aren't offered while running, so — unlike LoopBuilderRow —
 // this row has no move/remove affordance.
 public sealed record RunningLoopRow(
-    int Index, RoomKey Key, string Name, string? Command, int DelayMs,
+    int Index, RoomKey Key, string Name, string? Command, long DelayMs,
     bool DoNotRest, bool DoNotAttack, bool IsCurrentRoom, bool RestHereHp = false, bool RestHereMana = false)
 {
     public bool HasCommand => !string.IsNullOrWhiteSpace(Command);

@@ -247,6 +247,21 @@ public sealed class LoopRunner : IRecoverableEngine
     private DispatcherTimer? _delayTimer;
     private TimeSpan _delayRemaining;
     private long _delayStartTimestamp;
+    // A room command's own delay runs in real time from the command (Stopwatch
+    // timestamp it ends at); 0 for the reply wait, which pauses with the loop.
+    private long _delayDeadline;
+    // A DispatcherTimer can't be set past ~24 days, and a delay may be far longer:
+    // a long one is waited out in slices, each re-reading the deadline.
+    private static readonly TimeSpan MaxDelaySlice = TimeSpan.FromHours(1);
+
+    // Time left on a room command's delay, or null when none is running.
+    public TimeSpan? CommandDelayRemaining => _delayDeadline == 0 ? null : DeadlineRemaining();
+
+    private TimeSpan DeadlineRemaining()
+    {
+        TimeSpan left = TimeSpan.FromSeconds((double)(_delayDeadline - Stopwatch.GetTimestamp()) / Stopwatch.Frequency);
+        return left < TimeSpan.Zero ? TimeSpan.Zero : left;
+    }
 
     // In-flight stall watchdog. A move can be sent, go Pending, then be interrupted
     // by a combat gate before it confirms; on resume the runner keeps the step in
@@ -1195,6 +1210,21 @@ public sealed class LoopRunner : IRecoverableEngine
     public bool ResumeAfterDetour(Loop loop, bool throughGates = false)
         => StartInternal(loop, isRecovery: false, suppressFirstWaypointEvent: true, throughGates: throughGates);
 
+    // The room a run stopped for a trip (bank, sell, train) counted its steps from.
+    // Its resume keeps that anchor, so the step shown after rejoining at another
+    // room of the loop is the same number it was before the trip, not a count
+    // restarted from the rejoin room.
+    private (string Name, RoomKey[] Waypoints, RoomKey Anchor)? _resumeAnchor;
+
+    private RoomKey? TakeResumeAnchor(Loop loop)
+    {
+        (string Name, RoomKey[] Waypoints, RoomKey Anchor)? kept = _resumeAnchor;
+        _resumeAnchor = null;
+        return kept is { } k && k.Name == loop.Name
+            && k.Waypoints.SequenceEqual(loop.Waypoints.Select(w => w.Key))
+            ? k.Anchor : null;
+    }
+
     // Shared engine for both a fresh user Start and an auto-recovery reroute. On a
     // recovery reroute (isRecovery) we deliberately keep the session-scoped state —
     // the bounded _recoverAttempts budget and the lap history / first-waypoint flag
@@ -1224,6 +1254,8 @@ public sealed class LoopRunner : IRecoverableEngine
         }
         // Handed back to run again, the snapshot keeps the stamp it has.
         bool keptSnapshot = ReferenceEquals(loop, LastRunLoop);
+        RoomKey? keepAnchor = suppressFirstWaypointEvent ? TakeResumeAnchor(loop) : null;
+        _resumeAnchor = null;
 
         if (isRecovery)
         {
@@ -1328,7 +1360,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // (Idle) shape and the approach-phase preview overlay would
         // render empty.
 
-        if (currentKey is { } here && loop.Waypoints.Any(w => w.Key.Equals(here)))
+        if (keepAnchor is null && currentKey is { } here && loop.Waypoints.Any(w => w.Key.Equals(here)))
         {
             _log?.Info("LoopRunner",
                 $"Start branch=at-waypoint: player already at {here}; no approach needed");
@@ -1343,7 +1375,7 @@ public sealed class LoopRunner : IRecoverableEngine
         }
 
         if (_bfs is not null && currentKey is { } from
-            && TryEnterAtNearestRoom(loop, from, throughGates, firstRun: !isRecovery))
+            && TryEnterAtNearestRoom(loop, from, throughGates, firstRun: !isRecovery, anchor: keepAnchor))
             return true;
 
         if (_walker is null || _bfs is null || currentKey is null)
@@ -1414,9 +1446,10 @@ public sealed class LoopRunner : IRecoverableEngine
     // no approach. The cycle stays anchored at the first authored waypoint; the entry
     // is just the step index the run begins at. False when the cycle can't be
     // resolved or none of it can be reached, leaving the caller the waypoint pick.
-    private bool TryEnterAtNearestRoom(Loop loop, RoomKey from, bool throughGates, bool firstRun)
+    private bool TryEnterAtNearestRoom(Loop loop, RoomKey from, bool throughGates, bool firstRun,
+        RoomKey? anchor = null)
     {
-        _circleStartRoom = loop.Waypoints[0].Key;
+        _circleStartRoom = anchor ?? loop.Waypoints[0].Key;
         ExpandSteps();
         Dictionary<RoomKey, int> entryIndex = CycleEntryIndices();
         if (entryIndex.Count == 0) return false;
@@ -1433,7 +1466,7 @@ public sealed class LoopRunner : IRecoverableEngine
         if (best is not { } entry) return false;
         if (!entry.Equals(from) && _walker is null) return false;
 
-        if (loop.Waypoints.Any(w => w.Key.Equals(entry)))
+        if (anchor is null && loop.Waypoints.Any(w => w.Key.Equals(entry)))
         {
             // A waypoint entry anchors the cycle there, so every lap is whole — the
             // Roomba sweep, whose rooms are all waypoints, reads its first wrap as
@@ -1782,6 +1815,9 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         if (State == LoopState.Idle) return;
         string? name = _loop?.Name;
+        _resumeAnchor = willResume && _loop is { } stopped && _circleStartRoom is { } anchor
+            ? (stopped.Name, stopped.Waypoints.Select(w => w.Key).ToArray(), anchor)
+            : null;
         _log?.Info("LoopRunner",
             $"Stop: loop='{name ?? "?"}' state={State} reason={reason}");
         // If we're approaching, stop the walker too. The walker's own
@@ -2695,11 +2731,15 @@ public sealed class LoopRunner : IRecoverableEngine
 
         if (step.DelayMs > 0)
         {
-            // Wait the user-specified duration before advancing. The
-            // timer pauses + resumes with the coordinator's pause
-            // state so a rest-block doesn't burn the delay window.
+            // Wait the user's delay before advancing. The command goes out once the
+            // room is clear (a fight pauses the loop ahead of it), and the delay runs
+            // in real time from there: a fight during it doesn't stop the clock, it
+            // only holds the move until the room is clear again. Paused with the
+            // loop instead, a delay in a busy room ran 3-9 times as long as set
+            // (report paradigm-20261014-180148).
             _awaitingCommandReplies = false;
-            StartDelay(TimeSpan.FromMilliseconds(step.DelayMs));
+            _log?.Info("LoopRunner", $"command '{step.Command}': waiting {LoopDelay.Describe(step.DelayMs)} before moving on");
+            StartDelay(TimeSpan.FromMilliseconds(step.DelayMs), runsInRealTime: true);
         }
         else
         {
@@ -2764,14 +2804,18 @@ public sealed class LoopRunner : IRecoverableEngine
 
     // ----- custom-command delay timer --------------------------------
 
-    private void StartDelay(TimeSpan duration)
+    private void StartDelay(TimeSpan duration, bool runsInRealTime = false)
     {
         _delayRemaining = duration;
+        _delayDeadline = runsInRealTime
+            ? Stopwatch.GetTimestamp() + (long)(duration.TotalSeconds * Stopwatch.Frequency)
+            : 0;
         StartOrResumeDelayTimer();
     }
 
     private void StartOrResumeDelayTimer()
     {
+        if (_delayDeadline != 0) _delayRemaining = DeadlineRemaining();
         if (_delayRemaining <= TimeSpan.Zero)
         {
             OnDelayElapsed();
@@ -2780,7 +2824,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _delayTimer ??= new DispatcherTimer();
         _delayTimer.Tick -= OnDelayTick;
         _delayTimer.Tick += OnDelayTick;
-        _delayTimer.Interval = _delayRemaining;
+        _delayTimer.Interval = _delayRemaining < MaxDelaySlice ? _delayRemaining : MaxDelaySlice;
         _delayStartTimestamp = Stopwatch.GetTimestamp();
         _delayTimer.Start();
     }
@@ -2789,6 +2833,13 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         if (_delayTimer is null || !_delayTimer.IsEnabled) return;
         _delayTimer.Stop();
+        if (_delayDeadline != 0)
+        {
+            // The clock keeps running; what's left is re-read on resume. Kept above
+            // zero so the resume comes back here rather than re-sending the step.
+            _delayRemaining = TimeSpan.FromTicks(1);
+            return;
+        }
         TimeSpan elapsed = Stopwatch.GetElapsedTime(_delayStartTimestamp);
         _delayRemaining -= elapsed;
         if (_delayRemaining < TimeSpan.Zero) _delayRemaining = TimeSpan.Zero;
@@ -2796,18 +2847,29 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private void StopDelayTimer()
     {
+        _delayDeadline = 0;
         if (_delayTimer is null) return;
         _delayTimer.Stop();
         _delayTimer.Tick -= OnDelayTick;
         _delayRemaining = TimeSpan.Zero;
     }
 
-    private void OnDelayTick(object? sender, EventArgs e) => OnDelayElapsed();
+    private void OnDelayTick(object? sender, EventArgs e)
+    {
+        if (_delayDeadline != 0 && DeadlineRemaining() > TimeSpan.Zero)
+        {
+            _delayTimer?.Stop();
+            StartOrResumeDelayTimer();   // the next slice of a long delay
+            return;
+        }
+        OnDelayElapsed();
+    }
 
     private void OnDelayElapsed()
     {
         _delayTimer?.Stop();
         _delayRemaining = TimeSpan.Zero;
+        _delayDeadline = 0;
         if (_awaitingCommandReplies && State == LoopState.Running && HoldForCombat())
         {
             StartDelay(CommandReplyWait);

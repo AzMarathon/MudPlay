@@ -163,7 +163,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     // driven by clicking the row in the loop-builder strip, which opens the same
     // WaypointActionEditDialog the loop editor uses. Commands don't change the
     // gap-filled path, so no re-expand. No-op when index is out of range.
-    public void SetClickAction(int index, string? command, int delayMs, bool doNotRest = false, bool doNotAttack = false,
+    public void SetClickAction(int index, string? command, long delayMs, bool doNotRest = false, bool doNotAttack = false,
         bool restHereHp = false, bool restHereMana = false)
     {
         if (index < 0 || index >= Clicks.Count) return;
@@ -315,7 +315,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
 // LoopWaypoint on Save/BuildTransient. HasCommand drives the row's "has an action"
 // marker.
 public sealed record LoopBuilderRow(
-    int Index, RoomKey Key, string Name, string? Command = null, int DelayMs = 0, bool DoNotRest = false, bool DoNotAttack = false,
+    int Index, RoomKey Key, string Name, string? Command = null, long DelayMs = 0, bool DoNotRest = false, bool DoNotAttack = false,
     bool RestHereHp = false, bool RestHereMana = false)
 {
     public bool HasCommand => !string.IsNullOrWhiteSpace(Command);

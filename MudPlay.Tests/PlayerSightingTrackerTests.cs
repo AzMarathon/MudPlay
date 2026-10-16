@@ -50,6 +50,27 @@ public sealed class PlayerSightingTrackerTests
         Assert.Equal("Town Square", row.RoomName);
     }
 
+    // With no `who` run, a player beside us lists as unknown; a name that reads as a
+    // player's is counted anyway, a monster's isn't, and the later re-read as a
+    // Player doesn't count them twice (report paradigm-20261013-173152).
+    [Fact]
+    public void AlsoHere_UnknownNameThatReadsAsAPlayer_IsCountedOnce()
+    {
+        Room? current = MakeRoom(1, 2150, "Newhaven Arena");
+        var t = new PlayerSightingTracker(() => current, profile: null, selfNameProvider: () => "Me");
+
+        t.NoteAlsoHere(new RoomEntitiesObservation("Also here: ...", new[]
+        {
+            new RoomEntity("Thesifer", "Thesifer", EntityKind.Unknown, null),
+            new RoomEntity("angry carrion beast", "angry carrion beast", EntityKind.Unknown, null),
+        }, DateTimeOffset.Now));
+        t.NoteAlsoHere(AlsoHere("Thesifer"));
+
+        PlayerSighting row = Assert.Single(t.Snapshot());
+        Assert.Equal("Thesifer", row.Name);
+        Assert.Equal(1, row.TimesSeen);
+    }
+
     // Standing still (re-pressing Enter re-fires the same "Also here:" line)
     // counts the occupant once per visit, not once per redisplay.
     [Fact]

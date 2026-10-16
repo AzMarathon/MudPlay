@@ -122,10 +122,10 @@ public sealed partial class AllyDroppedHandler : IDisposable
     public Func<DateTime> NowProvider { get; set; } = () => DateTime.UtcNow;
 
     // Canonical @health reply shape, mirroring PartyPoller: {HP=cur/max[,MA=cur/max]
-    // [,pos]}. The cur halves accept a leading minus so a still-negative (aided but
+    // [,status text]}. The cur halves accept a leading minus so a still-negative (aided but
     // not yet fully healed) reading parses instead of silently failing to match.
     [GeneratedRegex(
-        @"^\{?HP=(?<hp>-?\d+)/(?<hpmax>\d+)(?:,(?:MA|KAI)=(?<mp>-?\d+)/(?<mpmax>\d+))?(?:,\s*\w+)?\}?\s*$",
+        @"^\{?HP=(?<hp>-?\d+)/(?<hpmax>\d+)(?:,(?:MA|KAI)=(?<mp>-?\d+)/(?<mpmax>\d+))?(?:,[^}]*)?\}?\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex HealthReply();
 

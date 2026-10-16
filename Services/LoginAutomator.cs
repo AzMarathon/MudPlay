@@ -71,9 +71,13 @@ public sealed class LoginAutomator : IDisposable
     // or MegaMUD-holdover) step never matches and LoggedIntoGame never comes.
     public event Action? StepAdvanced;
 
-    // Fired when a step's send fails (no value to substitute, send IO error,
-    // etc.). Payload is a short reason.
+    // Fired when a step's send fails (send IO error, a credential resend
+    // refused, etc.). Payload is a short reason.
     public event Action<string>? Aborted;
+
+    // Fired when a step is passed over because the credential it sends isn't
+    // saved. Payload is a short reason.
+    public event Action<string>? StepSkipped;
 
     public bool IsRunning => _started && !_disposed && _stepIndex < _steps.Count;
 
@@ -275,7 +279,7 @@ public sealed class LoginAutomator : IDisposable
         }
         if (usesUser && string.IsNullOrEmpty(_username))
         {
-            Abort($"step {indexAtDispatch + 1}: send references {{username}} but no username is configured");
+            SkipStep(indexAtDispatch, "no username is saved");
             return;
         }
 
@@ -284,7 +288,7 @@ public sealed class LoginAutomator : IDisposable
         {
             if (_resolvePassword is null)
             {
-                Abort($"step {indexAtDispatch + 1}: send references {{password}} but no password is configured");
+                SkipStep(indexAtDispatch, "no password is saved");
                 return;
             }
             try
@@ -298,7 +302,7 @@ public sealed class LoginAutomator : IDisposable
             }
             if (password is null)
             {
-                Abort($"step {indexAtDispatch + 1}: password not found in credential store");
+                SkipStep(indexAtDispatch, "the saved password can't be read");
                 return;
             }
         }
@@ -343,6 +347,30 @@ public sealed class LoginAutomator : IDisposable
         // so the auto-entry arm window stays fresh even if a later step stalls.
         StepAdvanced?.Invoke();
 
+        if (done) { FireDone(); return; }
+        TryAdvance();
+    }
+
+    // A step whose credential isn't saved is left for the user to type at its
+    // prompt; the steps after it (menu navigation into the game) still run when
+    // their prompts arrive.
+    private void SkipStep(int index, string reason)
+    {
+        bool done;
+        string? nextPattern = null;
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _stepIndex++;
+            _resolving = false;
+            done = _stepIndex >= _steps.Count;
+            if (!done) nextPattern = _steps[_stepIndex].WaitForPattern;
+        }
+        _log?.Invoke(done
+            ? $"LoginAutomator: step {index + 1}/{_steps.Count} left to type by hand ({reason}) — no steps after it"
+            : $"LoginAutomator: step {index + 1}/{_steps.Count} left to type by hand ({reason}); awaiting step {_stepIndex + 1}/{_steps.Count} (waiting for: \"{nextPattern}\")");
+        StepSkipped?.Invoke($"step {index + 1}: {reason}");
+        StepAdvanced?.Invoke();
         if (done) { FireDone(); return; }
         TryAdvance();
     }
