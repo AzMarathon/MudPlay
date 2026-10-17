@@ -369,16 +369,18 @@ public sealed class ChatRouter : IDisposable
     // went out: it reached nobody (DropUnsentTelepath).
     public event Action<string>? UnsentTelepathDropped;
 
-    // Whether a telepath the user sent, as it went out, is still waiting for the
-    // game's answer: neither confirmed, nor known not to have been sent, nor older
-    // than a confirmation ever comes.
-    public bool AwaitsConfirmation(string line)
+    // Whether a telepath the user sent, one isTheOne says is the kind asked about
+    // (told the line as it went out), is still waiting for the game's answer:
+    // neither confirmed, nor known not to have been sent, nor older than a
+    // confirmation ever comes. Asked of the pending sends themselves, so a
+    // subscriber that came into being after the line went out still sees it.
+    public bool UsersTelepathAwaiting(Func<string, bool> isTheOne)
     {
-        string sent = line.Trim();
+        ArgumentNullException.ThrowIfNull(isTheOne);
         DateTimeOffset now = _now();
         return _pendingTelepaths.Exists(p => p.UsersOwn
                                              && now - p.EnqueuedAt <= PendingCaptureStaleAfter
-                                             && $"/{p.Target} {p.Message}" == sent);
+                                             && isTheOne($"/{p.Target} {p.Message}"));
     }
 
     // The telepath lines seen going out lately, so that the row the board shows

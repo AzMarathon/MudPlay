@@ -13,9 +13,10 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 // where several can answer, the boss isn't in our list yet, the offer answers no
 // request of the user's, or we hold no timer and the answers of several are still
 // being gathered or did not agree, or the one player's answer is held back while
-// another telepath request waits to be shown sent — in which case it shows the "keep ours" default
-// plus a pick button per responder listed. Only conflict rows need a decision;
-// SelectedKilledAt is what the Apply button writes for them (null = keep ours).
+// another telepath request waits to be shown sent — in which case it shows the
+// "keep ours" default plus a pick button per responder listed. Only conflict rows
+// need a decision; SelectedKilledAt is what the Apply button writes for them
+// (null = keep ours).
 public sealed partial class BossTimerSyncRowViewModel : ObservableObject
 {
     // The boss as our list names it, or as the responder did while it is not on it.

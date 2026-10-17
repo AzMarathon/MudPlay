@@ -75,10 +75,6 @@ public sealed class BossTimerSyncCollector : IDisposable
     // had it: the game showed it sent, or it reached nobody.
     public event Action? TelepathRequestAnswered;
 
-    // The user's telepath requests as they went out, while the game may yet show
-    // them sent (AwaitingTelepathSent).
-    private readonly List<string> _telepathsOut = new();
-
     // broadcastOff: the Talk tab's "Disallow @commands from broadcast". Ticked, the
     // broadcast channel is not listened to at all, for answers no more than for
     // requests: it is public, and off until the user opens it.
@@ -103,31 +99,35 @@ public sealed class BossTimerSyncCollector : IDisposable
     // typed at the terminal. Where its answers would not be read, it asks nothing.
     private void OnUsersLineSent(string line)
     {
-        if (TransferChannels.RequestIn(line) is not { Transfer: Transfer.TimerSync, Channel: var channel }) return;
-        if (channel is { } on && (!TransferChannels.Allows(Transfer.TimerSync, on)
-                                  || (on == RemoteChannel.Broadcast && _broadcastOff())))
-            return;
-        if (channel == RemoteChannel.Telepath) _telepathsOut.Add(line.Trim());
-        UserAsked?.Invoke();
+        if (AsksForTimerSync(line, _broadcastOff)) UserAsked?.Invoke();
     }
+
+    // Whether a line as it went out asks for a timer sync on a channel whose
+    // answers would be read: one a timer sync may go by, and not the broadcast
+    // channel while it is switched off. A form whose channel is not recorded may
+    // be any, and counts.
+    public static bool AsksForTimerSync(string sentLine, Func<bool> broadcastOff)
+    {
+        if (TransferChannels.RequestIn(sentLine) is not { Transfer: Transfer.TimerSync, Channel: var channel }) return false;
+        return channel is not { } on
+               || (TransferChannels.Allows(Transfer.TimerSync, on) && !(on == RemoteChannel.Broadcast && broadcastOff()));
+    }
+
+    private static bool IsTimerSyncRequest(string sentLine) =>
+        TransferChannels.RequestIn(sentLine) is { Transfer: Transfer.TimerSync };
 
     private void OnUnsentTelepathDropped(string line)
     {
-        if (_telepathsOut.Remove(line.Trim())) TelepathRequestAnswered?.Invoke();
+        if (IsTimerSyncRequest(line)) TelepathRequestAnswered?.Invoke();
     }
 
     // True while a telepath request of the user's has gone out and the game has
     // not yet shown it sent, or said it reached nobody, for as long as a
-    // confirmation can still come (ChatRouter.AwaitsConfirmation). Until then the
-    // one player already asked may not stay the only one.
-    public bool AwaitingTelepathSent
-    {
-        get
-        {
-            _telepathsOut.RemoveAll(line => !_chat.AwaitsConfirmation(line));
-            return _telepathsOut.Count > 0;
-        }
-    }
+    // confirmation can still come. Until then the one player already asked may
+    // not stay the only one. Asked of the chat log's pending sends, not of what
+    // this collector saw go out: a window opened by the first request's
+    // confirmation came into being after a second request was already on its way.
+    public bool AwaitingTelepathSent => _chat.UsersTelepathAwaiting(IsTimerSyncRequest);
 
     // A request of ours went out on askedOn. Its answers are taken from here on,
     // with those of every request made before it while collecting: a second
@@ -215,6 +215,9 @@ public sealed class BossTimerSyncCollector : IDisposable
         if (TransferChannels.OwnRequest(e, _isOurName) is { Transfer: Transfer.TimerSync } own)
         {
             if (!TransferChannels.Allows(Transfer.TimerSync, own.Channel)) return;
+            // Nor while the broadcast channel is switched off: every answer there
+            // would be passed over.
+            if (own.Channel == RemoteChannel.Broadcast && _broadcastOff()) return;
             // Whose request it was is asked of the one place that knows, the lines
             // the user sent as they went out (TransferChannels.IsUsersOwn): for a
             // telepath, its confirmation is of a send of the user's to the player

@@ -657,9 +657,16 @@ public sealed class BossTimerTests : IDisposable
     // the Bosses tab, nothing asked yet); to: who a telepathed one reached; byUser:
     // the request was the user's own. What the window sends goes out through the
     // chat log as a line of the user's, as it does in the app.
+    // beforeOpen: what happens before the window exists, its chat log and timer
+    // store already there (the requests that went out before the echo opened it).
+    // killTimesWhenAsked: the window is handed our kill times as the user's
+    // request went out, as the app hands an auto-opened one. broadcastOff: the
+    // Talk tab's "Disallow @commands from broadcast" is ticked.
     private (BossTimerSyncViewModel window, BossTimerStore timers) NewSyncWindow(
         RemoteChannel? askedOn = RemoteChannel.Broadcast, string? to = null, bool byUser = true,
-        DateTimeOffset? heldWhenAsked = null)
+        DateTimeOffset? heldWhenAsked = null, Action<BossTimerStore>? beforeOpen = null,
+        Func<BossStore, BossTimerStore, IReadOnlyDictionary<string, DateTimeOffset?>>? killTimesWhenAsked = null,
+        bool broadcastOff = false)
     {
         // The golem is in the game data and not on our list.
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1), ("guardian golem", 51, 24, 1));
@@ -676,6 +683,8 @@ public sealed class BossTimerTests : IDisposable
         _syncChat.LastTelepathOnWire = () => _syncLastOnWire;
         _syncSent.Clear();
         _syncTimers.Clear();
+        IReadOnlyDictionary<string, DateTimeOffset?>? killTimes = killTimesWhenAsked?.Invoke(bosses, timers);
+        beforeOpen?.Invoke(timers);
         BossTimerSyncViewModel window = new(bosses, timers, cache, _syncChat,
             send: line =>
             {
@@ -683,9 +692,10 @@ public sealed class BossTimerTests : IDisposable
                 _syncLastOnWire = line;
                 _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
             },
-            preArmedOn: askedOn, _syncLog = new LogService(), broadcastOff: () => false,
+            preArmedOn: askedOn, _syncLog = new LogService(), broadcastOff: () => broadcastOff,
             isOurName: name => name == "Us", windowActive: _ => { }, preArmedTo: to, onUiThread: act => act(),
-            preArmedByUser: byUser, armTimer: (delay, fire) => _syncTimers.Add((delay, fire)));
+            preArmedByUser: byUser, armTimer: (delay, fire) => _syncTimers.Add((delay, fire)),
+            killTimesWhenAsked: killTimes);
         return (window, timers);
     }
 
@@ -2429,6 +2439,36 @@ public sealed class BossTimerTests : IDisposable
         }
     }
 
+    // Two telepath requests sent together (a macro's `/Bob …;/Sue …`): the window
+    // the first one's confirmation opens never saw the second go out. Still
+    // unconfirmed, it holds the first player's answer back all the same, and once
+    // the game shows it sent both players are asked and nothing is written.
+    [Fact]
+    public void SyncWindow_OpenedByTheFirstOfTwoTelepathsSentTogether_HoldsTheFirstAnswerBack()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: RemoteChannel.Telepath, to: "Bob", beforeOpen: _ =>
+        {
+            UserPressesEnter("/Bob @timer sync");
+            UserPressesEnter("/Sue @timer sync");
+            GameConfirms("Bob");
+        });
+        using (window)
+        {
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.Contains("1 waiting for the game to show your other telepath request sent", window.Status);
+            Assert.Contains(_syncLog.Snapshot(), e =>
+                e.Message.EndsWith("1 gathered until the game shows the user's other telepath request sent or not"));
+
+            GameConfirms("Sue");
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Contains(row.Responders, c => c.Responder == "Bob");
+        }
+    }
+
     // ----- the merge window: a pick applied with the window left open ---------
 
     // A pick applied is the user's own doing, like what the window merges in or
@@ -2547,7 +2587,82 @@ public sealed class BossTimerTests : IDisposable
         }
     }
 
+    // The same for a window the request's echo opened: it is handed our kill
+    // times as the user pressed Enter, so a kill of ours before the game showed
+    // the telepath sent is a change after asking, and the one player's answer
+    // does not sync over it. Nothing gathered, the log line says nothing of it.
+    [Fact]
+    public void SyncWindow_OpenedByTheEcho_CountsAKillBeforeTheEchoAsAChangeAfterAsking()
+    {
+        DateTimeOffset ownKill = Killed.AddHours(6);
+        var (window, timers) = NewSyncWindow(askedOn: RemoteChannel.Telepath, to: "Bob", heldWhenAsked: Held,
+            killTimesWhenAsked: (bossList, store) => BossTimerSyncViewModel.KillTimesNow(bossList, store, RealmType.ParaMud),
+            beforeOpen: store =>
+            {
+                UserPressesEnter("/bo @timer sync");
+                store.MarkKilled("ogre king", ownKill);
+                GameConfirms("Bob");
+            });
+        using (window)
+        {
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Equal(ownKill, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.False(row.WasSynced);
+            Assert.EndsWith("changed since you asked", row.OursText);
+            Assert.Contains(_syncLog.Snapshot(), e => e.Message.EndsWith("1 to pick, 0 gathered"));
+        }
+    }
+
+    // A typed broadcast request with the broadcast channel switched off starts no
+    // collecting in a window where nothing was asked yet: every answer there
+    // would be passed over.
+    [Fact]
+    public void SyncWindow_ABroadcastRequestTypedWithTheChannelOff_IsNotCollected()
+    {
+        var (window, _) = NewSyncWindow(askedOn: null, broadcastOff: true);
+        using (window)
+        {
+            UserTypes("br @timer sync");
+            SeesUsAsk(window, ChatChannel.Broadcast);
+
+            Assert.False(window.Requested);
+            Assert.Equal("Pick a channel and request timers.", window.Status);
+        }
+    }
+
     // ----- the merge window: a timer of ours that has run out ------------------
+
+    // A pick is written over a timer of ours that merely ran out while the window
+    // was open: running out is no change of ours. The row is shown holding none.
+    [Fact]
+    public void SyncWindow_APickAgainstATimerOfOursThatRanOutSince_IsWritten()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            int closes = 0;
+            window.CloseRequested += _ => closes++;
+            timers.MarkKilled("ogre king", Held);   // nineteen hours ago: running on the 24-hour respawn
+            window.Fold(Offers("Mallory", RemoteChannel.Telepath, TimerSyncStanding.NotAsked));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.Equal(Held, row.OursKilledAt);
+
+            // Its respawn set to twelve hours: the same kill has run out.
+            BossDef shorter = Boss("ogre king", number: 50, rooms: "1/1");
+            shorter.RespawnHoursOverride = 12;
+            _syncBosses.Save(new List<BossDef> { shorter });
+            Assert.Equal(Held, timers.KilledAt("ogre king"));
+            Assert.Null(timers.StatusFor(Assert.Single(_syncBosses.ResolveForRealm(RealmType.ParaMud)), RealmType.ParaMud));
+            row.Responders[0].AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Equal(1, closes);
+        }
+    }
 
     // An expired timer counts as holding none (user, 2026-10-17): the row offers
     // "Take none" and says ours ran out, and a reply is merged in as for a boss we
