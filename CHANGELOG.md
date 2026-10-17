@@ -1,6 +1,6 @@
 # Version history
 
-## 3.183.20
+## 3.183.22
 
 - Character Info: a carried container's chest icon is drawn as a link, not a plain grey button
 - Navigation: Save, Accept and Go buttons that were meant to stand out now show in the accent colour
