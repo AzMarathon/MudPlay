@@ -15,7 +15,8 @@ namespace MudPlay.Services;
 //
 // Nothing is recorded while Withhold says so: outside the game (a login is typed
 // there) and while a suicide password may be going out. Those lines are counted,
-// never kept.
+// never kept. The password of a `recover corpse <name> <password>` is masked, both
+// here and in the line told to TypedLineEntered.
 public sealed class SentCommandTrail
 {
     // Sized from the bug report's budget: ~70 bytes an entry, so the whole ring
@@ -63,6 +64,8 @@ public sealed class SentCommandTrail
     public void Record(string text, Origin origin, string? sender, Outcome outcome, string? why = null)
     {
         if (string.IsNullOrEmpty(text)) return;
+        // Another player's corpse password is theirs: it is never kept.
+        text = Game.Recovery.CorpseRecoveryLines.Redact(text);
         if (Withhold?.Invoke() == true)
         {
             lock (_ringLock) { _withheld++; }
@@ -182,6 +185,7 @@ public sealed class SentCommandTrail
             lock (_ringLock) { _withheld++; }
             return;
         }
+        line = Game.Recovery.CorpseRecoveryLines.Redact(line);
         if (UserLineSent(line, Origin.Typed)) TypedLineEntered?.Invoke(line);
     }
 
