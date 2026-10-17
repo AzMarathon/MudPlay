@@ -20,6 +20,9 @@ internal static class QuestItemGathering
     // Monsters named on one kill line; a common drop can come off dozens.
     private const int MaxDroppers = 3;
 
+    // How many fetches deep a chain of trades is followed (a fetch for a fetch).
+    private const int MaxFetchDepth = 3;
+
     // A drop slot at this chance always drops (MonsterDropIndex: 0 is unset).
     private const int SureDropPercent = 100;
 
@@ -64,27 +67,39 @@ internal static class QuestItemGathering
 
         var result = new List<QuestStep>(steps.Count);
         var gathered = new HashSet<int>();
+
+        // The fetches for what step needs go in ahead of it, and a fetch that needs
+        // something itself (an NPC who trades the item for another) gets its own fetch
+        // ahead of it in turn, as a guide lists "obtain 50 orc-heads" before "ask aldreth
+        // heads".
+        void AddFetches(QuestStep step, int depth)
+        {
+            foreach (int item in step.TurnInItems.Concat(step.RequiredItems).Distinct())
+            {
+                if (!gathered.Add(item) || result.Any(s => s.GrantedItems.Contains(item))) continue;
+                if (SourceStep(step.Order, item, givers, drops) is not { } gather) continue;
+
+                // The monster is killed on an earlier line anyway (the quest's own
+                // kill, or the fetch of another of its drops): the item comes with it.
+                int killer = gather.Command is null && gather.Droppers is { } droppers
+                    ? result.FindIndex(s => Kills(cache, s).Intersect(droppers).Any())
+                    : -1;
+                if (killer >= 0)
+                {
+                    result[killer] = result[killer] with
+                    {
+                        GrantedItems = result[killer].GrantedItems.Append(item).ToArray(),
+                    };
+                    continue;
+                }
+                if (depth < MaxFetchDepth) AddFetches(gather, depth + 1);
+                result.Add(gather);
+            }
+        }
+
         foreach (QuestStep step in steps)
         {
-            if (!step.Gathers)
-                foreach (int item in step.TurnInItems.Concat(step.RequiredItems).Distinct())
-                {
-                    if (!gathered.Add(item) || result.Any(s => s.GrantedItems.Contains(item))) continue;
-                    if (SourceStep(step.Order, item, givers, drops) is not { } gather) continue;
-
-                    // The monster is killed on an earlier line anyway (the quest's own
-                    // kill, or the fetch of another of its drops): the item comes with it.
-                    int killer = gather.Command is null && gather.Droppers is { } droppers
-                        ? result.FindIndex(s => Kills(cache, s).Intersect(droppers).Any())
-                        : -1;
-                    if (killer >= 0)
-                        result[killer] = result[killer] with
-                        {
-                            GrantedItems = result[killer].GrantedItems.Append(item).ToArray(),
-                        };
-                    else
-                        result.Add(gather);
-                }
+            AddFetches(step, 0);
             result.Add(step);
         }
         return result;
@@ -122,23 +137,18 @@ internal static class QuestItemGathering
             List<ItemGiver> usable = givers.GiversOf(item).Where(g => g.Requirement != "quest reward").ToList();
             foreach (ItemGiver g in usable.Where(g => IsTyped(g.Keyword)))
             {
-                string? note = g.Requirement.Length > 0 ? g.Requirement : null;
                 if (g.Kind == ItemGiverKind.Monster)
-                    return new QuestStep(order, $"ask {g.Name.ToLowerInvariant()} {g.Keyword}",
-                        string.Create(CultureInfo.InvariantCulture, $"Monster #{g.Number}"),
-                        Array.Empty<int>(), Array.Empty<int>(), granted, Gathers: true, Note: note);
+                    return GiverStep(order, granted, g, $"ask {g.Name.ToLowerInvariant()} {g.Keyword}",
+                        string.Create(CultureInfo.InvariantCulture, $"Monster #{g.Number}"));
                 if (g.Map > 0 && g.Room > 0)
-                    return new QuestStep(order, g.Keyword,
-                        string.Create(CultureInfo.InvariantCulture, $"Room {g.Map}/{g.Room}"),
-                        Array.Empty<int>(), Array.Empty<int>(), granted, Gathers: true, Note: note);
+                    return GiverStep(order, granted, g, g.Keyword,
+                        string.Create(CultureInfo.InvariantCulture, $"Room {g.Map}/{g.Room}"));
             }
             // A room that gives it with nothing to type for it (a draw of a room's roll
             // table): where to go, not what to type.
             foreach (ItemGiver g in usable.Where(g => g.Kind == ItemGiverKind.Room && g.Map > 0 && g.Room > 0))
-                return new QuestStep(order, null,
-                    string.Create(CultureInfo.InvariantCulture, $"Room {g.Map}/{g.Room}"),
-                    Array.Empty<int>(), Array.Empty<int>(), granted, Gathers: true,
-                    Note: g.Requirement.Length > 0 ? g.Requirement : null);
+                return GiverStep(order, granted, g, null,
+                    string.Create(CultureInfo.InvariantCulture, $"Room {g.Map}/{g.Room}"));
         }
 
         if (DropStep(order, granted, droppers) is { } drop) return drop;
@@ -149,6 +159,13 @@ internal static class QuestItemGathering
 
         return null;
     }
+
+    // A give from an NPC or room: the item it takes is needed first (and fetched in turn);
+    // a purchase is noted, since what it costs isn't an item.
+    private static QuestStep GiverStep(int order, int[] granted, ItemGiver g, string? command, string location) =>
+        new(order, command, location, Array.Empty<int>(),
+            g.TakenItemId > 0 ? new[] { g.TakenItemId } : Array.Empty<int>(), granted, Gathers: true,
+            Note: g.TakenItemId == 0 && g.Requirement.Length > 0 ? g.Requirement : null);
 
     // A keyword the player types to get the give: not one an NPC shows by itself, and
     // not a roll-table band.

@@ -305,7 +305,11 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         HashSet<int>? provenDone = prog.FlagValue is int value
             ? entries.Select((e, i) => (e.Order, i)).Where(x => x.Order <= value).Select(x => x.i).ToHashSet()
             : null;
-        AddStepRows(card, string.Join("\n", entries.Select(e => e.Line)), prog, provenDone);
+        // A later tier opens with a plain "-Complete <tier> first-" line, which is no
+        // checkbox, so the checkbox indices above still line up.
+        string? prior = QuestTextFormatter.PriorTierLine(_gameData, q, c => ResolveTitle(_quests.Resolve(c.Flag, c.Step), c));
+        AddStepRows(card, string.Join("\n", new[] { prior }.OfType<string>().Concat(entries.Select(e => e.Line))),
+            prog, provenDone);
     }
 
     // Materialize a quest's step markdown into tickable/label rows on the card. Shared by

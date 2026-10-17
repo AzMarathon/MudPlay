@@ -197,17 +197,20 @@ public static class QuestStepGraph
         return new QuestStep(value <= 0 ? 1 : value, ReadCommand(segments), location, requiredItems, turnInItems, grantedItems);
     }
 
-    // A line that hands over an item while the quest is under way, leaving the flag
-    // alone: it checks the flag (checkability / testability) and gives an item, and no
-    // step of it gives, adds to or clears the flag. Its Order is, for now, the value the
-    // check asks for (the checkability floor, else the testability ceiling), which the
-    // caller places the line after. Null for any other line.
+    // A line that hands over an item for the quest, leaving the flag alone: it checks
+    // the flag and gives an item, and no step of it gives, adds to or clears the flag.
+    // The check is checkability / testability while the quest is under way, or
+    // failability before it starts (`failability 130:failitem 3867:giveitem 3867`, the
+    // chalice Blood Champ's hand-in takes). Its Order is, for now, the value the check
+    // asks for (the checkability floor, else the testability ceiling, else 0 for not
+    // holding the flag), which the caller places the line after. Null for any other line.
     private static QuestStep? BuildGatherStep(string raw, int flag, string? location)
     {
         string[] segments = raw.Split(':');
         if (segments.Length == 0) return null;
 
         int? floor = null, ceiling = null;
+        bool without = false;
         var requiredItems = new List<int>();
         var turnInItems = new List<int>();
         var grantedItems = new List<int>();
@@ -227,6 +230,9 @@ public static class QuestStepGraph
                 case "testability" when onFlag && p.Length >= 3:
                     ceiling = ceiling is int c ? Math.Min(c, value) : value;
                     break;
+                case "failability" when onFlag:
+                    without = true;
+                    break;
                 case "checkitem" when p.Length >= 2 && int.TryParse(p[1], out int ci):
                     if (!requiredItems.Contains(ci)) requiredItems.Add(ci);
                     break;
@@ -239,7 +245,7 @@ public static class QuestStepGraph
             }
         }
 
-        if (grantedItems.Count == 0 || (floor ?? ceiling) is not int gate) return null;
+        if (grantedItems.Count == 0 || (floor ?? ceiling ?? (without ? 0 : null)) is not int gate) return null;
         return new QuestStep(gate, ReadCommand(segments), location, requiredItems, turnInItems, grantedItems, Gathers: true);
     }
 

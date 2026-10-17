@@ -377,20 +377,20 @@ public sealed class QuestTextFormatterTests
     }
 
     [Fact]
-    public void Step_RequiredItemAlsoTurnedIn_ListedOnceAsTurnIn()
+    public void Step_RequiredItemAlsoTurnedIn_ListedOnce()
     {
         // A step that checks the same item it takes (checkitem + takeitem of one id)
-        // names it once in the turn-in note, not again as "required".
-        Assert.Equal("(2/340) `ask valduin crystal` (turn in #100)",
+        // names it once.
+        Assert.Equal("(2/340) (#100 required) `ask valduin crystal`",
             QuestTextFormatter.Step(NoSet,
                 MakeStep(2, "ask valduin crystal", "Room 2/340",
                     required: new[] { 100 }, turnIn: new[] { 100 })));
     }
 
     [Fact]
-    public void Step_DistinctRequiredAndTurnIn_BothListed()
+    public void Step_TakenAndCheckedItems_AreBothRequired()
     {
-        Assert.Equal("(2/340) `ask x` (turn in #100) (#200 required)",
+        Assert.Equal("(2/340) (#100, #200 required) `ask x`",
             QuestTextFormatter.Step(NoSet,
                 MakeStep(2, "ask x", "Room 2/340",
                     required: new[] { 200 }, turnIn: new[] { 100 })));
@@ -404,16 +404,12 @@ public sealed class QuestTextFormatterTests
     }
 
     [Fact]
-    public void Step_RequiredItem_TrailsAsRequiredNote()
+    public void Step_NeededItem_GoesAheadOfTheCommand_AsTheGuidesWriteIt()
     {
-        Assert.Equal("(6/1357) `ask martok forge` (#100 required)",
+        // The seed guide's "[](6/1357) (Gleaming Shard required) `ask martok forge`".
+        Assert.Equal("(6/1357) (#100 required) `ask martok forge`",
             QuestTextFormatter.Step(NoSet, MakeStep(4, "ask martok forge", "Room 6/1357", required: new[] { 100 })));
-    }
-
-    [Fact]
-    public void Step_TurnInItem_TrailsAsTurnInNote()
-    {
-        Assert.Equal("(1/1333) `ask annora head` (turn in #100)",
+        Assert.Equal("(1/1333) (#100 required) `ask annora head`",
             QuestTextFormatter.Step(NoSet, MakeStep(5, "ask annora head", "Room 1/1333", turnIn: new[] { 100 })));
     }
 

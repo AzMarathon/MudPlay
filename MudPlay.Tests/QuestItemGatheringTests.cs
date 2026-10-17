@@ -43,7 +43,10 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 701, "Name": "quest token" },
           { "Number": 702, "Name": "Darkbane" },
           { "Number": 703, "Name": "adamant ore" },
-          { "Number": 931, "Name": "iron crown" }
+          { "Number": 931, "Name": "iron crown" },
+          { "Number": 685, "Name": "gleaming dagger" },
+          { "Number": 686, "Name": "Spirit Dagger of Goijar" },
+          { "Number": 687, "Name": "golden chest" }
         ]
         """;
 
@@ -55,7 +58,9 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 61, "Name": "metallic monstrosity", "DeathSpell": 0, "DropItem-0": 684, "DropItem%-0": 25 },
           { "Number": 62, "Name": "aldreth", "DeathSpell": 0 },
           { "Number": 63, "Name": "Commander Markus", "DeathSpell": 0, "DropItem-0": 622, "DropItem%-0": 100 },
-          { "Number": 64, "Name": "kobold king", "DeathSpell": 574, "DropItem-0": 931, "DropItem%-0": 100 }
+          { "Number": 64, "Name": "kobold king", "DeathSpell": 574, "DropItem-0": 931, "DropItem%-0": 100 },
+          { "Number": 65, "Name": "orc captain", "DeathSpell": 0, "DropItem-0": 700, "DropItem%-0": 30 },
+          { "Number": 66, "Name": "spectral knight", "DeathSpell": 580 }
         ]
         """;
 
@@ -63,7 +68,8 @@ public sealed class QuestItemGatheringTests : IDisposable
         [
           { "Number": 5519, "Name": "hill chieftan text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 5211 },
           { "Number": 5521, "Name": "stone chieftan text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 5212 },
-          { "Number": 574, "Name": "kobold king text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 1400 }
+          { "Number": 574, "Name": "kobold king text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 1400 },
+          { "Number": 580, "Name": "spectral knight text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 1510 }
         ]
         """;
 
@@ -94,7 +100,11 @@ public sealed class QuestItemGatheringTests : IDisposable
 
           { "Number": 4999, "Action": "mine vein:nomonsters:random 5000\n", "Called From": "Room 14/7127" },
           { "Number": 5000, "Action": "100:giveitem 703\n", "Called From": "Textblock(rndm) #4999" },
-          { "Number": 5010, "Action": "forge ore:takeitem 703:giveability 301 1\n", "Called From": "Room 14/7225" }
+          { "Number": 5010, "Action": "forge ore:takeitem 703:giveability 301 1\n", "Called From": "Room 14/7225" },
+
+          { "Number": 1500, "Action": "business:minlevel 10:failability 140:giveability 140 1\nreturn:checkability 140 3:takeitem 686:giveitem 687:giveability 140 4\n", "Called From": "Room 6/1387" },
+          { "Number": 1505, "Action": "forge:minlevel 20:takeitem 684:giveitem 685:giveability 140 2\n", "Called From": "Room 6/1357" },
+          { "Number": 1510, "Action": "checkability 140 2:takeitem 685:giveitem 686:giveability 140 3\n", "Called From": "Spell #580" }
         ]
         """;
 
@@ -129,6 +139,8 @@ public sealed class QuestItemGatheringTests : IDisposable
         [62] = new[] { new RoomKey(1, 2305) },
         [63] = new[] { new RoomKey(2, 2518) },
         [64] = new[] { new RoomKey(6, 834) },
+        [65] = new[] { new RoomKey(7, 1363) },
+        [66] = new[] { new RoomKey(6, 994) },
     };
 
     private static CrawledQuest Quest(GameDataCache cache, int flag) =>
@@ -144,7 +156,7 @@ public sealed class QuestItemGatheringTests : IDisposable
             "[] (14/247) `ask renfry task`",
             "[] (16/801) kill hill giant chieftan (hill chieftan's hand)",
             "[] (16/1095) kill stone giant chieftain (stone chieftan's hand)",
-            "[] (14/247) `ask renfry hands` (turn in hill chieftan's hand, stone chieftan's hand)",
+            "[] (14/247) (hill chieftan's hand, stone chieftan's hand required) `ask renfry hands`",
         }, QuestTextFormatter.StepLines(cache, Quest(cache, 208), Placement));
     }
 
@@ -160,22 +172,23 @@ public sealed class QuestItemGatheringTests : IDisposable
         Assert.Equal(new[]
         {
             "[] (2/2518) `bow` (get locked wooden box)",
-            "[] (1/1333) `kneel` (turn in locked wooden box)",
+            "[] (1/1333) (locked wooden box required) `kneel`",
             "[] (6/76) kill metallic monstrosity (gleaming shard)",
-            "[] (6/1357) `forge` (turn in gleaming shard)",
+            "[] (6/1357) (gleaming shard required) `forge`",
         }, QuestTextFormatter.StepLines(cache, Quest(cache, 126), Placement, givers, drops));
     }
 
     [Fact]
-    public void ItemAnNpcGives_IsAnAskLine_WithWhatItTakes_AndARollLineIsNotTyped()
+    public void ItemAnNpcTradesFor_IsAnAskLine_WithItsOwnFetchFirst_AndARollLineIsNotTyped()
     {
         GameDataCache cache = NewCache();
         (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
 
         Assert.Equal(new[]
         {
-            "[] (1/2305) `ask aldreth heads` (get quest token) (turn in orc-head)",
-            "[] (1/2305) `return` (turn in quest token)",
+            "[] (7/1363) kill orc captain (orc-head)",
+            "[] (1/2305) (orc-head required) `ask aldreth heads` (get quest token)",
+            "[] (1/2305) (quest token required) `return`",
             "[] (15/183) obtain Darkbane",
         }, QuestTextFormatter.StepLines(cache, Quest(cache, 300), Placement, givers, drops));
     }
@@ -211,7 +224,7 @@ public sealed class QuestItemGatheringTests : IDisposable
         Assert.Equal(new[]
         {
             "[] (2/2518) kill Commander Markus (locked wooden box)",
-            "[] (2/2577) `salute` (turn in locked wooden box)",
+            "[] (2/2577) (locked wooden box required) `salute`",
         }, QuestTextFormatter.StepLines(cache, Quest(cache, 128), Placement, givers, drops));
     }
 
@@ -225,22 +238,25 @@ public sealed class QuestItemGatheringTests : IDisposable
         {
             "[] (6/833) `kneel`",
             "[] (6/834) kill kobold king (iron crown)",
-            "[] (1/723) `crown` (turn in iron crown)",
+            "[] (1/723) (iron crown required) `crown`",
         }, QuestTextFormatter.StepLines(cache, Quest(cache, 129), Placement, givers, drops));
     }
 
     [Fact]
-    public void RoomRollTableGive_IsWhereToGo_NotANumberToType()
+    public void RoomRollTableGive_IsTheCommandThatDraws_NotANumberToType()
     {
         GameDataCache cache = NewCache();
         (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
 
-        // `mine vein` draws from table 5000, whose line leads with its roll band.
-        Assert.DoesNotContain(givers.GiversOf(703), g => g.Keyword == "100");
+        // `mine vein` draws from table 5000, whose line leads with its roll band: the
+        // command is the draw, not the band, and a draw is never a sure give.
+        ItemGiver ore = Assert.Single(givers.GiversOf(703));
+        Assert.Equal("mine vein", ore.Keyword);
+        Assert.False(ore.Deterministic);
         Assert.Equal(new[]
         {
-            "[] (14/7127) obtain adamant ore",
-            "[] (14/7225) `forge ore` (turn in adamant ore)",
+            "[] (14/7127) `mine vein` (get adamant ore)",
+            "[] (14/7225) (adamant ore required) `forge ore`",
         }, QuestTextFormatter.StepLines(cache, Quest(cache, 301), Placement, givers, drops));
     }
 
@@ -260,5 +276,28 @@ public sealed class QuestItemGatheringTests : IDisposable
 
         Assert.Equal(0, profile.QuestDraftRevision);
         Assert.Equal(new[] { 0, 1 }, profile.QuestLog[0].CheckedSteps);
+    }
+
+    [Fact]
+    public void LaterTier_DraftsInTheSeedGuidesShape()
+    {
+        GameDataCache cache = NewCache();
+        (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
+        // Modelled on the seed's Good 3: what a step needs comes first, "(… required)";
+        // each kill names its drop; the tier opens with the tier it follows.
+        List<CrawledQuest> tiers = QuestCrawler.Crawl(cache, null).Where(q => q.Flag == 140).ToList();
+        Assert.Equal(2, tiers.Count);
+
+        Assert.Null(QuestTextFormatter.PriorTierLine(cache, tiers[0], q => $"Tier {q.BandOrdinal}"));
+        Assert.Equal("-Complete Tier 1 first-", QuestTextFormatter.PriorTierLine(cache, tiers[1], q => $"Tier {q.BandOrdinal}"));
+        Assert.Equal(new[] { "[] (6/1387) `business`" },
+            QuestTextFormatter.StepLines(cache, tiers[0], Placement, givers, drops));
+        Assert.Equal(new[]
+        {
+            "[] (6/76) kill metallic monstrosity (gleaming shard)",
+            "[] (6/1357) (gleaming shard required) `forge` (get gleaming dagger)",
+            "[] (6/994) (gleaming dagger required) kill spectral knight (Spirit Dagger of Goijar)",
+            "[] (6/1387) (Spirit Dagger of Goijar required) `return` (get golden chest)",
+        }, QuestTextFormatter.StepLines(cache, tiers[1], Placement, givers, drops));
     }
 }

@@ -3,8 +3,9 @@
 <!-- current-version:start -->
 > **Version 3.180.47**
 > - Quest steps: a command in backticks, single quotes or two-word-plus double quotes is clickable; the shipped guides all use backticks
-> - Drafted quest checklists add a line to fetch each item a step turns in: a sure drop first, then the NPC or room that gives it, other drops, or the chest; a drop off a monster the quest already kills is noted on that kill
-> - Drafted checklists never offer a roll-table number as a command to type
+> - Drafted quest checklists read like the shipped guides: what a step needs comes first, "(gleaming shard required)", and a later tier opens with "-Complete <tier> first-"
+> - Drafts add a line to fetch each item a step needs: the quest's own give, a sure drop, the NPC or room that gives it, other drops or a chest, and a fetch for what that NPC wants in turn; a drop off a monster the quest already kills is noted on that kill
+> - A give drawn from a room's roll table names the command that draws it (`mine vein`), never the roll number, in drafts and the Game Data item pane
 > - A quest keeps the class lock of the lines that start it, though its hand-in names no class (Conquest 1 and 2, Tarl, Luca Prodigio)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

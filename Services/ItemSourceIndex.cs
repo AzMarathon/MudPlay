@@ -47,10 +47,14 @@ public enum ItemGiverKind { Monster, Room }
 // item, takes one twice, carries any other condition, or shares its keyword with
 // another line. Stock tries a keyword's lines in order and moves on from one that
 // fails a check; what Paradigm does isn't recorded, so several lines are left alone.
+//
+// TakenItemId is the first item the award line takes, whatever else it asks (the item
+// its "turn in" Requirement names), so a quest draft can say what to fetch first; zero
+// when the line takes nothing.
 public readonly record struct ItemGiver(
     ItemGiverKind Kind, int Number, int Map, int Room, string Name, string Requirement,
     string Keyword, bool Deterministic, IReadOnlyList<int>? RefusalMessages = null,
-    int TradeItemId = 0);
+    int TradeItemId = 0, int TakenItemId = 0);
 
 // One monster a room command summons on demand, which drops an item at a
 // guaranteed rate. This is the deterministic corner of monster drops, and the
@@ -364,7 +368,10 @@ public sealed class ItemSourceIndex
                 // turn-in / purchase / quest-reward gate and no `random` roll on
                 // the award line — so the acquisition router can rely on the
                 // command producing the item every time.
-                bool deterministic = takeId == 0 && !hasPrice && !hasAbility && !hasRandom;
+                // A line of a roll table is one draw's outcome, never a sure give.
+                bool rollBand = toks.Length > 0
+                    && int.TryParse(toks[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _);
+                bool deterministic = takeId == 0 && !hasPrice && !hasAbility && !hasRandom && !rollBand;
 
                 // One item taken, once, nothing else asked of the character, and no
                 // other line under the same keyword. A line that takes several, or
@@ -387,7 +394,7 @@ public sealed class ItemSourceIndex
                         string keyword = lineKeyword.Length > 0 ? lineKeyword : root.Keyword;
                         AddGiver(giversByItem, itemId,
                             new ItemGiver(root.Kind, root.Number, root.Map, root.Room, name, requirement,
-                                keyword, deterministic, refusals, tradeItemId));
+                                keyword, deterministic, refusals, tradeItemId, takeId));
                     }
                 }
             }
@@ -613,6 +620,16 @@ public sealed class ItemSourceIndex
             // too but isn't a menu key — skip it so only real keywords surface.
             if (kw.Length > 0 && !LooksLikeDirective(kw)) return kw;
         }
+        // A roll table is drawn by a command's own line (`mine vein:nomonsters:random
+        // 5000`), not by a menu entry: that line's trigger is what reaches the draw.
+        foreach (string rawLine in action.Split('\n'))
+        {
+            string[] toks = rawLine.Split(':');
+            string head = toks[0].Trim();
+            if (!IsTypedTrigger(head)) continue;
+            for (int t = 1; t < toks.Length; t++)
+                if (TryArg(toks[t].Trim(), "random", out int table) && table == child) return head;
+        }
         return string.Empty;
     }
 
@@ -637,7 +654,7 @@ public sealed class ItemSourceIndex
                     || string.Equals(e.Keyword, giver.Keyword, StringComparison.OrdinalIgnoreCase)))
             {
                 if (e.Requirement.Length == 0 && giver.Requirement.Length > 0)
-                    e = e with { Requirement = giver.Requirement };
+                    e = e with { Requirement = giver.Requirement, TakenItemId = giver.TakenItemId };
                 if (e.Keyword.Length == 0 && giver.Keyword.Length > 0)
                     e = e with { Keyword = giver.Keyword };
                 if (!e.Deterministic && giver.Deterministic)

@@ -93,13 +93,13 @@ internal static partial class QuestTextFormatter
     private const int MaxDropperRooms = 3;
 
     // One followable step drafted in the hand-written guide's own shape:
-    //   (map/room) `command` (item note)
+    //   (map/room) (items required) `command` (get items)
     // The Called-From location's rooms become clickable (map/room) links (all of
     // them, for a multi-room list); a player command is backtick-wrapped as the
     // literal to type; a command-less step whose script a monster's death runs is
     // narrated "kill <monster> (<drop>)" and a bare item grant "obtain <item>",
-    // matching how the seed guides read. Items the step needs / turns in trail as
-    // a parenthetical note. Falls back to a bare "Step N" label when the crawl
+    // matching how the seed guides read. Items the step needs or turns in come first,
+    // "(… required)", the way the seed guides write them. Falls back to a bare "Step N" label when the crawl
     // captured nothing followable (see StepOrNull) — kept for any caller that wants
     // a label for every step; the auto-draft (StepLines) drops those steps instead.
     public static string Step(GameDataCache gameData, QuestStep s,
@@ -169,6 +169,12 @@ internal static partial class QuestTextFormatter
             : RoomLinks(s.Location);
         if (rooms.Length > 0) segments.Add(rooms);
 
+        // What the step needs on hand, taken or only checked, goes ahead of the action as
+        // the guides write it: "(6/1357) (Gleaming Shard required) `ask martok forge`".
+        List<int> needs = s.TurnInItems.Concat(s.RequiredItems).Distinct().ToList();
+        if (needs.Count > 0)
+            segments.Add("(" + string.Join(", ", needs.Select(id => ItemName(gameData, id))) + " required)");
+
         if (hasCommand)
         {
             segments.Add($"`{s.Command!.Trim()}`");
@@ -183,15 +189,6 @@ internal static partial class QuestTextFormatter
         {
             segments.Add($"obtain {granted}");
         }
-
-        if (s.TurnInItems.Count > 0)
-            segments.Add("(turn in " + string.Join(", ", s.TurnInItems.Select(id => ItemName(gameData, id))) + ")");
-
-        // A required item the step also turns in is already named by the turn-in note
-        // (a checkitem + takeitem of the same id), so it isn't repeated as "required".
-        var required = s.RequiredItems.Where(id => !s.TurnInItems.Contains(id)).ToList();
-        if (required.Count > 0)
-            segments.Add("(" + string.Join(", ", required.Select(id => ItemName(gameData, id))) + " required)");
 
         if (!string.IsNullOrWhiteSpace(s.Note)) segments.Add($"({s.Note})");
 
@@ -253,6 +250,20 @@ internal static partial class QuestTextFormatter
         IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms = null,
         ItemSourceIndex? itemSources = null, MonsterDropIndex? itemDrops = null)
         => StepEntries(gameData, q, monsterRooms, itemSources, itemDrops).Select(e => e.Line).ToList();
+
+    // The note a later tier of a multi-part quest opens with, as the guides head one
+    // ("-MUST COMPLETE MAGEBANE PORTION FIRST-"): its steps check the flag at the values
+    // the tier before it leaves. Null for a single-part quest or a first tier. titleOf
+    // names a tier the way the journal does. A plain line, not a checkbox, so the draft's
+    // checkbox numbering is untouched.
+    public static string? PriorTierLine(GameDataCache gameData, CrawledQuest q, Func<CrawledQuest, string> titleOf)
+    {
+        ArgumentNullException.ThrowIfNull(titleOf);
+        if (q.BandOrdinal <= 1) return null;
+        CrawledQuest? prior = QuestCrawler.Crawl(gameData, null)
+            .FirstOrDefault(c => c.Flag == q.Flag && c.BandOrdinal == q.BandOrdinal - 1);
+        return prior is null ? null : $"-Complete {titleOf(prior)} first-";
+    }
 
     // StepLines with each line's give-step Order alongside — the flag value that step
     // sets, so a live flag read can say which checklist lines it proves done. A gather
