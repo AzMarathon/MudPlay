@@ -128,7 +128,7 @@ public sealed class AilmentSyncEngine : IDisposable
         {
             if (added.HasFlag(flag))
             {
-                // Bare apply-only announce (MegaMUD parity): '.@blind', no 'on'/'off'
+                // Bare announce (MegaMUD parity): '.@blind', no 'on'/'off'
                 // suffix. The receiver clears the chip via a witnessed cure, the
                 // spell-data duration timing out, the par `P` flag (poison), or a
                 // @status reconcile (PartyAilmentTracker) — never an 'off' say.
@@ -154,8 +154,9 @@ public sealed class AilmentSyncEngine : IDisposable
 
     // We have just started following leader (PartyManager.FollowingLeader). With an
     // ailment still on us the say goes out under the apply-time rules
-    // (ShouldAnnounce), so every client in the party lights our chip again, and one
-    // @wait goes out with the first held reason's note: PartyRestSync telepaths
+    // (ShouldAnnounce), so the leader lights our chip again (another member does
+    // once its roster has us back), and one @wait goes out, a hold's note first
+    // since that's what keeps us standing: PartyRestSync telepaths
     // only on a fresh hold, and this leader may never have been told. With the
     // master switch off nothing is sent; PartyRestSync asks the @wait again when it
     // comes back on.
@@ -170,7 +171,8 @@ public sealed class AilmentSyncEngine : IDisposable
         foreach ((MessageFlags flag, string token, WaitReason reason, bool verbose) in Ailments)
         {
             if (!active.HasFlag(flag) || IsWaitSuppressed(flag, spells)) continue;
-            wait ??= reason;
+            if (flag == MessageFlags.MovementPrevented) wait = reason;
+            else wait ??= reason;
             if (verbose && ShouldAnnounce(flag, spells, inParty))
             {
                 Say(token);

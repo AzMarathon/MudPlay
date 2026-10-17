@@ -1,6 +1,6 @@
 # Version history
 
-## 3.180.44
+## 3.180.43
 
 - A follower still held (knocked down) when it follows the leader again says `@held` and re-sends its `@wait`, so the party can cure it instead of waiting it out; the same for blind, confused, diseased and poisoned
 - bug reports addressed: paradigm-20261014-214037

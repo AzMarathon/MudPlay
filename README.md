@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.44**
+> **Version 3.180.43**
 > - A follower still held (knocked down) when it follows the leader again says `@held` and re-sends its `@wait`, so the party can cure it instead of waiting it out; the same for blind, confused, diseased and poisoned
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

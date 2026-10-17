@@ -5370,7 +5370,8 @@ public sealed class AppServices
         // ailment (blind / confused / diseased / held) it announces a BARE token
         // ".@blind" etc. on say at apply (MegaMUD parity — no 'on'/'off'), and
         // again on following a leader while still afflicted, so other MudPlay
-        // clients mirror our state and a cure-holds caster can free us, and for the four curable ailments @waits the leader. POISON is
+        // clients mirror our state and a cure-holds caster can free us, and
+        // @waits the leader for each. POISON is
         // never announced on say — it's par-owned (PartyManager). On CLEAR nothing
         // is said (MegaMUD sends no 'off'); only the @ok telepath releases the
         // leader's wait. The say only fires when we're in a party AND have no cure

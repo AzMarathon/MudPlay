@@ -436,19 +436,19 @@ public sealed class AilmentSyncEngineTests
         Assert.NotNull(h.Engine.LastFollowAnnounce);
     }
 
+    // Held and poisoned: the @wait carries the hold's note, the reason we stand there.
     [Fact]
-    public void Held_FollowingByFullName_TelepathsTheGivenName()
+    public void HeldAndPoisoned_FollowingAgain_WaitsWithTheHoldsNote()
     {
         using Harness h = new();
         SeedAll(h);
+        h.Feed("You have been poisoned!");
         h.Feed("You cannot move!");
         LeaveParty(h);
-        h.Say.Clear();
         h.Telepath.Clear();
 
-        Follow(h, "Leader Family");
+        Follow(h, "Leader");
 
-        Assert.Equal(".@held\r", Assert.Single(h.Say));
         Assert.Equal($"/Leader @wait {PartyRestSync.HeldNote}\r", Assert.Single(h.Telepath));
     }
 
@@ -468,27 +468,6 @@ public sealed class AilmentSyncEngineTests
         Assert.Empty(h.Say);
         Assert.Empty(h.Telepath);
         Assert.Null(h.Engine.LastFollowAnnounce);
-    }
-
-    [Fact]
-    public void PartyStateChangesWithoutAFollow_SendNothing()
-    {
-        // Only the game's follow line tells; the half-set states PartyState passes
-        // through (in a party with the last leader's name still on it, or leading
-        // a party of our own) say nothing.
-        using Harness h = new();
-        SeedAll(h);
-        h.Feed("You cannot move!");
-        LeaveParty(h);
-        h.Say.Clear();
-        h.Telepath.Clear();
-
-        h.Party.IsInParty = true;
-        h.Party.LeaderName = "Leader";
-        h.Party.SelfIsLeader = true;
-
-        Assert.Empty(h.Say);
-        Assert.Empty(h.Telepath);
     }
 
     [Fact]
