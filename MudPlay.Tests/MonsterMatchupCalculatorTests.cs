@@ -151,36 +151,7 @@ public sealed class MonsterMatchupCalculatorTests
             Player(), Monster(hasAttack: false));
 
         Assert.False(r.MonsterHasPhysicalAttack);
-        Assert.Equal(0, r.MonsterHitPercent);
         Assert.Equal(0, r.MonsterDamagePerHit);
-    }
-
-    [Fact]
-    public void ProtEvil_AppliesOnlyWhenMonsterIsEvil()
-    {
-        PlayerMatchupProfile p = Player(ac: 60, protEvil: 40);
-
-        MonsterMatchupResult evil = MonsterMatchupCalculator.Compute(p, Monster(isEvil: true));
-        MonsterMatchupResult neutral = MonsterMatchupCalculator.Compute(p, Monster(isEvil: false));
-
-        // The ward raises our effective defense against an evil monster, so its
-        // hit chance must be no higher than against a neutral monster (and
-        // strictly lower here, since 40 prot-evil meaningfully shifts defense).
-        Assert.True(evil.MonsterHitPercent < neutral.MonsterHitPercent);
-    }
-
-    [Fact]
-    public void ProtGood_IsIgnored_AgainstNonGoodMonster()
-    {
-        PlayerMatchupProfile withWard = Player(ac: 60, protGood: 40);
-        PlayerMatchupProfile noWard = Player(ac: 60, protGood: 0);
-
-        // Monster is neither good nor evil → the prot-good ward must not change
-        // the monster's hit chance.
-        int warded = MonsterMatchupCalculator.Compute(withWard, Monster(isGood: false)).MonsterHitPercent;
-        int plain = MonsterMatchupCalculator.Compute(noWard, Monster(isGood: false)).MonsterHitPercent;
-
-        Assert.Equal(plain, warded);
     }
 
     [Fact]

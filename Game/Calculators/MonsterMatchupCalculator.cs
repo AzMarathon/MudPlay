@@ -86,7 +86,6 @@ public static class MonsterMatchupCalculator
             RoundsToKill: roundsToKill,
             HasWeapon: player.HasWeapon,
             MonsterHasPhysicalAttack: monster.HasPhysicalAttack,
-            MonsterHitPercent: monsterHit,
             MonsterDamagePerHit: monsterDmgPerHit,
             MonsterSwingsPerRound: monsterSwings,
             MonsterDps: monsterDps);
@@ -187,7 +186,6 @@ public readonly record struct MonsterMatchupProfile(
 //                               0 when not killable (no weapon / zero DPS).
 //   HasWeapon                 — whether the player had a weapon (gates DPS fields).
 //   MonsterHasPhysicalAttack  — whether the monster has a physical slot to preview.
-//   MonsterHitPercent         — monster's primary-physical hit chance vs player.
 //   MonsterDamagePerHit       — monster avg damage per landed hit, after player DR.
 //   MonsterSwingsPerRound     — attacks/round the monster lands (energy/attEnergy),
 //                               thinned by a slowness debuff; 0 with no physical slot.
@@ -200,7 +198,6 @@ public readonly record struct MonsterMatchupResult(
     int RoundsToKill,
     bool HasWeapon,
     bool MonsterHasPhysicalAttack,
-    int MonsterHitPercent,
     int MonsterDamagePerHit,
     int MonsterSwingsPerRound = 0,
     double MonsterDps = 0);
