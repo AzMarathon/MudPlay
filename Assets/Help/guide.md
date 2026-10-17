@@ -1629,7 +1629,7 @@ Two commands under one name. Bare, it asks what your party standing is. Said alo
 **Forms:**
 
 - `@party`: are you solo, following or leading?
-- `.@party rest` (on **say** only): your client sends `rest` to the game. Whatever follows `@party` is sent as typed, so `.@party use chime` sends `use chime`, except that a character outside plain ASCII goes out as `?`, as `@do`'s do.
+- `.@party rest` (on **say** only): your client sends `rest` to the game. Whatever follows `@party` is sent as typed, so `.@party use chime` sends `use chime`, except that a character outside plain ASCII goes out as `?` or its plain spelling, as with `@do`.
 
 Two rewrites are made before sending. `@party meditate` sends `medi`. `@party go <direction>` sends the direction alone (`@party go n` sends `n`); `@party go hole` keeps its `go` and sends `go hole`.
 

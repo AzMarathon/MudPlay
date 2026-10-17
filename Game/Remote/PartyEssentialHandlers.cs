@@ -14,8 +14,8 @@ namespace MudPlay.Game.Remote;
 //   - Party passthrough — @party <command>. A party-membership-gated relay of
 //     the leader's directive to the follower's wire (the party analogue of @do,
 //     but authorised by active party membership rather than the per-player
-//     ExecuteCommands grant). Any command is sent verbatim so the whole party
-//     moves in lock-step; `meditate`→`medi` and `go <dir>`→bare-direction are the
+//     ExecuteCommands grant). Any command is sent verbatim (in plain ASCII, WireText) so
+//     the whole party moves in lock-step; `meditate`→`medi` and `go <dir>`→bare-direction are the
 //     only token rewrites.
 //   - Receive-only signalling — @wait / @ok. Recorded in WaitingMembers, which
 //     the pause-gate reads to decide whether to hold automation. @waiting is the
