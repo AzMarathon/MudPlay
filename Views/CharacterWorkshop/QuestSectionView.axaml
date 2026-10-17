@@ -163,8 +163,10 @@
                                 <!-- Detail pane: revealed only when the card is expanded. -->
                                 <StackPanel Spacing="4" IsVisible="{Binding IsExpanded}">
 
-                                    <!-- Class / race restriction the crawl found (informational —
-                                         not a hard eligibility gate; quests are no longer hidden). -->
+                                    <!-- Class / race restriction the crawl found: the detail behind
+                                         the header's "Cannot complete" flag. A quest this character
+                                         can't complete only shows when its Show in quest journal
+                                         opt-in is ticked in the editor. -->
                                     <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasRequirements}">
                                         <TextBlock Classes="FieldLabel" Text="Requires:"/>
                                         <TextBlock Text="{Binding RequirementsText}" TextWrapping="Wrap"

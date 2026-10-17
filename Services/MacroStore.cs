@@ -59,9 +59,7 @@ public sealed class MacroStore
         return removed;
     }
 
-    // Find an enabled macro whose chord matches the supplied key combo. Used
-    // by the runtime dispatch path when a keystroke fires on TerminalControl
-    // / ConversationWindow's input.
+    // Find an enabled macro whose chord matches the supplied key combo.
     public Macro? FindMatch(string key, bool ctrl, bool shift, bool alt)
     {
         foreach (Macro m in Macros)

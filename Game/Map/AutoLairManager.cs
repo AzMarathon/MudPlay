@@ -92,11 +92,8 @@ public sealed class AutoLairManager : IDisposable
     // gain by standing in it.
     private static readonly TimeSpan EmptyLairGrace = TimeSpan.FromSeconds(3);
 
-    // Scoring heuristic. Default = idle-penalised; Throughput = wasted-only.
+    // Scoring heuristic. Default = closest ready-by-arrival; Throughput = wasted-only.
     public AutoLairHeuristic Heuristic { get; set; } = AutoLairHeuristic.Default;
-
-    // Idle-wait penalty under the Default heuristic.
-    public double IdlePenalty { get; set; } = 1.0;
 
     // Current state machine phase. Observable for the bottom-strip status.
     public AutoLairPhase Phase { get; private set; } = AutoLairPhase.Idle;
@@ -173,7 +170,7 @@ public sealed class AutoLairManager : IDisposable
     // Most recently run auto-lair, retained past Stop (like
     // LoopRunner.LastRunLoopName) so @path can name it for a dead player's
     // recovery. Name is the setup name (or an ad-hoc descriptor) passed to Start;
-    // a label-less resume keeps the prior name but re-stamps the time. LastRunAt
+    // a label-less resume keeps the prior name but re-stamps the time. LastRunLairAt
     // lets MovementStatus pick the more recent of loop vs auto-lair. Default
     // (name null, time MinValue) until the first labelled run.
     public string? LastRunLairName { get; private set; }
@@ -536,7 +533,7 @@ public sealed class AutoLairManager : IDisposable
         }
 
         LairDecision? pick = AutoLairScheduler.PickNext(
-            candidates, TravelCostModel, Heuristic, IdlePenalty, DateTimeOffset.UtcNow);
+            candidates, TravelCostModel, Heuristic, DateTimeOffset.UtcNow);
         if (pick is null)
         {
             // No marked lair has a route from here (a door that beat the character,
@@ -586,7 +583,7 @@ public sealed class AutoLairManager : IDisposable
         {
             // Different target reached us here — wipe any in-flight
             // entry latch from the previous target so the next arrival
-            // gets a fresh ScheduleEntryAt.
+            // gets a fresh LatchAndScheduleEntry.
             CurrentEntryArrivalAt = null;
             _entryTimer.Stop();
 
@@ -958,7 +955,8 @@ public sealed class AutoLairManager : IDisposable
         // end-of-combat signal on stock. The raw `*Combat Off*` line is not: the
         // server emits one every time we cast, and once per strike for
         // non-sustaining attacks, so a Warlock nuking mid-fight would look done
-        // several times per kill (GAME_MECHANICS, "Monster-kill message order").
+        // several times per kill (GAME_MECHANICS "Kill detection and monster-kill
+        // message order").
         if (_coordinator.IsGateAsserted(MovementCoordinator.CombatGate))
         {
             if (!_engageSawCombat)

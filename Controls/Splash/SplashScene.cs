@@ -20,7 +20,8 @@ public abstract class SplashScene
     public abstract void Render(SplashCanvas c, int f);
 
     // The full rotation. One entry per animation; the harness cycles through them
-    // one full loop at a time, picking a different one each time (see NextAfter).
+    // one full loop at a time, picking a different one each time (see
+    // MudSplashAnimator.NextScene).
     private static readonly Func<SplashScene>[] Factory =
     {
         () => new MudThrowScene(),

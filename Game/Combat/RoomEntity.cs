@@ -2,9 +2,8 @@ using MudPlay.Models.GameData;
 
 namespace MudPlay.Game.Combat;
 
-// What kind of "Also Here" occupant a name resolved to. CombatStateTracker only
-// treats Monster entries as candidate targets; CombatManager further filters by
-// the per-monster AttackPriority in game data.
+// What kind of "Also Here" occupant a name resolved to. CombatStateTracker and
+// CombatManager only treat Monster entries as candidate targets.
 public enum EntityKind
 {
     // Name matched a PlayerRecord in the active per-BBS player database
@@ -30,11 +29,10 @@ public enum EntityKind
 // "Raijin" from "Raijin (sneaking)"). ResolvedName is the canonical name for
 // downstream lookups: monster BaseName when Kind is Monster,
 // PlayerRecord.GivenName when Player, equal to RawName for Unknown. CombatManager
-// uses ResolvedName to send "attack {ResolvedName}" — the server resolves
-// targeting by base name regardless of which prefix the room display printed.
-// Kind is Player / Monster / Unknown. MonsterNumber is MonsterRecord.Number when
-// Kind is Monster, else null; CombatManager joins this against the Monsters
-// table to read AttackPriority.
+// sends RawName so the server engages that instance, and keys its per-species
+// state on ResolvedName. Kind is Player / Monster / Unknown. MonsterNumber is
+// MonsterRecord.Number when Kind is Monster, else null; CombatManager resolves
+// the monster's overlay (relationship, priority) by it.
 public readonly record struct RoomEntity(
     string RawName,
     string ResolvedName,

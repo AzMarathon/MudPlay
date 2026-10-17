@@ -1,6 +1,6 @@
 namespace MudPlay.Game.Cash;
 
-// Runtime source-of-truth for the per-BBS runic-currency name. Some realms
+// Runtime source-of-truth for the realm's runic-currency name. Some realms
 // relabel the top ("runic") denomination to a board-specific word — which
 // changes both the coin wording the server sends AND the bare keyword the
 // client keys currency commands on (get/drop/hide/give/deposit). Only the
@@ -8,8 +8,9 @@ namespace MudPlay.Game.Cash;
 // denominations are stable, so the noun alone still identifies the
 // denomination — this service only resolves the leading word.
 //
-// The name is read live from BbsProfile.RunicCurrencyName via an injected
-// accessor and re-read on ProfileLoaded / BbsPinApplied through Refresh().
+// The name is read live from the active realm's RealmProfile.RunicCurrencyName
+// via an injected accessor and re-read on ProfileLoaded / BbsPinApplied through
+// Refresh().
 // Consumers read RunicName on demand rather than subscribing to a change
 // event, so a rename takes effect on the next line/command with no rewiring.
 public sealed class CurrencyNaming
@@ -28,7 +29,7 @@ public sealed class CurrencyNaming
         RunicName = Normalize(_read());
     }
 
-    // Re-read the active BBS's runic name (call after a profile / BBS swap).
+    // Re-read the active realm's runic name (call after a profile / BBS swap).
     public void Refresh() => RunicName = Normalize(_read());
 
     // True if word names the runic denomination — either the active board's

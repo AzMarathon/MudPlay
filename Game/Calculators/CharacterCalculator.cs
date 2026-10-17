@@ -187,9 +187,9 @@ public static class CharacterCalculator
 
     // ----- stat-derived secondary stats (CP-planning surface) --------------
     // These four are the stat→derived formulas the score screen / DLL expose that
-    // don't already live as combat helpers. Ground truth is the RE'd stock DLL
-    // (dll-stats-map.md); Paradigm's derivations come from the GreaterMUD branch of
-    // the engine math (GAME_MECHANICS "Realm differences in stat derivation").
+    // don't already live as combat helpers. Ground truth is the reverse-engineered Stock
+    // DLL; Paradigm's derivations are in GAME_MECHANICS "Realm differences in stat
+    // derivation & Paradigm-verification summary".
 
     // Base critical rating from stats (0x710): Level/10 + (Int-50)/10 + (Agl-50)/20
     // + (Chm-50)/30, floored at 1. Stock also caps it at 75; Paradigm has no cap
@@ -215,12 +215,9 @@ public static class CharacterCalculator
     // per-class +10 / -15 flat adjusts (character-specific grants, not a stat
     // effect), so this is the stat-and-level base a stealth-capable class starts
     // from. Non-stealth classes have no stealth at all.
-    // REALM-SPLIT (verified in MMUD-Explorer `CalculateStealth`, modMMudFunc.bas
-    // ~4620): Stock TRUNCATES each stat term individually
-    // (Fix(Agl/4)+Fix(Int/8)+Fix(Chm/6)); Paradigm (bGreaterMUD) sums the stat
-    // contributions as a float and rounds ONCE — so the two realms can differ by a
-    // point or two. (This corrects the earlier "PNG says stealth is identical"
-    // assumption, which the PNG's granularity couldn't disprove.)
+    // REALM-SPLIT: Stock truncates each stat term on its own (Agl/4 + Int/8 + Chm/6,
+    // each floored); Paradigm sums the stat contributions as a float and rounds once,
+    // so the two realms can differ by a point or two.
     public static int CalcStealthBase(int level, int intellect, int agility, int charm, RealmType realm)
     {
         int baseVal = (level < 16 ? level * 2 : level + 15) + 20;
@@ -291,8 +288,8 @@ public static class CharacterCalculator
     // the +spellcasting ability (0x46 = 70, gear/innate). manaStat blends the caster
     // stat by class type — 1=(3*Int+Wil)/6 (Mage), 2=(3*Wil+Int)/6 (Priest),
     // 3=(Int+Wil)/3 (Druid), 4=(3*Chm+Wil)/6 (Bard), and a flat 500 for Mystics (Kai),
-    // which no stat moves. Non-casters have none. Stock DLL (verified asm 0x41aae0);
-    // MMUD-Explorer has the same five on both realms.
+    // which no stat moves. Non-casters have none. Verified in the Stock DLL (asm
+    // 0x41aae0); Paradigm uses the same five blends.
     public static int CalcSpellcasting(int level, int intellect, int willpower, int charm,
                                        int mageryType, int mageryLevel, int plusSpellcasting)
     {

@@ -135,13 +135,13 @@ public sealed class KeybindingStore
             // chord — F3 now opens the Game Data Browser, and the function keys
             // are otherwise reserved for the editor/browser windows. All three
             // stay reachable from their toolbar buttons + menus; the user can
-            // assign a chord in Settings → Shortcuts.
+            // assign a chord in Settings → Toolbar + Shortcuts.
         };
 
     // Reset every binding back to its DefaultBindings chord (actions with no
     // default become unbound). Persists once and fires BindingsReloaded once
     // — cheaper than rebinding each action individually. Drives the "Reset
-    // all shortcuts" button on the Toolbar + Shortcuts settings tab.
+    // Keybinds to Default" button on the Toolbar + Shortcuts settings tab.
     public void ResetAllToDefaults()
     {
         SeedDefaults();

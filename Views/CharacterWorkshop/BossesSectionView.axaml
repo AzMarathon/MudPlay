@@ -68,8 +68,9 @@
 
         <!-- Boss grid. Sortable by boss, respawn, and each timer (numeric sort keys
              so remaining time orders correctly; blank / expired rows sort last).
-             ReflectionBinding on every column — DataGrid columns aren't in the
-             visual tree, so compiled bindings can't resolve BossRowViewModel here. -->
+             Text columns use ReflectionBinding: a column's Binding isn't in the
+             visual tree, so compiled bindings can't resolve BossRowViewModel there.
+             Template columns bind compiled through their DataTemplate's x:DataType. -->
         <DataGrid Grid.Row="1" x:Name="BossGrid"
                   ItemsSource="{Binding Rows}"
                   SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
@@ -142,7 +143,7 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <!-- Early-window columns (indices 4-6). Code-behind relabels /
+                <!-- Early-window columns (indices 5-7). Code-behind relabels /
                      collapses these per realm from BossTimerMath.EarlyColumnLabels:
                      Paradigm -5 / -10 / -20% (spawn this far before 100%), Stock a
                      single 87.5% column. -->
@@ -180,7 +181,7 @@
                 <!-- When this boss's timer was last set — by a Mark / Now button, a
                      back-dated Mark, or an auto-detected kill. Blank when never
                      recorded. Sits between Timer and Notes; both are after the
-                     early-window columns (4-6) the code-behind relabels, so those
+                     early-window columns (5-7) the code-behind relabels, so those
                      indices stay put. -->
                 <DataGridTextColumn Header="Last Killed" Width="150" IsReadOnly="True" SortMemberPath="LastKilledSortKey"
                                     Binding="{ReflectionBinding LastKilledDisplay}"
@@ -189,7 +190,7 @@
                 <!-- Free-text notes from the Manage dialog, shown read-only here.
                      Trimmed to the column width (resize / widen to read a long
                      one, or edit it in Manage). Appended after Timer so the
-                     early-window column indices (4-6) the code-behind relabels
+                     early-window column indices (5-7) the code-behind relabels
                      stay put. -->
                 <DataGridTextColumn Header="Notes" Width="240" IsReadOnly="True" CanUserSort="False"
                                     Binding="{ReflectionBinding Notes}"

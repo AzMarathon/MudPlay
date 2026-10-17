@@ -11,7 +11,7 @@ namespace MudPlay.Game.Map;
 // Why deterministic: the user has told us which lairs they want and how
 // often each respawns, so a uniform-random pick over the marked set
 // wastes that information. This scheduler picks the lair whose entry
-// timing minimises a configurable cost (wasted respawn vs idle wait).
+// timing best fits the chosen heuristic.
 //
 // A lair repopulates when the player enters it after its clock has run
 // out. The scheduler treats LairCandidate.ReadyAt as "earliest time the
@@ -26,9 +26,9 @@ namespace MudPlay.Game.Map;
 //               that long when we step in).
 //   slack < 0 ⇒ |slack| seconds of idle wait in the wait-room before
 //               stepping in.
-// Default heuristic minimises max(0, slack) + max(0, -slack) * idlePenalty;
-// throughput heuristic minimises max(0, slack) only (idle time is free).
-// idlePenalty defaults to 1.0 (treat early and late equally).
+// Default heuristic: the closest lair with slack >= 0 (up by arrival), else
+// the one whose fight could start soonest. Throughput heuristic minimises
+// max(0, slack) only (idle time is free).
 //
 // Wait-room contract: the caller is responsible for picking the
 // wait-room (the BFS-shortest neighbour of the lair that isn't itself a
@@ -47,14 +47,12 @@ public static class AutoLairScheduler
     //   WaitRoom = null or ApproachHops = null are skipped (unreachable /
     //   no eligible wait-room).
     // travel: converts hop counts to durations.
-    // heuristic: Default = idle-penalised; Throughput = wasted-only.
-    // idlePenalty: weight on idle wait time under the Default heuristic (≥ 0).
+    // heuristic: Default = closest ready-by-arrival; Throughput = wasted-only.
     // now: current wall-clock instant.
     public static LairDecision? PickNext(
         IReadOnlyList<LairCandidate> candidates,
         ITravelCostModel travel,
         AutoLairHeuristic heuristic = AutoLairHeuristic.Default,
-        double idlePenalty = 1.0,
         DateTimeOffset? now = null)
     {
         ArgumentNullException.ThrowIfNull(candidates);
@@ -62,7 +60,6 @@ public static class AutoLairScheduler
         if (candidates.Count == 0) return null;
 
         DateTimeOffset evalAt = now ?? DateTimeOffset.UtcNow;
-        double penalty = Math.Max(0, idlePenalty);
         // Default two-tier: prefer a lair that's up by the time we ARRIVE — among
         // those the CLOSEST (soonest we start fighting = most hits per run) — and only
         // if none is ready by arrival, fall back to whichever we could start fighting
@@ -118,8 +115,6 @@ public static class AutoLairScheduler
                 && (bestThroughput is null || wastedSeconds < bestThroughput.Score))
                 bestThroughput = Decision(wastedSeconds);
         }
-
-        _ = penalty; // idlePenalty no longer weights Default (superseded by the two-tier rule); kept for API/settings compat.
 
         return heuristic switch
         {

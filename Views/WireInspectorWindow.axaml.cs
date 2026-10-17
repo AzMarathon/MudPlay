@@ -11,7 +11,7 @@ namespace MudPlay.Views;
 // Stripped (CSI sequences removed), and Classified (combat-window lines tagged with
 // the recognizer's read of each). Bound to WireInspectorViewModel. Code-behind
 // handles ScrollViewer sync (XAML can't easily express two-way scroll-offset
-// binding) and Find-next (a one-shot scroll-to-match — no live highlight in v1).
+// binding) and Find-next (a one-shot scroll-to-match, no live highlight).
 public partial class WireInspectorWindow : Window
 {
     private ScrollViewer? _rawScroll;

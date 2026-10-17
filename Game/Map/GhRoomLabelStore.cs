@@ -110,7 +110,7 @@ public sealed class GhRoomLabelStore
     // Adopt gang-house room labels received via @roomba sync — ADD-IF-ABSENT, so a
     // room the receiver has already labeled keeps its own (a shared gang house is
     // the same for everyone, and this way a re-sync never clobbers local edits).
-    // Respects the single-catch-all invariant. Fires Changed once. Returns the
+    // Fires Changed once. Returns the
     // count adopted, for the program log.
     public int MergeSyncLabels(IReadOnlyList<GhRoomLabel> incoming)
     {

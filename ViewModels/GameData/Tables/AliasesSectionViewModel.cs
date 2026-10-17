@@ -37,13 +37,12 @@ public sealed class AliasesSectionViewModel : GameDataTableSectionViewModel, IEd
     // Engine-backed table — see GameDataTableSectionViewModel.ShowUseColumn.
     public override bool ShowUseColumn => false;
 
-    // Surfaced banner — tells the user that aliases only expand from the Conversation window's
-    // input field today, not from the terminal canvas. The canvas would need client-side
-    // line-mode (local echo + telnet ECHO negotiation) to participate; that work is
-    // intentionally deferred until usage demand justifies it.
+    // Surfaced banner: aliases expand only on lines sent through SendUserText (the
+    // client's own windows via AppServices.SendTypedInput, and the local API). A line
+    // typed in the terminal goes out through TerminalControl.SubmitTypedLine as typed.
     public override string? BannerText =>
-        "Aliases fire only when you press Enter in the Conversation window's input field. " +
-        "Typing in the main terminal sends each keystroke directly to the game and bypasses alias expansion.";
+        "Aliases fire on lines the client's own windows send (the Conversation input, quest-step commands " +
+        "and the like) and through the local API. A line typed in the main terminal goes to the game as typed.";
 
     public override IEnumerable<string> SearchableLabels => new[]
     {

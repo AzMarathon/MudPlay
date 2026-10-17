@@ -318,7 +318,7 @@ public sealed partial class RoomDetailDialogViewModel
         }
     }
 
-    // Restock phrase, matching MMUD Explorer's Regen column. %-N 100 → always
+    // Restock phrase. %-N 100 → always
     // replenishes; 0 → never self-restocks ("no regen" — the shop only holds one
     // when a player sold it there); between → a probabilistic trickle. Renders as
     // "<%> for <amount> per <period>", the period humanised from minutes.

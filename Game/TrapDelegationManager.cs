@@ -128,7 +128,7 @@ public sealed class TrapDelegationManager : System.IDisposable
 
     // True when at least one joined party member (excluding the local character
     // and not-yet-joined invitees) can disarm traps — class main gate, race
-    // secondary. Used by the walker's delegation gate.
+    // secondary. A walk only delegates a trap when this is true.
     public bool AnyPartyMemberCanDisarm()
     {
         foreach (PartyMember m in _party.State.Members)

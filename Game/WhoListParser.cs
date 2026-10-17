@@ -26,9 +26,9 @@ namespace MudPlay.Game;
 //   * Marker — '-', or 'x' for a player who has gossip switched off (the Stock
 //     engine's rule; it says nothing about being dead or dropped). Read past, not
 //     recorded.
-//   * Title — class-derived display string (e.g. "High Druid", "Magebane").
-//     Mapping back to class + level range is a future feature; for now we record
-//     the raw string.
+//   * Title — class-derived display string (e.g. "High Druid", "Magebane"),
+//     recorded raw; ClassTitleTable maps it back to a level range where that's
+//     wanted.
 //   * Optional of {gang}.
 //   * Optional trailing role marker — M mudop, S sysop, V visiting from another
 //     realm.

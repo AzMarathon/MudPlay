@@ -44,18 +44,20 @@ public sealed class ItemMdbViewBuilder
     // "Other Info" mirrors MegaMUD's Game Item Details right-pane ordering (verified against
     // stock items 172 / 203 / 283 / 304 / 438 / 741 / 784). Layout — anything unset is
     // suppressed unless MegaMUD shows the row even when empty (in which case we render "None"):
-    //   1. WCC No
+    //   1. WCC No, Weight
     //   2. Game Max (from Limit) — when > 0
     //   3. Uses Per Day (from UseCount) — when > 0 (-1 / 0 suppressed)
-    //   4. Weapon block (ItemType==Weapon): Weapon Type, Weapon Damage, Weapon Speed
+    //   4. Weapon block (ItemType==Weapon): Weapon Type, Weapon Damage, Weapon Speed, BSable
     //   5. Armour block (ItemType==Armour): Armour Type
-    //   6. Accuracy Bonus / AC Bonus / Required Strength — always
+    //   6. Accuracy Bonus / AC Bonus / Required Strength — when non-zero
     //   7. Also Used By — one row per non-zero ClassRest-N
     //   8. Negates — one row per non-zero NegateSpell-N (resolved to Spells.Name)
-    //   9. Ability rows — one per Abil-N with code > 0, even when AbilVal is 0 (so
+    //   9. Not Droppable / Delete on Death — when set
+    //  10. Ability rows — one per Abil-N with code > 0, even when AbilVal is 0 (so
     //      "Del@Maint: 0" surfaces). Stat-bonus codes render signed (+5); value/threshold
     //      codes render raw. LearnSpell + CastSpell resolve their values to Spells.Name.
-    //  10. Dropped By — comma-joined Monsters parsed from Obtained From.
+    // Dropped By, Placed In, Room command and the bought/sold shops are separate
+    // clickable lists, not Other Info rows.
     // AC Bonus follows MegaMUD's convention of ArmourClass/10 + "/" + DamageResist/10 (stock
     // stores ArmourClass=20 → "2/0"). Bought/sold (left pane) renders EVERY shop reference in
     // Obtained From, one row per room each shop operates from (a shop can run from several).
@@ -475,7 +477,7 @@ public sealed class ItemMdbViewBuilder
         ? "+" + n.ToString(System.Globalization.CultureInfo.InvariantCulture)
         : n.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-    // Signed value, or empty when zero — used by the "skip when None" row helpers.
+    // Signed value, or empty when zero.
     private static string FormatSignedOrEmpty(int n) => n == 0 ? string.Empty : FormatSigned(n);
 
     // MegaMUD's Weapon-Type labels use "2-Handed Sharp" not "2H Sharp". Returns empty when the

@@ -24,11 +24,12 @@ namespace MudPlay.Game.Combat;
 // repeating was the double-cast / corpse-cast bug — hence _announcedSpellCode, the
 // spell analogue of "we already sent `attack X`; the server owns the repeat."
 //
-// Casts route through the shared CastCoordinator.TryCast so the one-cast-per-round
-// cooldown is honoured across every casting engine (a survival heal from
-// CastingDirector blocks our offensive cast — survival beats offense). The INITIAL
-// engage / a decision switch bypasses that round cooldown (TryCast bypassRoundCooldown)
-// so a fresh mob is announced-at instantly, mirroring the weapon's cooldown-free send.
+// Casts route through the shared CastCoordinator.TryCast, which paces our attack
+// casts on their own clock, apart from CastingDirector's between-round casts (the
+// two are independent slots server-side); only its failure latch is shared. The
+// INITIAL engage / a decision switch bypasses the round cooldown (TryCast
+// bypassRoundCooldown) so a fresh mob is announced-at instantly, mirroring the
+// weapon's cooldown-free send.
 public sealed partial class CombatManager
 {
     private readonly CombatSpellChooser _spellChooser = new();
@@ -285,9 +286,9 @@ public sealed partial class CombatManager
     }
 
     // Wire the Auto-Nuke auto-engine gate. When the predicate returns false, the
-    // chooser never offers the multi-target attack spell or either debuff (the
-    // single-target Normal / Alternate attack spells stay available — they aren't
-    // nukes). Until called, nukes fail open (always allowed).
+    // chooser never offers the multi-target attack spell or the area debuff (the
+    // single-target debuff and Normal / Alternate attack spells stay available —
+    // they aren't nukes). Until called, nukes fail open (always allowed).
     public void SetAutoNukeGate(Func<bool> gate)
     {
         ArgumentNullException.ThrowIfNull(gate);
@@ -528,21 +529,19 @@ public sealed partial class CombatManager
                 break;
 
             default:
-                // A combat spell owns the round. Announce it ONCE and instantly: the
-                // engage bypasses the shared 5.5s round cooldown (mirroring a weapon's
-                // cooldown-free SendAttack), so a fresh mob is cast at immediately
-                // rather than after it swings. bypassRecastInterval additionally skips
-                // the 500ms burst guard: a between-round cast (self-buff / reroll, or the
-                // debuff half of debuff-then-attack) can stamp CastCoordinator's recast
-                // clock moments before this dispatch, so a fresh engage / arrival and an
-                // interrupt-resume pass it true to still land THIS round's attack behind
-                // one — a buff and a real attack are independent slots server-side, never
-                // competing for the round. The plain per-round re-decide paths (@kill
-                // retarget, target-priority follow) leave it false so the guard still
-                // absorbs a burst of dispatches in the same frame. The server then auto-repeats the
-                // spell each round; the heartbeat re-announces only if the chooser's
-                // decision later changes. Set the bridge even when the cast is blocked so
-                // we stay in spell mode and retry next tick rather than swinging.
+                // A combat spell owns the round. Announce it ONCE and instantly: the engage
+                // bypasses the shared 5.5s round cooldown (mirroring a weapon's
+                // cooldown-free SendAttack), so a fresh mob is cast at immediately rather
+                // than after it swings. bypassRecastInterval additionally skips the 500ms
+                // burst guard: the debuff half of debuff-then-attack is cast on the same
+                // attack-slot clock moments before this dispatch, so a fresh engage /
+                // arrival and an interrupt-resume pass it true to still land THIS round's
+                // attack behind it. The plain per-round re-decide paths (@kill retarget,
+                // target-priority follow) leave it false so the guard still absorbs a burst
+                // of dispatches in the same frame. The server then auto-repeats the spell
+                // each round; the heartbeat re-announces only if the chooser's decision
+                // later changes. Set the bridge even when the cast is blocked so we stay in
+                // spell mode and retry next tick rather than swinging.
                 _castingSpellTarget = picked.RawName;
                 // Clear _combatOff here, not only inside the TryCast-succeeded branch
                 // below. A fresh engage can lose the round's one-cast slot to a
@@ -600,14 +599,14 @@ public sealed partial class CombatManager
                 }
                 else
                 {
-                    // The attack never reached the server. Hold CastingDirector out
-                    // of the next round and make that round exist even in a freshly
-                    // started session whose TickEngine has not seen a generic combat
-                    // line yet. The old retry assumed CombatTickElapsed would arrive,
-                    // but its timer fallback is intentionally inert while its anchor
-                    // is null; a shade's "reaches out for you" armour-block line is
-                    // outside the generic tick patterns, so the pending attack could
-                    // otherwise remain here forever with CombatOff=false.
+                    // The attack never reached the server. Mark it owed (diagnostic)
+                    // and make that round exist even in a freshly started session whose
+                    // TickEngine has not seen a generic combat line yet. The old retry
+                    // assumed CombatTickElapsed would arrive, but its timer fallback is
+                    // intentionally inert while its anchor is null; a shade's "reaches
+                    // out for you" armour-block line is outside the generic tick
+                    // patterns, so the pending attack could otherwise remain here
+                    // forever with CombatOff=false.
                     _spellAttackOwed = true;
                     _ensureCombatTickAnchor?.Invoke();
                     _log?.Combat(LogCategory,
@@ -886,7 +885,7 @@ public sealed partial class CombatManager
         }
 
         // Self-heal: the auto-attack target diverged from the spell target
-        // (mob died → NoteMonsterDied cleared _currentTarget, or a re-pick
+        // (mob died → the kill path cleared _currentTarget, or a re-pick
         // switched targets). Drop spell mode; the next observation
         // re-decides cleanly.
         if (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase))
@@ -1053,10 +1052,8 @@ public sealed partial class CombatManager
     // later, so the cap-preempt (report paradigm-20260814-061340) is preserved — the
     // window is short enough (SwitchDispatchDelay) to still land ahead of the server's
     // next round even for a fast multi-projectile caster (report paradigm-20260822-003106).
-    // The re-tick that would otherwise re-arm the
-    // switch during the delay window is itself gated by AttackTallyMinGap (one tally per
-    // round), so no double-schedule. Falls back to a bare _post when no scheduler is
-    // wired (tests that don't opt in).
+    // _pendingSwitch keeps a re-tick inside the delay from arming the same switch twice.
+    // Falls back to a bare _post when no scheduler is wired (tests that don't opt in).
     // Pending deferred switch (target→spell). While one is armed, a re-tick during
     // the dispatch delay can't schedule the same switch again — the double-cast in
     // reports paradigm-20260819-121003 / -142147 (mmis fired twice after lbol
@@ -1126,22 +1123,6 @@ public sealed partial class CombatManager
             _post(Dispatch);
     }
 
-    // The AlternateSpellPhysical/AlternatePhysicalSpell/CustomRoundCycle branches
-    // above force a fresh dispatch EVERY round — unlike DeferSwitchDispatch's
-    // spell-only cascade, this can re-announce a WEAPON action too, so it can't
-    // reuse that guard's _castingSpellTarget check (null in a physical-phase
-    // round would wrongly skip a live target). Same underlying race though: the
-    // heartbeat is damage-line driven, so it decides on a round's own killing
-    // blow ahead of the "dies." / "You gain N experience." that would drop the
-    // target. Defer by SwitchDispatchDelay and re-validate against _currentTarget
-    // + the freshest room view before dispatching (report paradigm-20260905-205200:
-    // every kill wasted a round re-announcing at the corpse — "You don't see X
-    // here!").
-    // The chooser decisions that own the round as a SPELL (enter spell mode via the
-    // DispatchRoundAction default branch) — i.e. a switch off the weapon is warranted.
-    // Excludes WeaponAttack (the thing we're leaving), Backstab (a stealth opener, not
-    // a cascade rung), and the between-round debuffs (resolved separately, not round
-    // owners). Used by the weapon→spell re-climb.
     // A spell whose targeting scope is the room (DebuffTargeting.IsAreaEnemy). False
     // when the code can't be resolved.
     private bool IsRoomScoped(string? code)
@@ -1154,11 +1135,27 @@ public sealed partial class CombatManager
         => _lastCastAction is CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2
            || IsRoomScoped(_announcedSpellCode);
 
+    // The chooser decisions that own the round as a SPELL (enter spell mode via the
+    // DispatchRoundAction default branch) — i.e. a switch off the weapon is warranted.
+    // Excludes WeaponAttack (the thing we're leaving), Backstab (a stealth opener, not
+    // a cascade rung), and the between-round debuffs (resolved separately, not round
+    // owners).
     private static bool IsAttackSpellRoundOwner(CombatSpellAction action) => action is
         CombatSpellAction.NormalAttackSpell or CombatSpellAction.AlternateAttackSpell
         or CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2
         or CombatSpellAction.DrainSpell;
 
+    // The AlternateSpellPhysical/AlternatePhysicalSpell/CustomRoundCycle branches
+    // above force a fresh dispatch EVERY round — unlike DeferSwitchDispatch's
+    // spell-only cascade, this can re-announce a WEAPON action too, so it can't
+    // reuse that guard's _castingSpellTarget check (null in a physical-phase
+    // round would wrongly skip a live target). Same underlying race though: the
+    // heartbeat is damage-line driven, so it decides on a round's own killing
+    // blow ahead of the "dies." / "You gain N experience." that would drop the
+    // target. Defer by SwitchDispatchDelay and re-validate against _currentTarget
+    // + the freshest room view before dispatching (report paradigm-20260905-205200:
+    // every kill wasted a round re-announcing at the corpse — "You don't see X
+    // here!").
     private void DeferRoundContinuation(CombatSettings settings, string target, string reason)
     {
         void Dispatch()

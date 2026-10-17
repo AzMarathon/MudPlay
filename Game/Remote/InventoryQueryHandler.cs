@@ -28,8 +28,8 @@ public sealed class InventoryQueryHandler : IDisposable
     // Per-reply char budget for the @inv item / key lists. The engine wraps the
     // payload in { } and prefixes the recipient, and the game caps a single say's
     // input length — so a big pack is split across MULTIPLE replies (each chunk
-    // within budget) rather than truncated. Mirrors HelpHandler's cap; leaves
-    // headroom for the wrapper so no reply overruns the say line.
+    // within budget) rather than truncated. Kept under HelpHandler's 200 to leave
+    // headroom for the "(i/N)" label and the wrapper so no reply overruns the say line.
     private const int PackBudget = 170;
 
     private readonly RemoteCommandManager _engine;

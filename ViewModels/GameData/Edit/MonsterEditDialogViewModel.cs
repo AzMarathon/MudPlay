@@ -177,7 +177,7 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     public string Title => $"Monster — {(Name.Length > 0 ? Name : $"#{WccNoStr}")}";
 
     // Resolves a typed cast-code (e.g. "turn") to its Spells.Number, or null
-    // when the text doesn't match a known spell — see ParseAttackOverride.
+    // when the text doesn't match a known spell — see ResolveSpellOverride.
     // Optional so the dialog still works (falling back to numeric-only
     // detection) wherever game data isn't wired, e.g. tests.
     private readonly Func<string, int?>? _resolveSpellShort;

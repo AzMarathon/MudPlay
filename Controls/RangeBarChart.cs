@@ -61,7 +61,7 @@ public sealed class RangeBarChart : Control
     // once, filling the full width, and Offset selects which run of steps that is —
     // a slider drives Offset from step 1 to the tail. WindowSize <= 0 (or a loop
     // already shorter than the window) shows every step from Offset. Offset is a
-    // double so it can bind straight to a Slider's Value; it's floored + clamped in
+    // double so it can bind straight to a Slider's Value; it's rounded + clamped in
     // Render.
     public static readonly StyledProperty<double> OffsetProperty =
         AvaloniaProperty.Register<RangeBarChart, double>(nameof(Offset), 0);

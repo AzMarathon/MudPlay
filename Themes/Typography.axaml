@@ -1,15 +1,12 @@
 <!--
-  Typography tokens — IBM Plex Sans for chrome, JetBrains Mono for any
-  monospace surface that isn't the CP437 terminal canvas (which still uses
-  the bundled Mx437 bitmap font from Assets/Fonts/).
+  Typography tokens — IBM Plex Sans for chrome, JetBrains Mono for monospace
+  chrome surfaces. The terminal canvas font is a per-character setting
+  (default: the bundled Mx437 bitmap font from Assets/Fonts/).
 
   Fonts are bundled under Assets/Fonts/ and pulled in via avares://. The
   trailing #Family-Name segment must match the font's internal family name
   exactly; Avalonia uses it to disambiguate when multiple weights live in
   separate .ttf files.
-
-  Issue #4 tracks moving font choices into user preferences. The values
-  here are authoritative until then.
 -->
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -18,13 +15,13 @@
     <!-- ============ Font families ============ -->
     <FontFamily x:Key="FontChrome">avares://MudPlay/Assets/Fonts/IBMPlexSans-Regular.ttf#IBM Plex Sans</FontFamily>
     <FontFamily x:Key="FontMono">avares://MudPlay/Assets/Fonts/JetBrainsMono-Regular.ttf#JetBrains Mono</FontFamily>
-    <!-- The CP437 bitmap font the TerminalControl renders; same family
-         shared with anything that needs to feel "in-terminal"
-         (e.g. the Navigation map hover tooltip). -->
+    <!-- The bundled CP437 bitmap font: the terminal's default, and the
+         design-time font of the map hover / hold-chip tooltips (DisplayConfig
+         swaps the hover tooltip's font at runtime). -->
     <FontFamily x:Key="FontTerminal">avares://MudPlay/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16</FontFamily>
 
     <!-- ============ Font sizes ============ -->
-    <!-- 13 px is the skeleton default for chrome text; 11 px is the
+    <!-- 13 px is the default for chrome text; 11 px is the
          "small / muted" tier used on shortcuts and badges; 16 / 20 are
          section headers + the rare H1 surface. -->
     <sys:Double x:Key="FontSizeSm">11</sys:Double>

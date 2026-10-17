@@ -1,24 +1,23 @@
 namespace MudPlay.Models.GameData;
 
-// One "Messages/Responses" entry — a parser-pattern bundle paired with
-// the engine reaction that fires when any of its lines match.
+// One Messages entry — the lines that identify a spell, effect or condition
+// on the wire.
 //
 // Surfaced + edited via the Game Data Browser → Messages tab. Spell-bound
 // records carry up to four perspective-tagged lines (the same line shown
 // from the caster, target, witness, and buff-applied points of view) so
-// the future combat manager can ask a targeted question — "what's the
-// caster line for spell N?" — without scanning every record. Non-spell
+// a consumer can ask a targeted question — "what's the caster line for
+// spell N?" — without scanning every record. Non-spell
 // records (item procs, monster ability lines, condition messages,
 // life-counter triggers) typically populate only the slot that
 // semantically fits.
 //
 // Storage lives alongside the active game-data set at
-// Data/game data/{set}/messages.json with the realm-flavored seed at
-// Data/Global/Messages.{stock|paradigm}.seed.json (user-writable; bootstrapped
+// game data/{set}/messages.json with the realm-flavored seed at
+// Global/Messages.{stock|paradigm}.seed.json (user-writable; bootstrapped
 // from the bundled Defaults/ copy on first launch, realm picked from the set's
 // Info.json Legit). Each seed is decoded offline from that realm's MegaMUD
-// messages.md by tools/decode_messages_md.py — a record's name attributes it to
-// its spell/item by name. User edits are kept in the per-set file as a delta over
+// messages.md — a record's name attributes it to its spell/item by name. User edits are kept in the per-set file as a delta over
 // the seed (MessageStore / SeedDelta), so seed fixes still reach unedited records.
 //
 // Identity rule: Id is SHA1(Name | CasterMessage | TargetMessage |
@@ -143,7 +142,7 @@ public sealed record MessageRecord(
 // One back-reference from a MessageRecord to a record inside the active
 // set's JSON tables. Display name is resolved live from the current set so
 // it never goes stale on a game-data update. Table is the JSON file stem
-// under Data/game data/{set}/ (case-insensitive on resolution); Number is
+// under game data/{set}/ (case-insensitive on resolution); Number is
 // the Number field on the target record.
 public readonly record struct GameDataLink(
     string Table,

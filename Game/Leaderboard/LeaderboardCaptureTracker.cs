@@ -5,7 +5,7 @@ using MudPlay.Services;
 namespace MudPlay.Game.Leaderboard;
 
 // Passively captures a "top N" listing as it scrolls past on the live terminal
-// and hands the finished snapshot to the per-BBS store. Capture is entirely
+// and hands the finished snapshot to the per-realm store. Capture is entirely
 // player-driven: the user runs `top <N>` in-game whenever they want a fresh
 // reading (each realm rebuilds its rankings on its own cadence), and this watches
 // the emitted lines for the block.

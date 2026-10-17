@@ -55,8 +55,7 @@ public static class LookupEnums
 
     // True when an Items.WeaponType code marks a two-handed weapon (the "2H Blunt" /
     // "2H Sharp" labels above, codes 1 and 3). Two-handers occupy the off-hand slot,
-    // so wielding one needs a shield/off-hand removed first — the swap logic in
-    // ItemCastSequencer and CombatManager keys off this.
+    // so wielding one needs a shield/off-hand removed first.
     public static bool IsTwoHandedWeaponType(int weaponType) => weaponType is 1 or 3;
 
     private static readonly FrozenDictionary<int, string> ClassWeaponTypeNames = new Dictionary<int, string>
@@ -125,7 +124,7 @@ public static class LookupEnums
         [12] = "Deed Shop",
     }.ToFrozenDictionary();
 
-    // Shops.ShopType — the CashManager auto-deposit path consults this.
+    // Shops.ShopType → shop kind label.
     public static string? FormatShopType(string? raw) => Map(raw, ShopTypeNames);
 
     private static readonly FrozenDictionary<int, string> MonAttackTypeNames = new Dictionary<int, string>

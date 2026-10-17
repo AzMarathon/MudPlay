@@ -5,7 +5,7 @@ using MudPlay.Game.Cash;
 namespace MudPlay.ViewModels;
 
 // One row in the Transaction history window: the recorded entry plus its "keep"
-// toggle. Checking Keep marks the entry to survive a "Clear unkept" — the
+// toggle. Checking Keep marks the entry to survive "Clear history" — the
 // selective wipe for when the ledger fills with routine offloads but a few rows
 // are worth holding onto. The mark lives on the ledger entry and is saved with it,
 // so it outlasts the window and the session.

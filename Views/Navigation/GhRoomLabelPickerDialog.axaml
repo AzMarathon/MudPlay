@@ -21,10 +21,10 @@
                        FontWeight="SemiBold"
                        TextWrapping="Wrap"/>
 
-            <CheckBox Content="Make this the gang house's catch-all room"
+            <CheckBox Content="Make this a catch-all room for the gang house"
                       IsChecked="{Binding IsCatchAll, Mode=TwoWay}"
                       Margin="0,4,0,0"
-                      ToolTip.Tip="Anything that doesn't match any room's rules anywhere in the gang house gets swept here instead of being left in place. Only one room can be the catch-all — checking this here un-checks it elsewhere."/>
+                      ToolTip.Tip="Anything that doesn't match any room's rules anywhere in the gang house gets swept here instead of being left in place. Several rooms can be catch-alls: they form an overflow chain, so when one fills up the next is used."/>
 
             <TextBlock Text="Sort rules (any one matching sends an item here)"
                        Foreground="{StaticResource ChromeFgSecBrush}" Margin="0,6,0,0"/>

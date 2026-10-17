@@ -1,18 +1,11 @@
 <!--
-  Geometry resources for the toolbar / menu / status-bar icon set, ported
-  from docs/skeleton/main-shell.jsx (the `Icon` component's `paths` map).
-  All SVG paths are authored on the 24×24 grid the skeleton uses; consumers
-  render them inside a 16×16 (toolbar) or 12×12 (title-bar / muted) box via
-  Path Stretch="Uniform".
+  Geometry resources for the toolbar / menu / status-bar icon set. All paths
+  are authored on a 24×24 grid; consumers render them inside a 16×16
+  (toolbar) or 12×12 (title-bar / muted) box via Path Stretch="Uniform".
 
   Stroke style at the call site: 1.5 px stroke, round caps + joins, no fill.
-  Mirrors the skeleton's `<svg fill="none" strokeWidth="1.5"
-  strokeLinecap="round" strokeLinejoin="round">` baseline so a port stays
-  pixel-faithful.
 
-  Naming: matches the skeleton's keys verbatim (so "IconPlug" ≡ skeleton's
-  `plug`) for grep-back convenience. New icons get appended; never reuse a
-  key for a different glyph.
+  New icons get appended; never reuse a key for a different glyph.
 -->
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
@@ -73,10 +66,9 @@
     <StreamGeometry x:Key="IconClose">M6 6 L18 18 M6 18 L18 6</StreamGeometry>
     <StreamGeometry x:Key="IconSearch">M17 11 A6 6 0 1 1 5 11 A6 6 0 1 1 17 11 Z M16 16 L20 20</StreamGeometry>
 
-    <!-- Action menu glyphs (Phase 4 PR 4.6b). Same 24x24 grid + 1.5px round-stroke
-         style as the originals above. Used by the toolbar catalogue for the
-         bulk-action and auto-engine entries; commands wire in their owning
-         phases (9 EQUIP / 12 Quick Tools / 13 automation engines). -->
+    <!-- Action glyphs for the toolbar catalogue's bulk-action and auto-engine
+         entries. Same 24x24 grid + 1.5px round-stroke style as the originals
+         above. -->
 
     <!-- Bulk actions -->
     <!-- Down-arrow into open-top box. -->
@@ -116,7 +108,6 @@
     <StreamGeometry x:Key="IconAutoSneak">M10 3 C7 3 6 6 6 9 C6 11 8 13 10 13 C12 13 13 11 13 8 C13 5 12 3 10 3 Z M12 15 L12 20 H7 V15 Z</StreamGeometry>
     <!-- Closed eye (lash arc + lashes + slash). -->
     <StreamGeometry x:Key="IconAutoHide">M3 13 C7 9 17 9 21 13 M7 15 L8 17 M17 15 L16 17 M11 16 V18 M13 16 V18 M5 5 L19 19</StreamGeometry>
-    <!-- Double chevron up — level up / auto-train. -->
 
     <!-- "EXP" stick-letter wordmark — the send-exp toolbar button (no drawn
          glyph; the letters ARE the icon). -->

@@ -10,8 +10,6 @@ namespace MudPlay.Services;
 //   Patterns.RegexPattern  — full PCRE-like match with capture groups.
 //   Patterns.PrefixPattern — substring-startswith, no groups.
 //   Patterns.ExactPattern  — whole-line equality, no groups.
-// The user-defined Trigger engine implements this interface to plug into the
-// same dispatch path.
 public interface IMessagePattern
 {
     // Stable identifier (e.g. "chat.gossip", "combat.user-hits") — appears on

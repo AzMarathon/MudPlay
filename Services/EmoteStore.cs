@@ -340,10 +340,9 @@ public sealed partial class EmoteStore
 
     private Emote ToEmote(UserEmote e)
     {
-        string display = string.IsNullOrWhiteSpace(e.DisplayName) ? e.Shortcode : e.DisplayName!;
         return !string.IsNullOrEmpty(e.Image)
-            ? new Emote(e.Shortcode, EmoteKind.Image, Path.Combine(_dir, e.Image), display)
-            : new Emote(e.Shortcode, EmoteKind.Unicode, e.Emoji ?? "", display);
+            ? new Emote(e.Shortcode, EmoteKind.Image, Path.Combine(_dir, e.Image))
+            : new Emote(e.Shortcode, EmoteKind.Unicode, e.Emoji ?? "");
     }
 
     // Delete image files under EmotesDir no committed emote references any more.

@@ -29,7 +29,7 @@ public readonly record struct LevelProjectionColumn(
     // Every column the grid can show, in display order. Keys are persisted, so
     // renaming one silently resets that column for existing characters — add a new
     // key instead. The utility skills default off: they only matter to classes that
-    // were granted them, and 21 columns at once is unreadable.
+    // were granted them, and 22 columns at once is unreadable.
     public static IReadOnlyList<LevelProjectionColumn> All { get; } = new[]
     {
         new LevelProjectionColumn(PinnedKey, "Lvl", "Level", 60, true, false,

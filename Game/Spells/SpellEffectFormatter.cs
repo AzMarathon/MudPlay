@@ -8,10 +8,6 @@ namespace MudPlay.Game.Spells;
 // ability codes, durations convert 3-second spell-round ticks to seconds,
 // stat-affect abilities surface signed magnitudes, and RemovesSpell targets
 // render by name.
-//
-// Shared by the Spell Book (SpellBookRowViewModel, scaled to the character's
-// level) and the Game Data Items "Other Info" pane (weapon use-cast / proc
-// effects, rendered at the spell's own base level).
 public static class SpellEffectFormatter
 {
     // Compose the effect string for formula at level (the level-scaled

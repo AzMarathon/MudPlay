@@ -25,15 +25,12 @@ public sealed class GameDataBrowserViewModelTests : IDisposable
     }
 
     [Fact]
-    public void SeedSections_PopulatesEveryEventualTab()
+    public void SeedSections_PopulatesEveryTableTab()
     {
+        // The engine-backed tabs need their services, which this ctor isn't given;
+        // the game-data tables are always there.
         GameDataBrowserViewModel vm = new(_cache);
 
-        Assert.Contains(vm.Sections, s => s.Id == "players");
-        Assert.Contains(vm.Sections, s => s.Id == "macros");
-        Assert.Contains(vm.Sections, s => s.Id == "triggers");
-        Assert.Contains(vm.Sections, s => s.Id == "aliases");
-        Assert.Contains(vm.Sections, s => s.Id == "messages");
         Assert.Contains(vm.Sections, s => s.Id == "monsters");
         Assert.Contains(vm.Sections, s => s.Id == "items");
         Assert.Contains(vm.Sections, s => s.Id == "spells");

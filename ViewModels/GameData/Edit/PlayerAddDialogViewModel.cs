@@ -11,7 +11,7 @@ namespace MudPlay.ViewModels.GameData.Edit;
 // flags, auto-party toggles, Notes, etc.) via the existing PlayerEditDialogViewModel.
 //
 // Two-click split (Add → Edit) is deliberate. The full Player edit dialog is rich
-// (12 RemoteControls checkboxes + behavior toggles + observed-fields read-only pane), and
+// (16 RemoteControls checkboxes + behavior toggles + observed-fields read-only pane), and
 // most of that would render empty in an "add" context. Keeping the create path narrow
 // makes the action obvious: name a player so they're tracked, then refine.
 public sealed partial class PlayerAddDialogViewModel : ObservableObject, IDialogViewModel<PlayerAddResult>

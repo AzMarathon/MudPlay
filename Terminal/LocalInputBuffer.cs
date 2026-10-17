@@ -66,7 +66,7 @@ public sealed class LocalInputBuffer
     // True when the buffer is at MaxLength — further appends are dropped.
     public bool IsFull => _buf.Length >= MaxLength;
 
-    // Fires after every state-changing op (Append / Backspace / Flush / Clear) so the terminal can repaint.
+    // Fires after every state-changing op (Append / Backspace / Flush / Set) so the terminal can repaint.
     public event Action? Changed;
 
     // Append text to the buffer, clamped to the remaining capacity. Returns
@@ -97,8 +97,8 @@ public sealed class LocalInputBuffer
     }
 
     // Replace the whole buffer with text (clamped to MaxLength), then repaint.
-    // Used by command-history recall: Up / Down swap the live line for a
-    // previously-sent command wholesale rather than character by character.
+    // Command-history recall swaps the live line for a previously-sent command
+    // wholesale, not character by character.
     // Always fires Changed so recalling an empty line still erases the
     // previously-shown text from the overlay.
     public void Set(string? text)
@@ -106,15 +106,6 @@ public sealed class LocalInputBuffer
         _buf.Length = 0;
         if (!string.IsNullOrEmpty(text))
             _buf.Append(text, 0, Math.Min(MaxLength, text.Length));
-        Changed?.Invoke();
-    }
-
-    // Drop all buffered chars without producing wire bytes. Used by connection
-    // swaps + tests; the Enter path uses FlushBytes instead.
-    public void Clear()
-    {
-        if (_buf.Length == 0) return;
-        _buf.Length = 0;
         Changed?.Invoke();
     }
 

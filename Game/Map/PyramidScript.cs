@@ -43,8 +43,8 @@ public static class PyramidScript
 
     // Floor-1 pre-flight timer budget: 126 moves + 6 actions must finish within
     // 5 min of the first firepit `up` or the party scatters. The fire sphinx's answer
-    // ends the timer, so the ascent after it isn't on the clock. Used by the
-    // pre-flight feasibility gate (see PyramidSolver).
+    // ends the timer, so the ascent after it isn't on the clock (PyramidPreflight
+    // sizes its estimate from these).
     public const int Floor1MoveCount = 126;
     public const int Floor1ActionCount = 6;          // 5 push-blocks + ask sphinx fire
     public const int ActionMillis = 250;             // ~ per non-move action

@@ -8,9 +8,10 @@ using MudPlay.Views.Settings;
 
 namespace MudPlay.ViewModels.Settings;
 
-// "Spells" tab — self-cast picks per role. Top section orders the between-round
-// casting categories (Minor / Major party heal, Minor / Major self heal,
-// Curing, Buffing, Debuffing). Middle sections name the heal / regen / cure
+// "Spells" tab — self-cast picks per role. Top section orders the ten
+// between-round casting categories (Emergency heal, Minor / Major party heal,
+// Downed-ally heal, Minor / Major self heal, Curing, Priority buffs, Buffing,
+// Debuffing). Middle sections name the heal / regen / cure
 // spells plus the mana-regen reroll config; the bottom section holds the
 // ailment-handling toggles. Persists as the "Spells" entry in
 // CharacterProfile.Settings. The self-bless spell picks and their timing live in

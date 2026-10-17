@@ -38,14 +38,6 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     // True when a profile is loaded — editor is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;
 
-    public string PhaseTag => "Phase 6 (RemoteCommandManager)";
-
-    public string Description =>
-        "Engine-level policy for inbound @-commands. " +
-        "Per-channel disable rows below cover only the three channels the engine ever listens on — Gossip / Auction " +
-        "/ Broadcast / Yell are hard-excluded engine-wide and don't need a toggle. " +
-        "Per-player permissions live on the Game Data → Players tab; this tab is the master policy layer above them.";
-
     public override Control View => _view ??= new TalkSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels => new[]

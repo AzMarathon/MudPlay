@@ -36,13 +36,9 @@ public sealed class TokenTracker : IDisposable
     private string? _currentLookPlace;   // token-name line seen during a look burst
     private bool _disposed;
 
-    // Fired after the charge map changes (login read, a re-look landing, a clear),
-    // so a future UI can refresh. Fired on the UI thread.
-    public event Action? Changed;
-
     // Fired when a token USE succeeds (the "You invoke the token…" line). Carries the
-    // place. PR 1 uses it to reconcile charges; later phases hang the pause-rebuffs
-    // and party-confirm logic off it (the use also wipes buffs via negate magic).
+    // place: the charge re-look, the buff pause and a token route's landing all hang
+    // off it (the use also wipes buffs via negate magic).
     public event Action<string>? TokenUsed;
 
     // Fired when someone else uses a token in the room we're in (their WitnessMessage,
@@ -159,7 +155,6 @@ public sealed class TokenTracker : IDisposable
         }
         catch (OperationCanceledException) { /* keep whatever arrived */ }
         EndCollect();
-        Changed?.Invoke();
     }
 
     // Detect an outbound `use <token>` (the observed user/engine send path) and
@@ -221,7 +216,6 @@ public sealed class TokenTracker : IDisposable
     public void Clear()
     {
         lock (_lock) _charges.Clear();
-        Changed?.Invoke();
     }
 
     public void Dispose()
@@ -242,7 +236,6 @@ public sealed class TokenTracker : IDisposable
         try { await Task.Delay(SettleWindow).ConfigureAwait(true); }
         catch (OperationCanceledException) { /* keep whatever arrived */ }
         EndCollect();
-        Changed?.Invoke();
     }
 
     private void OnLine(LineExtractor.EmittedLine emitted)

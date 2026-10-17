@@ -20,11 +20,9 @@ namespace MudPlay.ViewModels.GameData.Tables;
 // "star"), ReqLevel is the cast prerequisite, Diff is the cast-difficulty score. Magery, AttType,
 // and Targets render via LookupEnums ("Mage" / "Cold" / "Full Area" / etc.).
 //
-// Double-click a row → opens every MessageRecord that links Spells#N for that row's spell number
-// in its own modeless MessageEditDialogViewModel. Multi-message spells (e.g. apostrophe / wording
-// variants of one effect line) stack as cascaded windows the user drags apart if needed. Zero
-// matches surfaces a one-shot info dialog naming the spell so the user sees the gap rather than a
-// silent no-op.
+// Double-click a row → opens the spell's MessageRecord (the one linking Spells#N) in the tabbed
+// MessageEditDialogViewModel, or a new record pre-linked to the spell when it has none; the Game
+// Data tab shows the spell's imported fields either way.
 //
 // The Seed column and the "Differs from seed" filter show which spells' message records
 // aren't plain seed records; "Compare with seed…" opens them beside the seed's and puts
@@ -279,12 +277,9 @@ public sealed class SpellsSectionViewModel : JsonTableSectionViewModel, IEditabl
             return;
         string spellName = row.Get("Name") ?? string.Empty;
 
-        // Post-restructure: each spell has at most ONE MessageRecord
-        // (the wcc generator emits one record per spell-name with all
-        // perspective slots populated as fields on the same record).
-        // Find that one record by Spells#N link and open the editor —
-        // or fall back to the "no message" InfoDialog if the spell
-        // has no record at all.
+        // Each spell has at most ONE MessageRecord (one record per
+        // spell name, every perspective slot a field on it); find it by
+        // its Spells#N link.
         MessageRecord? match = _messages.Messages
             .FirstOrDefault(m => m.Links is not null && m.Links.Any(l =>
                 string.Equals(l.Table, "Spells", StringComparison.OrdinalIgnoreCase)
@@ -326,7 +321,6 @@ public sealed class SpellsSectionViewModel : JsonTableSectionViewModel, IEditabl
 
         MessageEditDialogViewModel vm = new(
             record,
-            currentTier:     SettingsTier.Defaults,
             existingRecords: _messages.Messages,
             isNew:           isNew,
             cache:           _cache,

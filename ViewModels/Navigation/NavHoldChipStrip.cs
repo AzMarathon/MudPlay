@@ -33,7 +33,7 @@ public sealed class NavHoldChipStrip
                 Chips.Add(new NavHoldChip(label, tone, tip));
             else if (Chips[at].IsCleared)
                 // A fresh chip rather than un-clearing the old one: the view's fade
-                // transition would otherwise fade it back in over two seconds.
+                // transition would otherwise fade it back in over FadeTime.
                 Chips[at] = new NavHoldChip(label, tone, tip);
         }
 

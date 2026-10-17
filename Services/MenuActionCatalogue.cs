@@ -6,14 +6,14 @@ namespace MudPlay.Services;
 // The pool of entries the user can place in the customizable terminal
 // right-click menu (Settings → Toolbar + Shortcuts → Terminal right-click menu).
 // Separate from ToolbarItemCatalogue on purpose: the context menu offers far
-// more than the toolbar's ~40 icon actions — every main-menu command, whole
-// main menus as nested submenus, direct links to each Player Workshop tab, and
-// direct links to each calculator. Command / toggle resolution reuses the same
-// reflection bridge the toolbar and keybinds use: a CommandName is looked up as
-// an ICommand property on MainWindowViewModel; a ToggleProperty as a two-way
-// bool. Every CommandName / ToggleProperty / GestureProperty here is taken
-// verbatim from the live menu bar + terminal context menu bindings in
-// MainWindow.axaml, so nothing resolves to a dead item.
+// more than the toolbar's ~40 icon actions — every main-menu command, a few
+// ready-made submenus (Drop ▸ / Hide ▸ / Equip ▸), direct links to each Player
+// Workshop tab, and direct links to each calculator. Command / toggle
+// resolution reuses the same reflection bridge the toolbar and keybinds use: a
+// CommandName is looked up as an ICommand property on MainWindowViewModel; a
+// ToggleProperty as a two-way bool. Every CommandName / ToggleProperty /
+// GestureProperty here is taken verbatim from the live menu bar + terminal
+// context menu bindings in MainWindow.axaml, so nothing resolves to a dead item.
 public static class MenuActionCatalogue
 {
     public enum Kind

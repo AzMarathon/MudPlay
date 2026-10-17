@@ -1,13 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.19**
-> - Sync Timers: the first telepathed player's answer waits while your next telepath request is still unconfirmed
-> - Sync Timers: a pick you apply no longer reads "changed since you asked"
-> - Sync Timers: what you held when you asked is taken as you press Enter, not when the game echoes it
-> - Sync Timers: a request typed into the open window before Request Timers is now collected there
-> - Sync Timers: an expired timer of yours counts as none, so a reply for it merges in
-> - Help: a request typed at a non-game prompt opens no window where the board shows nothing back
+> **Version 3.183.32**
+> - A renamed room not yet shown, redisplaying mid-step, no longer loses the map's place or (with a move echo) names the room ahead
+> - With no move echo, two look-alike house rooms no longer lend the room ahead the name of the one beyond
+> - A gang-house room renamed to a name the game data has elsewhere is re-learned
+> - A look into a named room next door no longer names the house room ahead
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

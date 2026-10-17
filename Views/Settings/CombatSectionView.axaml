@@ -101,10 +101,10 @@
                 </StackPanel>
 
 
-                <!-- The master on/off for auto-attack lives on
-                     Settings → General → Auto-Combat (mirrored by the
-                     toolbar Toggle button). This tab configures HOW
-                     to attack, not WHETHER to. -->
+                <!-- Whether auto-attack runs is the Auto-Combat toggle
+                     (toolbar / Action menu); its starting state is
+                     General → Auto-Engines base modes. This tab
+                     configures HOW to attack, not WHETHER to. -->
 
                 <!-- ============ Combat action order ============ -->
                 <Panel Classes="ProfileFrame">
@@ -641,7 +641,7 @@
                     <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="12">
                         <RadioButton GroupName="TargetOrder" Content="Normal"
                                      IsChecked="{Binding TargetOrderNormal, Mode=TwoWay}"
-                                     ToolTip.Tip="Swing at the highest-priority monster first (priority from Monsters.json AttackPriority). Only applies when Target Priority is Default."/>
+                                     ToolTip.Tip="Swing at the highest-priority monster first (each monster's Priority in Game Data → Monsters). Only applies when Target Priority is Default."/>
                         <RadioButton GroupName="TargetOrder" Content="Reverse"
                                      IsChecked="{Binding TargetOrderReverse, Mode=TwoWay}"
                                      ToolTip.Tip="Swing at the lowest-priority monster first. Only applies when Target Priority is Default."/>
@@ -654,7 +654,7 @@
                               SelectedValueBinding="{Binding Value}"
                               DisplayMemberBinding="{Binding Label}"
                               Width="280" HorizontalAlignment="Left"
-                              ToolTip.Tip="Which monster to target (the 'who'). Default = pick our own target from game data (Target order + per-monster AttackPriority). Attack what party leader attacks = mirror the party leader's announced target. Attack what player attacks = mirror the named player's announced target. If our weapons/spells can't hit the followed target, combat-fail logic falls back to another monster."/>
+                              ToolTip.Tip="Which monster to target (the 'who'). Default = pick our own target from game data (Target order + each monster's Priority in Game Data → Monsters). Attack what party leader attacks = mirror the party leader's announced target. Attack what player attacks = mirror the named player's announced target. If our weapons/spells can't hit the followed target, combat-fail logic falls back to another monster."/>
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel"
                                Text="Player name"/>

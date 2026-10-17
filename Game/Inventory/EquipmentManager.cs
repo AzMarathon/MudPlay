@@ -7,13 +7,13 @@ using MudPlay.Services;
 namespace MudPlay.Game.Inventory;
 
 // Applies saved gear sets (EquipmentSet) — the engine half of the Workshop's
-// Equipment tab. Given a set, it diffs the desired controlled-slot items against
-// the live worn loadout (InventoryManager.Snapshot) and walks the character into
-// that set: physical slots get spaced "wear <item>" commands (the game
-// auto-removes whatever occupied the slot), while the two virtual slots
-// (Alternate Weapon / Off-Hand) never hit the wire — they write
-// CombatSettings.AlternateWeapon / AlternateOffHand so the combat weapon-swap
-// matrix picks them up.
+// Equipment tab. Given a set, it diffs the desired controlled-slot items
+// against the live worn loadout (InventoryManager.Snapshot) and walks the
+// character into that set: physical slots get "wear <item>" commands, sent
+// back-to-back as one burst (the game auto-removes whatever occupied the slot),
+// while the two virtual slots (Alternate Weapon / Off-Hand) never hit the
+// wire — they write CombatSettings.AlternateWeapon / AlternateOffHand so the
+// combat weapon-swap matrix picks them up.
 //
 // Settings are read live each call through the injected delegates, so a set
 // edited in the UI or a profile swap is reflected without re-subscription.
@@ -1666,9 +1666,10 @@ public sealed class EquipmentManager
     }
 
     // ----- sneak keeping ---------------------------------------------------
-    // Gear commands end a sneak (GAME_MECHANICS "What ends a sneak"). While
-    // SneakGuard keeps one, an automatic swap is held — the latest per kind — and
-    // re-run on RunHeldGear once the hold lifts, re-deriving from the worn state then.
+    // Gear commands end a sneak (GAME_MECHANICS "Sneaking — commands, equip order,
+    // and the sneak state machine", What ends a sneak). While SneakGuard keeps one,
+    // an automatic swap is held — the latest per kind — and re-run on RunHeldGear
+    // once the hold lifts, re-deriving from the worn state then.
     private Func<bool>? _gearHeld;
     private readonly Dictionary<string, Action> _heldGear = new(StringComparer.Ordinal);
 

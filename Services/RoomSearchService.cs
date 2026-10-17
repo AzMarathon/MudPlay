@@ -291,9 +291,9 @@ public sealed class RoomSearchService
         return (null, null);
     }
 
-    // Parse a comma/semicolon-separated coordinate list — used by @loop / @lair
-    // to consume "1/224, 1/218, 1/245". Returns null if any token fails so the
-    // caller falls back to name match.
+    // Parse a comma/semicolon-separated coordinate list ("1/224, 1/218,
+    // 1/245"). Returns null if any token fails so the caller falls back to name
+    // match.
     public static List<RoomKey>? TryParseCoordList(string text)
     {
         string[] tokens = (text ?? string.Empty).Split(new[] { ',', ';' },

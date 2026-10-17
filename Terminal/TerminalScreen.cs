@@ -37,7 +37,8 @@ public sealed class TerminalScreen
     // pushed in ScrollUp whenever the scroll region starts at the top of the
     // screen (the BBS-typical case — partial-region scrolls from vi-style apps
     // don't lose anything to history). Default capacity is
-    // ScrollbackBuffer.DefaultCapacity; Settings.Display surfaces the knob.
+    // ScrollbackBuffer.DefaultCapacity; Settings → BBS + Display's Scrollback
+    // (lines) resizes it live.
     public ScrollbackBuffer Scrollback { get; } = new();
 
     // Current cursor column (0-based).
@@ -77,7 +78,7 @@ public sealed class TerminalScreen
     public ReadOnlySpan<Cell> Row(int y) => _cells.AsSpan(y * Cols, Cols);
 
     // The write time of row y, or null if the row was never written (a blank
-    // row). Used by the transcript snapshot to stamp live-screen rows.
+    // row): what a reader of the transcript stamps a live-screen row with.
     public DateTimeOffset? RowTimestamp(int y) =>
         (uint)y < (uint)Rows && _rowStamps[y] != default ? _rowStamps[y] : null;
 

@@ -23,7 +23,8 @@ public sealed class MonsterTruckScene : SplashScene
     private static readonly CellAttributes Puddle = SplashCanvas.Rgb(90, 70, 46);
 
     // Side sprite; anchored so the last two rows are the big wheels sitting on the
-    // ground row. Colour is applied per row (body vs glass vs tyres) by DrawTruck.
+    // ground row. DrawTruck colours each cell by its glyph: '▒' is glass, '█' in
+    // the wheels is tyre, the rest body/rim.
     private static readonly string[] Cab =
     {
         "   ▄▄▄▄▄▄▄▄▄  ",

@@ -6,8 +6,8 @@ namespace MudPlay.Game.Combat;
 // bookkeeping; holds NO wire state. The owning CombatManager calls Choose once
 // per attack decision, sends the resulting cast (or its weapon swing for
 // WeaponAttack), then calls MarkCast on a successful send so the per-room
-// counters stay accurate vs what actually reached the server. ResetForNewRoom
-// wipes the bookkeeping when the room clears.
+// counters stay accurate vs what actually reached the server. ResetForRosterClear
+// wipes the bookkeeping when the roster clears, ResetForNewRoom on a physical move.
 //
 // Choose resolves the round's combat action (the 1/round physical swing XOR
 // attack spell — a spell IS the round's action, it does not stack with a
@@ -68,10 +68,11 @@ public sealed class CombatSpellChooser
     // paradigm-20260902-160110, "ISTO fired twice in the same fight"), so a survivor
     // that reveals a round later isn't re-debuffed. They're cleared on a PHYSICAL room
     // change (ResetForNewRoom) AND when the room is confirmed genuinely CLEARED of all
-    // hostiles — signalled by the player entering a rest (NoteRoomCleared, wired to a
-    // rest posture: you only rest once nothing is left to fight). That lets a same-room
-    // RESPAWN be re-debuffed (report paradigm-20260903-070438) without touching the
-    // survivor case (a survivor reveals within a round, long before any rest).
+    // hostiles — signalled by the player entering a rest
+    // (CombatManager.NoteRoomClearedByRest, wired to a rest posture: you only rest once
+    // nothing is left to fight). That lets a same-room RESPAWN be re-debuffed (report
+    // paradigm-20260903-070438) without touching the survivor case (a survivor reveals
+    // within a round, long before any rest).
     private readonly HashSet<string> _areaDebuffedMobs =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -132,12 +133,12 @@ public sealed class CombatSpellChooser
     }
 
     // Clear the AoE area-debuff room tags + per-room cap so the next wave is debuffed
-    // afresh — on a PHYSICAL room change (ResetForNewRoom) or when the room is confirmed
-    // genuinely CLEARED of all hostiles (NoteRoomCleared, wired to a rest posture: you
-    // only rest once nothing is left to fight, so a same-room RESPAWN after that is a new
-    // wave — report paradigm-20260903-070438). NOT called on a mid-fight wave-clear
-    // roster reset, where hidden same-species survivors must stay tagged (report
-    // paradigm-20260902-160110).
+    // afresh — on a PHYSICAL room change (ResetForNewRoom) or when the room is
+    // confirmed genuinely CLEARED of all hostiles (CombatManager.NoteRoomClearedByRest,
+    // wired to a rest posture: you only rest once nothing is left to fight, so a
+    // same-room RESPAWN after that is a new wave — report paradigm-20260903-070438).
+    // NOT called on a mid-fight wave-clear roster reset, where hidden same-species
+    // survivors must stay tagged (report paradigm-20260902-160110).
     public void ResetAreaDebuffTags()
     {
         _areaDebuffCasts = 0;
@@ -148,7 +149,7 @@ public sealed class CombatSpellChooser
     // (normal / alternate attack spell, single-target debuff) count MaxCasts PER
     // TARGET, so their tallies reset when the combat target changes within a room.
     // The AoE slots (multi-attack, area debuff) count PER ROOM and are untouched
-    // here — they survive a target change and only reset at room-clear.
+    // here — they survive a target change (see ResetForRosterClear / ResetForNewRoom).
     public void ResetForNewTarget()
     {
         _singleDebuffCasts = 0;
@@ -159,11 +160,6 @@ public sealed class CombatSpellChooser
         _castSingleTargetAttackThisTarget = false;
     }
 
-    // Pick the round's combat action. Pure — does not mutate counters; the caller
-    // commits the choice via MarkCast only when the cast actually reaches the
-    // wire. The backstab opener fires first when eligible; otherwise
-    // CombatSettings.ActionOrder decides between the attack-spell cascade and the
-    // weapon swing (the swing is always available, so the method always resolves).
     // True when this round opens with the backstab (see Choose). Anything cast at the
     // monster first — a pre-attack debuff included — spends the surprise, so the
     // debuff paths ask this and wait until the backstab round is over.
@@ -171,6 +167,11 @@ public sealed class CombatSpellChooser
         ctx.BackstabPending && !ctx.TargetDontBackstab
         && !(settings.SkipBackstabIfMultiAttack && MultiAttackRoomQualifies(settings, ctx));
 
+    // Pick the round's combat action. Pure — does not mutate counters; the caller
+    // commits the choice via MarkCast only when the cast actually reaches the
+    // wire. The backstab opener fires first when eligible; otherwise
+    // CombatSettings.ActionOrder decides between the attack-spell cascade and the
+    // weapon swing (the swing is always available, so the method always resolves).
     public CombatSpellDecision Choose(CombatSettings settings, in CombatSpellContext ctx)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -308,7 +309,7 @@ public sealed class CombatSpellChooser
         }
 
         // AoE not covering → the single-target debuff rung takes over, once per mob up to
-        // its per-room cap (this is the report-#1 fall-through).
+        // its per-room cap.
         CombatSpellSlot single = settings.SingleTargetDebuffSpell;
         if (ctx.OverridePreAttackSpell is { } preAttackOverride)
         {
@@ -350,16 +351,16 @@ public sealed class CombatSpellChooser
         return false;
     }
 
-    // Whether the drain spell should take this round. Fires only when configured,
-    // The drain is a pure HP-driven survival cast (user-confirmed 2026-08-27): it
-    // fires each round while HP is at/under the trigger, mana meets the slot floor,
-    // and the per-TARGET cast cap isn't spent — and stops the instant HP recovers
-    // ABOVE the trigger (no hysteresis band; report paradigm-20260827-153630, where a
-    // trigger+20 release pinned to 100% HP made it drain to full). The per-target cap
-    // resets on a target change so a fresh target gets the full cap again (report
-    // paradigm-20260827-101845). Also needs the target drain-eligible (living + not
-    // undead, and not reactively marked drain-immune off a "no effect" line). Yields
-    // to the room AoE (multi-attack) unless DrainsOverrideAoe — see the note in Choose.
+    // Whether the drain spell should take this round. The drain is a pure HP-driven
+    // survival cast (user-confirmed 2026-08-27): it fires each round while HP is
+    // at/under the trigger, mana meets the slot floor, and the per-TARGET cast cap
+    // isn't spent — and stops the instant HP recovers ABOVE the trigger (no hysteresis
+    // band; report paradigm-20260827-153630, where a trigger+20 release pinned to 100%
+    // HP made it drain to full). The per-target cap resets on a target change so a
+    // fresh target gets the full cap again (report paradigm-20260827-101845). Also
+    // needs the target drain-eligible (living + not undead, and not reactively marked
+    // drain-immune off a "no effect" line). Yields to the room AoE (multi-attack)
+    // unless DrainsOverrideAoe — see the note in Choose.
     private bool DrainApplies(
         CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool preferSpell)
     {
@@ -522,9 +523,7 @@ public sealed class CombatSpellChooser
                 break;
             case CombatSpellAction.DrainSpell:
                 // Per-target cap only; the drain does NOT arm the single-target
-                // weapon latch (it's HP-gated, not part of the damage cascade). It
-                // DOES arm the hysteresis latch so the HP gate holds on the release
-                // threshold until HP recovers past it.
+                // weapon latch (it's HP-gated, not part of the damage cascade).
                 _drainCasts++;
                 break;
             case CombatSpellAction.WeaponAttack:
@@ -610,7 +609,7 @@ public sealed class CombatSpellChooser
         if (!ManaMeetsReserve(slot.MinManaPerCast, ctx.Mana, ctx.MaxMana, mode)) return false;
         // Hard affordability floor: never pick a spell we can't actually pay for (the
         // server silently no-ops a below-cost cast). Unknown cost never blocks — same
-        // convention as CastingDirector.IsAffordable.
+        // convention as CastingDirector.SpellAffordable.
         if (slot.SpellName is { } code && ctx.ManaCostOf?.Invoke(code) is { } cost && ctx.Mana < cost)
             return false;
         return true;
@@ -733,9 +732,10 @@ public readonly record struct CombatSpellDecision(CombatSpellAction Action, stri
 // set of single-target spell actions the current target's SpellImmu level
 // deterministically blocks (their ReqLevel < the monster's immunity), or null
 // when nothing is level-blocked; AllowNukes is the Auto-Nuke auto-engine gate —
-// when false the chooser never offers the multi-target attack spell or either
-// debuff (the single-target Normal / Alternate attack spells are NOT nukes and
-// stay available). Defaults true so unwired callers / tests behave as before.
+// when false the chooser never offers the multi-target attack spell or the area
+// debuff (the single-target debuff and Normal / Alternate attack spells are NOT
+// nukes and stay available). Defaults true so unwired callers / tests behave as
+// before.
 // ResistBlockedActions is the set of single-target attack actions whose damage
 // *element* the current target resists ≥ 100% (0 damage or heal), or null when
 // nothing is resist-blocked — elemental only; M.R. and poison spells never

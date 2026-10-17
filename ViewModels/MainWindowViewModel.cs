@@ -85,8 +85,8 @@ public partial class MainWindowViewModel : ObservableObject
     // the control to the live emulator. Bound to TerminalControl.SplashActive.
     [ObservableProperty] private bool _showSplash = true;
 
-    // Whether the mud figure animates (Settings → General "Show startup mud
-    // animation"). When off, the splash still shows its static header (title +
+    // Whether the mud figure animates (Settings → General "Show the mud-throwing
+    // startup animation"). When off, the splash still shows its static header (title +
     // byline + hint). Read at construction; bound to TerminalControl.SplashAnimate.
     [ObservableProperty] private bool _splashAnimate = true;
 
@@ -96,7 +96,7 @@ public partial class MainWindowViewModel : ObservableObject
     public LineExtractor Lines { get; }
 
     // Terminal-canvas font size — forwarded from AppServices.Display so the
-    // Settings → Display tab's edits reach the live canvas without bouncing
+    // Settings → General edits reach the live canvas without bouncing
     // through a save cycle.
     public double TerminalFontSize => AppServices.Current.Display.FontSize;
 
@@ -160,7 +160,7 @@ public partial class MainWindowViewModel : ObservableObject
     public ObservableCollection<ToolbarButtonItem> ToolbarItems { get; } = new();
 
     // File → Quick Connect target. Wins over ResolveActiveBbs once set;
-    // cleared when the user picks a (different) BBS via Settings → BBS, or
+    // cleared when the user picks a (different) BBS via Settings → BBS + Display, or
     // when a new profile loads.
     private (string Host, int Port)? _quickConnectTarget;
 
@@ -343,9 +343,10 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Live auto-engine toggles. Each mirrors the matching
     // GeneralSettings.AutoMode flag on the active profile; the toolbar Toggle
-    // buttons, the Action-menu check items, and the Settings → General
-    // checkboxes all write here. The partial OnXxxChanged handlers persist to
-    // the profile and refresh the toolbar IsActive badge.
+    // buttons and the Action-menu check items write here (the Settings → General
+    // checkboxes set the base modes these are reconciled to). The partial
+    // OnXxxChanged handlers persist to the profile and refresh the toolbar
+    // IsActive badge.
     [ObservableProperty] private bool _isAutoCombatActive;
     [ObservableProperty] private bool _isAutoNukeActive;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAutoHealRestActive))] private bool _isAutoHealActive;
@@ -775,8 +776,8 @@ public partial class MainWindowViewModel : ObservableObject
         // Socket died after a long quiet stretch — TCP keepalive caught a hung server.
         NoResponse,
         // Deliberate hangup originated client-side — remote @hangup from a
-        // trusted player, or a future hang-up-if-naked / hang-up-if-low-HP
-        // automation. Never auto-retries (user is presumed to be in a
+        // trusted player, or HealthManager's emergency hangup. Never
+        // auto-retries (user is presumed to be in a
         // dangerous spot and needs to manually decide whether to come back).
         // The matching Game.MainMenuEntryAutomation.Arm also skips when this
         // fired, so the user manually re-enters and the post-entry
@@ -809,7 +810,7 @@ public partial class MainWindowViewModel : ObservableObject
     // absolute HP range that band implies against the monster's max HP.
     [ObservableProperty] private string _targetHpText = "";
 
-    // 500 ms repaint cadence for the three status-bar tick countdowns — fast
+    // 100 ms repaint cadence for the three status-bar tick countdowns — fast
     // enough to look live without burning cycles. State sourced from
     // AppServices.Tick (combat) + AppServices.Regen (HP / MA).
     private readonly DispatcherTimer _statusTickRefresh;
@@ -823,7 +824,7 @@ public partial class MainWindowViewModel : ObservableObject
     public string CaptureMenuLabel => IsDumping ? "Stop capture" : "Start capture";
 
     // Where session captures land when the user toggles capture. Stays under
-    // the user's Data/Logs folder so it's covered by the same rotation policy
+    // the app folder's Logs folder so it's covered by the same rotation policy
     // as DebugLogWriter output.
     private static string CaptureDirectory => AppPaths.LogsDir;
 
@@ -987,8 +988,8 @@ public partial class MainWindowViewModel : ObservableObject
                 "Allocate CP", "Spend points IAW CP allocation plan?", "Spend"));
 
         // Seed File → Recent profile slots + Save profile label.
-        // Notify both the display labels (Recent0..4 — "name - bbs")
-        // and the raw profile names (ProfileName0..4 — used as the
+        // Notify both the display labels (Recent0..9 — "name - bbs")
+        // and the raw profile names (ProfileName0..9 — used as the
         // OpenRecentProfile command parameter) on every list change.
         RecentProfiles.CollectionChanged += (_, _) =>
         {
@@ -1072,18 +1073,18 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Cleanup.WarningObserved += OnCleanupWarningObserved;
         // CleanupModeDetected fires when the BBS rejects us mid-connect
         // with "this system is not available" (we connected during the
-        // cleanup window). Used by TryScheduleReactiveReconnect to
-        // switch from the 5s reactive cycle to a single long-delay
-        // attempt at now + CleanupPeriodMinutes.
+        // cleanup window), which switches the reactive reconnect from
+        // the 5s cycle to a single long-delay attempt at now +
+        // CleanupPeriodMinutes.
         AppServices.Current.Cleanup.CleanupModeDetected += OnCleanupModeDetected;
 
         // Forward DisplayConfig.FontSize changes to TerminalFontSize so the
-        // bound TerminalControl re-renders when the Display tab changes the
-        // font live. Also resize the live scrollback when ScrollbackLines
-        // moves.
+        // bound TerminalControl re-renders when Settings → General changes
+        // the font live. Also resize the live scrollback when ScrollbackLines
+        // (Settings → BBS + Display) moves.
         AppServices.Current.Display.PropertyChanged += OnDisplayChanged;
 
-        // Seed the File → Game Data → Active set menu. Rebuild on every
+        // Seed the Game Data menu's set list. Rebuild on every
         // signal that could change which row carries the checkmark:
         // a different set is now active, a different BBS got pinned,
         // a profile re-mutated (BBS rename), or a fresh profile loaded.
@@ -1145,8 +1146,8 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Profile.ProfileLoaded += _ => RebuildSysopGotoMenu();
         AppServices.Current.Profile.ProfileMutated += _ => RebuildSysopGotoMenu();
 
-        // Casting spell profiles (Settings → Combat): the Action → Profiles fly-out
-        // and the toolbar profile-menu button share one item list, rebuilt on any
+        // Casting spell profiles (Settings → Combat): the Action → Combat Profiles
+        // fly-out and the toolbar profile-menu button share one item list, rebuilt on any
         // profile change; every swap echoes its report to the terminal.
         // POST the echo, don't call it inline: an @profile remote swap fires from
         // INSIDE the emulator's message pump (mid-parse of the incoming telepath),
@@ -1162,7 +1163,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetTerminalNotice(
             text => Avalonia.Threading.Dispatcher.UIThread.Post(
                 () => WriteTerminalStatus(text, TerminalStatusKind.Notice)));
-        // Let non-main surfaces (Settings → BBS) open the Profile Management window.
+        // Let non-main surfaces (Settings → BBS + Display) open the Profile Management window.
         AppServices.Current.SetOpenProfileManager(OpenProfileManager);
         AppServices.Current.SetStatusBarPreviewFactory(() => new ViewModels.StatusBar.StatusBarViewModel(this, preview: true));
         RebuildCombatProfilesMenu();
@@ -1684,7 +1685,7 @@ public partial class MainWindowViewModel : ObservableObject
         // @heal receive side polls `par` so CastingDirector heals the
         // requester off fresh party HP.
         AppServices.Current.Heal.SetWireSender(Named("Heal"));
-        // Cluster 3 — StealthManager's auto-sneak / auto-hide commands.
+        // StealthManager's auto-sneak / auto-hide commands ride the same gate-wrapped pipeline.
         AppServices.Current.Stealth.SetWireSender(Named("Stealth"));
         // @do passthrough — gate-wrapped because a malicious caller's
         // payload shouldn't be able to land mid-suicide-password entry.
@@ -2235,12 +2236,6 @@ public partial class MainWindowViewModel : ObservableObject
         _ = _telnet?.SendWindowSizeAsync(cols, rows);
     }
 
-    // Repaint the status-bar tick countdowns. Source-of-truth:
-    // Game.TickEngine.TimeToNextCombatTick for combat; Game.RegenTracker
-    // for HP / MA. HP and MA show the natural cycle by default and append
-    // the bonus cycle (rest / medi) when the player is resting or
-    // meditating — the two cycles have independent anchors and can be
-    // desynced.
     private void OnRoomTrackerStateChanged(Game.Map.RoomTransition t)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
@@ -2516,6 +2511,12 @@ public partial class MainWindowViewModel : ObservableObject
         TimeToLevelText = $"TNL: {time} (+{Game.Calculators.TrainBudgetCalculator.FormatBankableLevels(est.BankableLevelsFractional)} lvls)";
     }
 
+    // Repaint the status-bar tick countdowns. Source-of-truth:
+    // Game.TickEngine.TimeToNextCombatTick for combat; Game.RegenTracker
+    // for HP / MA. HP and MA show the natural cycle by default and append
+    // the bonus cycle (rest / medi) when the player is resting or
+    // meditating — the two cycles have independent anchors and can be
+    // desynced.
     private void RefreshStatusBarTicks()
     {
         Game.RegenTracker regen = AppServices.Current.Regen;
@@ -2567,10 +2568,10 @@ public partial class MainWindowViewModel : ObservableObject
         if (IsConnected)
         {
             // User-initiated disconnect path — prompt if the Confirm
-            // hangup flag is on. Programmatic disconnects (carrier-lost
-            // auto-reconnect cycle, remote @hangup, future health-
-            // threshold drops) call DisconnectInternalAsync directly
-            // and bypass this prompt.
+            // hangup flag is on. Programmatic disconnects (the
+            // auto-reconnect cycle, remote @hangup, the emergency
+            // hangup) never come through here, so they bypass this
+            // prompt.
             if (!await AppServices.Current.Confirm.ConfirmHangupAsync()) return;
             await DisconnectInternalAsync();
             return;
@@ -2672,9 +2673,9 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(Host) || Port <= 0)
         {
-            WriteTerminalStatus("[NO BBS SELECTED — OPEN SETTINGS → BBS, PICK ONE, AND SAVE.]",
+            WriteTerminalStatus("[NO BBS SELECTED — OPEN SETTINGS → BBS + DISPLAY, PICK ONE, AND SAVE.]",
                                 TerminalStatusKind.Error);
-            AppServices.Current.Log.Warn("Connect", "No active BBS — open Settings → BBS first.");
+            AppServices.Current.Log.Warn("Connect", "No active BBS — open Settings → BBS + Display first.");
             return;
         }
 
@@ -3355,8 +3356,8 @@ public partial class MainWindowViewModel : ObservableObject
     //
     // async void is intentional: ProfileLoaded is an Action<CharacterProfile>
     // event and we want fire-and-forget on the connect attempt so the
-    // caller (typically File → Open profile) doesn't block on the retry
-    // loop. The connect path already self-marshals UI updates and never
+    // caller (a File → Recent pick, a Profile Management swap) doesn't
+    // block on the retry loop. The connect path already self-marshals UI updates and never
     // throws to the caller.
     private async void OnProfileLoadedForConnect(Models.Profile.CharacterProfile _)
     {
@@ -3368,7 +3369,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         // A --reconnect relaunch (the self-updater restoring a session that was live
         // when the update ran) dials regardless of the toggle. Consumed here so only
-        // the startup profile load honours it — a later File → Open in the same
+        // the startup profile load honours it — a later profile load in the same
         // session falls back to the user's actual Auto-connect preference.
         bool forced = StartupOptions.ForceReconnect;
         StartupOptions.ForceReconnect = false;
@@ -3505,7 +3506,7 @@ public partial class MainWindowViewModel : ObservableObject
                 // preceding drop — reforms the party and holds the loop for them.
                 AppServices.Current.PartyReform.Arm();
                 // Re-enable any auto-actions the user opted into reviving on
-                // reconnect (Settings → Other). Only on a reconnect — a
+                // reconnect (Settings → General). Only on a reconnect — a
                 // connect following a prior in-session disconnect — never on
                 // the first connect of the session.
                 if (_hadDisconnectThisSession)
@@ -3528,7 +3529,7 @@ public partial class MainWindowViewModel : ObservableObject
                 IsConnected = false;
                 // Mark the session as having dropped at least once so the
                 // next Connected counts as a reconnect (arms the Settings →
-                // Other "re-enable auto-actions on reconnect" flags). A
+                // General "re-enable on reconnect" flags). A
                 // failed connect attempt fires Disconnected with
                 // wasConnected=false and must NOT arm this.
                 if (wasConnected) _hadDisconnectThisSession = true;
@@ -3644,8 +3645,8 @@ public partial class MainWindowViewModel : ObservableObject
                 // Categorise: if the user clicked Disconnect, the flag was
                 // set in DisconnectInternalAsync. Otherwise check for a
                 // pending intentional-hangup signal (raised by
-                // HangupHandler / future hang-up-if-naked / -if-low-HP
-                // automation right before the wire `=x` lands). Only
+                // HangupHandler or HealthManager's emergency hangup right
+                // before the exit command lands). Only
                 // when neither user-flag nor hangup-signal is set do we
                 // fall back to server-side classification (carrier vs
                 // keepalive-timeout) based on wire-silence duration.
@@ -3750,9 +3751,8 @@ public partial class MainWindowViewModel : ObservableObject
             });
         };
         // TelnetClient's Log event carries IAC negotiation trace lines;
-        // route them into LogService at Debug severity so the Log pane can
-        // surface them when DBG is checked and the status bar gets the
-        // latest via LatestLogText.
+        // route them into LogService at Debug severity so the Program Log
+        // shows them when its Debug box is ticked.
         client.Log += msg => AppServices.Current.Log.Debug("Telnet", msg);
 
         return client;
@@ -3819,19 +3819,6 @@ public partial class MainWindowViewModel : ObservableObject
     // Last feed's stat-box presence, tracked so the arm below is rising-edge only.
     private bool _statBoxOnScreen;
 
-    // Per-feed screen watch feeding TrainerMenuTracker's live-screen detection
-    // of the character-creation stat box (see the ScreenUpdated wiring in the
-    // ctor). Arms character-mode input only on the RISING edge of the box
-    // appearing — not every feed it's visible.
-    //
-    // Paradigm reuses the "Char. Creation" stat box for in-game `train stats`,
-    // and the box lingers on screen after the user is already back at the in-game
-    // prompt. A level-triggered arm re-armed off that stale box every feed, so the
-    // tracker flapped held→resume→held (the in-game prompt fired InputMenuExited,
-    // then the still-visible box re-armed) — which held the movement engine and
-    // stalled the walker after training (it advanced one room per manual `rm`).
-    // Presence is tracked unconditionally (even while armed) so the falling edge is
-    // seen; the box must actually leave and reappear before it can re-arm.
     // An @suicide with a stored password answers the game's password prompt, which
     // has no line end until answered and so is only ever seen on the cursor's row.
     private void OnScreenUpdatedForSuicidePrompt()
@@ -3850,6 +3837,19 @@ public partial class MainWindowViewModel : ObservableObject
         return TranscriptSnapshot.RowText(screen.Row(row));
     }
 
+    // Per-feed screen watch feeding TrainerMenuTracker's live-screen detection
+    // of the character-creation stat box (see the ScreenUpdated wiring in the
+    // ctor). Arms character-mode input only on the RISING edge of the box
+    // appearing — not every feed it's visible.
+    //
+    // Paradigm reuses the "Char. Creation" stat box for in-game `train stats`,
+    // and the box lingers on screen after the user is already back at the in-game
+    // prompt. A level-triggered arm re-armed off that stale box every feed, so the
+    // tracker flapped held→resume→held (the in-game prompt fired InputMenuExited,
+    // then the still-visible box re-armed) — which held the movement engine and
+    // stalled the walker after training (it advanced one room per manual `rm`).
+    // Presence is tracked unconditionally (even while armed) so the falling edge is
+    // seen; the box must actually leave and reappear before it can re-arm.
     private void OnScreenUpdatedForTrainerMenu()
     {
         bool onScreen = ScreenShowsStatBoxMarker();
@@ -4261,10 +4261,10 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // Convenience: encode a text line (Latin-1 + CRLF) and send it to the
-    // server. Used by the Conversation window's input field — typing in
-    // the chat panel feeds the game the same way as typing in the terminal
-    // does. Also scans the typed verb for heal-shaped commands so the regen
-    // tracker can gate any HP / MA upticks during the artifact grace window.
+    // server as a typed line, with alias expansion (the Conversation window's
+    // input, Reset States' re-poll, the local API). Also scans the typed verb for
+    // heal-shaped commands so the regen tracker can gate any HP / MA upticks
+    // during the artifact grace window.
     // origin is where the text came from (a window, the local API), for the
     // sent-command trail: nothing typed at the terminal comes this way.
     public void SendUserText(string text, SentCommandTrail.Origin origin)
@@ -4345,7 +4345,7 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // Toggle session capture. The file lives at
-    // Data/Logs/capture-yyyyMMdd-HHmmss.log and receives one line per
+    // Logs/capture-yyyyMMdd-HHmmss.log and receives one line per
     // completed terminal row, prefixed with [HH:mm:ss] and encoded with
     // inline ANSI SGR escapes so colour is preserved when the file is
     // viewed through any ANSI-aware tool (less -R, modern terminals, web
@@ -4455,12 +4455,7 @@ public partial class MainWindowViewModel : ObservableObject
         return new Services.Update.UpdateRelaunch(token, wasLive && token is not null);
     }
 
-    // ----- Placeholder shell-window plumbing -----------------------------
-
-    // Tracks one open placeholder per panel id so re-opening a panel from
-    // the menu / toolbar activates the existing window instead of stacking
-    // duplicates. Cleared by each window's Closed handler.
-    private readonly Dictionary<string, PlaceholderShellWindow> _placeholders = new();
+    // ----- Window raise / close -----------------------------------------
 
     // Bring an open window forward without ever closing it — for a deep link that just
     // switched it to the section / record asked for.
@@ -4474,24 +4469,6 @@ public partial class MainWindowViewModel : ObservableObject
     private static void RaiseOrClose(Avalonia.Controls.Window window, Action? close = null)
         => DialogService.RaiseOrClose(window, close);
 
-    private void OpenPlaceholder(string id, string panelName, string phaseTag, string headline, string description)
-    {
-        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
-            return;
-
-        if (_placeholders.TryGetValue(id, out PlaceholderShellWindow? existing))
-        {
-            RaiseOrClose(existing);
-            return;
-        }
-
-        PlaceholderShellWindow window = new();
-        window.Configure(panelName, phaseTag, headline, description);
-        window.Closed += (_, _) => _placeholders.Remove(id);
-        _placeholders[id] = window;
-        window.Show(main);
-    }
-
     // Singleton handle for the live LogPaneWindow — re-opening from menu or
     // toolbar activates the existing window instead of stacking duplicates.
     private LogPaneWindow? _logPane;
@@ -4502,7 +4479,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Re-select raises the existing window — see RaiseExisting.
+        // A re-press raises the open window, or closes it when it's in front (RaiseOrClose).
         if (_logPane is { } existing)
         {
             RaiseOrClose(existing);
@@ -4529,7 +4506,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Re-select raises the existing window — see RaiseExisting.
+        // A re-press raises the open window, or closes it when it's in front (RaiseOrClose).
         if (_backscroll is { } existing)
         {
             RaiseOrClose(existing);
@@ -4593,7 +4570,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Re-select raises the existing window — see RaiseExisting.
+        // A re-press raises the open window, or closes it when it's in front (RaiseOrClose).
         if (_conversation is { } existing)
         {
             RaiseOrClose(existing);
@@ -4698,11 +4675,11 @@ public partial class MainWindowViewModel : ObservableObject
     // ----- Profile file management ----------------------------------------
 
     // Most-recent-first list of saved profile names. Drives the inline
-    // File-menu recent entries (Recent0..Recent4). Rebuilt from
+    // File-menu recent entries (Recent0..Recent9). Rebuilt from
     // GlobalSettings on startup and after every profile save.
     public ObservableCollection<ProfileRef> RecentProfiles { get; } = new();
 
-    // Indexed accessors so the File menu can lay out five fixed MenuItems
+    // Indexed accessors so the File menu can lay out ten fixed MenuItems
     // instead of a flyout submenu. Avalonia ItemsSource inside MenuItem
     // wraps each item in its own MenuItem, which loses the parent VM as
     // the DataContext (the command resolution via $parent[Window] is
@@ -4799,7 +4776,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (BbsToSaveUnder(selectedBbs) is not { } bbs)
         {
             ShowInfoDialog("Save profile",
-                "Add a BBS first (Settings → BBS). Profiles are saved under a BBS.");
+                "Add a BBS first (Settings → BBS + Display). Profiles are saved under a BBS.");
             return;
         }
         if (await NameAndSaveAsync(bbs,
@@ -4895,7 +4872,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (BbsToSaveUnder(selectedBbs) is not { } bbs)
         {
             ShowInfoDialog("Save profile",
-                "Add a BBS first (Settings → BBS). Profiles are saved under a BBS.");
+                "Add a BBS first (Settings → BBS + Display). Profiles are saved under a BBS.");
             return;
         }
         await NameAndSaveAsync(bbs, note: null);
@@ -5064,8 +5041,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void OpenSettings() => OpenSettingsAt(null);
 
     // View → Events menu entry. Opens the Settings window deep-linked to
-    // the Events tab (matches the MenuCommandIds.SettingsOpenEvents
-    // reserved id).
+    // the Events tab.
     [RelayCommand]
     private void OpenEvents() => OpenSettingsAt("events");
 
@@ -5344,8 +5320,9 @@ public partial class MainWindowViewModel : ObservableObject
     // section. Toggles per the standard window-command rule: when the
     // browser is already open re-press behavior depends on what was
     // requested —
-    //   - no section requested (toolbar / Ctrl+G) → close it.
-    //   - section requested AND already showing → close it.
+    //   - no section requested (toolbar / Ctrl+G), or the section requested
+    //     is already showing → RaiseOrClose: raise it when buried, close it
+    //     when in front.
     //   - section requested AND different from current → switch the
     //     existing window's section, activate, do not respawn.
     // Switching in place beats closing-and-respawning because it preserves
@@ -5428,7 +5405,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.ItemSources,
             initialSectionId);
 
-    // Items bound to File → Game Data → Active set. Each entry has a
+    // Items listed at the top of the Game Data menu, one per imported set. Each entry has a
     // checkbox-style header (checked = currently active set) and a command
     // that flips GameDataCache.ActiveSet + writes the active realm's
     // RealmProfile.ActiveGameDataSet (falling back to
@@ -5450,7 +5427,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     // ----- Casting spell profiles (Settings → Combat quick-swap) -----
 
-    // Shared item list for the Action → Profiles fly-out and the toolbar's
+    // Shared item list for the Action → Combat Profiles fly-out and the toolbar's
     // profile-menu button — one "N) name" row per configured profile, the active
     // one checked. Rebuilt on any CombatProfileManager.Changed.
     public ObservableCollection<CombatProfileMenuItem> CombatProfileItems { get; } = new();
@@ -5493,15 +5470,14 @@ public partial class MainWindowViewModel : ObservableObject
     // steps back to the previous profile (wraps).
     public void CycleCombatProfileBack() => AppServices.Current.CombatProfiles.CycleBack();
 
-    // The terminal right-click Favorites flyout — always MaxStarred numbered
-    // slots when any favourite is starred: filled slots first, then "(empty)"
-    // placeholders so the fixed 10-slot layout is always visible.
+    // The terminal right-click Favorites flyout — starred GOTO rooms, then
+    // favourited loops and auto-lair setups, numbered 1..N.
     public ObservableCollection<FavoriteMenuItem> Favorites { get; } = new();
 
     private bool _hasFavorites;
 
-    // Drives the flyout's visibility — the whole submenu hides when nothing is
-    // starred (rather than showing ten empty rows to someone not using it).
+    // Drives the flyout's visibility — the whole submenu hides when it has no
+    // rows.
     public bool HasFavorites => _hasFavorites;
 
     // Per-kind accent brushes for the Favorites flyout names — matched to the
@@ -5675,9 +5651,9 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // Flip the active set and persist the user's choice. Active set is a
-    // BBS-scoped setting (every character on the same realm shares the same
-    // MajorMUD MDB); we write to the resolved BBS profile when one is
-    // pinned, else fall through to global settings so the menu still works
+    // realm-scoped setting (every character on the same realm shares the same
+    // MajorMUD MDB); we write it to the active realm when one resolves, else
+    // fall through to global settings so the menu still works
     // before any BBS is configured.
     private void SwitchActiveGameDataSet(string setName)
     {
@@ -5705,7 +5681,7 @@ public partial class MainWindowViewModel : ObservableObject
         RebuildGameDataSetsMenu();
     }
 
-    // File → Game Data → Import .mdb… — picks an Access database, runs the
+    // Game Data → Import .mdb… — picks an Access database, runs the
     // importer, switches to the new set on success.
     [RelayCommand]
     private async Task ImportMdbAsync()
@@ -5813,7 +5789,7 @@ public partial class MainWindowViewModel : ObservableObject
            ? TerminalStatusKind.Error
            : TerminalStatusKind.Notice;
 
-    // File → Game Data → Import loops (MegaMUD .mp)… — runs the exact same
+    // Game Data → Import loops (MegaMUD .mp)… — runs the exact same
     // .mp loop import as the Navigation Manage window's "Import .mp"
     // button. We spin up a transient manager view-model purely to reuse
     // its ImportMp command (file picker → parse → anchor-resolve →
@@ -6241,8 +6217,8 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void OpenWorkshop() => OpenWorkshopAt(null);
 
-    // Tools → Wire Inspector. Singleton-ish: a second open activates the
-    // existing window rather than spawning a duplicate.
+    // Tools → Wire Inspector. Single instance: a re-press raises or closes it
+    // (RaiseOrClose).
     private WireInspectorWindow? _wireInspector;
 
     [RelayCommand]
@@ -6251,7 +6227,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // Re-select raises the existing window — see RaiseExisting.
+        // A re-press raises the open window, or closes it when it's in front (RaiseOrClose).
         if (_wireInspector is { } existing)
         {
             RaiseOrClose(existing);
@@ -6275,7 +6251,7 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ResetLayout() => AppServices.Current.Panels.ResetToDefault();
 
-    // Tools → Open Logs folder… and Help → Open Logs folder…
+    // Tools → Open Logs folder…
     [RelayCommand]
     private void OpenLogsFolder()
     {
@@ -6327,7 +6303,7 @@ public partial class MainWindowViewModel : ObservableObject
     // Each property reads the current chord for one BuiltInAction.
     // Refreshed in bulk by RefreshKeybindLabels() when KeybindingStore
     // fires BindingChanged. The XAML menu items bind their InputGesture
-    // to these — so rebinding through the context-menu editor updates
+    // to these — so rebinding in Settings → Toolbar + Shortcuts updates
     // every menu's shortcut display immediately.
 
     public string ConversationGesture     => GetGesture(Models.Profile.BuiltInAction.OpenConversation);
@@ -6376,8 +6352,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Help → About MudPlay. A modeless, read-only window: program name + version,
     // a clickable repo link, a tab per bundled license (MIT / SIL OFL / CC BY-SA),
-    // and a community thank-you. Pressing the command while it's open raises it to
-    // front (see RaiseExisting).
+    // and a community thank-you. Pressing the command while it's open behaves as
+    // RaiseOrClose.
     [RelayCommand]
     private void OpenAbout()
     {
@@ -6475,9 +6451,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     // ----- Auto-engine toggle commands --------------------------------
     // ToolbarItemCatalogue routes its ToggleAutoCombat / ToggleAutoHeal
-    // entries here by command-name reflection. The Settings → General
-    // checkboxes write directly to GeneralSettings.AutoMode; both paths
-    // converge on the same profile field.
+    // entries here by command-name reflection. (The Settings → General
+    // checkboxes write the base modes, GeneralSettings.AutoModeBase, not
+    // this live state.)
 
     // Flip the live IsAutoCombatActive bit (which the partial OnXxxChanged
     // hook persists to GeneralSettings.AutoMode.AutoCombat and refreshes
@@ -6840,9 +6816,8 @@ public partial class MainWindowViewModel : ObservableObject
 
         AppServices.Current.Profile.Save();
 
-        // Reseed the surfaced observables (toolbar badges) from the freshly
-        // persisted AutoMode. The other eight auto-actions have no live UI
-        // state — engines pick the flip up on their next tick.
+        // Reseed the surfaced observables (toolbar badges, Action-menu ticks)
+        // from the freshly persisted AutoMode.
         SyncAutoEngineTogglesFromProfile();
 
         AppServices.Current.Log.Info(
@@ -7348,7 +7323,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
-        // About / License / Keyboard shortcuts each get their own tracker by title.
+        // Each title gets its own tracker.
         if (_infoDialogs.TryGetValue(title, out InfoDialog? existing))
         {
             RaiseOrClose(existing);

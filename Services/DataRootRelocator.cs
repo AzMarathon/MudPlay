@@ -4,8 +4,7 @@ using System.IO;
 namespace MudPlay.Services;
 
 // Moves the entire AppPaths.DataRoot tree to a user-chosen destination, then
-// restarts the app at the new location. Used by the Settings → General "Change
-// data directory" flow.
+// restarts the app at the new location.
 //
 // Sequence is deliberately copy-then-verify-then-delete:
 //   1. Validate the destination (writable, not overlapping the source).

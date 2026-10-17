@@ -7,8 +7,8 @@
   Naming: anything visual lives here. Anything behavioural (KeyBindings,
   Commands) lives at the call site.
 
-  Issue #4 tracks the runtime theme switch; until then keys here reference
-  StaticResource, which Avalonia resolves at load time.
+  The chrome has no runtime theme switch, so keys here reference
+  StaticResource, which Avalonia resolves once at load time.
 -->
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -178,23 +178,11 @@
     </Style>
 
     <!-- Tick-fired pulse: each combat tick flashes the Tick slot amber
-         for a quick visual heartbeat. Phase 4 Settings.Display will
-         surface an on/off toggle for the indicator. -->
+         for a quick visual heartbeat (StatusBarViewModel.OnCombatTick). -->
     <Style Selector="TextBlock.StatusSlot.Pulsing">
         <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
     </Style>
 
-
-    <!-- ============ Secondary connection strip (transitional) ============ -->
-    <!-- Hosts the Host / Port editor inputs until Phase 4 PR 4.5 absorbs them
-         into the BBS profile dialog. Visually distinct from the toolbar so
-         it's obvious this is "settings overflow", not chrome. -->
-    <Style Selector="Border.SecondaryStrip">
-        <Setter Property="Background" Value="{StaticResource ChromeBgSunkenBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderSoftBrush}"/>
-        <Setter Property="BorderThickness" Value="0,0,0,1"/>
-        <Setter Property="Padding" Value="10,6"/>
-    </Style>
 
     <!-- ============ Settings-tab tier banners ============
          A Settings tab groups its controls by which persistence tier they save

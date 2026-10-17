@@ -4,8 +4,8 @@ using MudPlay.Services;
 namespace MudPlay.Game.Remote;
 
 // What a leader's client knows of its followers' purses, for the crossings that
-// charge each crosser. Unlike the level tracker, which keeps every member's level
-// warm because a level is stable, wealth drifts with loot and spending, so it is
+// charge each crosser. Unlike a member's level, which stays on their player record
+// because a level is stable, wealth drifts with loot and spending, so it is
 // asked for only when a route needs it and believed only briefly.
 //
 // Two readers:

@@ -148,7 +148,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshFromWalker();
         // Seed the loop overlay from the live LoopRunner state. RefreshFromWalker
         // above already seeds the walker path + the engine-action text, but the
-        // blue loop polyline (LoopPath) is otherwise only drawn from
+        // green loop polyline (LoopPath) is otherwise only drawn from
         // OnLoopRunnerEvent — so a Navigation window reopened mid-loop would show
         // no loop line until the loop's next step fired an event. Seeding here
         // mirrors the overlay refresh the event handler runs.
@@ -457,7 +457,6 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         AutoLairRooms = new HashSet<RoomKey>(_services.AutoLair.Marked);
         RefreshAutoLairMarkedKeys();
-        OnPropertyChanged(nameof(HasLairMarkers));
         OnPropertyChanged(nameof(LairBuildStatusText));
         EnsureLairTickRunning();
         RefreshDerivedState();
@@ -874,7 +873,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // by pausing a running loop (OpenBuilderForRunningLoop), so the
         // edit-style red polyline + numbered waypoint markers (driven
         // by LoopBuilderPath / LoopBuilderWaypoints) are the right
-        // overlay. Suppress the runner's blue cycle so it doesn't sit
+        // overlay. Suppress the runner's green cycle so it doesn't sit
         // on top of the red preview — once the user resumes, the
         // runner re-fires LoopRunner events and this branch falls
         // through to the running-cycle path below.
@@ -1361,8 +1360,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(MapLoopPath))]
     private IReadOnlyList<RoomKey>? _loopPath;
 
-    // Dashed cyan preview polyline drawn under the active loop / walk while
-    // the user is in the LoopBuilder strip. Pulled from
+    // Red (by default) preview polyline of the loop being built, drawn under the
+    // active loop / walk while the user is in the loop builder. Pulled from
     // LoopBuilderSessionViewModel.PreviewedRoomKeys whenever the builder
     // changes.
     [ObservableProperty] private IReadOnlyList<RoomKey>? _loopBuilderPath;
@@ -1455,7 +1454,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private RoomKey? _selectedRoomKey;
 
     // Map crawler floor-step chords — kept in sync with the user's
-    // u / d movement macros (Settings → Macros). When the user has
+    // u / d movement macros (Game Data → Macros). When the user has
     // no macro for either direction we fall back to the MapControl's
     // default chord (PageUp / PageDown).
     [ObservableProperty] private MudPlay.Models.Profile.KeyChord _upStepChord
@@ -1499,7 +1498,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // over), and restore it if the walk stops with a destination still armed.
     partial void OnIsWalkingChanged(bool value) => RefreshPreviewPath();
 
-    // Red preview line drawn on the map while a destination is queued but not
+    // Preview line (amber by default) drawn on the map while a destination is queued but not
     // yet running. Bound to MapControl.PreviewPath. Cleared when no
     // destination is queued OR no path exists. Recomputed on QueuedDestination
     // change and on CurrentRoomKey change (so the preview tracks the player if
@@ -1857,8 +1856,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public bool HasNavTree => NavTree.Count > 0;
 
     // Free-text filter over the Loops + Auto-Lairs tree (leaf names). Empty shows
-    // the full folder tree; a value keeps only matching loops/setups and expands
-    // their folders. Rebuilds the tree only (not the flat backing lists).
+    // the full folder tree; a value lists only matching loops/setups, flat.
+    // Rebuilds the tree only (not the flat backing lists).
     [ObservableProperty] private string _loopFilter = string.Empty;
 
     // Debounce filter keystrokes: with hundreds of seeded loops/lairs a broad
@@ -1921,12 +1920,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Rebuild the folder tree from the flat Loops + Setups, honouring LoopFilter.
     // Both leaf kinds feed one tree keyed off the shared NavFolderManager folder
     // set; NavTreeBuilder orders folders first then leaves. With a filter active
-    // only matching leaves survive, empty folders are dropped (allFolders empty),
-    // and folders auto-expand so hits are visible; unfiltered, folders start
-    // collapsed so the compact rail opens tidy (per-folder expand overrides survive).
-    // Persistent folder expand-overrides for the loops/lairs tree + whether the
-    // last build was a filtered view — so a filter → clear cycle restores the
-    // user's resting expand state instead of the filtered all-expanded one.
+    // only matching leaves survive, listed flat with no folders; unfiltered, folders
+    // start collapsed so the compact rail opens tidy (per-folder expand overrides
+    // survive). Persistent folder expand-overrides for the loops/lairs tree + whether
+    // the last build was a filtered view — so a filter → clear cycle restores the
+    // user's resting expand state.
     private readonly HashSet<string> _navExpandOverrides = new(StringComparer.OrdinalIgnoreCase);
     private bool _navWasFiltering;
 
@@ -1949,11 +1947,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || (favQuery && l.Source.Favorite)) rows.Add(l);
         }
 
-        // While filtering, build a FLAT list — no folder grouping. An expanded
-        // folder tree defeats virtualization (Avalonia realises every child of an
-        // expanded node), so a broad match renders hundreds of rows at once and
-        // the first keystroke stalls. Flat top-level rows let the tree's
-        // VirtualizingStackPanel realise only what's visible. The resting
+        // While filtering, build a FLAT list — no folder grouping — so every hit
+        // is a visible row rather than tucked inside a folder. The resting
         // (unfiltered) view keeps the folder tree. Harvest the resting overrides
         // only when the tree we're replacing isn't itself a filtered view.
         Func<object, string?> folderOf = filtering ? (static _ => null) : FolderOfNavRow;
@@ -2128,7 +2123,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         CurrentMode == NavigationMode.LoopBuild && LoopBuilder is { HasClicks: true };
 
     // "Clear all" chip. Drops every selected step from the current loop-build
-    // session (LoopBuilderSession.Clear already resets the preview + save-ability),
+    // session (LoopBuilderSessionViewModel.Clear already resets the preview + save-ability),
     // then repaints the map so the red preview polyline + numbered pins disappear.
     [RelayCommand]
     private void ClearBuilder()
@@ -2224,9 +2219,6 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             .OpenWindowAsync<LairEditorDialogViewModel, Models.Profile.LairSetup?>(vm);
     }
 
-    // True when the user has at least one marker placed — gates the Save-as button.
-    public bool HasLairMarkers => _services.AutoLair.Marked.Count > 0;
-
     // ----- GOTO / Favorites pane ------------------------------------
 
     // Per-character favourite-room bookmarks (flat backing list — source
@@ -2234,7 +2226,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public ObservableCollection<FavoriteRowViewModel> Favorites { get; } = new();
 
     // Folder-grouped GOTO tree (mixed NavFolderNodeViewModel +
-    // FavoriteRowViewModel), bound by the rail's TreeView.
+    // FavoriteRowViewModel); the GOTO rail renders its flat projection below.
     public ObservableCollection<object> FavoriteTree { get; } = new();
 
     // Flat projection of FavoriteTree the GOTO rail renders — see _navFlat / NavFlatList.
@@ -2260,7 +2252,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public bool HasFavoriteTree => FavoriteTree.Count > 0;
 
     // Live filter over the GOTO favourites — empty shows the full folder tree; a
-    // value keeps only favourites whose label matches and expands their folders.
+    // value lists only favourites whose label matches, flat.
     // Rebuilds the tree only (not the flat Favorites list). Mirrors LoopFilter.
     [ObservableProperty] private string _gotoFilter = string.Empty;
 
@@ -2322,9 +2314,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     }
 
     // Rebuild the GOTO folder tree from the flat Favorites, honouring GotoFilter.
-    // With a filter active only matching favourites survive, empty folders are
-    // dropped, and folders auto-expand so hits are visible; unfiltered, the full
-    // folder set shows and per-folder expand overrides survive. Mirrors
+    // With a filter active only matching favourites are listed, flat; unfiltered,
+    // the full folder set shows and per-folder expand overrides survive. Mirrors
     // RebuildNavTree for loops/lairs.
     // Persistent folder expand-overrides for the GOTO tree + last-build filter
     // flag — same resting-state preservation as the loops/lairs tree.
@@ -2340,10 +2331,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             ? Favorites.Where(f => f.Label.Contains(filter, StringComparison.OrdinalIgnoreCase)
                                    || (favQuery && f.IsStarred))
             : Favorites;
-        // While filtering, build a FLAT list — no folder grouping — so the tree's
-        // VirtualizingStackPanel realises only visible rows (an expanded folder
-        // tree defeats virtualization; see RebuildNavTree). The resting view keeps
-        // the folder tree.
+        // While filtering, build a FLAT list — no folder grouping (see
+        // RebuildNavTree). The resting view keeps the folder tree.
         Func<FavoriteRowViewModel, string?> folderOf = filtering ? (static _ => null) : static r => r.Folder;
         IEnumerable<string> folders = filtering ? Array.Empty<string>() : _services.Favorites.AllFolders;
         NavTreeBuilder.Sync(FavoriteTree, rows, folderOf, folders,
@@ -2627,8 +2616,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Favorites.RemoveFolder(node.Path, moveContentsToParent: true);
     }
 
-    // Move a loop into folder (empty = root). Used by drag-drop +
-    // context-menu move.
+    // Move a loop into folder (empty = root).
     public void MoveLoopToFolder(LoopRowViewModel? row, string? folder)
     {
         if (row is null) return;
@@ -2871,7 +2859,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // irrelevant here. One destination → a flat "Use Teleport" item; many
     // → one flat "Use Teleport → <room>" entry each, rendered directly in
     // the context menu via indexed slots (mirrors the File-menu
-    // Recent0..4 pattern — no submenu/flyout).
+    // RecentN pattern — no submenu/flyout).
     private const int MaxTeleportSlots = 5;
 
     private readonly List<RoomKey> _contextTeleportDests = new();
@@ -3034,8 +3022,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (ContextRoomKey is { } k) await WalkToRoom(k);
     }
 
-    // Shared walk-to used by the room right-click "Walk here" AND the menu's
-    // Favorites / Recent-destinations sub-lists — stop conflicting engines, drop
+    // Shared walk-to for the map's room menu — stop conflicting engines, drop
     // out of loop-build, record the destination, then hand to the route picker.
     private async Task WalkToRoom(Game.Map.RoomKey k, bool askOnlyOverAvoids = false)
     {
@@ -3089,8 +3076,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (ContextRoomKey is { } k) _services.RoomTracker.SetLocated(k);
     }
 
-    // Right-click → "Save as Go To" (or "Remove from Go To" when
-    // already bookmarked). Persists via FavoritesStore; the GOTO pane
+    // Right-click → "Save as Go To" (or "Remove from Go To" when already
+    // bookmarked). Persists via FavoritesStore; the GOTO pane
     // refreshes from the store's Changed event.
     [RelayCommand]
     private void ToggleContextRoomFavorite()
@@ -3151,8 +3138,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public Func<bool>? IsMapBrowsing { get; set; }
 
     // Right-click → "Center on Player". Re-centres the map on the live
-    // current room and clears the 10 s browse-suppression window so
-    // subsequent live moves resume auto-centring. Same as the Home key.
+    // current room and clears the browse-suppression window (Settings → Other
+    // hold time) so subsequent live moves resume auto-centring. Same as the
+    // Home key.
     [RelayCommand]
     private void CenterOnPlayer() => CenterOnPlayerRequested?.Invoke();
 
@@ -3251,7 +3239,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // toggle mode flip needs to refresh either way.
         RefreshAutoLairMarkedKeys();
         // Entering / leaving LoopBuild flips the overlay-suppression
-        // branch in RefreshLoopOverlays — re-render so the blue cycle
+        // branch in RefreshLoopOverlays — re-render so the green cycle
         // (running) or red preview (build) switches over without
         // waiting for the next LoopEvent or tracker tick.
         RefreshLoopOverlays();
@@ -3398,7 +3386,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // (LoopBuilderPath = red polyline, LoopBuilderWaypoints = numbered pins). These
     // are reused — the loop builder and the estimator never run at once (their enter
     // buttons disable each other), and RefreshLoopOverlays only touches the runner's
-    // blue-cycle bindings, so a loop running in the background can't stomp them.
+    // green-cycle bindings, so a loop running in the background can't stomp them.
     private void OnExpEstimatorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         ExpEstimatorSessionViewModel? s = sender as ExpEstimatorSessionViewModel ?? ExpEstimator;
@@ -3650,8 +3638,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         Layout = layout;
     }
 
-    // Open-and-inspect entry used by the Game Data room chips (a monster's
-    // lair / placed / summoned rooms and the Rooms-tab double-click): centre the
+    // Open-and-inspect entry for a room picked outside the map: centre the
     // map on the room, select it, and populate + expand ROOM INFO so its details
     // show at once. OnFloorChangeRequested only centres + selects; this adds the
     // ROOM INFO fill the plain focus path deliberately leaves to a live click.
@@ -3752,7 +3739,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Exception: when the scheduler is actively running we keep the
     // markers in place — clearing them would yank the rug out from under
     // the live engine. The Lair-mode chip then shows "Stop" instead of
-    // "Building" and routes through the LoopModeButtonCommand dispatcher
+    // "Building" and routes through the LairModeButtonCommand dispatcher
     // (per LairModeButtonIsStop).
     [RelayCommand]
     private void ToggleLairMode()
@@ -3911,8 +3898,6 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshFromWalker();
     }
 
-    // Refresh the boat countdown label each second while a sail is in flight;
-    // stop the pump the moment the walker lands and clears IsSailing.
     // A loop began waiting on its walk-to, or stopped waiting: show or drop its ring.
     private void OnLoopHandoffChanged()
     {
@@ -3929,6 +3914,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RaiseTopBarStatus();
     }
 
+    // Refresh the boat countdown / Pyramid floor-1 clock each second; stop the
+    // pump once neither a sail nor a climb is running.
     private void OnSailingTick()
     {
         if (!_services.Walker.IsSailing && !_services.PyramidSolver.Active)
@@ -4915,8 +4902,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     };
 
     // Boolean view-shaped helpers — drive the badge background class via
-    // Classes.{IdleState,WalkingState,LoopingState,LairState} so styles
-    // own the per-state colours (grey / green / green / orange per user).
+    // Classes.{WalkingState,LoopingState,LairState} (idle is the unclassed base
+    // style) so styles own the per-state colours (grey / green / green / orange per user).
     public bool EngineActionIsIdle    => EngineActionKind == NavigationEngineKind.Idle;
     public bool EngineActionIsWalking => EngineActionKind == NavigationEngineKind.Walking;
     public bool EngineActionIsLooping => EngineActionKind == NavigationEngineKind.Looping;
@@ -5198,8 +5185,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private bool _loopBuilderOpenedByPause;
 
     // True when the builder's click list no longer matches the loop it was
-    // seeded from — used by the Pause → Edit → Run flow to decide whether
-    // to resume the in-flight loop or stop and restart with the new
+    // seeded from, which decides whether a Run after Pause → Edit resumes
+    // the in-flight loop or stop and restart with the new
     // clicks. Compares 1:1 in order; renames + waypoint reorders all count
     // as edits.
     private static bool BuilderClicksDifferFrom(LoopBuilderSessionViewModel builder, Game.Map.Loop loop)
@@ -5213,16 +5200,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         return false;
     }
 
-    // Pause flow: stop the runner via the user gate, then re-open the
-    // builder pre-seeded with the running loop's name + notes + click list
-    // so the user can edit before hitting Run again.
     // Seed a fresh builder session from a saved / cached / running loop — the FULL
     // loadout, not just the circuit shape. The bare AddClick(key) seeding used before
     // dropped every per-waypoint setting (command / delay / do-not-rest / do-not-attack)
     // AND the loop-wide Only-attack-in-lair flag, so re-opening or re-running a cached
-    // loop lost them (a do-not-attack room came back un-flagged). Used by every path
-    // that opens the builder from an existing loop: Load, the cached-last-loop preload,
-    // and pause-opens-builder.
+    // loop lost them (a do-not-attack room came back un-flagged).
     private static void SeedBuilderFromLoop(LoopBuilderSessionViewModel builder, Loop loop)
     {
         builder.ProposedName          = loop.Name;
@@ -5242,6 +5224,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
     }
 
+    // Pause flow: re-open the builder pre-seeded with the running loop's name +
+    // notes + click list so the user can edit before hitting Run again.
     private void OpenBuilderForRunningLoop()
     {
         Game.Map.LoopRunner runner = _services.LoopRunner;
@@ -5419,7 +5403,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private RouteDetailsDialogViewModel? _routeDetailsVm;
 
     // The Details… button shows whenever there's a route to detail — one the engine
-    // is executing, OR a previewed walk-to armed via the search box (the red preview
+    // is executing, OR a previewed walk-to armed via the search box (the preview
     // line on the map).
     public bool CanShowRouteDetails =>
         IsAnyExecuting || PreviewPath is { Count: > 1 } || LeaderRouteLine is { Count: > 1 };
@@ -5631,8 +5615,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         LoopBuilder.RemoveClickAt(oneBasedIndex - 1);
     }
 
-    // Click a loop-builder row → open the per-waypoint action editor (the same
-    // WaypointActionEditDialog the loop editor uses), pre-seeded with the row's
+    // Click a loop-builder row → open the per-waypoint action editor
+    // (WaypointActionEditDialog), pre-seeded with the row's
     // current command + delay, and apply the result to the builder step. Lets the
     // user attach commands while building instead of only after saving + editing.
     [RelayCommand]
@@ -5839,8 +5823,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         CurrentMode = NavigationMode.Idle;
     }
 
-    // Throw the estimate away and leave the mode — same teardown as toggling the
-    // Overlays chip off.
+    // Throw the estimate away and leave the mode — the same teardown
+    // ToggleExpEstimatorMode runs on the way out.
     [RelayCommand]
     private void DiscardEstimator()
     {

@@ -9,7 +9,7 @@ namespace MudPlay.Game.Conditions;
 // Handles the LOCAL side of our own confusion — the piece AilmentSyncEngine
 // can't cover for a party leader (or a solo player).
 //
-// AilmentSyncEngine already announces '.@confused on' and telepaths the leader
+// AilmentSyncEngine already announces '.@confused' and telepaths the leader
 // an @wait so the party pauses. But that @wait is eaten when we ARE the leader
 // (PartyRestSync.CanSignal returns false — a leader has no one to ping), so a
 // confused leader kept walking. It also never reflected our own confusion on our

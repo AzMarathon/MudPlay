@@ -213,8 +213,7 @@ public static class AbilityNames
     private static readonly System.Collections.Generic.HashSet<int> TrapGrantCodes = new() { 40, 41, 1002 };
 
     // True when the row (a Classes / Races record) carries any trap-skill grant
-    // in its Abil-0..9 slots — used by the trap-delegation capability check to decide
-    // whether a party member's class or race makes them worth firing @trap at.
+    // in its Abil-0..9 slots: a class or race that can disarm traps.
     // element is the source Classes / Races object; slots is the number of Abil-N
     // slots to scan (defaults to 10).
     public static bool HasTrapAbility(MudPlay.Services.GameRow element, int slots = 10)

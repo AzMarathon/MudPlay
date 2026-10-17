@@ -71,7 +71,7 @@ public sealed class MonsterOverlaySeedStore
         string realm = ResolveRealm(setName);
         ActiveRealm = realm;
 
-        // Per-realm user-writable seed at Data/Global/MonsterOverlay.{realm}.seed.json.
+        // Per-realm user-writable seed at Global/MonsterOverlay.{realm}.seed.json.
         // Bootstrapping from the bundled Defaults/ copy happens once at app
         // startup via AppPaths.EnsureGlobalSeedsBootstrapped().
         string path = AppPaths.MonsterOverlaySeedFile(realm);

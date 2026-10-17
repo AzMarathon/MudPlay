@@ -9,7 +9,7 @@ namespace MudPlay.Services;
 
 // Imports every user table from a Microsoft Access .mdb / .accdb database into
 // a folder of JSON files (one per table) under AppPaths.GameDataRoot. Each
-// subfolder of Data/game data/ becomes a switchable "game-data set" the
+// subfolder of game data/ becomes a switchable "game-data set" the
 // GameDataCache can activate.
 //
 // Backed by AccessReader from JetDatabaseReader — a pure-managed Jet3 / Jet4 /

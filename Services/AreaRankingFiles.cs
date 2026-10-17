@@ -7,7 +7,7 @@ namespace MudPlay.Services;
 
 // The Simulator's area rankings on disk, so a ranking survives the client being
 // closed: one file for each pairing of game-data set and character, kept inside the
-// set's folder (AppPaths.SimulatorRankingFile). Kept with the set because it is
+// set's folder (AppPaths.SimulatorRankingsFolder). Kept with the set because it is
 // about that set's rooms and goes when the set is deleted; never one of the set's
 // tables, and not carried by a copy of the set or of the profile, being one
 // character's results.

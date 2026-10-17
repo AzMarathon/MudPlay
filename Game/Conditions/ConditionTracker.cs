@@ -10,7 +10,7 @@ namespace MudPlay.Game.Conditions;
 // Tracks active conditions on the local character by matching inbound lines
 // against MessageRecord.AppliedMessage / MessageRecord.AppliedEndsWith pairs in
 // the active MessageStore. Exposes the resulting MessageFlags bitfield as an
-// observable so engines (CastingDirector's Tier-2 cure path, HealthManager's
+// observable so engines (CastingDirector's cure picks, HealthManager's
 // rest gating, etc.) can read it without re-scanning text.
 //
 // User-extensible by design: the user defines what lines map to what condition
@@ -116,8 +116,8 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     public bool IsAttackPrevented    => ActiveFlags.HasFlag(MessageFlags.AttackPrevented);
 
     // Fires when a record's AppliedMessage matches and the record wasn't already
-    // active. Carries the record itself so downstream engines can read its Action
-    // and dispatch (RestHp, Run, Hangup, etc.).
+    // active. Carries the record itself so downstream engines can read which
+    // effect it is (its Name, Flags and Links).
     public event Action<MessageRecord>? ConditionApplied;
 
     // Fires when a previously-active record's AppliedEndsWith matches.

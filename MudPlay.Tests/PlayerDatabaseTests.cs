@@ -704,29 +704,4 @@ public sealed class PlayerDatabaseTests
         Assert.False(db.RemoveByGivenName(""));
         Assert.False(db.RemoveByGivenName("   "));
     }
-
-    [Fact]
-    public void ReplaceObservations_CollapsesLegacyDuplicates_KeepingNewest()
-    {
-        // Simulates loading a pre-bugfix players.json that has both
-        // "Debbie Par" and "Debbie Schwartz" rows for the same player.
-        // The collapse picks the newer LastSeen as canonical but
-        // preserves the older FirstSeen.
-        PlayerDatabase db = new();
-        DateTime older = new(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
-        DateTime newer = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
-
-        db.ReplaceObservations(new[]
-        {
-            new PlayerObservation("Debbie", "Schwartz", "Mage", "Elf", "Good", null, null, null,
-                                  FirstSeenUtc: older, LastSeenUtc: older),
-            new PlayerObservation("Debbie", "Par",      null,   null,  null,   null, null, null,
-                                  FirstSeenUtc: newer, LastSeenUtc: newer),
-        });
-
-        PlayerRecord r = Assert.Single(db.Players);
-        Assert.Equal("Par",  r.FamilyName);     // newer wins for the volatile column
-        Assert.Equal(older,  r.FirstSeenUtc);   // older preserves "known since"
-        Assert.Equal(newer,  r.LastSeenUtc);
-    }
 }

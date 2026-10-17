@@ -8,7 +8,7 @@ namespace MudPlay.Game.Map;
 // mob, and movement between lairs rides the downtime — a hop that completes before
 // the next tick drops no round, so travel is FREE until a stretch is long enough to
 // leave you in a monster-less room when a tick fires (then floor(transit/5) ticks
-// drop). See GAME_MECHANICS.md "Combat tick & exp accrual".
+// drop). See GAME_MECHANICS "Global combat tick and exp accrual".
 //
 // A step-by-step replay of a fixed loop doesn't hold the real operating point: a
 // greedy skip cascades DOWN (skip a not-up lair → lap shortens → more get outrun),
@@ -53,7 +53,7 @@ public readonly record struct ExpTarget(
 // chance any monster is summoned. NoMonstersGated mirrors the spell's "nomonsters:"
 // condition — a gated spell only summons while the room is EMPTY of monsters.
 //
-// How many rolls a visit yields is realm- and gate-dependent (issue #384): the spell
+// How many rolls a visit yields is realm- and gate-dependent: the spell
 // re-rolls on entry and once per room-spell tick while you're present — about every
 // 6 s on both realms, not the combat round. An UNGATED spell rolls every
 // such tick regardless of occupancy; a GATED one only rolls-and-summons while the room

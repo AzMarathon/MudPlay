@@ -3,13 +3,13 @@ using System.IO;
 namespace MudPlay.Services;
 
 // One-shot migration that moves the legacy flat per-BBS settings file
-// (Data/BBS/{name}.json) into the per-folder layout (Data/BBS/{name}/bbs.json).
+// (BBS/{name}.json) into the per-folder layout (BBS/{name}/bbs.json).
 // Runs at startup before any service touches the filesystem. Idempotent —
 // re-running on an already-migrated tree is a no-op. Defensive — never deletes
 // the source file unless the destination write succeeded.
 //
 // Character profiles are NOT migrated automatically: they moved from a flat
-// Data/profiles/{char}/ layout to BBS-scoped Data/BBS/{bbs}/profiles/{char}/,
+// profiles/{char}/ layout to BBS-scoped BBS/{bbs}/profiles/{char}/,
 // and the correct destination BBS can't be inferred safely. Users relocate any
 // pre-existing profiles by hand.
 //

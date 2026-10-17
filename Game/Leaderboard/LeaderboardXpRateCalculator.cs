@@ -4,7 +4,7 @@ using System.Linq;
 namespace MudPlay.Game.Leaderboard;
 
 // Derives the displayed board, the XP/HR column, and reroll/dropout notices from
-// the per-BBS capture history (newest first).
+// the per-realm capture history (newest first).
 //
 // The displayed board is the UNION of the most-recent reading per character across
 // the stored captures — not just the newest snapshot's rows. A "top 100" that

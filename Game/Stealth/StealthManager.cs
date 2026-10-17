@@ -92,7 +92,8 @@ public sealed class StealthManager : IDisposable
     // and the cooldown hold stood us still under attack (backscroll 2026-10-04 14:50).
     // A monster arriving within FollowWindow of our room change marks us followed:
     // no sn and no stopping to cast while it lasts, since a sneak can't take with a
-    // monster in the room (GAME_MECHANICS "Sneaking…"). It lifts when we leave a
+    // monster in the room (GAME_MECHANICS "Sneaking — commands, equip order, and
+    // the sneak state machine"). It lifts when we leave a
     // room nobody followed us into — they've lost us, so the next room sneaks again.
     private static readonly TimeSpan FollowWindow = TimeSpan.FromMilliseconds(1500);
     private DateTimeOffset _roomChangedAt = DateTimeOffset.MinValue;
@@ -211,8 +212,9 @@ public sealed class StealthManager : IDisposable
             return false;
         }
         // Hidden with a step planned: the move ends the hide, and sneaking is a flag of
-        // its own that a hide neither sets nor clears (GAME_MECHANICS "What ends a
-        // hide on Stock"). With the sneak still up under the hide the step is a
+        // its own that a hide neither sets nor clears (GAME_MECHANICS "Hiding — sneak
+        // vs hide, the hide state machine, and search reveals" → "What ends a hide
+        // on Stock"). With the sneak still up under the hide the step is a
         // sneaked one as it stands, and an `sn` would only throw that sneak away and
         // roll again. With none under it, the step goes out sneaked only if an `sn`
         // takes first; where one can't take, the step goes as it stands.
@@ -414,35 +416,35 @@ public sealed class StealthManager : IDisposable
         _isInParty = isInParty;
     }
 
-    // True while we hold any active stealth (Sneaking or Hidden). Read by
-    // CombatManager's backstab gate to open with bs instead of a normal attack.
-    // Casting DOES break both Sneak and Hide (GAME_MECHANICS.md), but that's an
-    // accepted cost the automation pays to keep buffs up rather than a reason to
-    // suppress the cast — CastingDirector does not gate on this.
+    // True while we hold any active stealth (Sneaking or Hidden). Casting breaks
+    // both; whether a cast waits for the sneak is SneakGuard's call, not this
+    // flag's.
     public bool IsStealthed =>
         _stateValue == StealthState.Sneaking || _stateValue == StealthState.Hidden;
 
     // A sneaked move is out and the new room's "Sneaking..." hasn't come yet. It
     // arrives between the move and the room display, so a display without it means
-    // the sneak silently broke (GAME_MECHANICS "Sneaking…"; report
+    // the sneak silently broke (GAME_MECHANICS "Sneaking — commands, equip order,
+    // and the sneak state machine"; report
     // paradigm-20260927-014325: `sn` was acknowledged, we walked in, no "Sneaking...",
     // and the backstab still went out). The old room's `sn` acknowledgement doesn't
     // count for the new one.
     private bool _awaitingArrivalConfirm;
 
-    // Stealthed in THIS room: hidden, or sneaking with the arrival confirmed. The
-    // backstab opener reads this, so a silent break never opens with `bs`.
     // A refused move never left the room, so there's no new room to confirm.
     public void NoteMoveBlocked() => _awaitingArrivalConfirm = false;
 
+    // Stealthed in THIS room: hidden, or sneaking with the arrival confirmed. The
+    // backstab opener reads this, so a silent break never opens with `bs`.
     public bool IsStealthedHere =>
         _stateValue == StealthState.Hidden
         || (_stateValue == StealthState.Sneaking && !_awaitingArrivalConfirm);
 
     // True only while actively StealthState.Sneaking (not Hidden). Kept distinct
     // from IsStealthed because sneak carries a per-room re-confirm + silent-loss
-    // watchdog that hide doesn't. The backstab opener gates on IsStealthed (either
-    // state opens), so consumers wanting "sneaking specifically" use this.
+    // watchdog that hide doesn't. The backstab opener gates on IsStealthedHere
+    // (either state, sneaking only once the room confirmed it), so consumers
+    // wanting "sneaking specifically" use this.
     public bool IsSneaking => _stateValue == StealthState.Sneaking;
 
     // Called by an external observer (RoomTracker via AppServices) when the
@@ -578,8 +580,9 @@ public sealed class StealthManager : IDisposable
         _isEngineDriving = isEngineDriving;
     }
 
-    // How a rest and a sneak share the spot we stand on (GAME_MECHANICS "Sneaking and
-    // resting in place"). restUnderWay: resting or meditating, by the engine or by
+    // How a rest and a sneak share the spot we stand on (GAME_MECHANICS "Sneaking —
+    // commands, equip order, and the sneak state machine" → "Sneaking and resting in
+    // place"). restUnderWay: resting or meditating, by the engine or by
     // hand, with a pool still short of rest-max. restKeepsSneak: a ShadowRest
     // character, whose rest an `sn` neither breaks nor is ended by.
     public void SetIdleRestChecks(Func<bool> restUnderWay, Func<bool> restKeepsSneak)
@@ -620,7 +623,8 @@ public sealed class StealthManager : IDisposable
     // The game's sneak flag is up under the hide. `hid` never touches that flag, so a
     // character that sneaked in and then hid is still sneaking, and its step out is a
     // sneaked one as it stands: an `sn` sent for it would throw that sneak away and
-    // roll again (GAME_MECHANICS "What ends a sneak", the `sn` bullet). Set when a
+    // roll again (GAME_MECHANICS "Sneaking — commands, equip order, and the sneak
+    // state machine" → "What ends a sneak", the `sn` bullet). Set when a
     // hide is taken from Sneaking, cleared by anything that ends a sneak.
     private bool _sneakUnderHide;
 
@@ -759,13 +763,14 @@ public sealed class StealthManager : IDisposable
         TryBeginAutoSneak("in place — nothing is driving the moves");
     }
 
-    // The client sent a command that ends a sneak (GAME_MECHANICS "What ends a sneak"):
-    // a gear swap, a search, a door or trap step, a say. The server prints nothing we
+    // The client sent a command that ends a sneak (GAME_MECHANICS "Sneaking — commands,
+    // equip order, and the sneak state machine" → "What ends a sneak"): a gear swap, a search, a door or trap step, a say. The server prints nothing we
     // could latch, so without this the FSM reads stale-Sneaking and the next move goes
     // out unsneaked. Drop to Idle; the next move's ready check re-sneaks. Not in place:
     // a gear swap is a burst of commands, and an `sn` mid-burst would be broken again.
     //
-    // endsHide: the command ends a hide as well ("What ends a hide on Stock"), just as
+    // endsHide: the command ends a hide as well ("Hiding — sneak vs hide, the hide
+    // state machine, and search reveals" → "What ends a hide on Stock"), just as
     // silently. There is no re-hide for any break, so the hide is only dropped, and
     // Auto-Sneak takes over as it does after a cast.
     public void NoteSneakBroken(string what, bool endsHide = false)

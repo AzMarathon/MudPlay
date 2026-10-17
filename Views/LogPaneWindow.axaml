@@ -68,11 +68,11 @@
                         Content="Clear" Command="{Binding ClearCommand}"/>
             </Grid>
 
-            <!-- On-disk / calibration toggles. Sit under the filter row.
-                 Auto-collect gates whether the program / memory / combat-trace
-                 files are written to Data/Logs at all; Hop timing gates the
-                 navigation calibration trace. Both off by default so a normal
-                 session leaves nothing extra behind. Saved globally. The row
+            <!-- On-disk / diagnostic toggles under the filter row. Auto-collect
+                 gates whether the program / memory / combat-trace / performance
+                 files are written to Logs at all; Hop timing gates the
+                 navigation calibration trace (both off by default, so a normal
+                 session leaves nothing extra behind). Saved globally. The row
                  wraps: it is wider than the window's starting width. -->
             <WrapPanel Orientation="Horizontal" ItemSpacing="14" LineSpacing="4">
                 <CheckBox IsChecked="{Binding AutoCollectLogs}"
@@ -91,7 +91,7 @@
                           FontSize="11"
                           ToolTip.Tip="Stage wire lines the Messages catalogue doesn't recognize as review candidates (Game Data → Unrecognized Lines), and log a Warn row on first sighting. On by default. Saved for all characters."/>
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
-                            ToolTip.Tip="Write everything the Session Statistics window shows (Player Statistics, Time Analysis, Session Statistics) to its own file in the Logs folder, once every so many minutes while the character is in the game, and once more on leaving it. The window doesn't need to be open. The file is named …-session-stats.log (Tools → Open Logs folder…); the program log gives its name when it starts. Off by default. Saved for all characters.">
+                            ToolTip.Tip="Write everything the Session Stats window shows (Player Statistics, Time Analysis, Session Statistics) to its own file in the Logs folder, once every so many minutes while the character is in the game, and once more on leaving it. The window doesn't need to be open. The file is named …-session-stats.log (Tools → Open Logs folder…); the program log gives its name when it starts. Off by default. Saved for all characters.">
                     <CheckBox IsChecked="{Binding LogSessionStatistics}"
                               Content="Log session statistics every"
                               Foreground="{StaticResource ChromeFgSecBrush}"

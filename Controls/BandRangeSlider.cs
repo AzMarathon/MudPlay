@@ -9,9 +9,8 @@ namespace MudPlay.Controls;
 // A two-thumb range slider over a fixed [Minimum, Maximum] axis, splitting the track
 // into THREE coloured bands: Lower band [min → LowerValue], Middle [LowerValue →
 // UpperValue], Upper [UpperValue → max]. The two draggable thumbs set the two
-// boundaries at once, so all three colours live on one control — used by the route
-// Details window to set the green / amber / red Hits-You-% thresholds. Values snap to
-// whole units and the thumbs can't cross (a MinimumGap keeps every band non-empty).
+// boundaries at once, so all three colours live on one control. Values snap to whole
+// units and the thumbs can't cross (a MinimumGap keeps every band non-empty).
 // Generic + self-contained: the three band brushes are properties, so the colours are
 // owned by the caller, not baked in.
 public sealed class BandRangeSlider : Control

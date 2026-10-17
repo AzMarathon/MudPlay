@@ -36,8 +36,9 @@
                        Foreground="{StaticResource AccentAmberBrush}"/>
         </WrapPanel>
 
-        <!-- Auto-train parity toggles — mirror Settings → Auto-Trainer; flipping
-             either here or there keeps both surfaces in sync. -->
+        <!-- The auto-train on/off toggles live only here, next to the plan they
+             act on; Settings → Auto-Trainer holds the thresholds and party
+             options that shape how they run. -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="18" Margin="0,0,0,8"
                     IsVisible="{Binding HasCharacter}">
             <CheckBox Content="Auto-train (level up at trainers)" IsChecked="{Binding AutoTrainOn, Mode=TwoWay}"
@@ -75,7 +76,7 @@
                  DataGridTextColumn.Binding lives on the column object, which
                  isn't in the visual/logical tree and so doesn't inherit the
                  grid's x:DataType. Compiled bindings can't resolve the row-item
-                 (CpAllocationRow) members at compile time here, so these resolve
+                 (CpPlanRowViewModel) members at compile time here, so these resolve
                  by reflection against the row item at runtime. -->
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Lvl" Binding="{ReflectionBinding Level}" IsReadOnly="True"

@@ -114,12 +114,12 @@ public sealed class AutoPartyManager : IDisposable
     private MovementCoordinator? _coordinator;
     private Func<bool>? _isLooping;
 
-    // Per-given-name invite-wait deadlines — present while we're holding the
-    // loop for an auto-invited player to join. Maps to the moment the invite
-    // went out; the wait expires at invitedAt + InviteWaitWindow.
     // Who we've invited and are holding the walk for, until they join.
     public IReadOnlyCollection<string> PendingInvites => _inviteWaits.Keys;
 
+    // Per-given-name invite-wait deadlines — present while we're holding the
+    // loop for an auto-invited player to join. Maps to the moment the invite
+    // went out; the wait expires at invitedAt + InviteWaitWindow.
     private readonly Dictionary<string, DateTime> _inviteWaits =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -166,11 +166,6 @@ public sealed class AutoPartyManager : IDisposable
     // PartyInvite gate.
     private const string InviteGateAsserter = "AutoPartyManager";
 
-    // Late-bind the movement gate used by the invite-as-wait-signal behaviour.
-    // AppServices constructs AutoPartyManager before the MovementCoordinator /
-    // loop engine exist, so they're injected here once available. isLooping
-    // reports whether a loop circuit is currently active — the wait only
-    // engages while looping.
     // Settings → Other: auto-invite a seen player only while navigation is running.
     public bool OnlyWhileNavigating { get; set; }
     private Func<bool>? _isNavigating;
@@ -229,6 +224,11 @@ public sealed class AutoPartyManager : IDisposable
     private bool ReformCrossed =>
         _reformOrigin is not { } origin || _currentRoom?.Invoke() is not { } here || !here.Equals(origin);
 
+    // Late-bind the movement gate used by the invite-as-wait-signal behaviour.
+    // AppServices constructs AutoPartyManager before the MovementCoordinator /
+    // loop engine exist, so they're injected here once available. isLooping
+    // reports whether a loop circuit is currently active — the wait only
+    // engages while looping.
     public void SetMovementGate(MovementCoordinator coordinator, Func<bool> isLooping)
     {
         _coordinator = coordinator;

@@ -323,7 +323,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     }
 
     // Realm settings (menu commands, death floor, cleanup time, currency name) are
-    // edited in Settings → BBS; open it on this realm.
+    // edited in Settings → BBS + Display; open it on this realm.
     [RelayCommand]
     private void EditRealm()
     {

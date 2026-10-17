@@ -4,8 +4,8 @@ using System.Text.Json;
 namespace MudPlay.Services;
 
 // In-memory reverse index of Shops.json for the active game-data set: item id →
-// the set of shop Numbers that stock it. Backs the Settings → Other "buy item
-// if needed" affordance — when the walker plans a route through an (Item: N) /
+// the set of shop Numbers that stock it. Backs the item record's "Auto-obtain
+// for path" flag — when the walker plans a route through an (Item: N) /
 // (Ticket: N) gate whose item we don't carry, PathItemShopRouter asks this
 // index which shops sell it, joins those against the live room graph, and
 // detours to the nearest one.

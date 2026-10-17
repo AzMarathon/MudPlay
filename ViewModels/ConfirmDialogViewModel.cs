@@ -4,10 +4,9 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels;
 
-// Generic "Are you sure?" dialog VM, used by every confirm-prompt path
-// surfaced through ConfirmService. The caller supplies the dialog title and
-// body text; the dialog returns true on Yes, false on No (or window-X / Esc
-// — modeless cancel).
+// Generic "Are you sure?" dialog VM behind ConfirmService. The caller supplies
+// the dialog title and body text; the dialog returns true on Yes, false on No
+// (or window-X / Esc — modeless cancel).
 public sealed partial class ConfirmDialogViewModel : ObservableObject, IDialogViewModel<bool>
 {
     public event Action<bool>? CloseRequested;
