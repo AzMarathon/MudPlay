@@ -1637,10 +1637,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
         // Announce the items this route demands so the demand-driven
         // auto-search can arm for anything we're not carrying, and the rooms it
-        // crosses so the auto-light provisioner can ready / buy a light for the
-        // darkest one. Best-effort: walks the graph along the planned
-        // directions. Item announce is suppressed for the "direct — send it"
-        // choice, which crosses the gates as-is without provisioning anything. A
+        // crosses so the auto-light provisioner can buy a light for the darkest
+        // one (after any item detour the first announce set off). Best-effort:
+        // walks the graph along the planned directions. Item announce is
+        // suppressed for the "direct — send it" choice, which crosses the gates
+        // as-is without provisioning anything. A
         // boat route announces each land leg from its own origin (walk to the
         // dock, then walk from the arrival port).
         if (boatPlan is { } boat)

@@ -6,7 +6,7 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // Pins the demand-aware floor collector: it `get`s a still-outstanding
-// NeedKind.PathItem the moment a floor survey reveals it, and only then — so a
+// path-item need the moment a floor survey reveals it, and only then — so a
 // searched-up route counter is collected without depending on the Auto-Get engine.
 public sealed class PathItemFloorCollectorTests
 {
@@ -21,7 +21,7 @@ public sealed class PathItemFloorCollectorTests
     public void Collects_OutstandingNeed_WhenOnFloor()
     {
         NeedsRegistry needs = new();
-        needs.Post(NeedKind.PathItem, "42", "test");
+        needs.Post("42", "test");
         List<string> sent = new();
         var c = Make(needs, new HashSet<int> { 42 }, sent);
 
@@ -34,7 +34,7 @@ public sealed class PathItemFloorCollectorTests
     public void DoesNotCollect_WhenNotOnFloor()
     {
         NeedsRegistry needs = new();
-        needs.Post(NeedKind.PathItem, "42", "test");
+        needs.Post("42", "test");
         List<string> sent = new();
         var c = Make(needs, new HashSet<int>(), sent);   // floor empty
 
@@ -55,16 +55,4 @@ public sealed class PathItemFloorCollectorTests
         Assert.Empty(sent);
     }
 
-    [Fact]
-    public void DoesNotCollect_LightSourceNeed_OnlyPathItems()
-    {
-        NeedsRegistry needs = new();
-        needs.Post(NeedKind.LightSource, "illu>=42", "test");
-        List<string> sent = new();
-        var c = Make(needs, new HashSet<int> { 42 }, sent);
-
-        c.CollectRevealed();
-
-        Assert.Empty(sent);   // a light-source need is not a path item
-    }
 }

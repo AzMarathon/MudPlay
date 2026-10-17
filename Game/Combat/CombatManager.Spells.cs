@@ -190,10 +190,9 @@ public sealed partial class CombatManager
     // spell, once cast while engaged, keeps hitting EVERY monster in the room each
     // round — survivors and mobs that roam in afterward — until a cast condition
     // fails (count < MinEnemies, MaxCastsPerRoom hit, or mana < the AoE's floor). It
-    // is NOT re-cast to cover new arrivals, and the game has NO engine-side dedup
-    // against recasting the same room spell: a redundant send BREAKS and restarts the
-    // channel (*Combat Off* + *Combat Engaged*), wasting the round (report
-    // paradigm-20260923-103938). Unlike _announcedSpellCode / _castingSpellTarget —
+    // is NOT re-cast to cover new arrivals: the channel already covers them, and a
+    // re-send before the round fires costs nothing but adds nothing (GAME_MECHANICS
+    // "Room-attack spells: cast bare, persistent channel"). Unlike _announcedSpellCode / _castingSpellTarget —
     // which a single kill clears so the round re-picks a fresh target — this marker
     // SURVIVES a kill (the channel outlives any one mob) and clears only on a genuine
     // end-of-fight (ClearAttackSpellCascadeState: room-clear / combat-off / death), a
@@ -536,9 +535,10 @@ public sealed partial class CombatManager
                 // burst guard: the debuff half of debuff-then-attack is cast on the same
                 // attack-slot clock moments before this dispatch, so a fresh engage /
                 // arrival and an interrupt-resume pass it true to still land THIS round's
-                // attack behind it. The plain per-round re-decide paths (@kill retarget,
-                // target-priority follow) leave it false so the guard still absorbs a burst
-                // of dispatches in the same frame. The server then auto-repeats the spell
+                // attack behind it, and so does a target-priority follow, which moves off a
+                // cast just sent at our own pick. The plain per-round re-decide paths
+                // (@kill retarget) leave it false so the guard still absorbs a burst of
+                // dispatches in the same frame. The server then auto-repeats the spell
                 // each round; the heartbeat re-announces only if the chooser's decision
                 // later changes. Set the bridge even when the cast is blocked so we stay in
                 // spell mode and retry next tick rather than swinging.
@@ -686,9 +686,7 @@ public sealed partial class CombatManager
             _awaitingFollowAnnounce = false;
             _log?.Combat(LogCategory,
                 "target-priority follow — no announce this round; falling back to own pick");
-            _followDeferBypass = true;
-            try { OnEntitiesObserved(followFallback); }
-            finally { _followDeferBypass = false; }
+            EngageReleasedHold(followFallback, "target-priority follow");
             return;
         }
 
@@ -703,9 +701,7 @@ public sealed partial class CombatManager
             _awaitingNotLast = false;
             _log?.Combat(LogCategory,
                 "attack-not-last — no party announce this round; falling back to own pick");
-            _notLastDeferBypass = true;
-            try { OnEntitiesObserved(notLastFallback); }
-            finally { _notLastDeferBypass = false; }
+            EngageReleasedHold(notLastFallback, "attack-not-last");
             return;
         }
 

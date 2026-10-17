@@ -14,8 +14,8 @@ namespace MudPlay.Tests;
 /// clean stop, same as the Nav Stop button, so nothing survives to re-drive us and
 /// a manual/remote nav action afterward runs freely. It rides
 /// <see cref="RoomTracker.PlayerDeathObserved"/>, which fires for BOTH death
-/// phrasings, so a miracle-save death ("You have N lives left.") stops as surely
-/// as a plain "slain by" one.
+/// lives readouts, so a death by damage ("You have N lives left.") stops as surely
+/// as a suicide ("You now have N lives remaining.").
 /// </summary>
 public sealed class PlayerDeathMovementHaltTests
 {
@@ -59,9 +59,8 @@ public sealed class PlayerDeathMovementHaltTests
             Halt.SetEngineStopper(() => EngineStopCount++);
         }
 
-        // A miracle-save death — the phrasing that DeathLineWatcher's "slain by"
-        // watcher never sees. RoomTracker.NoteDeath fires PlayerDeathObserved
-        // regardless of phrasing.
+        // A miracle-save death. RoomTracker.NoteDeath fires PlayerDeathObserved
+        // whichever lives readout it was.
         public void Die() => Tracker.NoteDeath(6, "You have 6 lives left.");
 
         public bool SentCarriageReturn =>

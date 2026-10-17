@@ -1016,6 +1016,15 @@ With party heal spells configured (Settings → Party), members watch each other
 
 **A partymate who drops to the ground** is aided at once, and movement holds so the party doesn't walk off (or drag them into a lair) while they're down. Aid only stops the bleeding: they climb back 1 HP every 30 s and can't act until their HP is positive. So the hold lasts as long as that climb can take — worked out from their HP if their client answers, otherwise from the realm's death floor (Settings → BBS + Display) as the worst case. Your downed-ally heal speeds it up. Once they should be up, MudPlay checks their health; when they answer standing, a leader re-invites them, and the hold releases once they're back to the party-heal bar.
 
+**A partymate who dies** in your room (*Raijin is dead.*) is checked against the party list. MudPlay sends one `par` and reads the reply; it sends none when a `par` it sent is still unanswered, or when the `par` timer (Settings → Party → *Send `par`*) sends its next within 5 seconds, since that reply answers just as soon. Like the poll, it waits for you to be in the game and out of the trainer menu, and nothing goes out with the **Auto-All** master switch off; the next `par` read then answers it, your own included.
+
+- **Not on the list any more** (Stock takes a dead member off it): they leave your Party window.
+- **Listed as Invited** (Paradigm keeps a dead member's slot): when you lead, MudPlay uninvites them once the fight in the room is over, whether or not a loop is running, so a loop doesn't wait for them as if they were an invite. As a follower you can't uninvite, and the row stays.
+
+**Only a death MudPlay saw does this.** A member shown as Invited with no *is dead.* line for them, as after a teleport that splits the party, is never uninvited or taken off the list for it. And if you, or MudPlay's auto-invite, invite the dead member again before the fight is over, or they follow you again, they are not uninvited. MudPlay's own uninvite of a dead member doesn't count as you turning them away: auto-invite still invites them when it next sees them.
+
+Your leader's death needs no check: the game ends your follow itself. A follower is always in the leader's room, so a member's death is always seen there. Each step is in the program log under **Party**, and the bug report's party section shows the last one.
+
 ## Remote @-commands
 
 A remote command is a line of chat that starts with `@`. Another player sends it to your character; MudPlay reads it, checks that this player may ask for it, does it, and answers on the channel it came in on. It is how a leader steers followers, how a party asks its healer for a heal, and how two MudPlay clients hand each other loops, boss timers and Roomba logs.
@@ -4362,7 +4371,7 @@ Click **＋ Add buff** to open the Add-buff dialog:
 
     All three apply to **every cast of that buff**, solo or in a party: the Self cast, a cast on a party member, a whole-party spell, and a mana-regen reroll. They replaced the shared *Bless if above* (Settings → Health), *Bless self while resting / during combat* (Settings → Spells) and *Bless party while resting / during combat* (Settings → Party); each buff you already had took the values you had there.
   - **Only when HP is full** / **Only when MA is full** — hold the cast until you've rested up to your **rest-max** target (not literal 100%); a "topped-off, ready for the next fight" buff. A triggered recovery rest suspends it until you're back at max.
-  - **Only when the room is dark** — shown for a **light** spell. Ticked, it keeps the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); unticked, the light is maintained like any ordinary buff.
+  - **Only when the room is dark** — shown for a **light** spell (one that adds light, or Stock's *illuminate*, which makes a light ball). Ticked on a slot cast on yourself, it becomes your room-light spell: Auto-Light casts it one step before a dark room, or when the game says the room is dark, and not otherwise (see *Auto-Light*). Unticked, the light is maintained like any ordinary buff. Before 3.184.0 saving a light-spell slot cleared this tick; if yours has lost it, tick it again.
   - **Cast before resting for mana** — shown for a **mana-regen roll** spell (nature tap / mana flux / prfl). Ticked, the buff is only kept up **while you're resting for mana**: it's (re)cast when your mana drops below its rest threshold and recast on expiry through the whole rest — including if a fight interrupts the rest — and stops once your mana tops back up. Unticked, it's kept up all the time like a normal buff. (It also carries the reroll knobs, below.)
   - **Keep these when drawn** — shown for a **draw item**, one whose use deals one of several buffs at random. On Paradigm that is the Gypsy's **deck of cards** (Stock's deck can't be redrawn, so it has no tick boxes; see *How a deck slot runs*). There is one tick box per buff it can deal, each with its chance; hover a box to see what that buff applies and how long it lasts. A ticked buff is kept when it is drawn. An unticked one makes MudPlay use the item again on the next between-round cast, and the next, until a ticked one lands. At least one box has to stay ticked.
 - **OK** adds it as a slot.
@@ -4774,7 +4783,7 @@ Each of the three made choices keeps every colour near its usual hue, so red is 
 ### Auto-Engines base modes (12 checkboxes)
 
 **Default:** On — Auto-Combat, Auto-Nuke, Auto-Heal, Auto-Rest, Auto-Bless, Auto-Get Items, Auto-Get Cash, Auto-Sneak. Off — Auto-Light, Auto-Hide, Auto-Search, Auto-Train.
-**What it does:** Each checkbox is the base on/off state for one automation engine: Auto-Combat (fighting), Auto-Nuke (offensive AoE/debuff spells), Auto-Heal (heal and cure casts, and aiding a downed party member), Auto-Rest (stopping to rest or meditate), Auto-Bless (buffing), Auto-Light (keeping a light lit), Auto-Get Items (picking up ground loot), Auto-Get Cash (picking up coin), Auto-Sneak and Auto-Hide (the two stealth engines), Auto-Search (searching for hidden things), and Auto-Train (the Auto-Trainer tab's leveling automation).
+**What it does:** Each checkbox is the base on/off state for one automation engine: Auto-Combat (fighting), Auto-Nuke (offensive AoE/debuff spells), Auto-Heal (heal and cure casts, and aiding a downed party member), Auto-Rest (stopping to rest or meditate), Auto-Bless (buffing), Auto-Light (lighting dark rooms with your light spell and lights, and keeping lights stocked), Auto-Get Items (picking up ground loot), Auto-Get Cash (picking up coin), Auto-Sneak and Auto-Hide (the two stealth engines), Auto-Search (searching for hidden things), and Auto-Train (the Auto-Trainer tab's leveling automation).
 **When you might change it:** Set the automation posture a character should return to — e.g. a scout that should never auto-fight, or a healer that should always rest.
 **Important notes:** These are your character's **base** engine states, not the live toolbar toggles. They're applied when the character loads, and the live toggles snap back to them at the start of a loop or Auto-Lair run, when a walk-to arrives, and when you stop movement yourself (Stop, or a party member's `@stop`) — so you can flip an engine off to travel somewhere and have it return to your baseline when you get there, stop, or the circuit begins. See **Automation → Base modes** for the full picture.
 
@@ -5104,12 +5113,12 @@ Once `sys st` has answered even once, it's trusted for the rest of the session a
 
 **Default:** `-25`
 **What it does:** The negative HP value at which this realm actually kills a character (0 HP alone just "drops" you — bleeding out but revivable). Used by the emergency-hangup safety logic to know how far into negative HP it's safe to let things go.
-**Important notes:** With "Auto-refine the floor from slow deaths" (below) on, MudPlay learns the real number over time from observed deaths and updates this automatically.
+**Important notes:** With "Auto-refine the floor from slow deaths" (below) on, MudPlay learns the real number over time from the HP you survive and lowers this automatically; it never raises it.
 
 ### Auto-refine the floor from slow deaths
 
 **Default:** On
-**What it does:** Lets MudPlay learn this realm's real death floor from deaths where you bled out slowly (they land right at the floor) and update **Player dies at (HP)** to match. A single big overkill hit blows past the floor and is ignored. Turn it off to keep the value you typed.
+**What it does:** Lets MudPlay learn this realm's real death floor from the negative HP you are seen to survive, and update **Player dies at (HP)** to match. Each such HP proves the floor is below it: one you bled on from, and the last HP shown before a death where you bled out slowly. MudPlay only ever **lowers** the value, to one below the deepest HP survived; a death never raises it, since a floor set too shallow would stop the emergency hang-up short. A death by a single big overkill hit is ignored. Turn it off to keep the value you typed.
 
 ### PvP is enabled on this realm
 
@@ -5327,7 +5336,7 @@ Only **one 0-energy between-round spell** fires per combat round (the game's own
 **Available options:** `Default`, `Attack what party leader attacks`, `Attack what player attacks`
 **What it does:** Controls *who* you target while partying. `Default` uses your own priority list plus Target order above. The two "follow" modes make you mirror whatever target the party leader (or a named player) is currently attacking, instead of choosing your own.
 **When you might change it:** Group play where you want everyone stacking damage onto one target instead of spreading across the room.
-**Important notes:** If you can't actually hurt the monster you're told to follow, MudPlay falls back to your own next actionable target rather than getting stuck doing nothing.
+**Important notes:** Target Priority sets whose target you attack; Attack Order (below) sets when in the round you announce. The two are independent. If you can't actually hurt the monster you're told to follow, MudPlay falls back to your own next actionable target rather than getting stuck doing nothing. On entering a room with more than one monster and the followed player in it, MudPlay waits for that player: their attack announce, or a damage line showing them hitting a monster, puts you on their target. If neither comes, you attack your own pick about a second before the round fires, so the wait never costs you the round. Once the fight in the room is under way, a new pick doesn't wait: it takes the monster the followed player was last seen hitting, or your own. With Attack Order `AttackNotLast` too, the two share that one wait (see **AttackNotLast** under Attack Order).
 
 ### Player name (Target Priority)
 
@@ -5338,11 +5347,13 @@ Only **one 0-energy between-round spell** fires per combat round (the game's own
 
 **Default:** `Default`
 **Available options:** `Default`, `AttackLastParty`, `AttackLastRoom`, `AttackAfter`, `AttackNotLast` (shown verbatim in the dropdown).
-**What it does:** Pure timing — controls *when* you re-announce your own current action relative to other people's attacks, for coordinating who "goes" in what order. It re-issues whatever you're actually doing this round — a weapon swing, a single-target attack spell, or a bare room spell — so a caster lands last just like a fighter (re-announcing a combat spell costs no mana; mana is spent once when the round fires). It never changes *what* you're targeting — that's Target Priority's job. A party member's **room attack** counts as their commit too: when someone rooms (you see *"… moves to attack everyone in the room"*, or on Paradigm *"… is poised to assault the room"*), your own room spell re-announces after theirs so you room last.
+**What it does:** Attack Order sets when in the round you announce; Target Priority sets whose target you attack. Pure timing — controls *when* you re-announce your own current action relative to other people's attacks, for coordinating who "goes" in what order. It is a preference, met when MudPlay can see the others' announces, and never a reason to lose a round: an announce made any time before the round fires counts for that round, and the last one you made is the one used. It re-issues whatever you're actually doing this round — a weapon swing, a single-target attack spell, or a bare room spell — so a caster lands last just like a fighter (re-announcing a combat spell costs no mana; mana is spent once when the round fires). It never changes *what* you're targeting — that's Target Priority's job. A party member's **room attack** counts as their commit too: when someone rooms (you see *"… moves to attack everyone in the room"*, or on Paradigm *"… is poised to assault the room"*), your own room spell re-announces after theirs so you room last.
 - **AttackLastParty / AttackLastRoom** — re-announce after *every* qualifying commit, so you stay last (party members only, or anyone in the room).
 - **AttackAfter** — re-announce only after the named player commits (set the name in **Attack-after player name**).
 - **How the re-announce is timed** (these modes): party announces trickle in a line at a time, and someone reacting to another member's announce lands a moment later. So MudPlay waits until the announces stop for half a second and re-announces once, after the last. Whenever a qualifying announce still lands after yours, it re-announces again — every time — so you always end up last.
-- **AttackNotLast** — the inverse: *hold* your pick on room entry, commit **once** right after the **first** party member announces, and never re-fire — so you slot in behind the first mover instead of chasing the last slot. Only functional in a **party of 3+**; in a party of 2 or fewer it behaves exactly like `Default`.
+- **AttackNotLast** — the inverse: *hold* your pick on room entry, commit **once** right after the **first** party member announces, and never re-fire — so you slot in behind the first mover instead of chasing the last slot. A party member's damage line on a monster in the room counts as their opening too, for when their announce came before you could see it. If no one in the party opens, you attack anyway about a second before the round fires, so the hold never costs you the round. Once the fight in the room is under way, later picks there don't wait. Only functional in a **party of 3+**; in a party of 2 or fewer it behaves exactly like `Default`.
+- **AttackNotLast with a "follow" Target Priority** — the two holds are one wait, ending before the round fires. If the player you follow attacks a monster first (an announce, or a damage line), you attack their target. If another party member opens first, you attack your own pick right behind them, and switch to the followed player's target when they attack, the same round, as a caster or a fighter. If nobody opens, you attack your own pick once.
+- **The other modes never wait**: Default, AttackLastParty, AttackLastRoom and AttackAfter attack as soon as the room is read, and the last three re-announce after the others.
 **When you might change it:** A tank who wants to always commit their attack last, after everyone else in the party has already gone — or a roomer who wants their AoE to land after the party's. Pick **AttackNotLast** when you'd rather go early, right behind whoever opens.
 
 ### Attack-after player name
@@ -5684,7 +5695,7 @@ During a fight a cure is cast between rounds like any other spell in the priorit
 
 ### Room light — moved to the Buff Watchdog
 
-The room-light spell is configured in the **Buff Watchdog** now. Add it there and tick **Only when the room is dark** on the slot to keep the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); leave it unticked to maintain the light like an ordinary buff. See the **Buff Watchdog** section.
+The room-light spell is configured in the **Buff Watchdog** now. Add it there, cast on yourself, and tick **Only when the room is dark** on the slot: with Auto-Light on it is cast one step before a dark room, or when the game says the room is dark (see *Auto-Light*). Leave it unticked to maintain the light like an ordinary buff. See the **Buff Watchdog** section.
 
 ### Self-bless — moved to the Buff Watchdog
 
@@ -5894,6 +5905,7 @@ These two boxes are gone from this tab. Each buff has its own **Cast while resti
 **What it does:** After inviting someone, MudPlay follows up with reminder nags if they haven't joined yet, on a repeating cadence, until they join, decline, or the attempt window runs out.
 **On each realm:** on Paradigm it governs only those nags after an invite. On Stock it also governs the `@join` a leader sends in an invite's place to a member an exit left behind (see **How they come back differs by realm** under *If leading, wait only (s)*): with this off no `@join` is sent there either, and the member is invited at once, as on Paradigm.
 **Important notes:** Only a typed reply counts as declining. Their client's automatic traffic doesn't: replies in `{…}` or `@`-commands such as the `@where` a follower sends when its party breaks. If someone flagged *Invite to party if seen* is left sitting in an `[Invited]` slot with no nag running (a follow that broke, a nag they cut off), seeing them again re-sends the invite and starts a fresh nag.
+**After a teleport that splits the party:** each member is invited as they land and sent up to **3** nags at this cadence. The wait for them (*If leading, wait only (s)*) doesn't run out until the third nag has gone one resend interval unanswered; after that, if they still haven't joined, MudPlay does what it always does when the wait ends (it uninvites them and goes on). Joining at any point ends the wait and the nags. The **Max attempt window** below doesn't cut these three short, so a long resend interval, or Auto-All switched off for a while between nags, still gets all three and a full interval after the last. A member who answers `{Ok}` gets no more nags, and the wait ends when it always did. A member who is never seen to land, or a nag you've turned off here, ends with the wait as before.
 
 ### First nag after (seconds) / Resend frequency (seconds) / Max attempt window (seconds)
 
@@ -6328,28 +6340,40 @@ Applied emotes live in the **Emotes** folder inside that BBS's folder (`BBS/<bbs
 
 ## Auto-Light
 
-Settings → Auto-Light. Everything here only matters once the master **Auto-Light** engine toggle (Settings → General, or the toolbar) is turned on — these fields tune its behavior, they don't turn it on by themselves.
+Settings → Auto-Light. Everything here only matters once the master **Auto-Light** engine toggle (Settings → General, or the toolbar) is turned on — these fields tune its behavior, they don't turn it on by themselves. Auto-Light is off until you turn it on.
+
+**What Auto-Light does, with it on:**
+
+- **Lights a dark room one step ahead.** As a walk or a loop is about to step into a room the map says you can't see in, MudPlay lights it first, so the room shows when you arrive. A room the map doesn't know is lit when the game says *The room is pitch black* or *very dark*, and the room is shown again (a bare Enter) so a monster standing there is seen.
+- **Your room-light spell goes first.** That is a **Buff Watchdog** slot cast on yourself and ticked **Only when the room is dark**. On Paradigm every light spell is a buff that adds to a lit light, and on Stock *starlight* is; the buff goes up, and a light from your pack is lit only when the buff alone is not enough. Stock's *illuminate* instead makes a light ball: MudPlay casts it first too, reads your inventory once the game says *You cast illuminate!*, and lights the ball — no light from your pack on top of it. It isn't cast while you carry a ball or have one lit, nor when a ball would be no brighter than the light you have lit. A cast in the room you're standing in is followed by a bare Enter, since casting doesn't show the room again by itself; a cast a step ahead needs none. If the game never confirms an *illuminate* cast, your carried lights light the room meanwhile; after a few seconds, or as soon as you move on, MudPlay reads your inventory once in case the ball came anyway, and only then may the spell be tried again. A spell that was up while the room still couldn't be seen is not cast again for a room that dark or darker until you step into a room you can see in (or your worn light gear gets better, or a brighter light is lit), so it doesn't cast it over and over; your pack's lights take over there. While you're blind or under a spell that takes light away (*globe of darkness* and the like), lights are still lit and the spell still cast, but a room staying dark doesn't count against the spell.
+- **Fix for slots saved before 3.184.0:** an earlier bug cleared **Only when the room is dark** whenever a light-spell slot was saved. If your light spell slot no longer shows the tick, edit the slot and tick it again.
+- **Puts the light away** once you step into a room you can see in without it (worn gear, plus the light buff while it is up). A light you lit yourself is left alone.
+- **Buys lights before a walk that needs them.** When you start a walk that crosses dark rooms your gear, spell and pack can't light, MudPlay first walks to the shop selling your **Preferred light** that adds the fewest steps to the trip, buys enough for **Carry (hours)**, and walks on. A route item the walk needs is fetched first, then the light. If the shop is past dark rooms, it walks through them as they are, then buys. An auto-train walk to a trainer does the same before it sets out.
+- **Keeps a loop lit.** On a loop or an Auto-Lair run it lights rooms the same way from what you carry. When the loop goes through dark rooms you have no light for — when it starts, or later, say when your last light burns out — it stops the run, walks to the shop selling your Preferred light that adds the fewest steps, buys enough for Carry hours, walks back and carries on (the navigation chip reads *Light Trip*). A trip that couldn't buy isn't tried again for that loop until the lights you carry change, you can now pay for one when you couldn't before, or you start a run yourself; otherwise it waits 10 minutes, then twice as long after each try that fails, up to 2 hours. A Roomba sweep is never stopped for a light trip. When the lit light drops below **Reorder at**, it makes the same trip to restock.
+- **Stocks up on the way past a shop.** When an auto-deposit bank run or an auto-train trip heads back to the loop and a shop selling your light is at most 25 steps out of the way, it stops there to bring your pack up to Carry hours. It only buys whole lights that fit under the target, and only when there's a dark room ahead or a light lit right now.
+- **Picks a light up off the floor** when it walks into a room with one on the ground and your pack holds less than Carry hours of light: as many copies as make up the shortfall (with Carry hours `0`, one, and only when you carry none), never a whole pile. This works with **Auto-Get Items** off, and a light that is also flagged for Auto-Get is picked up once. The light's own item rules win: one marked *cannot be taken*, with **Auto-collect** turned off, or set to be auto-discarded or auto-sold, stays on the floor.
+- MudPlay never asks party members for lights.
 
 ### Preferred light
 
 **Default:** `Automatic (per route)`
 **Available options:** `Automatic (per route)`, `Only use my room-light spell (no items)`, or the name of any purchasable light item.
-**What it does:** Chooses what light source MudPlay buys and lights when it needs one. "Automatic" picks whatever's strong enough to cover the route ahead. Choosing a specific item pins it to that light (falling back to auto-pick if it's unavailable in your current game data). "Only use my room-light spell" tells MudPlay to never buy or ready a light item at all — it relies purely on your gear and the room-light spell you've configured in the Buff Watchdog.
+**What it does:** Chooses what light source MudPlay buys and lights when it needs one — before a walk, on a light trip, on a reorder and on a stock-up. "Automatic" picks the weakest light strong enough for the walk's darkest room, and a reorder or stock-up buys more of the light you have lit. Choosing a specific item pins it to that light (falling back to auto-pick if it's unavailable in your current game data). **"Only use my room-light spell"** uses that spell and nothing else: no light from your pack is lit (except a light ball the spell itself made), nothing is bought from a shop and nothing is picked up off the floor. If the spell isn't enough, the room stays dark.
 **When you might change it:** Pin a specific light for predictable weight/cost; use spell-only mode if you're a caster who never wants automation touching your light inventory.
 
 ### Carry (hours)
 
 **Default:** `6`
 **Available options:** 0–48
-**What it does:** How many hours of burn time you want stocked up before committing to a dark route — MudPlay divides this by your chosen light's burn time to figure out how many to buy.
-**When you might change it:** Raise it before a long session in a dark area; set to 0 if you'd rather just light what's needed on the spot without stockpiling.
+**What it does:** How many hours of burn time you want stocked up — MudPlay divides this by your chosen light's burn time to figure out how many to buy before a dark walk, on a reorder, or on a stock-up. A light in your pack counts at its full burn time; the lit one counts what it has left. It is also the most light Auto-Light picks up off the floor.
+**When you might change it:** Raise it before a long session in a dark area; set to 0 if you'd rather just light what you carry without buying any.
 
 ### Reorder at (min left)
 
 **Default:** `60` minutes
 **Available options:** 0–600
-**What it does:** When your lit light's remaining burn time drops below this, MudPlay detours to a shop, restocks back to your Carry-hours target, and returns to what it was doing.
-**When you might change it:** Lower it to squeeze more use out of what you're carrying before triggering a resupply detour.
+**What it does:** When your lit light's remaining burn time drops below this, MudPlay restocks back to your Carry-hours target: on a walk it detours to a shop on the way, and on a loop or Auto-Lair run it makes a light trip to the nearest shop and comes back. Once per light: the next one lit can trigger it again.
+**When you might change it:** Lower it to squeeze more use out of what you're carrying before triggering a resupply detour; `0` turns reordering off.
 **Important notes:** A live readout at the bottom of the tab summarizes the current plan (e.g. how many of your chosen light it will stock for your Carry-hours target), or says provisioning is off.
 
 ---
@@ -6960,7 +6984,7 @@ The two timer cues are checked every 30 seconds while you're in the game, and ea
 
 **Danger**
 
-- **You died**.
+- **You died** — the game says *You have been killed!*: any death by damage, your last life's included. A `suicide` makes no sound.
 - **Mortally wounded** — you drop to the ground.
 - **Fleeing** — a flee starts: low HP or mana, a hit-and-run or failed-backstab retreat, a PvP flee back along your route, or a monster set to **Flee** seen in the room.
 - **Navigation stopped** — a walk or loop fails, or the client loses track of the room.

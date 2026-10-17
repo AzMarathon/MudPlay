@@ -33,7 +33,6 @@ public sealed partial class DeathRecoveryManagerTests
         private readonly MessageRouter _router;
         public ProfileService Profile { get; } = new();
         public RoomTracker Tracker { get; }
-        public DeathLineWatcher Watcher { get; }
         public GroundItemTracker Ground { get; }
         public DeathRecoveryManager Recovery { get; }
         public List<string> Sent { get; } = new();
@@ -117,9 +116,8 @@ public sealed partial class DeathRecoveryManagerTests
             LogService log = new();
             Tracker = new RoomTracker(graph, log: null, now: Now);
             Tracker.AttachInventorySnapshot(() => Snapshot);
-            Watcher = new DeathLineWatcher(_router, log);
             Ground = new GroundItemTracker(_router, new CurrencyNaming());
-            Recovery = new DeathRecoveryManager(Watcher, Profile, Tracker, log, now: Now);
+            Recovery = new DeathRecoveryManager(Profile, Tracker, log, now: Now);
             Recovery.AttachGroundItems(Ground);
             Recovery.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
             Recovery.AttachInventorySnapshot(() => Snapshot);
@@ -213,7 +211,6 @@ public sealed partial class DeathRecoveryManagerTests
             foreach (IDisposable engine in _engines) engine.Dispose();
             Recovery.Dispose();
             Ground.Dispose();
-            Watcher.Dispose();
             try { Directory.Delete(_root, recursive: true); } catch { /* best-effort */ }
         }
     }
@@ -911,6 +908,25 @@ public sealed partial class DeathRecoveryManagerTests
         h.Recovery.FeedTestLine("You took an iron sword.");
 
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);   // the helm isn't waited for
+    }
+
+    // The Workshop grid is told of a death when its record is written, at the lives
+    // readout (RoomTracker.PlayerDeathObserved): the death line before it has no
+    // record to show yet.
+    [Fact]
+    public void ADeath_RefreshesTheRecordsGrid_OnceItsRecordIsWritten()
+    {
+        using GraphHarness h = new();
+        h.EnterGates();
+        int countAtRefresh = -1;
+        h.Recovery.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(DeathRecoveryManager.Records)) countAtRefresh = h.Recovery.Records.Count;
+        };
+
+        h.Tracker.NoteDeath(2, "You have 2 lives left.");
+
+        Assert.Equal(1, countAtRefresh);
     }
 
     [Fact]

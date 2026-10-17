@@ -22,7 +22,7 @@ public sealed class PathItemGiveRouterTests
     private static string Decode(byte[] b) => Encoding.Latin1.GetString(b).TrimEnd('\r');
 
     private static Need PathNeed(int id, int qty = 1)
-        => new(NeedKind.PathItem, id.ToString(), "test", DateTimeOffset.Now, qty);
+        => new(id.ToString(), "test", DateTimeOffset.Now, qty);
 
     private sealed class Harness
     {
