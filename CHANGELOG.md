@@ -1,5 +1,12 @@
 # Version history
 
+## 3.181.26
+
+- A message record switched off in Game Data still keeps its line from latching another spell's shorter text
+- A cast line naming a caster the room didn't list stops conditions being ruled out by who is listed
+- A player's hostile spell is ruled out unless a player outside the party is in the room on a PvP realm
+- Help lists every rule for a line several records fit
+
 ## 3.181.23
 
 - Start-up clean-up of saved rankings no longer waits on a ranking file that won't open

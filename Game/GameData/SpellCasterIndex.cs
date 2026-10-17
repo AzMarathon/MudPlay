@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using MudPlay.Game.Map;
+using MudPlay.Game.Spells;
 using MudPlay.Services;
 
 namespace MudPlay.Game.GameData;
@@ -26,6 +27,13 @@ namespace MudPlay.Game.GameData;
 //     the spell open: it may have come from somewhere not in view, and is never
 //     ruled out.
 //
+// One kind of player cast is not left open: a learned hostile spell, one with an
+// enemy scope (BuffClassifier.IsEnemyScope). A party member's never lands on the
+// character, and another player's only on a PvP realm (user, 2026-10-17), so it is
+// in reach only of a player outside the party in the room (PlayersAtFoes). A
+// player's heal or buff can land on anyone, the character's own among them, and
+// stays open.
+//
 // Built on a worker when a set's room graph has loaded (Warm), never by a lookup:
 // Of is asked while a game line is being read, and answers only for the load it
 // was built for.
@@ -35,8 +43,11 @@ public sealed class SpellCasterIndex
     // game printed, and several records can share one.
     // OnlyMonstersAndRooms: every caster of the spell is in the two sets, so with
     // none of them present the spell was not cast here.
+    // PlayersAtFoes: the casters are the two sets and players who learned the spell,
+    // which is hostile; the two never both hold.
     public sealed record Casters(
-        IReadOnlySet<string> Monsters, IReadOnlySet<int> RoomSpells, bool OnlyMonstersAndRooms);
+        IReadOnlySet<string> Monsters, IReadOnlySet<int> RoomSpells, bool OnlyMonstersAndRooms,
+        bool PlayersAtFoes);
 
     private sealed record Snapshot(
         GameDataCache.Load Load, Dictionary<int, Casters> BySpell, HashSet<string> MonsterNames);
@@ -104,7 +115,8 @@ public sealed class SpellCasterIndex
                 if (load.Set is not null)
                     _log?.Info("SpellCasterIndex",
                         $"Spell casters in '{load.Set}': {built.BySpell.Count} spells, "
-                        + $"{built.BySpell.Values.Count(static c => c.OnlyMonstersAndRooms)} cast only by monsters or rooms "
+                        + $"{built.BySpell.Values.Count(static c => c.OnlyMonstersAndRooms)} cast only by monsters or rooms, "
+                        + $"{built.BySpell.Values.Count(static c => c.PlayersAtFoes)} by those or a player at a foe "
                         + "(an applied line several spells share is read by which of them is cast where the character stands).");
             }
         }
@@ -125,6 +137,7 @@ public sealed class SpellCasterIndex
 
         Dictionary<int, HashSet<string>> castBy = new();   // spell → monsters, by name
         HashSet<int> open = new();                         // spells with a caster not in view
+        HashSet<int> learnedAtFoes = new();                // a player's hostile spell
         Dictionary<int, string> nameOf = new();
         ReadMonsters(castBy, open, nameOf, monsterNames);
 
@@ -159,7 +172,7 @@ public sealed class SpellCasterIndex
             if (number <= 0) continue;
 
             if (ReadInt(row, "Learnable") == 1 || Clean(ReadString(row, "Learned From")).Length > 0)
-                open.Add(number);
+                (BuffClassifier.IsEnemyScope(ReadInt(row, "Targets")) ? learnedAtFoes : open).Add(number);
 
             foreach (string raw in Clean(ReadString(row, "Casted By")).Split(','))
             {
@@ -186,16 +199,21 @@ public sealed class SpellCasterIndex
             HashSet<string>? monsters = null;
             HashSet<int>? rooms = null;
             bool closed = true;
+            bool byPlayers = false;
             foreach (int spell in WithWhatEndsInIt(number, parents))
             {
                 if (!known.Contains(spell) || open.Contains(spell)) closed = false;
+                if (learnedAtFoes.Contains(spell)) byPlayers = true;
                 if (castBy.TryGetValue(spell, out HashSet<string>? names))
                     (monsters ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase)).UnionWith(names);
                 if (carried.Contains(spell)) (rooms ??= new HashSet<int>()).Add(spell);
             }
+            // A spell nothing is listed for is open: the data is missing, not the
+            // caster. One players learn has its casters whatever the lists say.
             bySpell[number] = new Casters(
                 monsters ?? NoMonsters, rooms ?? NoRoomSpells,
-                OnlyMonstersAndRooms: closed && (monsters is not null || rooms is not null));
+                OnlyMonstersAndRooms: closed && !byPlayers && (monsters is not null || rooms is not null),
+                PlayersAtFoes: closed && byPlayers);
         }
 
         // Folded into the maps: the cache may drop both tables.

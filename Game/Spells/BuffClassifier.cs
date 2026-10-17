@@ -24,6 +24,11 @@ public static class BuffClassifier
     // A self-only beneficial buff (bless, troll skin, and kin) — only castable on us.
     public static bool IsSelfBuff(int targets) => targets is 0 or 1;
 
+    // A hostile scope: cast at an enemy, one (4 Monster, 8 Monster or User) or the
+    // room's (9 Divided Attack Area, 12 Full Attack Area). Every learnable curse,
+    // hold, blind, confusion and attack in both sets carries one of these.
+    public static bool IsEnemyScope(int targets) => targets is 4 or 8 or 9 or 12;
+
     // A spell actually persists — has a duration, base or level-scaled — rather
     // than firing once. An instant heal, cure, or utility spell (identify, and
     // the like) leaves all three duration columns 0, same signal
