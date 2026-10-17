@@ -17,6 +17,7 @@ using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
 using MudPlay.Terminal;
+using MudPlay.ViewModels.Guides;
 using MudPlay.ViewModels.Settings;
 using MudPlay.Views;
 using MudPlay.Views.Settings;
@@ -122,28 +123,35 @@ public partial class MainWindowViewModel : ObservableObject
     // CollectionChanged, mirroring how the toolbar rebuilds from Toolbar.Layout.
     public Services.ContextMenuConfig ContextMenu => AppServices.Current.ContextMenu;
 
-    // First-run setup tour. The FirstRunTutorialOverlay in MainWindow binds to
-    // this; MainWindow's code-behind decides when to Start() it (auto on open when
-    // a prerequisite is missing and it hasn't been dismissed, or on demand from
-    // Help / the Program Log). Probes read live app state; the dismiss persists to
-    // the Global tier.
-    public FirstRunTutorialViewModel Tutorial { get; } = new(
-        hasGameData: () => AppServices.Current.GameData.AvailableSets.Count > 0,
+    // Live app state the guides' probes read.
+    internal static readonly GuideProbes GuideProbes = new(
+        HasGameData: () => AppServices.Current.GameData.AvailableSets.Count > 0,
         // A BBS only counts once it has a host — a freshly-Added record is an empty
         // placeholder, so the tour keeps guiding through host/port + OK instead of
         // treating the click of Add as "done".
-        hasBbs: () => System.Linq.Enumerable.Any(
+        HasBbs: () => System.Linq.Enumerable.Any(
             System.Linq.Enumerable.Select(AppServices.Current.Bbs.ListNames(), AppServices.Current.Bbs.Get),
             b => b is not null && !string.IsNullOrWhiteSpace(b.Host)),
-        hasCharacter: () => System.Linq.Enumerable.Any(AppServices.Current.Profile.ListAll()),
-        characterLoaded: () => AppServices.Current.Profile.CurrentProfileName is not null,
-        isConnected: () => AppServices.Current.Connection.Connected,
-        persistDismiss: () =>
+        HasCharacter: () => System.Linq.Enumerable.Any(AppServices.Current.Profile.ListAll()),
+        CharacterLoaded: () => AppServices.Current.Profile.CurrentProfileName is not null,
+        IsConnected: () => AppServices.Current.Connection.Connected);
+
+    // The Visual Guides runner, the first-run setup tour among them. The
+    // GuideOverlay and the floating GuideCardWindow bind to it; MainWindow's
+    // code-behind auto-starts the setup tour on open (a prerequisite missing and
+    // not dismissed), and Help → Visual Guides opens any guide. Progress and the
+    // setup dismissal persist to the Global tier.
+    public GuideViewModel Guide { get; } = new(
+        GuideCatalogue.Build(GuideProbes),
+        progress: () => AppServices.Current.Settings.Current.Guides,
+        saveProgress: () => AppServices.Current.Settings.Save(),
+        persistSetupDismiss: () =>
         {
             AppServices.Current.Settings.Current.FirstRunTutorialDismissed = true;
             AppServices.Current.Settings.Save();
             AppServices.Current.Log.Info("Tutorial", "first-run setup tour: dismissed — won't auto-show again");
-        });
+        },
+        log: message => AppServices.Current.Log.Info("Tutorial", $"visual guide {message}"));
 
     // Render-ready view-models for the dynamic toolbar ItemsControl. Mirrors
     // ToolbarConfig.Layout; each entry resolves through ToolbarItemCatalogue
@@ -631,6 +639,8 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _walkerState = AppServices.Current.Walker.State;
             RefreshEngineActionChip();
+            if (e.Kind == Game.Map.WalkEventKind.Started && !_loopRunning && !_autoLairOn)
+                Guide.NotifyActionDone(GuideActions.WalkStarted);
             // A standalone walk-to ARRIVING settles the live auto-engines back into the
             // character's base modes, the same way loop-start does, so the toggles you
             // flipped for the trip return to their defined state once you're there. Only
@@ -660,6 +670,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _loopRunning = AppServices.Current.LoopRunner.State != Game.Map.LoopState.Idle;
             RefreshEngineActionChip();
+            if (e.Kind == Game.Map.LoopEventKind.Started) Guide.NotifyActionDone(GuideActions.LoopStarted);
             // Loop status owns the location slot while active — refresh on every
             // event so the lap counter ticks over on RepeatStarted and the slot
             // clears on Stopped.
@@ -688,6 +699,7 @@ public partial class MainWindowViewModel : ObservableObject
             // A fresh auto-lair run re-arms the once-per-run base-modes reconcile.
             if (active) _autoLairBaseReconciled = false;
             RefreshEngineActionChip();
+            if (active) Guide.NotifyActionDone(GuideActions.AutoLairStarted);
         });
 
     // Latches the auto-lair base-modes reconcile to the FIRST lair entry of a run
@@ -4526,6 +4538,7 @@ public partial class MainWindowViewModel : ObservableObject
             string path = Path.Combine(desktop, BugReportBuilder.FileName(capture));
             await File.WriteAllTextAsync(path, BugReportBuilder.Render(capture, description));
             svc.Log.Info("BugReport", $"Wrote bug report to {path}");
+            Guide.NotifyActionDone(GuideActions.BugReportWritten);
         }
         catch (Exception ex)
         {
@@ -4601,6 +4614,8 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
+        Guide.NotifyActionDone(GuideActions.BuffWatchdogOpened);
+
         if (_buffWatchdog is { } existing) { RaiseOrClose(existing); return; }
 
         BuffWatchdogWindow window = new()
@@ -4624,7 +4639,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Tick the first-run tour's "open Profile Management" line — from here, so
         // it fires however the window was opened (menu, Ctrl+P, or toolbar).
-        Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
+        Guide.NotifyActionDone(GuideActions.ProfileManagement);
 
         if (_profileManager is { } existing) { RaiseOrClose(existing); return; }
 
@@ -5049,6 +5064,8 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
+        Guide.NotifyActionDone(GuideActions.WorkshopOpened);
+
         if (_workshop is { } existing)
         {
             // Already on the section asked for: an ordinary re-press (RaiseOrClose). A
@@ -5155,6 +5172,8 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
+
+        Guide.NotifyActionDone(GuideActions.SettingsOpened);
 
         // Already on the section asked for: an ordinary re-press (RaiseOrClose), whose
         // close saves like OK — the title-bar X would throw the edits away. A deep link
@@ -5303,6 +5322,8 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
+
+        Guide.NotifyActionDone(GuideActions.GameDataBrowserOpened);
 
         if (_gameDataBrowser is { } existing)
         {
@@ -5654,7 +5675,7 @@ public partial class MainWindowViewModel : ObservableObject
             return;
 
         // Tick the first-run tour's "Import .mdb" line the moment the import runs.
-        Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionImportMdb);
+        Guide.NotifyActionDone(GuideActions.ImportMdb);
 
         // With Profile Management open, as the first-run guide used to leave it, the
         // client sat looking frozen at this point until the user tried to close it
@@ -5708,7 +5729,7 @@ public partial class MainWindowViewModel : ObservableObject
             // each carries the stamps of the table files it was made on, and is
             // dropped when it is next listed if the import changed one of them.
             SwitchActiveGameDataSet(result.FolderName);
-            Tutorial.NotifyActionDone(FirstRunTutorialViewModel.ActionGameDataImported);
+            Guide.NotifyActionDone(GuideActions.GameDataImported);
         }
         else
         {
@@ -5793,6 +5814,7 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void OpenNavigation()
     {
+        Guide.NotifyActionDone(GuideActions.NavigationOpened);
         if (_navigationWindow is { } existing) { RaiseOrClose(existing); return; }
         EnsureNavigationWindow();
     }
@@ -6064,6 +6086,8 @@ public partial class MainWindowViewModel : ObservableObject
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
 
+        Guide.NotifyActionDone(GuideActions.MonsterIntelOpened);
+
         if (_monsterIntel is { } existing) { RaiseOrClose(existing); return; }
 
         var svc = AppServices.Current;
@@ -6330,6 +6354,28 @@ public partial class MainWindowViewModel : ObservableObject
         AboutWindow window = new() { DataContext = new AboutWindowViewModel() };
         window.Closed += (_, _) => _aboutWindow = null;
         _aboutWindow = window;
+        window.Show(main);
+    }
+
+    private GuidePickerWindow? _guidePicker;
+
+    // Help → Visual Guides. A modeless picker of every guide with its progress;
+    // picking one runs it in the floating step card. RaiseOrClose on a re-press.
+    [RelayCommand]
+    private void OpenVisualGuides()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_guidePicker is { } existing)
+        {
+            RaiseOrClose(existing);
+            return;
+        }
+
+        GuidePickerWindow window = new() { DataContext = new GuidePickerViewModel(Guide) };
+        window.Closed += (_, _) => _guidePicker = null;
+        _guidePicker = window;
         window.Show(main);
     }
 

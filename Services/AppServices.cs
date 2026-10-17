@@ -1016,20 +1016,18 @@ public sealed class AppServices
     public ConnectionSnapshot Connection
         => _connectionProvider?.Invoke() ?? new ConnectionSnapshot(false, false, false);
 
-    // Force-show the first-run setup tour from anywhere, bypassing the
-    // missing-prerequisite + dismissed gates. The bool is demo mode: true (the
-    // Program Log test button) shows every step as if nothing is configured;
-    // false (Help → First-time setup) replays the user's real outstanding steps.
-    // MainWindow wires this on open; null before the window exists. Invoke on the
-    // UI thread.
-    public Action<bool>? StartFirstRunTutorial { get; set; }
+    // Show the whole first-run setup tour as a demo (every step as if nothing were
+    // configured) — the Program Log test button. MainWindow wires this on open;
+    // null before the window exists. Invoke on the UI thread.
+    public Action? StartSetupTourDemo { get; set; }
 
-    // ----- First-run tour cross-window bridge -----------------------------
-    // The tour lives on MainWindowViewModel, but its deep steps play out in the
-    // Profile Management + Settings windows. Those windows report progress by
-    // calling NotifyTourAction("AddBbs" / "BbsHostPort" / …), and glow the right
-    // control by reading CurrentTourAction (the action the tour wants next) and
-    // subscribing to TourActionChanged. String keys only — no view-model coupling.
+    // ----- Visual Guides cross-window bridge ------------------------------
+    // The guide runner lives on MainWindowViewModel, but guide steps play out in
+    // other windows (Profile Management, Settings, Navigation, the Game Data
+    // Browser, …). Those report progress by calling NotifyTourAction with a
+    // GuideActions key, and glow the right control by reading CurrentTourAction
+    // (the action the guide wants next) and subscribing to TourActionChanged.
+    // String keys only — no view-model coupling.
     public Action<string>? NotifyTourAction { get; set; }
 
     public string? CurrentTourAction { get; private set; }
@@ -2664,7 +2662,7 @@ public sealed class AppServices
     public Game.Map.GhItemLocationStore GhItemLocations { get; private set; } = null!;
 
     // Per-character favourite-room bookmarks. Wires Navigation's
-    // GOTO pane + the map's "Add to favorites" context menu;
+    // GOTO pane + the map's "Save as Go To" context menu;
     // persisted via ProfileService.
     public FavoritesStore Favorites { get; private set; } = null!;
 

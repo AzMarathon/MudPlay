@@ -13,6 +13,7 @@ using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Views.Settings;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Settings;
 
@@ -193,6 +194,7 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
         if (result is null) return;
 
         _events.Add(result);
+        GuideActions.Report(GuideActions.EventAdded);
         SelectedRow = Rows.FirstOrDefault(r => ReferenceEquals(r.Source, result));
     }
 

@@ -11,6 +11,7 @@ using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -523,8 +524,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return n switch
             {
                 0 => "click rooms on the map to mark them as lairs",
-                1 => "1 lair marked — add at least one more, or click Save lairs to keep this one for later",
-                _ => $"{n} {lairWord} marked · Run to start cycling, Save lairs to persist, toggle Lair mode to discard",
+                1 => "1 lair marked — add at least one more, or click Save to keep this one for later",
+                _ => $"{n} {lairWord} marked · Go to start cycling, Save to keep them, toggle Lair mode to discard",
             };
         }
     }
@@ -1492,6 +1493,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshPreviewPath();
         // Mark the preview target on the map too (the walker owns the marker while walking).
         if (!IsWalking) DestinationRoomKey = value;
+        if (value is not null) GuideActions.Report(GuideActions.DestinationQueued);
     }
     // Drop the armed preview the instant a walk starts (the live WalkPath takes
     // over), and restore it if the walk stops with a destination still armed.
@@ -3088,7 +3090,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (ContextRoomKey is { } k) _services.RoomTracker.SetLocated(k);
     }
 
-    // Right-click → "Add to favorites" (or "Remove from favorites" when
+    // Right-click → "Save as Go To" (or "Remove from Go To" when
     // already bookmarked). Persists via FavoritesStore; the GOTO pane
     // refreshes from the store's Changed event.
     [RelayCommand]
@@ -3528,7 +3530,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     //   - AutoLair — toggle the room as a marker on AutoLairManager.
     //     Mirrors how loop-build mode accumulates waypoints; the user
     //     enters Lair mode from the top-right action chip, clicks rooms to
-    //     add / remove, then commits via the rail's "Save lairs" button.
+    //     add / remove, then commits via the chip row's Save.
     //   - Idle — no-op (the click already moved SelectedRoomKey upstream).
     // remove (Alt+click): take the room back out — the loop's or the exp/hr sketch's
     // latest click on it, or its Auto-Lair mark — and never add.
@@ -3561,11 +3563,21 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         {
             case NavigationMode.LoopBuild:
                 if (remove) LoopBuilder?.RemoveLastClickOf(key);
-                else LoopBuilder?.AddClick(key);
+                else
+                {
+                    LoopBuilder?.AddClick(key);
+                    // A loop needs two rooms; one click isn't a loop yet.
+                    if (LoopBuilder?.Clicks.Count >= 2) GuideActions.Report(GuideActions.LoopHasTwoRooms);
+                }
                 break;
             case NavigationMode.AutoLair:
                 if (remove) _services.AutoLair.Unmark(key);
-                else _services.AutoLair.Toggle(key);
+                else
+                {
+                    _services.AutoLair.Toggle(key);
+                    // Auto-Lair won't start on fewer than two marked lairs.
+                    if (_services.AutoLair.Marked.Count >= 2) GuideActions.Report(GuideActions.TwoLairsMarked);
+                }
                 break;
             case NavigationMode.ExpEstimator:
                 if (remove) ExpEstimator?.RemoveLastClickOf(key);
@@ -3736,7 +3748,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // mode DISCARDS the in-progress marker set — matches LoopBuilder's
     // "exit discards clicks" semantics so the user has a clean idle state.
     // Markers loaded from a saved setup are equally transient; persist
-    // them via the rail's "Save lairs" button before toggling out.
+    // them via the chip row's Save before toggling out.
     //
     // Exception: when the scheduler is actively running we keep the
     // markers in place — clearing them would yank the rug out from under

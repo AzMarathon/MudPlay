@@ -10,6 +10,7 @@ using MudPlay.Game.Map;
 using MudPlay.Game.Map.MpFile;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -27,7 +28,7 @@ namespace MudPlay.ViewModels.Navigation;
 // Auto-Lair Mode section: lists saved LairSetups stored alongside loops in
 // the shared AppPaths.GameDataSetLoopsFolder (lair files use the .lair.json
 // suffix). Each row exposes Run / Load / Edit / Delete — same row shape as
-// the Loops section. New setups happen via "Save lairs" in the rail's
+// the Loops section. New setups happen via Save on the chip row in the
 // build-mode strip; this dialog is the CRUD surface for already-named
 // setups.
 public sealed partial class NavigationManagerDialogViewModel : ObservableObject, IDialogViewModel<bool>
@@ -678,6 +679,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
             OwnSettings = running.OwnSettings,
         };
         _loops.Save(snapshot);
+        GuideActions.Report(GuideActions.LoopSaved);
         // Re-stamp the live runner's loop name so subsequent edits
         // / saves identify the same record on disk.
         running.Name = saveName;
@@ -704,6 +706,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     [RelayCommand]
     private async Task ImportMpAsync()
     {
+        GuideActions.Report(GuideActions.MpImportStarted);
         if (_mpImporter is null)
         {
             ImportStatus = "Importer not available — file a bug.";
