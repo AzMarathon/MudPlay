@@ -332,7 +332,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     public bool IsAutoRestWired     => true;    // HealthManager
     public bool IsAutoNukeWired     => true;    // CombatSpellChooser multi-attack + debuff gate
     public bool IsAutoBlessWired    => true;    // CastingDirector Buffing-category gate
-    public bool IsAutoLightWired    => true;    // AutoLightManager
+    public bool IsAutoLightWired    => true;    // AutoLightProvisioner + AutoLightShopRouter
     public bool IsAutoGetItemsWired => true;    // AutoGetItemsManager
     public bool IsAutoGetCashWired  => true;    // CashManager + StashRoomManager (both gate here)
     public bool IsAutoSneakWired    => true;    // StealthManager auto-sneak

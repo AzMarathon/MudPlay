@@ -18,7 +18,7 @@ public sealed class PathItemShopRouterTests
     private static string Decode(byte[] b) => Encoding.Latin1.GetString(b).TrimEnd('\r');
 
     private static Need PathNeed(int id, int qty = 1)
-        => new(NeedKind.PathItem, id.ToString(), "test", DateTimeOffset.Now, qty);
+        => new(id.ToString(), "test", DateTimeOffset.Now, qty);
 
     private static readonly RoomKey Bank = new(1, 170);
 
@@ -227,17 +227,6 @@ public sealed class PathItemShopRouterTests
         PathItemShopRouter r = h.Build();
 
         r.OnNeedPosted(PathNeed(42));
-
-        Assert.False(r.DetourActive);
-    }
-
-    [Fact]
-    public void OnNeedPosted_NonPathItemNeed_Ignored()
-    {
-        var h = new Harness().WithSingleShop();
-        PathItemShopRouter r = h.Build();
-
-        r.OnNeedPosted(new Need(NeedKind.LightSource, "illu>=1", "test", DateTimeOffset.Now));
 
         Assert.False(r.DetourActive);
     }

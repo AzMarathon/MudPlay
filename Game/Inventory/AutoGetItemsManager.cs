@@ -31,7 +31,9 @@ namespace MudPlay.Game.Inventory;
 // (optional — unbound, the engine doesn't gate movement).
 //
 // Master switch: AutoActionDefaults.AutoGetItems (shared with the Settings →
-// General toggle and the toolbar Toggle command).
+// General toggle and the toolbar Toggle command). One other reason to pick an
+// item up runs through the same pass under its own toggle (SetExtraCollect): a
+// light Auto-Light wants.
 public sealed class AutoGetItemsManager : IDisposable
 {
     // LogService category — [AutoGet] rows per collected / deferred item.
@@ -44,9 +46,13 @@ public sealed class AutoGetItemsManager : IDisposable
     // MaxToGet carry cap (int.MaxValue = unbounded), the item's carry Weight
     // (MDB Encum; 0 when unknown — such items skip the encumbrance gate), and
     // whether Auto-sell would sell it (coin may be dropped to fit one of those in).
+    // AutoCollectSet is the item's own Auto-collect rule as the user left it — null
+    // when never set, false when turned off — and AutoDiscard whether Auto-discard
+    // would drop it: the extra collect reason (SetExtraCollect) honours both.
     public sealed record ResolvedItem(int Number, string Name, bool AutoCollect,
                                       bool CannotBeTaken, int MaxToGet, int Weight,
-                                      bool AutoSell = false);
+                                      bool AutoSell = false, bool? AutoCollectSet = null,
+                                      bool AutoDiscard = false);
 
     private readonly Func<string, ResolvedItem?> _resolve;
     private readonly Func<int, int> _heldCount;
@@ -381,9 +387,28 @@ public sealed class AutoGetItemsManager : IDisposable
     // GhSweepManager.IsActive; defaults to never-suppress.
     public Func<bool> SuppressDuringSweep { get; set; } = static () => false;
 
+    // A second reason to pick an item up besides its AutoCollect flag: the
+    // auto-light engine's "a light worth carrying" (AutoLightProvisioner
+    // .FloorLightsWanted), answering how many copies. It carries its own master
+    // toggle, so it is asked whether Auto-Get Items is on or not, and it runs in
+    // this same survey pass so a light that is also flagged is got once, under the
+    // same caps, encumbrance and in-flight ledger. The item's own rules decide over
+    // it: Auto-collect turned off, auto-discard and auto-sell each keep it on the
+    // floor. Unbound, nothing extra is collected.
+    private Func<ResolvedItem, int>? _extraWanted;
+    private string _extraWhy = string.Empty;
+
+    public void SetExtraCollect(Func<ResolvedItem, int> wanted, string why)
+    {
+        ArgumentNullException.ThrowIfNull(wanted);
+        _extraWanted = wanted;
+        _extraWhy = why;
+    }
+
     private void DispatchList(string list)
     {
-        if (!_isEnabled()) return;
+        bool autoGetOn = _isEnabled();
+        if (!autoGetOn && _extraWanted is null) return;
         // A Roomba sweep is sorting the house — don't let auto-collect grab extra
         // weight and shrink the headroom Roomba needs for its moves.
         if (SuppressDuringSweep())
@@ -444,6 +469,10 @@ public sealed class AutoGetItemsManager : IDisposable
         }
         long projectedWeight = enc.CurrentWeight;
 
+        // Copies taken for the extra reason in this survey, by item name, so two
+        // entries of one light share its count instead of each taking all of it.
+        Dictionary<string, int>? extraThisSurvey = null;
+
         foreach (string entry in SplitEntries(list))
         {
             ResolvedItem? item = _resolve(entry);
@@ -453,7 +482,17 @@ public sealed class AutoGetItemsManager : IDisposable
                 _log?.Debug(LogCategory, $"skipped item={item.Name} (cannot be taken)");
                 continue;
             }
-            if (!item.AutoCollect) continue;     // user didn't flag it
+            // Flagged and Auto-Get on, or wanted for the extra reason (a light) —
+            // as many copies as it asks for, less those already on their way.
+            bool extra = !(autoGetOn && item.AutoCollect);
+            int extraLeft = int.MaxValue;
+            if (extra)
+            {
+                if (_extraWanted is null || item.AutoCollectSet == false || item.AutoDiscard || item.AutoSell) continue;
+                extraLeft = _extraWanted(item) - _floorInFlight.GetValueOrDefault(item.Name)
+                    - (extraThisSurvey?.GetValueOrDefault(item.Name) ?? 0);
+                if (extraLeft <= 0) continue;
+            }
 
             // A stacked ground pile is surveyed with a leading count ("5 piece of
             // amber"): every counted unit is weighed on its own, then sent as one
@@ -486,8 +525,10 @@ public sealed class AutoGetItemsManager : IDisposable
             // one `get N <item>` on Paradigm (see after the loop), or N single gets
             // on Stock.
             int allowedThisEntry = 0;
+            int acceptedThisEntry = 0;
             for (int u = skip; u < units; u++)
             {
+                if (acceptedThisEntry >= extraLeft) break;   // the extra reason's count is met
 
                 // MaxToGet carry cap. Count what we already hold (carried + worn +
                 // key ring — key-type items land in the ring, not the pack) plus
@@ -532,11 +573,12 @@ public sealed class AutoGetItemsManager : IDisposable
                     decidedThisPass[item.Number] = decidedSoFar + 1;
                 }
                 if (encKnown && item.Weight > 0) projectedWeight += item.Weight;
+                acceptedThisEntry++;
 
                 if (deferMode)
                 {
                     _deferred.Add(item.Name);
-                    _log?.Info(LogCategory, $"deferred (combat) item={item.Name}");
+                    _log?.Info(LogCategory, $"deferred (combat) item={item.Name}{(extra ? $" ({_extraWhy})" : string.Empty)}");
                 }
                 else
                 {
@@ -544,9 +586,14 @@ public sealed class AutoGetItemsManager : IDisposable
                 }
             }
 
+            if (extra && acceptedThisEntry > 0)
+                (extraThisSurvey ??= new(StringComparer.OrdinalIgnoreCase))[item.Name] =
+                    extraThisSurvey.GetValueOrDefault(item.Name) + acceptedThisEntry;
+
             if (!deferMode && allowedThisEntry > 0)
             {
-                _log?.Info(LogCategory, $"collect {allowedThisEntry}x item={item.Name}");
+                _log?.Info(LogCategory,
+                    $"collect {allowedThisEntry}x item={item.Name}{(extra ? $" ({_extraWhy})" : string.Empty)}");
                 // Paradigm grabs the pile in one `get N <item>`; Stock sends one per
                 // unit. NoteGetSent fires per emitted line so the gate balances the
                 // count-prefixed `You took N <item>` confirmation either way.
