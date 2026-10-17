@@ -238,8 +238,15 @@ public sealed partial class CombatManager : IDisposable
     // reset that a guard death's roster desync can trigger — that reset nulls
     // _currentTarget and disarms the normal resume, so this separate memory is what
     // drives recovery (the reported "chief left unattacked after the last guard
-    // died" stall). Cleared when the priority itself dies / leaves / on room change.
+    // died" stall). Cleared when a room read no longer lists the priority, on a
+    // target-not-here reply, and on room change.
     private string? _guardBlockedTarget;
+
+    // The last kill while _guardBlockedTarget was set. Until a room read newer than
+    // it says whether the priority still stands, the guard retry waits, for at most
+    // GuardKillJudgeWait: a kill can be the priority's own.
+    private DateTimeOffset _guardFightKillAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan GuardKillJudgeWait = TimeSpan.FromSeconds(2);
 
     // Target-Priority follow deferral. When we're partied, in a multi-mob room,
     // and configured to follow the leader's / a member's target, we hold our own
@@ -284,6 +291,7 @@ public sealed partial class CombatManager : IDisposable
     // engage latency, so keep it short.
     private static readonly TimeSpan ArrivalSettleWindow = TimeSpan.FromMilliseconds(350);
     private bool _arrivalSettleArmed;
+    private bool _arrivalSettleRearmed;   // the one extra window OnArrivalSettleElapsed may take
     private DateTimeOffset _arrivalSettleArmedAt;
     private bool _arrivalSettleBypass;
     private Action<TimeSpan, Action>? _scheduleArrivalSettle;
@@ -1724,14 +1732,32 @@ public sealed partial class CombatManager : IDisposable
         // fight or our room (GAME_MECHANICS "Kill detection and monster-kill message
         // order"), so the roster may still hold the corpse. An exp line that wasn't a
         // kill's costs only the re-display's round trip.
+        //
+        // The settle has disarmed, so only a re-display engages the arrival now. When
+        // none could be asked for (a dark room, or one asked for and not read yet) the
+        // settle waits one more window for it, then engages the room as it stands.
         if (_lastExpGainAt > _arrivalSettleArmedAt)
         {
-            NoteArrivalSettleDecision("an exp line came during the window — deferred to the room re-display");
-            _log?.Combat(LogCategory,
-                "arrival-settle: an exp line came during the window with no target of ours to pin it on — "
-                + "deferring engage to the room re-display so the round's action can't corpse-cast a just-killed mob");
-            TrySendRoomRefresh("exp gain during arrival-settle");
-            return;
+            if (TrySendRoomRefresh("exp gain during arrival-settle", askAgainOnceRead: true))
+            {
+                NoteArrivalSettleDecision("an exp line came during the window — deferred to the room re-display");
+                _log?.Combat(LogCategory,
+                    "arrival-settle: an exp line came during the window with no target of ours to pin it on — "
+                    + "deferring engage to the room re-display so the round's action can't corpse-cast a just-killed mob");
+                return;
+            }
+            if (!_arrivalSettleRearmed && _scheduleArrivalSettle is { } schedule)
+            {
+                _arrivalSettleRearmed = true;
+                _arrivalSettleArmed = true;
+                _arrivalSettleArmedAt = DateTimeOffset.Now;
+                NoteArrivalSettleDecision("an exp line came during the window and no re-display could be asked for — waited one more window");
+                _log?.Combat(LogCategory,
+                    "arrival-settle: an exp line came during the window and no re-display could be asked for — "
+                    + $"waiting {ArrivalSettleWindow.TotalMilliseconds:F0}ms more, then engaging the room as it stands");
+                schedule(ArrivalSettleWindow, OnArrivalSettleElapsed);
+                return;
+            }
         }
         if (MoveInFlight())
         {
@@ -2088,6 +2114,7 @@ public sealed partial class CombatManager : IDisposable
             if (!_arrivalSettleArmed)
             {
                 _arrivalSettleArmed = true;
+                _arrivalSettleRearmed = false;
                 _arrivalSettleArmedAt = DateTimeOffset.Now;
                 _log?.Combat(LogCategory,
                     $"arrival-settle: holding first engage {ArrivalSettleWindow.TotalMilliseconds:F0}ms " +
@@ -3480,7 +3507,10 @@ public sealed partial class CombatManager : IDisposable
         return sent;
     }
 
-    private bool TrySendRoomRefresh(string context)
+    // askAgainOnceRead: the cooldown keeps a burst from asking twice for one
+    // re-display, so once that re-display has been read a new question isn't a
+    // double. For a caller whose question the last read came too early to answer.
+    private bool TrySendRoomRefresh(string context, bool askAgainOnceRead = false)
     {
         if (_wireSender is null) return false;
         if (_isInDarkRoom?.Invoke() == true)
@@ -3490,7 +3520,19 @@ public sealed partial class CombatManager : IDisposable
             return false;
         }
         DateTimeOffset now = DateTimeOffset.Now;
-        if (now - _lastRoomRefreshAt < RoomRefreshCooldown) return false;
+        if (now - _lastRoomRefreshAt < RoomRefreshCooldown)
+        {
+            if (!askAgainOnceRead) return false;
+            if (_rosterReadAt <= _lastRoomRefreshAt)
+            {
+                _log?.Combat(LogCategory,
+                    $"CR re-display not re-sent ({context}) — the one sent "
+                    + $"{(now - _lastRoomRefreshAt).TotalMilliseconds:F0}ms ago hasn't been read yet");
+                return false;
+            }
+            _log?.Combat(LogCategory,
+                $"CR re-display sent inside the cooldown ({context}) — the last one has already been read");
+        }
         _lastRoomRefreshAt = now;
         _wireSender(Encoding.Latin1.GetBytes("\r"));
         return true;
@@ -4011,10 +4053,20 @@ public sealed partial class CombatManager : IDisposable
         // A kill in a guard fight: ask for the room, whose re-display says whether the
         // guarded priority still stands (JudgeGuardBlockByRoster). The removal below
         // can't: it drops our target's slot, which through the redirect is usually the
-        // priority's, whichever of them died.
-        if (_guardBlockedTarget is { } guarded && TrySendRoomRefresh("kill in a guard fight"))
-            _log?.Combat(LogCategory,
-                $"kill while '{guarded}' is guard-blocked — re-displaying the room to see whether it still stands");
+        // priority's, whichever of them died. The guard retry waits for that read
+        // (TryGuardRetry), so it's asked for even inside the cooldown once the last
+        // re-display has been read: that one came before this kill.
+        if (_guardBlockedTarget is { } guarded)
+        {
+            _guardFightKillAt = DateTimeOffset.Now;
+            if (TrySendRoomRefresh("kill in a guard fight", askAgainOnceRead: true))
+                _log?.Combat(LogCategory,
+                    $"kill while '{guarded}' is guard-blocked — re-displaying the room to see whether it still stands");
+            else
+                _log?.Combat(LogCategory,
+                    $"kill while '{guarded}' is guard-blocked — no re-display sent for it; the guard retry waits "
+                    + $"up to {GuardKillJudgeWait.TotalSeconds:F0}s for a room read");
+        }
 
         // Normally the corpse's identity is the still-set _currentTarget. But a prompt
         // exp-inferred kill (OnUserGainExperience) fires BEFORE this Off and already
@@ -4763,9 +4815,17 @@ public sealed partial class CombatManager : IDisposable
     // is gone with everyone else: the hold ends, and the roster that still names it
     // is emptied, which lets go of the Combat gate. With an "Also here:" in it the
     // roster was read on that line and has already decided.
+    //
+    // A guard fight's kill is judged the same way: a display finished after it with
+    // no "Also here:" read since lists nobody, the priority included. That's how the
+    // room answers when the priority's kill emptied it (JudgeGuardBlockByRoster only
+    // hears from a display that lists someone).
     public void NoteRoomDisplayed()
     {
-        if (_disposed || _userBreakHold is not { } held || !_heldRoomLookPending) return;
+        if (_disposed) return;
+        if (_guardBlockedTarget is { } guarded && _guardFightKillAt > _rosterReadAt)
+            DropGuardBlock(guarded, "is gone: the room re-displayed after the kill with nobody in it");
+        if (_userBreakHold is not { } held || !_heldRoomLookPending) return;
         _log?.Combat(LogCategory,
             $"the room re-displayed with nobody in it — '{held}' is gone; dropping the stale roster");
         EndUserBreakHold("the room it was read in lists nobody");
@@ -5659,6 +5719,7 @@ public sealed partial class CombatManager : IDisposable
         if (_wireSender is null) return;
 
         DateTimeOffset now = DateTimeOffset.Now;
+        if (HoldGuardRetryForUnjudgedKill(priority, now)) return;
         if (now - _lastAttackSentAt < ResumeAfterAttackGuard) return;
         if (now - _lastInterruptResumeAt < ResumePacing) return;
         _lastInterruptResumeAt = now;
@@ -5687,18 +5748,50 @@ public sealed partial class CombatManager : IDisposable
                 return;
             }
         }
-        _guardBlockedTarget = null;
-        _lastGuardRosterCheck = (DateTimeOffset.Now, $"'{priority}' no longer listed — block dropped");
-        _log?.Combat(LogCategory,
-            $"room re-display no longer lists guarded priority '{priority}' — clearing guard block");
+        DropGuardBlock(priority, "no longer listed");
     }
 
-    // What the last room read made of a guard block, for the bug report.
+    private void DropGuardBlock(string priority, string why)
+    {
+        _guardBlockedTarget = null;
+        _lastGuardRosterCheck = (DateTimeOffset.Now, $"'{priority}' {why} — block dropped");
+        _log?.Combat(LogCategory, $"guarded priority '{priority}' {why} — clearing guard block");
+    }
+
+    // A guard fight's kill that no room read has judged yet holds the guard retry
+    // (true while it waits). With no read in GuardKillJudgeWait (a dark room, a
+    // re-display that never came) the roster the kills left decides: emptied, the
+    // priority fell with the rest; otherwise the chase goes on.
+    private bool HoldGuardRetryForUnjudgedKill(string priority, DateTimeOffset now)
+    {
+        if (_guardFightKillAt <= _rosterReadAt) return false;
+        if (now - _guardFightKillAt < GuardKillJudgeWait)
+        {
+            _log?.Combat(LogCategory,
+                $"guard retry at '{priority}' held — the kill at {_guardFightKillAt:HH:mm:ss.fff} may have been "
+                + "its own; waiting for the room read");
+            return true;
+        }
+        if (_classifier.Current is { } room && room.Entities.Any(e => e.Kind == EntityKind.Monster))
+            return false;
+        DropGuardBlock(priority, "taken for dead: no room read came after the last kill, and the roster lists no monster");
+        return true;
+    }
+
+    // What the last room read made of a guard block, for the bug report, led by a
+    // kill in the fight that no read has judged yet.
     private (DateTimeOffset At, string Text)? _lastGuardRosterCheck;
 
-    public string? LastGuardRosterCheck => _lastGuardRosterCheck is { } c
-        ? $"{c.At:HH:mm:ss.fff} {c.Text}"
-        : null;
+    public string? LastGuardRosterCheck
+    {
+        get
+        {
+            string? last = _lastGuardRosterCheck is { } c ? $"{c.At:HH:mm:ss.fff} {c.Text}" : null;
+            if (_guardBlockedTarget is null || _guardFightKillAt <= _rosterReadAt) return last;
+            string pending = $"kill at {_guardFightKillAt:HH:mm:ss.fff}, not judged yet";
+            return last is null ? pending : $"{pending}; before it {last}";
+        }
+    }
 
     // Public current-room engageability probe for consumers (AutoSearch) that must
     // gate on THIS room's live roster, not the sticky cross-room combat gate

@@ -746,6 +746,27 @@ public sealed class CombatManagerSpellsTests
         Assert.Contains("exp line", h.Combat.LastArrivalSettleDecision);
     }
 
+    // The same exp line where no re-display can be asked for (a dark room): the
+    // settle has disarmed and nothing would engage the arrival until it swung. It
+    // waits one more window instead, then engages.
+    [Fact]
+    public void ArrivalSettle_ExpGainInsideWindow_NoReDisplayPossible_EngagesAfterOneMoreWindow()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nebo", MinEnemies = 1 };
+        h.AddMonster(1, "muckworm");
+        h.Combat.SetDarkRoomProbe(() => true);
+
+        h.Arrive("muckworm");
+        h.Feed("You gain 10 experience.");
+        h.FireSettle();
+        Assert.DoesNotContain("nebo muckworm", h.AllSent);
+
+        h.FireSettle();
+
+        Assert.Equal("nebo muckworm", h.LastSent);
+    }
+
     // An exp line from before the hold armed is no kill of the window's: the settle
     // engages the arrival as usual.
     [Fact]

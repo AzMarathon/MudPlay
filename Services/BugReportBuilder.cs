@@ -998,7 +998,8 @@ public static class BugReportBuilder
         // explains re-attacks aimed at a monster that isn't our live target.
         Kv(sb, "Guard-blocked priority", combat.GuardBlockedTarget ?? "(none)");
         // Whether the last room read still listed that priority: a block kept past the
-        // priority's death sends the next guard retry at its corpse.
+        // priority's death sends the next guard retry at its corpse. A kill no read has
+        // judged yet, which holds the retry, is shown ahead of it.
         Kv(sb, "Guard block, last room read", svc.Combat.LastGuardRosterCheck ?? "(none this session)");
         // What the arrival settle did when its window last elapsed: deferred to the
         // room re-display for a kill or exp line in the window, or engaged the room.

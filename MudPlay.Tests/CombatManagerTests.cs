@@ -698,6 +698,111 @@ public sealed class CombatManagerTests
         Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
     }
 
+    // The guard's kill asks for the room and its re-display keeps the block; the
+    // chief then dies inside the 3 s re-display cooldown. That kill's re-display is
+    // still asked for (the last one was read before it), and until it comes an Off of
+    // the fight left (the rat's) sends no retry at the chief's corpse.
+    [Fact]
+    public void GuardBlock_PriorityKilledInsideCooldown_ReDisplayStillAsked_RetryHeldUntilRead()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.AddMonster(1, "brigand chief", killable: true);
+        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(3, "giant rat", killable: true);
+
+        h.Feed("Also here: brigand chief, large brigand, giant rat.");
+        h.Feed("large brigand moves to protect brigand chief");
+
+        BackdateLastAttack(h.Combat);
+        h.Feed("You gain 10 experience.");                       // the guard
+        h.Feed("*Combat Off*");
+        h.Feed("Also here: brigand chief, giant rat.");
+        Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
+        Assert.Equal("brigand chief", h.Combat.CurrentTarget);
+
+        NewExpRound(h.Combat);
+        BackdateLastAttack(h.Combat);
+        h.Feed("You gain 10 experience.");                       // the chief
+        h.Feed("*Combat Off*");
+        Assert.Equal(2, h.CrRefreshSends);
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+        Assert.Contains("not judged yet", h.Combat.LastGuardRosterCheck);
+
+        BackdateLastAttack(h.Combat);
+        int sentBefore = h.Sent.Count;
+        h.Feed("*Combat Off*");                                  // the rat fight's
+        Assert.DoesNotContain(h.Sent.Skip(sentBefore),
+            b => Encoding.Latin1.GetString(b).TrimEnd('\r') == "a brigand chief");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+    }
+
+    // Solo, the chief dies last: its re-display has no "Also here:" line, so no
+    // roster read judges the kill. Its own Off sends no retry at it, and the
+    // finished display, with nobody read since the kill, ends the chase.
+    [Fact]
+    public void GuardBlock_PriorityKilledLast_EmptyReDisplay_NoRetryAndBlockDropped()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.AddMonster(1, "brigand chief", killable: true);
+        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+
+        h.Feed("Also here: brigand chief, large brigand.");
+        h.Feed("large brigand moves to protect brigand chief");
+
+        BackdateLastAttack(h.Combat);
+        h.Feed("You gain 10 experience.");                       // the guard
+        h.Feed("*Combat Off*");
+        h.Feed("Also here: brigand chief.");
+        Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
+
+        NewExpRound(h.Combat);
+        BackdateLastAttack(h.Combat);
+        int sentBefore = h.Sent.Count;
+        h.Feed("You gain 10 experience.");                       // the chief
+        h.Feed("*Combat Off*");
+        Assert.DoesNotContain(h.Sent.Skip(sentBefore),
+            b => Encoding.Latin1.GetString(b).TrimEnd('\r') == "a brigand chief");
+        Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
+
+        h.Combat.NoteRoomDisplayed();                            // the emptied room's re-display
+        Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
+    }
+
+    // With no room read at all after the kill (a dark room), the wait ends after 2 s
+    // and a roster the kills emptied ends the chase.
+    [Fact]
+    public void GuardBlock_KillUnjudgedPastTheWait_EmptiedRoster_DropsBlock()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.AddMonster(1, "brigand chief", killable: true);
+        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+
+        h.Feed("Also here: brigand chief, large brigand.");
+        h.Feed("large brigand moves to protect brigand chief");
+        BackdateLastAttack(h.Combat);
+        h.Feed("You gain 10 experience.");                       // the guard
+        h.Feed("*Combat Off*");
+        h.Feed("Also here: brigand chief.");
+
+        h.Dark = true;
+        NewExpRound(h.Combat);
+        BackdateLastAttack(h.Combat);
+        h.Feed("You gain 10 experience.");                       // the chief
+        h.Feed("*Combat Off*");
+        Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
+
+        SetStamp(h.Combat, "_rosterReadAt", DateTimeOffset.Now - TimeSpan.FromSeconds(4));
+        SetStamp(h.Combat, "_guardFightKillAt", DateTimeOffset.Now - TimeSpan.FromSeconds(3));
+        int sentBefore = h.Sent.Count;
+        h.Feed("*Combat Off*");
+
+        Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
+        Assert.Equal(sentBefore, h.Sent.Count);
+    }
+
     // A monster a party member killed (no exp for us, so no death seen) stays on the
     // roster; with talk-slow off, attacking it comes back `You say "a giant rat"` (with
     // it on, "Your command had no effect." — the CommandNoEffect path). That echo of
@@ -4823,6 +4928,13 @@ public sealed class CombatManagerTests
     /// so time-compressed tests must age the stamp to exercise a real resume.</summary>
     private static void BackdateLastAttack(CombatManager combat, double seconds = 5) =>
         SetStamp(combat, "_lastAttackSentAt", DateTimeOffset.Now - TimeSpan.FromSeconds(seconds));
+
+    // A round boundary between two kills, for the per-round exp tally OnCombatTick
+    // zeroes: without one, two kills read as one room spell's.
+    private static void NewExpRound(CombatManager combat) =>
+        typeof(CombatManager).GetField("_expGainsThisRound",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(combat, 0);
 
     private static void SetStamp(CombatManager combat, string field, DateTimeOffset value) =>
         typeof(CombatManager).GetField(field,
