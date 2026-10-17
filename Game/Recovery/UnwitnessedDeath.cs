@@ -19,6 +19,9 @@ namespace MudPlay.Game.Recovery;
 // NothingLost says it was an arena death (a hang-up while dropped in an arena
 // room): no life, item or coin was taken, so the record lists no pile and is
 // written as a witnessed arena death's is.
+//
+// GameData is the set Room's number is of, as the held list recorded it; null from
+// a list written before that was kept, and the record is then unstamped.
 public sealed record UnwitnessedDeath(
     RoomRef? Room,
     DateTimeOffset At,
@@ -28,4 +31,5 @@ public sealed record UnwitnessedDeath(
     List<DeathItem>? Lost,
     CurrencyHoldings? Coins,
     bool AtEntry = true,
-    bool NothingLost = false);
+    bool NothingLost = false,
+    string? GameData = null);

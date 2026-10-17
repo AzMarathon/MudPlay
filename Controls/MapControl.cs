@@ -231,8 +231,9 @@ public sealed class MapControl : Control
         AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(TeleportRooms));
 
     // Rooms holding an un-recovered deathpile (a DeathRecord whose Status isn't
-    // Recovered). Each gets a skull glyph so the player can spot where a death is
-    // waiting to be recovered. Supplied by NavigationViewModel from
+    // Recovered, recorded on the game data shown). Each gets a skull glyph so the
+    // player can spot where a death is waiting to be recovered. Supplied by
+    // NavigationViewModel from
     // DeathRecoveryManager.Records; a record flipping to Recovered drops its room
     // from the set and the skull clears on the next render.
     public static readonly StyledProperty<IReadOnlySet<RoomKey>?> DeathRoomsProperty =
