@@ -1,8 +1,14 @@
 # Version history
 
-## 3.183.20
+## 3.183.23
 
 - Backscroll and How did I Die? draw a vector terminal font smooth (antialiased), like the live terminal
+
+## 3.183.22
+
+- Character Info: a carried container's chest icon is drawn as a link, not a plain grey button
+- Navigation: Save, Accept and Go buttons that were meant to stand out now show in the accent colour
+- Field labels in Settings General and Events and on the Roomba tab now use the dimmed label style
 
 ## 3.183.19
 

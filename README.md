@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.20**
+> **Version 3.183.23**
 > - Backscroll and How did I Die? draw a vector terminal font smooth (antialiased), like the live terminal
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

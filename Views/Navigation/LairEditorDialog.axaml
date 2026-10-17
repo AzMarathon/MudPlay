@@ -195,7 +195,7 @@
                 <Button Grid.Column="2"
                         Content="Save"
                         IsDefault="True"
-                        Classes="Accent"
+                        Classes="accent"
                         IsEnabled="{Binding CanSave}"
                         Command="{Binding SaveCommand}"/>
             </Grid>

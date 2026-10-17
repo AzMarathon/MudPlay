@@ -56,7 +56,7 @@
                         IsCancel="True" MinWidth="80"/>
                 <Button Content="Save" Command="{Binding SaveCommand}"
                         IsDefault="True" MinWidth="80"
-                        Classes="Accent"/>
+                        Classes="accent"/>
             </StackPanel>
         </Grid>
     </Border>
