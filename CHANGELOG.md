@@ -1,8 +1,9 @@
 # Version history
 
-## 3.183.35
+## 3.183.36
 
 - Combat: Attack Order "Attack Not Last" attacks again when the party walks into each room behind you
+- Combat: "Attack Not Last" with a follow Target Priority waits once, then attacks, even if no one opens
 - bug reports addressed: paradigm-20261017-050150
 
 ## 3.183.34

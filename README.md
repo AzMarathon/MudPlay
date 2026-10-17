@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.35**
+> **Version 3.183.36**
 > - Combat: Attack Order "Attack Not Last" attacks again when the party walks into each room behind you
+> - Combat: "Attack Not Last" with a follow Target Priority waits once, then attacks, even if no one opens
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

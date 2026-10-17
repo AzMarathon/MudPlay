@@ -5325,7 +5325,7 @@ Only **one 0-energy between-round spell** fires per combat round (the game's own
 **Available options:** `Default`, `Attack what party leader attacks`, `Attack what player attacks`
 **What it does:** Controls *who* you target while partying. `Default` uses your own priority list plus Target order above. The two "follow" modes make you mirror whatever target the party leader (or a named player) is currently attacking, instead of choosing your own.
 **When you might change it:** Group play where you want everyone stacking damage onto one target instead of spreading across the room.
-**Important notes:** If you can't actually hurt the monster you're told to follow, MudPlay falls back to your own next actionable target rather than getting stuck doing nothing.
+**Important notes:** If you can't actually hurt the monster you're told to follow, MudPlay falls back to your own next actionable target rather than getting stuck doing nothing. On entering a room with more than one monster and the followed player in it, MudPlay waits up to a round for that player to attack, then picks its own target. With Attack Order `AttackNotLast` too, the two share that one wait (see **AttackNotLast** under Attack Order).
 
 ### Player name (Target Priority)
 
@@ -5341,6 +5341,7 @@ Only **one 0-energy between-round spell** fires per combat round (the game's own
 - **AttackAfter** — re-announce only after the named player commits (set the name in **Attack-after player name**).
 - **How the re-announce is timed** (these modes): party announces trickle in a line at a time, and someone reacting to another member's announce lands a moment later. So MudPlay waits until the announces stop for half a second and re-announces once, after the last. Whenever a qualifying announce still lands after yours, it re-announces again — every time — so you always end up last.
 - **AttackNotLast** — the inverse: *hold* your pick on room entry, commit **once** right after the **first** party member announces, and never re-fire — so you slot in behind the first mover instead of chasing the last slot. If no one in the party opens within a round, you attack anyway, so the hold never leaves you standing idle. Only functional in a **party of 3+**; in a party of 2 or fewer it behaves exactly like `Default`.
+- **AttackNotLast with a "follow" Target Priority** — the two holds are one wait, at most a round long. If the player you follow attacks a monster first, you attack their target. If another party member opens first, you attack your own pick right behind them, and switch to the followed player's target when they attack. If nobody opens within the round, you attack your own pick once.
 **When you might change it:** A tank who wants to always commit their attack last, after everyone else in the party has already gone — or a roomer who wants their AoE to land after the party's. Pick **AttackNotLast** when you'd rather go early, right behind whoever opens.
 
 ### Attack-after player name

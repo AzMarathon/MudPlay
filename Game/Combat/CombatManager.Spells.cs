@@ -686,14 +686,7 @@ public sealed partial class CombatManager
             _awaitingFollowAnnounce = false;
             _log?.Combat(LogCategory,
                 "target-priority follow — no announce this round; falling back to own pick");
-            _followDeferBypass = true;
-            _releasingFollowHold = true;
-            try { OnEntitiesObserved(followFallback); }
-            finally
-            {
-                _followDeferBypass = false;
-                _releasingFollowHold = false;
-            }
+            EngageReleasedHold(followFallback, "target-priority follow");
             return;
         }
 
@@ -708,14 +701,7 @@ public sealed partial class CombatManager
             _awaitingNotLast = false;
             _log?.Combat(LogCategory,
                 "attack-not-last — no party announce this round; falling back to own pick");
-            _notLastDeferBypass = true;
-            _releasingNotLastHold = true;
-            try { OnEntitiesObserved(notLastFallback); }
-            finally
-            {
-                _notLastDeferBypass = false;
-                _releasingNotLastHold = false;
-            }
+            EngageReleasedHold(notLastFallback, "attack-not-last");
             return;
         }
 

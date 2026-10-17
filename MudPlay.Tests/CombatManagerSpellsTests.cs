@@ -4085,6 +4085,72 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("pu tunnel horror", h.LastSent);
     }
 
+    // ----- attack-not-last + follow-leader: one wait for both -----------
+
+    // Leader Cidir stands in the room with two monsters, so both holds apply on entry.
+    private static void EnterUnderNotLastAndFollowLeader(Harness h)
+    {
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.TargetPriority = TargetPriority.FollowLeader;
+        h.Settings.NormalAttackCommand = "pu";
+        h.Players.RecordObservation("Cidir", "Priest", null, null, null, null, null, DateTime.UtcNow);
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.Party.LeaderName = "Cidir NineteenTr";
+        h.AddMonster(635, "tunnel horror");
+        h.AddMonster(636, "giant skeleton");
+        h.Feed("Also here: tunnel horror, giant skeleton, Cidir.");
+    }
+
+    private static int Punches(Harness h) => h.AllSent.Count(s => s.StartsWith("pu "));
+
+    [Fact]
+    public void NotLastAndFollowLeader_NoAnnounces_AttacksOnceAfterTheRound()
+    {
+        // The two holds' fallbacks used to re-latch each other, so with nobody
+        // announcing we never attacked.
+        using Harness h = new();
+        EnterUnderNotLastAndFollowLeader(h);
+        Assert.Equal(0, Punches(h));
+
+        h.Tick();
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        h.Feed("*Combat Engaged*");
+        h.Tick();
+        h.Tick();
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void NotLastAndFollowLeader_LeaderAnnounces_FollowsTheLeadersTarget()
+    {
+        using Harness h = new();
+        EnterUnderNotLastAndFollowLeader(h);
+
+        h.Feed("Cidir moves to attack giant skeleton.");
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        h.Feed("*Combat Engaged*");
+        h.Tick();
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void NotLastAndFollowLeader_MemberAnnouncesFirst_AttacksOwnPickThenFollowsTheLeader()
+    {
+        // Attack Order sets when: the first party announce ends the wait, so we attack
+        // right behind it on our own pick. Target Priority still sets who: the
+        // leader's later announce moves us onto the leader's target.
+        using Harness h = new();
+        EnterUnderNotLastAndFollowLeader(h);
+
+        h.Feed("Thresh moves to attack giant skeleton.");
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        h.Feed("*Combat Engaged*");
+
+        h.Feed("Cidir moves to attack giant skeleton.");
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        Assert.Equal(2, Punches(h));
+    }
+
     [Fact]
     public void AttackNotLast_PartyWalkedInBehindUs_NoAnnounceStillFallsBack()
     {

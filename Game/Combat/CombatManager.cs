@@ -298,20 +298,18 @@ public sealed partial class CombatManager : IDisposable
     private bool _arrivalSettleBypass;
     private Action<TimeSpan, Action>? _scheduleArrivalSettle;
 
-    // A not-last / follow hold that ended (its announce, or its round-long fallback)
+    // A not-last / follow hold that ended (an announce, or its round-long fallback)
     // while the room's last word was an arrival goes through the settle like any
     // first engage. The release rides the settle so its engage doesn't hold again:
     // the party walks in a beat after us on every step, so without this the hold
     // re-latched on every release and never attacked (report paradigm-20261017-050150).
-    private bool _arrivalSettleReleasesNotLast;
-    private bool _arrivalSettleReleasesFollow;
+    // Holds the name of the hold that ended, for the log and the bug report.
+    private string? _arrivalSettleCarriedRelease;
 
-    // Set only while a hold's own release re-dispatches the room (the not-last
-    // announce, or either hold's round fallback). The bypass flags can't say this:
-    // a resume and the backstab re-announce lift the follow hold too, with no hold
-    // having ended.
-    private bool _releasingNotLastHold;
-    private bool _releasingFollowHold;
+    // Set only while EngageReleasedHold re-dispatches the room, naming the hold that
+    // ended. The bypass flags can't say this: a resume and the backstab re-announce
+    // lift the follow hold too, with no hold having ended.
+    private string? _releasingHold;
 
     // Summon-on-death re-scan hold. The monster just killed summons another as it
     // dies, and that one isn't on the roster until the room is displayed again.
@@ -1349,8 +1347,8 @@ public sealed partial class CombatManager : IDisposable
         _castingSpellTarget, _spellAttackOwed,
         _readSettings().AttackTiming.ToString(),
         _awaitingNotLast ? "not-last" : _awaitingFollowAnnounce ? "follow"
-            : _arrivalSettleReleasesNotLast ? "not-last ended; engaging when the arrival settle elapses"
-            : _arrivalSettleReleasesFollow ? "follow ended; engaging when the arrival settle elapses"
+            : _arrivalSettleCarriedRelease is { } ended
+                ? $"{ended} hold ended; engaging when the arrival settle elapses"
             : null,
         _spellChooser.DescribeCasts(), ConfirmedAttackCastCount);
 
@@ -1641,9 +1639,8 @@ public sealed partial class CombatManager : IDisposable
         // A release is spent on this window's engage. Every path that doesn't engage
         // drops it: what decides instead (a re-display, the new room) reads the room
         // anew, and the hold's fallback still bounds that wait to a round.
-        bool releasesNotLast = _arrivalSettleReleasesNotLast;
-        bool releasesFollow = _arrivalSettleReleasesFollow;
-        DropArrivalSettleReleases();
+        string? carriedRelease = _arrivalSettleCarriedRelease;
+        _arrivalSettleCarriedRelease = null;
         if (_classifier.Current is not { } cur) return;
         // A monster died DURING this settle window (a burst kill landing between arm and
         // now). Its death forced a roster resync (a room re-display) that hasn't arrived
@@ -1686,8 +1683,7 @@ public sealed partial class CombatManager : IDisposable
                 _arrivalSettleRearmed = true;
                 _arrivalSettleArmed = true;
                 _arrivalSettleArmedAt = DateTimeOffset.Now;
-                _arrivalSettleReleasesNotLast = releasesNotLast;
-                _arrivalSettleReleasesFollow = releasesFollow;
+                _arrivalSettleCarriedRelease = carriedRelease;
                 NoteArrivalSettleDecision("an exp line came during the window and no re-display could be asked for — waited one more window");
                 _log?.Combat(LogCategory,
                     "arrival-settle: an exp line came during the window and no re-display could be asked for — "
@@ -1705,28 +1701,40 @@ public sealed partial class CombatManager : IDisposable
                 + "the new room's display decides");
             return;
         }
-        string released = releasesNotLast ? " (the attack-not-last hold had ended)"
-            : releasesFollow ? " (the target-priority follow hold had ended)" : "";
+        string released = carriedRelease is null ? "" : $" (the {carriedRelease} hold had ended)";
         NoteArrivalSettleDecision("window elapsed with no room re-display — engaged the accumulated room" + released);
         _log?.Combat(LogCategory,
             "arrival-settle: window elapsed with no room re-display — engaging the accumulated room" + released);
-        bool notLastBypassWas = _notLastDeferBypass, followBypassWas = _followDeferBypass;
         _arrivalSettleBypass = true;
-        _notLastDeferBypass |= releasesNotLast;
-        _followDeferBypass |= releasesFollow;
-        try { OnEntitiesObserved(cur); }
-        finally
+        try
         {
-            _arrivalSettleBypass = false;
-            _notLastDeferBypass = notLastBypassWas;
-            _followDeferBypass = followBypassWas;
+            if (carriedRelease is not null) EngageReleasedHold(cur, carriedRelease);
+            else OnEntitiesObserved(cur);
         }
+        finally { _arrivalSettleBypass = false; }
     }
 
-    private void DropArrivalSettleReleases()
+    // Engages the room once a not-last or follow hold has ended. Both holds lift
+    // together: when both settings apply they are one wait, ended by whichever
+    // releases first, and the engage that ends it must not latch the other. Their
+    // round fallbacks used to re-latch each other, so with nobody announcing we
+    // never attacked.
+    private void EngageReleasedHold(RoomEntitiesObservation obs, string hold)
     {
-        _arrivalSettleReleasesNotLast = false;
-        _arrivalSettleReleasesFollow = false;
+        _awaitingNotLast = false;
+        _awaitingFollowAnnounce = false;
+        bool notLastBypassWas = _notLastDeferBypass, followBypassWas = _followDeferBypass;
+        string? releasingWas = _releasingHold;
+        _notLastDeferBypass = true;
+        _followDeferBypass = true;
+        _releasingHold = hold;
+        try { OnEntitiesObserved(obs); }
+        finally
+        {
+            _notLastDeferBypass = notLastBypassWas;
+            _followDeferBypass = followBypassWas;
+            _releasingHold = releasingWas;
+        }
     }
 
     // What the arrival settle last did when its window elapsed, for the bug report:
@@ -1807,7 +1815,7 @@ public sealed partial class CombatManager : IDisposable
         if (!_arrivalSettleBypass && obs.Source != RoomObservationSource.Arrival)
         {
             _arrivalSettleArmed = false;
-            DropArrivalSettleReleases();
+            _arrivalSettleCarriedRelease = null;
         }
 
         // A confirmed move into an EMPTY room re-opens the surprise round (the
@@ -2064,12 +2072,11 @@ public sealed partial class CombatManager : IDisposable
         if (obs.Source == RoomObservationSource.Arrival && _currentTarget is null
             && _scheduleArrivalSettle is not null && !_arrivalSettleBypass)
         {
-            if (_releasingNotLastHold || _releasingFollowHold)
+            if (_releasingHold is { } endedHold)
             {
-                _arrivalSettleReleasesNotLast |= _releasingNotLastHold;
-                _arrivalSettleReleasesFollow |= _releasingFollowHold;
+                _arrivalSettleCarriedRelease = endedHold;
                 _log?.Combat(LogCategory,
-                    $"arrival-settle: the {(_releasingNotLastHold ? "attack-not-last" : "target-priority follow")} hold "
+                    $"arrival-settle: the {endedHold} hold "
                     + "has ended — engaging when the settle elapses, without holding again");
             }
             if (!_arrivalSettleArmed)
@@ -2189,29 +2196,34 @@ public sealed partial class CombatManager : IDisposable
         // their target; OnCombatTick falls back to our own pick if none arrives).
         // Skipped during the fallback's re-entrant call (_followDeferBypass) and
         // once we already hold a target (mid-fight re-observe — don't stall).
-        if (!_followDeferBypass && _currentTarget is null &&
-            ShouldWaitForFollow(settings, engageable.Count, obs))
+        //
+        // Attack-not-last deferral: hold our own pick and wait for the first party
+        // member's announce, then engage ONCE (TryReleaseNotLastHold; OnCombatTick
+        // falls back to our own pick if none arrives that round). Only functional in
+        // a party of 3+ — a smaller party behaves like Default and never holds.
+        //
+        // When both apply they latch together as one wait (EngageReleasedHold ends
+        // both): the followed player's attack ends it on their target, any other
+        // party announce ends it on our own pick, and one round's fallback ends it.
+        bool holdForFollow = !_followDeferBypass && _currentTarget is null &&
+            ShouldWaitForFollow(settings, engageable.Count, obs);
+        bool holdNotLast = !_notLastDeferBypass && _currentTarget is null &&
+            ShouldWaitForNotLast(settings);
+        if (holdForFollow)
         {
             _awaitingFollowAnnounce = true;
             _log?.Combat(LogCategory,
                 $"target-priority {settings.TargetPriority} — holding own pick, " +
                 $"awaiting follow announce (engageable={engageable.Count})");
-            return;
         }
-
-        // Attack-not-last deferral: hold our own pick and wait for the first party
-        // member's announce, then engage ONCE (TryReleaseNotLastHold; OnCombatTick
-        // falls back to our own pick if none arrives that round). Only functional in
-        // a party of 3+ — a smaller party behaves like Default and never holds.
-        if (!_notLastDeferBypass && _currentTarget is null &&
-            ShouldWaitForNotLast(settings))
+        if (holdNotLast)
         {
             _awaitingNotLast = true;
             _log?.Combat(LogCategory,
                 $"attack-not-last — holding own pick, awaiting first party announce " +
                 $"(engageable={engageable.Count})");
-            return;
         }
+        if (holdForFollow || holdNotLast) return;
 
         // Walk the engageable list in TargetOrder and pick the first
         // monster we can actually engage. A monster the game data proves
@@ -2997,7 +3009,7 @@ public sealed partial class CombatManager : IDisposable
 
         // AttackNotLast: if we're holding for the first party announce, this is it —
         // engage our own pick once and stop (no follow, no re-fire).
-        if (TryReleaseNotLastHold(announcer)) return;
+        if (TryReleaseNotLastHold(announcer, followable: !IsRoomAttackAnnounce(announcedTarget))) return;
 
         // A room attack's wildcard target ("everyone in the room") is not a mob —
         // never route it through Target Priority (following it would try to engage a
@@ -3100,27 +3112,38 @@ public sealed partial class CombatManager : IDisposable
     // own pick once (bypassing the hold so it doesn't re-latch). Returns true when it
     // consumed the announce. Only party members trip it (a stranger's swing isn't the
     // party's turn); the hold's own party-size gate means we're always partied here.
-    private bool TryReleaseNotLastHold(string announcer)
+    // An attack on a monster by the player a follow hold waits for is left to
+    // TryFollowTargetPriority (followable), which ends the shared wait on their target.
+    private bool TryReleaseNotLastHold(string announcer, bool followable = false)
     {
         if (!_awaitingNotLast) return false;
         if (!IsPartyMember(announcer)) return false;
+        if (followable && _awaitingFollowAnnounce && IsFollowedPlayer(_readSettings(), announcer))
+            return false;
 
         _awaitingNotLast = false;
         if (_classifier.Current is { } obs)
         {
             _log?.Combat(LogCategory,
                 $"attack-not-last — first party announce ({announcer}); engaging our own pick once");
-            _notLastDeferBypass = true;
-            _releasingNotLastHold = true;
-            try { OnEntitiesObserved(obs); }
-            finally
-            {
-                _notLastDeferBypass = false;
-                _releasingNotLastHold = false;
-            }
+            EngageReleasedHold(obs, "attack-not-last");
         }
         return true;
     }
+
+    // The player Target Priority follows (the leader's or a named member's full
+    // name), or null when it follows no one.
+    private string? FollowedPlayerName(CombatSettings settings) => settings.TargetPriority switch
+    {
+        TargetPriority.FollowLeader => _party.LeaderName,
+        TargetPriority.FollowMember => settings.TargetPriorityMemberName,
+        _                           => null,
+    };
+
+    // Announcers carry the given name; the followed name may be a full `par` name.
+    private bool IsFollowedPlayer(CombatSettings settings, string announcer)
+        => FollowedPlayerName(settings) is { Length: > 0 } followName
+        && string.Equals(GivenName(announcer), GivenName(followName), StringComparison.OrdinalIgnoreCase);
 
     // True when the room-entry picker should hold our own target and wait for the
     // followed player's attack announce instead of engaging independently. Only
@@ -3136,13 +3159,7 @@ public sealed partial class CombatManager : IDisposable
         if (!_party.IsInParty) return false;
         if (engageableCount <= 1) return false;
 
-        string? followName = settings.TargetPriority switch
-        {
-            TargetPriority.FollowLeader => _party.LeaderName,
-            TargetPriority.FollowMember => settings.TargetPriorityMemberName,
-            _                           => null,
-        };
-        if (followName is not { Length: > 0 }) return false;
+        if (FollowedPlayerName(settings) is not { Length: > 0 } followName) return false;
 
         string followGiven = GivenName(followName);
         for (int i = 0; i < obs.Entities.Count; i++)
@@ -3172,22 +3189,14 @@ public sealed partial class CombatManager : IDisposable
         // party scoping per mode).
         if (!_party.IsInParty) return false;
 
-        string? followName = settings.TargetPriority switch
-        {
-            TargetPriority.FollowLeader => _party.LeaderName,
-            TargetPriority.FollowMember => settings.TargetPriorityMemberName,
-            _                           => null,
-        };
-        if (followName is not { Length: > 0 }) return false;
-        // FollowLeader reads LeaderName (full `par` name) and FollowMember reads a
-        // user-typed name; the announcer is always a given name — normalise both.
-        if (!string.Equals(GivenName(announcer), GivenName(followName), StringComparison.OrdinalIgnoreCase))
-            return false;
+        if (!IsFollowedPlayer(settings, announcer)) return false;
 
         // The followed player just announced — our deferral is resolved either way
         // (we engage their target below, or the un-actionable failback re-picks our
-        // own), so drop the hold before OnCombatTick's fallback can also fire.
+        // own), so drop the hold before OnCombatTick's fallback can also fire. A
+        // not-last hold latched beside it is the same wait and ends with it.
         _awaitingFollowAnnounce = false;
+        _awaitingNotLast = false;
 
         if (_classifier.Current is { } liveObs)
         {
@@ -3200,7 +3209,7 @@ public sealed partial class CombatManager : IDisposable
                     $"{announcedTarget} un-actionable for us ({annReason}); " +
                     "re-picking our own target");
                 _currentTarget = null;
-                OnEntitiesObserved(liveObs);
+                EngageReleasedHold(liveObs, "target-priority follow");
                 return true;
             }
 
@@ -4547,7 +4556,7 @@ public sealed partial class CombatManager : IDisposable
         _awaitingFollowAnnounce = false;
         _awaitingNotLast = false;
         _arrivalSettleArmed = false;
-        DropArrivalSettleReleases();
+        _arrivalSettleCarriedRelease = null;
         ClearBackstabResolution();
         ClearAttackSpellCascadeState();
     }
