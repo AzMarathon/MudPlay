@@ -1,5 +1,14 @@
 # Version history
 
+## 3.184.6
+
+- Lost-recovery walk-back stops after 64 reverse moves and gives up as an exhausted one does
+- Unsure of your room, a text-exit move (`go path`) still narrows down where you are
+- Unsure of your room, a refused, blocked, rate-limited or unanswered move is no longer counted when the room shows again
+- Unsure of your room, moves typed together are each matched to their own room display
+- Unsure of your room, a move into a dark room (or made blind) still counts, and so does a Lost room display that fits no room exactly
+- A walk's forward re-locate reads every step's landing in order; a room it, the walk-back or an unsure re-match settles on is never saved as your known room, and a relog lands back on it
+
 ## 3.184.0
 
 - Auto-Light: the room-light spell is read by its cast code again, so the Add-buff dialog offers "Only when the room is dark" (re-tick it on a slot the old bug cleared) and the spell counts toward lighting a route

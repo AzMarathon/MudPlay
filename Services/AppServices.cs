@@ -4162,6 +4162,11 @@ public sealed class AppServices
         // grids when NO engine is driving; it stands down while one is attached so
         // the gate's tier-2 forward localiser is the sole re-anchor.
         RoomTracker.SetEngineAttachedProbe(() => Recovery.HasAttachedEngine);
+        // How long a move typed while unsure is waited for scales with the
+        // character's hop (Auto-Lair's travel model: Paradigm's movement formula or
+        // Stock's encumbrance buckets). AutoLair is built later in init; the lambda
+        // only reads it once moves are going out.
+        RoomTracker.SetExpectedHopProbe(() => AutoLair?.TravelCostModel.EstimateTravel(1) ?? TimeSpan.Zero);
         // Tier-3 look-sweep combat gate: clear the recovery room before peeking
         // (lit) / wait a combat tick for an ambush to reveal (dark). Reads the
         // predicate live so an auto-attack toggle is honoured; the tick drives
@@ -4208,7 +4213,8 @@ public sealed class AppServices
         // On every save (including the save-on-close), stamp the live confirmed
         // room as LastKnownRoom so the next session lands where the player actually
         // is — not at the last strict anchor, which lags behind predicted-neighbour
-        // moves through same-named rooms.
+        // moves through same-named rooms. A room worked out while unsure is a guess
+        // and is never stamped; the save keeps the trail from it instead.
         Profile.ProfileSaving += _ => RoomTracker.PersistCurrentRoomForSave();
         if (Profile.Current is { } loaded) RoomTracker.Hydrate(loaded);
 
