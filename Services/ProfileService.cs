@@ -943,6 +943,8 @@ public sealed class ProfileService
             copy.Equipment?.Sets.Clear();
             copy.LearnedSpells = null;
             copy.DeathHistory = null;
+            // The source holds those items, not the copy.
+            copy.CorpseHandoffs = null;
             copy.StashedCopper = null;
             copy.StateUnverified = true;
             JsonStore.Save(path, copy);

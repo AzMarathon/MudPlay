@@ -28,9 +28,12 @@ public sealed class CommandHistory
     // repeat of the newest entry are ignored so recall stays useful (re-sending
     // the same move shouldn't bury the history under duplicates). Once at
     // Capacity the oldest entry is dropped.
+    // Another player's corpse password is left off, so a recalled `recover corpse`
+    // needs it typed again.
     public void Record(string command)
     {
         if (string.IsNullOrWhiteSpace(command)) return;
+        command = Game.Recovery.CorpseRecoveryLines.WithoutPassword(command);
         if (_entries.Count > 0 && _entries[^1] == command) return;
         _entries.Add(command);
         if (_entries.Count > Capacity) _entries.RemoveAt(0);

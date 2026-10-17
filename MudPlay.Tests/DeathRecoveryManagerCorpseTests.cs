@@ -37,6 +37,23 @@ public sealed partial class DeathRecoveryManagerTests
     }
 
     [Fact]
+    public void Paradigm_AFriendsCorpseRecoveredMeanwhile_DoesNotCloseOurPile()
+    {
+        // The same closing line names whose corpse it was (user, 2026-10-17).
+        using GraphHarness h = DiedAtTheGates();
+        h.Tracker.NoteMoveSentByObserver(Direction.S);
+        h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();
+        Assert.Contains("recover corpse Ermias", h.Sent);
+
+        h.Recovery.FeedTestLine("You have recovered the corpse of Raijin.");
+        Assert.NotEqual(DeathRecoveryStatus.Recovered, h.Latest.Status);
+
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
+    [Fact]
     public void Paradigm_WalkIn_ThenWalkingOn_TheNextRoomsFloorDoesNotMarkThePileMissing()
     {
         // The corpse is there and asked for. The walk goes on into a room with a

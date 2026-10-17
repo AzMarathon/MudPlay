@@ -94,6 +94,10 @@ public static class BugReportBuilder
             }
             secrets.Add(new(BugReportScrub.SuicidePasswordLabel, Open(profile.EncryptedSuicidePassword)));
         }
+        // Other players' corpse passwords typed this session: held in memory only, so
+        // they can be found wherever the terminal or a log caught them.
+        foreach (string password in svc.CorpseHandoff.SessionPasswords)
+            secrets.Add(new(BugReportScrub.CorpsePasswordLabel, password));
         // Only the name the game itself shows is exempt: a profile can be called
         // anything, the login name included.
         return BugReportScrub.Build(secrets, [Guard<string?>(() => svc.PlayerStats.Name, null)], unreadable, compiled);
@@ -160,6 +164,7 @@ public static class BugReportBuilder
                     scrubber, Censor))),
             new(BugReportAutomationSections.PermissionsHeading, SafeSection(() => BugReportAutomationSections.RemotePermissions(svc))),
             new(BugReportAutomationSections.DeathsHeading, SafeSection(() => BugReportAutomationSections.DeathHistory(svc.DeathRecovery.Records))),
+            new(BugReportAutomationSections.CorpseHandoffsHeading, SafeSection(() => BugReportAutomationSections.CorpseHandoffs(svc.CorpseHandoff.Records))),
             new("Keybindings (changed from the default)", SafeSection(() => BuildKeybindings(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
             new("Monster observations (this character, newest first)", SafeSection(() => BuildMonsterObservations(svc))),
@@ -210,7 +215,7 @@ public static class BugReportBuilder
     {
         StringBuilder sb = new();
         Kv(sb, "Account details", scrubber.MaskedValues > 0
-            ? $"the account details saved in MudPlay ({scrubber.MaskedValues} value(s): login name, login password, suicide password) "
+            ? $"the account details saved in MudPlay and the corpse recovery passwords typed this session ({scrubber.MaskedValues} value(s): login name, login password, suicide password, corpse passwords) "
               + $"are written as `{BugReportScrub.Mask}` wherever they appear in this report"
             : "none are saved in MudPlay for this character, so none could be masked: a login typed by hand is not known to the client");
         if (scrubber.UnreadableValues > 0)

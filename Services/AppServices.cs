@@ -2065,6 +2065,9 @@ public sealed class AppServices
     // state machine off room re-entry and pickup confirmations.
     public Game.Recovery.DeathRecoveryManager DeathRecovery { get; private set; } = null!;
 
+    // Other players' corpses recovered with their password, kept to hand back.
+    public Game.Recovery.CorpseHandoffManager CorpseHandoff { get; private set; } = null!;
+
     // Runtime inventory parser. Folds the full i
     // dump into a currency + numeric-encumbrance
     // Game.Inventory.InventorySnapshot and patches it
@@ -7225,6 +7228,39 @@ public sealed class AppServices
         // updates holdings — this is the only path that catches buy / sell
         // wealth swings (CashManager's own patterns see get / drop only).
         Inventory.Changed += Cash.OnInventoryChanged;
+
+        // Another player's corpse recovered with their password: recorded off the
+        // recovery's lines and handed back through the item-sweep pacer, each give
+        // struck off on the game's confirmation.
+        CorpseHandoff = new Game.Recovery.CorpseHandoffManager(
+            Profile,
+            selfName: () => Party.LocalCharacterName ?? Profile.Current?.Name,
+            currentRoom: () => RoomTracker.State.CurrentRoom is { } here
+                ? (new Models.Profile.RoomRef(here.Key.Map, here.Key.Room), here.Name)
+                : (null, null),
+            canonicalCurrency: Currency.Canonicalize,
+            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            runicName: () => Currency.RunicName,
+            sendPaced: (commands, owner, mayGo) => InventoryAction.SendPaced(commands, owner, mayGo),
+            recallPaced: owner => InventoryAction.RecallPaced(owner, _ => true),
+            scheduleAfter: (delay, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            log: Log);
+        Cash.CoinCollected += CorpseHandoff.NoteCoinsPicked;
+        Inventory.ItemGivenAway += CorpseHandoff.OnItemGivenAway;
+        Inventory.CoinsGivenAway += CorpseHandoff.OnCoinsGivenAway;
+        Inventory.GiveRefused += CorpseHandoff.OnGiveRefused;
+        Inventory.CoinGiveMisaimed += CorpseHandoff.OnCoinGiveRefused;
+        Inventory.CoinGiveLackedCoins += CorpseHandoff.OnCoinGiveRefused;
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewRoom is not null && t.PreviousRoom is not null && !t.PreviousRoom.Key.Equals(t.NewRoom.Key))
+                CorpseHandoff.NoteRoomChanged();
+        };
 
         // StashRoomManager. NOT autonomous:
         // AutoDepositManager (built below) drives ExecuteStash on arrival

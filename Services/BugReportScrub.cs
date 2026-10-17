@@ -3,8 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace MudPlay.Services;
 
-// Takes the account's login name, login password and suicide password out of a
-// bug report. Reports get attached to public issues, so none of the three may
+// Takes the account's login name, login password and suicide password, and any
+// other player's corpse password typed this session, out of a bug report. Reports get attached to public issues, so none of the three may
 // appear anywhere in one: not in the scrollback, the wire, the program log, the
 // sent-command trail, a trigger's text or a settings dump. The scrub runs over
 // the whole rendered document, after every section is built, so a section added
@@ -346,6 +346,7 @@ public static class BugReportScrub
     public const string LoginNameLabel = "login name";
     public const string LoginPasswordLabel = "login password";
     public const string SuicidePasswordLabel = "suicide password";
+    public const string CorpsePasswordLabel = "corpse recovery password";
 
     private static string SplitTolerant(string value)
     {

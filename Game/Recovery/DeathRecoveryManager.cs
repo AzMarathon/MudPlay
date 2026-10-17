@@ -2255,11 +2255,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private string? FindOurCorpse()
     {
         if (_groundItems is not { } ground) return null;
-        // Prefer the live in-game name over the profile's stored name, which a copied
-        // profile can leave stale (report stock-20260828-104653) — matching another
-        // player's corpse would be a serious mis-recovery.
-        string? live = _liveSelfName?.Invoke();
-        string ourGiven = FirstToken(!string.IsNullOrWhiteSpace(live) ? live : _profile.Current?.Name);
+        string ourGiven = OurGivenName();
         string? loneCorpse = null;
         int corpseCount = 0;
         foreach (string item in ground.Items)
@@ -2275,8 +2271,14 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         return ourGiven.Length == 0 && corpseCount == 1 ? loneCorpse : null;
     }
 
-    private static string FirstToken(string? name) =>
-        string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim().Split(' ')[0];
+    // Prefer the live in-game name over the profile's stored name, which a copied
+    // profile can leave stale (report stock-20260828-104653) — matching another
+    // player's corpse would be a serious mis-recovery.
+    private string OurGivenName()
+    {
+        string? live = _liveSelfName?.Invoke();
+        return CorpseRecoveryLines.GivenName(!string.IsNullOrWhiteSpace(live) ? live : _profile.Current?.Name);
+    }
 
     private List<string> PileNames(DeathRecord record)
     {
@@ -2395,16 +2397,24 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // Pass-through spillover "You took" is independent of any death-room
         // recovery (we're standing in a NEIGHBOUR of the death room, not it), so it
         // runs before the _activeRecovery guard below.
-        if (_spilloverRecovering && YouTookRegex().Match(line.Text) is { Success: true } spill)
+        if (_spilloverRecovering && CorpseRecoveryLines.Took(line.Text) is { } spill)
         {
-            OnSpilloverItemTaken(spill.Groups["item"].Value);
+            OnSpilloverItemTaken(spill);
             return;
         }
 
         if (_activeRecovery is null) return;
 
-        if (!line.IsPromptLine && CorpseRecoveredRegex().IsMatch(line.Text))
+        if (!line.IsPromptLine && CorpseRecoveryLines.Completed(line.Text) is { } whose)
         {
+            // Another player's corpse prints the same line, and it is theirs, not
+            // ours (CorpseHandoffManager keeps it to hand back).
+            string ours = OurGivenName();
+            if (ours.Length > 0 && !string.Equals(CorpseRecoveryLines.GivenName(whose), ours, StringComparison.OrdinalIgnoreCase))
+            {
+                _log?.Debug(LogCategory, $"paradigm: recovered {whose}'s corpse, not ours — our pile stays open");
+                return;
+            }
             DeathRecord record = _activeRecovery;
             int total = PileNames(record).Count;
             _log?.Info(LogCategory, $"paradigm: corpse recovered ({total} item(s)) — re-equipping worn gear");
@@ -2415,8 +2425,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             return;
         }
 
-        if (_stockRecovering && YouTookRegex().Match(line.Text) is { Success: true } took)
-            OnStockItemTaken(took.Groups["item"].Value);
+        if (_stockRecovering && CorpseRecoveryLines.Took(line.Text) is { } took)
+            OnStockItemTaken(took);
     }
 
     // A "You took <item>." landed while grabbing spillover in a room next to a death
@@ -3177,21 +3187,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     [GeneratedRegex(@"^corpse of (?<name>.+?)\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex CorpseRegex();
-
-    // "You have recovered the corpse of <name>." — the single line that ends a
-    // successful `recover corpse`, after which the whole pile (items + coins) is
-    // back in the pack. A realm that phrases this differently simply leaves the
-    // record Partial (the user can Mark Recovered); no false transition occurs.
-    [GeneratedRegex(@"^You have recovered the corpse of .+?\.$", RegexOptions.CultureInvariant)]
-    private static partial Regex CorpseRecoveredRegex();
-
-    // "You took <item>." — the own-pickup confirmation for a Stock ground `get`
-    // (matches KnownPatterns.PlayerGets' own branch; the "<player> picks up" form
-    // is another player and never reaches here). Drives the per-item Stock
-    // deathpile decrement. "You took N damage." is the engine's damage report,
-    // not a pickup.
-    [GeneratedRegex(@"^You took (?!\d+ damage\.$)(?<item>.+?)\.$", RegexOptions.CultureInvariant)]
-    private static partial Regex YouTookRegex();
 
     // "Your <item> has returned to its rightful place." — printed to the dying
     // player for an item the engine found no room for anywhere (GAME_MECHANICS

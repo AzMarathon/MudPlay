@@ -1,11 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.2**
-> - Deaths remember the game data they were recorded on, shown in a new Game data column
-> - Recover Now, Auto-Recover and the map's skull skip a pile recorded on another game data; older deaths, and those of a game data no longer installed, count as the active one's
-> - A hang-up death keeps the game data the link dropped on
-> - @death names the game data of a death recorded on another one
+> **Version 3.182.0**
+> - Recovering a friend's corpse with `recover corpse <name> <password>` records every item and coin taken from it
+> - Death Recovery lists those corpses; Corpse handoff gives everything back to the name you type, paced, and keeps what was refused or unanswered
+> - The recover password is never saved or logged, and is masked in the Commands-sent capture, Up-arrow recall and bug reports
+> - Recovering a friend's corpse no longer marks your own open pile recovered
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
