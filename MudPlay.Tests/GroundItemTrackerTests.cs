@@ -1,4 +1,3 @@
-using System.Reflection;
 using MudPlay.Game.Cash;
 using MudPlay.Game.Inventory;
 using MudPlay.Services;
@@ -16,15 +15,15 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class GroundItemTrackerTests
 {
-    private static (GroundItemTracker ground, MessageRouter router, LineExtractor lines) Setup(
+    private static (GroundItemTracker ground, MessageRouter router, ServerFeed feed) Setup(
         Func<string, bool>? isKnownItem = null)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         GroundItemTracker ground = new(router, new CurrencyNaming(), isKnownItem);
-        LineExtractor lines = new(new TerminalEmulator(80, 24));
-        ground.AttachLineExtractor(lines);
-        return (ground, router, lines);
+        ServerFeed feed = new();
+        ground.AttachLineExtractor(feed.Lines);
+        return (ground, router, feed);
     }
 
     // Single-line survey path — through the router pattern subscription.
@@ -32,19 +31,6 @@ public sealed class GroundItemTrackerTests
         router.Dispatch(new LineExtractor.EmittedLine(
             text, Array.Empty<CellAttributes>(),
             DateTimeOffset.UtcNow, IsPromptLine: false));
-
-    // Multi-line stitch path — through the LineExtractor's emitted-line event.
-    private static void FeedLine(LineExtractor lines, string text)
-    {
-        FieldInfo? field = typeof(LineExtractor).GetField(
-            "LineEmitted", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (field?.GetValue(lines) is Action<LineExtractor.EmittedLine> handler)
-        {
-            handler(new LineExtractor.EmittedLine(
-                text, Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false));
-        }
-    }
 
     [Fact]
     public void EmptyBeforeSurvey()
@@ -90,10 +76,10 @@ public sealed class GroundItemTrackerTests
     [Fact]
     public void MultiLineWrap_StitchesAcrossRows()
     {
-        var (ground, _, lines) = Setup();
+        var (ground, _, feed) = Setup();
 
-        FeedLine(lines, "You notice a rusty dagger, a torch and a");
-        FeedLine(lines, "healing potion here.");
+        feed.Line("You notice a rusty dagger, a torch and a");
+        feed.Line("healing potion here.");
 
         Assert.Equal(new[] { "a rusty dagger", "a torch", "a healing potion" }, ground.Items);
     }
@@ -106,12 +92,12 @@ public sealed class GroundItemTrackerTests
         // count-prefixed items split at the wrap ("…, 2" + "padded boots, …"). Every
         // item the deathpile sweep needs must survive the stitch — a single-line
         // parse missed it entirely, so the sweep peeked but never walked.
-        var (ground, _, lines) = Setup();
+        var (ground, _, feed) = Setup();
 
-        FeedLine(lines, "You notice bone key, amethyst ring, demonhide sandals, silver bracelet, 2");
-        FeedLine(lines, "padded boots, 2 padded pants, 2 silk robe, 2 silk cape, 2 bone charm, 2 padded");
-        FeedLine(lines, "gloves, 2 padded helm, waterskin, sandals, skullcap, cotton gloves, cloth");
-        FeedLine(lines, "pants, small sign here.");
+        feed.Line("You notice bone key, amethyst ring, demonhide sandals, silver bracelet, 2");
+        feed.Line("padded boots, 2 padded pants, 2 silk robe, 2 silk cape, 2 bone charm, 2 padded");
+        feed.Line("gloves, 2 padded helm, waterskin, sandals, skullcap, cotton gloves, cloth");
+        feed.Line("pants, small sign here.");
 
         Assert.Contains("bone key", ground.Items);
         Assert.Contains("2 padded boots", ground.Items);   // count survived the wrap-join

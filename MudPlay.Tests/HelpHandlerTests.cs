@@ -31,7 +31,7 @@ public sealed class HelpHandlerTests
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(chat, party, players);
         engine.SetWireSender(_replies.Add);
         HelpHandler handler = new(engine);

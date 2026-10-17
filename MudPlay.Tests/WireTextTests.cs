@@ -12,6 +12,9 @@ namespace MudPlay.Tests;
 // can't be encoded in Latin-1 at all and arrived as `?`.
 public sealed class WireTextTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     // What the remote-command engine put on the wire, through the sender the client binds.
     private readonly List<byte[]> _replies = new();
 
@@ -49,11 +52,12 @@ public sealed class WireTextTests
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         players.RecordObservation("Friend", @class: null, race: null, alignment: null,
             title: null, gang: null, role: null, nowUtc: Now);
         players.EditCustomization("Friend", new PlayerCustomization(RemoteControls: PlayerRemoteControls.All));
         RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         engine.RegisterHandler("@probe", PlayerRemoteControls.QueryVersion, ctx =>
         {
@@ -61,7 +65,7 @@ public sealed class WireTextTests
             ctx.Refuse("needs ≥2 rooms");
         });
 
-        engine.DispatchForTests(new ChatLogEntry(Now, channel, "Friend", "@probe", "Friend: @probe"));
+        ChatLines.Hear(_routers[engine], new ChatLine(channel, "Friend", "@probe"));
 
         Assert.Equal(2, _replies.Count);
         foreach (byte[] sent in _replies)

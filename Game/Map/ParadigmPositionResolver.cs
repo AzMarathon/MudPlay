@@ -246,13 +246,6 @@ public sealed class ParadigmPositionResolver : IDisposable
         ResyncFailed?.Invoke();
     }
 
-    // ----- test seams ------------------------------------------------
-    internal void FeedLocationForTests(int map, int room)
-        => OnLocationObserved(new MatchResult(
-            KnownPatterns.ParadigmLocation,
-            default,
-            new[] { map.ToString(), room.ToString() }));
-
     internal void FireTimeoutForTests() => OnTimeout();
 
     public void Dispose()

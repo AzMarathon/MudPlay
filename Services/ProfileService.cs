@@ -352,37 +352,6 @@ public sealed class ProfileService
         }
     }
 
-    // Start a fresh in-memory draft profile from the installed defaults and fire
-    // ProfileLoaded — a scratch profile whose edits stay in memory (Save writes
-    // nothing for an unnamed profile) until it's named via Save As.
-    // Distinct from LoadDefaultProfile, which starts from the Global default file.
-    // Any outgoing profile is auto-saved first so per-session edits aren't dropped.
-    public CharacterProfile LoadBlank()
-    {
-        string? outgoing = CurrentProfileName;
-        if (Current is not null)
-        {
-            try { Save(); }
-            catch { /* swallow — a load shouldn't fail because the outgoing save did */ }
-            Current = null;
-            CurrentProfileName = null;
-            ProfileClosed?.Invoke();
-        }
-
-        CharacterProfile draft = new();
-        Current = draft;
-        CurrentProfileName = null;
-        CurrentBbsName = null;
-        Log?.Info(LogCategory, outgoing is null
-            ? "Started a blank draft profile (no character loaded)."
-            : $"Closed profile '{outgoing}'; started a blank draft profile.");
-        ProfileLoaded?.Invoke(draft);
-        // After the load's own handlers: a store that saves as it takes the new
-        // profile in is not the user changing anything.
-        _draftSaveWanted = false;
-        return draft;
-    }
-
     // Load the "default profile" — the CharacterProfile persisted at
     // AppPaths.DefaultProfileFile in the Global folder — and fire ProfileLoaded.
     // Used on app start when no last-used named profile exists, and by New.
@@ -471,7 +440,9 @@ public sealed class ProfileService
                 ? "Loaded the default profile (no character loaded)."
                 : $"Closed profile '{outgoing}'; loaded the default profile.");
         ProfileLoaded?.Invoke(profile);
-        _draftSaveWanted = somethingToKeep;   // set after the handlers, as in LoadBlank
+        // After the load's own handlers: a store that saves as it takes the new
+        // profile in is not the user changing anything.
+        _draftSaveWanted = somethingToKeep;
         return profile;
     }
 

@@ -63,8 +63,6 @@ public sealed partial class CombatEntryRefusalHandler : IDisposable
         _wireSender = sender;
     }
 
-    internal void FeedTestLine(string text) => HandleLine(text);
-
     // Test seam: run the post-break retry synchronously. The DispatcherTimer
     // tick that drives it in-app isn't pumped in headless xUnit.
     internal void CompleteRetryForTest() => CompleteRetry();

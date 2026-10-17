@@ -10,13 +10,16 @@ namespace MudPlay.Tests;
 
 public sealed class PartyEssentialHandlersTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     // What the remote-command engine put on the wire, through the sender the client binds.
     private readonly List<byte[]> _replies = new();
 
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
     // Build a self-contained engine + handlers + the state they read from.
-    // Tests dispatch via RemoteCommandManager.DispatchForTests and read the
+    // Tests send chat lines through the router (ChatLines.Hear) and read the
     // replies from _replies. PartyEssentialHandlers' own wire-sender is
     // captured separately so we can assert on the @party-relay path.
     private (RemoteCommandManager engine, PartyEssentialHandlers handlers, PlayerState player, PartyState party, PlayerDatabase players, List<byte[]> partyRelay) Setup(
@@ -34,9 +37,10 @@ public sealed class PartyEssentialHandlersTests
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         PlayerState player = new();
         RemoteCommandManager engine = new(chat, party, players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         PartyEssentialHandlers handlers = new(engine, player, party,
             readCurrentRoom: readCurrentRoom ?? (() => currentRoom),
@@ -52,8 +56,8 @@ public sealed class PartyEssentialHandlersTests
         return (engine, handlers, player, party, players, relayCapture);
     }
 
-    private static ChatLogEntry Telepath(string sender, string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
+    private static ChatLine Telepath(string sender, string msg) =>
+        new(ChatChannel.TelepathIncoming, sender, msg);
 
     private static void SeedPlayer(PlayerDatabase db, string name, PlayerRemoteControls controls)
     {
@@ -97,7 +101,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, _, players, _) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryVersion);
-        engine.DispatchForTests(Telepath("Friend", "@version"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@version"));
 
         Assert.Contains("MudPlay", LastReply());
     }
@@ -112,7 +116,7 @@ public sealed class PartyEssentialHandlersTests
         // <Version> bump propagates automatically.
         var (engine, _, _, _, players, _) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryVersion);
-        engine.DispatchForTests(Telepath("Friend", "@version"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@version"));
 
         string reply = LastReply();
         Assert.Contains($"{{MudPlay {Services.AppInfo.Version}}}", reply);
@@ -125,7 +129,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, _, players, _) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
-        engine.DispatchForTests(Telepath("Friend", "@health"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@health"));
 
         Assert.Contains("HP unknown", LastReply());
     }
@@ -141,7 +145,7 @@ public sealed class PartyEssentialHandlersTests
         player.Position = PlayerPosition.Resting;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@health"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@health"));
 
         // Full wire: /<given> {<payload>}\r. The reply body is
         // brace-wrapped at SendReply per the remote-command convention.
@@ -162,7 +166,7 @@ public sealed class PartyEssentialHandlersTests
         player.Position = PlayerPosition.Standing;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@health"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@health"));
         Assert.Equal("/Friend {HP=100/150,MA=75/85}\r", LastReply());
     }
 
@@ -177,7 +181,7 @@ public sealed class PartyEssentialHandlersTests
         player.Position = PlayerPosition.Meditating;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@health"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@health"));
         Assert.Equal("/Friend {HP=100/150,MA=75/85, Meditating}\r", LastReply());
     }
 
@@ -191,7 +195,7 @@ public sealed class PartyEssentialHandlersTests
         player.ManaType = ManaType.Kai;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@health"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@health"));
         Assert.Equal("/Friend {HP=500/500,KAI=150/150}\r", LastReply());
     }
 
@@ -206,7 +210,7 @@ public sealed class PartyEssentialHandlersTests
         player.ManaType = ManaType.None;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@health"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@health"));
         Assert.Equal("/Friend {HP=200/200}\r", LastReply());
     }
 
@@ -218,7 +222,7 @@ public sealed class PartyEssentialHandlersTests
         player.Position = PlayerPosition.Meditating;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@status"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@status"));
         // Not moving + meditating → "meditating"; room unknown (no tracker fix);
         // no ETA clause (not walking); ailment clause. No boat/steps ETA present.
         Assert.Equal("/Friend {meditating; location unknown; no ailments}\r", LastReply());
@@ -239,7 +243,7 @@ public sealed class PartyEssentialHandlersTests
         player.Position = PlayerPosition.Standing;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@status"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@status"));
         string reply = LastReply();
         Assert.Contains("walking to 5/1141", reply);
         Assert.Contains("Market Road (map 5, room 1000)", reply);
@@ -258,7 +262,7 @@ public sealed class PartyEssentialHandlersTests
         player.Position = PlayerPosition.Standing;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@status"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@status"));
         string reply = LastReply();
         Assert.Contains("paused en route to 5/1141", reply);
         Assert.DoesNotContain("walking to", reply);
@@ -279,7 +283,7 @@ public sealed class PartyEssentialHandlersTests
         player.Position = PlayerPosition.Resting;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@status"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@status"));
         string reply = LastReply();
         Assert.Contains("resting (low HP) on loop 'Newhaven Sewers'", reply);
         Assert.DoesNotContain("running loop", reply);
@@ -309,7 +313,7 @@ public sealed class PartyEssentialHandlersTests
         player.Position = PlayerPosition.Standing;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@status"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@status"));
         string reply = LastReply();
         Assert.Contains("sailing to tal'kiran", reply);
         Assert.Contains("The Ship's Hold (map 2, room 500)", reply);
@@ -329,7 +333,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@path"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@path"));
         string reply = LastReply();
         Assert.Contains("not moving", reply);
         Assert.Contains("last ran loop 'Orc Cave 1'", reply);
@@ -344,7 +348,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@path"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@path"));
         Assert.Contains("last ran auto-lair 'Dragon Lair'", LastReply());
     }
 
@@ -356,7 +360,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@path"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@path"));
         string reply = LastReply();
         Assert.Contains("not moving", reply);
         Assert.DoesNotContain("last ran", reply);
@@ -371,7 +375,7 @@ public sealed class PartyEssentialHandlersTests
         player.InCombat = true;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@status"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@status"));
         Assert.Contains("fighting", LastReply());
     }
 
@@ -386,7 +390,7 @@ public sealed class PartyEssentialHandlersTests
         player.InCombat = true;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@status"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@status"));
         string reply = LastReply();
         Assert.Contains("fleeing", reply);
         Assert.DoesNotContain("fighting", reply);
@@ -401,7 +405,7 @@ public sealed class PartyEssentialHandlersTests
         player.Position = PlayerPosition.Standing;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@status"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@status"));
         // Table order is poison, blind, confused, diseased.
         Assert.Contains("ailments: poisoned, blind", LastReply());
     }
@@ -417,7 +421,7 @@ public sealed class PartyEssentialHandlersTests
         player.Position = PlayerPosition.Standing;
         player.HasPromptData = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@status"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@status"));
         Assert.Contains("no ailments", LastReply());
     }
 
@@ -426,7 +430,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, _, players, _) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
-        engine.DispatchForTests(Telepath("Friend", "@party"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@party"));
 
         Assert.Contains("no active party", LastReply());
     }
@@ -442,7 +446,7 @@ public sealed class PartyEssentialHandlersTests
         party.IsInParty = true;
         party.SelfIsLeader = false;
 
-        engine.DispatchForTests(Telepath("Friend", "@party"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@party"));
 
         // Given name only — family is stripped (the @-command layer
         // never addresses players by family name).
@@ -461,7 +465,7 @@ public sealed class PartyEssentialHandlersTests
         party.IsInParty = true;
         party.SelfIsLeader = true;
 
-        engine.DispatchForTests(Telepath("Friend", "@party"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@party"));
 
         // Family-stripped given names, comma-separated, roster order,
         // excluding self + leader.
@@ -481,7 +485,7 @@ public sealed class PartyEssentialHandlersTests
         party.IsInParty = true;
         party.SelfIsLeader = true;
 
-        engine.DispatchForTests(Telepath("Helper", "@party rest"));
+        ChatLines.Hear(_routers[engine], Telepath("Helper", "@party rest"));
 
         Assert.Contains("{I'm leading: Helper}", LastReply());
         // No sub-command dispatched.
@@ -500,9 +504,8 @@ public sealed class PartyEssentialHandlersTests
         var (engine, _, _, party, _, _) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
 
-        ChatLogEntry say = new(Now, ChatChannel.Local, "Leader",
-            "@party", "Leader says: @party");
-        engine.DispatchForTests(say);
+        ChatLine say = new(ChatChannel.Local, "Leader", "@party");
+        ChatLines.Hear(_routers[engine], say);
 
         // We're "leading" Leader (the only member) — leader path with
         // no followers other than self.
@@ -518,9 +521,8 @@ public sealed class PartyEssentialHandlersTests
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
 
-        ChatLogEntry say = new(Now, ChatChannel.Local, "Leader",
-            "@party rest", "Leader says: @party rest");
-        engine.DispatchForTests(say);
+        ChatLine say = new(ChatChannel.Local, "Leader", "@party rest");
+        ChatLines.Hear(_routers[engine], say);
 
         Assert.Equal("rest\r", Encoding.Latin1.GetString(relay[0]));
     }
@@ -532,7 +534,7 @@ public sealed class PartyEssentialHandlersTests
         // accessor returns null and @where degrades to a plain message.
         var (engine, _, _, _, players, _) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        engine.DispatchForTests(Telepath("Friend", "@where"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@where"));
 
         Assert.Contains("Location unknown", LastReply());
     }
@@ -554,7 +556,7 @@ public sealed class PartyEssentialHandlersTests
         };
         var (engine, _, _, _, players, _) = Setup(room);
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        engine.DispatchForTests(Telepath("Friend", "@where"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@where"));
 
         string reply = LastReply();
         Assert.Contains("Town Square", reply);
@@ -592,7 +594,7 @@ public sealed class PartyEssentialHandlersTests
                 return true;
             });
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        engine.DispatchForTests(Telepath("Friend", "@where"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@where"));
 
         string reply = LastReply();
         Assert.Contains("Training Grounds", reply);
@@ -614,7 +616,7 @@ public sealed class PartyEssentialHandlersTests
                 return true;
             });
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        engine.DispatchForTests(Telepath("Friend", "@where"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@where"));
 
         string reply = LastReply();
         Assert.Contains("map 1", reply);
@@ -630,7 +632,7 @@ public sealed class PartyEssentialHandlersTests
         var (engine, _, _, _, players, _) = Setup(
             requestPositionRefix: (_, _, onFailed) => { onFailed(); return true; });
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        engine.DispatchForTests(Telepath("Friend", "@where"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@where"));
 
         Assert.Contains("Location unknown", LastReply());
     }
@@ -643,7 +645,7 @@ public sealed class PartyEssentialHandlersTests
         var (engine, _, _, _, players, _) = Setup(
             requestPositionRefix: (_, _, _) => false);
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        engine.DispatchForTests(Telepath("Friend", "@where"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@where"));
 
         Assert.Contains("Location unknown", LastReply());
     }
@@ -653,7 +655,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, _, players, _) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        engine.DispatchForTests(Telepath("Friend", "@who"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@who"));
 
         Assert.Contains("no one", LastReply());
     }
@@ -669,7 +671,7 @@ public sealed class PartyEssentialHandlersTests
         };
         var (engine, _, _, _, players, _) = Setup(roomEntities: entities);
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        engine.DispatchForTests(Telepath("Friend", "@who"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@who"));
 
         string reply = LastReply();
         Assert.Contains("Raijin", reply);
@@ -684,7 +686,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, _, players, _) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        engine.DispatchForTests(Telepath("Friend", "@path"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@path"));
 
         Assert.Contains("not moving", LastReply());
     }
@@ -701,7 +703,7 @@ public sealed class PartyEssentialHandlersTests
         MovementStatus mv = new(MovementKind.Loop, "Sewer farm", CurrentStep: 2, TotalSteps: 6);
         var (engine, _, _, _, players, _) = Setup(currentRoom: room, movement: mv);
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        engine.DispatchForTests(Telepath("Friend", "@path"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@path"));
 
         string reply = LastReply();
         Assert.Contains("Sewer farm", reply);
@@ -718,7 +720,7 @@ public sealed class PartyEssentialHandlersTests
         MovementStatus mv = new(MovementKind.Walking, "5/1141", CurrentStep: 0, TotalSteps: 4);
         var (engine, _, _, _, players, _) = Setup(movement: mv);
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        engine.DispatchForTests(Telepath("Friend", "@path"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@path"));
 
         string reply = LastReply();
         Assert.Contains("walking to 5/1141", reply);
@@ -730,15 +732,15 @@ public sealed class PartyEssentialHandlersTests
     // always return the status reply (covered in the Party_FromTelepath_*
     // tests above).
 
-    private static ChatLogEntry Say(string sender, string msg) =>
-        new(Now, ChatChannel.Local, sender, msg, $"{sender} says: {msg}");
+    private static ChatLine Say(string sender, string msg) =>
+        new(ChatChannel.Local, sender, msg);
 
     [Fact]
     public void PartyRest_FromPartyMember_SendsRestToWire()
     {
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party rest"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party rest"));
 
         Assert.Equal("rest\r", Encoding.Latin1.GetString(relay[0]));
     }
@@ -755,7 +757,7 @@ public sealed class PartyEssentialHandlersTests
         handlers.SetWireSender(_ => duringSend.Add(handlers.RelayingFor));
 
         Assert.Null(handlers.RelayingFor);
-        engine.DispatchForTests(Say("Leader", "@party break"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party break"));
 
         Assert.Equal(new string?[] { "Leader" }, duringSend);
         Assert.Null(handlers.RelayingFor);
@@ -770,11 +772,11 @@ public sealed class PartyEssentialHandlersTests
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
 
-        engine.DispatchForTests(Say("Stranger", "@party break"));
+        ChatLines.Hear(_routers[engine], Say("Stranger", "@party break"));
         Assert.Empty(relay);
 
         engine.BlockedByMasterSwitch = _ => true;
-        engine.DispatchForTests(Say("Leader", "@party break"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party break"));
         Assert.Empty(relay);
     }
 
@@ -783,7 +785,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party meditate"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party meditate"));
 
         Assert.Equal("medi\r", Encoding.Latin1.GetString(relay[0]));
     }
@@ -793,7 +795,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party go n"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party go n"));
 
         Assert.Equal("n\r", Encoding.Latin1.GetString(relay[0]));
     }
@@ -806,7 +808,7 @@ public sealed class PartyEssentialHandlersTests
         // the "go" verb must survive (drop it only for real cardinal directions).
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party go hole"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party go hole"));
 
         Assert.Equal("go hole\r", Encoding.Latin1.GetString(relay[0]));
     }
@@ -817,7 +819,7 @@ public sealed class PartyEssentialHandlersTests
         // A long-form direction word ("north") is still a cardinal — drop the "go".
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party go north"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party go north"));
 
         Assert.Equal("north\r", Encoding.Latin1.GetString(relay[0]));
     }
@@ -827,9 +829,9 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party stat"));
-        engine.DispatchForTests(Say("Leader", "@party i"));
-        engine.DispatchForTests(Say("Leader", "@party par"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party stat"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party i"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party par"));
 
         Assert.Equal(3, relay.Count);
         Assert.Equal("stat\r", Encoding.Latin1.GetString(relay[0]));
@@ -846,7 +848,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party use chime"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party use chime"));
 
         Assert.Single(relay);
         Assert.Equal("use chime\r", Encoding.Latin1.GetString(relay[0]));
@@ -857,7 +859,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party ring chime"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party ring chime"));
 
         Assert.Single(relay);
         Assert.Equal("ring chime\r", Encoding.Latin1.GetString(relay[0]));
@@ -870,7 +872,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party .hi"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party .hi"));
 
         Assert.Single(relay);
         Assert.Equal(".hi\r", Encoding.Latin1.GetString(relay[0]));
@@ -882,7 +884,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party cast heal raijin"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party cast heal raijin"));
 
         Assert.Single(relay);
         Assert.Equal("cast heal raijin\r", Encoding.Latin1.GetString(relay[0]));
@@ -899,7 +901,7 @@ public sealed class PartyEssentialHandlersTests
         List<string> relayed = new();
         handlers.PartyDirectiveRelayed += (_, command) => relayed.Add(command);
 
-        engine.DispatchForTests(Say("Leader", "@party say café ══"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party say café ══"));
 
         Assert.Equal("say caf? ??\r", Encoding.Latin1.GetString(Assert.Single(relay)));
         Assert.Equal(new[] { "say caf? ??" }, relayed);
@@ -912,7 +914,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPartyMember(party, "Leader", isLeader: true);
         const string command = "say Hi, \"there\" ~ {x} [1+2=3] 50% @home!";
 
-        engine.DispatchForTests(Say("Leader", "@party " + command));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party " + command));
 
         Assert.Equal(Encoding.ASCII.GetBytes(command + "\r"), Assert.Single(relay));
     }
@@ -925,7 +927,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party suicide"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party suicide"));
 
         Assert.Single(relay);
         Assert.Equal("suicide\r", Encoding.Latin1.GetString(relay[0]));
@@ -938,7 +940,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party set suicide hunter2"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party set suicide hunter2"));
 
         Assert.Empty(relay);
     }
@@ -948,7 +950,7 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, _, _, party, _, relay) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
-        engine.DispatchForTests(Say("Leader", "@party reroll"));
+        ChatLines.Hear(_routers[engine], Say("Leader", "@party reroll"));
 
         Assert.Empty(relay);
     }
@@ -963,7 +965,7 @@ public sealed class PartyEssentialHandlersTests
         // QueryHealthStatus so the engine doesn't refuse first.
         var (engine, _, _, _, players, relay) = Setup();
         SeedPlayer(players, "Stranger", PlayerRemoteControls.QueryHealthStatus);
-        engine.DispatchForTests(Say("Stranger", "@party rest"));
+        ChatLines.Hear(_routers[engine], Say("Stranger", "@party rest"));
 
         Assert.Empty(relay);
     }
@@ -976,7 +978,7 @@ public sealed class PartyEssentialHandlersTests
         var (engine, handlers, _, party, _, _) = Setup();
         SeedPartyMember(party, "Follower");
 
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
 
         Assert.Contains("Follower", handlers.WaitingMembers);
     }
@@ -986,10 +988,10 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, handlers, _, party, _, _) = Setup();
         SeedPartyMember(party, "Follower");
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
         Assert.Contains("Follower", handlers.WaitingMembers);
 
-        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@ok"));
         Assert.DoesNotContain("Follower", handlers.WaitingMembers);
     }
 
@@ -1002,7 +1004,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPartyMember(party, "Boss", isLeader: true);
         party.LeaderName = "Boss";
 
-        engine.DispatchForTests(Telepath("Boss", "@waiting"));
+        ChatLines.Hear(_routers[engine], Telepath("Boss", "@waiting"));
 
         Assert.Equal("/Boss @ok\r", Encoding.Latin1.GetString(relay[^1]));
     }
@@ -1014,7 +1016,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPartyMember(party, "Boss", isLeader: true);
         party.LeaderName = "Boss";
 
-        engine.DispatchForTests(Telepath("Boss", "@waiting"));
+        ChatLines.Hear(_routers[engine], Telepath("Boss", "@waiting"));
 
         Assert.Empty(relay);
     }
@@ -1027,7 +1029,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPartyMember(party, "Other");
         party.LeaderName = "Boss";
 
-        engine.DispatchForTests(Telepath("Other", "@waiting"));
+        ChatLines.Hear(_routers[engine], Telepath("Other", "@waiting"));
 
         Assert.Empty(relay);
     }
@@ -1039,13 +1041,13 @@ public sealed class PartyEssentialHandlersTests
         SeedPartyMember(party, "Follower");
         handlers.NotePause("Follower", ignoreOk: true);
 
-        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@ok"));
         Assert.True(handlers.IsPaused);
 
         handlers.ClearAllWaits();   // the wait window ran out
         Assert.False(handlers.IsPaused);
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
-        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@ok"));
         Assert.False(handlers.IsPaused);   // trusted again next time
     }
 
@@ -1055,8 +1057,8 @@ public sealed class PartyEssentialHandlersTests
         var (engine, handlers, _, party, _, _) = Setup();
         SeedPartyMember(party, "Follower");
         SeedPartyMember(party, "Other");
-        engine.DispatchForTests(Telepath("Follower", "@wait (too heavy to move)"));
-        engine.DispatchForTests(Telepath("Other", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait (too heavy to move)"));
+        ChatLines.Hear(_routers[engine], Telepath("Other", "@wait"));
 
         handlers.ReleaseWait("Follower");
 
@@ -1072,7 +1074,7 @@ public sealed class PartyEssentialHandlersTests
         DateTime now = new(2026, 9, 26, 19, 54, 30, DateTimeKind.Utc);
         handlers.NowProvider = () => now;
 
-        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@ok"));
         now = now.AddSeconds(1);
         Assert.True(handlers.OkedWithin("Follower", TimeSpan.FromSeconds(5)));
         now = now.AddSeconds(10);
@@ -1085,7 +1087,7 @@ public sealed class PartyEssentialHandlersTests
         // @wait is party-whitelist-gated by the engine; the wait-set
         // should never see a non-party sender.
         var (engine, handlers, _, _, _, _) = Setup();
-        engine.DispatchForTests(Telepath("Stranger", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@wait"));
 
         Assert.Empty(handlers.WaitingMembers);
     }
@@ -1095,9 +1097,9 @@ public sealed class PartyEssentialHandlersTests
     {
         var (engine, handlers, _, party, _, _) = Setup();
         SeedPartyMember(party, "Follower");
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
         // The @ok comes back with different casing — same player.
-        engine.DispatchForTests(Telepath("follower", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("follower", "@ok"));
 
         Assert.Empty(handlers.WaitingMembers);
     }
@@ -1112,7 +1114,7 @@ public sealed class PartyEssentialHandlersTests
         PartyMember row = party.Members[0];
         Assert.False(row.IsWaiting);
 
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
 
         Assert.True(row.IsWaiting);
     }
@@ -1123,10 +1125,10 @@ public sealed class PartyEssentialHandlersTests
         var (engine, _, _, party, _, _) = Setup();
         SeedPartyMember(party, "Follower");
         PartyMember row = party.Members[0];
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
         Assert.True(row.IsWaiting);
 
-        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@ok"));
         Assert.False(row.IsWaiting);
     }
 
@@ -1140,7 +1142,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPartyMember(party, "Follower Lastname");
         PartyMember row = party.Members[0];
 
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
 
         Assert.True(row.IsWaiting);
     }
@@ -1154,7 +1156,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPartyMember(party, "Follower");
         PartyMember row = party.Members[0];
 
-        engine.DispatchForTests(Telepath("Stranger", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@wait"));
 
         Assert.False(row.IsWaiting);
     }
@@ -1168,7 +1170,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
         engine.LivesProvider = null;
 
-        engine.DispatchForTests(Telepath("Friend", "@lives"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@lives"));
 
         Assert.Contains("lives unknown", LastReply());
     }
@@ -1180,7 +1182,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
         engine.LivesProvider = () => null;
 
-        engine.DispatchForTests(Telepath("Friend", "@lives"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@lives"));
 
         Assert.Contains("lives unknown", LastReply());
     }
@@ -1192,7 +1194,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
         engine.LivesProvider = () => 4;
 
-        engine.DispatchForTests(Telepath("Friend", "@lives"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@lives"));
 
         Assert.Contains("4 lives remaining", LastReply());
     }
@@ -1204,7 +1206,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
         engine.LivesProvider = () => 1;
 
-        engine.DispatchForTests(Telepath("Friend", "@lives"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@lives"));
 
         Assert.Contains("1 life remaining", LastReply());
     }
@@ -1217,7 +1219,7 @@ public sealed class PartyEssentialHandlersTests
         var (engine, _, _, _, players, relay) = Setup();
         SeedPlayer(players, "Raijin", PlayerRemoteControls.RequestInvite);
 
-        engine.DispatchForTests(Telepath("Raijin", "@invite"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@invite"));
 
         Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(relay[0]));
     }
@@ -1233,7 +1235,7 @@ public sealed class PartyEssentialHandlersTests
         party.IsInParty = true;
         party.SelfIsLeader = false;
 
-        engine.DispatchForTests(Telepath("Raijin", "@invite"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@invite"));
 
         Assert.Contains("{I'm following MudPlay; denied.}", LastReply());
         Assert.Empty(relay);
@@ -1251,7 +1253,7 @@ public sealed class PartyEssentialHandlersTests
         party.SelfIsLeader = false;
         engine.WarnOnDenial = false;
 
-        engine.DispatchForTests(Telepath("Raijin", "@invite"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@invite"));
 
         Assert.Empty(_replies);
         Assert.Empty(relay);
@@ -1273,7 +1275,7 @@ public sealed class PartyEssentialHandlersTests
         party.IsInParty = true;
         party.SelfIsLeader = true;
 
-        engine.DispatchForTests(Telepath("Raijin", "@invite"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@invite"));
 
         // Comma-joined given names of the 5 followers (skipping self).
         Assert.Contains("{My party is full: Helper, Buddy, Lou, Sam, Pal are following me.}", LastReply());
@@ -1291,7 +1293,7 @@ public sealed class PartyEssentialHandlersTests
         party.IsInParty = true;
         party.SelfIsLeader = true;
 
-        engine.DispatchForTests(Telepath("Raijin", "@invite"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@invite"));
 
         Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(relay[0]));
     }
@@ -1304,7 +1306,7 @@ public sealed class PartyEssentialHandlersTests
         var (engine, _, _, _, players, relay) = Setup();
         SeedPlayer(players, "Raijin", PlayerRemoteControls.RequestInvite);
 
-        engine.DispatchForTests(Telepath("Raijin", "@join"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@join"));
 
         Assert.Equal("join Raijin\r", Encoding.Latin1.GetString(relay[0]));
     }
@@ -1320,7 +1322,7 @@ public sealed class PartyEssentialHandlersTests
         party.IsInParty = true;
         party.SelfIsLeader = false;
 
-        engine.DispatchForTests(Telepath("Raijin", "@join"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@join"));
 
         Assert.Contains("{I'm following MudPlay; denied.}", LastReply());
         Assert.Empty(relay);
@@ -1341,7 +1343,7 @@ public sealed class PartyEssentialHandlersTests
         party.IsInParty = true;
         party.SelfIsLeader = false;
 
-        engine.DispatchForTests(Telepath("Raijin", "@join"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@join"));
 
         Assert.Equal("join Raijin\r", Encoding.Latin1.GetString(relay[0]));
     }
@@ -1356,7 +1358,7 @@ public sealed class PartyEssentialHandlersTests
         List<string> announced = new();
         handlers.JoinSent = announced.Add;
 
-        engine.DispatchForTests(Telepath("Boss", "@join"));
+        ChatLines.Hear(_routers[engine], Telepath("Boss", "@join"));
 
         Assert.Equal("join Boss\r", Encoding.Latin1.GetString(Assert.Single(relay)));
         Assert.Equal(new[] { "Boss" }, announced);
@@ -1372,7 +1374,7 @@ public sealed class PartyEssentialHandlersTests
         List<string> announced = new();
         handlers.JoinSent = announced.Add;
 
-        engine.DispatchForTests(Telepath("Boss", "@join"));
+        ChatLines.Hear(_routers[engine], Telepath("Boss", "@join"));
 
         Assert.Empty(relay);
         Assert.Empty(announced);
@@ -1399,7 +1401,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Raijin", PlayerRemoteControls.RequestInvite);
         DropPlayer(player);
 
-        engine.DispatchForTests(Telepath("Raijin", "@join"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@join"));
 
         string reply = LastReply();
         Assert.Contains("Can't join", reply);
@@ -1415,7 +1417,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Raijin", PlayerRemoteControls.RequestInvite);
         DropPlayer(player);
 
-        engine.DispatchForTests(Telepath("Raijin", "@invite"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@invite"));
 
         string reply = LastReply();
         Assert.Contains("Can't invite", reply);
@@ -1431,7 +1433,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Raijin", PlayerRemoteControls.RequestInvite);
         DropPlayer(player);
 
-        engine.DispatchForTests(Telepath("Raijin", "@join"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@join"));
 
         Assert.Contains("being dragged by MudPlay", LastReply());
         Assert.Empty(relay);
@@ -1447,7 +1449,7 @@ public sealed class PartyEssentialHandlersTests
         DropPlayer(player);
         engine.WarnOnDenial = false;
 
-        engine.DispatchForTests(Telepath("Raijin", "@join"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@join"));
 
         Assert.Empty(_replies);
         Assert.Empty(relay);
@@ -1461,7 +1463,7 @@ public sealed class PartyEssentialHandlersTests
         DropPlayer(player);
         engine.WarnOnDenial = true;
 
-        engine.DispatchForTests(Telepath("Raijin", "@join"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@join"));
 
         Assert.Contains("Can't join", LastReply());
         Assert.Empty(relay);

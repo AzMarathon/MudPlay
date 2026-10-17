@@ -16,6 +16,9 @@ namespace MudPlay.Tests;
 // a bare @death, or all of them for @death all — gated on the QueryDeaths grant.
 public sealed class DeathQueryHandlerTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     private static readonly System.DateTime Now = new(2026, 6, 20, 0, 0, 0, System.DateTimeKind.Utc);
 
     // What the remote-command engine put on the wire, through the sender the client binds.
@@ -28,16 +31,17 @@ public sealed class DeathQueryHandlerTests
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(chat, party, players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         _ = new DeathQueryHandler(engine, () => records,
             r => r.GameData is { } set && !string.Equals(set, activeGameData, System.StringComparison.OrdinalIgnoreCase));
         return (engine, players);
     }
 
-    private static ChatLogEntry Telepath(string sender, string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
+    private static ChatLine Telepath(string sender, string msg) =>
+        new(ChatChannel.TelepathIncoming, sender, msg);
 
     private static void SeedPlayer(PlayerDatabase db, string name, PlayerRemoteControls controls)
     {
@@ -76,7 +80,7 @@ public sealed class DeathQueryHandlerTests
         var (engine, players) = Setup(records);
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryDeaths);
 
-        engine.DispatchForTests(Telepath("Friend", "@death"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@death"));
 
         string reply = LastReply();
         Assert.Contains("death #3", reply);
@@ -97,7 +101,7 @@ public sealed class DeathQueryHandlerTests
         var (engine, players) = Setup(records);
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryDeaths);
 
-        engine.DispatchForTests(Telepath("Friend", "@death all"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@death all"));
 
         var replies = Replies();
         Assert.Contains(replies, r => r.Contains("death #3"));
@@ -112,7 +116,7 @@ public sealed class DeathQueryHandlerTests
         var (engine, players) = Setup(records);
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryDeaths);
 
-        engine.DispatchForTests(Telepath("Friend", "@death"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@death"));
 
         Assert.Contains("no unrecovered deaths", LastReply());
     }
@@ -129,7 +133,7 @@ public sealed class DeathQueryHandlerTests
         var (engine, players) = Setup(new List<DeathRecord> { own, other }, activeGameData: "beta");
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryDeaths);
 
-        engine.DispatchForTests(Telepath("Friend", "@death all"));
+        ChatLines.Hear(_routers[engine], Telepath("Friend", "@death all"));
 
         var replies = Replies();
         Assert.Contains(replies, r => r.Contains("death #2") && r.Contains("(1/102), recorded on game data 'alpha', 5 lives left"));
@@ -145,7 +149,7 @@ public sealed class DeathQueryHandlerTests
         var (engine, players) = Setup(records);
         SeedPlayer(players, "Stranger", PlayerRemoteControls.None);
 
-        engine.DispatchForTests(Telepath("Stranger", "@death"));
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@death"));
 
         Assert.DoesNotContain(Replies(), r => r.Contains("death #"));
     }

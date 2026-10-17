@@ -7,14 +7,15 @@ namespace MudPlay.Tests;
 
 public sealed class LookParserTests
 {
+    // The game's output, fed the way the client receives it.
+    private readonly ServerFeed _feed = new();
+
     private static readonly DateTime Now = new(2026, 5, 30, 14, 0, 0, DateTimeKind.Utc);
 
-    private static LookParser Build(out PlayerDatabase db)
+    private LookParser Build(out PlayerDatabase db)
     {
-        db = new PlayerDatabase();
-        return new LookParser(
-            lines: new Terminal.LineExtractor(new Terminal.TerminalEmulator(80, 25)),
-            db:    db);
+        db = new PlayerDatabase(new ProfileService(), () => null);
+        return new LookParser(lines: _feed.Lines, db: db);
     }
 
     /// <summary>
@@ -43,7 +44,7 @@ public sealed class LookParserTests
     public void ParsesHeaderSuffixes_RecordsLookAndGang(string header, string? gang)
     {
         LookParser p = Build(out PlayerDatabase db);
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             header,
             "MudPlay is a healthy, well built Dark-Elf Mystic with short black hair and black",
@@ -52,7 +53,7 @@ public sealed class LookParserTests
             "He is equipped with:",
             "quarterstaff                    (Weapon Hand)",
         }, Now);
-        p.FeedPromptLine("[HP=33]:", Now);
+        _feed.Line("[HP=33]:", Now);
 
         PlayerRecord r = Assert.Single(db.Players);
         Assert.Equal("MudPlay",  r.GivenName);
@@ -68,7 +69,7 @@ public sealed class LookParserTests
     public void RoundTotalsTable_IsNotALookResponse()
     {
         LookParser p = Build(out PlayerDatabase db);
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "[Round 1 ----------------------------]",
             "[ Combatant             Dealt  Taken ]",
@@ -76,7 +77,7 @@ public sealed class LookParserTests
             "[ Thresh                   55      0 ]",
             "A Mage stands here.",
         }, Now);
-        p.FeedPromptLine("[HP=199/MA=230]:", Now);
+        _feed.Line("[HP=199/MA=230]:", Now);
 
         Assert.Empty(db.Players);
     }
@@ -92,7 +93,7 @@ public sealed class LookParserTests
         db.RecordLook("MudPlay", race: null, @class: null,
             gang: "Knights of Chaos", equipment: null, nowUtc: Now);
 
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "[ MudPlay ]",
             "MudPlay is a healthy, well built Dark-Elf Mystic with short black hair and black",
@@ -102,7 +103,7 @@ public sealed class LookParserTests
             "",
             "Nothing",
         }, Now);
-        p.FeedPromptLine("[HP=33]:", Now);
+        _feed.Line("[HP=33]:", Now);
 
         PlayerRecord r = Assert.Single(db.Players);
         Assert.Equal("Knights of Chaos", r.Gang);
@@ -121,7 +122,7 @@ public sealed class LookParserTests
     public void NonHeaderBracketedLines_DoNotStartABlock(string line)
     {
         LookParser p = Build(out PlayerDatabase db);
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             line,
             "Someone is a healthy, well built Dark-Elf Mystic with short black hair.",
@@ -129,7 +130,7 @@ public sealed class LookParserTests
             "He is equipped with:",
             "quarterstaff                    (Weapon Hand)",
         }, Now);
-        p.FeedPromptLine("[HP=33]:", Now);
+        _feed.Line("[HP=33]:", Now);
 
         Assert.Empty(db.Players);
     }
@@ -138,7 +139,7 @@ public sealed class LookParserTests
     public void ParsesEquippedLook_RecordsRaceClassAndAllSlots()
     {
         LookParser p = Build(out PlayerDatabase db);
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "[ MudPlay WuzHere ]",
             "MudPlay is a healthy, well built Dark-Elf Mystic with short black hair and black",
@@ -154,7 +155,7 @@ public sealed class LookParserTests
             "quarterstaff                    (Weapon Hand)",
         }, Now);
         // Prompt closes the block since we never see a blank-after-content.
-        p.FeedPromptLine("[HP=33]:", Now);
+        _feed.Line("[HP=33]:", Now);
 
         Assert.Single(db.Players);
         PlayerRecord r = db.Players[0];
@@ -182,7 +183,7 @@ public sealed class LookParserTests
     public void ParsesEmptyLoadout_RecordsExplicitNothing()
     {
         LookParser p = Build(out PlayerDatabase db);
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "[ MudPlay WuzHere ]",
             "MudPlay is a healthy, well built Dark-Elf Mystic with short black hair and black",
@@ -193,7 +194,7 @@ public sealed class LookParserTests
             "",
             "Nothing",
         }, Now);
-        p.FeedPromptLine("[HP=33]:", Now);
+        _feed.Line("[HP=33]:", Now);
 
         PlayerRecord r = db.Players[0];
         Assert.NotNull(r.Equipment);
@@ -204,14 +205,14 @@ public sealed class LookParserTests
     public void LongestRaceMatch_PicksDarkElf_OverElf()
     {
         LookParser p = Build(out PlayerDatabase db);
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "[ Tester One ]",
             "Tester is a healthy, slim Dark-Elf Mage with green eyes.  She is unwounded.",
             "He is equipped with:",
             "Nothing",
         }, Now);
-        p.FeedPromptLine("[HP=99]:", Now);
+        _feed.Line("[HP=99]:", Now);
 
         Assert.Equal("Dark-Elf", db.Players[0].Race);
         Assert.Equal("Mage",     db.Players[0].Class);
@@ -221,14 +222,14 @@ public sealed class LookParserTests
     public void LongestRaceMatch_PicksHalfElf_OverElfOrHalf()
     {
         LookParser p = Build(out PlayerDatabase db);
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "[ Beta Tester ]",
             "Beta is a wiry Half-Elf Druid with bright blue eyes.  She is unwounded.",
             "He is equipped with:",
             "Nothing",
         }, Now);
-        p.FeedPromptLine("[HP=99]:", Now);
+        _feed.Line("[HP=99]:", Now);
 
         Assert.Equal("Half-Elf", db.Players[0].Race);
         Assert.Equal("Druid",    db.Players[0].Class);
@@ -241,14 +242,14 @@ public sealed class LookParserTests
         // Pre-existing who row (alignment + title).
         db.RecordObservation("MudPlay WuzHere", null, null, "Neutral", "Apprentice", null, null, Now);
 
-        look.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "[ MudPlay WuzHere ]",
             "MudPlay is a healthy, well built Dark-Elf Mystic with short black hair.",
             "He is equipped with:",
             "Nothing",
         }, Now);
-        look.FeedPromptLine("[HP=33]:", Now);
+        _feed.Line("[HP=33]:", Now);
 
         PlayerRecord r = db.Players[0];
         Assert.Equal("Dark-Elf", r.Race);          // from look
@@ -264,25 +265,25 @@ public sealed class LookParserTests
     {
         LookParser look = Build(out PlayerDatabase db);
         // First look: full block with equipment.
-        look.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "[ MudPlay WuzHere ]",
             "MudPlay is a wiry Dark-Elf Mystic.",
             "He is equipped with:",
             "padded vest                     (Torso)",
         }, Now);
-        look.FeedPromptLine("[HP=33]:", Now);
+        _feed.Line("[HP=33]:", Now);
         Assert.NotNull(db.Players[0].Equipment);
         Assert.Single(db.Players[0].Equipment!);
 
         // Second look interrupted before equipment marker — prompt
         // arrives mid-description. Equipment should stay attached.
-        look.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "[ MudPlay WuzHere ]",
             "MudPlay is a wiry Dark-Elf Mystic.",
         }, Now.AddSeconds(10));
-        look.FeedPromptLine("[HP=33]:", Now.AddSeconds(10));
+        _feed.Line("[HP=33]:", Now.AddSeconds(10));
 
         // Equipment slot still populated from the earlier complete look.
         Assert.NotNull(db.Players[0].Equipment);
@@ -293,14 +294,14 @@ public sealed class LookParserTests
     public void EquipmentLineRegex_HandlesTwoHandedSlotLabel()
     {
         LookParser p = Build(out PlayerDatabase db);
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "[ Tester Two ]",
             "Tester is a wiry Human Warrior with stern eyes.",
             "He is equipped with:",
             "nexus spear                     (Two Handed)",
         }, Now);
-        p.FeedPromptLine("[HP=99]:", Now);
+        _feed.Line("[HP=99]:", Now);
 
         Assert.Equal("Two Handed", db.Players[0].Equipment![0].SlotLabel);
         Assert.Equal("nexus spear", db.Players[0].Equipment![0].ItemName);

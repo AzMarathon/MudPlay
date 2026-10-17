@@ -10,6 +10,9 @@ namespace MudPlay.Tests;
 
 public sealed class RoomDisplayParserTests : IDisposable
 {
+    // The game's output, fed the way the client receives it.
+    private readonly ServerFeed _feed = new();
+
     private readonly string _root;
 
     public RoomDisplayParserTests()
@@ -56,8 +59,7 @@ public sealed class RoomDisplayParserTests : IDisposable
         RoomGraphManager graph = new(cache);
         graph.OnActiveSetChanged("alpha");
         RoomTracker tracker = new(graph);
-        LineExtractor lines = new(new TerminalEmulator(80, 25));
-        RoomDisplayParser parser = new(lines, tracker);
+        RoomDisplayParser parser = new(_feed.Lines, tracker);
         return (tracker, parser);
     }
 
@@ -86,7 +88,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Town Gates",
             "Obvious exits: north."
@@ -101,7 +103,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Town Gates",
             "You are standing at the south gate of the town. The road",
@@ -120,7 +122,7 @@ public sealed class RoomDisplayParserTests : IDisposable
 
         // North Square (1/2) has just S; verify the multi-exit parse
         // by faking a room with all four cardinals.
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Town Gates",
             "Obvious exits: north, south, east and west."
@@ -137,7 +139,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Town Gates",
             "Obvious exits: none."
@@ -162,7 +164,7 @@ public sealed class RoomDisplayParserTests : IDisposable
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
         // Cellar (2/5) has only U.
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Cellar",
             "Obvious exits: up."
@@ -182,14 +184,14 @@ public sealed class RoomDisplayParserTests : IDisposable
         // The first room's lines, then a movement transition, then a
         // new room display. The transition line acts as a block
         // boundary so the second room's name is correctly picked.
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Town Gates",
             "Obvious exits: north."
         });
         Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "You walk north.",
             "North Square",
@@ -204,7 +206,7 @@ public sealed class RoomDisplayParserTests : IDisposable
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
         // Combat ending + blank + new room display.
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "You strike the goblin for 12 damage.",
             "The goblin dies.",
@@ -222,7 +224,7 @@ public sealed class RoomDisplayParserTests : IDisposable
         // can't recover a name. No observation should be made.
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "You walk north.",
             "Obvious exits: south."
@@ -241,7 +243,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     public void ExitListParses_VariousFormats(string list, Direction[] expected)
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Some Room Name",
             $"Obvious exits: {list}."
@@ -268,14 +270,14 @@ public sealed class RoomDisplayParserTests : IDisposable
         // must skip "e" and pick "Newhaven, Narrow Road".
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Town Gates",
             "Obvious exits: north."
         });
         Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "n",
             "North Square",
@@ -293,7 +295,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             echo,
             "Town Gates",
@@ -308,7 +310,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "north",
             "Town Gates",
@@ -331,10 +333,10 @@ public sealed class RoomDisplayParserTests : IDisposable
         // tracker to Suspect. The boundary must isolate the real room title.
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[] { "Town Gates", "Obvious exits: north." });
+        _feed.Rows(new[] { "Town Gates", "Obvious exits: north." });
         Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "You are following MudPlay.",
             "The following people are in your travel party:",
@@ -356,7 +358,7 @@ public sealed class RoomDisplayParserTests : IDisposable
         // the dragged room's title from whatever combat/chatter preceded it.
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "The dark goblin archer collapses with a spiteful hiss.",
             "You gain 40 experience.",
@@ -377,7 +379,7 @@ public sealed class RoomDisplayParserTests : IDisposable
         // is picked correctly.
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "You strike the goblin for 12 damage.",
             "[HP=80/MA=20]: ",
@@ -399,17 +401,16 @@ public sealed class RoomDisplayParserTests : IDisposable
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
         // Establish a confirmed starting room first.
-        parser.FeedTestLines(new[] { "Town Gates", "Obvious exits: north." });
+        _feed.Rows(new[] { "Town Gates", "Obvious exits: north." });
         Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
 
-        DateTimeOffset t = DateTimeOffset.UtcNow;
-        parser.FeedTestEmittedLines(new[]
+        _feed.Rows(new[]
         {
-            new LineExtractor.EmittedLine("dark goblin archer", Array.Empty<CellAttributes>(), t, false),
-            new LineExtractor.EmittedLine("It appears to be a vile creature of the dark.", Array.Empty<CellAttributes>(), t, false),
-            new LineExtractor.EmittedLine("[HP=72/KAI=5]: ", Array.Empty<CellAttributes>(), t, true),
-            new LineExtractor.EmittedLine("North Square", Array.Empty<CellAttributes>(), t, false),
-            new LineExtractor.EmittedLine("Obvious exits: south.", Array.Empty<CellAttributes>(), t, false),
+            "dark goblin archer",
+            "It appears to be a vile creature of the dark.",
+            "[HP=72/KAI=5]: ",
+            "North Square",
+            "Obvious exits: south.",
         });
 
         // The prompt cleared the monster-look header out of the buffer, so the
@@ -436,7 +437,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestEmittedLines(new[]
+        _feed.Raw(string.Concat(new[]
         {
             ColoredLine("Bank of Godfrey", BrightCyanSgr1Then36),
             ColoredLine("    This is the town bank. It is lightly crowded with customers come to", DefaultAttr),
@@ -451,7 +452,7 @@ public sealed class RoomDisplayParserTests : IDisposable
             ColoredLine("10 copper farthings == 1 silver noble", DimCyan),
             ColoredLine("Also here: nasty elite guardsman.", DefaultAttr),
             ColoredLine("Obvious exits: north, east, closed gate west", DefaultAttr),
-        });
+        }));
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.Equal(new RoomKey(1, 297), tracker.State.CurrentRoom!.Key);
@@ -468,7 +469,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestEmittedLines(new[]
+        _feed.Raw(string.Concat(new[]
         {
             ColoredLine("Bank of Godfrey", BrightCyanSgr1Then36),
             ColoredLine("    This is the town bank. It is lightly crowded with customers come to", DefaultAttr),
@@ -484,7 +485,7 @@ public sealed class RoomDisplayParserTests : IDisposable
             ColoredLine("You notice a torch here.", DefaultAttr),
             ColoredLine("Also here: nasty elite guardsman, Salad.", DefaultAttr),
             ColoredLine("Obvious exits: north, east, closed gate west", DefaultAttr),
-        });
+        }));
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.Equal(new RoomKey(1, 297), tracker.State.CurrentRoom!.Key);
@@ -531,7 +532,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestEmittedLines(new[]
+        _feed.Raw(string.Concat(new[]
         {
             ColoredLine("Cellar", BrightCyanSgr1Then36),          // stale prior room name (before the boundary)
             ColoredLine("You walk north.", DefaultAttr),          // HARD boundary — the real block start
@@ -539,7 +540,7 @@ public sealed class RoomDisplayParserTests : IDisposable
             ColoredLine("", DimCyan),                             // blank inside the display
             ColoredLine("The currency conversion rates are:", DimCyan),  // near block: no bright cyan
             ColoredLine("Obvious exits: north.", DefaultAttr),
-        });
+        }));
 
         // Recovered "Town Gates" (after the boundary), not "Cellar" (before it).
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
@@ -562,25 +563,18 @@ public sealed class RoomDisplayParserTests : IDisposable
         + "1b5b306d1b5b303b33326d4f6276696f75732065786974733a206e4c086f7274682c206552086173742c20636c6f7365"
         + "64206761746520776573740d0a1b5b3739441b5b4b1b5b303b33376d5b48503d33331b5b303b33376d5d3a01";
 
-    private static LineExtractor.EmittedLine ColoredLine(string text, CellAttributes attr)
-    {
-        CellAttributes[] attrs = new CellAttributes[text.Length];
-        for (int i = 0; i < text.Length; i++) attrs[i] = attr;
-        return new LineExtractor.EmittedLine(text, attrs, DateTimeOffset.UtcNow, false);
-    }
+    // One row as the game sends it in one colour: the SGR escape, the text, a reset.
+    private static string ColoredLine(string text, string sgr) => $"\u001b[{sgr}m{text}\u001b[0m\r\n";
 
-    private static readonly CellAttributes BrightCyanSgr96 = new(
-        TerminalColor.Indexed(14), TerminalColor.Default, CellFlags.None);
+    private const string BrightCyanSgr96 = "96";
 
-    private static readonly CellAttributes BrightCyanSgr1Then36 = new(
-        TerminalColor.Indexed(6), TerminalColor.Default, CellFlags.Bold);
+    private const string BrightCyanSgr1Then36 = "1;36";
 
     // SGR 0;36 — the bank's currency table. Index 6 WITHOUT bold, so it is
     // deliberately NOT bright cyan and must not be mistaken for a room name.
-    private static readonly CellAttributes DimCyan = new(
-        TerminalColor.Indexed(6), TerminalColor.Default, CellFlags.None);
+    private const string DimCyan = "0;36";
 
-    private static readonly CellAttributes DefaultAttr = CellAttributes.Default;
+    private const string DefaultAttr = "0";
 
     [Fact]
     public void ColorAnchor_BrightCyan_PicksRoomNameOverPriorLines()
@@ -591,12 +585,12 @@ public sealed class RoomDisplayParserTests : IDisposable
         // bright cyan.
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestEmittedLines(new[]
+        _feed.Raw(string.Concat(new[]
         {
             ColoredLine("Some narrative line that isn't the room name.", DefaultAttr),
             ColoredLine("Town Gates", BrightCyanSgr96),
             ColoredLine("Obvious exits: north.", DefaultAttr),
-        });
+        }));
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
@@ -614,7 +608,7 @@ public sealed class RoomDisplayParserTests : IDisposable
         // already-completed move into a wall. The title nearest the exits wins.
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestEmittedLines(new[]
+        _feed.Raw(string.Concat(new[]
         {
             ColoredLine("Astro walks into the room from the southeast.", DefaultAttr),
             ColoredLine("Astro invokes the way of the monkey!", BrightCyanSgr1Then36),
@@ -622,7 +616,7 @@ public sealed class RoomDisplayParserTests : IDisposable
             ColoredLine("Town Gates", BrightCyanSgr1Then36),
             ColoredLine("Also here: leafling.", DefaultAttr),
             ColoredLine("Obvious exits: north.", DefaultAttr),
-        });
+        }));
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
@@ -634,7 +628,7 @@ public sealed class RoomDisplayParserTests : IDisposable
         // Live GH rooms can list hundreds of wrapped floor items. The title is
         // long gone from the 12-line rolling buffer when the exits line arrives.
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
-        var lines = new List<LineExtractor.EmittedLine>
+        var lines = new List<string>
         {
             ColoredLine("Town Gates", BrightCyanSgr96),
         };
@@ -642,7 +636,7 @@ public sealed class RoomDisplayParserTests : IDisposable
             lines.Add(ColoredLine($"wrapped floor item row {i}", DefaultAttr));
         lines.Add(ColoredLine("Obvious exits: north.", DefaultAttr));
 
-        parser.FeedTestEmittedLines(lines);
+        _feed.Raw(string.Concat(lines));
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
@@ -655,7 +649,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Silvermere Residence",
             "Obvious exits: open door south, up."
@@ -674,7 +668,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Crown Street",
             "Obvious exits: closed door north, east, west."
@@ -693,7 +687,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Inner Gate",
             "Obvious exits: open gate north, south, east, west."
@@ -709,7 +703,7 @@ public sealed class RoomDisplayParserTests : IDisposable
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Inner Gate",
             "Obvious exits: closed gate north, south, east, west."
@@ -730,7 +724,7 @@ public sealed class RoomDisplayParserTests : IDisposable
         RoomObservation? captured = null;
         parser.RoomParsed += o => captured = o;
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "Abandoned Asylum",
             "Obvious exits: closed door north, open gate south, open door west."
@@ -753,12 +747,12 @@ public sealed class RoomDisplayParserTests : IDisposable
         // SGR 1;36 → palette index 6 + Bold flag. Same visual as SGR 96.
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
 
-        parser.FeedTestEmittedLines(new[]
+        _feed.Raw(string.Concat(new[]
         {
             ColoredLine("Pre-room narrative.", DefaultAttr),
             ColoredLine("Town Gates", BrightCyanSgr1Then36),
             ColoredLine("Obvious exits: north.", DefaultAttr),
-        });
+        }));
 
         Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
     }

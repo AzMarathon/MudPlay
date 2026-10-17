@@ -30,10 +30,11 @@ public sealed class PartyAilmentTrackerTests
         public PartyState State { get; } = new();
         public PartyManager Party { get; }
         public PlayerState Player { get; } = new();
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
         public RemoteCommandManager Engine { get; }
         public PartyEssentialHandlers Essentials { get; }
-        public LineExtractor Lines { get; }
+        // The game's output, fed the way the client receives it.
+        public ServerFeed Server { get; } = new();
         public PartyAilmentTracker Tracker { get; }
         public List<CureCastMatcher> Cures { get; } = new();
         // Apply-witness wiring (PR B): matchers the tracker witnesses to SET chips,
@@ -51,8 +52,6 @@ public sealed class PartyAilmentTrackerTests
             Party = new PartyManager(Router, State);
             Engine = new RemoteCommandManager(Chat, State, Players);
             Essentials = new PartyEssentialHandlers(Engine, Player, State);
-            Terminal.TerminalEmulator emulator = new(80, 24);
-            Lines = new LineExtractor(emulator);
             Tracker = new PartyAilmentTracker(Chat, Party, Essentials, () => Cures,
                 readApplyMatchers: () => Applies,
                 resolveDurationSeconds: (n, source) =>
@@ -61,7 +60,7 @@ public sealed class PartyAilmentTrackerTests
                     return Durations.TryGetValue(n, out double? d) ? d : null;
                 },
                 nowMs: () => NowMs);
-            Tracker.AttachLineExtractor(Lines);
+            Tracker.AttachLineExtractor(Server.Lines);
         }
 
         /// <summary>Add a party member by replaying the follow signal.</summary>
@@ -74,16 +73,8 @@ public sealed class PartyAilmentTrackerTests
         /// <summary>Dispatch a server line so ChatRouter classifies it.</summary>
         public void Say(string line) => Router.Dispatch(Line(line));
 
-        /// <summary>Push a line through the tracker's LineEmitted clear path.</summary>
-        public void EmitLine(string text)
-        {
-            System.Reflection.FieldInfo? field = typeof(LineExtractor)
-                .GetField("LineEmitted",
-                    System.Reflection.BindingFlags.Instance |
-                    System.Reflection.BindingFlags.NonPublic);
-            if (field?.GetValue(Lines) is Action<LineExtractor.EmittedLine> handler)
-                handler(Line(text));
-        }
+        // A server line through the extractor the tracker's clear path reads.
+        public void EmitLine(string text) => Server.Line(text);
 
         public void Dispose()
         {

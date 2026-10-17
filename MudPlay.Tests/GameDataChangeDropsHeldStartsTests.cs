@@ -157,7 +157,7 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
     private Fight NewFight(World w, bool registered = true)
     {
         MessageRouter router = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         DefaultPatterns.Seed(router);
         RoomEntityClassifier classifier = new(router, new MonsterMessageStore(), players, new LogService());
         RoomDepartureWatcher departure = new(router, classifier);
@@ -342,8 +342,8 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         DefaultPatterns.Seed(router);
         PartyState partyState = new();
         PartyManager party = new(router, partyState);
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         profile.Current!.Settings = new Dictionary<string, JsonElement>
         {
             ["General"] = JsonSerializer.SerializeToElement(
@@ -457,8 +457,8 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         InventoryManager inventory = new();
         PartyState partyState = new();
         TrainerMenuTracker menu = new(router, partyState);
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         AutoTrainManager autoTrain = new(stats, parser, w.Cache, inventory, profile, menu,
             new ListedEffectCatalog(new MessageStore(), w.Cache), router);
         TrainerWalkManager trainer = new(stats, parser, w.Cache, profile, w.Tracker, w.Bfs,

@@ -433,42 +433,6 @@ public sealed partial class StatParser : IDisposable
             + "command, e.g. typed in a full-screen form).");
     }
 
-    // ----- Test seam -----------------------------------------------------
-    // Test seam — arm the scanner without going through the wire-observation
-    // path.
-    internal void TestArm() => _windowOpenedAt = NowProvider();
-
-    // Test seam — arm the health-command gate without the wire path.
-    internal void TestArmHealth() => _healthWindowOpenedAt = NowProvider();
-
-    // Test seam — pump a line through the full handler path without a real
-    // LineExtractor. Mirrors OnLine so tests exercise the always-on lives
-    // handler + the gated scan together. isPromptLine defaults to false; set
-    // true for tests that want to exercise the close-on-prompt-after-capture
-    // path.
-    internal void FeedTestLine(string text, bool isPromptLine = false, CellAttributes[]? attributes = null)
-    {
-        OnLivesRemainingLine(text);
-        OnExperienceGainLine(text);
-        OnTrainSuccessLine(text);
-        OnCpGainLine(text);
-        TryHealthWindow(text);
-        MaybeSelfArmOnHeader(text);
-        if (_windowOpenedAt is null) return;
-        if (isPromptLine && _capturedThisArm)
-        {
-            CloseGate("prompt after capture");
-            return;
-        }
-        if (NowProvider() - _windowOpenedAt.Value > ExpectingScreenWindow)
-        {
-            CloseGate("window expired");
-            return;
-        }
-        ScanLine(text, attributes);
-        if (_fieldsCapturedThisArm > 0) _capturedThisArm = true;
-    }
-
     private void OnLine(LineExtractor.EmittedLine line)
     {
         // Lives-remaining (miracle save) — always-on, independent of

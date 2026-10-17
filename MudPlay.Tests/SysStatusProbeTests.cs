@@ -11,6 +11,8 @@ public sealed class SysStatusProbeTests
     private sealed class Harness
     {
         public SysRoomStatusParser Parser { get; } = new();
+        // The game's output, fed the way the client receives it.
+        public ServerFeed Feed { get; } = new();
         public SysStatusProbe Probe { get; }
         public List<string> Sent { get; } = new();
         public bool CapabilityEnabled { get; set; } = true;
@@ -25,6 +27,7 @@ public sealed class SysStatusProbeTests
 
         public Harness()
         {
+            Parser.AttachLineExtractor(Feed.Lines);
             Probe = new SysStatusProbe(Parser, () => CapabilityEnabled, () => Now)
             {
                 // The "timeout" completes only when a test fires it explicitly,
@@ -47,9 +50,9 @@ public sealed class SysStatusProbeTests
 
         public void ReplyWithRoom(int map, int room)
         {
-            Parser.FeedTestLine($"Room {room}  Map: {map}");
-            Parser.FeedTestLine("Monsters: None");
-            Parser.FeedTestLine("[HP=100]:", isPromptLine: true);
+            Feed.Line($"Room {room}  Map: {map}");
+            Feed.Line("Monsters: None");
+            Feed.Line("[HP=100]:");
         }
     }
 

@@ -13,6 +13,9 @@ namespace MudPlay.Tests;
 // failure; and the suicide rules match the exact command words.
 public sealed class RemoteCommandCheckOrderTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     // What the remote-command engine put on the wire, through the sender the client binds.
     private readonly List<byte[]> _replies = new();
 
@@ -22,14 +25,15 @@ public sealed class RemoteCommandCheckOrderTests
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         return (engine, players);
     }
 
-    private static ChatLogEntry Telepath(string sender, string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
+    private static ChatLine Telepath(string sender, string msg) =>
+        new(ChatChannel.TelepathIncoming, sender, msg);
 
     private static void Seed(PlayerDatabase db, string name, PlayerRemoteControls controls)
     {
@@ -50,7 +54,7 @@ public sealed class RemoteCommandCheckOrderTests
         engine.MaxSuicideLivesThreshold = 5;
         engine.RegisterHandler("@suicide", PlayerRemoteControls.SysopCommands, _ => { });
 
-        engine.DispatchForTests(Telepath("Stranger", "@suicide"));
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@suicide"));
 
         Assert.Equal("/Stranger {command invalid or not allowed}\r", Assert.Single(Sent()));
     }
@@ -62,7 +66,7 @@ public sealed class RemoteCommandCheckOrderTests
         engine.LivesProvider = () => 2;
         engine.RegisterHandler("@suicide", PlayerRemoteControls.SysopCommands, _ => { });
 
-        engine.DispatchForTests(Telepath("Nobody", "@suicide"));
+        ChatLines.Hear(_routers[engine], Telepath("Nobody", "@suicide"));
 
         string reply = Assert.Single(Sent());
         Assert.DoesNotContain("lives", reply);
@@ -77,7 +81,7 @@ public sealed class RemoteCommandCheckOrderTests
         engine.LivesProvider = () => 2;
         engine.RegisterHandler("@suicide", PlayerRemoteControls.SysopCommands, _ => { });
 
-        engine.DispatchForTests(Telepath("Nobody", "@suicide"));
+        ChatLines.Hear(_routers[engine], Telepath("Nobody", "@suicide"));
 
         Assert.Empty(_replies);
     }
@@ -90,7 +94,7 @@ public sealed class RemoteCommandCheckOrderTests
         bool fired = false;
         engine.RegisterHandler("@do", PlayerRemoteControls.ExecuteCommands, _ => fired = true);
 
-        engine.DispatchForTests(Telepath("Stranger", "@do suicide"));
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@do suicide"));
 
         Assert.False(fired);
         Assert.Equal("/Stranger {command invalid or not allowed}\r", Assert.Single(Sent()));
@@ -108,7 +112,7 @@ public sealed class RemoteCommandCheckOrderTests
         engine.LivesProvider = () => 1;
         engine.RegisterHandler("@suicide", PlayerRemoteControls.SysopCommands, _ => { });
 
-        engine.DispatchForTests(Telepath("Trusted", message));
+        ChatLines.Hear(_routers[engine], Telepath("Trusted", message));
 
         Assert.Empty(_replies);
     }
@@ -125,7 +129,7 @@ public sealed class RemoteCommandCheckOrderTests
         IReadOnlyList<string>? got = null;
         engine.RegisterHandler("@have", PlayerRemoteControls.QueryInventory, ctx => got = ctx.Args);
 
-        engine.DispatchForTests(Telepath("Trusted", "@have suicide note"));
+        ChatLines.Hear(_routers[engine], Telepath("Trusted", "@have suicide note"));
 
         Assert.Equal(new[] { "suicide", "note" }, got);
         Assert.Empty(_replies);
@@ -144,7 +148,7 @@ public sealed class RemoteCommandCheckOrderTests
         bool fired = false;
         engine.RegisterHandler("@do", PlayerRemoteControls.ExecuteCommands, _ => fired = true);
 
-        engine.DispatchForTests(Telepath("Trusted", message));
+        ChatLines.Hear(_routers[engine], Telepath("Trusted", message));
 
         Assert.True(fired);
         Assert.Empty(_replies);
@@ -166,7 +170,7 @@ public sealed class RemoteCommandCheckOrderTests
         bool fired = false;
         engine.RegisterHandler("@do", PlayerRemoteControls.ExecuteCommands, _ => fired = true);
 
-        engine.DispatchForTests(Telepath("Trusted", message));
+        ChatLines.Hear(_routers[engine], Telepath("Trusted", message));
 
         Assert.False(fired);
         Assert.Equal("/Trusted {@do suicide is not allowed, use @suicide}\r", Assert.Single(Sent()));
@@ -180,7 +184,7 @@ public sealed class RemoteCommandCheckOrderTests
         bool fired = false;
         engine.RegisterHandler("@do", PlayerRemoteControls.ExecuteCommands, _ => fired = true);
 
-        engine.DispatchForTests(Telepath("Trusted", "@do SUICIDE"));
+        ChatLines.Hear(_routers[engine], Telepath("Trusted", "@do SUICIDE"));
 
         Assert.False(fired);
         Assert.Equal("/Trusted {@do suicide is not allowed, use @suicide}\r", Assert.Single(Sent()));

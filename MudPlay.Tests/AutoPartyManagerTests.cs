@@ -27,7 +27,7 @@ public sealed class AutoPartyManagerTests
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         PartyState party = new();
         AutoPartyManager engine = new(router, players, party);
         engine.NowProvider = () => Now;
@@ -352,7 +352,7 @@ public sealed class AutoPartyManagerTests
         // MainWindowViewModel binds SendUserInput as the sender.
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         PartyState party = new();
         AutoPartyManager engine = new(router, players, party) { NowProvider = () => Now };
         // NOTE: no SetWireSender. The pre-fix path set
@@ -1429,7 +1429,7 @@ public sealed class AutoPartyManagerTests
         // roster name.
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
         PartyState party = new();
         party.SelfIsLeader = true;   // leader-side reform — only a leader re-invites its followers
@@ -1464,7 +1464,7 @@ public sealed class AutoPartyManagerTests
         // menu trip, there's nothing to re-invite.
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
         PartyState party = new();
         party.SelfIsLeader = true;   // leader-side reform — only a leader re-invites its followers
@@ -1492,7 +1492,7 @@ public sealed class AutoPartyManagerTests
         // the follower re-forms rather than sitting at [Invited] forever.
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
         PartyState party = new();
         party.SelfIsLeader = true;   // leader-side reform — only a leader re-invites its followers
@@ -1526,7 +1526,7 @@ public sealed class AutoPartyManagerTests
         // the rejoin.
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         PartyState party = new();
         party.SelfIsLeader = false;      // we're a follower
         party.LeaderName = "MudPlay";

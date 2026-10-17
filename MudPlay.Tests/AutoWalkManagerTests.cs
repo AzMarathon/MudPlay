@@ -1368,7 +1368,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         h.Walker.WalkTo(new RoomKey(14, 3803));      // W, W
         Assert.Equal(new[] { "w" }, SentText(h));
 
-        resolver.FeedLocationForTests(14, 3799);
+        new ServerFeed(router).Line("Location: 14,3799");
 
         Assert.Equal(new[] { "w" }, SentText(h));
         Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);

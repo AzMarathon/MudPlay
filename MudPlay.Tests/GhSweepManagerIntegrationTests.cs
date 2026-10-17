@@ -63,8 +63,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         labels.SetLabel(new RoomKey(1, 1),
@@ -79,9 +79,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null);
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
-        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(inventoryLines);
-        FeedInventory(inventoryLines, "nothing");
+        ServerFeed inventoryFeed = new();
+        inventory.AttachLineExtractor(inventoryFeed.Lines);
+        FeedInventory(inventoryFeed, "nothing");
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();
@@ -255,8 +255,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
@@ -268,9 +268,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null);
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
-        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(inventoryLines);
-        FeedInventory(inventoryLines, "nothing");
+        ServerFeed inventoryFeed = new();
+        inventory.AttachLineExtractor(inventoryFeed.Lines);
+        FeedInventory(inventoryFeed, "nothing");
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();
@@ -352,8 +352,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
@@ -366,9 +366,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null);
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
-        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(inventoryLines);
-        FeedInventory(inventoryLines, "nothing");
+        ServerFeed inventoryFeed = new();
+        inventory.AttachLineExtractor(inventoryFeed.Lines);
+        FeedInventory(inventoryFeed, "nothing");
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();
@@ -463,8 +463,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
@@ -477,10 +477,10 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null);
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
-        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(inventoryLines);
+        ServerFeed inventoryFeed = new();
+        inventory.AttachLineExtractor(inventoryFeed.Lines);
         // Recon baseline: nearly empty (1/100), so a 60-weight hammer looks movable.
-        FeedInventory(inventoryLines, "nothing");
+        FeedInventory(inventoryFeed, "nothing");
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();
@@ -538,7 +538,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // The fresh dump shows only 40 of 100 free — the pack is holding 59 more
         // than when sorting opened. The hammer doesn't fit RIGHT NOW, and the
         // refusal correctly stops us re-sending the get into a full pack.
-        FeedInventory(inventoryLines, "nothing", currentWeight: 60);
+        FeedInventory(inventoryFeed, "nothing", currentWeight: 60);
 
         Assert.Equal(40, sweep.WorkingWeightBudget);
         Assert.Equal(getsSent, sent.Count(c => c == "get war hammer")); // never re-sent
@@ -593,8 +593,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         labels.SetLabel(new RoomKey(1, 1),
@@ -609,9 +609,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null);
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
-        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(inventoryLines);
-        FeedInventory(inventoryLines, "nothing");
+        ServerFeed inventoryFeed = new();
+        inventory.AttachLineExtractor(inventoryFeed.Lines);
+        FeedInventory(inventoryFeed, "nothing");
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();
@@ -728,8 +728,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         labels.SetLabel(new RoomKey(1, 1),
@@ -744,9 +744,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null);
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
-        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(inventoryLines);
-        FeedInventory(inventoryLines, "nothing");
+        ServerFeed inventoryFeed = new();
+        inventory.AttachLineExtractor(inventoryFeed.Lines);
+        FeedInventory(inventoryFeed, "nothing");
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();
@@ -804,7 +804,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         Assert.Equal("i", sent[^1]);
 
         // Inventory confirms we never had it → the move is dropped, not retried.
-        FeedInventory(inventoryLines, "nothing");
+        FeedInventory(inventoryFeed, "nothing");
 
         Assert.Equal(0, sweep.CarriedPendingCount);
         Assert.Equal(0, sweep.PendingMoveCount);
@@ -848,8 +848,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         labels.SetLabel(new RoomKey(1, 1),
@@ -864,9 +864,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null);
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
-        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(inventoryLines);
-        FeedInventory(inventoryLines, "nothing");
+        ServerFeed inventoryFeed = new();
+        inventory.AttachLineExtractor(inventoryFeed.Lines);
+        FeedInventory(inventoryFeed, "nothing");
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();
@@ -956,8 +956,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         labels.SetLabel(new RoomKey(1, 1),
@@ -972,9 +972,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null);
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
-        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(inventoryLines);
-        FeedInventory(inventoryLines, "nothing");
+        ServerFeed inventoryFeed = new();
+        inventory.AttachLineExtractor(inventoryFeed.Lines);
+        FeedInventory(inventoryFeed, "nothing");
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();
@@ -1022,7 +1022,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         Assert.Equal("drop war hammer", sent[^1]);
 
         FeedRouter(router, "Syntax: DROP {Amount} {Currency}");
-        FeedInventory(inventoryLines, "a war hammer");
+        FeedInventory(inventoryFeed, "a war hammer");
 
         // Still ours to move — retried on a later visit, not abandoned.
         Assert.Equal(1, sweep.CarriedPendingCount);
@@ -1078,8 +1078,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // when re-walking a 120-room circuit hurts, and it's the one an
         // in-memory-only queue can't survive. A brand-new manager (no memory of
         // the sweep at all) must still be able to resume from the profile.
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhSuspendedSweepStore store = new(profile);
         store.Save(new[]
         {
@@ -1114,8 +1114,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // Start does: an item sold or dropped since the sweep bailed is dropped from the
         // plan rather than blindly re-dropped (which the game partial-matches onto a
         // different item still held).
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhSuspendedSweepStore store = new(profile);
         store.Save(new[]
         {
@@ -1428,8 +1428,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // gear inflates base by exactly their weight, which collapses the budget,
         // trips the too-tight-to-collect guard, and makes a resumed sweep deliver
         // its load and stop.
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhSuspendedSweepStore store = new(profile);
         store.Save(new[]
         {
@@ -1532,8 +1532,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     [Fact]
     public void AFreshSweepUnderAnotherSet_KeepsThatSetsRecord()
     {
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhSuspendedSweepStore store = new(profile);
         store.Save(new[] { new GhSuspendedMove("1/3", "1/1", "mace", 1, carried: true, hidden: false) }, "alpha");
         SweepHarness h = NewSweepHarness(_root, _scratchBbs, store, activeGameData: () => "beta");
@@ -1555,8 +1555,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     [Fact]
     public void Resume_FromThePersistedQueue_IsRefused_UnderAnotherGameDataSet()
     {
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhSuspendedSweepStore store = new(profile);
         store.Save(new[] { new GhSuspendedMove("1/3", "1/1", "war hammer", 1, carried: false, hidden: false) }, "alpha");
         SweepHarness h = NewSweepHarness(_root, _scratchBbs, store, activeGameData: () => "beta");
@@ -1602,8 +1602,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         // Two rooms labeled for the SAME category: A is the primary (first
@@ -1620,9 +1620,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null);
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
-        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(inventoryLines);
-        FeedInventory(inventoryLines, "nothing");
+        ServerFeed inventoryFeed = new();
+        inventory.AttachLineExtractor(inventoryFeed.Lines);
+        FeedInventory(inventoryFeed, "nothing");
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();
@@ -1755,8 +1755,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(scratchBbs));
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
@@ -1769,9 +1769,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null);
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
-        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(inventoryLines);
-        FeedInventory(inventoryLines, carriedInventory, currentWeight, maxWeight);
+        ServerFeed inventoryFeed = new();
+        inventory.AttachLineExtractor(inventoryFeed.Lines);
+        FeedInventory(inventoryFeed, carriedInventory, currentWeight, maxWeight);
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();
@@ -1816,23 +1816,14 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         router.Dispatch(new LineExtractor.EmittedLine(text, Array.Empty<CellAttributes>(),
             DateTimeOffset.UtcNow, IsPromptLine: false));
 
-    private static void FeedInventory(LineExtractor lines, string carried, int currentWeight = 1,
+    private static void FeedInventory(ServerFeed feed, string carried, int currentWeight = 1,
                                       int maxWeight = 100)
     {
-        FeedLine(lines, $"You are carrying {carried}.");
-        FeedLine(lines, "You have no keys.");
-        FeedLine(lines, "Wealth:    0 copper farthings");
-        FeedLine(lines, $"Encumbrance:    {currentWeight}/{maxWeight}  -  None  "
+        feed.Line($"You are carrying {carried}.");
+        feed.Line("You have no keys.");
+        feed.Line("Wealth:    0 copper farthings");
+        feed.Line($"Encumbrance:    {currentWeight}/{maxWeight}  -  None  "
                         + $"[{currentWeight * 100 / maxWeight}%]");
-    }
-
-    private static void FeedLine(LineExtractor lines, string text)
-    {
-        FieldInfo? field = typeof(LineExtractor).GetField(
-            "LineEmitted", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (field?.GetValue(lines) is Action<LineExtractor.EmittedLine> handler)
-            handler(new LineExtractor.EmittedLine(text, Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false));
     }
 
     // InventoryOnly walks the same recon circuit and feeds the item-location
@@ -1867,8 +1858,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         // Both rooms labeled as sortable destinations — proves InventoryOnly
@@ -1884,9 +1875,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null);
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
-        LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(inventoryLines);
-        FeedInventory(inventoryLines, "nothing");
+        ServerFeed inventoryFeed = new();
+        inventory.AttachLineExtractor(inventoryFeed.Lines);
+        FeedInventory(inventoryFeed, "nothing");
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();
@@ -1985,8 +1976,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);

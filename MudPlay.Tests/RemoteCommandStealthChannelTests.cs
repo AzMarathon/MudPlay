@@ -13,6 +13,9 @@ namespace MudPlay.Tests;
 // sneak.
 public sealed class RemoteCommandStealthChannelTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
     // Each engine's own wire, captured through the sender the client binds.
@@ -22,7 +25,7 @@ public sealed class RemoteCommandStealthChannelTests
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         players.RecordObservation("Leader", @class: null, race: null, alignment: null,
             title: null, gang: null, role: null, nowUtc: Now);
         players.EditCustomization("Leader", new PlayerCustomization(RemoteControls: PlayerRemoteControls.All));
@@ -30,13 +33,14 @@ public sealed class RemoteCommandStealthChannelTests
         {
             StealthedProvider = () => stealthed,
         };
+        _routers[engine] = router;
         engine.SetWireSender((_wire[engine] = new()).Add);
         engine.RegisterHandler("@invite", PlayerRemoteControls.RequestInvite, ctx => ctx.Reply("on my way"));
         return engine;
     }
 
-    private static ChatLogEntry Say(string msg) =>
-        new(Now, ChatChannel.Local, "Leader", msg, $"Leader says: {msg}");
+    private static ChatLine Say(string msg) =>
+        new(ChatChannel.Local, "Leader", msg);
 
     private string Only(RemoteCommandManager engine) =>
         Encoding.Latin1.GetString(Assert.Single(_wire[engine]));
@@ -46,7 +50,7 @@ public sealed class RemoteCommandStealthChannelTests
     {
         RemoteCommandManager engine = Engine(stealthed: true);
 
-        engine.DispatchForTests(Say("&@invite"));
+        ChatLines.Hear(_routers[engine], Say("&@invite"));
 
         Assert.Equal("/Leader @invite\r", Only(engine));
     }
@@ -56,7 +60,7 @@ public sealed class RemoteCommandStealthChannelTests
     {
         RemoteCommandManager engine = Engine(stealthed: false);
 
-        engine.DispatchForTests(Say("&@invite"));
+        ChatLines.Hear(_routers[engine], Say("&@invite"));
 
         Assert.Equal(">Leader @invite\r", Only(engine));
     }
@@ -66,7 +70,7 @@ public sealed class RemoteCommandStealthChannelTests
     {
         RemoteCommandManager engine = Engine(stealthed: true);
 
-        engine.DispatchForTests(Say("@invite"));
+        ChatLines.Hear(_routers[engine], Say("@invite"));
 
         Assert.Equal("/Leader {on my way}\r", Only(engine));
     }
@@ -77,7 +81,7 @@ public sealed class RemoteCommandStealthChannelTests
         RemoteCommandManager engine = Engine(stealthed: true);
         engine.RegisterHandler("@probe", PlayerRemoteControls.QueryVersion, ctx => ctx.Refuse("no"));
 
-        engine.DispatchForTests(Say("@probe"));
+        ChatLines.Hear(_routers[engine], Say("@probe"));
 
         Assert.Equal("/Leader {no}\r", Only(engine));
     }

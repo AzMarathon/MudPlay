@@ -137,10 +137,6 @@ public sealed partial class SysRoomStatusParser : IDisposable
            && candidate.Length <= full.Length
            && full.StartsWith(candidate, StringComparison.OrdinalIgnoreCase);
 
-    // Test hook — drive one line through the parser without a live LineExtractor.
-    internal void FeedTestLine(string text, bool isPromptLine = false)
-        => HandleLine(text, isPromptLine);
-
     private void OnLineEmitted(LineExtractor.EmittedLine line)
         => HandleLine(line.Text, line.IsPromptLine);
 

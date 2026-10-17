@@ -18,6 +18,9 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class HealCommandHandlerTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     // What the remote-command engine put on the wire, through the sender the client binds.
     private readonly List<byte[]> _replies = new();
 
@@ -38,8 +41,9 @@ public sealed class HealCommandHandlerTests
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(chat, party, players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         PartySettings settings = new();
         List<byte[]> wire = new();
@@ -55,8 +59,8 @@ public sealed class HealCommandHandlerTests
         };
     }
 
-    private static ChatLogEntry Telepath(string sender, string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
+    private static ChatLine Telepath(string sender, string msg) =>
+        new(ChatChannel.TelepathIncoming, sender, msg);
 
     private static void SeedPlayer(PlayerDatabase db, string name, PlayerRemoteControls controls)
     {
@@ -88,7 +92,7 @@ public sealed class HealCommandHandlerTests
         SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
         h.Party.MinorPartyHealSpell = "mheal"; // this character heals the party
 
-        h.Engine.DispatchForTests(Telepath("Bob", "@heal"));
+        ChatLines.Hear(_routers[h.Engine], Telepath("Bob", "@heal"));
 
         Assert.Equal(new[] { "par" }, Wire(h));
         Assert.Equal("healing", Assert.Single(Replies()));
@@ -102,7 +106,7 @@ public sealed class HealCommandHandlerTests
         // Only a group / AOE heal configured — still a healer.
         h.Party.MajorPartyHealAoeSpell = "groupheal";
 
-        h.Engine.DispatchForTests(Telepath("Bob", "@heal"));
+        ChatLines.Hear(_routers[h.Engine], Telepath("Bob", "@heal"));
 
         Assert.Equal(new[] { "par" }, Wire(h));
         Assert.Equal("healing", Assert.Single(Replies()));
@@ -115,7 +119,7 @@ public sealed class HealCommandHandlerTests
         SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
         // No party-heal spell set — nothing to cast, so no par + no reply.
 
-        h.Engine.DispatchForTests(Telepath("Bob", "@heal"));
+        ChatLines.Hear(_routers[h.Engine], Telepath("Bob", "@heal"));
 
         Assert.Empty(Wire(h));
         Assert.Empty(Replies());
@@ -132,7 +136,7 @@ public sealed class HealCommandHandlerTests
         h.Party.MinorPartyHealSpell = "mheal";
         h.Handler.IsInTrainerMenu = () => true;
 
-        h.Engine.DispatchForTests(Telepath("Bob", "@heal"));
+        ChatLines.Hear(_routers[h.Engine], Telepath("Bob", "@heal"));
 
         Assert.Empty(Wire(h));
         Assert.Empty(Replies());
@@ -147,7 +151,7 @@ public sealed class HealCommandHandlerTests
             PlayerRemoteControls.All & ~PlayerRemoteControls.ExecuteCommands);
         h.Party.MinorPartyHealSpell = "mheal";
 
-        h.Engine.DispatchForTests(Telepath("Stranger", "@heal"));
+        ChatLines.Hear(_routers[h.Engine], Telepath("Stranger", "@heal"));
 
         Assert.Empty(Wire(h));
         Assert.Empty(Replies());
@@ -160,8 +164,9 @@ public sealed class HealCommandHandlerTests
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(chat, party, players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         PartySettings settings = new() { MinorPartyHealSpell = "mheal" };
         List<byte[]> wire = new();
@@ -171,7 +176,7 @@ public sealed class HealCommandHandlerTests
         engine.WarnOnDenial = false;
 
         handler.Dispose();
-        engine.DispatchForTests(Telepath("Bob", "@heal"));
+        ChatLines.Hear(_routers[engine], Telepath("Bob", "@heal"));
 
         Assert.Empty(wire.Select(b => Encoding.Latin1.GetString(b)).ToList());
     }

@@ -6,9 +6,13 @@ namespace MudPlay.Tests;
 
 public sealed class AbilBreakdownParserTests
 {
-    private static (AbilBreakdownParser parser, List<AbilBreakdown> captured) NewParser()
+    // The game's output, fed the way the client receives it.
+    private readonly ServerFeed _feed = new();
+
+    private (AbilBreakdownParser parser, List<AbilBreakdown> captured) NewParser()
     {
         AbilBreakdownParser parser = new();
+        parser.AttachLineExtractor(_feed.Lines);
         List<AbilBreakdown> captured = new();
         parser.BreakdownParsed += captured.Add;
         return (parser, captured);
@@ -28,8 +32,8 @@ public sealed class AbilBreakdownParserTests
     {
         (AbilBreakdownParser parser, List<AbilBreakdown> captured) = NewParser();
 
-        parser.FeedTestLines(LiveCapture);
-        parser.FeedTestLine("[HP=899/MA=573]: (Resting)", isPromptLine: true);
+        _feed.Rows(LiveCapture);
+        _feed.Line("[HP=899/MA=573]: (Resting)");
 
         AbilBreakdown b = Assert.Single(captured);
         Assert.Equal(145, b.Code);
@@ -47,8 +51,8 @@ public sealed class AbilBreakdownParserTests
         // The `spells:` line is exactly what nature tap / mana flux rolled.
         (AbilBreakdownParser parser, List<AbilBreakdown> captured) = NewParser();
 
-        parser.FeedTestLines(LiveCapture);
-        parser.FeedTestLine("", isPromptLine: true);
+        _feed.Rows(LiveCapture);
+        _feed.Prompt();
 
         Assert.Equal(11, Assert.Single(captured).Spells);
     }
@@ -60,8 +64,8 @@ public sealed class AbilBreakdownParserTests
         // bonus yields a single-row block.
         (AbilBreakdownParser parser, List<AbilBreakdown> captured) = NewParser();
 
-        parser.FeedTestLine("worn:     ManaRegen(145)              0185");
-        parser.FeedTestLine("", isPromptLine: true);
+        _feed.Line("worn:     ManaRegen(145)              0185");
+        _feed.Prompt();
 
         AbilBreakdown b = Assert.Single(captured);
         Assert.Equal(185, b.Worn);
@@ -76,13 +80,13 @@ public sealed class AbilBreakdownParserTests
     {
         (AbilBreakdownParser parser, List<AbilBreakdown> captured) = NewParser();
 
-        parser.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "granted:  ManaRegen(145)              0005",
             "spells:   ManaRegen(145)              0011",
             "total:    ManaRegen(145)              0016",
         });
-        parser.FeedTestLine("", isPromptLine: true);
+        _feed.Prompt();
 
         AbilBreakdown b = Assert.Single(captured);
         Assert.Equal(16, b.ReportedTotal);
@@ -96,8 +100,8 @@ public sealed class AbilBreakdownParserTests
         // A bad nature-tap / mana-flux roll subtracts from mana regen.
         (AbilBreakdownParser parser, List<AbilBreakdown> captured) = NewParser();
 
-        parser.FeedTestLine("spells:   ManaRegen(145)             -0050");
-        parser.FeedTestLine("", isPromptLine: true);
+        _feed.Line("spells:   ManaRegen(145)             -0050");
+        _feed.Prompt();
 
         Assert.Equal(-50, Assert.Single(captured).Spells);
     }
@@ -107,10 +111,10 @@ public sealed class AbilBreakdownParserTests
     {
         (AbilBreakdownParser parser, List<AbilBreakdown> captured) = NewParser();
 
-        parser.FeedTestLine("worn:     ManaRegen(145)              0185");
+        _feed.Line("worn:     ManaRegen(145)              0185");
         Assert.Empty(captured);               // not yet closed
 
-        parser.FeedTestLine("[HP=1/MA=1]: (Standing)", isPromptLine: true);
+        _feed.Line("[HP=1/MA=1]: (Standing)");
         Assert.Single(captured);
     }
 
@@ -121,9 +125,9 @@ public sealed class AbilBreakdownParserTests
 
         // The echoed command line is a non-matching content line; it must not
         // emit an empty breakdown.
-        parser.FeedTestLine("[HP=899/MA=573]: (Resting) abil 145");
-        parser.FeedTestLines(LiveCapture);
-        parser.FeedTestLine("", isPromptLine: true);
+        _feed.Line("[HP=899/MA=573]: (Resting) abil 145");
+        _feed.Rows(LiveCapture);
+        _feed.Prompt();
 
         Assert.Equal(211, Assert.Single(captured).Total);
     }
@@ -133,9 +137,9 @@ public sealed class AbilBreakdownParserTests
     {
         (AbilBreakdownParser parser, List<AbilBreakdown> captured) = NewParser();
 
-        parser.FeedTestLine("worn:     ManaRegen(145)              0185");
-        parser.FeedTestLine("worn:     HPRegen(123)                0040");
-        parser.FeedTestLine("", isPromptLine: true);
+        _feed.Line("worn:     ManaRegen(145)              0185");
+        _feed.Line("worn:     HPRegen(123)                0040");
+        _feed.Prompt();
 
         Assert.Equal(2, captured.Count);
         Assert.Equal(145, captured[0].Code);
@@ -149,8 +153,8 @@ public sealed class AbilBreakdownParserTests
     {
         (AbilBreakdownParser parser, List<AbilBreakdown> captured) = NewParser();
 
-        parser.FeedTestLine("spells:   ManaRegen(145)              0011");
-        parser.FeedTestLine("You feel the surge fade.");   // arbitrary game text
+        _feed.Line("spells:   ManaRegen(145)              0011");
+        _feed.Line("You feel the surge fade.");   // arbitrary game text
         Assert.Single(captured);
         Assert.Equal(11, captured[0].Spells);
     }
@@ -160,8 +164,8 @@ public sealed class AbilBreakdownParserTests
     {
         (AbilBreakdownParser parser, List<AbilBreakdown> captured) = NewParser();
 
-        parser.FeedTestLine("spells:   ManaRegen(145)              0011");
-        parser.FeedTestLine("", isPromptLine: true);
+        _feed.Line("spells:   ManaRegen(145)              0011");
+        _feed.Prompt();
 
         AbilBreakdown b = Assert.Single(captured);
         Assert.Equal(11, b.From("SPELLS"));

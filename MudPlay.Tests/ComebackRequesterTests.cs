@@ -6,7 +6,6 @@ using MudPlay.Game.Map;
 using MudPlay.Game.Remote;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
-using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -87,14 +86,11 @@ public sealed class ComebackRequesterTests : IDisposable
 
         public string? LastWire => RequesterWire.Count == 0 ? null : RequesterWire[^1];
 
-        // The router first and the refusal detector after it, the order the app
-        // hands a line on in.
-        public void Feed(string text)
-        {
-            Router.Dispatch(new LineExtractor.EmittedLine(
-                text, new CellAttributes[text.Length], _clock, IsPromptLine: false));
-            RefusalDetector.FeedTestLine(text, _clock);
-        }
+        // The game's output through the client's input path: the router first and
+        // the refusal detector after it, the order the app hands a line on in.
+        public required ServerFeed Server { get; init; }
+
+        public void Feed(string text) => Server.Line(text);
 
         public void Type(string line) => Requester.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"));
 
@@ -123,9 +119,10 @@ public sealed class ComebackRequesterTests : IDisposable
         RoomTracker tracker = new(graph);
         PartyState party = new();
         FollowMoveObserver followObserver = new(router, tracker);
-        MovementRefusalDetector refusalDetector = new(new LineExtractor(new TerminalEmulator(80, 24)), tracker);
-
         Harness? h = null;
+        ServerFeed server = new(router, clock: () => h!.Now);
+        MovementRefusalDetector refusalDetector = new(server.Lines, tracker);
+
         ComebackRequester requester = new(router, tracker,
             isMovementPrevented: isMovementPrevented,
             party: party,
@@ -140,6 +137,7 @@ public sealed class ComebackRequesterTests : IDisposable
             Requester = requester,
             FollowObserver = followObserver,
             RefusalDetector = refusalDetector,
+            Server = server,
         };
         requester.NowProvider = () => h.Now;
         requester.MasterSwitchOff = () => !h.MasterSwitchOn;
@@ -693,14 +691,15 @@ public sealed class ComebackRequesterTests : IDisposable
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
         using PartyManager manager = new(h.Router, h.Party);
+        manager.AttachLineExtractor(h.Server.Lines);
         manager.LeaderListedAsInvited += h.Requester.NoteLeaderListedAsInvited;
         MovementCoordinator coordinator = new();
         using PartyFollowerMovementGate gate = new(h.Party, coordinator);
         h.Feed("You are now following Boss.");
 
         h.Feed(ParHeader);
-        manager.FeedTestLines(new[] { BossInvited });
-        manager.FeedTestPromptLine();
+        h.Server.Rows(new[] { BossInvited });
+        h.Server.Prompt("[HP=0/MA=0]:");
 
         Assert.Equal("/Boss @comeback 1/1", h.LastWire);
         Assert.Contains("[Invited]", h.Requester.LastIncidentSummary);
@@ -716,6 +715,7 @@ public sealed class ComebackRequesterTests : IDisposable
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
         using PartyManager manager = new(h.Router, h.Party);
+        manager.AttachLineExtractor(h.Server.Lines);
         manager.LeaderListedAsInvited += h.Requester.NoteLeaderListedAsInvited;
         MovementCoordinator coordinator = new();
         using PartyFollowerMovementGate gate = new(h.Party, coordinator);
@@ -727,8 +727,8 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Equal(1, h.Sent);
 
         h.Feed(ParHeader);
-        manager.FeedTestLines(new[] { BossInvited });
-        manager.FeedTestPromptLine();
+        h.Server.Rows(new[] { BossInvited });
+        h.Server.Prompt("[HP=0/MA=0]:");
 
         Assert.Equal(1, h.Sent);
         Assert.False(h.Party.SelfIsLeader);
@@ -743,18 +743,19 @@ public sealed class ComebackRequesterTests : IDisposable
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
         using PartyManager manager = new(h.Router, h.Party);
+        manager.AttachLineExtractor(h.Server.Lines);
         manager.LeaderListedAsInvited += h.Requester.NoteLeaderListedAsInvited;
         h.Feed("You are now following Boss.");
 
         h.Feed(ParHeader);
-        manager.FeedTestLines(new[] { OtherInvited, BossInvited });
-        manager.FeedTestPromptLine();
+        h.Server.Rows(new[] { OtherInvited, BossInvited });
+        h.Server.Prompt("[HP=0/MA=0]:");
         Assert.Equal(1, h.Sent);
 
         h.Advance(TimeSpan.FromSeconds(5));
         h.Feed(ParHeader);
-        manager.FeedTestLines(new[] { OtherInvited, BossInvited });
-        manager.FeedTestPromptLine();
+        h.Server.Rows(new[] { OtherInvited, BossInvited });
+        h.Server.Prompt("[HP=0/MA=0]:");
 
         Assert.Equal(1, h.Sent);
         Assert.False(h.Party.SelfIsLeader);
@@ -768,6 +769,7 @@ public sealed class ComebackRequesterTests : IDisposable
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
         using PartyManager manager = new(h.Router, h.Party);
+        manager.AttachLineExtractor(h.Server.Lines);
         manager.LeaderListedAsInvited += h.Requester.NoteLeaderListedAsInvited;
         MovementCoordinator coordinator = new();
         using PartyFollowerMovementGate gate = new(h.Party, coordinator);
@@ -775,8 +777,8 @@ public sealed class ComebackRequesterTests : IDisposable
 
         h.Feed("You are following Boss.");
         h.Feed(ParHeader);
-        manager.FeedTestLines(new[] { OtherInvited, BossFullRow });
-        manager.FeedTestPromptLine();
+        h.Server.Rows(new[] { OtherInvited, BossFullRow });
+        h.Server.Prompt("[HP=0/MA=0]:");
 
         Assert.False(h.Party.SelfIsLeader);
         Assert.Equal("Boss", h.Party.LeaderName);
@@ -791,8 +793,8 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Equal(1, h.Sent);
 
         h.Feed(ParHeader);
-        manager.FeedTestLines(new[] { OtherInvited, BossInvited });
-        manager.FeedTestPromptLine();
+        h.Server.Rows(new[] { OtherInvited, BossInvited });
+        h.Server.Prompt("[HP=0/MA=0]:");
         Assert.Equal(1, h.Sent);
         Assert.Contains(MovementCoordinator.FollowerGate, coordinator.AssertedGates);
     }
@@ -802,11 +804,12 @@ public sealed class ComebackRequesterTests : IDisposable
     {
         using Harness h = NewHarness();
         using PartyManager manager = new(h.Router, h.Party);
+        manager.AttachLineExtractor(h.Server.Lines);
         manager.LeaderListedAsInvited += h.Requester.NoteLeaderListedAsInvited;
         h.Feed("You are now following Boss.");
 
         h.Feed(ParHeader);
-        manager.FeedTestLines(new[] { OtherInvited });
+        h.Server.Rows(new[] { OtherInvited });
 
         Assert.Null(h.LastWire);
     }
@@ -908,7 +911,7 @@ public sealed class ComebackRequesterTests : IDisposable
         h.Feed(ItemRefusal);
         h.Requester.FireSettleForTests();
 
-        h.Feed("Boss telepaths: {follow timed out — resuming anyway}");
+        h.Feed("Boss telepaths: {follow timed out - resuming anyway}");
         h.Feed("Boss telepaths: {I can't yet, I'm on a train trip. I'll come for you when the training is done}");
         h.Advance(TimeSpan.FromMinutes(9));
         Assert.True(h.Requester.IsLeaderWeAsked("Boss"));
@@ -1431,8 +1434,8 @@ public sealed class ComebackRequesterTests : IDisposable
     [Theory]
     [InlineData("I can't I'm idle")]
     [InlineData("I can't, my loop goes through an exit you can't pass")]
-    [InlineData("my party is full — can't take you back")]
-    [InlineData("you're 40 rooms off (limit 30) — can't come, forget me")]
+    [InlineData("my party is full - can't take you back")]
+    [InlineData("you're 40 rooms off (limit 30) - can't come, forget me")]
     public void Stock_TheLeaderRefuses_TheFollowIsGivenUp(string refusal)
     {
         using Harness h = NewFollower();
@@ -1468,18 +1471,16 @@ public sealed class ComebackRequesterTests : IDisposable
     }
 
     // Every answer a leader gives that says it is coming, now or later, in the
-    // words this version sends and with the long dash older ones sent.
+    // words this version sends.
     [Theory]
     [InlineData("coming to your location for pickup")]
     [InlineData("backtracking up to 12 room(s) to find you")]
     [InlineData("comeback already in progress")]
     [InlineData("comeback already in progress - fetching Tank first, then you")]
-    [InlineData("comeback already in progress — fetching Tank first, then you")]
     [InlineData("I can't yet, I'm on a train trip. I'll come for you when the training is done")]
     [InlineData("I can't yet, an exit on my way turned you away. I'll invite you when my next pass finds you")]
     [InlineData("didn't find you where the trip left you - @comeback with your room and I'll come")]
     [InlineData("found you - re-inviting Me")]
-    [InlineData("found you — re-inviting Me")]
     [InlineData("got you - resuming")]
     [InlineData("got you - waiting for your @ok")]
     public void Stock_ARecognisedComingAnswer_IsWaitedOnForLonger(string answer)
@@ -1551,7 +1552,7 @@ public sealed class ComebackRequesterTests : IDisposable
         List<string> givenUp = AskedOnStock(h);
         h.Feed("Boss telepaths: {coming to your location for pickup}");
 
-        h.Feed("Boss telepaths: {follow timed out — resuming anyway}");
+        h.Feed("Boss telepaths: {follow timed out - resuming anyway}");
 
         Assert.Equal(new[] { "Boss" }, givenUp);
         Assert.True(h.Requester.IsLeaderWeAsked("Boss"));
@@ -1649,19 +1650,6 @@ public sealed class ComebackRequesterTests : IDisposable
 
         Assert.Equal("join Boss", h.LastWire);
         Assert.True(h.Requester.JoinJustSentTo("Boss"));
-    }
-
-    // An older leader's wording, with the long dash, is read the same.
-    [Fact]
-    public void Stock_FoundYouFromAnOlderLeader_IsReadTheSame()
-    {
-        using Harness h = NewFollower();
-        h.Requester.OnStock = () => true;
-        AskedOnStock(h);
-
-        h.Feed("Boss telepaths: {found you — re-inviting Me}");
-
-        Assert.Equal("join Boss", h.LastWire);
     }
 
     // The leader we asked is in the room with us: a leader who walked back by

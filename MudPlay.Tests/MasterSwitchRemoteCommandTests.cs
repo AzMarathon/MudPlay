@@ -22,6 +22,8 @@ public sealed class MasterSwitchRemoteCommandTests
     private sealed class Setup : IDisposable
     {
         public RemoteCommandManager Engine { get; }
+        // The router the engine's chat lines arrive through.
+        public MessageRouter Router { get; }
         // What Engine put on the wire, through the sender the client binds.
         public List<byte[]> Sent { get; } = new();
         public AutoModeRemoteHandler Handler { get; }
@@ -33,15 +35,16 @@ public sealed class MasterSwitchRemoteCommandTests
         public Setup()
         {
             MessageRouter router = new();
+            Router = router;
             DefaultPatterns.Seed(router);
             ChatRouter chat = new(router);
             PartyState party = Party;
             party.Members.Add(new PartyMember { Name = Sender });
-            PlayerDatabase players = new();
+            PlayerDatabase players = new(new ProfileService(), () => null);
             players.RecordObservation(Sender, null, null, null, null, null, null, Now);
             players.EditCustomization(Sender, new PlayerCustomization(RemoteControls: ~PlayerRemoteControls.None));
-            Profile = new ProfileService();
-            Profile.LoadBlank();
+            Profile = TestProfiles.Service();
+            Profile.LoadDefaultProfile();
             Controller = new AutoModeController(Profile);
             Engine = new RemoteCommandManager(chat, party, players)
             {
@@ -75,8 +78,8 @@ public sealed class MasterSwitchRemoteCommandTests
         public void Dispose() => Handler.Dispose();
     }
 
-    private static ChatLogEntry Telepath(string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, Sender, msg, $"{Sender} telepaths: {msg}");
+    private static ChatLine Telepath(string msg) =>
+        new(ChatChannel.TelepathIncoming, Sender, msg);
 
     private static AutoActionDefaults AllOff() => new()
     {
@@ -104,7 +107,7 @@ public sealed class MasterSwitchRemoteCommandTests
         s.Controller.TurnOff("test");
         AutoActionDefaults before = s.Mode;
 
-        s.Engine.DispatchForTests(Telepath(command));
+        ChatLines.Hear(s.Router, Telepath(command));
 
         Assert.Empty(s.Invoked);
         Assert.Empty(s.Sent);
@@ -119,7 +122,7 @@ public sealed class MasterSwitchRemoteCommandTests
     {
         using Setup s = new();
 
-        s.Engine.DispatchForTests(Telepath(command));
+        ChatLines.Hear(s.Router, Telepath(command));
 
         // Handled: it reached a handler (the recorder, or the real @auto-* /
         // @settings one, which answers) and nothing was counted as skipped.
@@ -134,8 +137,8 @@ public sealed class MasterSwitchRemoteCommandTests
         using Setup s = new();
         s.Controller.TurnOff("test");
 
-        s.Engine.DispatchForTests(Telepath("&@invite"));
-        s.Engine.DispatchForTests(Telepath("&@auto-all on"));
+        ChatLines.Hear(s.Router, Telepath("&@invite"));
+        ChatLines.Hear(s.Router, Telepath("&@auto-all on"));
 
         Assert.Empty(s.Sent);
         Assert.True(s.Controller.KillSwitchEngaged);
@@ -147,7 +150,7 @@ public sealed class MasterSwitchRemoteCommandTests
         using Setup s = new();
         s.Controller.TurnOff("test");
 
-        s.Engine.DispatchForTests(Telepath("@because I said so"));
+        ChatLines.Hear(s.Router, Telepath("@because I said so"));
 
         Assert.Empty(s.Controller.SkippedSinceOff);
         Assert.Empty(s.Sent);
@@ -159,7 +162,7 @@ public sealed class MasterSwitchRemoteCommandTests
         using Setup s = new();
         s.WriteGeneral(new GeneralSettings { AutoMode = AllOff() });
 
-        s.Engine.DispatchForTests(Telepath("@auto-all off"));
+        ChatLines.Hear(s.Router, Telepath("@auto-all off"));
 
         Assert.True(s.Controller.KillSwitchEngaged);
         Assert.Contains("@auto-all: off", s.LastReply);
@@ -174,7 +177,7 @@ public sealed class MasterSwitchRemoteCommandTests
         baseModes.AutoRest = true;
         s.WriteGeneral(new GeneralSettings { AutoMode = AllOff(), AutoModeBase = baseModes });
 
-        s.Engine.DispatchForTests(Telepath("@auto-all on"));
+        ChatLines.Hear(s.Router, Telepath("@auto-all on"));
 
         Assert.False(s.Controller.KillSwitchEngaged);
         Assert.True(s.Mode.AutoCombat);
@@ -192,11 +195,11 @@ public sealed class MasterSwitchRemoteCommandTests
         AutoActionDefaults mode = AllOff();
         mode.AutoCombat = true;
         s.WriteGeneral(new GeneralSettings { AutoMode = mode });
-        s.Engine.DispatchForTests(Telepath("@auto-all off"));
+        ChatLines.Hear(s.Router, Telepath("@auto-all off"));
         Assert.True(s.Controller.KillSwitchEngaged);
         Assert.False(s.Mode.AutoCombat);
 
-        s.Engine.DispatchForTests(Telepath(command));
+        ChatLines.Hear(s.Router, Telepath(command));
 
         Assert.False(s.Controller.KillSwitchEngaged);
         Assert.True(s.Mode.AutoCombat);
@@ -208,10 +211,9 @@ public sealed class MasterSwitchRemoteCommandTests
     {
         using Setup s = new();
         s.Controller.TurnOff("test");
-        ChatLogEntry stranger = new(Now, ChatChannel.TelepathIncoming, "Stranger", "@auto-all on",
-            "Stranger telepaths: @auto-all on");
+        ChatLine stranger = new(ChatChannel.TelepathIncoming, "Stranger", "@auto-all on");
 
-        s.Engine.DispatchForTests(stranger);
+        ChatLines.Hear(s.Router, stranger);
 
         Assert.True(s.Controller.KillSwitchEngaged);
         // And unanswered: a denial would make @auto-all the one command that tells
@@ -223,10 +225,9 @@ public sealed class MasterSwitchRemoteCommandTests
     public void SwitchOn_AutoAllFromSomeoneWithoutTheGrant_GetsTheUsualDenial()
     {
         using Setup s = new();
-        ChatLogEntry stranger = new(Now, ChatChannel.TelepathIncoming, "Stranger", "@auto-all off",
-            "Stranger telepaths: @auto-all off");
+        ChatLine stranger = new(ChatChannel.TelepathIncoming, "Stranger", "@auto-all off");
 
-        s.Engine.DispatchForTests(stranger);
+        ChatLines.Hear(s.Router, stranger);
 
         Assert.False(s.Controller.KillSwitchEngaged);
         Assert.Single(s.Sent);
@@ -247,7 +248,7 @@ public sealed class MasterSwitchRemoteCommandTests
     {
         using Setup s = new();
         s.Controller.TurnOff("test");
-        s.Engine.DispatchForTests(Telepath("@comeback"));
+        ChatLines.Hear(s.Router, Telepath("@comeback"));
         Assert.Empty(s.Invoked);
 
         SwitchBackOn(s);
@@ -263,8 +264,7 @@ public sealed class MasterSwitchRemoteCommandTests
     {
         using Setup s = new();
         s.Controller.TurnOff("test");
-        s.Engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.TelepathIncoming, "Stranger", "@comeback",
-            "Stranger telepaths: @comeback"));
+        ChatLines.Hear(s.Router, new ChatLine(ChatChannel.TelepathIncoming, "Stranger", "@comeback"));
 
         Assert.Empty(s.Engine.HeldComebackSenders);
         SwitchBackOn(s);
@@ -278,7 +278,7 @@ public sealed class MasterSwitchRemoteCommandTests
     {
         using Setup s = new();
         s.Controller.TurnOff("test");
-        s.Engine.DispatchForTests(Telepath("@comeback"));
+        ChatLines.Hear(s.Router, Telepath("@comeback"));
 
         s.Party.Members.Clear();
         SwitchBackOn(s);
@@ -296,7 +296,7 @@ public sealed class MasterSwitchRemoteCommandTests
     {
         using Setup s = new();
         s.Controller.TurnOff("test");
-        s.Engine.DispatchForTests(Telepath("@comeback"));
+        ChatLines.Hear(s.Router, Telepath("@comeback"));
 
         s.Engine.DropHeldComebacks(why);
         SwitchBackOn(s);
@@ -314,7 +314,7 @@ public sealed class MasterSwitchRemoteCommandTests
         s.Engine.Now = () => now;
         s.Engine.ComebackWindow = TimeSpan.FromMinutes(2);
         s.Controller.TurnOff("test");
-        s.Engine.DispatchForTests(Telepath("@comeback"));
+        ChatLines.Hear(s.Router, Telepath("@comeback"));
 
         now += TimeSpan.FromMinutes(2) + TimeSpan.FromSeconds(1);
         SwitchBackOn(s);

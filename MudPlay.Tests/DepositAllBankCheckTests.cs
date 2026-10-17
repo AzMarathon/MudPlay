@@ -16,6 +16,9 @@ namespace MudPlay.Tests;
 // known to be no bank it sends nothing and says so.
 public sealed class DepositAllBankCheckTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
     // What the remote-command engine put on the wire, through the sender the client binds.
@@ -26,11 +29,12 @@ public sealed class DepositAllBankCheckTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         players.RecordObservation("Leader", @class: null, race: null, alignment: null,
             title: null, gang: null, role: null, nowUtc: Now);
         players.EditCustomization("Leader", new PlayerCustomization(RemoteControls: PlayerRemoteControls.ExecuteCommands));
         RemoteCommandManager engine = new(new ChatRouter(router), party, players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         InventoryManager inventory = new(log: null, itemWeightResolver: null, slotResolver: null);
         inventory.AttachLineExtractor(new LineExtractor(new TerminalEmulator(80, 24)));
@@ -45,8 +49,8 @@ public sealed class DepositAllBankCheckTests
         return (engine, game);
     }
 
-    private static ChatLogEntry Telepath(string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, "Leader", msg, $"Leader telepaths: {msg}");
+    private static ChatLine Telepath(string msg) =>
+        new(ChatChannel.TelepathIncoming, "Leader", msg);
 
     private string Only() =>
         Encoding.Latin1.GetString(Assert.Single(_replies));
@@ -56,7 +60,7 @@ public sealed class DepositAllBankCheckTests
     {
         var (engine, game) = Setup(inBank: false);
 
-        engine.DispatchForTests(Telepath("@deposit-all"));
+        ChatLines.Hear(_routers[engine], Telepath("@deposit-all"));
 
         Assert.Equal("/Leader {not in a bank - nothing deposited}\r", Only());
         Assert.Empty(game);
@@ -70,7 +74,7 @@ public sealed class DepositAllBankCheckTests
         var (engine, _) = Setup(inBank: false);
         engine.WarnOnDenial = false;
 
-        engine.DispatchForTests(Telepath("@deposit-all"));
+        ChatLines.Hear(_routers[engine], Telepath("@deposit-all"));
 
         Assert.StartsWith("/Leader {not in a bank", Only());
     }
@@ -84,7 +88,7 @@ public sealed class DepositAllBankCheckTests
     {
         var (engine, _) = Setup(inBank);
 
-        engine.DispatchForTests(Telepath("@deposit-all"));
+        ChatLines.Hear(_routers[engine], Telepath("@deposit-all"));
 
         Assert.StartsWith("/Leader {wealth unknown", Only());
     }

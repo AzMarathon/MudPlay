@@ -71,6 +71,23 @@ internal sealed class EventEngineHarness : IDisposable
         Timers.Dispose();
     }
 
+    // An EventManager as the client builds it, over engines with no game data
+    // loaded: for what the manager does with its event list and its actions alone.
+    // Its posts run at once.
+    public static EventManager ManagerWithoutGameData(ProfileService? profile = null, LogService? log = null)
+    {
+        GameDataCache cache = new(Path.Combine(Path.GetTempPath(), "mudplay-no-game-data-" + Guid.NewGuid().ToString("N")));
+        RoomGraphManager graph = new(cache);
+        BfsMapper bfs = new(graph);
+        RoomTracker tracker = new(graph);
+        MovementCoordinator coord = new();
+        AutoWalkManager walker = new(graph, bfs, tracker, coord);
+        LoopRunner runner = new(tracker, coord, graph: graph, bfs: bfs, postToUi: run => run());
+        AutoLairManager autoLair = new(walker, tracker, graph, bfs, new LairTimerStore(cache, graph, tracker));
+        return new EventManager(profile ?? TestProfiles.Loaded(), new LoopManager(bfs, graph), new LairManager(),
+            runner, autoLair, walker, log, post: act => act());
+    }
+
     // deferPosts: what the event manager posts waits for Pump, as it waits for the
     // dispatcher in the app. Off, it runs at once, which suits a test that feeds
     // the manager its engine events by hand.
@@ -108,8 +125,8 @@ internal sealed class EventEngineHarness : IDisposable
         loops.LoadAll(loopSet);
         LairManager lairs = new();
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         LogService log = new();
         List<Action>? posted = deferPosts ? new List<Action>() : null;
         EventManager events = new(profile, loops, lairs, runner, autoLair, walker, log,

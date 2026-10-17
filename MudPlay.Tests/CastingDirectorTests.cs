@@ -754,6 +754,8 @@ public sealed class CastingDirectorTests
         public MessageStore Messages { get; } = new();
         public CastCoordinator Cast { get; }
         public ConditionTracker Conditions { get; }
+        // The game's output, fed the way the client receives it.
+        public ServerFeed Server { get; } = new();
         public CastingDirector Director { get; }
         public List<string> CastsSent { get; } = new();
         public List<string> SelfBuffCast { get; } = new();
@@ -837,6 +839,7 @@ public sealed class CastingDirectorTests
             Cast.SetWireSender(_ => { });
             Cast.CastSent += CastsSent.Add;
             Conditions = new ConditionTracker(Messages, Log);
+            Conditions.AttachLineExtractor(Server.Lines);
             State.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(PlayerState.Hp)) BeforeDirectorSeesHp?.Invoke();
@@ -922,17 +925,7 @@ public sealed class CastingDirectorTests
                 AppliedEndsWith: endsWith));
         }
 
-        public void FeedLine(string text)
-        {
-            var emitted = new LineExtractor.EmittedLine(
-                text, Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false);
-            typeof(ConditionTracker)
-                .GetMethod("OnLine",
-                    System.Reflection.BindingFlags.Instance |
-                    System.Reflection.BindingFlags.NonPublic)!
-                .Invoke(Conditions, new object[] { emitted });
-        }
+        public void FeedLine(string text) => Server.Line(text);
 
         public void Dispose()
         {
@@ -4711,6 +4704,8 @@ public sealed class CastingDirectorTests
         public PartyState Party { get; } = new();
         public CastCoordinator Cast { get; }
         public CastingDirector Director { get; }
+        // The game's output, fed the way the client receives it.
+        public ServerFeed Server { get; } = new();
         public List<string> CastsSent { get; } = new();
         public SpellsSettings Spells { get; set; } = new();
         public HealthSettings Health { get; set; } = new();
@@ -4764,6 +4759,7 @@ public sealed class CastingDirectorTests
                 readPartySettings: () => PartySettings,
                 isEnabled: () => true,
                 log: Log);
+            Director.AttachLineExtractor(Server.Lines);
             Director.SetClock(() => Now);
             Director.SetTriggeredRestGate(() => TriggeredRest);
             Director.SetBuffDurationSources(
@@ -4836,17 +4832,7 @@ public sealed class CastingDirectorTests
         /// <see cref="LineExtractor"/> by invoking the director's private
         /// OnLine handler directly (matches the ConditionTracker.OnLine
         /// reflection idiom used elsewhere in this file).</summary>
-        public void Confirm(string casterLine)
-        {
-            var emitted = new LineExtractor.EmittedLine(
-                casterLine, Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false);
-            typeof(CastingDirector)
-                .GetMethod("OnLine",
-                    System.Reflection.BindingFlags.Instance |
-                    System.Reflection.BindingFlags.NonPublic)!
-                .Invoke(Director, new object[] { emitted });
-        }
+        public void Confirm(string casterLine) => Server.Line(casterLine);
 
         public void Dispose()
         {

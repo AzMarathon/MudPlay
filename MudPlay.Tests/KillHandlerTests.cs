@@ -21,6 +21,8 @@ public sealed class KillHandlerTests
     private sealed class Setup : IDisposable
     {
         public RemoteCommandManager Engine { get; }
+        // The router the engine's chat lines arrive through.
+        public MessageRouter Router { get; }
         // What Engine put on the wire, through the sender the client binds.
         public List<byte[]> Sent { get; } = new();
         public KillHandler Handler { get; }
@@ -33,10 +35,11 @@ public sealed class KillHandlerTests
         public Setup()
         {
             MessageRouter router = new();
+            Router = router;
             DefaultPatterns.Seed(router);
             ChatRouter chat = new(router);
             PartyState party = new();
-            Players = new PlayerDatabase();
+            Players = new PlayerDatabase(new ProfileService(), () => null);
             Engine = new RemoteCommandManager(chat, party, Players);
             Engine.SetWireSender(Sent.Add);
             Handler = new KillHandler(Engine, name => { Retargets.Add(name); return Refusal; });
@@ -45,8 +48,8 @@ public sealed class KillHandlerTests
         public void Dispose() => Handler.Dispose();
     }
 
-    private static ChatLogEntry Telepath(string sender, string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
+    private static ChatLine Telepath(string sender, string msg) =>
+        new(ChatChannel.TelepathIncoming, sender, msg);
 
     private static void SeedPlayer(PlayerDatabase db, string name, PlayerRemoteControls controls)
     {
@@ -60,7 +63,7 @@ public sealed class KillHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.ExecuteCommands);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@kill kobold"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@kill kobold"));
 
         Assert.Equal(new[] { "kobold" }, s.Retargets);
     }
@@ -71,7 +74,7 @@ public sealed class KillHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.ExecuteCommands);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@kill giant rat"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@kill giant rat"));
 
         Assert.Equal(new[] { "giant rat" }, s.Retargets);
     }
@@ -82,7 +85,7 @@ public sealed class KillHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.ExecuteCommands);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@kill kobold"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@kill kobold"));
 
         Assert.Empty(s.Sent);
     }
@@ -94,7 +97,7 @@ public sealed class KillHandlerTests
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.ExecuteCommands);
         s.Engine.WarnOnDenial = true;
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@kill"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@kill"));
 
         Assert.Empty(s.Retargets);
         string reply = Encoding.Latin1.GetString(s.Sent[^1]);
@@ -108,7 +111,7 @@ public sealed class KillHandlerTests
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.ExecuteCommands);
         s.Engine.WarnOnDenial = false;
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@kill"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@kill"));
 
         Assert.Empty(s.Retargets);
         Assert.Empty(s.Sent);
@@ -122,7 +125,7 @@ public sealed class KillHandlerTests
         using Setup s = new() { Refusal = "not attacking Bob: PvP is off" };
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.ExecuteCommands);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@kill Bob"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@kill Bob"));
 
         Assert.Equal("/Tank {not attacking Bob: PvP is off}\r",
             Encoding.Latin1.GetString(Assert.Single(s.Sent)));
@@ -135,7 +138,7 @@ public sealed class KillHandlerTests
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.ExecuteCommands);
         s.Engine.WarnOnDenial = false;
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@kill Bob"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@kill Bob"));
 
         Assert.Empty(s.Sent);
     }
@@ -146,7 +149,7 @@ public sealed class KillHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Rando", PlayerRemoteControls.QueryHealthStatus);
 
-        s.Engine.DispatchForTests(Telepath("Rando", "@kill kobold"));
+        ChatLines.Hear(s.Router, Telepath("Rando", "@kill kobold"));
 
         Assert.Empty(s.Retargets);
     }

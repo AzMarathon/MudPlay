@@ -18,6 +18,9 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class ExperienceQueryHandlerTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     // What the remote-command engine put on the wire, through the sender the client binds.
     private readonly List<byte[]> _replies = new();
 
@@ -36,8 +39,9 @@ public sealed class ExperienceQueryHandlerTests
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(chat, party, players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         PlayerStats stats = new();
         Clock clock = new();
@@ -52,8 +56,8 @@ public sealed class ExperienceQueryHandlerTests
         return (engine, stats, activity, clock, players);
     }
 
-    private static ChatLogEntry Telepath(string sender, string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
+    private static ChatLine Telepath(string sender, string msg) =>
+        new(ChatChannel.TelepathIncoming, sender, msg);
 
     private static void SeedPlayer(PlayerDatabase db, string name, PlayerRemoteControls controls)
     {
@@ -83,7 +87,7 @@ public sealed class ExperienceQueryHandlerTests
         var (engine, _, _, _, players) = Setup();
         SeedPlayer(players, "Bob", PlayerRemoteControls.QueryExperience);
 
-        engine.DispatchForTests(Telepath("Bob", "@level"));
+        ChatLines.Hear(_routers[engine], Telepath("Bob", "@level"));
 
         Assert.Contains("parse a stat screen", string.Join(" ", Replies()));
     }
@@ -98,7 +102,7 @@ public sealed class ExperienceQueryHandlerTests
         stats.LevelExpSpan = 500_000;
         stats.ExpToNext = 120_000;
 
-        engine.DispatchForTests(Telepath("Bob", "@level"));
+        ChatLines.Hear(_routers[engine], Telepath("Bob", "@level"));
 
         string reply = Assert.Single(Replies());
         Assert.Equal("Level 12, 1,500,000 exp, 120,000 to next level", reply);
@@ -113,7 +117,7 @@ public sealed class ExperienceQueryHandlerTests
         stats.Exp = 1_500_000;
         // LevelExpSpan left 0 — the exp line hasn't been parsed yet.
 
-        engine.DispatchForTests(Telepath("Bob", "@level"));
+        ChatLines.Hear(_routers[engine], Telepath("Bob", "@level"));
 
         string reply = Assert.Single(Replies());
         Assert.Equal("Level 12, 1,500,000 exp, exp-to-next unknown (type exp)", reply);
@@ -128,7 +132,7 @@ public sealed class ExperienceQueryHandlerTests
         SeedPlayer(players, "Bob", PlayerRemoteControls.QueryExperience);
         clock.Advance(30); // time online, but no exp booked
 
-        engine.DispatchForTests(Telepath("Bob", "@exp"));
+        ChatLines.Hear(_routers[engine], Telepath("Bob", "@exp"));
 
         string reply = Assert.Single(Replies());
         Assert.Equal("Made: 0  Rate: unknown (type exp for needed + time to level)", reply);
@@ -145,7 +149,7 @@ public sealed class ExperienceQueryHandlerTests
         stats.LevelExpSpan = 500_000;
         stats.ExpToNext = 32_400; // one hour of exp remaining → "60m" (under the 90m h/m cutover)
 
-        engine.DispatchForTests(Telepath("Bob", "@exp"));
+        ChatLines.Hear(_routers[engine], Telepath("Bob", "@exp"));
 
         string reply = Assert.Single(Replies());
         Assert.Equal("Made: 16,200  Needed: 32,400 (L13, +0.00 lvls)  Rate: 32,400/hr  Will level in: 60m", reply);
@@ -160,7 +164,7 @@ public sealed class ExperienceQueryHandlerTests
         clock.Advance(30);
         // LevelExpSpan stays 0 — rate is known, ETA is not.
 
-        engine.DispatchForTests(Telepath("Bob", "@exp"));
+        ChatLines.Hear(_routers[engine], Telepath("Bob", "@exp"));
 
         string reply = Assert.Single(Replies());
         Assert.Equal("Made: 6,000  Rate: 12,000/hr (type exp for needed + time to level)", reply);
@@ -177,7 +181,7 @@ public sealed class ExperienceQueryHandlerTests
         stats.LevelExpSpan = 500_000;
         stats.ExpToNext = 0; // server clamps to 0 once past the threshold
 
-        engine.DispatchForTests(Telepath("Bob", "@exp"));
+        ChatLines.Hear(_routers[engine], Telepath("Bob", "@exp"));
 
         Assert.Equal("Made: 6,000  Needed: 0 (L13, +0.00 lvls)  Rate: 12,000/hr  Will level in: ready to level",
             Assert.Single(Replies()));
@@ -196,7 +200,7 @@ public sealed class ExperienceQueryHandlerTests
         stats.LevelExpSpan = 500_000_000;
         stats.ExpToNext = 60_000_000;      // 60m / 30m per hr = 2h
 
-        engine.DispatchForTests(Telepath("Bob", "@exp"));
+        ChatLines.Hear(_routers[engine], Telepath("Bob", "@exp"));
 
         Assert.Equal("Made: 30,000,000  Needed: 60,000,000 (L72, +0.00 lvls)  Rate: 30 m/hr  Will level in: 2h 0m",
             Assert.Single(Replies()));
@@ -231,7 +235,7 @@ public sealed class ExperienceQueryHandlerTests
             PlayerRemoteControls.All & ~PlayerRemoteControls.QueryExperience);
         clock.Advance(30);
 
-        engine.DispatchForTests(Telepath("Stranger", "@exp"));
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@exp"));
 
         Assert.Empty(Replies());
     }

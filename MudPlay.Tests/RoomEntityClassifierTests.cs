@@ -22,7 +22,7 @@ public sealed class RoomEntityClassifierTests
     {
         public MessageRouter Router { get; }
         public MonsterMessageStore Monsters { get; } = new();
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
         public LogService Log { get; } = new();
         public FlavorPrefixStore Prefixes { get; } = new();
         public RoomEntityClassifier Classifier { get; }
@@ -394,7 +394,7 @@ public sealed class RoomEntityClassifierTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         MonsterMessageStore monsters = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
 
         using RoomEntityClassifier classifier = new(router, monsters, players, log: null);
 
@@ -874,12 +874,12 @@ public sealed class RoomEntityClassifierTests
         h.AddMonster(5, "kobold thief");
 
         // Attach the extractor so the wrap-buffer path is live.
-        Terminal.LineExtractor lines = new(new MudPlay.Terminal.TerminalEmulator(80, 24));
-        h.Classifier.AttachLineExtractor(lines);
+        ServerFeed feed = new();
+        h.Classifier.AttachLineExtractor(feed.Lines);
 
         // Feed wrapped rows in the order the server produces them.
-        FeedLine(lines, "Also here: angry giant rat, nasty carrion beast, giant rat, acid slime, short");
-        FeedLine(lines, "kobold thief.");
+        feed.Line("Also here: angry giant rat, nasty carrion beast, giant rat, acid slime, short");
+        feed.Line("kobold thief.");
 
         Assert.Single(h.Observations);
         RoomEntitiesObservation obs = h.Observations[0];
@@ -899,12 +899,12 @@ public sealed class RoomEntityClassifierTests
         h.AddMonster(2, "acid slime");
         h.AddMonster(3, "kobold thief");
 
-        Terminal.LineExtractor lines = new(new MudPlay.Terminal.TerminalEmulator(80, 24));
-        h.Classifier.AttachLineExtractor(lines);
+        ServerFeed feed = new();
+        h.Classifier.AttachLineExtractor(feed.Lines);
 
-        FeedLine(lines, "Also here: giant rat,");
-        FeedLine(lines, "acid slime,");
-        FeedLine(lines, "kobold thief.");
+        feed.Line("Also here: giant rat,");
+        feed.Line("acid slime,");
+        feed.Line("kobold thief.");
 
         Assert.Single(h.Observations);
         Assert.Equal(3, h.Observations[0].Entities.Count);
@@ -927,7 +927,7 @@ public sealed class RoomEntityClassifierTests
         private readonly string _root;
         public MessageRouter Router { get; }
         public MonsterMessageStore Monsters { get; } = new();
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
         public RoomTracker Tracker { get; }
         public RoomEntityClassifier Classifier { get; }
         public List<RoomEntitiesObservation> Observations { get; } = new();
@@ -1445,20 +1445,4 @@ public sealed class RoomEntityClassifierTests
         Assert.Equal("giant rat", h.Classifier.Current!.Value.Entities[0].ResolvedName);
     }
 
-    private static void FeedLine(Terminal.LineExtractor lines, string text)
-    {
-        // The classifier's LineEmitted subscription is what we want
-        // to exercise; reflect into the private event invoke since
-        // LineExtractor.LineEmitted isn't a public test hook.
-        System.Reflection.FieldInfo? field = typeof(Terminal.LineExtractor)
-            .GetField("LineEmitted",
-                System.Reflection.BindingFlags.Instance |
-                System.Reflection.BindingFlags.NonPublic);
-        if (field?.GetValue(lines) is Action<Terminal.LineExtractor.EmittedLine> handler)
-        {
-            handler(new Terminal.LineExtractor.EmittedLine(
-                text, Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false));
-        }
-    }
 }

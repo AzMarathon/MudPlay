@@ -21,7 +21,7 @@ public sealed class StashRoomManagerTests
     private sealed class Harness : IDisposable
     {
         public LogService Log { get; } = new();
-        public ProfileService Profile { get; } = new();
+        public ProfileService Profile { get; } = TestProfiles.Service();
         public StashRoomManager Stash { get; }
         public List<byte[]> Sent { get; } = new();
         public CashSettings CashSettings { get; set; } = new();
@@ -40,7 +40,7 @@ public sealed class StashRoomManagerTests
 
         public Harness()
         {
-            Profile.LoadBlank();
+            Profile.LoadDefaultProfile();
             Stash = new StashRoomManager(Profile,
                 readCash: () => CashSettings,
                 getSnapshot: () => Snapshot,

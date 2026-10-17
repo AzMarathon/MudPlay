@@ -32,6 +32,8 @@ public sealed class SessionResetHandlerTests
     private sealed class Setup : IDisposable
     {
         public RemoteCommandManager Engine { get; }
+        // The router the engine's chat lines arrive through.
+        public MessageRouter Router { get; }
         // What Engine put on the wire, through the sender the client binds.
         public List<byte[]> Sent { get; } = new();
         public SessionResetHandler Handler { get; }
@@ -45,10 +47,11 @@ public sealed class SessionResetHandlerTests
         public Setup()
         {
             MessageRouter router = new();
+            Router = router;
             DefaultPatterns.Seed(router);
             ChatRouter chat = new(router);
             PartyState party = new();
-            Players = new PlayerDatabase();
+            Players = new PlayerDatabase(new ProfileService(), () => null);
             Engine = new RemoteCommandManager(chat, party, Players);
             Engine.SetWireSender(Sent.Add);
             Combat = new CombatSessionTracker(router, new RoundDamageTracker(router, new PlayerState()));
@@ -61,8 +64,8 @@ public sealed class SessionResetHandlerTests
         public void Dispose() => Handler.Dispose();
     }
 
-    private static ChatLogEntry Telepath(string sender, string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
+    private static ChatLine Telepath(string sender, string msg) =>
+        new(ChatChannel.TelepathIncoming, sender, msg);
 
     private static void SeedPlayer(PlayerDatabase db, string name, PlayerRemoteControls controls)
     {
@@ -78,7 +81,7 @@ public sealed class SessionResetHandlerTests
         for (int i = 0; i < 5; i++) s.Activity.NoteKill();
         s.Activity.NoteExperience(4200);
 
-        s.Engine.DispatchForTests(Telepath("Leader", "@reset"));
+        ChatLines.Hear(s.Router, Telepath("Leader", "@reset"));
 
         SessionActivityStats stats = s.Activity.Snapshot();
         Assert.Equal(0, stats.MonstersKilled);
@@ -96,7 +99,7 @@ public sealed class SessionResetHandlerTests
         s.Transactions.NoteStash(new[] { ("gold", 400L) }, new[] { "a torch" });
         Assert.Equal(3, s.Transactions.Snapshot().Count);   // deposit, the item, the room's coin row
 
-        s.Engine.DispatchForTests(Telepath("Leader", "@reset"));
+        ChatLines.Hear(s.Router, Telepath("Leader", "@reset"));
 
         Assert.Equal(3, s.Transactions.Snapshot().Count);
     }
@@ -109,7 +112,7 @@ public sealed class SessionResetHandlerTests
         s.Time.NoteInGame(); // in-game, so Time Analysis is accruing
         s.Clock.Advance(30); // 30 min of session time accrues
 
-        s.Engine.DispatchForTests(Telepath("Leader", "@reset"));
+        ChatLines.Hear(s.Router, Telepath("Leader", "@reset"));
         s.Clock.Advance(5);
 
         // @reset re-anchors but stays armed → only the post-reset 5 min remains.
@@ -122,7 +125,7 @@ public sealed class SessionResetHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Leader", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Leader", "@reset"));
+        ChatLines.Hear(s.Router, Telepath("Leader", "@reset"));
 
         Assert.NotEmpty(s.Sent);
         string reply = Encoding.Latin1.GetString(s.Sent[^1]);
@@ -136,7 +139,7 @@ public sealed class SessionResetHandlerTests
         SeedPlayer(s.Players, "Rando", PlayerRemoteControls.QueryHealthStatus);
         for (int i = 0; i < 3; i++) s.Activity.NoteKill();
 
-        s.Engine.DispatchForTests(Telepath("Rando", "@reset"));
+        ChatLines.Hear(s.Router, Telepath("Rando", "@reset"));
 
         // Permission gate blocks the handler — counters untouched, no reply.
         Assert.Equal(3, s.Activity.Snapshot().MonstersKilled);

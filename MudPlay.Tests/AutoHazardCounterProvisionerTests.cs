@@ -87,8 +87,8 @@ public sealed class AutoHazardCounterProvisionerTests
                 now:            () => Now,
                 followingLeader: () => Following);
             Engine.SetWireSender(_wire.Add);
-            ProfileService profile = new();
-            profile.LoadBlank();
+            ProfileService profile = TestProfiles.Service();
+            profile.LoadDefaultProfile();
             Controller = new AutoModeController(profile);
             Engine.MasterSwitchOff = () => Controller.Blocks("Hazard counter item");
         }

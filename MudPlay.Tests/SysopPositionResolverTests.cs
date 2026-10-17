@@ -41,6 +41,8 @@ public sealed class SysopPositionResolverTests : IDisposable
     private sealed class Harness : IDisposable
     {
         public SysRoomStatusParser Parser { get; } = new();
+        // The game's output, fed the way the client receives it.
+        public ServerFeed Feed { get; } = new();
         public SysStatusProbe Probe { get; }
         public SysopPositionResolver Resolver { get; }
         public RoomTracker Tracker { get; }
@@ -57,6 +59,7 @@ public sealed class SysopPositionResolverTests : IDisposable
 
         public Harness(string root)
         {
+            Parser.AttachLineExtractor(Feed.Lines);
             Directory.CreateDirectory(Path.Combine(root, "alpha"));
             File.WriteAllText(Path.Combine(root, "alpha", "Rooms.json"), GraphJson);
             GameDataCache cache = new(root);
@@ -93,9 +96,9 @@ public sealed class SysopPositionResolverTests : IDisposable
         public void ReplyWithRoom(int map, int room)
         {
             int before = Resolved.Count + Failures;
-            Parser.FeedTestLine($"Room {room}  Map: {map}");
-            Parser.FeedTestLine("Monsters: None");
-            Parser.FeedTestLine("[HP=100]:", isPromptLine: true);
+            Feed.Line($"Room {room}  Map: {map}");
+            Feed.Line("Monsters: None");
+            Feed.Line("[HP=100]:");
             FinishTheProbe();
             Assert.Equal(before + 1, Resolved.Count + Failures);
         }

@@ -69,7 +69,7 @@ public sealed class TrapDelegationManagerTests : IDisposable
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyManager party = new(router, new PartyState()) { LocalCharacterName = localName };
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         GameDataCache gameData = SeededCache();
         return (router, party, players, gameData);
     }
@@ -185,8 +185,10 @@ public sealed class TrapDelegationManagerTests : IDisposable
         // confirmation — class settles capability, no race probe needed.
         var h = Harness();
         TrapDelegationManager mgr = NewManager(h);
-        h.party.TestEnterParBlock();
-        h.party.FeedTestLines(new[]
+        ServerFeed feed = new(h.router);
+        h.party.AttachLineExtractor(feed.Lines);
+        feed.Line("The following people are in your travel party:");
+        feed.Rows(new[]
         {
             "  Helper                          (Ninja)         [M:100%] [H:100%]   - Frontrank",
             "",

@@ -304,9 +304,6 @@ public sealed class RemoteCommandManager : IDisposable
     // startup line.
     public int HandlerCount => _handlers.Count;
 
-    // Test seam — drives the engine without going through ChatRouter.
-    internal void DispatchForTests(ChatLogEntry entry) => OnChatEntry(entry);
-
     // Outcome of TryInvokeLocal, so the caller can map a refusal to the right
     // status rather than guessing from a bool.
     public enum LocalInvokeResult

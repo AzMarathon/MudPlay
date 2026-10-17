@@ -26,7 +26,7 @@ public sealed class PartyLevelTrackerTests
         public readonly ChatRouter Chat;
         public readonly PartyState State = new();
         public readonly PartyBroadcaster Broadcaster;
-        public readonly PlayerDatabase Players = new();
+        public readonly PlayerDatabase Players = new(new ProfileService(), () => null);
         public readonly List<byte[]> Wire = new();
         public readonly List<Action> Windows = new();
         public readonly PartyLevelProbe Probe;

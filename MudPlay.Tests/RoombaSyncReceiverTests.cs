@@ -19,10 +19,9 @@ namespace MudPlay.Tests;
 // The reply only arrives because the sender granted us "Query Roomba", so having
 // asked is the whole gate — a line outside the window is ignored. Because every
 // line stands alone (no reassembly), a line the game drops costs only its rooms —
-// the rest still merge. Ingest is exercised directly (an internal test seam, same
-// idea as RemoteCommandManager.DispatchForTests) except for the Dispose test,
-// which needs the real MessageRouter → ChatRouter → EntryClassified path to prove
-// unsubscription.
+// the rest still merge. Ingest, the receiver's ChatRouter handler, is called
+// directly except for the Dispose test, which needs the real MessageRouter →
+// ChatRouter → EntryClassified path to prove unsubscription.
 public sealed class RoombaSyncReceiverTests : IDisposable
 {
     private static readonly DateTime Now = new(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc);
@@ -57,8 +56,8 @@ public sealed class RoombaSyncReceiverTests : IDisposable
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
         labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 

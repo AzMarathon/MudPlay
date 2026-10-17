@@ -17,6 +17,9 @@ namespace MudPlay.Tests;
 // reassembles and saves without clobbering a loop of its own.
 public sealed class LoopShareTests : IDisposable
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     // Loops persist under the set's Loops/ folder in the real app data root (AppPaths
     // caches it at static init), so each test uses its own set name and deletes it.
     private readonly string _setName = "test-set-" + Guid.NewGuid().ToString("N")[..12];
@@ -794,12 +797,13 @@ public sealed class LoopShareTests : IDisposable
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), new PlayerDatabase())
+        RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), new PlayerDatabase(new ProfileService(), () => null))
         {
             BlockedByMasterSwitch = _ => masterSwitchOff,
             WarnOnDenial = warn,
             StealthedProvider = () => stealthed,
         };
+        _routers[engine] = router;
         engine.SetWireSender((_wire[engine] = new()).Add);
         return engine;
     }
@@ -858,7 +862,7 @@ public sealed class LoopShareTests : IDisposable
     {
         RemoteCommandManager engine = Engine();
 
-        engine.DispatchForTests(Tele("Raijin", line));
+        ChatLines.Hear(_routers[engine], ChatChannel.TelepathIncoming, "Raijin", line);
 
         Assert.Empty(_wire[engine]);
         Assert.False(PartyProbeManager.TryParseVersion(line, out _));
@@ -914,12 +918,13 @@ public sealed class LoopShareTests : IDisposable
         LogService log = new();
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), new PlayerDatabase(), log) { WarnOnDenial = true };
+        RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), new PlayerDatabase(new ProfileService(), () => null), log) { WarnOnDenial = true };
+        _routers[engine] = router;
         engine.SetWireSender((_wire[engine] = new()).Add);
         engine.RegisterIgnored(LoopShareHandler.DataToken);
         engine.RegisterIgnored(LoopShareHandler.ResultToken);
 
-        engine.DispatchForTests(Tele("Raijin", line));
+        ChatLines.Hear(_routers[engine], ChatChannel.TelepathIncoming, "Raijin", line);
 
         Assert.Empty(_wire[engine]);
         // Swallowed as a reserved token, ahead of the unknown-command and blocked-word paths.

@@ -947,11 +947,11 @@ public sealed class CashManagerTests
         h.Settings.GoldPolicy = CashPolicy.Collect;
         h.Settings.SilverPolicy = CashPolicy.Collect;
 
-        Terminal.LineExtractor lines = new(new MudPlay.Terminal.TerminalEmulator(80, 24));
-        h.Cash.AttachLineExtractor(lines);
+        ServerFeed feed = new();
+        h.Cash.AttachLineExtractor(feed.Lines);
 
-        FeedLine(lines, "You notice 5 gold sovereigns, 10 silver nobles, a longsword, a shield, a potion of");
-        FeedLine(lines, "healing here.");
+        feed.Line("You notice 5 gold sovereigns, 10 silver nobles, a longsword, a shield, a potion of");
+        feed.Line("healing here.");
 
         Assert.Equal(2, h.Dispatches.Count);
         Assert.Contains(h.Dispatches, d => d.Currency == "gold" && d.Count == 5);
@@ -1605,20 +1605,6 @@ public sealed class CashManagerTests
 
         h.Feed("There are 1000 copper pieces here.");
         Assert.Single(h.Sent);   // second batch gated out by the in-flight projection
-    }
-
-    private static void FeedLine(Terminal.LineExtractor lines, string text)
-    {
-        System.Reflection.FieldInfo? field = typeof(Terminal.LineExtractor)
-            .GetField("LineEmitted",
-                System.Reflection.BindingFlags.Instance |
-                System.Reflection.BindingFlags.NonPublic);
-        if (field?.GetValue(lines) is Action<Terminal.LineExtractor.EmittedLine> handler)
-        {
-            handler(new Terminal.LineExtractor.EmittedLine(
-                text, Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false));
-        }
     }
 
     // Report paradigm-20261007-111929: a boss died, the coin get went out on the

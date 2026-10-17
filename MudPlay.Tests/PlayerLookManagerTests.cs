@@ -22,7 +22,7 @@ public sealed class PlayerLookManagerTests
     {
         public MessageRouter Router { get; }
         public MonsterMessageStore Monsters { get; } = new();
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
         public LogService Log { get; } = new();
         public RoomEntityClassifier Classifier { get; }
         public RoomEntryWatcher RoomEntry { get; }

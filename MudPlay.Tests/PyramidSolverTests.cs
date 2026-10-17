@@ -30,6 +30,8 @@ public sealed class PyramidSolverTests : IDisposable
         public required AutoWalkManager Walker { get; init; }
         public required MovementCoordinator Coord { get; init; }
         public required PyramidSolver Solver { get; init; }
+        // The game's output, fed the way the client receives it.
+        public required ServerFeed Feed { get; init; }
         public List<byte[]> Sent { get; } = new();
         public List<WalkEvent> Events { get; } = new();
         public List<string> SentText => Sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
@@ -131,7 +133,9 @@ public sealed class PyramidSolverTests : IDisposable
             gateEngineOn: gate => made!.EnginesOn.Contains(gate),
             stopDoor: () => made!.DoorStops++);
 
-        Harness h = new() { Tracker = tracker, Walker = walker, Coord = coord, Solver = solver };
+        ServerFeed feed = new();
+        solver.AttachLineExtractor(feed.Lines);
+        Harness h = new() { Tracker = tracker, Walker = walker, Coord = coord, Solver = solver, Feed = feed };
         made = h;
         walker.SetWireSender(h.Sent.Add);
         walker.SetPyramidSolver(solver);
@@ -236,11 +240,11 @@ public sealed class PyramidSolverTests : IDisposable
                 && !h.LeaderHasKey)
             {
                 // The floating key dies and its key is picked up as we walk in.
-                if (h.MemberGrabsKey) h.Solver.FeedLineForTests("Jroc picks up golden lion key");
+                if (h.MemberGrabsKey) h.Feed.Line("Jroc picks up golden lion key");
                 else
                 {
                     h.LeaderHasKey = true;
-                    h.Solver.FeedLineForTests("You took golden lion key.");
+                    h.Feed.Line("You took golden lion key.");
                 }
             }
 
@@ -275,7 +279,7 @@ public sealed class PyramidSolverTests : IDisposable
         {
             Assert.Contains(h.Room, new[] { 1920, 2001, 2051 });   // only ever asked where a sphinx stands
             h.OpenGates.Add((h.Room, "U"));
-            h.Solver.FeedLineForTests(CeilingLine);
+            h.Feed.Line(CeilingLine);
             return true;
         }
 
@@ -948,11 +952,11 @@ public sealed class PyramidSolverTests : IDisposable
         using Harness h = Begin(NewHarness());
         RunUntil(h, () => h.Room == 1803);
 
-        h.Solver.FeedLineForTests("Your legs are paralyzed!");
+        h.Feed.Line("Your legs are paralyzed!");
         for (int i = 0; i < 10; i++) Pump(h);       // well inside the wear-off cap
         Assert.True(h.Solver.IsHeld);
 
-        h.Solver.FeedLineForTests("You can move again!");
+        h.Feed.Line("You can move again!");
         RunToEnd(h);
         AssertFinished(h);
         Assert.Equal(0, h.Refused);                  // no moves were thrown at the hold
@@ -964,7 +968,7 @@ public sealed class PyramidSolverTests : IDisposable
         using Harness h = Begin(NewHarness());
         RunUntil(h, () => h.Room == 1803);
 
-        h.Solver.FeedLineForTests("Your legs are paralyzed!");
+        h.Feed.Line("Your legs are paralyzed!");
         RunToEnd(h);                                 // "You can move again!" never arrives
         AssertFinished(h);
     }
@@ -978,13 +982,13 @@ public sealed class PyramidSolverTests : IDisposable
         // Undead priest holds a party member → stepping stalls. Check fewer ticks
         // than the ~20-tick "assume worn off" cap so we're verifying the pause, not
         // the cap's auto-release.
-        h.Solver.FeedLineForTests("big undead priest casts hold person on Jroc!");
+        h.Feed.Line("big undead priest casts hold person on Jroc!");
         for (int i = 0; i < 8; i++) Pump(h);
         Assert.True(h.Solver.Active);
         Assert.True(h.Solver.IsHeld);
 
         // A freedom cast on the held member releases the pause → finishes.
-        h.Solver.FeedLineForTests("Xian casts freedom on Jroc!");
+        h.Feed.Line("Xian casts freedom on Jroc!");
         RunToEnd(h);
         AssertFinished(h);
     }
@@ -995,7 +999,7 @@ public sealed class PyramidSolverTests : IDisposable
         using Harness h = Begin(NewHarness(leaderName: "MudPlay", partyMembers: new[] { "Jroc" }));
         DriveUntilFloor(h, "F3");
 
-        h.Solver.FeedLineForTests("big undead priest casts hold person on Jroc!");
+        h.Feed.Line("big undead priest casts hold person on Jroc!");
         RunToEnd(h);                                 // no freedom cast ever comes
         AssertFinished(h);
     }
@@ -1071,7 +1075,7 @@ public sealed class PyramidSolverTests : IDisposable
         // The timer swings it open; the game says so.
         h.WaitDoorsOpen = true;
         h.Tracker.NoteNamedDoorOpened(Direction.N);
-        h.Solver.FeedLineForTests("The door to the north just opened.");
+        h.Feed.Line("The door to the north just opened.");
         Assert.Equal("n", h.SentText[^1]);
 
         RunToEnd(h);
@@ -1223,7 +1227,7 @@ public sealed class PyramidSolverTests : IDisposable
         Pump(h);
         Pump(h);
         h.LeaderHasKey = true;
-        h.Solver.FeedLineForTests("You took golden lion key.");
+        h.Feed.Line("You took golden lion key.");
         RunToEnd(h);
 
         AssertFinished(h);

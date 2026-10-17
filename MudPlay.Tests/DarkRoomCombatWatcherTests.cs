@@ -23,7 +23,7 @@ public sealed class DarkRoomCombatWatcherTests
         private readonly string _root;
         public MessageRouter Router { get; } = new();
         public MonsterMessageStore Monsters { get; } = new();
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
         public LogService Log { get; } = new();
         public RoomTracker Tracker { get; }
         public RoomEntityClassifier Classifier { get; }

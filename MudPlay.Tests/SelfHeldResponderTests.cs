@@ -1,4 +1,3 @@
-using System.Reflection;
 using MudPlay.Game;
 using MudPlay.Game.Conditions;
 using MudPlay.Game.Map;
@@ -37,6 +36,8 @@ public sealed class SelfHeldResponderTests
         public LogService Log { get; } = new();
         public MessageStore Messages { get; } = new();
         public ConditionTracker Conditions { get; }
+        // The game's output, fed the way the client receives it.
+        public ServerFeed Server { get; } = new();
         public MessageRouter Router { get; } = new();
         public PartyManager Party { get; }
         public MovementCoordinator Coordinator { get; }
@@ -45,6 +46,7 @@ public sealed class SelfHeldResponderTests
         public Harness()
         {
             Conditions = new ConditionTracker(Messages, Log);
+            Conditions.AttachLineExtractor(Server.Lines);
             Messages.Messages.Add(Knockdown());
             DefaultPatterns.Seed(Router);
             PartyState partyState = new();
@@ -71,13 +73,7 @@ public sealed class SelfHeldResponderTests
             }
         }
 
-        private void Feed(string text)
-        {
-            var emitted = Line(text);
-            typeof(ConditionTracker)
-                .GetMethod("OnLine", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(Conditions, new object[] { emitted });
-        }
+        private void Feed(string text) => Server.Line(text);
 
         public void Dispose()
         {

@@ -1,8 +1,6 @@
-using System.Reflection;
 using MudPlay.Game;
 using MudPlay.Game.Inventory;
 using MudPlay.Models.Profile;
-using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -20,7 +18,8 @@ public sealed class InventoryManagerTests
     private sealed class Harness : IDisposable
     {
         public InventoryManager Inv { get; }
-        public LineExtractor Lines { get; }
+        // The game's output, fed the way the client receives it.
+        public ServerFeed Server { get; } = new();
         public int ChangedCount { get; private set; }
 
         public Harness(
@@ -33,22 +32,11 @@ public sealed class InventoryManagerTests
             Inv = new InventoryManager(
                 log: null, itemWeightResolver: itemWeight, slotResolver: slotResolver,
                 isItemRecordName: isItemRecordName, isKey: isKey, staysWhenSpent: staysWhenSpent);
-            Lines = new LineExtractor(new TerminalEmulator(80, 24));
-            Inv.AttachLineExtractor(Lines);
+            Inv.AttachLineExtractor(Server.Lines);
             Inv.Changed += () => ChangedCount++;
         }
 
-        public void Feed(string text)
-        {
-            FieldInfo? field = typeof(LineExtractor).GetField(
-                "LineEmitted", BindingFlags.Instance | BindingFlags.NonPublic);
-            if (field?.GetValue(Lines) is Action<LineExtractor.EmittedLine> handler)
-            {
-                handler(new LineExtractor.EmittedLine(
-                    text, Array.Empty<CellAttributes>(),
-                    DateTimeOffset.UtcNow, IsPromptLine: false));
-            }
-        }
+        public void Feed(string text) => Server.Line(text);
 
         public void Dispose() => Inv.Dispose();
     }

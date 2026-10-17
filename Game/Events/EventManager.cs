@@ -86,17 +86,17 @@ namespace MudPlay.Game.Events;
 // Fire and the run ticker (a DispatcherTimer), so no internal locking is needed.
 public sealed class EventManager : IDisposable
 {
-    private readonly ProfileService? _profile;
-    private readonly LoopManager? _loops;
-    private readonly LairManager? _lairs;
-    private readonly LoopRunner? _loopRunner;
-    private readonly AutoLairManager? _autoLair;
-    private readonly AutoWalkManager? _walker;
+    private readonly ProfileService _profile;
+    private readonly LoopManager _loops;
+    private readonly LairManager _lairs;
+    private readonly LoopRunner _loopRunner;
+    private readonly AutoLairManager _autoLair;
+    private readonly AutoWalkManager _walker;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
     // Runs an action once the engine raise it was asked from has unwound (see the
-    // header). Inline without engines (the parameterless ctor): nothing resets.
-    private readonly Action<Action> _post = static act => act();
+    // header).
+    private readonly Action<Action> _post;
 
     // Tracks which events the reconciler auto-disabled (vs the user manually
     // flipping Disabled). The Settings.Events row badge renders "↻ target missing"
@@ -153,9 +153,6 @@ public sealed class EventManager : IDisposable
         if (profile.Current is { } current) LoadFrom(current);
     }
 
-    // Parameterless ctor for tests / in-memory scenarios — no profile, no engines.
-    public EventManager() { }
-
     // Symmetric tear-down for the five ProfileService / LoopManager / LairManager
     // subscriptions wired in the engine-bound ctor. Today AppServices keeps
     // EventManager alive for the app's lifetime so this is mostly hygiene — but it
@@ -166,17 +163,14 @@ public sealed class EventManager : IDisposable
         if (_disposed) return;
         _disposed = true;
         StopTicker();
-        if (_walker is not null) _walker.Event -= OnWalkEvent;
-        if (_loopRunner is not null) _loopRunner.Event -= OnLoopEvent;
-        if (_autoLair is not null) _autoLair.ActiveChanged -= OnAutoLairActiveChanged;
-        if (_profile is not null)
-        {
-            _profile.ProfileLoaded -= LoadFrom;
-            _profile.ProfileClosed -= Clear;
-            _profile.ProfileSaving -= SnapshotForSave;
-        }
-        if (_loops is not null)  _loops.LoopsChanged -= ReconcileTargets;
-        if (_lairs is not null)  _lairs.SetupsChanged -= ReconcileTargets;
+        _walker.Event -= OnWalkEvent;
+        _loopRunner.Event -= OnLoopEvent;
+        _autoLair.ActiveChanged -= OnAutoLairActiveChanged;
+        _profile.ProfileLoaded -= LoadFrom;
+        _profile.ProfileClosed -= Clear;
+        _profile.ProfileSaving -= SnapshotForSave;
+        _loops.LoopsChanged -= ReconcileTargets;
+        _lairs.SetupsChanged -= ReconcileTargets;
     }
     private bool _disposed;
 
@@ -203,7 +197,7 @@ public sealed class EventManager : IDisposable
         ArgumentNullException.ThrowIfNull(e);
         Events.Add(e);
         ReconcileTargets();
-        _profile?.Save();
+        _profile.Save();
     }
 
     // Replace an existing event by reference. Persists. No-op when original isn't
@@ -221,7 +215,7 @@ public sealed class EventManager : IDisposable
         if (_lastSwitch.Remove(original, out string? note) && updated.Disabled == original.Disabled)
             _lastSwitch[updated] = note;
         ReconcileTargets();
-        _profile?.Save();
+        _profile.Save();
         return true;
     }
 
@@ -232,7 +226,7 @@ public sealed class EventManager : IDisposable
         if (!Events.Remove(e)) return false;
         _autoDisabled.Remove(e);
         _lastSwitch.Remove(e);
-        _profile?.Save();
+        _profile.Save();
         return true;
     }
 
@@ -245,7 +239,7 @@ public sealed class EventManager : IDisposable
 
     // "Disable all events" (Settings → Events) is ticked: nothing fires, whatever
     // each event's own state says.
-    public bool AllDisabled => _profile?.Current?.EventsGloballyDisabled == true;
+    public bool AllDisabled => _profile.Current?.EventsGloballyDisabled == true;
 
     // That event is the one whose run is under way.
     public bool IsRunning(ScheduledEvent e) => _run is { } run && ReferenceEquals(run.Event, e);
@@ -306,7 +300,7 @@ public sealed class EventManager : IDisposable
         _autoDisabled.Remove(e);
         _lastSwitch[e] = $"switched {(enabled ? "on" : "off")} by {by} at {Now().ToLocalTime():HH:mm:ss}";
         Events[index] = e;
-        _profile?.Save();
+        _profile.Save();
         _log?.Info("Events",
             $"Event '{Label(e)}' switched {(enabled ? "on" : "off")} by {by}"
             + (!enabled && IsRunning(e) ? "; its run under way goes on to its end" : "")
@@ -418,11 +412,11 @@ public sealed class EventManager : IDisposable
     public const int SuspendedIdleMinutesCeiling = 120;
 
     public int MaxQueued =>
-        Math.Clamp(_profile?.Current?.EventQueueLimit ?? DefaultMaxQueued, 1, MaxQueuedCeiling);
+        Math.Clamp(_profile.Current?.EventQueueLimit ?? DefaultMaxQueued, 1, MaxQueuedCeiling);
     public TimeSpan MaxQueueWait => TimeSpan.FromMinutes(
-        Math.Clamp(_profile?.Current?.EventQueueWaitMinutes ?? DefaultMaxQueueWaitMinutes, 1, MaxQueueWaitMinutesCeiling));
+        Math.Clamp(_profile.Current?.EventQueueWaitMinutes ?? DefaultMaxQueueWaitMinutes, 1, MaxQueueWaitMinutesCeiling));
     public TimeSpan SuspendedIdleLimit => TimeSpan.FromMinutes(
-        Math.Clamp(_profile?.Current?.EventSuspendedIdleMinutes ?? DefaultSuspendedIdleMinutes, 1, SuspendedIdleMinutesCeiling));
+        Math.Clamp(_profile.Current?.EventSuspendedIdleMinutes ?? DefaultSuspendedIdleMinutes, 1, SuspendedIdleMinutesCeiling));
 
     private sealed class EventRun(
         ScheduledEvent e, ScheduledEvent origin, EventResumePlan? resume, int depth, DateTimeOffset startedAt)
@@ -750,7 +744,7 @@ public sealed class EventManager : IDisposable
         // Per-character; checked here so the scheduler doesn't have to
         // worry about it and tests using the parameterless ctor (no
         // profile) keep firing.
-        if (_profile?.Current?.EventsGloballyDisabled == true) return false;
+        if (_profile.Current?.EventsGloballyDisabled == true) return false;
         // Events are the user's own automation: with the master switch off this
         // firing is skipped, not put off and not queued (user, 2026-10-09). Every
         // trigger kind comes through here, a Logoff event included, so one check
@@ -902,7 +896,7 @@ public sealed class EventManager : IDisposable
             RemoveQueuedAt(0);
             if (!Events.Contains(next.Event))
                 _log?.Info("Events", $"Event '{Label(next.Event)}' dropped from the queue — it was removed or edited while it waited.");
-            else if (next.Event.Disabled || _profile?.Current?.EventsGloballyDisabled == true)
+            else if (next.Event.Disabled || _profile.Current?.EventsGloballyDisabled == true)
                 _log?.Info("Events", $"Event '{Label(next.Event)}' dropped from the queue — it was disabled while it waited.");
             else
             {
@@ -1069,7 +1063,7 @@ public sealed class EventManager : IDisposable
                 if (!StartWalk(key, "event walk-to", e.WalkToEntersBossRoom == true)) return ActionStart.Failed;
                 // Already standing there: the walker finished inside WalkTo, while
                 // _driving hid its Finished from us.
-                return _walker!.State == WalkState.Idle ? ActionStart.Done : ActionStart.Running;
+                return _walker.State == WalkState.Idle ? ActionStart.Done : ActionStart.Running;
 
             case EventActionType.Loop:
                 if (FindLoop(e.LoopName) is null)
@@ -1277,7 +1271,7 @@ public sealed class EventManager : IDisposable
                 ScheduledEvent? next = FindEvent(e.ThenEventName);
                 if (next is null)
                     _log?.Warn("Events", $"Event '{label}': Then event '{e.ThenEventName}' doesn't exist.");
-                else if (next.Disabled || _profile?.Current?.EventsGloballyDisabled == true)
+                else if (next.Disabled || _profile.Current?.EventsGloballyDisabled == true)
                     _log?.Info("Events", $"Event '{label}': Then event '{Label(next)}' is disabled.");
                 else if (run.Depth + 1 > MaxChainDepth)
                     _log?.Warn("Events",
@@ -1364,7 +1358,7 @@ public sealed class EventManager : IDisposable
             ThenFailed(Label(e), $"the walk to {key.Map}/{key.Room}", _drivenFailure ?? "it wouldn't start");
             return false;
         }
-        if (_walker!.State == WalkState.Idle) return false;
+        if (_walker.State == WalkState.Idle) return false;
         run.OnThenWalk = true;
         run.WalkTarget = key;
         _run = run;
@@ -1432,8 +1426,8 @@ public sealed class EventManager : IDisposable
         _log?.Info("Events", $"Event '{label}' finished; {verb} {what}{step}{note}.");
         bool stillArriving = kind switch
         {
-            ThenWatchKind.Loop => _loopRunner?.State == LoopState.Approaching,
-            ThenWatchKind.Walk => _walker?.State == WalkState.Walking,
+            ThenWatchKind.Loop => _loopRunner.State == LoopState.Approaching,
+            ThenWatchKind.Walk => _walker.State == WalkState.Walking,
             _ => false,
         };
         LastThenSummary = $"'{label}' → {what}: {(stillArriving ? "started" : "under way")} {Stamp()}";
@@ -1465,7 +1459,6 @@ public sealed class EventManager : IDisposable
     private bool StartWalk(RoomKey key, string reason, bool enterBossRoom)
     {
         _drivenFailure = null;
-        if (_walker is null) return false;
         _driving = true;
         try
         {
@@ -1482,7 +1475,6 @@ public sealed class EventManager : IDisposable
     private bool StartLoop(string? name, string reason)
     {
         _drivenFailure = null;
-        if (_loopRunner is null) return false;
         if (FindLoop(name) is not { } saved)
         {
             _drivenFailure = $"no saved loop is named '{name}'";
@@ -1506,7 +1498,6 @@ public sealed class EventManager : IDisposable
     private bool StartAutoLair(string? name, string reason)
     {
         _drivenFailure = null;
-        if (_autoLair is null) return false;
         if (FindSetup(name) is not { } setup)
         {
             _drivenFailure = $"no saved auto-lair setup is named '{name}'";
@@ -1580,7 +1571,7 @@ public sealed class EventManager : IDisposable
                 // this run's room starting is the run's; what the detour's walks
                 // come to is the detour's business, and the user's Stop arrives by
                 // NoteUserStop.
-                if (w.Kind == WalkEventKind.Started && Equals(_walker?.Journey?.Destination, run.WalkTarget)) Resumed(run);
+                if (w.Kind == WalkEventKind.Started && Equals(_walker.Journey?.Destination, run.WalkTarget)) Resumed(run);
             }
             else if (w.Kind == WalkEventKind.Stopped)
             {
@@ -1635,7 +1626,7 @@ public sealed class EventManager : IDisposable
                 }
                 else if (l.Kind == LoopEventKind.Started && run.Suspended)
                 {
-                    if (string.Equals(_loopRunner?.CurrentLoop?.Name, run.Event.LoopName, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(_loopRunner.CurrentLoop?.Name, run.Event.LoopName, StringComparison.OrdinalIgnoreCase))
                         Resumed(run);
                     else
                         Abort(run, "another loop was started while its own was away");
@@ -1655,7 +1646,7 @@ public sealed class EventManager : IDisposable
         if (run.Action == EventActionType.AutoLair)
         {
             if (active) Resumed(run);
-            else if (_autoLair?.StoppedForResume == true) Suspend(run, "its auto-lair was stopped by something that brings it back");
+            else if (_autoLair.StoppedForResume) Suspend(run, "its auto-lair was stopped by something that brings it back");
             else Abort(run, "its auto-lair was stopped");
         }
         else if (run.Action is EventActionType.Wait or EventActionType.RestUp && active)
@@ -1750,8 +1741,8 @@ public sealed class EventManager : IDisposable
         _driving = true;
         try
         {
-            if (run.Event.ActionType == EventActionType.Loop) _loopRunner?.Stop("event stop-after");
-            else _autoLair?.Stop("event stop-after");
+            if (run.Event.ActionType == EventActionType.Loop) _loopRunner.Stop("event stop-after");
+            else _autoLair.Stop("event stop-after");
         }
         finally { _driving = false; }
         // Posted: a lap rule is met inside the loop runner's own raise.
@@ -1862,7 +1853,7 @@ public sealed class EventManager : IDisposable
         }
         if (anyChanged)
         {
-            _profile?.Save();
+            _profile.Save();
             AutoDisabledChanged?.Invoke();
         }
     }
@@ -1873,7 +1864,7 @@ public sealed class EventManager : IDisposable
     private void AutoDisable(ScheduledEvent e, string reason)
     {
         AutoDisableInternal(e, reason);
-        _profile?.Save();
+        _profile.Save();
         AutoDisabledChanged?.Invoke();
     }
 
@@ -1928,7 +1919,7 @@ public sealed class EventManager : IDisposable
         if (converted)
         {
             _log?.Info("Events", "Converted this character's events to the Then format (a walk-to goes back, anything else stops).");
-            _profile?.Save();
+            _profile.Save();
         }
         ReconcileTargets();
     }
@@ -2018,7 +2009,6 @@ public sealed class EventManager : IDisposable
             switch (plan)
             {
                 case EventResumePlan.Loop l:
-                    if (_loopRunner is null) return EngineStart.Refused;
                     // By name: the catalogue's copy of a loop the run holds is a new object
                     // once another client has edited the file.
                     if (_loopRunner.State is not LoopState.Idle
@@ -2027,7 +2017,6 @@ public sealed class EventManager : IDisposable
                     EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Loop, "event resume");
                     return StartedLoop(_loopRunner, l.SavedLoop) ? EngineStart.Started : EngineStart.Refused;
                 case EventResumePlan.AutoLair al:
-                    if (_autoLair is null) return EngineStart.Refused;
                     if (_autoLair.IsActive) return EngineStart.StillRunning;
                     EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Lair, "event resume");
                     if (al.OffARun)
@@ -2043,7 +2032,6 @@ public sealed class EventManager : IDisposable
                     }
                     return _autoLair.Start() ? EngineStart.Started : EngineStart.Refused;
                 case EventResumePlan.Walker w:
-                    if (_walker is null) return EngineStart.Refused;
                     if (_walker.State == WalkState.Walking && Equals(_walker.Journey?.Destination, w.Destination))
                         return EngineStart.StillRunning;
                     EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Walker, "event resume");

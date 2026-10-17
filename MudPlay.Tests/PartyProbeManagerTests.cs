@@ -23,7 +23,7 @@ public sealed class PartyProbeManagerTests
         public readonly MessageRouter Router;
         public readonly ChatRouter Chat;
         public readonly PartyState State = new();
-        public readonly PlayerDatabase Players = new();
+        public readonly PlayerDatabase Players = new(new ProfileService(), () => null);
         public readonly List<byte[]> Wire = new();
         public readonly PartyProbeManager Probe;
 

@@ -12,12 +12,16 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class StatParserTests
 {
-    private static (StatParser parser, PlayerStats stats) Setup()
+    // The game's output, fed the way the client receives it.
+    private readonly ServerFeed _feed = new();
+
+    // An armed parser on the class feed: `stat` sent, so its screen is read.
+    private (StatParser parser, PlayerStats stats) Setup()
     {
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        // No real LineExtractor — tests use TestArm + FeedTestLine.
-        parser.TestArm();
+        parser.AttachLineExtractor(_feed.Lines);
+        parser.ObserveOutbound(Encoding.Latin1.GetBytes("stat\r"));
         return (parser, stats);
     }
 
@@ -39,7 +43,7 @@ public sealed class StatParserTests
             "Intellect:  60       Health:    30          Martial Arts: 118",
             "Willpower:  30       Charm:     40          MagicRes:     37",
         };
-        foreach (string l in lines) p.FeedTestLine(l);
+        foreach (string l in lines) _feed.Line(l);
 
         Assert.Equal("MudPlay WuzHere", s.Name);
         Assert.Equal("Dark-Elf",      s.Race);
@@ -81,7 +85,7 @@ public sealed class StatParserTests
         // terminator silently dropped Class here, so a rerolled
         // character's class never updated in the profile.
         var (p, s) = Setup();
-        p.FeedTestLine("Class: Missionary Level: 2             Stealth:        65");
+        _feed.Line("Class: Missionary Level: 2             Stealth:        65");
         Assert.Equal("Missionary", s.Class);
         Assert.Equal(2, s.Level);
         Assert.Equal(65, s.Stealth);
@@ -95,7 +99,7 @@ public sealed class StatParserTests
         // the post-buff value (the altered-or-not distinction
         // isn't surfaced anywhere yet).
         var (p, s) = Setup();
-        p.FeedTestLine("Strength: *80   Agility: *95");
+        _feed.Line("Strength: *80   Agility: *95");
         Assert.Equal(80, s.Strength);
         Assert.Equal(95, s.Agility);
     }
@@ -107,7 +111,7 @@ public sealed class StatParserTests
         // shape, different label. Both regexes coexist; only one
         // matches per character.
         var (p, s) = Setup();
-        p.FeedTestLine("Mana:  120/120");
+        _feed.Line("Mana:  120/120");
         Assert.Equal(120, s.Mana);
         Assert.Equal(120, s.MaxMana);
         Assert.Equal(0,   s.Kai);
@@ -117,20 +121,21 @@ public sealed class StatParserTests
     public void SpellcastingField_Captured()
     {
         var (p, s) = Setup();
-        p.FeedTestLine("Spellcasting: 75");
+        _feed.Line("Spellcasting: 75");
         Assert.Equal(75, s.Spellcasting);
     }
 
     [Fact]
     public void NoOutboundStat_LinesAreIgnored()
     {
-        // Without TestArm (or a real outbound `stat`), every line is
+        // Without an outbound `stat`, every line is
         // a no-op. Protects against chat noise.
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        // No TestArm — the gate is closed.
-        parser.FeedTestLine("Strength: 60");
-        parser.FeedTestLine("Lives/CP: 9/0");
+        parser.AttachLineExtractor(_feed.Lines);
+        // No outbound `stat` — the gate is closed.
+        _feed.Line("Strength: 60");
+        _feed.Line("Lives/CP: 9/0");
         Assert.Equal(0, stats.Strength);
         Assert.Equal(0, stats.Lives);
         Assert.False(parser.HasParsed);
@@ -141,8 +146,9 @@ public sealed class StatParserTests
     {
         PlayerStats stats = new();
         StatParser parser = new(stats);
+        parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("stat\r"));
-        parser.FeedTestLine("Strength: 60");
+        _feed.Line("Strength: 60");
         Assert.Equal(60, stats.Strength);
     }
 
@@ -151,8 +157,9 @@ public sealed class StatParserTests
     {
         PlayerStats stats = new();
         StatParser parser = new(stats);
+        parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("look\r"));
-        parser.FeedTestLine("Strength: 60");
+        _feed.Line("Strength: 60");
         Assert.Equal(0, stats.Strength);
     }
 
@@ -166,8 +173,9 @@ public sealed class StatParserTests
         // shows the identical stat screen for `st`, `sta`, and `stat`.
         PlayerStats stats = new();
         StatParser parser = new(stats);
+        parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
-        parser.FeedTestLine("Strength: 60");
+        _feed.Line("Strength: 60");
         Assert.Equal(60, stats.Strength);
     }
 
@@ -180,8 +188,9 @@ public sealed class StatParserTests
     {
         PlayerStats stats = new();
         StatParser parser = new(stats);
+        parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
-        parser.FeedTestLine("Strength: 60");
+        _feed.Line("Strength: 60");
         Assert.Equal(0, stats.Strength);
     }
 
@@ -195,7 +204,7 @@ public sealed class StatParserTests
         parser.ExpectingScreenWindow = TimeSpan.FromSeconds(5);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("stat\r"));
         t = t.AddSeconds(6);   // past window
-        parser.FeedTestLine("Strength: 60");
+        _feed.Line("Strength: 60");
         Assert.Equal(0, stats.Strength);
     }
 
@@ -225,8 +234,9 @@ public sealed class StatParserTests
         // see fresh lives counts immediately after life-loss events.
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        // No TestArm.
-        parser.FeedTestLine("You have 7 lives left.");
+        parser.AttachLineExtractor(_feed.Lines);
+        // No outbound `stat`.
+        _feed.Line("You have 7 lives left.");
         Assert.Equal(7, stats.Lives);
         Assert.True(parser.HasParsed);
     }
@@ -237,7 +247,8 @@ public sealed class StatParserTests
         // Singular grammar: "You have 1 life left." (no 's').
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        parser.FeedTestLine("You have 1 life left.");
+        parser.AttachLineExtractor(_feed.Lines);
+        _feed.Line("You have 1 life left.");
         Assert.Equal(1, stats.Lives);
     }
 
@@ -256,7 +267,8 @@ public sealed class StatParserTests
         // hard-block.
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        parser.FeedTestLine(text);
+        parser.AttachLineExtractor(_feed.Lines);
+        _feed.Line(text);
         Assert.Equal(expected, stats.Lives);
     }
 
@@ -270,8 +282,9 @@ public sealed class StatParserTests
         // banked-exp total stays current between manual checks.
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        // No TestArm — the stat gate is closed.
-        parser.FeedTestLine("You gain 1500 experience.");
+        parser.AttachLineExtractor(_feed.Lines);
+        // No outbound `stat` — the stat gate is closed.
+        _feed.Line("You gain 1500 experience.");
         Assert.Equal(1500, stats.Exp);
         Assert.True(parser.HasParsed);
     }
@@ -284,8 +297,8 @@ public sealed class StatParserTests
     {
         var (p, s) = Setup();
         s.Cp = 3;
-        p.FeedTestLine("You gain 0 additional lives.");   // not a CP line
-        p.FeedTestLine("You gain 15 CPs");
+        _feed.Line("You gain 0 additional lives.");   // not a CP line
+        _feed.Line("You gain 15 CPs");
         Assert.Equal(18, s.Cp);
     }
 
@@ -293,10 +306,10 @@ public sealed class StatParserTests
     public void ExperienceGainLine_AddsToRunningTotal()
     {
         var (p, s) = Setup();
-        p.FeedTestLine("Exp: 0  Level: 2  Exp needed for next level: 100 (200) [50%]");
+        _feed.Line("Exp: 0  Level: 2  Exp needed for next level: 100 (200) [50%]");
         Assert.Equal(0, s.Exp);
-        p.FeedTestLine("You gain 800 experience.");
-        p.FeedTestLine("You gain 200 experience.");
+        _feed.Line("You gain 800 experience.");
+        _feed.Line("You gain 200 experience.");
         Assert.Equal(1000, s.Exp);   // accrued, not overwritten
     }
 
@@ -306,9 +319,9 @@ public sealed class StatParserTests
         // A fresh stat/exp poll is authoritative — it overwrites the
         // accrued total rather than adding to it (re-anchor).
         var (p, s) = Setup();
-        p.FeedTestLine("You gain 5000 experience.");
+        _feed.Line("You gain 5000 experience.");
         Assert.Equal(5000, s.Exp);
-        p.FeedTestLine("Exp: 12345  Level: 3  Exp needed for next level: 10 (20) [50%]");
+        _feed.Line("Exp: 12345  Level: 3  Exp needed for next level: 10 (20) [50%]");
         Assert.Equal(12345, s.Exp);
     }
 
@@ -317,8 +330,9 @@ public sealed class StatParserTests
     {
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        parser.FeedTestLine("MudPlay gains a level!");
-        parser.FeedTestLine("Bob gains 999 experience.");
+        parser.AttachLineExtractor(_feed.Lines);
+        _feed.Line("MudPlay gains a level!");
+        _feed.Line("Bob gains 999 experience.");
         Assert.Equal(0, stats.Exp);
     }
 
@@ -328,15 +342,15 @@ public sealed class StatParserTests
         // With a real exp-screen baseline, a live gain also draws down "to next level"
         // and re-derives the percent, so @exp Needed / @level to-next stay current.
         var (p, s) = Setup();
-        p.FeedTestLine("Exp: 0  Level: 2  Exp needed for next level: 100 (200) [50%]");
+        _feed.Line("Exp: 0  Level: 2  Exp needed for next level: 100 (200) [50%]");
         Assert.Equal(100, s.ExpToNext);
 
-        p.FeedTestLine("You gain 30 experience.");
+        _feed.Line("You gain 30 experience.");
         Assert.Equal(70, s.ExpToNext);            // 100 - 30
         Assert.Equal(65, s.LevelPercent);         // (200 - 70) / 200
 
         // Never goes negative once the level's worth of exp is banked.
-        p.FeedTestLine("You gain 500 experience.");
+        _feed.Line("You gain 500 experience.");
         Assert.Equal(0, s.ExpToNext);
     }
 
@@ -348,7 +362,8 @@ public sealed class StatParserTests
         // Stock line carries the attained level — set it absolutely, no poll needed.
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        parser.FeedTestLine("You hand over 1 gold crown and you receive training to attain level 5.");
+        parser.AttachLineExtractor(_feed.Lines);
+        _feed.Line("You hand over 1 gold crown and you receive training to attain level 5.");
         Assert.Equal(5, stats.Level);
         Assert.True(parser.HasParsed);
     }
@@ -359,10 +374,10 @@ public sealed class StatParserTests
         // Paradigm line has no number — infer current + 1 from the known level, and clear
         // the old level's to-next (the new level's span isn't known until the next poll).
         var (p, s) = Setup();
-        p.FeedTestLine("Exp: 500  Level: 3  Exp needed for next level: 40 (200) [80%]");
+        _feed.Line("Exp: 500  Level: 3  Exp needed for next level: 40 (200) [80%]");
         Assert.Equal(3, s.Level);
 
-        p.FeedTestLine("You hand over 350 copper farthings to train to the next level!");
+        _feed.Line("You hand over 350 copper farthings to train to the next level!");
         Assert.Equal(4, s.Level);
         Assert.Equal(0, s.ExpToNext);
         Assert.Equal(0, s.LevelExpSpan);
@@ -374,7 +389,8 @@ public sealed class StatParserTests
         // No baseline level to infer from → don't fabricate one; a stat poll establishes it.
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        parser.FeedTestLine("You hand over 350 copper farthings to train to the next level!");
+        parser.AttachLineExtractor(_feed.Lines);
+        _feed.Line("You hand over 350 copper farthings to train to the next level!");
         Assert.Equal(0, stats.Level);
     }
 
@@ -388,12 +404,12 @@ public sealed class StatParserTests
         // expired. Protects against the user's own typed-command
         // echo (which is a prompt line) corrupting stat fields.
         var (p, s) = Setup();
-        p.FeedTestLine("Strength: 60");                 // capture
+        _feed.Line("Strength: 60");                 // capture
         Assert.Equal(60, s.Strength);
-        p.FeedTestLine("[HP=22]:", isPromptLine: true); // prompt after capture → close
+        _feed.Line("[HP=22]:"); // prompt after capture → close
 
         // Subsequent line — even with a juicy match — must NOT commit.
-        p.FeedTestLine("Strength: 0");
+        _feed.Line("Strength: 0");
         Assert.Equal(60, s.Strength);
     }
 
@@ -406,10 +422,10 @@ public sealed class StatParserTests
         // yet). Only the SECOND prompt (the one after the stat
         // burst) should close.
         var (p, s) = Setup();
-        p.FeedTestLine("[HP=22]:stat", isPromptLine: true);   // pre-capture prompt: ignored
-        p.FeedTestLine("Strength: 60");                       // capture
+        _feed.Line("[HP=22]:stat");   // pre-capture prompt: ignored
+        _feed.Line("Strength: 60");                       // capture
         Assert.Equal(60, s.Strength);
-        p.FeedTestLine("Charm: 40");                          // still in window
+        _feed.Line("Charm: 40");                          // still in window
         Assert.Equal(40, s.Charm);
     }
 
@@ -429,7 +445,7 @@ public sealed class StatParserTests
         MudPlay.Models.Profile.LastKnownStats? captured = null;
         p.ScreenParsed += snap => captured = snap;
 
-        p.FeedTestLine("Class: Mystic        Level: 2        Stealth:            65");
+        _feed.Line("Class: Mystic        Level: 2        Stealth:            65");
         Assert.Equal(2, s.Level);
         Assert.Null(captured);          // no prompt, no further line → gate still open
 
@@ -450,7 +466,7 @@ public sealed class StatParserTests
         bool fired = false;
         p.ScreenParsed += _ => fired = true;
 
-        p.SettleNowForTests();          // armed via Setup's TestArm, but nothing captured
+        p.SettleNowForTests();          // armed by Setup's outbound `stat`, but nothing captured
 
         Assert.False(fired);
     }
@@ -466,8 +482,8 @@ public sealed class StatParserTests
         int count = 0;
         p.ScreenParsed += _ => count++;
 
-        p.FeedTestLine("Strength: 60");                  // capture
-        p.FeedTestLine("[HP=22]:", isPromptLine: true);  // reactive close → fires once
+        _feed.Line("Strength: 60");                  // capture
+        _feed.Line("[HP=22]:");  // reactive close → fires once
         Assert.Equal(1, count);
 
         p.SettleNowForTests();                           // window already closed → no-op
@@ -483,7 +499,7 @@ public sealed class StatParserTests
         // label lands inside our scan window. The ChatLineRx pre-check
         // skips the whole line so the field regexes never run.
         var (p, s) = Setup();
-        p.FeedTestLine("Foo gossips: my Strength: 999 is great");
+        _feed.Line("Foo gossips: my Strength: 999 is great");
         Assert.Equal(0, s.Strength);
     }
 
@@ -493,7 +509,7 @@ public sealed class StatParserTests
         // User's own outgoing `gossip` echoes back as
         // `MudPlay gossips: "..."`. Same shape, same protection.
         var (p, s) = Setup();
-        p.FeedTestLine("MudPlay gossips: \"my Lives/CP: 0/0 is sad\"");
+        _feed.Line("MudPlay gossips: \"my Lives/CP: 0/0 is sad\"");
         Assert.Equal(0, s.Lives);
         Assert.Equal(0, s.Cp);
     }
@@ -508,7 +524,7 @@ public sealed class StatParserTests
     public void AllChatVerbs_AreSkipped(string prefix)
     {
         var (p, s) = Setup();
-        p.FeedTestLine($"{prefix} Strength: 100 is a thing I have");
+        _feed.Line($"{prefix} Strength: 100 is a thing I have");
         Assert.Equal(0, s.Strength);
     }
 
@@ -523,7 +539,7 @@ public sealed class StatParserTests
         // delta to span this level (constant per level); ExpToNext
         // is currently 2950 because no progress has been made.
         var (p, s) = Setup();
-        p.FeedTestLine("Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
+        _feed.Line("Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
         Assert.Equal(0,    s.Exp);
         Assert.Equal(1,    s.Level);
         Assert.Equal(2950, s.ExpToNext);
@@ -539,7 +555,7 @@ public sealed class StatParserTests
         // report paradigm-20260916-081052: the int parse used to reject the (M) total
         // (7,411,379,231) so the whole line failed and Exp drifted off gain-line accrual.
         var (p, s) = Setup();
-        p.FeedTestLine("Exp: 7050294193 Level: 64 Exp needed for next level: 361085038 (7411379231) [95%]");
+        _feed.Line("Exp: 7050294193 Level: 64 Exp needed for next level: 361085038 (7411379231) [95%]");
         Assert.Equal(7050294193L, s.Exp);
         Assert.Equal(64,          s.Level);
         Assert.Equal(361085038L,  s.ExpToNext);
@@ -553,8 +569,8 @@ public sealed class StatParserTests
         // A gain that pushes the total past int.MaxValue must accrue in full, not clamp
         // to 2,147,483,647 (the old int-field bug).
         var (p, s) = Setup();
-        p.FeedTestLine("Exp: 2100000000 Level: 64 Exp needed for next level: 10 (20) [50%]");
-        p.FeedTestLine("You gain 200000000 experience.");
+        _feed.Line("Exp: 2100000000 Level: 64 Exp needed for next level: 10 (20) [50%]");
+        _feed.Line("You gain 200000000 experience.");
         Assert.Equal(2300000000L, s.Exp);
     }
 
@@ -564,7 +580,7 @@ public sealed class StatParserTests
         // The stat screen packs Exp inline ("Race: Gaunt One   Exp: 7049892943
         // Perception: 188") — the same >int32 value must parse there too.
         var (p, s) = Setup();
-        p.FeedTestLine("Race: Gaunt One   Exp: 7049892943      Perception:    188");
+        _feed.Line("Race: Gaunt One   Exp: 7049892943      Perception:    188");
         Assert.Equal(7049892943L, s.Exp);
     }
 
@@ -577,7 +593,7 @@ public sealed class StatParserTests
         // cumulative total; at level 1 with no prior levels, it
         // equals the within-level earned.
         var (p, s) = Setup();
-        p.FeedTestLine("Exp: 1475 Level: 1 Exp needed for next level: 1475 (2950) [50%]");
+        _feed.Line("Exp: 1475 Level: 1 Exp needed for next level: 1475 (2950) [50%]");
         Assert.Equal(1475, s.Exp);
         Assert.Equal(1,    s.Level);
         Assert.Equal(1475, s.ExpToNext);
@@ -593,7 +609,7 @@ public sealed class StatParserTests
         // auto-train, etc.). Percent saturates at 100 in that
         // window. Pin both behaviours.
         var (p, s) = Setup();
-        p.FeedTestLine("Exp: 5000 Level: 1 Exp needed for next level: 0 (2950) [100%]");
+        _feed.Line("Exp: 5000 Level: 1 Exp needed for next level: 0 (2950) [100%]");
         Assert.Equal(5000, s.Exp);
         Assert.Equal(0,    s.ExpToNext);
         Assert.Equal(2950, s.LevelExpSpan);
@@ -616,8 +632,9 @@ public sealed class StatParserTests
         // screenshot.
         PlayerStats stats = new();
         StatParser parser = new(stats);
+        parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
-        parser.FeedTestLine("Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
+        _feed.Line("Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
         Assert.Equal(2950, stats.LevelExpSpan);
     }
 
@@ -632,8 +649,9 @@ public sealed class StatParserTests
         // ex* commands fall through.
         PlayerStats stats = new();
         StatParser parser = new(stats);
+        parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
-        parser.FeedTestLine("Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
+        _feed.Line("Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
         Assert.Equal(0, stats.LevelExpSpan);
     }
 
@@ -644,7 +662,8 @@ public sealed class StatParserTests
         // fields covers exp fields too.
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        parser.FeedTestLine("Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
+        parser.AttachLineExtractor(_feed.Lines);
+        _feed.Line("Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
         Assert.Equal(0, stats.LevelExpSpan);
     }
 
@@ -655,7 +674,7 @@ public sealed class StatParserTests
         // embedding the entire payload can't write to the fields
         // even with the gate open.
         var (p, s) = Setup();
-        p.FeedTestLine("Foo gossips: Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
+        _feed.Line("Foo gossips: Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
         Assert.Equal(0, s.LevelExpSpan);
     }
 
@@ -665,7 +684,7 @@ public sealed class StatParserTests
         // Sanity — the chat-shape guard mustn't false-positive on
         // legitimate stat-screen lines (no chat-verb-shape prefix).
         var (p, s) = Setup();
-        p.FeedTestLine("Strength:   60       Agility:   80          Tracking:     0");
+        _feed.Line("Strength:   60       Agility:   80          Tracking:     0");
         Assert.Equal(60, s.Strength);
         Assert.Equal(80, s.Agility);
         Assert.Equal(0,  s.Tracking);
@@ -677,11 +696,12 @@ public sealed class StatParserTests
     // real `health` send leaves it. That closed stat gate is what stops the
     // health line's HP value bleeding into the stat sheet's `Health:` attribute
     // (a core stat; the sheet labels the HP pool `Hits:`).
-    private static (StatParser parser, PlayerStats stats) HealthSetup()
+    private (StatParser parser, PlayerStats stats) HealthSetup()
     {
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        parser.TestArmHealth();
+        parser.AttachLineExtractor(_feed.Lines);
+        parser.ObserveOutbound(Encoding.Latin1.GetBytes("health\r"));
         return (parser, stats);
     }
 
@@ -694,7 +714,7 @@ public sealed class StatParserTests
         bool fired = false;
         p.HealthReanchored += (maxHits, poolMax) => { captured = (maxHits, poolMax); fired = true; };
 
-        p.FeedTestLine("Health:      91/91  [100%]  Kai:  6/10  [60%]");
+        _feed.Line("Health:      91/91  [100%]  Kai:  6/10  [60%]");
 
         Assert.Equal(91, s.Hits);
         Assert.Equal(91, s.MaxHits);
@@ -715,7 +735,7 @@ public sealed class StatParserTests
         (int MaxHits, int PoolMax) captured = default;
         p.HealthReanchored += (maxHits, poolMax) => captured = (maxHits, poolMax);
 
-        p.FeedTestLine("Health:    593/593    [100%]    Mana:    619/619    [100%]");
+        _feed.Line("Health:    593/593    [100%]    Mana:    619/619    [100%]");
 
         Assert.Equal(593, s.Hits);
         Assert.Equal(593, s.MaxHits);
@@ -734,7 +754,7 @@ public sealed class StatParserTests
         int poolMaxSeen = -1;
         p.HealthReanchored += (_, poolMax) => poolMaxSeen = poolMax;
 
-        p.FeedTestLine("Health:    137/137    [100%]");
+        _feed.Line("Health:    137/137    [100%]");
 
         Assert.Equal(137, s.Hits);
         Assert.Equal(137, s.MaxHits);
@@ -750,8 +770,9 @@ public sealed class StatParserTests
     {
         PlayerStats stats = new();
         StatParser parser = new(stats);
+        parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
-        parser.FeedTestLine("Health:  91/91  [100%]  Kai:  6/10  [60%]");
+        _feed.Line("Health:  91/91  [100%]  Kai:  6/10  [60%]");
         Assert.Equal(91, stats.MaxHits);
     }
 
@@ -762,8 +783,9 @@ public sealed class StatParserTests
         // stat-screen scan, so a following stat-sheet line stays untouched.
         PlayerStats stats = new();
         StatParser parser = new(stats);
+        parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("health\r"));
-        parser.FeedTestLine("Strength: 60");
+        _feed.Line("Strength: 60");
         Assert.Equal(0, stats.Strength);
     }
 
@@ -776,7 +798,7 @@ public sealed class StatParserTests
         parser.ExpectingHealthWindow = TimeSpan.FromSeconds(5);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("health\r"));
         t = t.AddSeconds(6);   // past the window
-        parser.FeedTestLine("Health:  91/91  [100%]  Kai:  6/10  [60%]");
+        _feed.Line("Health:  91/91  [100%]  Kai:  6/10  [60%]");
         Assert.Equal(0, stats.Hits);
         Assert.Equal(0, stats.MaxHits);
     }
@@ -787,7 +809,7 @@ public sealed class StatParserTests
         // A gossip embedding the readout can't commit the re-anchor — both the
         // chat-shape guard and the line-start anchor reject it.
         var (p, s) = HealthSetup();
-        p.FeedTestLine("Bob gossips: Health: 91/91 [100%] Kai: 6/10 [60%]");
+        _feed.Line("Bob gossips: Health: 91/91 [100%] Kai: 6/10 [60%]");
         Assert.Equal(0, s.Hits);
         Assert.Equal(0, s.MaxHits);
     }
@@ -798,7 +820,8 @@ public sealed class StatParserTests
         // Without an outbound `health`, the readout is a no-op — nothing arms.
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        parser.FeedTestLine("Health:  91/91  [100%]  Kai:  6/10  [60%]");
+        parser.AttachLineExtractor(_feed.Lines);
+        _feed.Line("Health:  91/91  [100%]  Kai:  6/10  [60%]");
         Assert.Equal(0, stats.Hits);
         Assert.False(parser.HasParsed);
     }
@@ -811,9 +834,10 @@ public sealed class StatParserTests
         // Reproduces report paradigm-20260906-090057: `stat` was typed while the
         // `train stats` form still owned the keyboard in character-mode, so the
         // command went out a byte at a time and the outbound gate never armed.
-        // The screen must still parse off its own header line. NOTE: no TestArm().
+        // The screen must still parse off its own header line. NOTE: no outbound `stat`.
         PlayerStats stats = new();
         StatParser parser = new(stats);   // deliberately un-armed
+        parser.AttachLineExtractor(_feed.Lines);
         string[] lines =
         {
             "Name: Client Tester                    Lives/CP:      9/5",
@@ -825,7 +849,7 @@ public sealed class StatParserTests
             "Intellect: 137    Health:  67          Martial Arts:   30",
             "Willpower: 50     Charm:   31          MagicRes:       86",
         };
-        foreach (string l in lines) parser.FeedTestLine(l);
+        foreach (string l in lines) _feed.Line(l);
 
         Assert.True(parser.HasParsed);
         Assert.Equal("Client Tester", stats.Name);
@@ -844,19 +868,20 @@ public sealed class StatParserTests
     public void InStatScreen_FromTheHeaderUntilTheClosingPrompt()
     {
         StatParser parser = new(new PlayerStats());   // un-armed: a stat the gate never saw
+        parser.AttachLineExtractor(_feed.Lines);
         Assert.False(parser.InStatScreen);
 
-        parser.FeedTestLine("Name: Client Tester                    Lives/CP:      9/5");
-        parser.FeedTestLine("Willpower: 50     Charm:   31          MagicRes:       86");
+        _feed.Line("Name: Client Tester                    Lives/CP:      9/5");
+        _feed.Line("Willpower: 50     Charm:   31          MagicRes:       86");
         Assert.True(parser.InStatScreen);
 
-        parser.FeedTestLine("[HP=219/MA=204]:", isPromptLine: true);
+        _feed.Line("[HP=219/MA=204]:");
         Assert.False(parser.InStatScreen);
 
         // A later screen in the same session closes on its own prompt too.
-        parser.FeedTestLine("Name: Client Tester                    Lives/CP:      9/5");
+        _feed.Line("Name: Client Tester                    Lives/CP:      9/5");
         Assert.True(parser.InStatScreen);
-        parser.FeedTestLine("[HP=219/MA=204]:", isPromptLine: true);
+        _feed.Line("[HP=219/MA=204]:");
         Assert.False(parser.InStatScreen);
     }
 
@@ -868,8 +893,9 @@ public sealed class StatParserTests
         // "<who> <verb>:". Nothing may commit off it.
         PlayerStats stats = new();
         StatParser parser = new(stats);
-        parser.FeedTestLine("Villain gossips: Name: Loot Goblin  Lives/CP: 9/9 haha");
-        parser.FeedTestLine("Class: Mage       Level: 25            Stealth:         0");
+        parser.AttachLineExtractor(_feed.Lines);
+        _feed.Line("Villain gossips: Name: Loot Goblin  Lives/CP: 9/9 haha");
+        _feed.Line("Class: Mage       Level: 25            Stealth:         0");
         Assert.False(parser.HasParsed);
         Assert.Equal(0, stats.Level);
     }
@@ -906,8 +932,8 @@ public sealed class StatParserTests
     public void ExpScreen_DoesNotCountAsReadingTheMaxima()
     {
         var (p, _) = Setup();
-        p.FeedTestLine("Exp: 12345  Level: 3  Exp needed for next level: 10 (20) [50%]");
-        p.FeedTestLine("[HP=10/MA=5]:", isPromptLine: true);
+        _feed.Line("Exp: 12345  Level: 3  Exp needed for next level: 10 (20) [50%]");
+        _feed.Line("[HP=10/MA=5]:");
 
         Assert.False(p.LastCaptureReadHits);
         Assert.False(p.LastCaptureReadPool);
@@ -917,9 +943,9 @@ public sealed class StatParserTests
     public void StatScreen_CountsAsReadingTheMaxima()
     {
         var (p, _) = Setup();
-        p.FeedTestLine("Hits:    86/86    Armour Class:  30/3  Thievery:       62");
-        p.FeedTestLine("Mana:    38/38    Spellcasting: 74     Traps:          65");
-        p.FeedTestLine("[HP=86/MA=38]:", isPromptLine: true);
+        _feed.Line("Hits:    86/86    Armour Class:  30/3  Thievery:       62");
+        _feed.Line("Mana:    38/38    Spellcasting: 74     Traps:          65");
+        _feed.Line("[HP=86/MA=38]:");
 
         Assert.True(p.LastCaptureReadHits);
         Assert.True(p.LastCaptureReadPool);
@@ -933,17 +959,17 @@ public sealed class StatParserTests
     public void StatScreen_SaysWhetherItGaveTheLives()
     {
         var (p, s) = Setup();
-        p.FeedTestLine("Name: MudPlay WuzHere                  Lives/CP:           6/0");
-        p.FeedTestLine("Hits:    86/86    Armour Class:  30/3  Thievery:       62");
-        p.FeedTestLine("[HP=86/MA=38]:", isPromptLine: true);
+        _feed.Line("Name: MudPlay WuzHere                  Lives/CP:           6/0");
+        _feed.Line("Hits:    86/86    Armour Class:  30/3  Thievery:       62");
+        _feed.Line("[HP=86/MA=38]:");
 
         Assert.True(p.LastCaptureReadLives);
         Assert.Equal(6, s.Lives);
 
         // The next capture is an `exp` screen: no lives on it.
-        p.TestArm();
-        p.FeedTestLine("Exp: 12345  Level: 3  Exp needed for next level: 10 (20) [50%]");
-        p.FeedTestLine("[HP=86/MA=38]:", isPromptLine: true);
+        p.ObserveOutbound(Encoding.Latin1.GetBytes("stat\r"));
+        _feed.Line("Exp: 12345  Level: 3  Exp needed for next level: 10 (20) [50%]");
+        _feed.Line("[HP=86/MA=38]:");
 
         Assert.False(p.LastCaptureReadLives);
     }

@@ -26,7 +26,7 @@ public sealed class EventSchedulerTests
     private static (EventManager events, EventScheduler scheduler, WirePromptScanner prompt,
                     List<byte[]> sent) Build(Func<DateTime>? now = null)
     {
-        EventManager events = new();
+        EventManager events = EventEngineHarness.ManagerWithoutGameData();
         WirePromptScanner prompt = new();
         EventScheduler scheduler = new(events, prompt, now: now);
         List<byte[]> sent = new();
@@ -37,7 +37,7 @@ public sealed class EventSchedulerTests
     private static (EventManager events, EventScheduler scheduler, WirePromptScanner prompt,
                     CleanupWarningWatcher cleanup, List<byte[]> sent) BuildWithCleanup()
     {
-        EventManager events = new();
+        EventManager events = EventEngineHarness.ManagerWithoutGameData();
         WirePromptScanner prompt = new();
         CleanupWarningWatcher cleanup = new();
         EventScheduler scheduler = new(events, prompt, cleanup);

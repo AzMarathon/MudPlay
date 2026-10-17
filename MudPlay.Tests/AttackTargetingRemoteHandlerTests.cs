@@ -25,6 +25,8 @@ public sealed class AttackTargetingRemoteHandlerTests
     private sealed class Setup : IDisposable
     {
         public RemoteCommandManager Engine { get; }
+        // The router the engine's chat lines arrive through.
+        public MessageRouter Router { get; }
         // What the engine put on the wire, through the sender the client binds.
         public List<byte[]> Sent { get; } = new();
         public AttackTargetingRemoteHandler Handler { get; }
@@ -34,22 +36,23 @@ public sealed class AttackTargetingRemoteHandlerTests
         public Setup()
         {
             MessageRouter router = new();
+            Router = router;
             DefaultPatterns.Seed(router);
             ChatRouter chat = new(router);
             PartyState party = new();
-            Players = new PlayerDatabase();
+            Players = new PlayerDatabase(new ProfileService(), () => null);
             Engine = new RemoteCommandManager(chat, party, Players);
             Engine.SetWireSender(Sent.Add);
-            Profile = new ProfileService();
-            Profile.LoadBlank();
+            Profile = TestProfiles.Service();
+            Profile.LoadDefaultProfile();
             Handler = new AttackTargetingRemoteHandler(Engine, Profile);
         }
 
         public void Dispose() => Handler.Dispose();
     }
 
-    private static ChatLogEntry Telepath(string sender, string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
+    private static ChatLine Telepath(string sender, string msg) =>
+        new(ChatChannel.TelepathIncoming, sender, msg);
 
     private static void SeedPlayer(PlayerDatabase db, string name, PlayerRemoteControls controls)
     {
@@ -75,7 +78,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkprio"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkprio"));
 
         string reply = LastReply(s);
         Assert.Contains("@atkprio", reply);
@@ -91,7 +94,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkprio 1"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkprio 1"));
 
         CombatSettings dto = ReadCombat(s.Profile.Current!);
         Assert.Equal(TargetPriority.Default, dto.TargetPriority);
@@ -104,7 +107,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkprio 2"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkprio 2"));
 
         CombatSettings dto = ReadCombat(s.Profile.Current!);
         Assert.Equal(TargetPriority.FollowLeader, dto.TargetPriority);
@@ -117,7 +120,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkprio 3 Bob"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkprio 3 Bob"));
 
         CombatSettings dto = ReadCombat(s.Profile.Current!);
         Assert.Equal(TargetPriority.FollowMember, dto.TargetPriority);
@@ -133,7 +136,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkprio 3"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkprio 3"));
 
         string reply = LastReply(s);
         Assert.Contains("command failed", reply);
@@ -145,7 +148,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkprio 2 Bob"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkprio 2 Bob"));
 
         string reply = LastReply(s);
         Assert.Contains("command failed", reply);
@@ -157,7 +160,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkprio leader"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkprio leader"));
 
         string reply = LastReply(s);
         Assert.Contains("command failed", reply);
@@ -169,7 +172,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkprio 9"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkprio 9"));
 
         string reply = LastReply(s);
         Assert.Contains("command failed", reply);
@@ -181,8 +184,8 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkprio 3 Bob"));
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkprio"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkprio 3 Bob"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkprio"));
 
         string reply = LastReply(s);
         Assert.Contains("3 Attack what player attacks", reply);
@@ -197,7 +200,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkorder"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkorder"));
 
         string reply = LastReply(s);
         Assert.Contains("@atkorder", reply);
@@ -212,7 +215,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkorder 2"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkorder 2"));
 
         CombatSettings dto = ReadCombat(s.Profile.Current!);
         Assert.Equal(AttackTiming.AttackLastParty, dto.AttackTiming);
@@ -225,7 +228,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkorder 3"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkorder 3"));
 
         CombatSettings dto = ReadCombat(s.Profile.Current!);
         Assert.Equal(AttackTiming.AttackLastRoom, dto.AttackTiming);
@@ -237,7 +240,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkorder 4 Alice"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkorder 4 Alice"));
 
         CombatSettings dto = ReadCombat(s.Profile.Current!);
         Assert.Equal(AttackTiming.AttackAfter, dto.AttackTiming);
@@ -250,7 +253,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkorder 4"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkorder 4"));
 
         string reply = LastReply(s);
         Assert.Contains("command failed", reply);
@@ -262,8 +265,8 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkorder 4 Alice"));
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkorder 1"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkorder 4 Alice"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkorder 1"));
 
         CombatSettings dto = ReadCombat(s.Profile.Current!);
         Assert.Equal(AttackTiming.Default, dto.AttackTiming);
@@ -276,7 +279,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
 
-        s.Engine.DispatchForTests(Telepath("Tank", "@atkorder last"));
+        ChatLines.Hear(s.Router, Telepath("Tank", "@atkorder last"));
 
         string reply = LastReply(s);
         Assert.Contains("command failed", reply);
@@ -290,7 +293,7 @@ public sealed class AttackTargetingRemoteHandlerTests
         using Setup s = new();
         SeedPlayer(s.Players, "Rando", PlayerRemoteControls.QueryHealthStatus);
 
-        s.Engine.DispatchForTests(Telepath("Rando", "@atkprio 2"));
+        ChatLines.Hear(s.Router, Telepath("Rando", "@atkprio 2"));
 
         CombatSettings dto = ReadCombat(s.Profile.Current!);
         Assert.Equal(TargetPriority.Default, dto.TargetPriority);

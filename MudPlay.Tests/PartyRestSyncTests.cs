@@ -4,7 +4,6 @@ using MudPlay.Game.Remote;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
-using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -401,23 +400,27 @@ public sealed class PartyRestSyncTests
 
 public sealed class PartyEssentialHandlersPauseGateTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private static (RemoteCommandManager engine, PartyEssentialHandlers handlers, PartyState party) Setup()
+    private (RemoteCommandManager engine, PartyEssentialHandlers handlers, PartyState party) Setup()
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         PlayerState player = new();
         RemoteCommandManager engine = new(chat, party, players);
+        _routers[engine] = router;
         PartyEssentialHandlers handlers = new(engine, player, party);
         return (engine, handlers, party);
     }
 
-    private static ChatLogEntry Telepath(string sender, string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
+    private static ChatLine Telepath(string sender, string msg) =>
+        new(ChatChannel.TelepathIncoming, sender, msg);
 
     private static void SeedPartyMember(PartyState p, string name)
     {
@@ -440,7 +443,7 @@ public sealed class PartyEssentialHandlersPauseGateTests
         List<bool> events = new();
         handlers.PauseGateChanged += events.Add;
 
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
 
         Assert.True(handlers.IsPaused);
         Assert.Equal(new[] { true }, events);
@@ -455,8 +458,8 @@ public sealed class PartyEssentialHandlersPauseGateTests
         List<bool> events = new();
         handlers.PauseGateChanged += events.Add;
 
-        engine.DispatchForTests(Telepath("FollowerA", "@wait"));
-        engine.DispatchForTests(Telepath("FollowerB", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("FollowerA", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("FollowerB", "@wait"));
 
         Assert.True(handlers.IsPaused);
         Assert.Single(events); // edge-only — only one transition fired
@@ -468,16 +471,16 @@ public sealed class PartyEssentialHandlersPauseGateTests
         var (engine, handlers, party) = Setup();
         SeedPartyMember(party, "FollowerA");
         SeedPartyMember(party, "FollowerB");
-        engine.DispatchForTests(Telepath("FollowerA", "@wait"));
-        engine.DispatchForTests(Telepath("FollowerB", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("FollowerA", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("FollowerB", "@wait"));
         List<bool> events = new();
         handlers.PauseGateChanged += events.Add;
 
-        engine.DispatchForTests(Telepath("FollowerA", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("FollowerA", "@ok"));
         Assert.True(handlers.IsPaused);   // FollowerB still waiting
         Assert.Empty(events);
 
-        engine.DispatchForTests(Telepath("FollowerB", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("FollowerB", "@ok"));
         Assert.False(handlers.IsPaused);
         Assert.Equal(new[] { false }, events);
     }

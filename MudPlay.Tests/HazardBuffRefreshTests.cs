@@ -131,8 +131,8 @@ public sealed class HazardBuffRefreshTests : IDisposable
             Engine.SetStepHold(Coordinator, (after, run) => Timers.Add((after, run)));
             Engine.UseSent += () => UsesSent++;
             Engine.SneakSpentHere += () => SneakSpent++;
-            ProfileService profile = new();
-            profile.LoadBlank();
+            ProfileService profile = TestProfiles.Service();
+            profile.LoadDefaultProfile();
             Switch = new AutoModeController(profile);
             Engine.MasterSwitchOff = () => Switch.Blocks("Hazard counter item");
         }

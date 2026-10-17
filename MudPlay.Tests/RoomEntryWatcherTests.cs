@@ -20,7 +20,7 @@ public sealed class RoomEntryWatcherTests
     {
         public MessageRouter Router { get; } = new();
         public MonsterMessageStore Monsters { get; } = new();
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
         public LogService Log { get; } = new();
         public RoomEntityClassifier Classifier { get; }
         public RoomEntryWatcher Watcher { get; }

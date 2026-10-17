@@ -4,7 +4,6 @@ using MudPlay.Game.Conditions;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
-using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -26,6 +25,8 @@ public sealed class AilmentSyncEngineTests
     {
         public MessageStore Messages { get; } = new();
         public ConditionTracker Tracker { get; }
+        // The game's output, fed the way the client receives it.
+        public ServerFeed Server { get; } = new();
         public PartyState Party { get; } = new();
         public PartyRestSync Rest { get; }
         public AilmentSyncEngine Engine { get; }
@@ -43,6 +44,7 @@ public sealed class AilmentSyncEngineTests
         public Harness()
         {
             Tracker = new ConditionTracker(Messages, null);
+            Tracker.AttachLineExtractor(Server.Lines);
             Rest = new PartyRestSync(Party);
             Rest.SetWireSender(b => Telepath.Add(Encoding.Latin1.GetString(b)));
             Engine = new AilmentSyncEngine(
@@ -57,17 +59,7 @@ public sealed class AilmentSyncEngineTests
             Party.LeaderName = "Leader";
         }
 
-        public void Feed(string text)
-        {
-            var emitted = new LineExtractor.EmittedLine(
-                text, Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false);
-            typeof(ConditionTracker)
-                .GetMethod("OnLine",
-                    System.Reflection.BindingFlags.Instance |
-                    System.Reflection.BindingFlags.NonPublic)!
-                .Invoke(Tracker, new object[] { emitted });
-        }
+        public void Feed(string text) => Server.Line(text);
 
         public void Dispose()
         {
@@ -316,6 +308,8 @@ public sealed class AilmentSyncEngineTests
         // silently rather than NRE.
         MessageStore messages = new();
         ConditionTracker tracker = new(messages, null);
+        ServerFeed feed = new();
+        tracker.AttachLineExtractor(feed.Lines);
         PartyState party = new();
         PartyRestSync rest = new(party);
         party.IsInParty = true;
@@ -327,12 +321,7 @@ public sealed class AilmentSyncEngineTests
             log: null);
         messages.Messages.Add(Ailment("Poison", MessageFlags.Poisoned, "poisoned!", "poison wears off."));
 
-        var emitted = new LineExtractor.EmittedLine(
-            "You have been poisoned!", Array.Empty<CellAttributes>(),
-            DateTimeOffset.UtcNow, IsPromptLine: false);
-        typeof(ConditionTracker)
-            .GetMethod("OnLine", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .Invoke(tracker, new object[] { emitted });
+        feed.Line("You have been poisoned!");
 
         tracker.Dispose();
         rest.Dispose();

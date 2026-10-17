@@ -389,8 +389,8 @@ public sealed class RouteChoicePlannerTests
             graph.OnActiveSetChanged("alpha");
             BfsMapper bfs = new(graph);
 
-            ProfileService profile = new();
-            profile.LoadBlank();
+            ProfileService profile = TestProfiles.Service();
+            profile.LoadDefaultProfile();
             MovementFilter filter = new(profile);
 
             if (wireHazards is not null)
@@ -501,8 +501,8 @@ public sealed class RouteChoicePlannerTests
 
     private static ProfileService BlankProfile()
     {
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         return profile;
     }
 

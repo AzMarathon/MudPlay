@@ -34,7 +34,7 @@ public sealed class DivertHandlerTests
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(chat, party, players);
         engine.SetWireSender(_replies.Add);
         DivertHandler handler = new(engine, chat);
@@ -214,7 +214,7 @@ public sealed class DivertHandlerTests
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(chat, party, players);
         using DivertHandler handler = new(engine, chat);   // no SetWireSender
         SeedPlayer(players, "Bob", PlayerRemoteControls.DivertConversations);

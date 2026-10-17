@@ -15,7 +15,7 @@ public sealed class MovementFilterTests
 {
     private static (ProfileService Profile, MovementFilter Filter) NewPair()
     {
-        ProfileService profile = new();
+        ProfileService profile = TestProfiles.Service();
         MovementFilter filter = new(profile);
         return (profile, filter);
     }
@@ -33,8 +33,8 @@ public sealed class MovementFilterTests
     [Fact]
     public void ProfileLoaded_HydratesFromPersistedLists()
     {
-        ProfileService profile = new();
-        CharacterProfile draft = profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        CharacterProfile draft = profile.LoadDefaultProfile();
         draft.AvoidedRooms = new() { new RoomRef(1, 5), new RoomRef(2, 9) };
         draft.StashRooms   = new() { new RoomRef(3, 7) };
 
@@ -52,7 +52,7 @@ public sealed class MovementFilterTests
     public void ProfileClosed_ClearsBothSets()
     {
         (ProfileService profile, MovementFilter filter) = NewPair();
-        profile.LoadBlank();
+        profile.LoadDefaultProfile();
         filter.MarkAvoided(new RoomKey(1, 1));
         filter.MarkStash(new RoomKey(1, 2));
 
@@ -74,7 +74,7 @@ public sealed class MovementFilterTests
     public void MarkAvoided_AddsToSet_AndMirrorsBackToProfile()
     {
         (ProfileService profile, MovementFilter filter) = NewPair();
-        CharacterProfile draft = profile.LoadBlank();
+        CharacterProfile draft = profile.LoadDefaultProfile();
 
         filter.MarkAvoided(new RoomKey(1, 5));
 
@@ -89,7 +89,7 @@ public sealed class MovementFilterTests
     public void MarkAvoided_Idempotent()
     {
         (ProfileService profile, MovementFilter filter) = NewPair();
-        CharacterProfile draft = profile.LoadBlank();
+        CharacterProfile draft = profile.LoadDefaultProfile();
 
         filter.MarkAvoided(new RoomKey(1, 5));
         filter.MarkAvoided(new RoomKey(1, 5));
@@ -102,7 +102,7 @@ public sealed class MovementFilterTests
     public void UnmarkAvoided_RemovesFromBothInMemoryAndProfile()
     {
         (ProfileService profile, MovementFilter filter) = NewPair();
-        CharacterProfile draft = profile.LoadBlank();
+        CharacterProfile draft = profile.LoadDefaultProfile();
 
         filter.MarkAvoided(new RoomKey(1, 5));
         filter.MarkAvoided(new RoomKey(2, 9));
@@ -119,7 +119,7 @@ public sealed class MovementFilterTests
     public void UnmarkAvoided_NotMarked_IsNoOp()
     {
         (ProfileService profile, MovementFilter filter) = NewPair();
-        profile.LoadBlank();
+        profile.LoadDefaultProfile();
 
         int events = 0;
         filter.AvoidedChanged += () => events++;
@@ -133,7 +133,7 @@ public sealed class MovementFilterTests
     public void MarkStash_TracksSeparateSet_FromAvoided()
     {
         (ProfileService profile, MovementFilter filter) = NewPair();
-        CharacterProfile draft = profile.LoadBlank();
+        CharacterProfile draft = profile.LoadDefaultProfile();
 
         filter.MarkAvoided(new RoomKey(1, 1));
         filter.MarkStash(new RoomKey(1, 2));
@@ -151,7 +151,7 @@ public sealed class MovementFilterTests
     public void Mark_Fires_ChangedEvents()
     {
         (ProfileService profile, MovementFilter filter) = NewPair();
-        profile.LoadBlank();
+        profile.LoadDefaultProfile();
 
         int avoidedFires = 0;
         int stashFires = 0;
@@ -173,7 +173,7 @@ public sealed class MovementFilterTests
     public void ReplaceAll_SetsBothSets_AndPersistsToProfile()
     {
         (ProfileService profile, MovementFilter filter) = NewPair();
-        CharacterProfile draft = profile.LoadBlank();
+        CharacterProfile draft = profile.LoadDefaultProfile();
 
         filter.ReplaceAll(
             avoided: new[] { new RoomKey(1, 5), new RoomKey(2, 9) },
@@ -190,7 +190,7 @@ public sealed class MovementFilterTests
     public void ReplaceAll_DropsEntriesNotInNewSets()
     {
         (ProfileService profile, MovementFilter filter) = NewPair();
-        profile.LoadBlank();
+        profile.LoadDefaultProfile();
         filter.MarkAvoided(new RoomKey(1, 1));
         filter.MarkAvoided(new RoomKey(1, 2));
         filter.MarkStash(new RoomKey(1, 3));
@@ -207,7 +207,7 @@ public sealed class MovementFilterTests
     public void ReplaceAll_MoveRoomBetweenSets()
     {
         (ProfileService profile, MovementFilter filter) = NewPair();
-        profile.LoadBlank();
+        profile.LoadDefaultProfile();
         filter.MarkAvoided(new RoomKey(4, 4));
 
         // Editor removed the avoid row and added the same room as a stash.
@@ -221,7 +221,7 @@ public sealed class MovementFilterTests
     public void ReplaceAll_FiresBothChangedEvents()
     {
         (ProfileService profile, MovementFilter filter) = NewPair();
-        profile.LoadBlank();
+        profile.LoadDefaultProfile();
 
         int avoidedFires = 0, stashFires = 0;
         filter.AvoidedChanged += () => avoidedFires++;
@@ -245,20 +245,20 @@ public sealed class MovementFilterTests
     [Fact]
     public void ProfileSwap_RehydratesIntoFreshSet()
     {
-        ProfileService profile = new();
+        ProfileService profile = TestProfiles.Service();
         MovementFilter filter = new(profile);
 
-        CharacterProfile first = profile.LoadBlank();
+        CharacterProfile first = profile.LoadDefaultProfile();
         first.AvoidedRooms = new() { new RoomRef(1, 1) };
         // Drive a fresh ProfileLoaded so the filter rebuilds from the
         // new state — same path Settings → BBS Apply uses.
-        profile.LoadBlank().AvoidedRooms = new() { new RoomRef(9, 9) };
+        profile.LoadDefaultProfile().AvoidedRooms = new() { new RoomRef(9, 9) };
         profile.NotifyBbsPinApplied();
 
-        // After the second LoadBlank, only the new profile's lists
+        // After the second LoadDefaultProfile, only the new profile's lists
         // should appear in the filter.
         Assert.False(filter.IsAvoided(new RoomKey(1, 1)));
-        // The second LoadBlank's AvoidedRooms was assigned AFTER
+        // The second LoadDefaultProfile's AvoidedRooms was assigned AFTER
         // ProfileLoaded fired, so the filter snapshot from that load
         // is empty — the filter only re-snapshots on Profile events.
         // Verify the documented contract: snapshot at event time.
@@ -850,8 +850,8 @@ public sealed class MovementFilterTests
             graph.OnActiveSetChanged("alpha");
             BfsMapper bfs = new(graph);
 
-            ProfileService profile = new();
-            profile.LoadBlank();
+            ProfileService profile = TestProfiles.Service();
+            profile.LoadDefaultProfile();
             MovementFilter filter = new(profile);
             filter.MarkAvoided(new RoomKey(1, 2));
 

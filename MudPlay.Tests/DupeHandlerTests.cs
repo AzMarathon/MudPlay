@@ -20,6 +20,9 @@ namespace MudPlay.Tests;
 // touches the target's other settings.
 public sealed class DupeHandlerTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     private static readonly DateTime Now = new(2026, 9, 21, 0, 0, 0, DateTimeKind.Utc);
 
     private const PlayerRemoteControls Elevated = PlayerRemoteControls.SysopCommands;
@@ -37,8 +40,9 @@ public sealed class DupeHandlerTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(chat, new PartyState(), players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         _ = new DupeHandler(engine, players, () => localCharacter, log);
         return (router, engine, players);
@@ -295,7 +299,7 @@ public sealed class DupeHandlerTests
         PlayerCustomization spent = new(DupeUsedAtUtc: Now, DupedPlayer: "Moron");
         Assert.False(spent.IsDefault);
 
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         SeedPlayer(players, "Reveal", PlayerRemoteControls.None);
         players.EditCustomization("Reveal", spent);
 
@@ -394,8 +398,7 @@ public sealed class DupeHandlerTests
         SeedPlayer(players, "Reveal", PlayerRemoteControls.All);
         SeedPlayer(players, "Moron", PlayerRemoteControls.None);
 
-        engine.DispatchForTests(new ChatLogEntry(
-            Now, ChatChannel.Local, "Reveal", "@dupe Moron", "Reveal says: @dupe Moron"));
+        ChatLines.Hear(_routers[engine], new ChatLine(ChatChannel.Local, "Reveal", "@dupe Moron"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
         Assert.Empty(_replies);
@@ -436,8 +439,7 @@ public sealed class DupeHandlerTests
         SeedPlayer(players, "Reveal", PlayerRemoteControls.All);
         SeedPlayer(players, "Moron", PlayerRemoteControls.None);
 
-        engine.DispatchForTests(new ChatLogEntry(
-            Now, ChatChannel.Broadcast, "Reveal", "@dupe Moron", "BROADCAST: @dupe Moron"));
+        ChatLines.Hear(_routers[engine], new ChatLine(ChatChannel.Broadcast, "Reveal", "@dupe Moron"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
         Assert.Empty(_replies);
@@ -450,8 +452,7 @@ public sealed class DupeHandlerTests
         SeedPlayer(players, "Reveal", PlayerRemoteControls.All);
         SeedPlayer(players, "Moron", PlayerRemoteControls.None);
 
-        engine.DispatchForTests(new ChatLogEntry(
-            Now, ChatChannel.Yell, "Reveal", "@dupe Moron", "Reveal yells: @dupe Moron"));
+        ChatLines.Hear(_routers[engine], new ChatLine(ChatChannel.Yell, "Reveal", "@dupe Moron"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
         Assert.Empty(_replies);

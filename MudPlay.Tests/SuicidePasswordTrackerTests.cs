@@ -29,8 +29,8 @@ public sealed class SuicidePasswordTrackerTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         EngineSendGate gate = new();
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         string tmpDir = Path.Combine(Path.GetTempPath(), "fterm-suicide-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tmpDir);
         PasswordProtector protector = new(Path.Combine(tmpDir, ".credkey"));

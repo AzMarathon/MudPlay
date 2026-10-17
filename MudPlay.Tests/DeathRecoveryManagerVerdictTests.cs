@@ -93,12 +93,12 @@ public sealed partial class DeathRecoveryManagerTests
 
         h.Tracker.NoteRoomObserved(Obs3());
         Assert.Equal(new RoomKey(1, 1), h.Tracker.State.CurrentRoom!.Key);
-        h.Recovery.FeedTestLine("Obvious exits: south");
+        h.Feed.Line("Obvious exits: south");
         Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
 
         h.FeedSurvey("corpse of Ermias");                   // the real look
         h.EnterGates();
-        h.Recovery.FeedTestLine("Obvious exits: north");
+        h.Feed.Line("Obvious exits: north");
 
         Assert.Contains("recover corpse Ermias", h.Sent);
         Assert.NotEqual(DeathRecoveryStatus.Missing, h.Latest.Status);
@@ -116,11 +116,11 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.True(h.Recovery.RecoverNow(h.Latest));
         h.FeedSurvey("a lantern");                    // the peek's floor
         h.Tracker.NoteRoomObserved(Obs3());           // set aside as a peek
-        h.Recovery.FeedTestLine("Obvious exits: south");
+        h.Feed.Line("Obvious exits: south");
         Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
 
         h.EnterGates();                               // the real look: bare floor
-        h.Recovery.FeedTestLine("Obvious exits: north");
+        h.Feed.Line("Obvious exits: north");
 
         Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
     }
@@ -144,7 +144,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.EnterGates();
 
         Assert.Equal(new[] { "recover corpse Ermias" }, h.Sent.ToArray());
-        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+        h.Feed.Line("You have recovered the corpse of Ermias.");
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
     }
 
@@ -338,7 +338,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.EnterGates();
         Assert.Equal(new[] { "longsword", "longsword", "longsword" }, h.Latest.UnrecoveredItems);
         h.Sent.Clear();
-        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+        h.Feed.Line("You have recovered the corpse of Ermias.");
         Assert.Equal(new[] { "eq longsword" }, h.Sent.ToArray());
     }
 
@@ -395,7 +395,7 @@ public sealed partial class DeathRecoveryManagerTests
 
         h.FeedSurvey("a longsword");
         h.EnterGates();
-        h.Recovery.FeedTestLine("You took longsword.");
+        h.Feed.Line("You took longsword.");
 
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
     }

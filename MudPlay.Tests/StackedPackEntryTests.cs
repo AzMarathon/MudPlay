@@ -1,9 +1,7 @@
-using System.Reflection;
 using System.Text;
 using MudPlay.Game.Inventory;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
-using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -18,20 +16,14 @@ public sealed class StackedPackEntryTests
     private sealed class LivePack : IDisposable
     {
         public InventoryManager Inv { get; } = new();
-        private readonly LineExtractor _lines = new(new TerminalEmulator(80, 24));
+        // The game's output, fed the way the client receives it.
+        private readonly ServerFeed _feed = new();
 
-        public LivePack() => Inv.AttachLineExtractor(_lines);
+        public LivePack() => Inv.AttachLineExtractor(_feed.Lines);
 
         public InventorySnapshot Snapshot => Inv.Snapshot;
 
-        public void Feed(string text)
-        {
-            FieldInfo? field = typeof(LineExtractor).GetField(
-                "LineEmitted", BindingFlags.Instance | BindingFlags.NonPublic);
-            if (field?.GetValue(_lines) is Action<LineExtractor.EmittedLine> handler)
-                handler(new LineExtractor.EmittedLine(
-                    text, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
-        }
+        public void Feed(string text) => _feed.Line(text);
 
         // A full 'i' read listing exactly these entries, as the game words them.
         public void Read(params string[] entries)

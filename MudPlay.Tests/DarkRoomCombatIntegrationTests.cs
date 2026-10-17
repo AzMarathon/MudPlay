@@ -27,7 +27,7 @@ public sealed class DarkRoomCombatIntegrationTests
         private readonly string _root;
         public MessageRouter Router { get; } = new();
         public MonsterMessageStore Monsters { get; } = new();
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
         public PartyState Party { get; } = new();
         public LogService Log { get; } = new();
         public RoomTracker Tracker { get; }

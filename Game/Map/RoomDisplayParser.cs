@@ -80,25 +80,6 @@ public sealed partial class RoomDisplayParser : IDisposable
 
     public void Dispose() => _lines.LineEmitted -= OnLineEmitted;
 
-    // Test seam — feed plain text lines without colour information. Lines fall
-    // through to the text-heuristic path (echo filter + first non-blank line in
-    // the block).
-    internal void FeedTestLines(IEnumerable<string> lines, DateTimeOffset? when = null)
-    {
-        DateTimeOffset stamp = when ?? DateTimeOffset.UtcNow;
-        foreach (string text in lines)
-            HandleLine(new LineExtractor.EmittedLine(text, [], stamp, false));
-    }
-
-    // Test seam — feed pre-built EmittedLines through the real emit entry point
-    // so the colour-anchored detection and prompt-boundary handling are both
-    // exercised.
-    internal void FeedTestEmittedLines(IEnumerable<LineExtractor.EmittedLine> lines)
-    {
-        foreach (LineExtractor.EmittedLine line in lines)
-            OnLineEmitted(line);
-    }
-
     private void OnLineEmitted(LineExtractor.EmittedLine line)
     {
         if (line.IsPromptLine)

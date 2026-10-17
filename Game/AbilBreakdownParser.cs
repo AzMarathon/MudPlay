@@ -111,20 +111,6 @@ public sealed partial class AbilBreakdownParser : IDisposable
         if (_lines is not null) _lines.LineEmitted -= OnLineEmitted;
     }
 
-    // Test hook — drive one line through the parser without a live
-    // LineExtractor. Pass isPromptLine to replay the prompt row that flushes a
-    // block.
-    internal void FeedTestLine(string text, bool isPromptLine = false)
-        => HandleLine(text, isPromptLine);
-
-    // Test hook — drive several non-prompt content lines. Does not flush; feed
-    // a prompt or a non-matching line afterwards to close the block, exercising
-    // the real terminator paths.
-    internal void FeedTestLines(IEnumerable<string> lines)
-    {
-        foreach (string text in lines) HandleLine(text, isPromptLine: false);
-    }
-
     private void OnLineEmitted(LineExtractor.EmittedLine line)
         => HandleLine(line.Text, line.IsPromptLine);
 

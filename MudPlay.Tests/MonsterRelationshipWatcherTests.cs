@@ -68,7 +68,7 @@ public sealed class MonsterRelationshipWatcherTests
             Func<bool>? fleeInFlight = null)
         {
             DefaultPatterns.Seed(Router);
-            Classifier = new RoomEntityClassifier(Router, Monsters, new PlayerDatabase(), Log);
+            Classifier = new RoomEntityClassifier(Router, Monsters, new PlayerDatabase(new ProfileService(), () => null), Log);
             Watcher = new MonsterRelationshipWatcher(
                 Classifier,
                 resolveOverlay: ResolveOverlay,

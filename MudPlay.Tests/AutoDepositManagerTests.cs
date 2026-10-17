@@ -229,8 +229,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), graphJson ?? GraphJson);
         File.WriteAllText(Path.Combine(_root, "alpha", "Lairs.json"), LairsJson);
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
 
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");

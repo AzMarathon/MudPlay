@@ -23,6 +23,9 @@ namespace MudPlay.Tests;
 // remote report (format / substring filter / "expired").
 public sealed class BossTimerTests : IDisposable
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     private readonly string _set = "boss-timer-test-" + Path.GetRandomFileName();
     private readonly string _seedPath =
         Path.Combine(Path.GetTempPath(), "bts-" + Path.GetRandomFileName() + ".json");
@@ -482,8 +485,9 @@ public sealed class BossTimerTests : IDisposable
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(chat, party, players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         players.RecordObservation("Bob", null, null, null, null, null, null, Now);
         players.EditCustomization("Bob", new PlayerCustomization(RemoteControls: PlayerRemoteControls.QueryBossTimers));
@@ -500,8 +504,8 @@ public sealed class BossTimerTests : IDisposable
     // The engine's clock: it bounds what it says on the broadcast channel by the minute.
     private DateTimeOffset _engineNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
-    private static ChatLogEntry Telepath(string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, "Bob", msg, $"Bob telepaths: {msg}");
+    private static ChatLine Telepath(string msg) =>
+        new(ChatChannel.TelepathIncoming, "Bob", msg);
 
     private string Reply() =>
         _replies.Select(b => Encoding.Latin1.GetString(b)).Select(StripWire).Single();
@@ -530,7 +534,7 @@ public sealed class BossTimerTests : IDisposable
         var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
         timers.MarkKilled("ogre king");
 
-        engine.DispatchForTests(new ChatLogEntry(Now, channel, "Bob", "@timer sync", "raw"));
+        ChatLines.Hear(_routers[engine], new ChatLine(channel, "Bob", "@timer sync"));
 
         string[] wire = _replies.Select(b => Encoding.Latin1.GetString(b)).ToArray();
         Assert.NotEmpty(wire);
@@ -549,7 +553,7 @@ public sealed class BossTimerTests : IDisposable
         timers.MarkKilled("ogre king");
         engine.StealthedProvider = () => true;
 
-        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Local, "Bob", "@timer sync", "raw"));
+        ChatLines.Hear(_routers[engine], new ChatLine(ChatChannel.Local, "Bob", "@timer sync"));
 
         Assert.All(_replies.Select(b => Encoding.Latin1.GetString(b)),
             line => Assert.StartsWith("/Bob {@timerdata ", line));
@@ -566,8 +570,7 @@ public sealed class BossTimerTests : IDisposable
             Enumerable.Range(1, 30).Select(i => ($"boss number {i}", 1000 + i, 24)).ToArray();
         var (engine, timers) = SetupHandler(RealmType.ParaMud, bosses);
         foreach ((string name, _, _) in bosses) timers.MarkKilled(name);
-        ChatLogEntry Asks(string who, ChatChannel channel = ChatChannel.Broadcast) =>
-            new(Now, channel, who, "@timer sync", "raw");
+        ChatLine Asks(string who, ChatChannel channel = ChatChannel.Broadcast) => new(channel, who, "@timer sync");
         string[] Sent()
         {
             string[] wire = _replies.Select(b => Encoding.Latin1.GetString(b)).ToArray();
@@ -586,11 +589,11 @@ public sealed class BossTimerTests : IDisposable
             Assert.Equal(30, BossTimerSyncCodec.Decode(blob).Count);
         }
 
-        engine.DispatchForTests(Asks("Bob"));
+        ChatLines.Hear(_routers[engine], Asks("Bob"));
         SentTheTimersWhole("br ");
 
         _engineNow += TimeSpan.FromSeconds(59);
-        engine.DispatchForTests(Asks("Bob"));
+        ChatLines.Hear(_routers[engine], Asks("Bob"));
         Assert.Empty(Sent());
 
         // The several lines were one answer, and an answer to a player who holds the
@@ -599,19 +602,19 @@ public sealed class BossTimerTests : IDisposable
         // few, and no more.
         for (int i = 1; i <= BroadcastAnswerBudget.AnswersPerWindow; i++)
         {
-            engine.DispatchForTests(Asks($"Passerby{i}"));
+            ChatLines.Hear(_routers[engine], Asks($"Passerby{i}"));
             Assert.Equal("br {command invalid or not allowed}\r", Sent().Single());
         }
-        engine.DispatchForTests(Asks("OneMore"));
+        ChatLines.Hear(_routers[engine], Asks("OneMore"));
         Assert.Empty(Sent());
 
         // The bound is on that channel alone: the same player is answered by telepath.
-        engine.DispatchForTests(Asks("Bob", ChatChannel.TelepathIncoming));
+        ChatLines.Hear(_routers[engine], Asks("Bob", ChatChannel.TelepathIncoming));
         SentTheTimersWhole("/Bob ");
 
         // A minute after the answer, it is given again.
         _engineNow += TimeSpan.FromSeconds(1);
-        engine.DispatchForTests(Asks("Bob"));
+        ChatLines.Hear(_routers[engine], Asks("Bob"));
         SentTheTimersWhole("br ");
     }
 
@@ -624,7 +627,7 @@ public sealed class BossTimerTests : IDisposable
         timers.MarkKilled("ogre king");
         engine.DisableBroadcastChannel = true;
 
-        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer sync", "raw"));
+        ChatLines.Hear(_routers[engine], new ChatLine(ChatChannel.Broadcast, "Bob", "@timer sync"));
 
         Assert.Empty(_replies);
     }
@@ -2693,13 +2696,13 @@ public sealed class BossTimerTests : IDisposable
         var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
         timers.MarkKilled("ogre king");
 
-        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer", "raw"));
-        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer ogre", "raw"));
+        ChatLines.Hear(_routers[engine], new ChatLine(ChatChannel.Broadcast, "Bob", "@timer"));
+        ChatLines.Hear(_routers[engine], new ChatLine(ChatChannel.Broadcast, "Bob", "@timer ogre"));
 
         Assert.StartsWith("br {ogre king - ", Encoding.Latin1.GetString(Assert.Single(_replies)));
 
         _engineNow += BroadcastAnswerBudget.Window;
-        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer ogre", "raw"));
+        ChatLines.Hear(_routers[engine], new ChatLine(ChatChannel.Broadcast, "Bob", "@timer ogre"));
         Assert.Equal(2, _replies.Count);
     }
 
@@ -2711,7 +2714,7 @@ public sealed class BossTimerTests : IDisposable
         timers.MarkKilled("ogre king");
         engine.DisableBroadcastChannel = true;
 
-        engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer", "raw"));
+        ChatLines.Hear(_routers[engine], new ChatLine(ChatChannel.Broadcast, "Bob", "@timer"));
 
         Assert.Empty(_replies);
     }
@@ -2720,7 +2723,7 @@ public sealed class BossTimerTests : IDisposable
     public void Timer_NoneActive_ReportsEmptySet()
     {
         var (engine, _) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
-        engine.DispatchForTests(Telepath("@timer"));
+        ChatLines.Hear(_routers[engine], Telepath("@timer"));
         Assert.Equal("no boss timers active", Reply());
     }
 
@@ -2729,7 +2732,7 @@ public sealed class BossTimerTests : IDisposable
     {
         var (engine, timers) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
         timers.MarkKilled("ogre king");
-        engine.DispatchForTests(Telepath("@timer"));
+        ChatLines.Hear(_routers[engine], Telepath("@timer"));
 
         string reply = Reply();
         Assert.Contains("ogre king", reply);
@@ -2744,7 +2747,7 @@ public sealed class BossTimerTests : IDisposable
         timers.MarkKilled("crimson mist");
         timers.MarkKilled("ogre king");
 
-        engine.DispatchForTests(Telepath("@timer crimson"));
+        ChatLines.Hear(_routers[engine], Telepath("@timer crimson"));
         string reply = Reply();
         Assert.Contains("crimson mist", reply);
         Assert.DoesNotContain("ogre king", reply);
@@ -2754,7 +2757,7 @@ public sealed class BossTimerTests : IDisposable
     public void Timer_QueryWeDoNotHold_ReportsExpired()
     {
         var (engine, _) = SetupHandler(RealmType.ParaMud, ("crimson mist", 10, 12));
-        engine.DispatchForTests(Telepath("@timer crimson"));
+        ChatLines.Hear(_routers[engine], Telepath("@timer crimson"));
         Assert.Equal("expired", Reply());
     }
 
@@ -2767,7 +2770,7 @@ public sealed class BossTimerTests : IDisposable
         timers.MarkKilled("huge black dragon");
         timers.MarkKilled("ogre king");
 
-        engine.DispatchForTests(Telepath("@timer dragon"));
+        ChatLines.Hear(_routers[engine], Telepath("@timer dragon"));
 
         List<string> replies = Replies();
         Assert.Equal(2, replies.Count);   // two dragons, two lines — ogre king excluded
@@ -2785,7 +2788,7 @@ public sealed class BossTimerTests : IDisposable
         foreach (string n in new[] { "red dragon", "blue dragon", "green dragon", "black dragon", "white dragon", "gold dragon" })
             timers.MarkKilled(n);
 
-        engine.DispatchForTests(Telepath("@timer dragon"));
+        ChatLines.Hear(_routers[engine], Telepath("@timer dragon"));
 
         List<string> replies = Replies();
         Assert.Equal(6, replies.Count);   // 5 timer lines + 1 overflow line

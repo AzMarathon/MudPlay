@@ -543,8 +543,8 @@ public sealed class AutoLairManagerTests : IDisposable
         MovementFilter? filter = null;
         if (stats is { } s)
         {
-            ProfileService profile = new();
-            profile.LoadBlank();
+            ProfileService profile = TestProfiles.Service();
+            profile.LoadDefaultProfile();
             filter = new MovementFilter(profile)
             {
                 StrengthProvider = () => s.Strength,
@@ -554,8 +554,8 @@ public sealed class AutoLairManagerTests : IDisposable
         }
         else if (live is not null)
         {
-            ProfileService profile = new();
-            profile.LoadBlank();
+            ProfileService profile = TestProfiles.Service();
+            profile.LoadDefaultProfile();
             filter = new MovementFilter(profile)
             {
                 StrengthProvider = () => live.Strength,

@@ -24,7 +24,7 @@ public sealed class AlignmentTrackerTests
         var router = new MessageRouter();
         DefaultPatterns.Seed(router);
         var stats = new PlayerStats { Name = name };
-        var db = new PlayerDatabase();   // parameterless ctor = in-memory, no disk
+        var db = new PlayerDatabase(new ProfileService(), () => null);   // parameterless ctor = in-memory, no disk
         var tracker = new AlignmentTracker(router, stats, db);
         return (router, db, tracker);
     }
@@ -75,7 +75,7 @@ public sealed class AlignmentTrackerTests
     {
         var router = new MessageRouter();
         DefaultPatterns.Seed(router);
-        var db = new PlayerDatabase();
+        var db = new PlayerDatabase(new ProfileService(), () => null);
         var tracker = new AlignmentTracker(router, new PlayerStats { Name = "Fujin" }, db);
         Assert.Null(tracker.SelfAlignment);
 

@@ -1366,35 +1366,6 @@ public sealed partial class PartyManager : IDisposable
         HandleLine(line.Text, line.IsPromptLine);
     }
 
-    // Test seam — feeds the par-block state machine without spinning up a real
-    // LineExtractor. Tests prime the state via TestEnterParBlock then pump rows
-    // here. Same shape as WhoListParser.FeedTestLines.
-    internal void FeedTestLines(IEnumerable<string> lines)
-    {
-        foreach (string text in lines) HandleLine(text, isPromptLine: false);
-    }
-
-    // Test seam — feeds a synthetic prompt line (IsPromptLine=true), the
-    // real-BBS par-block terminator, so tests can drive end-of-block
-    // reconciliation exactly the way the LineExtractor does in production.
-    internal void FeedTestPromptLine(string text = "[HP=0/MA=0]:") => HandleLine(text, isPromptLine: true);
-
-    // Test seam — drives the FULL emitted-line path (custom disconnect match +
-    // par-block state machine), the way the live LineExtractor feed does. The
-    // plain FeedTestLines seam only pumps HandleLine, so it can't exercise the
-    // board-specific disconnect pattern (TryCustomDisconnectLine).
-    internal void FeedTestEmittedLine(string text) => OnLineEmitted(
-        new LineExtractor.EmittedLine(
-            text, new CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false));
-
-    // Test seam — flips the state machine into ReadingRows without dispatching
-    // the par-header pattern.
-    internal void TestEnterParBlock()
-    {
-        _parState = ParState.ReadingRows;
-        _parBlockNames.Clear();
-    }
-
     private void HandleLine(string text, bool isPromptLine = false)
     {
         if (_parState != ParState.ReadingRows) return;

@@ -26,7 +26,7 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.True(h.Recovery.RecoverNow(h.Latest));
         h.FeedSurvey("a torch");
         h.EnterGates();
-        h.Recovery.FeedTestLine("Obvious exits: north");
+        h.Feed.Line("Obvious exits: north");
         Assert.Contains("get torch", h.Sent);
     }
 
@@ -47,10 +47,10 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Contains("look", h.Sent);
         h.FeedSurvey("a torch");
         h.EnterGates();
-        h.Recovery.FeedTestLine("Obvious exits: north");
+        h.Feed.Line("Obvious exits: north");
         Assert.Contains("get torch", h.Sent);
 
-        h.Recovery.FeedTestLine("You took torch.");
+        h.Feed.Line("You took torch.");
         for (int i = 0; i < 3; i++) h.Heartbeat();
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
         Assert.DoesNotContain(h.Sent, s => s.StartsWith("look "));   // no sweep over a pile underfoot
@@ -67,7 +67,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.Sent.Clear();
 
         h.FeedSurvey("a torch");                      // the next room's floor, a torch like ours on it
-        h.Recovery.FeedTestLine("Obvious exits: south");
+        h.Feed.Line("Obvious exits: south");
         for (int i = 0; i < 3; i++) h.Heartbeat();
 
         Assert.Empty(h.Sent);
@@ -127,7 +127,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.FeedSurvey("a torch");
         h.EnterGates();
         Assert.Contains("get torch", h.Sent);
-        h.Recovery.FeedTestLine("You took torch.");
+        h.Feed.Line("You took torch.");
         for (int i = 0; i < 4; i++) h.Heartbeat();
         Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
         Assert.Equal(new[] { "iron sword" }, h.Latest.UnrecoveredItems);
@@ -213,7 +213,7 @@ public sealed partial class DeathRecoveryManagerTests
 
         h.FeedSurvey("a torch");
         Assert.Contains("get torch", h.Sent);
-        h.Recovery.FeedTestLine("You took torch.");
+        h.Feed.Line("You took torch.");
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
     }
 
@@ -251,7 +251,7 @@ public sealed partial class DeathRecoveryManagerTests
 
         h.Tracker.NoteRoomObserved(Obs3());
         Assert.Equal(new[] { "get torch" }, h.Sent.ToArray());
-        h.Recovery.FeedTestLine("You took torch.");
+        h.Feed.Line("You took torch.");
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
     }
 
@@ -304,7 +304,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.EnterGates();
 
         Assert.Equal(1, h.Sent.Count(s => s == "get torch"));
-        h.Recovery.FeedTestLine("You took torch.");
+        h.Feed.Line("You took torch.");
         Assert.Equal(new[] { "rope" }, h.Latest.UnrecoveredItems);
     }
 
@@ -380,7 +380,7 @@ public sealed partial class DeathRecoveryManagerTests
 
         h.FeedSurvey("an iron sword");
         Assert.Contains("get iron sword", h.Sent);
-        h.Recovery.FeedTestLine("You took an iron sword.");
+        h.Feed.Line("You took an iron sword.");
         for (int i = 0; i < 5; i++) h.Heartbeat();
 
         Assert.DoesNotContain(h.Sent, s => s.StartsWith("look "));
@@ -419,7 +419,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.Recovery.AutoRecover = true;
         h.FeedSurvey("an iron sword");
         h.EnterGates();
-        h.Recovery.FeedTestLine("You took an iron sword.");
+        h.Feed.Line("You took an iron sword.");
         h.Tracker.NoteMoveSentByObserver(Direction.N);
         h.Tracker.NoteRoomObserved(Obs3());
         h.Tracker.NoteMoveSentByObserver(Direction.S);
@@ -442,7 +442,7 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Contains("get steel helm", h.Sent);
 
         h.Tracker.NoteMoveSent(Direction.S);
-        h.Recovery.FeedTestLine("You took a steel helm.");
+        h.Feed.Line("You took a steel helm.");
 
         Assert.True(h.Latest.UnrecoveredItems is null or { Count: 0 },
             $"still listed: {string.Join(", ", h.Latest.UnrecoveredItems ?? new())}; status {h.Latest.Status}");
@@ -455,7 +455,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.Tracker.NoteMoveSent(Direction.N);
         h.FeedSurvey("a steel helm");
         h.Tracker.NoteRoomObserved(Obs3());
-        h.Recovery.FeedTestLine("You took a steel helm.");
+        h.Feed.Line("You took a steel helm.");
 
         Assert.True(h.Latest.UnrecoveredItems is null or { Count: 0 },
             $"still listed: {string.Join(", ", h.Latest.UnrecoveredItems ?? new())}");
@@ -473,7 +473,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.EnterGates();
 
         Assert.Equal(1, h.Sent.Count(s => s == "get steel helm"));
-        h.Recovery.FeedTestLine("You took a steel helm.");
+        h.Feed.Line("You took a steel helm.");
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
     }
 }

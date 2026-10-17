@@ -26,7 +26,7 @@ public sealed class SuicideHandlerTests
         public PasswordProtector Protector { get; }
         public PartyState Party { get; } = new();
         public PlayerState PlayerState { get; } = new();
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
         public LogService Log { get; } = new();
         public WirePromptScanner PromptScanner { get; } = new();
         public RemoteCommandManager Engine { get; }
@@ -41,8 +41,8 @@ public sealed class SuicideHandlerTests
             // ChatRouter is required for RemoteCommandManager to receive
             // telepath input.
             ChatRouter chat = new(Router);
-            Profile = new ProfileService();
-            Profile.LoadBlank();
+            Profile = TestProfiles.Service();
+            Profile.LoadDefaultProfile();
             TmpDir = Path.Combine(Path.GetTempPath(), "fterm-suicide-handler-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(TmpDir);
             Protector = new PasswordProtector(Path.Combine(TmpDir, ".credkey"));

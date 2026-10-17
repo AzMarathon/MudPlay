@@ -14,8 +14,8 @@ public sealed class AutoModeControllerTests
 {
     private static ProfileService BlankProfile()
     {
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         return profile;
     }
 

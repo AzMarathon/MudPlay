@@ -2,7 +2,6 @@ using System.Linq;
 using MudPlay.Game.Conditions;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
-using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -20,6 +19,8 @@ public sealed class ConditionTrackerTests
         public LogService Log { get; } = new();
         public MessageStore Messages { get; } = new();
         public ConditionTracker Tracker { get; }
+        // The game's output, fed the way the client receives it.
+        public ServerFeed Server { get; } = new();
         public List<MessageRecord> Applied { get; } = new();
         public List<MessageRecord> Ended { get; } = new();
         public List<MessageRecord> ActionFailed { get; } = new();
@@ -27,40 +28,15 @@ public sealed class ConditionTrackerTests
         public Harness()
         {
             Tracker = new ConditionTracker(Messages, Log);
+            Tracker.AttachLineExtractor(Server.Lines);
             Tracker.ConditionApplied += Applied.Add;
             Tracker.ConditionEnded   += Ended.Add;
             Tracker.ActionFailed     += ActionFailed.Add;
         }
 
-        public void Feed(string text)
-        {
-            // The tracker subscribes to LineExtractor in real life;
-            // tests reflect into the private OnLine via a public
-            // helper would be overkill. Instead, attach a fake
-            // extractor and dispatch through it.
-            // Simpler: keep the private OnLine internal-via-friend
-            // by exposing FeedTestLine. Use the same pattern other
-            // engines have.
-            var emitted = new LineExtractor.EmittedLine(
-                text, Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false);
-            typeof(ConditionTracker)
-                .GetMethod("OnLine",
-                    System.Reflection.BindingFlags.Instance |
-                    System.Reflection.BindingFlags.NonPublic)!
-                .Invoke(Tracker, new object[] { emitted });
-        }
+        public void Feed(string text) => Server.Line(text);
 
-        public void FeedAt(string text, DateTimeOffset when)
-        {
-            var emitted = new LineExtractor.EmittedLine(
-                text, Array.Empty<CellAttributes>(), when, IsPromptLine: false);
-            typeof(ConditionTracker)
-                .GetMethod("OnLine",
-                    System.Reflection.BindingFlags.Instance |
-                    System.Reflection.BindingFlags.NonPublic)!
-                .Invoke(Tracker, new object[] { emitted });
-        }
+        public void FeedAt(string text, DateTimeOffset when) => Server.Line(text, when);
 
         public void Dispose() => Tracker.Dispose();
     }

@@ -12,18 +12,25 @@ public sealed class PartyManagerTests
     private static LineExtractor.EmittedLine Line(string text) =>
         new(text, new CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
 
-    /// <summary>
-    /// Build a router with the default party patterns seeded and wire a
-    /// PartyManager + PartyState. The manager doesn't need a real
-    /// LineExtractor for these unit tests — par rows are fed via
-    /// <see cref="PartyManager.FeedTestLines"/>.
-    /// </summary>
-    private static (MessageRouter router, PartyManager party) Setup(string? localCharacterName = null)
+    // The router the manager reads, and the game's output fed through it and the
+    // extractor the manager is attached to, the way the client wires them.
+    private readonly MessageRouter _router = new();
+    private readonly ServerFeed _feed;
+
+    public PartyManagerTests()
     {
-        MessageRouter router = new();
-        DefaultPatterns.Seed(router);
+        DefaultPatterns.Seed(_router);
+        _feed = new ServerFeed(_router);
+    }
+
+    // A PartyManager + PartyState on the class router, attached to the class feed so
+    // par rows arrive through the extractor as they do in the client.
+    private (MessageRouter router, PartyManager party) Setup(string? localCharacterName = null)
+    {
+        MessageRouter router = _router;
         PartyState state = new();
         PartyManager party = new(router, state);
+        party.AttachLineExtractor(_feed.Lines);
         if (localCharacterName is not null) party.LocalCharacterName = localCharacterName;
         return (router, party);
     }
@@ -483,7 +490,7 @@ public sealed class PartyManagerTests
         // /MudPlay @health to ourselves. Both sides now reduce to given.
         var (router, p) = Setup(localCharacterName: "MudPlay WuzHere");
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Midrank",
             "  MudPlay WuzHere                                   (Mystic)            [H:100%]   - Frontrank",
@@ -510,7 +517,7 @@ public sealed class PartyManagerTests
         var (router, p) = Setup(localCharacterName: "MudPlay");
         router.Dispatch(Line("Raijin started to follow you."));
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)                [H:100%]   - Midrank",
             "  MudPlay WuzHere                   (Mystic)                [H:100%]   - Frontrank",
@@ -521,7 +528,7 @@ public sealed class PartyManagerTests
 
         // Next poll: dissolution line + lone MudPlay row in "solo" par.
         router.Dispatch(Line("You are not in a party at the present time."));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  MudPlay WuzHere                   (Mystic)                [H:100%]   - Midrank",
         });
@@ -543,8 +550,8 @@ public sealed class PartyManagerTests
     public void ParBlock_RealBbsFormat_PopulatesMembers()
     {
         var (_, p) = Setup(localCharacterName: "MudPlay");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Midrank",
             "  MudPlay WuzHere                   (Mystic)                  [H:100%]   - Frontrank",
@@ -575,8 +582,8 @@ public sealed class PartyManagerTests
         // so the PartyWindow can render the per-row rank chip in the
         // skeleton-design colour-coded style. Default Mid when missing.
         var (_, p) = Setup(localCharacterName: "MudPlay");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Midrank",
             "  MudPlay WuzHere                   (Mystic)                  [H:100%]   - Frontrank",
@@ -602,8 +609,8 @@ public sealed class PartyManagerTests
         // and the PartyWindow demoted a force-frontranked (poisoned) leader
         // to midrank the moment they were poisoned. Rank must survive the flag.
         var (_, p) = Setup(localCharacterName: "MindGoblin");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  MudPlay                          (Missionary) [M:100%] [H: 89%]P  - Frontrank",
             "  MindGoblin                     (Druid)      [M: 98%] [H:100%]   - Midrank",
@@ -627,8 +634,8 @@ public sealed class PartyManagerTests
         // the only way to see it. A poll with the flag sets the chip; a later poll
         // without it clears the chip straight off the flag dropping.
         var (_, p) = Setup(localCharacterName: "MindGoblin");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Suijin                         (Mage)       [M: 98%] [H: 81%]P  - Backrank",
             "  MindGoblin                     (Druid)      [M: 98%] [H:100%]   - Midrank",
@@ -637,8 +644,8 @@ public sealed class PartyManagerTests
         PartyMember suijin = p.State.Members.First(x => x.Name == "Suijin");
         Assert.True(suijin.Poisoned);   // P flag present → chip set
 
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Suijin                         (Mage)       [M: 98%] [H: 95%]   - Backrank",
             "  MindGoblin                     (Druid)      [M: 98%] [H:100%]   - Midrank",
@@ -654,8 +661,8 @@ public sealed class PartyManagerTests
         // poll and apply/wear-off-message-driven), so par must NOT set it even when
         // our own row shows `P`.
         var (_, p) = Setup(localCharacterName: "MindGoblin");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  MindGoblin                     (Druid)      [M: 98%] [H: 70%]P  - Midrank",
             string.Empty,
@@ -673,8 +680,8 @@ public sealed class PartyManagerTests
         // silently revert them to Mid. The rank has to hold across the
         // poison-flagged poll.
         var (_, p) = Setup(localCharacterName: "MindGoblin");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  MudPlay                          (Missionary) [M:100%] [H:100%]   - Frontrank",
             string.Empty,
@@ -682,8 +689,8 @@ public sealed class PartyManagerTests
         Assert.Equal(Models.Profile.PartyRank.Front,
             p.State.Members.First(x => x.Name == "MudPlay").Rank);
 
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  MudPlay                          (Missionary) [M:100%] [H: 89%]P  - Frontrank",
             string.Empty,
@@ -703,8 +710,8 @@ public sealed class PartyManagerTests
         // failed to match and PartyMember.HpPercent stayed frozen at
         // whatever the last 100% poll captured.
         var (_, p) = Setup(localCharacterName: "MudPlay");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [M: 72%] [H: 85%]   - Backrank",
             "  Hurter WuzHere                  (Mystic)        [M:  3%] [H:  5%]   - Frontrank",
@@ -809,8 +816,8 @@ public sealed class PartyManagerTests
         // the next par poll — so the PartyWindow rank chip swaps colour
         // on the same tick the rerank message lands.
         var (router, p) = Setup(localCharacterName: "MudPlay");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Midrank",
             "  MudPlay WuzHere                   (Mystic)                  [H:100%]   - Frontrank",
@@ -838,8 +845,8 @@ public sealed class PartyManagerTests
         // grammar). Routes to the IsSelf row by flag, since the
         // message carries no name.
         var (router, p) = Setup(localCharacterName: "MudPlay");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  MudPlay WuzHere                   (Mystic)                  [H:100%]   - Midrank",
             string.Empty,
@@ -864,8 +871,8 @@ public sealed class PartyManagerTests
         // with disconnect / late-arriving observation) must not throw
         // and must not magic up a phantom member.
         var (router, p) = Setup(localCharacterName: "MudPlay");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  MudPlay WuzHere                   (Mystic)                  [H:100%]   - Midrank",
             string.Empty,
@@ -884,8 +891,8 @@ public sealed class PartyManagerTests
         // the rest/meditate state — R = Resting, M = Meditating, blank
         // = Standing. Real Playpen format observed live.
         var (_, p) = Setup(localCharacterName: "MudPlay");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%] R - Midrank",
             "  MudPlay WuzHere                   (Mystic)                  [H:100%]   - Frontrank",
@@ -906,8 +913,8 @@ public sealed class PartyManagerTests
     public void ParBlock_StateFlag_M_SetsMeditatingPosition()
     {
         var (_, p) = Setup(localCharacterName: "MudPlay");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%] M - Midrank",
             string.Empty,
@@ -925,8 +932,8 @@ public sealed class PartyManagerTests
         // A blank line is the par-block terminator — rows after it must
         // not get parsed.
         var (_, p) = Setup();
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Forged WuzHere                  (Mage)          [M:100%] [H:100%]   - Frontrank",
             "",
@@ -942,8 +949,8 @@ public sealed class PartyManagerTests
     {
         // The "Name Class Hits Mana" header doesn't match the row regex.
         var (_, p) = Setup();
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "   Name         Class            Hits     Mana",
             "   ----         -----            ----     ----",
@@ -958,10 +965,10 @@ public sealed class PartyManagerTests
     public void ParBlock_PercentsUpdateOnRepeatObservation()
     {
         var (_, p) = Setup();
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[] { "  Helper WuzHere                  (Cleric)        [M:100%] [H:100%]   - Midrank" });
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[] { "  Helper WuzHere                  (Cleric)        [M:30%] [H:42%]    - Midrank" });
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[] { "  Helper WuzHere                  (Cleric)        [M:100%] [H:100%]   - Midrank" });
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[] { "  Helper WuzHere                  (Cleric)        [M:30%] [H:42%]    - Midrank" });
 
         PartyMember m = Assert.Single(p.State.Members);
         Assert.Equal(42, m.HpPercent);
@@ -975,7 +982,7 @@ public sealed class PartyManagerTests
         // catalogue should flip the state machine into ReadingRows.
         var (router, p) = Setup();
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[] { "  Forged WuzHere                  (Mage)          [M:100%] [H:100%]   - Frontrank" });
+        _feed.Rows(new[] { "  Forged WuzHere                  (Mage)          [M:100%] [H:100%]   - Frontrank" });
 
         Assert.Single(p.State.Members);
         Assert.Equal("Forged WuzHere", p.State.Members[0].Name);
@@ -1004,25 +1011,25 @@ public sealed class PartyManagerTests
         Assert.Equal(4, p.State.Members.Count);   // self + 3 followers
 
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  MudPlay                          (Missionary) [M:100%] [H:100%]   - Frontrank",
             "  MindGoblin                     (Druid)      [M:100%] [H:100%]   - Midrank",
             "  Suijin                         (Mage)       [M:100%] [H:100%]   - Midrank",
             "  Raijin                         (Priest)     [M:100%] [H:100%]   - Backrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
         Assert.Equal(4, p.State.Members.Count);   // everyone still present → no drop
 
         // MindGoblin walked upstairs; the next par omits them.
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  MudPlay                          (Missionary) [M:100%] [H: 88%]   - Frontrank",
             "  Suijin                         (Mage)       [M:100%] [H:100%]   - Midrank",
             "  Raijin                         (Priest)     [M:100%] [H:100%]   - Backrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
 
         Assert.Equal(3, p.State.Members.Count);
         Assert.DoesNotContain(p.State.Members, m => m.Name.StartsWith("MindGoblin", StringComparison.Ordinal));
@@ -1043,22 +1050,22 @@ public sealed class PartyManagerTests
         Assert.False(p.State.SelfIsLeader);
 
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  Raijin                         (Priest)     [M:100%] [H:100%]   - Frontrank",
             "  MudPlay                          (Missionary) [M:100%] [H:100%]   - Midrank",
             "  Suijin                         (Mage)       [M:100%] [H:100%]   - Backrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
         Assert.Equal(3, p.State.Members.Count);
 
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  Raijin                         (Priest)     [M:100%] [H:100%]   - Frontrank",
             "  MudPlay                          (Missionary) [M:100%] [H:100%]   - Midrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
 
         Assert.Equal(2, p.State.Members.Count);
         Assert.DoesNotContain(p.State.Members, m => m.Name.StartsWith("Suijin", StringComparison.Ordinal));
@@ -1076,7 +1083,7 @@ public sealed class PartyManagerTests
         Assert.Equal(2, p.State.Members.Count);
 
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
 
         Assert.Equal(2, p.State.Members.Count);
     }
@@ -1094,17 +1101,17 @@ public sealed class PartyManagerTests
         p.ParReplyRead += () => rosterAtRead.Add(p.State.Members.Count);
 
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestPromptLine();                           // cut short: answers nothing
+        _feed.Prompt("[HP=0/MA=0]:");                           // cut short: answers nothing
         Assert.Empty(rosterAtRead);
 
         // The first reply that leaves a member out takes them off the roster.
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  MudPlay                          (Missionary) [M:100%] [H:100%]   - Frontrank",
             "  Helper                         (Mage)       [M:100%] [H:100%]   - Midrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
         Assert.Equal(new[] { 2 }, rosterAtRead);
         Assert.DoesNotContain(p.State.Members, m => m.Name == "Member");
 
@@ -1123,13 +1130,13 @@ public sealed class PartyManagerTests
         router.Dispatch(Line("Helper started to follow you."));
 
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  Member                          (Priest)        [Invited]",
             "  Helper                         (Mage)       [M:100%] [H:100%]   - Midrank",
             "  MudPlay                          (Missionary) [M:100%] [H:100%]   - Frontrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
 
         Assert.True(p.State.Members.Single(m => m.Name == "Member").IsInvited);
         Assert.False(p.State.Members.Single(m => m.Name == "Helper").IsInvited);
@@ -1145,11 +1152,11 @@ public sealed class PartyManagerTests
         Assert.Equal(2, p.State.Members.Count);
 
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  Raijin                         (Priest)     [M:100%] [H:100%]   - Backrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
 
         Assert.Contains(p.State.Members, m => m.IsSelf);
     }
@@ -1167,8 +1174,8 @@ public sealed class PartyManagerTests
     public void ParBlock_MysticKaiBracket_ParsesResourceIntoMpPercent()
     {
         var (_, p) = Setup(localCharacterName: "Raijin");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  MudPlay WuzHere                  (Mystic)     [K: 60%] [H: 82%]   - Frontrank",
             "  Raijin WuzHere                 (Priest)     [M:100%] [H: 86%]   - Backrank",
@@ -1197,22 +1204,22 @@ public sealed class PartyManagerTests
 
         // Poll 1: MudPlay has kai → [K:100%] bracket present.
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  MudPlay WuzHere                  (Mystic)     [K:100%] [H: 82%]   - Frontrank",
             "  Raijin WuzHere                 (Priest)     [M:100%] [H: 86%]   - Backrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
         Assert.Same(mudplay, p.State.Members.First(m => m.Name.StartsWith("MudPlay", StringComparison.Ordinal)));
 
         // Poll 2: MudPlay's kai drained → the [K:] bracket vanishes entirely.
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  MudPlay WuzHere                  (Mystic)              [H: 76%]   - Frontrank",
             "  Raijin WuzHere                 (Priest)     [M:100%] [H: 90%]   - Backrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
 
         // Same instance throughout — never reconciled away, never re-added.
         Assert.Same(mudplay, p.State.Members.First(m => m.Name.StartsWith("MudPlay", StringComparison.Ordinal)));
@@ -1234,22 +1241,22 @@ public sealed class PartyManagerTests
 
         // Poll 1: mana present at 40%.
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  MudPlay WuzHere                  (Priest)     [M: 40%] [H: 82%]   - Frontrank",
             "  Raijin WuzHere                 (Priest)     [M:100%] [H: 86%]   - Backrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
         Assert.Equal(40, mudplay.MpPercent);
 
         // Poll 2: mana drained to 0 → [M:] bracket vanishes entirely.
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  MudPlay WuzHere                  (Priest)              [H: 76%]   - Frontrank",
             "  Raijin WuzHere                 (Priest)     [M:100%] [H: 90%]   - Backrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
 
         // The bar reads 0, not the stale 40 from poll 1.
         Assert.Equal(0, mudplay.MpPercent);
@@ -1541,8 +1548,8 @@ public sealed class PartyManagerTests
     public void ParInvitedRow_AddsRowWithIsInvitedTrue()
     {
         var (_, p) = Setup(localCharacterName: "MudPlay");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [Invited]",
             "  MudPlay WuzHere                   (Mystic)                  [H:100%]   - Frontrank",
@@ -1569,8 +1576,8 @@ public sealed class PartyManagerTests
         var (_, p) = Setup(localCharacterName: "MudPlay");
         Assert.False(p.State.SelfIsLeader);
 
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [Invited]",
             string.Empty,
@@ -1588,8 +1595,8 @@ public sealed class PartyManagerTests
         // you." → existing OnFollowsYou flips IsInvited=false on the
         // same row (matched by given name), no double-add.
         var (router, p) = Setup(localCharacterName: "MudPlay");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [Invited]",
             string.Empty,
@@ -1613,8 +1620,8 @@ public sealed class PartyManagerTests
         // the member is stuck "Invited" forever, their health stays hidden, and the
         // healer skips them.
         var (_, p) = Setup(localCharacterName: "Raijin");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Suijin WuzHere                   (Mage)          [Invited]",
             string.Empty,
@@ -1623,8 +1630,8 @@ public sealed class PartyManagerTests
 
         // Next poll — no follows-you line ever arrived; Suijin now shows as a
         // joined member with live vitals.
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Suijin WuzHere                   (Mage)          [M:98%] [H: 83%]   - Midrank",
             string.Empty,
@@ -1643,8 +1650,8 @@ public sealed class PartyManagerTests
         // strictly narrower and is tried first. A par block with both
         // invited and real members should round-trip cleanly.
         var (_, p) = Setup(localCharacterName: "MudPlay");
-        p.TestEnterParBlock();
-        p.FeedTestLines(new[]
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [Invited]",
             "  Helper Lastname                 (Cleric)        [M:80%] [H:94%]   - Backrank",
@@ -1871,16 +1878,16 @@ public sealed class PartyManagerTests
     // What a follower still on the old leader's list, and following nobody, is
     // printed for `par` (GAME_MECHANICS "`par` output block"): no "You are
     // following" line, the listed members as [Invited], its own row last.
-    private static void ParOfAListedFollower(MessageRouter router, PartyManager p)
+    private void ParOfAListedFollower(MessageRouter router)
     {
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  Boss Hogg                      (Warrior)    [Invited]",
             "  Other Guy                      (Mage)       [Invited]",
             "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Midrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
     }
 
     // On Stock giving the follow up frees our own engines (the roster is solo),
@@ -1965,7 +1972,7 @@ public sealed class PartyManagerTests
         p.NoteFollowGivenUp("Boss");
         Assert.False(p.State.IsInParty);
 
-        ParOfAListedFollower(router, p);
+        ParOfAListedFollower(router);
 
         Assert.True(p.State.IsInParty);
         Assert.True(p.State.SelfIsLeader);
@@ -1984,7 +1991,7 @@ public sealed class PartyManagerTests
         int replies = 0;
         p.ParReplyRead += () => replies++;
 
-        ParOfAListedFollower(router, p);
+        ParOfAListedFollower(router);
 
         Assert.False(p.State.IsInParty);
         Assert.False(p.State.SelfIsLeader);
@@ -2005,12 +2012,12 @@ public sealed class PartyManagerTests
         p.NoteFollowGivenUp("Boss");
 
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  Other Guy                      (Mage)       [Invited]",
             "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Midrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
 
         Assert.Null(p.ListedWithLeader);
         Assert.False(p.State.SelfIsLeader);
@@ -2029,13 +2036,13 @@ public sealed class PartyManagerTests
         Assert.False(p.IsLeftBehindOnOurList("Tank"));            // following
 
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  Tank Smith                     (Warrior)    [Invited]",
             "  Newcomer Jones                 (Mage)       [Invited]",
             "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Frontrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
 
         Assert.True(p.IsLeftBehindOnOurList("Tank"));
         Assert.True(p.IsLeftBehindOnOurList("Tank Smith"));
@@ -2082,12 +2089,12 @@ public sealed class PartyManagerTests
 
         router.Dispatch(Line("You are following Boss."));
         router.Dispatch(Line("The following people are in your travel party:"));
-        p.FeedTestLines(new[]
+        _feed.Rows(new[]
         {
             "  Boss Hogg                      (Warrior)             [H:100%]   - Frontrank",
             "  Me Myself                      (Priest)     [M:100%] [H: 86%]   - Midrank",
         });
-        p.FeedTestPromptLine();
+        _feed.Prompt("[HP=0/MA=0]:");
 
         Assert.Null(p.ListedWithLeader);
         Assert.True(p.State.IsInParty);

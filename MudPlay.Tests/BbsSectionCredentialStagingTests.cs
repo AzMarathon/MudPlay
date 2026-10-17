@@ -14,7 +14,7 @@ namespace MudPlay.Tests;
 // while its host and port — staged per board — were kept.
 //
 // The two BBS records are saved under the scratch data root and deleted again in a
-// finally. The character is a LoadBlank draft, which keeps credentials in memory
+// finally. The character is the unnamed default-profile draft, which keeps credentials in memory
 // and makes Save a no-op, so no character profile is touched on disk.
 [Collection(BbsSectionCollection.Name)]
 public sealed class BbsSectionCredentialStagingTests
@@ -100,8 +100,11 @@ public sealed class BbsSectionCredentialStagingTests
             store.Save(new BbsProfile { Name = a, Host = "a.example", Port = 23 });
             store.Save(new BbsProfile { Name = b, Host = "b.example", Port = 23 });
 
-            ProfileService profile = new();
-            profile.LoadBlank();
+            // Started on board A, so the view model opens on this test's board: one
+            // it opened on would be written back on Apply, and another test's board,
+            // deleted by its owner meanwhile, would be made again.
+            ProfileService profile = TestProfiles.Service();
+            profile.LoadDefaultProfile(onBbs: a);
 
             PasswordProtector passwords = new();
             return new Fixture

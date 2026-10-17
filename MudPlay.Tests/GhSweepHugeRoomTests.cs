@@ -68,8 +68,8 @@ public sealed class GhSweepHugeRoomTests : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         _labels = new GhRoomLabelStore(profile);
         _labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         _labels.SetLabel(Weapons, new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);

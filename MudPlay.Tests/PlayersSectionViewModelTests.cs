@@ -20,7 +20,7 @@ public sealed class PlayersSectionViewModelTests
 
     private static PlayerDatabase BuildDb(params string[] names)
     {
-        PlayerDatabase db = new();
+        PlayerDatabase db = new(new ProfileService(), () => null);
         foreach (string n in names)
             db.RecordObservation(n, null, null, null, null, null, null, Now);
         return db;
@@ -28,8 +28,8 @@ public sealed class PlayersSectionViewModelTests
 
     private static ProfileService BuildProfileWithName(string name)
     {
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         profile.Current!.Name = name;
         return profile;
     }
@@ -90,8 +90,8 @@ public sealed class PlayersSectionViewModelTests
     {
         // Draft profile with no name → no filter.
         PlayerDatabase db = BuildDb("MudPlay", "Raijin");
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         // Don't set Name — stays empty.
         PlayersSectionViewModel vm = new(db, dialogs: null, profile: profile);
 
@@ -109,11 +109,11 @@ public sealed class PlayersSectionViewModelTests
         Assert.Single(vm.AllRows);
         Assert.Equal("Raijin", vm.AllRows[0].Get("Given Name"));
 
-        // Swap to Raijin. LoadBlank creates a fresh draft with empty
+        // Swap to Raijin. LoadDefaultProfile creates a fresh draft with empty
         // Name; we set Name then call NotifyMutated so the section
         // VM's ProfileMutated subscription re-runs the filter with
         // the new value.
-        profile.LoadBlank();
+        profile.LoadDefaultProfile();
         profile.Current!.Name = "Raijin";
         profile.NotifyMutated();
 
@@ -125,7 +125,7 @@ public sealed class PlayersSectionViewModelTests
     public void ProfileClosed_ShowsEveryRow()
     {
         // Closing the profile (no character loaded) drops the filter.
-        // LoadBlank itself triggers ProfileClosed for the outgoing
+        // LoadDefaultProfile itself triggers ProfileClosed for the outgoing
         // profile + ProfileLoaded for the new blank, so the AllRows
         // count reflects the fresh draft (no name → no filter).
         PlayerDatabase db = BuildDb("MudPlay", "Raijin");
@@ -133,7 +133,7 @@ public sealed class PlayersSectionViewModelTests
         PlayersSectionViewModel vm = new(db, dialogs: null, profile: profile);
         Assert.Single(vm.AllRows);
 
-        profile.LoadBlank();    // closes "MudPlay" draft, opens new empty draft
+        profile.LoadDefaultProfile();    // closes "MudPlay" draft, opens new empty draft
 
         Assert.Equal(2, vm.AllRows.Count);
     }
@@ -173,7 +173,7 @@ public sealed class PlayersSectionViewModelTests
         // The Toggles column surfaces the party-behaviour flags AND each granted
         // remote-control permission the user set for the player, in checkbox order;
         // a player with nothing configured reads blank.
-        PlayerDatabase db = new();
+        PlayerDatabase db = new(new ProfileService(), () => null);
         db.RecordObservation("Helper One", null, null, null, null, null, null, Now);
         db.RecordObservation("Plain Two", null, null, null, null, null, null, Now);
         db.EditCustomization("Helper", new PlayerCustomization(
@@ -195,7 +195,7 @@ public sealed class PlayersSectionViewModelTests
     {
         // A player granted every remote-control category collapses to one entry rather
         // than listing all sixteen.
-        PlayerDatabase db = new();
+        PlayerDatabase db = new(new ProfileService(), () => null);
         db.RecordObservation("Boss One", null, null, null, null, null, null, Now);
         db.EditCustomization("Boss",
             new PlayerCustomization(RemoteControls: PlayerRemoteControls.All));
@@ -219,7 +219,7 @@ public sealed class PlayersSectionViewModelTests
 
         vm.Dispose();
         // Trigger every event the section was subscribed to.
-        profile.LoadBlank();
+        profile.LoadDefaultProfile();
         profile.Current!.Name = "Raijin";
         profile.NotifyMutated();
 

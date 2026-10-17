@@ -65,6 +65,8 @@ public sealed class RemoteReplyPolicyTests : IDisposable
     private sealed class Rig : IDisposable
     {
         public required RemoteCommandManager Engine { get; init; }
+        // The router the engine's chat lines arrive through.
+        public required MessageRouter Router { get; init; }
         // What Engine put on the wire, through the sender the client binds.
         public List<byte[]> Replies { get; } = new();
         public required RoomTracker Tracker { get; init; }
@@ -107,8 +109,8 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         LairTimerStore timers = new(cache, graph, tracker);
         AutoLairManager autoLair = new(walker, tracker, graph, bfs, timers, log: null, coordinator: coord);
         MovementController controller = new(walker, loopRunner, autoLair, coord);
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         FavoritesStore favorites = new(profile, cache, () => cache.ActiveSet);
         BossStore bosses = new();
         RoomSearchService search = new(graph, cache, bfs, new RoomBlacklistStore(), favorites: favorites, bosses: bosses);
@@ -119,7 +121,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         party.Members.Add(new PartyMember { Name = "Boss", IsLeader = true });
         party.Members.Add(new PartyMember { Name = "Me", IsSelf = true });
         party.Members.Add(new PartyMember { Name = Sender });
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         players.RecordObservation(Sender, @class: null, race: null, alignment: null,
             title: null, gang: null, role: null, nowUtc: Now);
         players.EditCustomization(Sender, new PlayerCustomization(RemoteControls: PlayerRemoteControls.All));
@@ -140,7 +142,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         essentials.SetWireSender(ToGame);
         _ = new HelpHandler(engine);
         _ = new KillHandler(engine, _ => { game.Add("(retarget)"); return null; });
-        _ = new AttackTargetingRemoteHandler(engine, new ProfileService());
+        _ = new AttackTargetingRemoteHandler(engine, TestProfiles.Service());
         _ = new AutoModeRemoteHandler(engine, profile, new AutoModeController(profile));
         TrapDisarmManager trapManager = new(router, new PlayerStats { Traps = traps }, cache);
         trapManager.SetWireSender(ToGame);
@@ -154,15 +156,15 @@ public sealed class RemoteReplyPolicyTests : IDisposable
 
         Rig rig = new()
         {
-            Engine = engine, Tracker = tracker, Controller = controller,
+            Engine = engine, Router = router, Tracker = tracker, Controller = controller,
             AutoLair = autoLair, Timers = timers, Game = game,
         };
         engine.SetWireSender(rig.Replies.Add);
         return rig;
     }
 
-    private static ChatLogEntry On(ChatChannel channel, string msg) =>
-        new(Now, channel, Sender, msg, $"{Sender}: {msg}");
+    private static ChatLine On(ChatChannel channel, string msg) =>
+        new(channel, Sender, msg);
 
     private static List<string> Sent(Rig r) =>
         r.Replies.Select(b => Encoding.Latin1.GetString(b)).ToList();
@@ -217,7 +219,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         using Rig r = Build();
         r.Engine.WarnOnDenial = false;
 
-        r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, command));
+        ChatLines.Hear(r.Router, On(ChatChannel.TelepathIncoming, command));
 
         Assert.Empty(Sent(r));
     }
@@ -235,7 +237,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         {
             using Rig r = Build();
 
-            r.Engine.DispatchForTests(On(channel, command));
+            ChatLines.Hear(r.Router, On(channel, command));
 
             List<string> sent = Sent(r);
             Assert.NotEmpty(sent);
@@ -251,11 +253,11 @@ public sealed class RemoteReplyPolicyTests : IDisposable
     public void WarnOff_ARepeatedStop_IsStillAnswered()
     {
         using Rig r = Build();
-        r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@stop"));
+        ChatLines.Hear(r.Router, On(ChatChannel.TelepathIncoming, "@stop"));
         r.Replies.Clear();
         r.Engine.WarnOnDenial = false;
 
-        r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@stop"));
+        ChatLines.Hear(r.Router, On(ChatChannel.TelepathIncoming, "@stop"));
 
         Assert.Equal($"/{Sender} {{already @stopped}}\r", Assert.Single(Sent(r)));
     }
@@ -268,7 +270,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         using Rig r = Build(traps: 0);
         r.Engine.WarnOnDenial = false;
 
-        r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@trap n"));
+        ChatLines.Hear(r.Router, On(ChatChannel.TelepathIncoming, "@trap n"));
 
         Assert.Empty(Sent(r));
         Assert.Empty(r.Game);
@@ -281,7 +283,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
     {
         using Rig r = Build();
 
-        r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, command));
+        ChatLines.Hear(r.Router, On(ChatChannel.TelepathIncoming, command));
 
         Assert.Empty(r.Game);
     }
@@ -298,7 +300,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         using Rig r = Build();
         r.Engine.WarnOnDenial = false;
 
-        r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, command));
+        ChatLines.Hear(r.Router, On(ChatChannel.TelepathIncoming, command));
 
         Assert.StartsWith($"/{Sender} {{{opening}", Assert.Single(Sent(r)));
     }
@@ -315,7 +317,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         using Rig r = Build();
         r.Engine.WarnOnDenial = false;
 
-        r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, command));
+        ChatLines.Hear(r.Router, On(ChatChannel.TelepathIncoming, command));
 
         Assert.StartsWith($"/{Sender} {{{opening}", Assert.Single(Sent(r)));
     }
@@ -328,12 +330,12 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         r.Engine.FailureMessage = "not for you";
         r.Engine.RegisterHandler("@probe", PlayerRemoteControls.QueryVersion, ctx => ctx.Refuse());
 
-        r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@probe"));
+        ChatLines.Hear(r.Router, On(ChatChannel.TelepathIncoming, "@probe"));
         Assert.Equal($"/{Sender} {{not for you}}\r", Assert.Single(Sent(r)));
 
         r.Replies.Clear();
         r.Engine.WarnOnDenial = false;
-        r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@probe"));
+        ChatLines.Hear(r.Router, On(ChatChannel.TelepathIncoming, "@probe"));
         Assert.Empty(Sent(r));
     }
 

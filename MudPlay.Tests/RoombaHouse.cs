@@ -99,8 +99,8 @@ internal sealed class RoombaHouse : IDisposable
         ItemNameStore names = new(cache);
         names.OnActiveSetChanged("alpha");
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         Labels = new GhRoomLabelStore(profile);
         Labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         Labels.SetLabel(A, new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);

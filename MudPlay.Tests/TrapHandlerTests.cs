@@ -17,6 +17,9 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class TrapHandlerTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     // What the remote-command engine put on the wire, through the sender the client binds.
     private readonly List<byte[]> _replies = new();
 
@@ -34,9 +37,10 @@ public sealed class TrapHandlerTests
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         PlayerStats stats = new() { Traps = traps };
         RemoteCommandManager engine = new(chat, party, players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         TrapDisarmManager mgr = new(router, stats, new GameDataCache(GameDataRoot));
         TrapHandler handler = new(engine, mgr);
@@ -45,11 +49,11 @@ public sealed class TrapHandlerTests
         return (engine, handler, mgr, players, wire);
     }
 
-    private static ChatLogEntry Telepath(string sender, string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
+    private static ChatLine Telepath(string sender, string msg) =>
+        new(ChatChannel.TelepathIncoming, sender, msg);
 
-    private static ChatLogEntry Say(string sender, string msg) =>
-        new(Now, ChatChannel.Local, sender, msg, $"{sender} says: {msg}");
+    private static ChatLine Say(string sender, string msg) =>
+        new(ChatChannel.Local, sender, msg);
 
     private static void SeedPlayer(PlayerDatabase db, string name, PlayerRemoteControls controls)
     {
@@ -68,7 +72,7 @@ public sealed class TrapHandlerTests
         var (engine, _, _, players, wire) = Setup();
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
 
-        engine.DispatchForTests(Telepath("Raijin", "@trap n"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@trap n"));
 
         Assert.Equal("disarm trap n\r", Encoding.Latin1.GetString(Assert.Single(wire)));
     }
@@ -81,7 +85,7 @@ public sealed class TrapHandlerTests
         var (engine, _, _, players, _) = Setup();
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
 
-        engine.DispatchForTests(Telepath("Raijin", "@trap n"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@trap n"));
 
         Assert.Equal("/Raijin {Attempting to disarm trap n.}\r",
             Encoding.Latin1.GetString(_replies[0]));
@@ -93,7 +97,7 @@ public sealed class TrapHandlerTests
         var (engine, _, _, players, wire) = Setup();
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
 
-        engine.DispatchForTests(Telepath("Raijin", "@trap northeast"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@trap northeast"));
 
         Assert.Equal("disarm trap ne\r", Encoding.Latin1.GetString(Assert.Single(wire)));
     }
@@ -106,7 +110,7 @@ public sealed class TrapHandlerTests
         var (engine, _, _, players, _) = Setup();
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
 
-        engine.DispatchForTests(Telepath("Raijin", "@trap"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@trap"));
 
         Assert.Contains("missing direction", LastReply());
     }
@@ -117,7 +121,7 @@ public sealed class TrapHandlerTests
         var (engine, _, _, players, _) = Setup();
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
 
-        engine.DispatchForTests(Telepath("Raijin", "@trap middle"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@trap middle"));
 
         Assert.Contains("unknown direction", LastReply());
     }
@@ -129,7 +133,7 @@ public sealed class TrapHandlerTests
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
         engine.WarnOnDenial = false;
 
-        engine.DispatchForTests(Telepath("Raijin", "@trap"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@trap"));
 
         Assert.Empty(_replies);
     }
@@ -142,7 +146,7 @@ public sealed class TrapHandlerTests
         var (engine, _, _, players, _) = Setup(traps: 0);
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
 
-        engine.DispatchForTests(Telepath("Raijin", "@trap n"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@trap n"));
 
         Assert.Contains("can't disarm", LastReply());
     }
@@ -156,7 +160,7 @@ public sealed class TrapHandlerTests
         var (engine, _, _, players, _) = Setup(traps: 0);
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
 
-        engine.DispatchForTests(Say("Raijin", "@trap n"));
+        ChatLines.Hear(_routers[engine], Say("Raijin", "@trap n"));
 
         Assert.Empty(_replies);
     }
@@ -168,7 +172,7 @@ public sealed class TrapHandlerTests
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
         engine.WarnOnDenial = false;
 
-        engine.DispatchForTests(Telepath("Raijin", "@trap n"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@trap n"));
 
         Assert.Empty(_replies);
     }
@@ -180,10 +184,10 @@ public sealed class TrapHandlerTests
     {
         var (engine, _, mgr, players, _) = Setup();
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
-        engine.DispatchForTests(Telepath("Raijin", "@trap n"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@trap n"));
         _replies.Clear();
 
-        engine.DispatchForTests(Telepath("Raijin", "@trap stop"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@trap stop"));
 
         // ok ack on telepath wire: `/Raijin {ok}\r`
         Assert.Equal("/Raijin {ok}\r", LastReply());
@@ -198,9 +202,9 @@ public sealed class TrapHandlerTests
         SeedPlayer(players, "Stopper",   PlayerRemoteControls.ExecuteCommands);
 
         // Initiator opens the flow.
-        engine.DispatchForTests(Telepath("Initiator", "@trap n"));
+        ChatLines.Hear(_routers[engine], Telepath("Initiator", "@trap n"));
         // Stopper (different player) cancels — per user spec.
-        engine.DispatchForTests(Telepath("Stopper", "@trap stop"));
+        ChatLines.Hear(_routers[engine], Telepath("Stopper", "@trap stop"));
 
         Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
     }
@@ -214,7 +218,7 @@ public sealed class TrapHandlerTests
         SeedPlayer(players, "Stranger",
             PlayerRemoteControls.All & ~PlayerRemoteControls.ExecuteCommands);
 
-        engine.DispatchForTests(Telepath("Stranger", "@trap n"));
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@trap n"));
 
         Assert.Empty(wire);
     }
@@ -223,7 +227,7 @@ public sealed class TrapHandlerTests
     public void Trap_FromUnknownSender_DoesNothing()
     {
         var (engine, _, _, _, wire) = Setup();
-        engine.DispatchForTests(Telepath("Drive-by", "@trap n"));
+        ChatLines.Hear(_routers[engine], Telepath("Drive-by", "@trap n"));
         Assert.Empty(wire);
     }
 
@@ -236,7 +240,7 @@ public sealed class TrapHandlerTests
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
 
         handler.Dispose();
-        engine.DispatchForTests(Telepath("Raijin", "@trap n"));
+        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@trap n"));
 
         Assert.Empty(wire);
     }

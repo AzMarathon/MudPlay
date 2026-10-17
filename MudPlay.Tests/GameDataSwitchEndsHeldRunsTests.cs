@@ -131,8 +131,8 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
         """;
 
     private sealed record Pickup(
-        PartyComebackManager Comeback, RemoteCommandManager Engine, PartyState Party, RoomTracker Tracker,
-        LoopRunner Runner, MovementController Controller, List<string> Sent);
+        PartyComebackManager Comeback, RemoteCommandManager Engine, MessageRouter Router, PartyState Party,
+        RoomTracker Tracker, LoopRunner Runner, MovementController Controller, List<string> Sent);
 
     // The engines and a pick-up manager over them, the controller wired to it as
     // AppServices wires it. cancelWired false leaves that wiring out.
@@ -145,7 +145,7 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState partyState = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(chat, partyState, players);
         GameDataCache cache = new(root);
         cache.SwitchSet("alpha");
@@ -174,7 +174,7 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
                 comeback.Cancel(reason);
             };
         _dispose.AddRange(new IDisposable[] { controller, comeback, lair, timers, party, engine });
-        return new Pickup(comeback, engine, partyState, tracker, runner, controller, sent);
+        return new Pickup(comeback, engine, router, partyState, tracker, runner, controller, sent);
     }
 
     // Standing in the member's room, re-invited and waiting for them to follow, with
@@ -185,8 +185,7 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
         p.Party.IsInParty = true;
         p.Tracker.SetLocated(new RoomKey(1, 1));
         p.Runner.Start(new Loop("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
-        p.Engine.DispatchForTests(new ChatLogEntry(
-            DateTimeOffset.UnixEpoch, ChatChannel.TelepathIncoming, "Tank", "@comeback 1/1", "Tank telepaths: @comeback 1/1"));
+        ChatLines.Hear(p.Router, ChatChannel.TelepathIncoming, "Tank", "@comeback 1/1");
         p.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.Equal("Tank", p.Comeback.RecoveringMember);
         Assert.Equal("re-invited, waiting for them to follow", p.Comeback.RecoveryPhase);

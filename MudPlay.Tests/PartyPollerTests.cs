@@ -10,6 +10,9 @@ namespace MudPlay.Tests;
 
 public sealed class PartyPollerTests
 {
+    // The game's output each PartyManager is fed, the way the client feeds it.
+    private readonly Dictionary<PartyManager, ServerFeed> _feeds = new();
+
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
     /// <summary>
@@ -17,13 +20,16 @@ public sealed class PartyPollerTests
     /// driven manually via DoParPollForTests — keeps unit tests
     /// deterministic without spinning up Avalonia's DispatcherTimer.
     /// </summary>
-    private static (PartyPoller poller, PartyManager mgr, PartyState state, ChatRouter chat, MessageRouter router, List<byte[]> wire) Setup()
+    private (PartyPoller poller, PartyManager mgr, PartyState state, ChatRouter chat, MessageRouter router, List<byte[]> wire) Setup()
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState state = new();
         PartyManager mgr = new(router, state);
+        ServerFeed feed = new(router);
+        mgr.AttachLineExtractor(feed.Lines);
+        _feeds[mgr] = feed;
         PartyPoller poller = new(chat, state, mgr, useTimer: false);
         List<byte[]> wire = new();
         poller.SetWireSender(wire.Add);
@@ -242,7 +248,7 @@ public sealed class PartyPollerTests
 
     // ===== Settings.Party "Send par" triggers =====
 
-    private static (PartyPoller poller, List<byte[]> wire) InParty(PartySettings settings)
+    private (PartyPoller poller, List<byte[]> wire) InParty(PartySettings settings)
     {
         var (poller, _, state, _, _, wire) = Setup();
         state.Members.Add(new PartyMember { Name = "Forged" });
@@ -635,8 +641,8 @@ public sealed class PartyPollerTests
         var (poller, mgr, _, _, _, wire) = Setup();
         mgr.LocalCharacterName = "MudPlay";
 
-        mgr.TestEnterParBlock();
-        mgr.FeedTestLines(new[]
+        _feeds[mgr].Line("The following people are in your travel party:");
+        _feeds[mgr].Rows(new[]
         {
             "  MudPlay WuzHere                   (Mystic)                  [H:100%]   - Frontrank",
             string.Empty,
@@ -655,8 +661,8 @@ public sealed class PartyPollerTests
         var (poller, mgr, _, _, _, wire) = Setup();
         mgr.LocalCharacterName = "MudPlay";
 
-        mgr.TestEnterParBlock();
-        mgr.FeedTestLines(new[]
+        _feeds[mgr].Line("The following people are in your travel party:");
+        _feeds[mgr].Rows(new[]
         {
             "  Raijin WuzHere                  (Priest)        [M:100%] [H:100%]   - Frontrank",
             string.Empty,
@@ -673,7 +679,7 @@ public sealed class PartyPollerTests
     /// nag cadences so the tick-based tests don't need real time
     /// to elapse.
     /// </summary>
-    private static (PartyPoller poller, PartyManager mgr, PartyState state, ChatRouter chat, MessageRouter router, List<byte[]> wire, Func<DateTime> clock, Action<TimeSpan> advance)
+    private (PartyPoller poller, PartyManager mgr, PartyState state, ChatRouter chat, MessageRouter router, List<byte[]> wire, Func<DateTime> clock, Action<TimeSpan> advance)
         SetupWithClock()
     {
         var setup = Setup();

@@ -26,8 +26,8 @@ public sealed class GhRoomLabelStoreTests : IDisposable
 
     private GhRoomLabelStore NewPinnedStore()
     {
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore store = new(profile);
         store.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
         return store;
@@ -120,8 +120,8 @@ public sealed class GhRoomLabelStoreTests : IDisposable
     [Fact]
     public void SetSearchesPerRoom_WithoutBbsPin_IsNoOp()
     {
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore store = new(profile);   // no OnBbsPinApplied
 
         store.SetSearchesPerRoom(1);
@@ -136,8 +136,8 @@ public sealed class GhRoomLabelStoreTests : IDisposable
         first.SetSearchesPerRoom(7);
         first.SetSearchForHidden(true);
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         GhRoomLabelStore second = new(profile);
         second.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
 
@@ -148,8 +148,8 @@ public sealed class GhRoomLabelStoreTests : IDisposable
     [Fact]
     public void OnBbsPinApplied_MigratesLegacyPerCharacterData_Once()
     {
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         profile.Current!.GhRoomLabels = new List<GhRoomLabel> { new(1, 100) };
         profile.Current!.GhSearchesPerRoom = 9;
         profile.Current!.GhSearchForHidden = true;
@@ -175,8 +175,8 @@ public sealed class GhRoomLabelStoreTests : IDisposable
         GhRoomLabelStore seed = NewPinnedStore();
         seed.SetLabel(new RoomKey(1, 1), new List<GhCategoryRule>(), isCatchAll: false);
 
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         profile.Current!.GhRoomLabels = new List<GhRoomLabel> { new(9, 999) };
 
         GhRoomLabelStore store = new(profile);

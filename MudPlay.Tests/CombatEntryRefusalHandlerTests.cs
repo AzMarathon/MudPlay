@@ -2,7 +2,6 @@ using System.IO;
 using System.Text;
 using MudPlay.Game.Map;
 using MudPlay.Services;
-using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -42,6 +41,8 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
     {
         public RoomTracker Tracker { get; }
         public CombatEntryRefusalHandler Handler { get; }
+        // The game's output, fed the way the client receives it.
+        public ServerFeed Feed { get; } = new();
         public bool EngineActive { get; set; } = true;
         public string? LastSent { get; private set; }
         public int SendCount { get; private set; }
@@ -55,8 +56,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
             RoomGraphManager graph = new(cache);
             graph.OnActiveSetChanged("alpha");
             Tracker = new RoomTracker(graph);
-            LineExtractor lines = new(new TerminalEmulator(80, 25));
-            Handler = new CombatEntryRefusalHandler(lines, Tracker, () => EngineActive);
+            Handler = new CombatEntryRefusalHandler(Feed.Lines, Tracker, () => EngineActive);
             Handler.SetWireSender(bytes =>
             {
                 LastSent = Encoding.Latin1.GetString(bytes);
@@ -80,7 +80,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         using Harness h = new(_root);
         h.SetupPending();
 
-        h.Handler.FeedTestLine(CombatGatedLine);
+        h.Feed.Line(CombatGatedLine);
 
         Assert.Equal("break\r", h.LastSent);
         Assert.Equal(1, h.SendCount);
@@ -95,7 +95,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         using Harness h = new(_root);
         h.SetupPending();
 
-        h.Handler.FeedTestLine(CombatGatedLine);
+        h.Feed.Line(CombatGatedLine);
         h.Handler.CompleteRetryForTest();
 
         Assert.False(h.Handler.IsSettling);
@@ -109,8 +109,8 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         using Harness h = new(_root);
         h.SetupPending();
 
-        h.Handler.FeedTestLine(CombatGatedLine);
-        h.Handler.FeedTestLine(CombatGatedLine);
+        h.Feed.Line(CombatGatedLine);
+        h.Feed.Line(CombatGatedLine);
 
         Assert.Equal(1, h.SendCount);
     }
@@ -122,7 +122,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         h.SetupPending();
         h.EngineActive = false;
 
-        h.Handler.FeedTestLine(CombatGatedLine);
+        h.Feed.Line(CombatGatedLine);
 
         Assert.Equal(0, h.SendCount);
         Assert.False(h.Handler.IsSettling);
@@ -134,7 +134,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         using Harness h = new(_root);
         h.Tracker.SetLocated(new RoomKey(1, 1));   // Confirmed, no pending move
 
-        h.Handler.FeedTestLine(CombatGatedLine);
+        h.Feed.Line(CombatGatedLine);
 
         Assert.Equal(0, h.SendCount);
         Assert.False(h.Handler.IsSettling);
@@ -146,7 +146,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         using Harness h = new(_root);
         h.SetupPending();
 
-        h.Handler.FeedTestLine("The goblin growls at you.");
+        h.Feed.Line("The goblin growls at you.");
 
         Assert.Equal(0, h.SendCount);
         Assert.False(h.Handler.IsSettling);
@@ -159,7 +159,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         h.SetupPending();
 
         // Anchored pattern — a quoted copy inside a chat line can't false-fire.
-        h.Handler.FeedTestLine("[Gossip] Bob: heh 'You may not enter that room while in combat.' noob");
+        h.Feed.Line("[Gossip] Bob: heh 'You may not enter that room while in combat.' noob");
 
         Assert.Equal(0, h.SendCount);
         Assert.False(h.Handler.IsSettling);

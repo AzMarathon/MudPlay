@@ -20,9 +20,9 @@ public sealed class EventsSectionViewModelTests
     private static (EventManager events, ProfileService profile,
                     EventsSectionViewModel vm, List<byte[]> sent) Build()
     {
-        ProfileService profile = new();
-        profile.LoadBlank();
-        EventManager events = new();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
+        EventManager events = EventEngineHarness.ManagerWithoutGameData();
         // Re-create with profile binding via the ctor that takes it —
         // simpler than poking the private field. EventManager's
         // parameterless ctor doesn't subscribe to the profile, so we
@@ -201,7 +201,7 @@ public sealed class EventsSectionViewModelTests
 
         // A fresh VM bound to the same profile reads the persisted
         // state back through the binding.
-        EventManager events2 = new();
+        EventManager events2 = EventEngineHarness.ManagerWithoutGameData();
         EventsSectionViewModel vm2 = new(events2, profile);
         Assert.True(vm2.IsGloballyDisabled);
     }

@@ -1426,9 +1426,6 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     // ----- test seams ------------------------------------------------
     internal void FireSettleForTests() => OnSettleTick();
     internal bool HasSettlePendingForTests => _settleCont is not null;
-    internal void FeedLineForTests(string text)
-        => OnLine(new LineExtractor.EmittedLine(
-            text, Array.Empty<MudPlay.Terminal.CellAttributes>(), DateTimeOffset.UnixEpoch, IsPromptLine: false));
 
     public void Dispose()
     {

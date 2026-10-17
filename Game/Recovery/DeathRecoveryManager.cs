@@ -2984,11 +2984,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _wireSender(Encoding.Latin1.GetBytes(text + "\r"));
     }
 
-    // Test seam — feed a plain inbound line to the pickup parser. isPromptLine
-    // exercises the "You took" confirmation arriving on a redrawn prompt row.
-    internal void FeedTestLine(string text, DateTimeOffset? when = null, bool isPromptLine = false)
-        => OnLine(new LineExtractor.EmittedLine(text, [], when ?? _now(), isPromptLine));
-
     // Append a synthetic death record (the "Simulate Death" button) so the DEATH
     // grid + recovery flow can be exercised without dying in game. Decrements the
     // displayed lives by one, floored at zero.

@@ -234,8 +234,8 @@ public sealed class SentCommandTrailTests
     {
         MessageRouter router = new();
         MudPlay.Services.Patterns.DefaultPatterns.Seed(router);
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         string tmp = Path.Combine(Path.GetTempPath(), "mudplay-trail-cover-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tmp);
         try
@@ -268,8 +268,8 @@ public sealed class SentCommandTrailTests
     {
         MessageRouter router = new();
         MudPlay.Services.Patterns.DefaultPatterns.Seed(router);
-        ProfileService profile = new();
-        profile.LoadBlank();
+        ProfileService profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         string tmp = Path.Combine(Path.GetTempPath(), "mudplay-trail-cover-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tmp);
         try

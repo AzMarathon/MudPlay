@@ -78,17 +78,6 @@ public sealed class SpellListParser : IDisposable
         if (_lines is not null) _lines.LineEmitted -= OnLineEmitted;
     }
 
-    // Test hook — drive a sequence of non-prompt text lines through the parser
-    // without a real LineExtractor. Use FeedTestLine to feed a line flagged as
-    // the prompt.
-    internal void FeedTestLines(IEnumerable<string> lines)
-    {
-        foreach (string text in lines) HandleLine(text, isPromptLine: false);
-    }
-
-    // Test hook — feed a single line, optionally flagged as the prompt.
-    internal void FeedTestLine(string text, bool isPromptLine = false) => HandleLine(text, isPromptLine);
-
     private void OnLineEmitted(LineExtractor.EmittedLine line) => HandleLine(line.Text, line.IsPromptLine);
 
     private void HandleLine(string text, bool isPromptLine)

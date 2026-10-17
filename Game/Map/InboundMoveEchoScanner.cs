@@ -59,8 +59,6 @@ public sealed class InboundMoveEchoScanner : IDisposable
 
     public void Dispose() => _lines.LineEmitted -= OnLineEmitted;
 
-    internal void FeedTestLine(LineExtractor.EmittedLine line) => OnLineEmitted(line);
-
     private void OnLineEmitted(LineExtractor.EmittedLine line)
     {
         if (line.IsPromptLine)

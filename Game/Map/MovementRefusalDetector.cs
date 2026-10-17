@@ -50,9 +50,6 @@ public sealed partial class MovementRefusalDetector : IDisposable
         _tracker.CommandMoveRefused -= OnCommandMoveRefused;
     }
 
-    internal void FeedTestLine(string text, DateTimeOffset? when = null)
-        => HandleLine(text, when ?? DateTimeOffset.UtcNow);
-
     private void OnLineEmitted(LineExtractor.EmittedLine line)
     {
         if (line.IsPromptLine) return;

@@ -3,7 +3,6 @@ using MudPlay.Game.Map;
 using MudPlay.Game.Remote;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
-using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -14,6 +13,9 @@ namespace MudPlay.Tests;
 // engine holds until every waiting member sends @ok.
 public sealed class PartyWaitMovementGateTests
 {
+    // The router each engine reads, which a test's chat lines go through.
+    private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
+
     // What the remote-command engine put on the wire, through the sender the client binds.
     private readonly List<byte[]> _replies = new();
 
@@ -26,9 +28,10 @@ public sealed class PartyWaitMovementGateTests
         DefaultPatterns.Seed(router);
         ChatRouter chat = new(router);
         PartyState party = new();
-        PlayerDatabase players = new();
+        PlayerDatabase players = new(new ProfileService(), () => null);
         PlayerState player = new();
         RemoteCommandManager engine = new(chat, party, players);
+        _routers[engine] = router;
         engine.SetWireSender(_replies.Add);
         PartyEssentialHandlers handlers = new(engine, player, party);
         MovementCoordinator coord = new();
@@ -36,8 +39,8 @@ public sealed class PartyWaitMovementGateTests
         return (engine, handlers, party, coord, gate);
     }
 
-    private static ChatLogEntry Telepath(string sender, string msg) =>
-        new(Now, ChatChannel.TelepathIncoming, sender, msg, $"{sender} telepaths: {msg}");
+    private static ChatLine Telepath(string sender, string msg) =>
+        new(ChatChannel.TelepathIncoming, sender, msg);
 
     private static void SeedPartyMember(PartyState p, string name)
     {
@@ -80,7 +83,7 @@ public sealed class PartyWaitMovementGateTests
         SeedPartyMember(party, "Follower");
         SwitchOff(engine, coord, gate);
 
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
 
         Assert.Contains("Follower", handlers.WaitingMembers);
         Assert.False(coord.IsGateAsserted(MovementCoordinator.PartyWaitGate));
@@ -97,11 +100,11 @@ public sealed class PartyWaitMovementGateTests
     {
         var (engine, handlers, party, coord, gate) = Setup();
         SeedPartyMember(party, "Follower");
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
         Assert.True(coord.IsGateAsserted(MovementCoordinator.PartyWaitGate));
         SwitchOff(engine, coord, gate);
 
-        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@ok"));
 
         Assert.Empty(handlers.WaitingMembers);
         SwitchOn(engine, coord, gate);
@@ -114,7 +117,7 @@ public sealed class PartyWaitMovementGateTests
         var (engine, handlers, _, coord, gate) = Setup();
         SwitchOff(engine, coord, gate);
 
-        engine.DispatchForTests(Telepath("Stranger", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@wait"));
 
         Assert.Empty(handlers.WaitingMembers);
         Assert.Empty(_replies);
@@ -130,7 +133,7 @@ public sealed class PartyWaitMovementGateTests
         gate.NowProvider = () => t;
         gate.WaitWindow = TimeSpan.FromSeconds(30);
         SeedPartyMember(party, "Follower");
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
         SwitchOff(engine, coord, gate);
 
         t = t.AddSeconds(120);
@@ -152,7 +155,7 @@ public sealed class PartyWaitMovementGateTests
         var (engine, _, party, coord, _) = Setup();
         SeedPartyMember(party, "Follower");
 
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
 
         Assert.True(coord.IsPaused);
         Assert.Contains(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
@@ -164,14 +167,14 @@ public sealed class PartyWaitMovementGateTests
         var (engine, _, party, coord, _) = Setup();
         SeedPartyMember(party, "FollowerA");
         SeedPartyMember(party, "FollowerB");
-        engine.DispatchForTests(Telepath("FollowerA", "@wait"));
-        engine.DispatchForTests(Telepath("FollowerB", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("FollowerA", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("FollowerB", "@wait"));
         Assert.Contains(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
 
-        engine.DispatchForTests(Telepath("FollowerA", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("FollowerA", "@ok"));
         Assert.Contains(MovementCoordinator.PartyWaitGate, coord.AssertedGates); // B still waits
 
-        engine.DispatchForTests(Telepath("FollowerB", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("FollowerB", "@ok"));
         Assert.DoesNotContain(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
         Assert.False(coord.IsPaused);
     }
@@ -184,9 +187,9 @@ public sealed class PartyWaitMovementGateTests
         var (engine, _, party, coord, _) = Setup();
         SeedPartyMember(party, "Follower");
         coord.AssertGate(MovementCoordinator.UserGate);
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
 
-        engine.DispatchForTests(Telepath("Follower", "@ok"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@ok"));
 
         Assert.True(coord.IsPaused); // user pause survives
         Assert.DoesNotContain(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
@@ -200,7 +203,7 @@ public sealed class PartyWaitMovementGateTests
         SeedPartyMember(party, "Follower");
         gate.Dispose();
 
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
 
         Assert.DoesNotContain(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
     }
@@ -217,7 +220,7 @@ public sealed class PartyWaitMovementGateTests
         SeedPartyMember(party, "Follower");
         PartyMember row = party.Members[0];
 
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
         Assert.Contains(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
         Assert.True(row.IsWaiting);
 
@@ -244,7 +247,7 @@ public sealed class PartyWaitMovementGateTests
         gate.WaitWindow = TimeSpan.Zero;   // timeout disabled — only @ok releases
         SeedPartyMember(party, "Follower");
 
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
         t = Now.AddHours(1);
         gate.TickForTests();
 
@@ -260,8 +263,8 @@ public sealed class PartyWaitMovementGateTests
         gate.WaitWindow = TimeSpan.FromSeconds(30);
         SeedPartyMember(party, "Follower");
 
-        engine.DispatchForTests(Telepath("Follower", "@wait"));
-        engine.DispatchForTests(Telepath("Follower", "@ok"));   // clears well before the window
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
+        ChatLines.Hear(_routers[engine], Telepath("Follower", "@ok"));   // clears well before the window
 
         Assert.DoesNotContain(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
 
