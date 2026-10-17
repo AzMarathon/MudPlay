@@ -667,12 +667,15 @@ public sealed class BossTimerTests : IDisposable
         _syncRouter = new MessageRouter();
         DefaultPatterns.Seed(_syncRouter);
         _syncChat = new ChatRouter(_syncRouter, clock: _syncClock);
+        _syncLastOnWire = null;
+        _syncChat.LastTelepathOnWire = () => _syncLastOnWire;
         _syncSent.Clear();
         _syncTimers.Clear();
         BossTimerSyncViewModel window = new(bosses, timers, cache, _syncChat,
             send: line =>
             {
                 _syncSent.Add(line);
+                _syncLastOnWire = line;
                 _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
             },
             preArmedOn: askedOn, _syncLog = new LogService(), broadcastOff: () => false,
@@ -701,6 +704,8 @@ public sealed class BossTimerTests : IDisposable
     private MessageRouter _syncRouter = null!;
     private ChatRouter _syncChat = null!;
     private Func<DateTimeOffset>? _syncClock;
+    // The last line put on the wire, as the telepath pacer tells the chat log.
+    private string? _syncLastOnWire;
 
     private static MudPlay.Terminal.LineExtractor.EmittedLine Shown(string text) =>
         new(text, new MudPlay.Terminal.CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
@@ -709,13 +714,17 @@ public sealed class BossTimerTests : IDisposable
     // own; the board then shows the line back.
     private void UserTypes(string line)
     {
+        _syncLastOnWire = line;
         _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
         BoardShows(line);
     }
 
     // A line the client put on the wire by itself or for another player.
-    private void ClientSends(string line) =>
+    private void ClientSends(string line)
+    {
+        _syncLastOnWire = line;
         _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: false);
+    }
 
     // A row on the screen: the board showing back a line that was sent, whoever
     // sent it and however it comes out.
@@ -2061,6 +2070,52 @@ public sealed class BossTimerTests : IDisposable
             Assert.False(row.WasAutoMerged);
             Assert.False(row.WasSynced);
             Assert.Equal("Betty", Assert.Single(row.Responders).Responder);
+            Assert.Equal("1 responder(s): 1 to pick, 0 merged in, 0 synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // A request that was not sent asks nobody. The window's request goes to letters
+    // that fit two players (the game lists them), or the game refuses it on every
+    // try; the user then telepaths that player something else by the same letters
+    // or fewer, and the game confirms it. That player was not asked: the timers
+    // they send are listed, never merged in or synced.
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void SyncWindow_ARequestThatWasNotSent_ThenAnotherTelepathToThatPlayer_AsksNobody(
+        bool refusedOnEveryTry, bool weHoldOne)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            DateTimeOffset? ours = weHoldOne ? Held : null;
+            if (weHoldOne) timers.MarkKilled("ogre king", Held);
+            if (refusedOnEveryTry)
+            {
+                Requests(window, 1, "Bob");
+                for (int i = 0; i < TelepathPacer.MaxAttempts; i++) BoardShows("--- Telepath Not Sent ---");
+                _syncChat.TelepathGivenUp("/Bob @timer sync");   // the pacer, out of tries
+            }
+            else
+            {
+                Requests(window, 1, "bo");
+                BoardShows("Please be more specific.  You could have meant any of these:");
+                BoardShows("-- Bob");
+                BoardShows("-- Bobby");
+            }
+            UserTypes(refusedOnEveryTry ? "/Bob hi" : "/bo hi");
+            GameConfirms("Bob");
+
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Equal(ours, timers.KilledAt("ogre king"));
+            Assert.False(window.CollectorForTests.OnePlayerAsked);
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.False(row.WasAutoMerged);
+            Assert.False(row.WasSynced);
+            Assert.Equal("Bob", Assert.Single(row.Responders).Responder);
             Assert.Equal("1 responder(s): 1 to pick, 0 merged in, 0 synced, 0 already in sync.", window.Status);
         }
     }

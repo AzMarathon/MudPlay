@@ -45,9 +45,17 @@ internal static class JsonStore
     // in (compact, not laid out for a hand edit), and read from the file as a
     // stream. Load holds the whole text as a string, which for a file of megabytes
     // is that many characters twice over before a single object exists.
-    public static T? LoadStream<T>(string path, JsonSerializerOptions options) where T : class
+    public static T? LoadStream<T>(string path, JsonSerializerOptions options) where T : class =>
+        LoadStream<T>(path, options, attempts: 20);
+
+    // As LoadStream, without the wait: a file that will not open throws at once. For
+    // a caller that would rather pass a file by than wait on it, and leaves it for a
+    // read that does wait.
+    public static T? LoadStreamNoWait<T>(string path, JsonSerializerOptions options) where T : class =>
+        LoadStream<T>(path, options, attempts: 1);
+
+    private static T? LoadStream<T>(string path, JsonSerializerOptions options, int attempts) where T : class
     {
-        const int attempts = 20;
         for (int i = 1; ; i++)
         {
             if (!File.Exists(path)) return null;

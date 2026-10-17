@@ -636,6 +636,37 @@ public sealed class AreaRankingFilesTests : IDisposable
         Assert.Equal(0, Files(SweepNow).SweepOld(Array.Empty<string>()));
     }
 
+    // A file that will not open (another client holds it to itself) is passed by at
+    // once, not waited on as a read waits on a file being replaced: the sweep runs at
+    // every start, ahead of the first ranking listed. Each such file once cost about
+    // half a second. It is left in place and said.
+    [Fact]
+    public void TheSweep_PassesAFileThatWillNotOpenWithoutWaiting_AndLeavesIt()
+    {
+        string set = NewSet("a");
+        string[] locked = new[] { One, Two, Renamed }.Select(c => Save(new SimulatorOwner(set, c), OldThen)).ToArray();
+        var skipped = new List<string>();
+        var holds = locked.Select(f => new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.None)).ToList();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            Assert.Equal(0, Files(SweepNow).SweepOld(Array.Empty<string>(), skipped.Add));
+            clock.Stop();
+        }
+        finally
+        {
+            foreach (FileStream hold in holds) hold.Dispose();
+        }
+
+        // Waited on, the three would take well over a second.
+        Assert.True(clock.ElapsedMilliseconds < 400, $"{clock.ElapsedMilliseconds} ms");
+        Assert.All(locked, f => Assert.True(File.Exists(f), f));
+        Assert.All(locked, f => Assert.Contains(skipped, s => s.StartsWith(f, StringComparison.Ordinal)));
+
+        // Let go, they are old rankings like any other.
+        Assert.Equal(3, Files(SweepNow).SweepOld(Array.Empty<string>()));
+    }
+
     // A file that cannot be deleted (its folder cannot be written) is opened all the
     // same, and on Linux the delete then fails without a word. It is not counted,
     // it is said, and the file stays.

@@ -1,11 +1,44 @@
 # Version history
 
-## 3.181.5
+## 3.181.26
 
 - A message record switched off in Game Data still keeps its line from latching another spell's shorter text
 - A cast line naming a caster the room didn't list stops conditions being ruled out by who is listed
 - A player's hostile spell is ruled out unless a player outside the party is in the room on a PvP realm
 - Help lists every rule for a line several records fit
+
+## 3.181.23
+
+- Start-up clean-up of saved rankings no longer waits on a ranking file that won't open
+- A ranked tour on the map is cleared when its ranking is dropped on a game-data reload
+- Saved rankings ignore a game-data set folder that is a symbolic link
+
+## 3.181.20
+
+- Learned arrival rooms: a file another program holds is retried, not set aside as damaged
+- Two clients writing learned room names or arrival rooms at once take turns, so neither loses the other's
+- A temporary file left by a write that never finished is removed when the realm or set loads
+- A renamed realm keeps its learned room names, saved or not, with or without a names file yet
+- A room name learned on a walk reaches the trainer, bank and item-giver lists once the walk goes quiet
+
+## 3.181.15
+
+- A telepath the game refused on every try, or whose letters fit two players, is let go at once
+- A later telepath to that player no longer makes them the one a timer request asked
+
+## 3.181.13
+
+- Loading another character drops a loop held for a reconnect or loaded to start, with a notice
+- Stopping a pyramid climb or asylum maze solve stops the door it was bashing
+- A destination queued in the Navigation window is dropped when the game data changes
+- A Roomba sweep cut short says it stopped, and why, not "complete"; an event's Then counts it as not done
+- Roomba's Resume refuses an unfinished queue saved on other game data
+- A boss room picked after a game data change is not walked to
+- Route cards closed by a game data change say the walk was not started
+- A party's gate-item count asks nothing more once the game data changes
+- Help: switching game data forgets party hand-overs too
+- A second Stop or Reset States ends a party training trip waiting on the leader's own train
+- One failing held start no longer keeps a game data change from stopping the rest
 
 ## 3.181.2
 

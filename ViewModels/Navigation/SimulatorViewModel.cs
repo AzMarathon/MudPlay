@@ -98,9 +98,11 @@ public sealed partial class SimulatorViewModel : ObservableObject
     // again, record overrides synced in). Its tables may be the same files or other
     // ones: the ranking is listed again from what is kept, which compares the
     // tables it was made on with the new load's and drops it only if they changed
-    // (user, 2026-10-11). The sketch, still that set's rooms, stays. The store is
-    // told of the new load by the app and not from here (AreaRankingStore.
-    // NoteActiveSet), since no Simulator need be open when a set is read in again.
+    // (user, 2026-10-11). The sketch, still that set's rooms, stays, unless it is a
+    // ranked tour whose ranking the new load dropped (ClearSketchOfDroppedRanking).
+    // The store is told of the new load by the app and not from here
+    // (AreaRankingStore.NoteActiveSet), since no Simulator need be open when a set
+    // is read in again.
     //
     // The character is read with the set. A profile load changes both, the set
     // first: taken one at a time, the pairing in between (the new set with the
@@ -114,7 +116,29 @@ public sealed partial class SimulatorViewModel : ObservableObject
         ChangeOwner(owner);
         // A new pairing was listed by the change. The same one is listed again here:
         // what is on show was checked against the load that has just gone.
-        if (readAgain && samePairing) ListKept(owner);
+        if (!readAgain || !samePairing) return;
+        ListKept(owner);
+        ClearSketchOfDroppedRanking();
+    }
+
+    // The ranking whose picked row's tour is the estimator's sketch, until the
+    // sketch is edited, cleared or replaced: an edited one is the user's own route.
+    private AreaRanking? _sketchFrom;
+    // Set while a picked row's tour is being put on the map, whose own RouteChanged
+    // must not count as an edit.
+    private bool _drawingRankedTour;
+
+    // The ranking on show that the store no longer holds after its set was read in
+    // again was dropped (its tables changed, or its set's data was replaced): the
+    // tour drawn from it goes too, as the list it was picked from did. One still
+    // held, listed or not, keeps its sketch.
+    private void ClearSketchOfDroppedRanking()
+    {
+        if (_sketchFrom is not { } from || _rankings.Holds(from)) return;
+        _sketchFrom = null;
+        if (_sketch() is not { HasClicks: true } sketch) return;
+        _log?.Info("Simulator", $"the estimator sketch '{sketch.ProposedName}' was cleared: it was a tour of an area ranking that has been dropped");
+        sketch.Clear();
     }
 
     // Another character was loaded, or the loaded one closed: a result is one
@@ -152,6 +176,9 @@ public sealed partial class SimulatorViewModel : ObservableObject
         if (Rankings.Count > 0)
             _log?.Info("Simulator", $"the area ranking for {_owner.Label} is off the list: it is {owner.Label} now");
         _owner = owner;
+        // A tour left on the map from the pairing's ranking is no longer tied to a
+        // ranking on show, and what becomes of that ranking is not this list's.
+        _sketchFrom = null;
         ListKept(owner);
     }
 
@@ -315,6 +342,7 @@ public sealed partial class SimulatorViewModel : ObservableObject
     // the sketch comes into (or drops out of) the picker as it gains or loses a route.
     public void SketchChanged()
     {
+        if (!_drawingRankedTour) _sketchFrom = null;
         if (SelectedRoute?.IsSketch == true) ClearSimulation();
         bool offered = SketchOffered(), listed = Routes.Contains(_sketchOption);
         if (offered && !listed)
@@ -674,7 +702,9 @@ public sealed partial class SimulatorViewModel : ObservableObject
         IsSimulating = true;
         IsRanking = true;
         // Ranking again replaces the pairing's ranking from here on, as the list does.
+        // A tour of it left on the map is the user's sketch now: nothing dropped it.
         _rankings.Forget(owner);
+        _sketchFrom = null;
         ShowRanking(null);
         try
         {
@@ -881,11 +911,16 @@ public sealed partial class SimulatorViewModel : ObservableObject
         RankStats.Insert(0, new SimStat("Route", RouteLine(value)));
         NoteLoopChanged(value);
         OnPropertyChanged(nameof(HasRankDetail));
-        if (_showOnMap(value.Tour, value.Area) is { } why)
+        string? why;
+        _drawingRankedTour = true;
+        try { why = _showOnMap(value.Tour, value.Area); }
+        finally { _drawingRankedTour = false; }
+        if (why is not null)
         {
             RankStatus = why;
             return;
         }
+        _sketchFrom = _shown;
         RefreshRoutes();
         if (Routes.Contains(_sketchOption)) SelectedRoute = _sketchOption;
     }
@@ -1064,7 +1099,8 @@ public sealed partial class SimulatorViewModel : ObservableObject
         if (_shown is not { } ranking) return null;
         TimeSpan age = DateTimeOffset.Now - ranking.MadeAt;
         string made = $"made {ranking.MadeAt.ToLocalTime():yyyy-MM-dd HH:mm} " +
-                      $"({(age.TotalDays >= 1 ? $"{age.TotalDays:0} day(s)" : $"{age.TotalHours:0.#} h")} ago) at L{ranking.Level}, character L{ranking.CharacterLevel} then";
+                      $"({(age.TotalDays >= 1 ? $"{age.TotalDays:0} day(s)" : $"{age.TotalHours:0.#} h")} ago) at L{ranking.Level}, character L{ranking.CharacterLevel} then" +
+                      (ReferenceEquals(_sketchFrom, ranking) ? "; the estimator sketch is a picked row's tour, unedited" : "");
         if (!_shownKept) return $"just made this session; {made}";
         string from = ranking.FromDisk ? "read back from disk" : "kept in memory this session";
         string stands = _keptCheck.Unchecked ? "not checked against the character yet"
