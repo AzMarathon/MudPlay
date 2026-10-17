@@ -3915,6 +3915,7 @@ How one damage spell cast against a monster is worked out.
 - **Client use:**
   - The flags are recomputed **additively** (add what the codes prove, never strip a hand-authored flag except the LastActionFailed-on-confuse cleanup).
   - The Paradigm seed's `paralyzed` record for #5110 carries MovementPrevented + AttackPrevented, as #327's does, instead of Confused (user, 2026-10-17).
+  - The `yellow fungus` record for #249 (`You are paralyzed` → `You can move again`) carries MovementPrevented + AttackPrevented instead of Confused, in both seeds (user, 2026-10-17).
   - `SelfAilmentChipResponder` / `PartyAilmentTracker` / `ConditionTracker` all read these flags, so a missing flag silently breaks ailment + confuse-fumble recognition (the reason rose book #199 was invisible).
   - `ConditionTracker.CastLineOfAnotherSpell` (built by `BuildCastLinesHolding`) and `KeepWhatCouldBeCastHere` decide which of the records a line matches are latched; `SpellCasterIndex` reads who casts what (from the `Monsters`, `Items`, `Rooms` and `Spells` tables and the `TBInfoStore`, with `Casted By` as a cross-check) and `CastReach` asks it of the room and the roster (report `paradigm-20261011-165726`), the roster's players and the realm's PvP box included (`CastReach.StrangersSeen`, the user's ruling of 2026-10-17).
 - **One spell's applied line can hold another spell's applied line, word for word** *([OBSERVED] 2026-10-04: Stock message table `wccmsg2` #1448 / #365 / #493, the 1.11p and Paradigm 1.9.1 `Spells` and `Monsters` data, and both message seeds · Realm: both)*:

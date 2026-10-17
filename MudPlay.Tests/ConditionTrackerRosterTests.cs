@@ -323,7 +323,6 @@ public sealed class ConditionTrackerRosterTests
     // line is seen. What holds, stops attacks or blinds is latched all the same.
     [Theory]
     [InlineData("paradigm", "ancestral guardian", "You are deathly afraid!", MessageFlags.MovementPrevented)]
-    [InlineData("paradigm", "mammoth stone scorpion", "You are paralyzed!", MessageFlags.MovementPrevented | MessageFlags.AttackPrevented)]
     [InlineData("stock", "monkey spirit", "You have gone mad!", MessageFlags.AttackPrevented)]
     [InlineData("stock", "crowned spider", "You are caught in a cocoon!", MessageFlags.Blinded)]
     public void WithOnlyTheMilderSpellsCasterListed_AHoldAnAttackStopABlindness_StillLatches(
@@ -356,25 +355,34 @@ public sealed class ConditionTrackerRosterTests
         h.AssertToldLatchesWhatNotToldDoes();
     }
 
-    [Fact]
-    public void TheParadigmSeed_FlagsBothParalyzedRecordsAlike_AndKeepsTheirIds()
+    // Every record that applies `You are paralyzed` is a hold and an attack-stop: the
+    // paralyzed spells and yellow fungus (#249), all of them Confusion (71) in the data
+    // (the user's ruling of 2026-10-17). A set's own message file stores the user's
+    // overrides by Id, so the Ids stay.
+    [Theory]
+    [InlineData("paradigm", "paralyzed", 327, "65c6d25ebdba89ec")]
+    [InlineData("paradigm", "paralyzed", 5110, "f3246e40343077c8")]
+    [InlineData("paradigm", "yellow fungus", 249, "ffef3d936076c9b0")]
+    [InlineData("stock", "paralyzed", 327, "65c6d25ebdba89ec")]
+    [InlineData("stock", "yellow fungus", 249, "96a7f595b8a7e815")]
+    public void TheSeed_FlagsEveryParalysisAsAHoldAndAnAttackStop_AndKeepsItsId(
+        string realm, string name, int spell, string id)
     {
         string dir = Path.Combine(Path.GetTempPath(), "mudplay-para-seed-" + Path.GetRandomFileName());
         try
         {
             AppPaths.ExtractEmbeddedSeeds(dir);
             List<MessageRecord> seed = JsonStore.Load<List<MessageRecord>>(
-                Path.Combine(dir, "Messages.paradigm.seed.json"))!;
-            MessageRecord Linked(int spell) => seed.Single(r =>
-                r.Name == "paralyzed" && r.Links is { } links && links.Contains(new GameDataLink("Spells", spell)));
+                Path.Combine(dir, $"Messages.{realm}.seed.json"))!;
 
-            MessageRecord crawlers = Linked(327), scorpions = Linked(5110);
-            Assert.Equal(MessageFlags.MovementPrevented | MessageFlags.AttackPrevented, crawlers.Flags);
-            Assert.Equal(crawlers.Flags, scorpions.Flags);
-            Assert.Equal(crawlers.RawFlagsHex, scorpions.RawFlagsHex);
-            // A set's own message file stores the user's overrides by Id.
-            Assert.Equal("65c6d25ebdba89ec", crawlers.Id);
-            Assert.Equal("f3246e40343077c8", scorpions.Id);
+            MessageRecord r = seed.Single(x =>
+                x.Name == name && x.Links is { } links && links.Contains(new GameDataLink("Spells", spell)));
+            Assert.Equal(MessageFlags.MovementPrevented | MessageFlags.AttackPrevented, r.Flags);
+            Assert.Equal(0x30, r.RawFlagsHex);
+            Assert.Equal(id, r.Id);
+            Assert.DoesNotContain(seed, x =>
+                x.AppliedMessage == "You are paralyzed"
+                && x.Flags != (MessageFlags.MovementPrevented | MessageFlags.AttackPrevented));
         }
         finally
         {

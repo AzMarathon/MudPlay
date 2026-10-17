@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.33**
+> **Version 3.181.34**
 > - Paradigm's scorpion paralysis (#5110) now holds and stops attacks, like the other paralysis, instead of confusing
+> - Yellow fungus's paralysis now holds and stops attacks instead of confusing, on both realms
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

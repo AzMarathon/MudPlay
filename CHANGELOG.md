@@ -1,8 +1,9 @@
 # Version history
 
-## 3.181.33
+## 3.181.34
 
 - Paradigm's scorpion paralysis (#5110) now holds and stops attacks, like the other paralysis, instead of confusing
+- Yellow fungus's paralysis now holds and stops attacks instead of confusing, on both realms
 
 ## 3.181.32
 

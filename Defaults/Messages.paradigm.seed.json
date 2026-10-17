@@ -12815,8 +12815,8 @@
   {
     "Id": "ffef3d936076c9b0",
     "Name": "yellow fungus",
-    "Flags": "Confused",
-    "RawFlagsHex": 2,
+    "Flags": "MovementPrevented, AttackPrevented",
+    "RawFlagsHex": 48,
     "CasterMessage": "You eat the yellow fungus, and feel better!",
     "TargetMessage": "{null}",
     "WitnessMessage": "{source} eats some yellow fungus!",
