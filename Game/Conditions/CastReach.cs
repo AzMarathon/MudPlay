@@ -6,7 +6,7 @@ namespace MudPlay.Game.Conditions;
 
 // Whether a message record's spell could have been cast where the character
 // stands: by the room's own spell, by a monster the client has in the room, or,
-// for a learned spell aimed at foes, by a player in it outside the party on a PvP
+// for a learned hostile spell, by a player in it outside the party on a PvP
 // realm. ConditionTracker asks it of the records one applied line matched, to
 // leave out the ones nobody here casts (KeepWhatCouldBeCastHere).
 //
@@ -29,7 +29,7 @@ public sealed class CastReach
     // Where the character stands, as far as the client can vouch for it. RoomSpell
     // is the spell of the room, 0 for none. Monsters are the names of the monsters
     // in it; null when the roster is not the whole of who is here. Strangers are the
-    // players in it outside the party who can aim a spell at the character: none
+    // players in it outside the party whose hostile spell can reach the character: none
     // off a PvP realm, null when the roster can't say.
     public readonly record struct Here(
         int RoomSpell, IReadOnlyCollection<string>? Monsters, IReadOnlyCollection<string>? Strangers);
@@ -107,7 +107,7 @@ public sealed class CastReach
     // position is not confirmed, and then nothing is ruled out at all. The room's
     // spell is read off the map, so it stands whenever the position does. The
     // monsters and the players stand only when the room can be seen and its roster
-    // is whole, but off a PvP realm no player can aim a spell at the character.
+    // is whole, but off a PvP realm no player's hostile spell reaches the character.
     public static Here? Standing(
         Map.RoomConfidence confidence, Map.Room? room,
         bool inDarkRoom, bool enteredBlind, bool blinded,

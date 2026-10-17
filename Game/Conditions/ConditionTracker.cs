@@ -912,7 +912,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // caster in sight for any of them nothing is left out (a dark room, a hidden
     // monster), and a spell an item or a textblock can also cast is never left out.
     // A player's spell is in reach only of a player outside the party on a PvP realm
-    // when it is aimed at foes, and is never left out otherwise (CastReach). (User,
+    // when it is hostile, and is never left out otherwise (CastReach). (User,
     // 2026-10-11: "it should also be able to discriminate spells being cast based on
     // monsters in the room, spells they have available and what spells the room
     // casts as well".)

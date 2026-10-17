@@ -94,7 +94,13 @@ public sealed class SpellCasterIndexTests : IDisposable
           { "Number": 9108, "Name": "(learnable, aimed at a foe, no monster)", "Learnable": 1,
             "Learned From": "\u0000", "Targets": 12, "Casted By": "\u0000" },
           { "Number": 9109, "Name": "(9107 and a textblock)", "Learnable": 1, "Learned From": "\u0000",
-            "Targets": 8, "Casted By": "Monster #108, Textblock #2500(8%)" }
+            "Targets": 8, "Casted By": "Monster #108, Textblock #2500(8%)" },
+          { "Number": 9110, "Name": "(a learnable curse, Monster scope)", "Learnable": 1, "Learned From": "\u0000",
+            "Targets": 4, "Casted By": "Monster #108" },
+          { "Number": 9111, "Name": "(a learnable party buff)", "Learnable": 1, "Learned From": "\u0000",
+            "Targets": 13, "Casted By": "Monster #108" },
+          { "Number": 9112, "Name": "(a learnable single-target buff)", "Learnable": 1, "Learned From": "\u0000",
+            "Targets": 2, "Casted By": "Monster #108" }
         ]
         """;
 
@@ -175,10 +181,10 @@ public sealed class SpellCasterIndexTests : IDisposable
     public void ASlotThatCanNeverLand_IsNoCaster()
         => Assert.Equal(new[] { "white queen" }, Of(1336).Monsters);
 
-    // Glacial mist is learnable and aimed at foes (Targets 12): its casters are its
+    // Glacial mist is learnable and hostile (Targets 12): its casters are its
     // monsters and the players who learned it.
     [Fact]
-    public void ASpellAPlayerCanLearn_AimedAtFoes_IsCastByMonstersAndPlayers()
+    public void AHostileSpellAPlayerCanLearn_IsCastByMonstersAndPlayers()
     {
         SpellCasterIndex.Casters mist = Of(1042);
 
@@ -187,10 +193,12 @@ public sealed class SpellCasterIndexTests : IDisposable
         Assert.True(mist.PlayersAtFoes);
     }
 
+    // Every enemy scope, the single-target ones included.
     [Theory]
-    [InlineData(9107)]   // a monster casts it too
-    [InlineData(9108)]   // nothing else does
-    public void ALearnableSpellAimedAtFoes_IsPlayersAtFoes(int spell)
+    [InlineData(9107)]   // Targets 8, a monster casts it too
+    [InlineData(9108)]   // Targets 12, nothing else does
+    [InlineData(9110)]   // Targets 4, a curse
+    public void ALearnableHostileSpell_IsPlayersAtFoes(int spell)
     {
         SpellCasterIndex.Casters casters = Of(spell);
 
@@ -198,13 +206,15 @@ public sealed class SpellCasterIndexTests : IDisposable
         Assert.False(casters.OnlyMonstersAndRooms);
     }
 
-    // A buff a player can learn (9105 has no Targets aimed at foes) can be cast on
-    // the character by anyone, the character included; one a textblock casts as well
-    // has a caster not in view.
+    // A heal or buff a player can learn can be cast on the character by anyone, the
+    // character included (9105 self, no Targets; 9111 the party; 9112 one player);
+    // a hostile one a textblock casts as well has a caster not in view (9109).
     [Theory]
     [InlineData(9105)]
+    [InlineData(9111)]
+    [InlineData(9112)]
     [InlineData(9109)]
-    public void ALearnableSpell_NotAimedAtFoesOrWithACasterNotInView_IsOpen(int spell)
+    public void ALearnableSpell_NotHostileOrWithACasterNotInView_IsOpen(int spell)
     {
         SpellCasterIndex.Casters casters = Of(spell);
 
@@ -222,8 +232,8 @@ public sealed class SpellCasterIndexTests : IDisposable
     [InlineData(9102)]   // its list was cut off at the column's 250 characters
     [InlineData(9103)]   // a room is listed whose own spell it is not: an exit's or a command's cast
     [InlineData(9104)]   // another spell casts it otherwise than by ending in it
-    [InlineData(9105)]   // a player can learn it, and it isn't aimed at foes
-    [InlineData(9106)]   // an item teaches it, and it isn't aimed at foes
+    [InlineData(9105)]   // a player can learn it, and it isn't hostile
+    [InlineData(9106)]   // an item teaches it, and it isn't hostile
     [InlineData(9100)]   // it lists a monster the set has no row for
     [InlineData(5522)]   // a death spell: its caster is gone from the roster when it lands
     public void AMonstersSpell_WithOneCasterNotInView_IsNeverClosed(int spell)

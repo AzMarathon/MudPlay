@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using MudPlay.Game.Map;
+using MudPlay.Game.Spells;
 using MudPlay.Services;
 
 namespace MudPlay.Game.GameData;
@@ -26,11 +27,12 @@ namespace MudPlay.Game.GameData;
 //     the spell open: it may have come from somewhere not in view, and is never
 //     ruled out.
 //
-// One kind of player cast is not left open: a learned spell aimed at foes. A party
-// member's doesn't land on the character, and another player's only on a PvP realm
-// (user, 2026-10-17), so it is in reach only of a player outside the party in the
-// room (PlayersAtFoes). A player's buff can land on anyone, the character's own
-// among them, and stays open.
+// One kind of player cast is not left open: a learned hostile spell, one with an
+// enemy scope (BuffClassifier.IsEnemyScope). A party member's never lands on the
+// character, and another player's only on a PvP realm (user, 2026-10-17), so it is
+// in reach only of a player outside the party in the room (PlayersAtFoes). A
+// player's heal or buff can land on anyone, the character's own among them, and
+// stays open.
 //
 // Built on a worker when a set's room graph has loaded (Warm), never by a lookup:
 // Of is asked while a game line is being read, and answers only for the load it
@@ -42,7 +44,7 @@ public sealed class SpellCasterIndex
     // OnlyMonstersAndRooms: every caster of the spell is in the two sets, so with
     // none of them present the spell was not cast here.
     // PlayersAtFoes: the casters are the two sets and players who learned the spell,
-    // which is aimed at foes; the two never both hold.
+    // which is hostile; the two never both hold.
     public sealed record Casters(
         IReadOnlySet<string> Monsters, IReadOnlySet<int> RoomSpells, bool OnlyMonstersAndRooms,
         bool PlayersAtFoes);
@@ -56,9 +58,6 @@ public sealed class SpellCasterIndex
     private const int SpellAbilSlots = 10;
     private const int AttackSlots = 5;
     private const int MidSpellSlots = 5;
-    // Spells.Targets scopes aimed at foes: 8 Monster or User, 9 Divided Attack Area,
-    // 12 Full Attack Area. Glacial mist, which the ruling was given for, is 12.
-    private static readonly HashSet<int> AimedAtFoes = new() { 8, 9, 12 };
     private static readonly string[] AbilFields = NumberedFields.Of("Abil-", SpellAbilSlots);
     private static readonly string[] AbilValFields = NumberedFields.Of("AbilVal-", SpellAbilSlots);
     private static readonly string[] AttTypeFields = NumberedFields.Of("AttType-", AttackSlots);
@@ -138,7 +137,7 @@ public sealed class SpellCasterIndex
 
         Dictionary<int, HashSet<string>> castBy = new();   // spell → monsters, by name
         HashSet<int> open = new();                         // spells with a caster not in view
-        HashSet<int> learnedAtFoes = new();                // a player's spell aimed at foes
+        HashSet<int> learnedAtFoes = new();                // a player's hostile spell
         Dictionary<int, string> nameOf = new();
         ReadMonsters(castBy, open, nameOf, monsterNames);
 
@@ -173,7 +172,7 @@ public sealed class SpellCasterIndex
             if (number <= 0) continue;
 
             if (ReadInt(row, "Learnable") == 1 || Clean(ReadString(row, "Learned From")).Length > 0)
-                (AimedAtFoes.Contains(ReadInt(row, "Targets")) ? learnedAtFoes : open).Add(number);
+                (BuffClassifier.IsEnemyScope(ReadInt(row, "Targets")) ? learnedAtFoes : open).Add(number);
 
             foreach (string raw in Clean(ReadString(row, "Casted By")).Split(','))
             {

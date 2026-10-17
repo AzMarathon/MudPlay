@@ -141,7 +141,7 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
     }
 
     // The same room with the whole family. Glacial mist and the blizzard that ends in
-    // freezing can be learned, and are aimed at foes: with no player here outside the
+    // freezing can be learned, and are hostile: with no player here outside the
     // party, nobody here casts them (user, 2026-10-17).
     [Fact]
     public void AnIceStormCasterHere_TheMistAPlayerCanLearn_IsLeftOut_WithNoPlayerToCastIt()
@@ -213,6 +213,49 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
         Feed("You are freezing");
 
         Assert.Contains("glacial mist", AppliedNames);
+        Assert.True(_tracker.IsConfused);
+    }
+
+    // Made-up records sharing one applied text: the white queen's (#1336), a
+    // learnable single-target hostile spell (#9107, Targets 8, otherwise the ice
+    // sorceress's) and a learnable single-target buff (#9112, Targets 2).
+    private void AddALearnableCurseAndBuff()
+    {
+        _messages.Messages.Add(Record("queen's chill (test)", MessageFlags.None,
+            "{null}", "You feel a chill", "The chill passes", 1336));
+        _messages.Messages.Add(Record("learned curse (test)", MessageFlags.Confused,
+            "{null}", "You feel a chill", "The chill passes", 9107));
+        _messages.Messages.Add(Record("learned buff (test)", MessageFlags.None,
+            "{null}", "You feel a chill", "The chill passes", 9112));
+    }
+
+    // A single-target hostile spell is ruled out like the mist; a buff players learn
+    // never is, whoever is here.
+    [Fact]
+    public void ALearnableSingleTargetCurse_IsLeftOut_AndALearnableBuffIsNot()
+    {
+        AddALearnableCurseAndBuff();
+        _pvp = true;
+        _party.Add("Jroc");
+        Present(Monster("white queen"), Player("Jroc"));
+
+        Feed("You feel a chill!");
+
+        Assert.Equal(
+            new[] { "learned buff (test)", "queen's chill (test)" }, AppliedNames.Order(StringComparer.Ordinal));
+        Assert.False(_tracker.IsConfused);
+    }
+
+    [Fact]
+    public void ALearnableSingleTargetCurse_IsInReach_OfAPlayerOutsideThePartyOnAPvpRealm()
+    {
+        AddALearnableCurseAndBuff();
+        _pvp = true;
+        Present(Monster("white queen"), Player("Bob"));
+
+        Feed("You feel a chill!");
+
+        Assert.Equal(3, _applied.Count);
         Assert.True(_tracker.IsConfused);
     }
 
@@ -536,7 +579,7 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
         Assert.Equal(CastReach.Verdict.Unknown, VerdictOn(31999, new CastReach.Here(0, Nobody, Nobody)));
     }
 
-    // A learned spell aimed at foes (#9108 has no monster caster; glacial mist #1042
+    // A learned hostile spell (#9108 has no monster caster; glacial mist #1042
     // has some): out of reach with no player outside the party here, in reach with
     // one, unknown while the players can't be told.
     [Fact]
