@@ -44,6 +44,8 @@ internal sealed class EventEngineHarness : IDisposable
 
     // Every command the walker or the loop runner put on the wire, in order.
     public List<string> Sent { get; } = new();
+    // The clock the event manager reads: the real one unless a test sets its own.
+    public Func<DateTimeOffset> EventsNow { get; set; } = () => DateTimeOffset.UtcNow;
     // What the event manager told the terminal.
     public List<string> Notices { get; } = new();
 
@@ -74,7 +76,8 @@ internal sealed class EventEngineHarness : IDisposable
     // An EventManager as the client builds it, over engines with no game data
     // loaded: for what the manager does with its event list and its actions alone.
     // Its posts run at once.
-    public static EventManager ManagerWithoutGameData(ProfileService? profile = null, LogService? log = null)
+    public static EventManager ManagerWithoutGameData(ProfileService? profile = null, LogService? log = null,
+        Func<DateTimeOffset>? now = null)
     {
         GameDataCache cache = new(Path.Combine(Path.GetTempPath(), "mudplay-no-game-data-" + Guid.NewGuid().ToString("N")));
         RoomGraphManager graph = new(cache);
@@ -85,7 +88,7 @@ internal sealed class EventEngineHarness : IDisposable
         LoopRunner runner = new(tracker, coord, graph: graph, bfs: bfs, postToUi: run => run());
         AutoLairManager autoLair = new(walker, tracker, graph, bfs, new LairTimerStore(cache, graph, tracker));
         return new EventManager(profile ?? TestProfiles.Loaded(), new LoopManager(bfs, graph), new LairManager(),
-            runner, autoLair, walker, log, post: act => act());
+            runner, autoLair, walker, log, post: act => act(), now: now);
     }
 
     // deferPosts: what the event manager posts waits for Pump, as it waits for the
@@ -129,10 +132,11 @@ internal sealed class EventEngineHarness : IDisposable
         profile.LoadDefaultProfile();
         LogService log = new();
         List<Action>? posted = deferPosts ? new List<Action>() : null;
+        EventEngineHarness h = null!;
         EventManager events = new(profile, loops, lairs, runner, autoLair, walker, log,
-            post: act => { if (posted is null) act(); else posted.Add(act); });
+            post: act => { if (posted is null) act(); else posted.Add(act); }, now: () => h.EventsNow());
 
-        EventEngineHarness h = new()
+        h = new()
         {
             Tracker = tracker, Coordinator = coord, Walker = walker, Runner = runner, AutoLair = autoLair,
             Loops = loops, Lairs = lairs, Events = events, Timers = timers, Log = log, Profile = profile,

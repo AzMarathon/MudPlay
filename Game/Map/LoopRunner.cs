@@ -240,11 +240,12 @@ public sealed class LoopRunner : IRecoverableEngine
     // so it keeps climbing past the 10th lap instead of freezing.
     private int _completedLaps;
 
-    // Custom-command delay timer state. _delayTimer is lazily constructed on first
-    // delay use; _delayRemaining tracks the time left when the timer is stopped by
-    // a pause so resume continues from where it left off rather than restarting the
-    // full duration.
-    private DispatcherTimer? _delayTimer;
+    // Custom-command delay timer state. _delayRemaining tracks the time left when
+    // the timer is stopped by a pause so resume continues from where it left off
+    // rather than restarting the full duration.
+    private IDisposable? _delayTimer;
+    // Arms one tick after the delay; disposing what it returns cancels it.
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
     private TimeSpan _delayRemaining;
     private long _delayStartTimestamp;
     // A room command's own delay runs in real time from the command (Stopwatch
@@ -279,9 +280,9 @@ public sealed class LoopRunner : IRecoverableEngine
     // disarmed on advance / pause / recovery / stop. On expiry — still Running, still
     // Pending — it escalates to the recovery gate, which re-establishes position
     // (Paradigm `rm` resync / stock footprint backtrack) and reroutes, re-sending the
-    // interrupted move without risking an overshoot. Lazily constructed like _delayTimer.
-    private DispatcherTimer? _stallWatchdog;
-    private static readonly TimeSpan StallWatchdogInterval = TimeSpan.FromSeconds(10);
+    // interrupted move without risking an overshoot.
+    private IDisposable? _stallWatchdog;
+    internal static readonly TimeSpan StallWatchdogInterval = TimeSpan.FromSeconds(10);
 
     public LoopState State { get; private set; } = LoopState.Idle;
 
@@ -895,10 +896,12 @@ public sealed class LoopRunner : IRecoverableEngine
         RoomGraphManager? graph = null, EngineRecoveryGate? recovery = null,
         BfsMapper? bfs = null, AutoWalkManager? walker = null,
         IRoomFilter? filter = null, Action<Action>? postToUi = null,
-        Func<DateTimeOffset>? now = null, Func<long>? timestamp = null)
+        Func<DateTimeOffset>? now = null, Func<long>? timestamp = null,
+        Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(coordinator);
+        _schedule = schedule ?? DispatcherTicks.Once;
         _tracker = tracker;
         _coordinator = coordinator;
         _promptScanner = promptScanner;
@@ -2820,18 +2823,21 @@ public sealed class LoopRunner : IRecoverableEngine
             OnDelayElapsed();
             return;
         }
-        _delayTimer ??= new DispatcherTimer();
-        _delayTimer.Tick -= OnDelayTick;
-        _delayTimer.Tick += OnDelayTick;
-        _delayTimer.Interval = _delayRemaining < MaxDelaySlice ? _delayRemaining : MaxDelaySlice;
+        _delayTimer?.Dispose();
         _delayStartTimestamp = _timestamp();
-        _delayTimer.Start();
+        _delayTimer = _schedule(_delayRemaining < MaxDelaySlice ? _delayRemaining : MaxDelaySlice, OnDelayTick);
+    }
+
+    private void CancelDelayTimer()
+    {
+        _delayTimer?.Dispose();
+        _delayTimer = null;
     }
 
     private void PauseDelayTimer()
     {
-        if (_delayTimer is null || !_delayTimer.IsEnabled) return;
-        _delayTimer.Stop();
+        if (_delayTimer is null) return;
+        CancelDelayTimer();
         if (_delayDeadline != 0)
         {
             // The clock keeps running; what's left is re-read on resume. Kept above
@@ -2847,17 +2853,15 @@ public sealed class LoopRunner : IRecoverableEngine
     private void StopDelayTimer()
     {
         _delayDeadline = 0;
-        if (_delayTimer is null) return;
-        _delayTimer.Stop();
-        _delayTimer.Tick -= OnDelayTick;
+        CancelDelayTimer();
         _delayRemaining = TimeSpan.Zero;
     }
 
-    private void OnDelayTick(object? sender, EventArgs e)
+    private void OnDelayTick()
     {
+        _delayTimer = null;
         if (_delayDeadline != 0 && DeadlineRemaining() > TimeSpan.Zero)
         {
-            _delayTimer?.Stop();
             StartOrResumeDelayTimer();   // the next slice of a long delay
             return;
         }
@@ -2866,7 +2870,7 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private void OnDelayElapsed()
     {
-        _delayTimer?.Stop();
+        CancelDelayTimer();
         _delayRemaining = TimeSpan.Zero;
         _delayDeadline = 0;
         if (_awaitingCommandReplies && State == LoopState.Running && HoldForCombat())
@@ -2880,28 +2884,23 @@ public sealed class LoopRunner : IRecoverableEngine
         AdvanceStep();
     }
 
-    // Test seam — pretend the custom-command delay just elapsed.
-    internal void FireDelayForTests() => OnDelayElapsed();
-
     private void ArmStallWatchdog(string why)
     {
-        _stallWatchdog ??= new DispatcherTimer();
-        _stallWatchdog.Tick -= OnStallWatchdogTick;
-        _stallWatchdog.Tick += OnStallWatchdogTick;
-        _stallWatchdog.Interval = StallWatchdogInterval;
-        _stallWatchdog.Stop();
-        _stallWatchdog.Start();
+        _stallWatchdog?.Dispose();
+        _stallWatchdog = _schedule(StallWatchdogInterval, OnStallWatchdogElapsed);
         _log?.Debug("LoopRunner",
             $"stall watchdog armed ({StallWatchdogInterval.TotalSeconds:F0}s): {why}");
     }
 
-    private void DisarmStallWatchdog() => _stallWatchdog?.Stop();
-
-    private void OnStallWatchdogTick(object? sender, EventArgs e) => OnStallWatchdogElapsed();
+    private void DisarmStallWatchdog()
+    {
+        _stallWatchdog?.Dispose();
+        _stallWatchdog = null;
+    }
 
     private void OnStallWatchdogElapsed()
     {
-        _stallWatchdog?.Stop();
+        _stallWatchdog = null;
         // Only act if we're genuinely still wedged: Running, a step in flight, and
         // the tracker still Pending. A move that confirmed normally already advanced
         // us (AdvanceStep disarms); a re-pause disarmed us too. Escalate to the
@@ -2988,20 +2987,6 @@ public sealed class LoopRunner : IRecoverableEngine
         _stallRearmedForSend = askedForSend;
         ArmStallWatchdog($"step {_index + 1}: {why}, one more wait");
     }
-
-    // Test seam — pretend the in-flight stall watchdog just elapsed.
-    internal void FireStallWatchdogForTests() => OnStallWatchdogElapsed();
-
-    // Test seam — true while the in-flight stall watchdog is armed and
-    // counting down. FireStallWatchdogForTests bypasses arming entirely (it
-    // invokes the elapsed-handler directly), so it can't tell a test whether
-    // EmitCardinal actually armed the watchdog on send — this can.
-    internal bool IsStallWatchdogArmedForTests => _stallWatchdog?.IsEnabled == true;
-
-    // Test seam — pretend the bound prompt scanner just observed an in-game
-    // prompt (the reconnect-resume trigger), without needing a real
-    // WirePromptScanner wired to a wire.
-    internal void FirePromptObservedForTests() => OnPromptObserved(default);
 
     // Test seam — the loop NotifyDisconnected captured to resume on the next
     // in-game prompt, or null if nothing is pending.
@@ -3222,8 +3207,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // The reform reads the first room display, which a lit room prints within the
     // second. A room too dark to display never gives it one, and the loop mustn't
     // wait on that for good.
-    private static readonly TimeSpan ReconnectReformHoldMax = TimeSpan.FromSeconds(5);
-    private DispatcherTimer? _reconnectHoldTimer;
+    internal static readonly TimeSpan ReconnectReformHoldMax = TimeSpan.FromSeconds(5);
+    private IDisposable? _reconnectHoldTimer;
 
     private void OnPromptObserved(PromptObservation _)
     {
@@ -3281,11 +3266,8 @@ public sealed class LoopRunner : IRecoverableEngine
         _log?.Info("LoopRunner", "reconnect: holding movement until the party reform has seen the room");
         _coordinator.AssertGate(MovementCoordinator.ReconnectReformGate, nameof(LoopRunner),
             "the party reform has yet to see the room");
-        _reconnectHoldTimer ??= new DispatcherTimer { Interval = ReconnectReformHoldMax };
-        _reconnectHoldTimer.Tick -= OnReconnectHoldElapsed;
-        _reconnectHoldTimer.Tick += OnReconnectHoldElapsed;
-        _reconnectHoldTimer.Stop();
-        _reconnectHoldTimer.Start();
+        _reconnectHoldTimer?.Dispose();
+        _reconnectHoldTimer = _schedule(ReconnectReformHoldMax, OnReconnectHoldElapsed);
     }
 
     // linesStillToCome: called from a prompt, whose lines (the room display the
@@ -3302,23 +3284,21 @@ public sealed class LoopRunner : IRecoverableEngine
         if (linesStillToCome) _postToUi(() => ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: false));
     }
 
-    private void OnReconnectHoldElapsed(object? sender, EventArgs e) =>
+    private void OnReconnectHoldElapsed()
+    {
+        _reconnectHoldTimer = null;
         EndReconnectReformHold($"no room display for the party reform within {ReconnectReformHoldMax.TotalSeconds:0}s");
+    }
 
     private void EndReconnectReformHold(string why)
     {
         if (!ReconnectResumeHeldForReform) return;
         ReconnectResumeHeldForReform = false;
-        _reconnectHoldTimer?.Stop();
+        _reconnectHoldTimer?.Dispose();
+        _reconnectHoldTimer = null;
         _log?.Info("LoopRunner", $"reconnect: movement hold for the party reform dropped ({why})");
         _coordinator.ClearGate(MovementCoordinator.ReconnectReformGate, nameof(LoopRunner), why);
     }
-
-    // Test seam — pretend the prompt scanner fired.
-    internal void FirePromptForTests() => OnPromptObserved(default);
-
-    // Test seam — the reconnect hold's timer doesn't tick under headless xUnit.
-    internal void FireReconnectHoldElapsedForTests() => OnReconnectHoldElapsed(null, EventArgs.Empty);
 
     // Auto-recovery entry: a mid-circuit step landed somewhere we didn't plan for
     // (blocked at the source room, or the recovery gate handed back a room that

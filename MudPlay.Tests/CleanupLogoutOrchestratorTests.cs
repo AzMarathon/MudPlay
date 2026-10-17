@@ -42,15 +42,15 @@ public sealed class CleanupLogoutOrchestratorTests
         CleanupWarningWatcher cleanup = new();
 
         List<(TimeSpan, Action)> polls = new();
-        CleanupLogoutOrchestrator engine = new(cleanup, router, schedulePoll: (delay, tick) => polls.Add((delay, tick)));
-        Harness h = new()
+        Harness h = null!;
+        CleanupLogoutOrchestrator engine = new(cleanup, router, schedulePoll: (delay, tick) => polls.Add((delay, tick)), now: () => h.Clock);
+        h = new()
         {
             Engine = engine,
             Cleanup = cleanup,
             Router = router,
             Polls = polls,
         };
-        engine.NowProvider = () => h.Clock;
         engine.SetWireSender(h.Sent.Add);
         engine.SetSafePredicate(() => h.Safe);
         engine.SetConnectedCheck(() => h.Connected);

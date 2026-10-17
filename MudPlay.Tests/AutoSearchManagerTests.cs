@@ -13,6 +13,9 @@ namespace MudPlay.Tests;
 // those ticks so the state machine runs deterministically.
 public sealed class AutoSearchManagerTests
 {
+    // The manager's classify and settle timers.
+    private readonly ManualTimers _searchTimers = new();
+
     // What the manager put on the wire, through the sender the client binds.
     private readonly List<byte[]> _sent = new();
 
@@ -29,12 +32,12 @@ public sealed class AutoSearchManagerTests
     [Fact]
     public void ClearRoom_Enabled_SearchesAfterClassify()
     {
-        var mgr = new AutoSearchManager(isEnabled: () => true);
+        var mgr = new AutoSearchManager(isEnabled: () => true, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());                 // arm — nothing sent yet
         Assert.Empty(_sent);
-        mgr.OnClassifyElapsed();             // classify delay fires
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);             // classify delay fires
 
         Assert.Single(_sent);
         Assert.Equal("sea", Decode(_sent[0]));
@@ -43,11 +46,11 @@ public sealed class AutoSearchManagerTests
     [Fact]
     public void ClearRoom_Disabled_SendsNothing()
     {
-        var mgr = new AutoSearchManager(isEnabled: () => false);
+        var mgr = new AutoSearchManager(isEnabled: () => false, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());
-        mgr.OnClassifyElapsed();
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
 
         Assert.Empty(_sent);
     }
@@ -55,10 +58,10 @@ public sealed class AutoSearchManagerTests
     [Fact]
     public void ClearRoom_OncePerRoom()
     {
-        var mgr = new AutoSearchManager(isEnabled: () => true);
+        var mgr = new AutoSearchManager(isEnabled: () => true, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
-        for (int i = 0; i < 3; i++) { mgr.OnRoomChanged(Key()); mgr.OnClassifyElapsed(); }
+        for (int i = 0; i < 3; i++) { mgr.OnRoomChanged(Key()); _searchTimers.RunDue(AutoSearchManager.ClassifyDelay); }
 
         Assert.Equal(3, _sent.Count);
         Assert.All(_sent, b => Assert.Equal("sea", Decode(b)));
@@ -68,12 +71,12 @@ public sealed class AutoSearchManagerTests
     public void ClassifyElapsed_ReadsMasterGateLive()
     {
         bool enabled = false;
-        var mgr = new AutoSearchManager(isEnabled: () => enabled);
+        var mgr = new AutoSearchManager(isEnabled: () => enabled, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
-        mgr.OnRoomChanged(Key()); mgr.OnClassifyElapsed();   // off — no send
+        mgr.OnRoomChanged(Key()); _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);   // off — no send
         enabled = true;
-        mgr.OnRoomChanged(Key()); mgr.OnClassifyElapsed();   // on — one send
+        mgr.OnRoomChanged(Key()); _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);   // on — one send
 
         Assert.Single(_sent);
     }
@@ -82,10 +85,10 @@ public sealed class AutoSearchManagerTests
     public void Send_ReachesBoundSink()
     {
         var sink = new List<byte[]>();
-        var mgr = new AutoSearchManager(isEnabled: () => true);
+        var mgr = new AutoSearchManager(isEnabled: () => true, schedule: _searchTimers.Arm);
         mgr.SetWireSender(sink.Add);
 
-        mgr.OnRoomChanged(Key()); mgr.OnClassifyElapsed();
+        mgr.OnRoomChanged(Key()); _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
 
         Assert.Single(sink);
         Assert.Equal("sea", Decode(sink[0]));
@@ -94,10 +97,10 @@ public sealed class AutoSearchManagerTests
     [Fact]
     public void DemandGate_ArmsSearch_WhenMasterOff()
     {
-        var mgr = new AutoSearchManager(isEnabled: () => false, isDemandActive: () => true);
+        var mgr = new AutoSearchManager(isEnabled: () => false, isDemandActive: () => true, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
-        mgr.OnRoomChanged(Key()); mgr.OnClassifyElapsed();
+        mgr.OnRoomChanged(Key()); _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
 
         Assert.Single(_sent);
         Assert.Equal("sea", Decode(_sent[0]));
@@ -106,10 +109,10 @@ public sealed class AutoSearchManagerTests
     [Fact]
     public void BothGatesOff_SendsNothing()
     {
-        var mgr = new AutoSearchManager(isEnabled: () => false, isDemandActive: () => false);
+        var mgr = new AutoSearchManager(isEnabled: () => false, isDemandActive: () => false, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
-        mgr.OnRoomChanged(Key()); mgr.OnClassifyElapsed();
+        mgr.OnRoomChanged(Key()); _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
 
         Assert.Empty(_sent);
     }
@@ -125,12 +128,12 @@ public sealed class AutoSearchManagerTests
         var coord = new MovementCoordinator();
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
-            coordinator: coord);              // no get engine, no demand
+            coordinator: coord, schedule: _searchTimers.Arm);              // no get engine, no demand
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());
         Assert.True(SearchHeld(coord));       // held from entry so the sea fires in place
-        mgr.OnClassifyElapsed();              // clear room → sea fires
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);              // clear room → sea fires
 
         Assert.Single(_sent);
         Assert.Equal("sea", Decode(_sent[0]));
@@ -146,15 +149,15 @@ public sealed class AutoSearchManagerTests
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
             hasGetEngineArmed: () => true,
-            coordinator: coord);
+            coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());
-        mgr.OnClassifyElapsed();
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
 
         Assert.Single(_sent);
         Assert.True(SearchHeld(coord));       // held for the collection settle
-        mgr.OnSettleElapsed();
+        _searchTimers.RunDue(AutoSearchManager.SearchSettle);
         Assert.False(SearchHeld(coord));
     }
 
@@ -169,14 +172,14 @@ public sealed class AutoSearchManagerTests
         // the settle elapses.
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
-            hasGetEngineArmed: () => true);
+            hasGetEngineArmed: () => true, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());
         Assert.False(mgr.IsRevealInFlight);   // armed, but no sea sent yet
-        mgr.OnClassifyElapsed();              // clear room → sea fires, settle armed
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);              // clear room → sea fires, settle armed
         Assert.True(mgr.IsRevealInFlight);    // reveal is round-tripping
-        mgr.OnSettleElapsed();
+        _searchTimers.RunDue(AutoSearchManager.SearchSettle);
         Assert.False(mgr.IsRevealInFlight);   // window closed
     }
 
@@ -186,11 +189,11 @@ public sealed class AutoSearchManagerTests
         // With no get engine armed the settle window is never held (report
         // paradigm-20260818-060742), so there is nothing collecting the reveal and
         // nothing to suppress — the guard stays open.
-        var mgr = new AutoSearchManager(isEnabled: () => true);   // no consumer
+        var mgr = new AutoSearchManager(isEnabled: () => true, schedule: _searchTimers.Arm);   // no consumer
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());
-        mgr.OnClassifyElapsed();              // sea fires but releases immediately
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);              // sea fires but releases immediately
         Assert.Single(_sent);
         Assert.False(mgr.IsRevealInFlight);
     }
@@ -203,11 +206,11 @@ public sealed class AutoSearchManagerTests
         // room after a stash room, report paradigm-20260829-212158).
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
-            hasGetEngineArmed: () => true);
+            hasGetEngineArmed: () => true, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());
-        mgr.OnClassifyElapsed();
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
         Assert.True(mgr.IsRevealInFlight);
         mgr.OnRoomChanged(Key());             // moved on before settle elapsed
         Assert.False(mgr.IsRevealInFlight);
@@ -226,11 +229,11 @@ public sealed class AutoSearchManagerTests
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
             hasGetEngineArmed: () => true,   // settle would otherwise hold the walker
-            coordinator: coord);
+            coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());
-        mgr.OnClassifyElapsed();              // sea fires, settle holds
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);              // sea fires, settle holds
         Assert.True(SearchHeld(coord));
         Assert.True(mgr.IsRevealInFlight);
 
@@ -245,7 +248,7 @@ public sealed class AutoSearchManagerTests
         // Outside our own reveal window (e.g. a manually typed `sea`), the empty-result
         // line must not release a Search gate we aren't holding.
         var coord = new MovementCoordinator();
-        var mgr = new AutoSearchManager(isEnabled: () => true, coordinator: coord);
+        var mgr = new AutoSearchManager(isEnabled: () => true, coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.NotifySearchRevealedNothing();    // nothing in flight
@@ -261,14 +264,14 @@ public sealed class AutoSearchManagerTests
         // room) → the start room never got an entry search. Movement start arms +
         // searches it before the walker steps out (report paradigm-20260909-055045).
         var coord = new MovementCoordinator();
-        var mgr = new AutoSearchManager(isEnabled: () => true, coordinator: coord);
+        var mgr = new AutoSearchManager(isEnabled: () => true, coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnMovementStarting(Key(58));      // arms + holds the walker
         Assert.True(SearchHeld(coord));
         Assert.Empty(_sent);   // nothing sent until classify
 
-        mgr.OnClassifyElapsed();
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
         Assert.Single(_sent);
         Assert.Equal("sea", Decode(_sent[0]));
     }
@@ -279,15 +282,15 @@ public sealed class AutoSearchManagerTests
         // Arrived here and searched on entry, then a new leg starts from the same
         // room — don't re-search it. This is what stops every loop leg re-searching
         // the room it departs.
-        var mgr = new AutoSearchManager(isEnabled: () => true);
+        var mgr = new AutoSearchManager(isEnabled: () => true, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key(96));
-        mgr.OnClassifyElapsed();              // entry search fires (1 sea)
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);              // entry search fires (1 sea)
         Assert.Single(_sent);
 
         mgr.OnMovementStarting(Key(96));      // leg departs the same room
-        mgr.OnClassifyElapsed();
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
         Assert.Single(_sent);  // still one — no re-search
     }
 
@@ -295,12 +298,12 @@ public sealed class AutoSearchManagerTests
     public void MovementStarting_NoOpWhenDisabled()
     {
         var coord = new MovementCoordinator();
-        var mgr = new AutoSearchManager(isEnabled: () => false, coordinator: coord);
+        var mgr = new AutoSearchManager(isEnabled: () => false, coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnMovementStarting(Key(58));
         Assert.False(SearchHeld(coord));      // not armed → no hold, no search
-        mgr.OnClassifyElapsed();
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
         Assert.Empty(_sent);
     }
 
@@ -309,12 +312,12 @@ public sealed class AutoSearchManagerTests
     {
         // A search is already armed for the room (entry search classifying) — the
         // start hook must not double-arm it.
-        var mgr = new AutoSearchManager(isEnabled: () => true);
+        var mgr = new AutoSearchManager(isEnabled: () => true, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key(58));           // arms the entry search
         mgr.OnMovementStarting(Key(58));      // must not re-arm
-        mgr.OnClassifyElapsed();
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
 
         Assert.Single(_sent);  // exactly one search
     }
@@ -323,7 +326,7 @@ public sealed class AutoSearchManagerTests
     public void MovementStarting_NullRoom_NoOp()
     {
         var coord = new MovementCoordinator();
-        var mgr = new AutoSearchManager(isEnabled: () => true, coordinator: coord);
+        var mgr = new AutoSearchManager(isEnabled: () => true, coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnMovementStarting(null);
@@ -341,7 +344,7 @@ public sealed class AutoSearchManagerTests
             isEnabled: () => true,
             hasEngageableHostiles: () => hostiles,
             hasGetEngineArmed: () => true,   // a consumer is armed, so the settle window is held
-            coordinator: coord);
+            coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());          // arm
@@ -350,7 +353,7 @@ public sealed class AutoSearchManagerTests
         Assert.True(SearchHeld(coord));
 
         // A stray classify tick during combat must not leak a mid-fight search.
-        mgr.OnClassifyElapsed();
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
         Assert.Empty(_sent);
 
         hostiles = false;
@@ -359,7 +362,7 @@ public sealed class AutoSearchManagerTests
         Assert.Equal("sea", Decode(_sent[0]));
         Assert.True(SearchHeld(coord));
 
-        mgr.OnSettleElapsed();        // settle → release
+        _searchTimers.RunDue(AutoSearchManager.SearchSettle);        // settle → release
         Assert.False(SearchHeld(coord));
     }
 
@@ -376,17 +379,17 @@ public sealed class AutoSearchManagerTests
             hasEngageableHostiles: () => true,
             isCombatEngaging: () => false,   // auto-combat off — no fight incoming
             hasGetEngineArmed: () => true,
-            coordinator: coord);
+            coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());     // arm + assert the Search gate
         mgr.OnRoomObserved();         // hostile seen but not engaging → must NOT defer
         Assert.False(_sent.Count > 1);
-        mgr.OnClassifyElapsed();      // classify fires the search
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);      // classify fires the search
         Assert.Single(_sent);
         Assert.Equal("sea", Decode(_sent[0]));
 
-        mgr.OnSettleElapsed();        // settle → release; walker proceeds
+        _searchTimers.RunDue(AutoSearchManager.SearchSettle);        // settle → release; walker proceeds
         Assert.False(SearchHeld(coord));
     }
 
@@ -397,7 +400,7 @@ public sealed class AutoSearchManagerTests
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
             hasEngageableHostiles: () => true,
-            coordinator: coord);
+            coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());
@@ -423,7 +426,7 @@ public sealed class AutoSearchManagerTests
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
             hasEngageableHostiles: () => hostiles,
-            coordinator: coord);
+            coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());
@@ -446,11 +449,11 @@ public sealed class AutoSearchManagerTests
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
             hasEngageableHostiles: () => hostiles,
-            coordinator: coord);
+            coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());
-        mgr.OnClassifyElapsed();      // clear room → one sea, gate held for settle
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);      // clear room → one sea, gate held for settle
         Assert.Single(_sent);
 
         // A monster wanders in after the clear-room search: must not re-arm or
@@ -463,7 +466,7 @@ public sealed class AutoSearchManagerTests
         mgr.OnRoomObserved();         // that fight clears — still no second search
         Assert.Single(_sent);
 
-        mgr.OnSettleElapsed();        // settle window ends → gate released
+        _searchTimers.RunDue(AutoSearchManager.SearchSettle);        // settle window ends → gate released
         Assert.False(SearchHeld(coord));
     }
 
@@ -475,7 +478,7 @@ public sealed class AutoSearchManagerTests
         var mgr = new AutoSearchManager(
             isEnabled: () => enabled,
             hasEngageableHostiles: () => true,
-            coordinator: coord);
+            coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key());
@@ -496,7 +499,7 @@ public sealed class AutoSearchManagerTests
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
             hasEngageableHostiles: () => true,
-            coordinator: coord);
+            coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
         mgr.OnRoomChanged(Key());
         mgr.OnRoomObserved();
@@ -519,17 +522,17 @@ public sealed class AutoSearchManagerTests
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
             hasQueuedMoves: () => queued,
-            coordinator: coord);
+            coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key(1));       // transit room
-        mgr.OnClassifyElapsed();         // moves still queued → skipped, gate released
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);         // moves still queued → skipped, gate released
         Assert.Empty(_sent);
         Assert.False(SearchHeld(coord));
 
         queued = false;                  // settled in the landing room
         mgr.OnRoomChanged(Key(2));
-        mgr.OnClassifyElapsed();
+        _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);
         Assert.Single(_sent);   // one search, in the room we stopped in
     }
 
@@ -544,7 +547,7 @@ public sealed class AutoSearchManagerTests
         var mgr = new AutoSearchManager(
             isEnabled: () => true,
             hasEngageableHostiles: () => hostiles,
-            coordinator: coord);
+            coordinator: coord, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
 
         mgr.OnRoomChanged(Key(934));     // died-in room, fight present

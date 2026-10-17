@@ -43,7 +43,8 @@ public sealed class ParadigmPositionResolverTests : IDisposable
         RoomTracker Tracker,
         EngineRecoveryGate Gate,
         List<byte[]> Sent,
-        ServerFeed Feed);
+        ServerFeed Feed,
+        ManualTimers Timeout);
 
     // Gaol -> Dungeon -> Vault in a line, southeast each time.
     private const string ThreeRoomGraphJson = """
@@ -81,10 +82,11 @@ public sealed class ParadigmPositionResolverTests : IDisposable
 
         MessageRouter router = new();
         MudPlay.Services.Patterns.DefaultPatterns.Seed(router);   // Subscribe needs the pattern in the catalog
-        ParadigmPositionResolver resolver = new(router, tracker, gate, cache, log: null, useTimer: false);
+        ManualTimers timeout = new();
+        ParadigmPositionResolver resolver = new(router, tracker, gate, cache, log: null, schedule: timeout.Arm);
         List<byte[]> sent = new();
         resolver.SetWireSender(sent.Add);
-        return new Harness(resolver, tracker, gate, sent, new ServerFeed(router));
+        return new Harness(resolver, tracker, gate, sent, new ServerFeed(router), timeout);
     }
 
     [Fact]
@@ -168,7 +170,7 @@ public sealed class ParadigmPositionResolverTests : IDisposable
         h.Resolver.ResyncFailed += () => failed = true;
         h.Resolver.TryRequestResync("drift");
 
-        h.Resolver.FireTimeoutForTests();
+        h.Timeout.RunAll();
 
         Assert.True(failed);
         Assert.False(h.Resolver.RequestInFlight);
@@ -203,7 +205,7 @@ public sealed class ParadigmPositionResolverTests : IDisposable
         int resolved = 0, failed = 0;
 
         Assert.True(h.Resolver.RequestResyncOnce("where", _ => resolved++, () => failed++));
-        h.Resolver.FireTimeoutForTests();
+        h.Timeout.RunAll();
 
         Assert.Equal(0, resolved);
         Assert.Equal(1, failed);

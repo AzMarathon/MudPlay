@@ -21,6 +21,19 @@ namespace MudPlay.Tests;
 // through the emulator and the line extractor, echoes included.
 internal sealed class RoombaHouse : IDisposable
 {
+    // The sweep's settle, pacing and backoff timers, the clock its pacing reads,
+    // and the game's prompts as it reads them.
+    private readonly ManualTimers _sweepTimers = new();
+    private DateTimeOffset _sweepNow = new(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+    private readonly WirePromptScanner _sweepPrompt = new();
+
+    // The pace between queued commands runs out.
+    private void PaceOut()
+    {
+        _sweepNow += GhSweepManager.MinCommandInterval;
+        _sweepTimers.RunDue(GhSweepManager.PromptWaitTimeout);
+    }
+
     public static readonly RoomKey A = new(1, 1);
     public static readonly RoomKey B = new(1, 2);
     public static readonly RoomKey C = new(1, 3);
@@ -138,7 +151,7 @@ internal sealed class RoombaHouse : IDisposable
             postToUi: action => action());
         Sweep = sweep = new GhSweepManager(Labels, runner, _tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false, log: Log,
-            isParadigm: () => Paradigm, inventory: _inventory, itemLocations: Locations);
+            isParadigm: () => Paradigm, inventory: _inventory, itemLocations: Locations, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
         Sweep.SetWireSender(bytes => Sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
         runner.SetWireSender(bytes => Sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
 
@@ -205,7 +218,7 @@ internal sealed class RoombaHouse : IDisposable
             else if (command == "l")
             {
                 Wire(Display(Prompt + "l"));
-                Sweep.FirePromptWaitTimeoutForTests();
+                PaceOut();
             }
             else if (command.StartsWith("get ", StringComparison.Ordinal)) Get(command[4..]);
             else if (command.StartsWith("drop ", StringComparison.Ordinal)) Drop(command[5..]);
@@ -299,7 +312,7 @@ internal sealed class RoombaHouse : IDisposable
         Invoke("OnReconSearchSettleElapsed");
         // A search sent in the middle of a room's batch is paced like the rest of it.
         if (Sweep.Phase == GhSweepManager.SweepPhase.Sorting && Sent.Count == sent)
-            Sweep.FirePromptWaitTimeoutForTests();
+            PaceOut();
     }
 
     private void Get(string argument)
@@ -308,7 +321,7 @@ internal sealed class RoombaHouse : IDisposable
         if (TooHeavy(argument))
         {
             Wire(Prompt + "get " + argument, "You cannot carry that much!");
-            Sweep.FirePromptWaitTimeoutForTests();
+            PaceOut();
             return;
         }
         int visible = Floor[_here].GetValueOrDefault(name);
@@ -316,7 +329,7 @@ internal sealed class RoombaHouse : IDisposable
         if (count > visible + hidden)
         {
             Wire(Prompt + "get " + argument, $"You don't see {argument} here.");
-            Sweep.FirePromptWaitTimeoutForTests();
+            PaceOut();
             return;
         }
         int fromVisible = Math.Min(count, visible);
@@ -325,7 +338,7 @@ internal sealed class RoombaHouse : IDisposable
         if (fromHidden > 0 && (Stash[_here][name] -= fromHidden) == 0) Stash[_here].Remove(name);
         _pack[name] = _pack.GetValueOrDefault(name) + count;
         Wire(Prompt + "get " + argument, $"You took {argument}.");
-        Sweep.FirePromptWaitTimeoutForTests();
+        PaceOut();
     }
 
     private void Drop(string argument)
@@ -334,7 +347,7 @@ internal sealed class RoombaHouse : IDisposable
         Floor[_here][name] = Floor[_here].GetValueOrDefault(name) + count;
         _pack[name] = _pack.GetValueOrDefault(name) - count;
         Wire(Prompt + "drop " + argument, $"You dropped {argument}.");
-        Sweep.FirePromptWaitTimeoutForTests();
+        PaceOut();
     }
 
     // ----- what the tests read ---------------------------------------------

@@ -62,10 +62,10 @@ public sealed class LairEntryPriorityBuffWaitTests
                 readSpells: () => Spells,
                 readHealth: () => Health,
                 isEnabled: () => AutoHeal,
-                log: Log);
+                log: Log,
+                now: () => Now);
             Director.SetAutoBlessGate(() => AutoBless);
             Director.SetManaCostLookup(code => ManaCosts.TryGetValue(code, out int cost) ? cost : null);
-            Director.SetClock(() => Now);
             Director.SetPartyBuffSource(() => Buffs);
             Director.SetStealthMaintenanceDeferGate(() => SneakKept);
             Director.SetBuffDurationSources(

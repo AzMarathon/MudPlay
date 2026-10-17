@@ -102,7 +102,9 @@ public sealed class PathItemSummonRouter : IDisposable
     private readonly LogService? _log;
     private readonly TimeSpan _detourTimeout;
     private readonly WireSender _wire = new();
-    private readonly Timer _timer;
+    private IDisposable? _timer;
+    // Arms one tick after the delay; disposing what it returns cancels it.
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
 
     private Phase _phase = Phase.Idle;
     private int _itemId;
@@ -130,7 +132,8 @@ public sealed class PathItemSummonRouter : IDisposable
         Action<RoomKey> walkTo,
         Action<Action> post,
         LogService? log = null,
-        TimeSpan? detourTimeout = null)
+        TimeSpan? detourTimeout = null,
+        Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
         ArgumentNullException.ThrowIfNull(summonSourcesForItem);
         ArgumentNullException.ThrowIfNull(cheaperSourceExists);
@@ -156,14 +159,14 @@ public sealed class PathItemSummonRouter : IDisposable
         _engineWalkActive = engineWalkActive;
         _walkTo = walkTo;
         _post = post;
+        _schedule = schedule
+            ?? ((delay, tick) => new Timer(_ => _post(tick), null, delay, Timeout.InfiniteTimeSpan));
         _log = log;
         // One budget for the walk, the fight, and the pickup. A summoned monster is
         // a real fight, not a dialogue beat — the gate statue is 300 HP — so this is
         // minutes where the give router's give window is seconds. Expiring it only
         // abandons the detour; it never interferes with a fight in progress.
         _detourTimeout = detourTimeout ?? TimeSpan.FromMinutes(4);
-        _timer = new Timer(_ => _post(OnTimeout), null,
-            Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     }
 
     // Bind the wire sink used to issue the summon command and the re-survey.
@@ -314,9 +317,8 @@ public sealed class PathItemSummonRouter : IDisposable
     // and never reported, the summon never died (combat off, a fight we lost, an
     // already-claimed GameLimit monster), or the drop never reached inventory.
     // Resume to the destination and leave the need outstanding for the other
-    // fulfillers. Invoked on the UI thread via the injected post delegate; tests
-    // call it directly.
-    public void OnTimeout()
+    // fulfillers. Runs on the UI thread.
+    private void OnTimeout()
     {
         if (_phase == Phase.Idle) return;
         if (_carriedCount(_itemId) >= _targetCount) return;   // race: OnInventoryChanged has it
@@ -327,7 +329,7 @@ public sealed class PathItemSummonRouter : IDisposable
         ResumeToPath();
     }
 
-    public void Dispose() => _timer.Dispose();
+    public void Dispose() => _timer?.Dispose();
 
     private void BeginSummoning()
     {
@@ -367,10 +369,17 @@ public sealed class PathItemSummonRouter : IDisposable
         _phase = Phase.Idle;
     }
 
-    private void ArmTimer() => _timer.Change(_detourTimeout, Timeout.InfiniteTimeSpan);
+    private void ArmTimer()
+    {
+        _timer?.Dispose();
+        _timer = _schedule(_detourTimeout, OnTimeout);
+    }
 
     private void DisarmTimer()
-        => _timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
 
     private bool TrySelectSource(RoomKey cur, RoomKey dest, int itemId, out SummonSource best)
         => TrySelectSource(_summonSourcesForItem(itemId), cur, dest, _distanceBetween, out best);

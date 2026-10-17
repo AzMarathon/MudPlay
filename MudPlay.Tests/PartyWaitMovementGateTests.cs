@@ -13,6 +13,12 @@ namespace MudPlay.Tests;
 // engine holds until every waiting member sends @ok.
 public sealed class PartyWaitMovementGateTests
 {
+    // The clock the PartyWaitMovementGate reads: the real one unless a test sets its own.
+    private Func<DateTime> _gateNow = () => DateTime.UtcNow;
+
+    // The gate's 1 s expiry tick.
+    private readonly ManualTimers _gateTimers = new();
+
     // The router each engine reads, which a test's chat lines go through.
     private readonly Dictionary<RemoteCommandManager, MessageRouter> _routers = new();
 
@@ -35,7 +41,7 @@ public sealed class PartyWaitMovementGateTests
         engine.SetWireSender(_replies.Add);
         PartyEssentialHandlers handlers = new(engine, player, party);
         MovementCoordinator coord = new();
-        PartyWaitMovementGate gate = new(handlers, coord);
+        PartyWaitMovementGate gate = new(handlers, coord, now: () => _gateNow(), schedule: _gateTimers.Arm);
         return (engine, handlers, party, coord, gate);
     }
 
@@ -130,22 +136,22 @@ public sealed class PartyWaitMovementGateTests
     {
         var (engine, handlers, party, coord, gate) = Setup();
         DateTime t = Now;
-        gate.NowProvider = () => t;
+        _gateNow = () => t;
         gate.WaitWindow = TimeSpan.FromSeconds(30);
         SeedPartyMember(party, "Follower");
         ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
         SwitchOff(engine, coord, gate);
 
         t = t.AddSeconds(120);
-        gate.TickForTests();
+        _gateTimers.RunAll();
         Assert.Contains("Follower", handlers.WaitingMembers);
 
         SwitchOn(engine, coord, gate);
         t = t.AddSeconds(29);
-        gate.TickForTests();
+        _gateTimers.RunAll();
         Assert.True(coord.IsGateAsserted(MovementCoordinator.PartyWaitGate));
         t = t.AddSeconds(2);
-        gate.TickForTests();
+        _gateTimers.RunAll();
         Assert.False(coord.IsGateAsserted(MovementCoordinator.PartyWaitGate));
     }
 
@@ -215,7 +221,7 @@ public sealed class PartyWaitMovementGateTests
     {
         var (engine, handlers, party, coord, gate) = Setup();
         DateTime t = Now;
-        gate.NowProvider = () => t;
+        _gateNow = () => t;
         gate.WaitWindow = TimeSpan.FromSeconds(30);
         SeedPartyMember(party, "Follower");
         PartyMember row = party.Members[0];
@@ -226,12 +232,12 @@ public sealed class PartyWaitMovementGateTests
 
         // 29s — not yet expired.
         t = Now.AddSeconds(29);
-        gate.TickForTests();
+        _gateTimers.RunAll();
         Assert.Contains(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
 
         // 31s — the leader gives up: gate, wait set, and roster chip all clear.
         t = Now.AddSeconds(31);
-        gate.TickForTests();
+        _gateTimers.RunAll();
         Assert.DoesNotContain(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
         Assert.False(coord.IsPaused);
         Assert.Empty(handlers.WaitingMembers);
@@ -243,13 +249,13 @@ public sealed class PartyWaitMovementGateTests
     {
         var (engine, _, party, coord, gate) = Setup();
         DateTime t = Now;
-        gate.NowProvider = () => t;
+        _gateNow = () => t;
         gate.WaitWindow = TimeSpan.Zero;   // timeout disabled — only @ok releases
         SeedPartyMember(party, "Follower");
 
         ChatLines.Hear(_routers[engine], Telepath("Follower", "@wait"));
         t = Now.AddHours(1);
-        gate.TickForTests();
+        _gateTimers.RunAll();
 
         Assert.Contains(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
     }
@@ -259,7 +265,7 @@ public sealed class PartyWaitMovementGateTests
     {
         var (engine, _, party, coord, gate) = Setup();
         DateTime t = Now;
-        gate.NowProvider = () => t;
+        _gateNow = () => t;
         gate.WaitWindow = TimeSpan.FromSeconds(30);
         SeedPartyMember(party, "Follower");
 
@@ -270,7 +276,7 @@ public sealed class PartyWaitMovementGateTests
 
         // A later tick past the old deadline must not resurrect or misfire.
         t = Now.AddSeconds(60);
-        gate.TickForTests();
+        _gateTimers.RunAll();
         Assert.DoesNotContain(MovementCoordinator.PartyWaitGate, coord.AssertedGates);
     }
 }

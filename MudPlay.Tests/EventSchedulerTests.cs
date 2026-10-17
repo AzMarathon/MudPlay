@@ -24,9 +24,9 @@ public sealed class EventSchedulerTests
     private static readonly byte[] PromptBytes = Encoding.Latin1.GetBytes("[HP=100]: ");
 
     private static (EventManager events, EventScheduler scheduler, WirePromptScanner prompt,
-                    List<byte[]> sent) Build(Func<DateTime>? now = null)
+                    List<byte[]> sent) Build(Func<DateTime>? now = null, Func<DateTimeOffset>? eventsNow = null)
     {
-        EventManager events = EventEngineHarness.ManagerWithoutGameData();
+        EventManager events = EventEngineHarness.ManagerWithoutGameData(now: eventsNow);
         WirePromptScanner prompt = new();
         EventScheduler scheduler = new(events, prompt, now: now);
         List<byte[]> sent = new();
@@ -63,9 +63,8 @@ public sealed class EventSchedulerTests
     [Fact]
     public void AfterAReconnect_TheWaitingEventRunsBeforeTheLogonEvent()
     {
-        var (events, scheduler, prompt, sent) = Build();
         DateTimeOffset now = new(2026, 10, 10, 18, 0, 0, TimeSpan.Zero);
-        events.Now = () => now;
+        var (events, scheduler, prompt, sent) = Build(eventsNow: () => now);
         ScheduledEvent hold = new() { Name = "hold", ActionType = EventActionType.Wait, WaitSeconds = 60, Then = EventThenType.Nothing };
         ScheduledEvent waiting = CommandEvent(EventTriggerType.Every, "stat", "waiting");
         waiting.Then = EventThenType.Resume;

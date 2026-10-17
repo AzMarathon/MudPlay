@@ -24,6 +24,8 @@ public sealed class PathItemShopRouterTests
 
     private sealed class Harness
     {
+        // The router's timeout timers.
+        public readonly ManualTimers Timers = new();
         public readonly Dictionary<int, List<RoomKey>> ShopRooms = new();
         public readonly Dictionary<(RoomKey From, RoomKey To), int> Dist = new();
         public readonly Dictionary<int, int> Carried = new();
@@ -75,8 +77,7 @@ public sealed class PathItemShopRouterTests
             walkTo: Walks.Add,
             post: a => a(),                          // synchronous in tests
             log: null,
-            buyTimeout: TimeSpan.FromHours(1),        // real timer never fires mid-test
-            withdrawTimeout: TimeSpan.FromHours(1),
+            schedule: Timers.Arm,
             partyTollTopUp: PartyTopUp is null ? null : (bank, shop, dest, drawing) =>
             {
                 TopUpAsked.Add((bank, shop, dest, drawing));
@@ -375,7 +376,7 @@ public sealed class PathItemShopRouterTests
         r.OnNeedPosted(PathNeed(42));
         r.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "reached", ShopA));
 
-        r.OnBuyTimeout();                // item never appeared
+        h.Timers.RunAll();                // item never appeared
 
         Assert.Equal(2, h.Walks.Count);
         Assert.Equal(Dest, h.Walks[1]);
@@ -672,7 +673,7 @@ public sealed class PathItemShopRouterTests
         r.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "reached", Bank));
 
         // Over-request silently no-ops — cash never moved. The window elapses.
-        r.OnWithdrawTimeout();
+        h.Timers.RunAll();
 
         Assert.False(r.DetourActive);              // fail-out, no forced resume
         Assert.Single(h.Walks);                    // only the bank walk

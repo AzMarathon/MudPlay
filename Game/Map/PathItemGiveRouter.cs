@@ -94,7 +94,9 @@ public sealed class PathItemGiveRouter : IDisposable
     private readonly LogService? _log;
     private readonly TimeSpan _giveTimeout;
     private readonly WireSender _wire = new();
-    private readonly Timer _giveTimer;
+    private IDisposable? _giveTimer;
+    // Arms one tick after the delay; disposing what it returns cancels it.
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
 
     private Phase _phase = Phase.Idle;
     // Items a giver didn't hand over on this trip. The resumed walk re-announces
@@ -119,7 +121,8 @@ public sealed class PathItemGiveRouter : IDisposable
         Action<RoomKey> walkTo,
         Action<Action> post,
         LogService? log = null,
-        TimeSpan? giveTimeout = null)
+        TimeSpan? giveTimeout = null,
+        Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
         ArgumentNullException.ThrowIfNull(giveSourcesForItem);
         ArgumentNullException.ThrowIfNull(currentRoom);
@@ -141,10 +144,10 @@ public sealed class PathItemGiveRouter : IDisposable
         _engineWalkActive = engineWalkActive;
         _walkTo = walkTo;
         _post = post;
+        _schedule = schedule
+            ?? ((delay, tick) => new Timer(_ => _post(tick), null, delay, Timeout.InfiniteTimeSpan));
         _log = log;
         _giveTimeout = giveTimeout ?? TimeSpan.FromSeconds(8);
-        _giveTimer = new Timer(_ => _post(OnGiveTimeout), null,
-            Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     }
 
     // Bind the wire sink used to issue the give command.
@@ -254,8 +257,8 @@ public sealed class PathItemGiveRouter : IDisposable
     // Give-window elapsed. If the item still isn't carried the give didn't land
     // (dialogue mismatch, a hidden prerequisite, a moved NPC) — resume to the
     // destination and leave the need outstanding for the other fulfillers.
-    // Invoked on the UI thread via the injected post delegate; tests call it directly.
-    public void OnGiveTimeout()
+    // Runs on the UI thread.
+    private void OnGiveTimeout()
     {
         if (_phase != Phase.Acquiring) return;
         if (_carriedCount(_itemId) >= _targetCount) return; // race: OnInventoryChanged handled it
@@ -289,7 +292,7 @@ public sealed class PathItemGiveRouter : IDisposable
         ResumeToPath();
     }
 
-    public void Dispose() => _giveTimer.Dispose();
+    public void Dispose() => _giveTimer?.Dispose();
 
     private void BeginAcquiring()
     {
@@ -329,10 +332,16 @@ public sealed class PathItemGiveRouter : IDisposable
     }
 
     private void ArmGiveTimer()
-        => _giveTimer.Change(_giveTimeout, Timeout.InfiniteTimeSpan);
+    {
+        _giveTimer?.Dispose();
+        _giveTimer = _schedule(_giveTimeout, OnGiveTimeout);
+    }
 
     private void DisarmGiveTimer()
-        => _giveTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+    {
+        _giveTimer?.Dispose();
+        _giveTimer = null;
+    }
 
     private bool TrySelectGiver(RoomKey cur, RoomKey dest, int itemId, out GiveSource best)
         => TrySelectGiver(_giveSourcesForItem(itemId), cur, dest, _distanceBetween, out best);

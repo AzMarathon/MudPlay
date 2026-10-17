@@ -1,4 +1,3 @@
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game.Combat;
 using MudPlay.Services;
@@ -102,7 +101,11 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     // quantized up to the next combat tick.
     public static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(1);
 
-    private readonly DispatcherTimer _timer;
+    // How often the round projection and the heartbeat are checked.
+    internal static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
+    private IDisposable? _poll;
+    // Arms one tick after the delay; disposing what it returns cancels it.
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
     private readonly List<IDisposable> _patternSubs = new();
     private readonly Func<DateTimeOffset> _now;
     private DateTimeOffset? _lastHeartbeat;
@@ -132,10 +135,12 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     // semantics (see HeartbeatInterval).
     public event Action? HeartbeatElapsed;
 
-    public TickEngine(MessageRouter router, Func<DateTimeOffset>? now = null)
+    public TickEngine(MessageRouter router, Func<DateTimeOffset>? now = null,
+        Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         _now = now ?? (() => DateTimeOffset.Now);
+        _schedule = schedule ?? DispatcherTicks.Once;
 
         // Damage-driven combat tick stamping. Any combat-round line —
         // hit, miss, or otherwise — anchors the cycle; the server beats
@@ -158,12 +163,13 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         }));
         _patternSubs.Add(router.Subscribe(KnownPatterns.MobMisses, _ => RecordCombatTick()));
 
-        _timer = new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = TimeSpan.FromMilliseconds(100),
-        };
-        _timer.Tick += (_, _) => OnTimerTick();
-        _timer.Start();
+        _poll = _schedule(PollInterval, OnPoll);
+    }
+
+    private void OnPoll()
+    {
+        _poll = _schedule(PollInterval, OnPoll);
+        OnTimerTick();
     }
 
     // Whether a damage line is no part of the combat round. A room's own spell is
@@ -340,9 +346,6 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         OnPropertyChanged(nameof(TimeToNextCombatTick));
     }
 
-    // Deterministic test seam for the DispatcherTimer callback. Production only
-    // reaches OnTimerTick through the live 100ms timer above.
-    internal void PollTimersForTests() => OnTimerTick();
 
     private static TimeSpan? RemainingFor(DateTimeOffset? last, TimeSpan interval)
     {
@@ -355,7 +358,8 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _timer.Stop();
+        _poll?.Dispose();
+        _poll = null;
         foreach (IDisposable sub in _patternSubs) sub.Dispose();
         _patternSubs.Clear();
     }

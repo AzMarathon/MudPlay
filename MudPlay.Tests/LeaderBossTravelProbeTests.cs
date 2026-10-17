@@ -24,7 +24,8 @@ public sealed class LeaderBossTravelProbeTests
         public List<bool> Answers { get; } = new();
         public string? Leader { get; set; } = "Raijin";
         public bool StillNeeded { get; set; } = true;
-        public List<TimeSpan> Scheduled { get; } = new();
+        // The wait for the leader's answer.
+        public ManualTimers Timers { get; } = new();
 
         public Harness()
         {
@@ -35,7 +36,7 @@ public sealed class LeaderBossTravelProbeTests
                 headsToBoss: r => r.Destination == Boss,
                 isBossRoom: k => k == Boss,
                 stillNeeded: () => StillNeeded,
-                schedule: (delay, _) => { Scheduled.Add(delay); return new Handle(); });
+                schedule: Timers.Arm);
             Probe.SetWireSender(ProbeWire.Add);
             Probe.Resolved += Answers.Add;
         }
@@ -46,8 +47,6 @@ public sealed class LeaderBossTravelProbeTests
             Router.Dispatch(new LineExtractor.EmittedLine(text, [], DateTimeOffset.UtcNow, false));
 
         public void Dispose() { Probe.Dispose(); Replies.Dispose(); }
-
-        private sealed class Handle : IDisposable { public void Dispose() { } }
     }
 
     [Fact]
@@ -83,15 +82,15 @@ public sealed class LeaderBossTravelProbeTests
     {
         using Harness h = new();
         h.Probe.Ask();
-        Assert.Equal(LeaderBossTravelProbe.ReplyTimeout, h.Scheduled[^1]);
+        Assert.Equal(LeaderBossTravelProbe.ReplyTimeout, h.Timers.PendingDelays[^1]);
 
-        h.Probe.OnTimeout();
+        h.Timers.RunDue(LeaderBossTravelProbe.ReplyTimeout);
         Assert.Empty(h.Answers);
         Assert.True(h.Probe.WaitingForLeaderToMove);
 
         h.Probe.NoteMoved();
         Assert.Equal(2, h.ProbeWire.Count);
-        h.Probe.OnTimeout();
+        h.Timers.RunDue(LeaderBossTravelProbe.ReplyTimeout);
 
         Assert.Equal(new[] { false }, h.Answers);
     }
@@ -101,7 +100,7 @@ public sealed class LeaderBossTravelProbeTests
     {
         using Harness h = new();
         h.Probe.Ask();
-        h.Probe.OnTimeout();
+        h.Timers.RunDue(LeaderBossTravelProbe.ReplyTimeout);
         h.Probe.NoteMoved();
 
         h.Line("Raijin telepaths: {walking to 6/1249; Dark Road (map 6, room 1200); step 1/40}");

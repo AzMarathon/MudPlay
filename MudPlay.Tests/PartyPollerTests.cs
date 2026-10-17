@@ -15,11 +15,11 @@ public sealed class PartyPollerTests
 
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    /// <summary>
-    /// Setup uses the test-seam ctor (useTimer=false) so par cadence is
-    /// driven manually via DoParPollForTests — keeps unit tests
-    /// deterministic without spinning up Avalonia's DispatcherTimer.
-    /// </summary>
+    // The poller's par cadence and @health nag ticks, run when a test says the
+    // interval is up; and the clock it reads.
+    private readonly ManualTimers _pollerTimers = new();
+    private Func<DateTime> _pollerNow = () => DateTime.UtcNow;
+
     private (PartyPoller poller, PartyManager mgr, PartyState state, ChatRouter chat, MessageRouter router, List<byte[]> wire) Setup()
     {
         MessageRouter router = new();
@@ -30,7 +30,7 @@ public sealed class PartyPollerTests
         ServerFeed feed = new(router);
         mgr.AttachLineExtractor(feed.Lines);
         _feeds[mgr] = feed;
-        PartyPoller poller = new(chat, state, mgr, useTimer: false);
+        PartyPoller poller = new(chat, state, mgr, schedule: _pollerTimers.Arm, now: () => _pollerNow());
         List<byte[]> wire = new();
         poller.SetWireSender(wire.Add);
         return (poller, mgr, state, chat, router, wire);
@@ -45,7 +45,7 @@ public sealed class PartyPollerTests
     public void ParPoll_WhenSolo_SendsNothing()
     {
         var (poller, _, _, _, _, wire) = Setup();
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
         Assert.Empty(wire);
     }
 
@@ -56,7 +56,7 @@ public sealed class PartyPollerTests
         state.Members.Add(new PartyMember { Name = "Forged" });
         state.IsInParty = true;
 
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
 
         Assert.Equal("par\r", LastWire(wire));
     }
@@ -73,11 +73,11 @@ public sealed class PartyPollerTests
         wire.Clear();   // drop the on-join @health telepath — we test the par cadence
 
         poller.NotifyDisconnected();
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
         Assert.Empty(wire);   // suspended — nothing reaches the wire
 
         poller.NotifyEnteredRealm();
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
         Assert.Equal("par\r", LastWire(wire));
     }
 
@@ -87,7 +87,7 @@ public sealed class PartyPollerTests
         var (poller, _, state, _, _, _) = Setup();
         state.IsInParty = true;
         poller.SetWireSender(_ => { }); // bind something to satisfy null-guard then no-op
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
         // No assertion — test passes by not throwing.
     }
 
@@ -152,7 +152,7 @@ public sealed class PartyPollerTests
         poller.IsParPollEnabled = () => false;
         wire.Clear();   // drop the on-join @health send; isolate the par poll
 
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
 
         Assert.Empty(wire);
     }
@@ -165,7 +165,7 @@ public sealed class PartyPollerTests
         state.IsInParty = true;
         poller.IsParPollEnabled = () => true;
 
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
 
         Assert.Equal("par\r", LastWire(wire));
     }
@@ -188,7 +188,7 @@ public sealed class PartyPollerTests
         poller.IsInTrainerMenu = () => true;
         wire.Clear();   // drop the on-join @health send; isolate the par poll
 
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
 
         Assert.Empty(wire);
     }
@@ -203,11 +203,11 @@ public sealed class PartyPollerTests
         poller.IsParPollEnabled = () => true;
         poller.IsInTrainerMenu = () => inMenu;
 
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
         Assert.DoesNotContain(wire, b => Encoding.Latin1.GetString(b) == "par\r");
 
         inMenu = false;   // menu exited — the next poll must send par again
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
         Assert.Equal("par\r", LastWire(wire));
     }
 
@@ -236,12 +236,12 @@ public sealed class PartyPollerTests
         // Enter the menu — a due retry must not go on the wire.
         inMenu = true;
         advance(TimeSpan.FromSeconds(6));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
         Assert.Empty(wire);
 
         // Exit — the pending nag resumes on the next tick.
         inMenu = false;
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
         Assert.Single(wire);
         Assert.Equal("/Helper @health\r", Encoding.Latin1.GetString(wire[0]));
     }
@@ -279,7 +279,7 @@ public sealed class PartyPollerTests
     public void TimerUnticked_ATimerTickSendsNothing()
     {
         var (poller, wire) = InParty(new PartySettings { ParPollOnTimer = false });
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
         Assert.Empty(wire);
     }
 
@@ -343,7 +343,7 @@ public sealed class PartyPollerTests
     public void NothingTicked_NothingSendsPar()
     {
         var (poller, wire) = InParty(new PartySettings { ParPollOnTimer = false });
-        poller.DoParPollForTests();
+        _pollerTimers.RunDue(poller.ParCadence);
         poller.NoteRoundComplete(Round(engaged: true, unknownDealt: 6, unknownTaken: 20));
         Assert.Empty(wire);
         Assert.StartsWith("never", poller.ParTriggerSummary);
@@ -425,9 +425,9 @@ public sealed class PartyPollerTests
         // Past the initial delay + a frequency window — still nothing,
         // because no nag was armed in the first place.
         advance(TimeSpan.FromSeconds(6));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
         advance(TimeSpan.FromSeconds(11));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
         Assert.Empty(wire);
     }
 
@@ -674,17 +674,14 @@ public sealed class PartyPollerTests
 
     // ===== @health nag retry (shares JoinNag* settings) ==================
 
-    /// <summary>
-    /// Build a poller wired with a frozen-clock NowProvider and short
-    /// nag cadences so the tick-based tests don't need real time
-    /// to elapse.
-    /// </summary>
+    // Build a poller wired with a frozen clock and short nag cadences so the
+    // tick-based tests don't need real time to elapse.
     private (PartyPoller poller, PartyManager mgr, PartyState state, ChatRouter chat, MessageRouter router, List<byte[]> wire, Func<DateTime> clock, Action<TimeSpan> advance)
         SetupWithClock()
     {
         var setup = Setup();
         DateTime t = Now;
-        setup.poller.NowProvider = () => t;
+        _pollerNow = () => t;
         setup.poller.HealthNagInitialDelay = TimeSpan.FromSeconds(5);
         setup.poller.HealthNagFrequency    = TimeSpan.FromSeconds(10);
         setup.poller.HealthNagMaxTotal     = TimeSpan.FromSeconds(55);
@@ -702,7 +699,7 @@ public sealed class PartyPollerTests
 
         // Tick 1s in — still inside the initial-delay window (5s).
         advance(TimeSpan.FromSeconds(1));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
 
         Assert.Single(wire);
     }
@@ -715,7 +712,7 @@ public sealed class PartyPollerTests
         wire.Clear();
 
         advance(TimeSpan.FromSeconds(6));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
 
         Assert.Single(wire);
         Assert.Equal("/Helper @health\r", Encoding.Latin1.GetString(wire[0]));
@@ -730,10 +727,10 @@ public sealed class PartyPollerTests
 
         // First retry at 6s.
         advance(TimeSpan.FromSeconds(6));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
         // Second retry — needs Frequency (10s) past the first retry.
         advance(TimeSpan.FromSeconds(11));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
 
         Assert.Equal(2, wire.Count);
     }
@@ -750,7 +747,7 @@ public sealed class PartyPollerTests
 
         // Plenty of time elapsed — should NOT retry now.
         advance(TimeSpan.FromSeconds(20));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
 
         Assert.Empty(wire);
     }
@@ -764,10 +761,10 @@ public sealed class PartyPollerTests
 
         // Jump past the max-total cap (55s) — no retry, no further work.
         advance(TimeSpan.FromSeconds(60));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
         // Tick again to confirm the timer is now idle.
         advance(TimeSpan.FromSeconds(10));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
 
         Assert.Empty(wire);
     }
@@ -782,7 +779,7 @@ public sealed class PartyPollerTests
         state.Members.RemoveAt(0);
         // Plenty of time elapsed — should NOT retry; member is gone.
         advance(TimeSpan.FromSeconds(20));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
 
         Assert.Empty(wire);
     }
@@ -794,7 +791,7 @@ public sealed class PartyPollerTests
         state.Members.Add(new PartyMember { Name = "Forged", IsSelf = true });
 
         advance(TimeSpan.FromSeconds(60));
-        poller.TickHealthNagsForTests();
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
 
         Assert.Empty(wire);
     }

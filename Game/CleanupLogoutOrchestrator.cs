@@ -134,15 +134,16 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
     // character is saved on the way out ("Your character has been saved.").
     private const string ExitCommand = "x";
 
-    // Test seam — override the clock so unit tests don't sleep.
-    public Func<DateTime> NowProvider { get; set; } = () => DateTime.UtcNow;
+    private readonly Func<DateTime> _now;
 
     public CleanupLogoutOrchestrator(
         CleanupWarningWatcher cleanup,
         MessageRouter router,
         LogService? log = null,
-        Action<TimeSpan, Action>? schedulePoll = null)
+        Action<TimeSpan, Action>? schedulePoll = null,
+        Func<DateTime>? now = null)
     {
+        _now = now ?? (() => DateTime.UtcNow);
         ArgumentNullException.ThrowIfNull(cleanup);
         ArgumentNullException.ThrowIfNull(router);
         _cleanup = cleanup;
@@ -315,14 +316,14 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
                 }
                 if (_settleOwed)
                 {
-                    _safeSinceUtc ??= NowProvider();
-                    if (NowProvider() - _safeSinceUtc.Value < InterruptSettle) break;
+                    _safeSinceUtc ??= _now();
+                    if (_now() - _safeSinceUtc.Value < InterruptSettle) break;
                 }
                 BeginExit();
                 break;
 
             case CleanupLogoutPhase.Exiting:
-                if (NowProvider() - _exitSentUtc < MenuWaitTimeout) break;
+                if (_now() - _exitSentUtc < MenuWaitTimeout) break;
                 if (!_exitRetried)
                 {
                     _exitRetried = true;
@@ -349,7 +350,7 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
 
     private void SendExit(string why)
     {
-        _exitSentUtc = NowProvider();
+        _exitSentUtc = _now();
         _log?.Log(LogSeverity.Info, "CleanupLogout", why + $" ('{ExitCommand}').");
         if (_wire.IsBound) _wire.Send(ExitCommand);
     }

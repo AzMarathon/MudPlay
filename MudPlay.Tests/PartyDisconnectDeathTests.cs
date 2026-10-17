@@ -27,14 +27,13 @@ public sealed class PartyDisconnectDeathTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        PartyManager mgr = new(router, state);
+        DateTimeOffset fakeNow = clock ?? Now;
+        PartyManager mgr = new(router, state, now: () => fakeNow);
         ServerFeed feed = new(router);
         mgr.AttachLineExtractor(feed.Lines);
         _feeds[mgr] = feed;
         List<byte[]> wire = new();
         mgr.SetWireSender(wire.Add);
-        DateTimeOffset fakeNow = clock ?? Now;
-        mgr.NowProvider = () => fakeNow;
         return (router, mgr, wire);
     }
 
@@ -86,11 +85,10 @@ public sealed class PartyDisconnectDeathTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        PartyManager mgr = new(router, state, now: () => Now) { LocalCharacterName = "MudPlay" };
         ServerFeed feed = new(router);
         mgr.AttachLineExtractor(feed.Lines);
         _feeds[mgr] = feed;
-        mgr.NowProvider = () => Now;
         mgr.SetWireSender(_ => { });
 
         router.Dispatch(Line("Raijin started to follow you."));
@@ -122,11 +120,10 @@ public sealed class PartyDisconnectDeathTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        PartyManager mgr = new(router, state, now: () => Now) { LocalCharacterName = "MudPlay" };
         ServerFeed feed = new(router);
         mgr.AttachLineExtractor(feed.Lines);
         _feeds[mgr] = feed;
-        mgr.NowProvider = () => Now;
         List<byte[]> wire = new();
         mgr.SetWireSender(wire.Add);
 
@@ -156,11 +153,10 @@ public sealed class PartyDisconnectDeathTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        PartyManager mgr = new(router, state, now: () => Now) { LocalCharacterName = "MudPlay" };
         ServerFeed feed = new(router);
         mgr.AttachLineExtractor(feed.Lines);
         _feeds[mgr] = feed;
-        mgr.NowProvider = () => Now;
         mgr.SetWireSender(_ => { });
 
         router.Dispatch(Line("Raijin started to follow you."));
@@ -184,11 +180,10 @@ public sealed class PartyDisconnectDeathTests
         DefaultPatterns.Seed(router);
         PartyState state = new();
         DateTimeOffset now = Now;
-        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        PartyManager mgr = new(router, state, now: () => now) { LocalCharacterName = "MudPlay" };
         ServerFeed feed = new(router);
         mgr.AttachLineExtractor(feed.Lines);
         _feeds[mgr] = feed;
-        mgr.NowProvider = () => now;
         mgr.DisconnectGraceWindow = TimeSpan.FromSeconds(90);
         mgr.ComebackWindow = TimeSpan.FromMinutes(2);
         mgr.SetWireSender(_ => { });
@@ -215,11 +210,10 @@ public sealed class PartyDisconnectDeathTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        PartyManager mgr = new(router, state, now: () => Now) { LocalCharacterName = "MudPlay" };
         ServerFeed feed = new(router);
         mgr.AttachLineExtractor(feed.Lines);
         _feeds[mgr] = feed;
-        mgr.NowProvider = () => Now;
         mgr.SetWireSender(_ => { });
 
         router.Dispatch(Line("Raijin started to follow you."));
@@ -260,11 +254,10 @@ public sealed class PartyDisconnectDeathTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        PartyManager mgr = new(router, state, now: () => Now) { LocalCharacterName = "MudPlay" };
         ServerFeed feed = new(router);
         mgr.AttachLineExtractor(feed.Lines);
         _feeds[mgr] = feed;
-        mgr.NowProvider = () => Now;
         List<byte[]> wire = new();
         mgr.SetWireSender(wire.Add);
 
@@ -302,11 +295,10 @@ public sealed class PartyDisconnectDeathTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        PartyManager mgr = new(router, state) { LocalCharacterName = "MudPlay" };
+        PartyManager mgr = new(router, state, now: () => Now) { LocalCharacterName = "MudPlay" };
         ServerFeed feed = new(router);
         mgr.AttachLineExtractor(feed.Lines);
         _feeds[mgr] = feed;
-        mgr.NowProvider = () => Now;
         mgr.SetWireSender(_ => { });
 
         router.Dispatch(Line("Raijin started to follow you."));
@@ -666,13 +658,12 @@ public sealed class PartyDisconnectDeathTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        PartyManager mgr = new(router, state);
+        PartyManager mgr = new(router, state, now: () => clock);
         ServerFeed feed = new(router);
         mgr.AttachLineExtractor(feed.Lines);
         _feeds[mgr] = feed;
         List<byte[]> wire = new();
         mgr.SetWireSender(wire.Add);
-        mgr.NowProvider = () => clock;
         mgr.DisconnectGraceWindow = TimeSpan.FromSeconds(10);
 
         // Establish leadership via the follows-you path.

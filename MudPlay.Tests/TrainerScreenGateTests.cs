@@ -24,7 +24,7 @@ public sealed class TrainerScreenGateTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        TrainerMenuTracker tracker = new(router, state) { NowProvider = () => Now };
+        TrainerMenuTracker tracker = new(router, state, now: () => Now);
         EngineSendGate send = new();
         TrainerScreenGate gate = new(tracker, send);
         return (tracker, gate, send, router);

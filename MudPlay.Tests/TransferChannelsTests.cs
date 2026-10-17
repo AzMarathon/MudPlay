@@ -351,7 +351,7 @@ public sealed class TransferChannelsTests
             PlayerDatabase players = _players;
             Grant("Friend");
             players.RecordObservation("Stranger", null, null, null, null, null, null, Now);
-            Commands = new RemoteCommandManager(new ChatRouter(router), Party, players, Log)
+            Commands = new RemoteCommandManager(new ChatRouter(router), Party, players, Log, now: () => Clock)
             {
                 WarnOnDenial = warn,
                 BlockedByMasterSwitch = _ => masterSwitchOff,
@@ -359,7 +359,6 @@ public sealed class TransferChannelsTests
                 DisableBroadcastChannel = !broadcastOpen,
             };
             Commands.SetWireSender(CommandsWire.Add);
-            Commands.Now = () => Clock;
             // Stand-ins that answer as the real handlers do for a channel they use,
             // and refuse as they do for one they don't.
             Register("@timer", PlayerRemoteControls.QueryBossTimers, Transfer.TimerSync);

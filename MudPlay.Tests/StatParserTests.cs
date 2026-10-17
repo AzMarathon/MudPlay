@@ -12,6 +12,9 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class StatParserTests
 {
+    // The parser's idle settle-close timer.
+    private readonly ManualTimers _statTimers = new();
+
     // The game's output, fed the way the client receives it.
     private readonly ServerFeed _feed = new();
 
@@ -19,7 +22,7 @@ public sealed class StatParserTests
     private (StatParser parser, PlayerStats stats) Setup()
     {
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("stat\r"));
         return (parser, stats);
@@ -131,7 +134,7 @@ public sealed class StatParserTests
         // Without an outbound `stat`, every line is
         // a no-op. Protects against chat noise.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         // No outbound `stat` — the gate is closed.
         _feed.Line("Strength: 60");
@@ -145,7 +148,7 @@ public sealed class StatParserTests
     public void OutboundStatCommand_ArmsTheGate()
     {
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("stat\r"));
         _feed.Line("Strength: 60");
@@ -156,7 +159,7 @@ public sealed class StatParserTests
     public void OutboundOtherCommand_DoesNotArmGate()
     {
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("look\r"));
         _feed.Line("Strength: 60");
@@ -172,7 +175,7 @@ public sealed class StatParserTests
         // Every prefix of "stat" from 2 chars up arms the scan window — MajorMUD
         // shows the identical stat screen for `st`, `sta`, and `stat`.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
         _feed.Line("Strength: 60");
@@ -187,7 +190,7 @@ public sealed class StatParserTests
     public void OutboundNonStatCommand_DoesNotArmGate(string command)
     {
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
         _feed.Line("Strength: 60");
@@ -200,7 +203,7 @@ public sealed class StatParserTests
         // Mutable clock — line past the window is ignored.
         PlayerStats stats = new();
         DateTime t = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
-        StatParser parser = new(stats) { NowProvider = () => t };
+        StatParser parser = new(stats, now: () => t, schedule: _statTimers.Arm);
         parser.ExpectingScreenWindow = TimeSpan.FromSeconds(5);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("stat\r"));
         t = t.AddSeconds(6);   // past window
@@ -215,7 +218,7 @@ public sealed class StatParserTests
     {
         PlayerStats stats = new();
         DateTime t = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
-        StatParser parser = new(stats) { NowProvider = () => t };
+        StatParser parser = new(stats, now: () => t, schedule: _statTimers.Arm);
         parser.ExpectingScreenWindow = TimeSpan.FromSeconds(5);
         Assert.False(parser.ScreenExpected);
 
@@ -233,7 +236,7 @@ public sealed class StatParserTests
         // always-on — no scan window needed. The hard-block needs to
         // see fresh lives counts immediately after life-loss events.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         // No outbound `stat`.
         _feed.Line("You have 7 lives left.");
@@ -246,7 +249,7 @@ public sealed class StatParserTests
     {
         // Singular grammar: "You have 1 life left." (no 's').
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         _feed.Line("You have 1 life left.");
         Assert.Equal(1, stats.Lives);
@@ -266,7 +269,7 @@ public sealed class StatParserTests
         // Lives so LivesProvider returns the fresh count to the
         // hard-block.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         _feed.Line(text);
         Assert.Equal(expected, stats.Lives);
@@ -281,7 +284,7 @@ public sealed class StatParserTests
         // must accrue live, with no outbound `stat`/`exp` poll, so the
         // banked-exp total stays current between manual checks.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         // No outbound `stat` — the stat gate is closed.
         _feed.Line("You gain 1500 experience.");
@@ -329,7 +332,7 @@ public sealed class StatParserTests
     public void ExperienceGainLine_IgnoresUnrelatedAndThirdParty()
     {
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         _feed.Line("MudPlay gains a level!");
         _feed.Line("Bob gains 999 experience.");
@@ -361,7 +364,7 @@ public sealed class StatParserTests
     {
         // Stock line carries the attained level — set it absolutely, no poll needed.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         _feed.Line("You hand over 1 gold crown and you receive training to attain level 5.");
         Assert.Equal(5, stats.Level);
@@ -388,7 +391,7 @@ public sealed class StatParserTests
     {
         // No baseline level to infer from → don't fabricate one; a stat poll establishes it.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         _feed.Line("You hand over 350 copper farthings to train to the next level!");
         Assert.Equal(0, stats.Level);
@@ -449,7 +452,7 @@ public sealed class StatParserTests
         Assert.Equal(2, s.Level);
         Assert.Null(captured);          // no prompt, no further line → gate still open
 
-        p.SettleNowForTests();          // the 750 ms idle timer fires
+        _statTimers.RunAll();          // the 750 ms idle timer fires
 
         Assert.NotNull(captured);
         Assert.Equal(2, captured!.Level);
@@ -466,7 +469,7 @@ public sealed class StatParserTests
         bool fired = false;
         p.ScreenParsed += _ => fired = true;
 
-        p.SettleNowForTests();          // armed by Setup's outbound `stat`, but nothing captured
+        _statTimers.RunAll();          // armed by Setup's outbound `stat`, but nothing captured
 
         Assert.False(fired);
     }
@@ -486,7 +489,7 @@ public sealed class StatParserTests
         _feed.Line("[HP=22]:");  // reactive close → fires once
         Assert.Equal(1, count);
 
-        p.SettleNowForTests();                           // window already closed → no-op
+        _statTimers.RunAll();                           // window already closed → no-op
         Assert.Equal(1, count);
     }
 
@@ -631,7 +634,7 @@ public sealed class StatParserTests
         // MajorMUD's partial-command behaviour visible in the
         // screenshot.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
         _feed.Line("Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
@@ -648,7 +651,7 @@ public sealed class StatParserTests
         // Only true prefixes of "experience" arm the gate. Random
         // ex* commands fall through.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
         _feed.Line("Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
@@ -661,7 +664,7 @@ public sealed class StatParserTests
         // Chat-noise protection — the same gate that protects stat
         // fields covers exp fields too.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         _feed.Line("Exp: 0 Level: 1 Exp needed for next level: 2950 (2950) [0%]");
         Assert.Equal(0, stats.LevelExpSpan);
@@ -699,7 +702,7 @@ public sealed class StatParserTests
     private (StatParser parser, PlayerStats stats) HealthSetup()
     {
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("health\r"));
         return (parser, stats);
@@ -769,7 +772,7 @@ public sealed class StatParserTests
     public void OutboundHealthPrefix_ArmsHealthGate(string command)
     {
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
         _feed.Line("Health:  91/91  [100%]  Kai:  6/10  [60%]");
@@ -782,7 +785,7 @@ public sealed class StatParserTests
         // `health` opens only the compact readout — it must not arm the full
         // stat-screen scan, so a following stat-sheet line stays untouched.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("health\r"));
         _feed.Line("Strength: 60");
@@ -794,7 +797,7 @@ public sealed class StatParserTests
     {
         PlayerStats stats = new();
         DateTime t = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
-        StatParser parser = new(stats) { NowProvider = () => t };
+        StatParser parser = new(stats, now: () => t, schedule: _statTimers.Arm);
         parser.ExpectingHealthWindow = TimeSpan.FromSeconds(5);
         parser.ObserveOutbound(Encoding.Latin1.GetBytes("health\r"));
         t = t.AddSeconds(6);   // past the window
@@ -819,7 +822,7 @@ public sealed class StatParserTests
     {
         // Without an outbound `health`, the readout is a no-op — nothing arms.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         _feed.Line("Health:  91/91  [100%]  Kai:  6/10  [60%]");
         Assert.Equal(0, stats.Hits);
@@ -836,7 +839,7 @@ public sealed class StatParserTests
         // command went out a byte at a time and the outbound gate never armed.
         // The screen must still parse off its own header line. NOTE: no outbound `stat`.
         PlayerStats stats = new();
-        StatParser parser = new(stats);   // deliberately un-armed
+        StatParser parser = new(stats, schedule: _statTimers.Arm);   // deliberately un-armed
         parser.AttachLineExtractor(_feed.Lines);
         string[] lines =
         {
@@ -867,7 +870,7 @@ public sealed class StatParserTests
     [Fact]
     public void InStatScreen_FromTheHeaderUntilTheClosingPrompt()
     {
-        StatParser parser = new(new PlayerStats());   // un-armed: a stat the gate never saw
+        StatParser parser = new(new PlayerStats(), schedule: _statTimers.Arm);   // un-armed: a stat the gate never saw
         parser.AttachLineExtractor(_feed.Lines);
         Assert.False(parser.InStatScreen);
 
@@ -892,7 +895,7 @@ public sealed class StatParserTests
         // header regex is anchored at line start, and a chat line opens with
         // "<who> <verb>:". Nothing may commit off it.
         PlayerStats stats = new();
-        StatParser parser = new(stats);
+        StatParser parser = new(stats, schedule: _statTimers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         _feed.Line("Villain gossips: Name: Loot Goblin  Lives/CP: 9/9 haha");
         _feed.Line("Class: Mage       Level: 25            Stealth:         0");

@@ -125,8 +125,10 @@ public sealed class EventManager : IDisposable
         AutoLairManager autoLair,
         AutoWalkManager walker,
         LogService? log = null,
-        Action<Action>? post = null)
+        Action<Action>? post = null,
+        Func<DateTimeOffset>? now = null)
     {
+        _now = now ?? (() => DateTimeOffset.UtcNow);
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(loops);
         ArgumentNullException.ThrowIfNull(lairs);
@@ -298,7 +300,7 @@ public sealed class EventManager : IDisposable
 
         e.Disabled = !enabled;
         _autoDisabled.Remove(e);
-        _lastSwitch[e] = $"switched {(enabled ? "on" : "off")} by {by} at {Now().ToLocalTime():HH:mm:ss}";
+        _lastSwitch[e] = $"switched {(enabled ? "on" : "off")} by {by} at {_now().ToLocalTime():HH:mm:ss}";
         Events[index] = e;
         _profile.Save();
         _log?.Info("Events",
@@ -381,8 +383,7 @@ public sealed class EventManager : IDisposable
     // a "rest up here" room, resting to rest max.
     public bool RestUpRequested => _run is { Action: EventActionType.RestUp };
 
-    // Clock seam for tests.
-    internal Func<DateTimeOffset> Now { get; set; } = () => DateTimeOffset.UtcNow;
+    private readonly Func<DateTimeOffset> _now;
 
     // ----- Dispatch --------------------------------------------------
 
@@ -483,12 +484,12 @@ public sealed class EventManager : IDisposable
     {
         if (IsMasterSwitchOff?.Invoke() == true)
         {
-            _heldSince ??= Now();
+            _heldSince ??= _now();
             return true;
         }
         if (_heldSince is not { } since) return false;
         _heldSince = null;
-        TimeSpan held = Now() - since;
+        TimeSpan held = _now() - since;
         if (_run is { } run)
         {
             run.StartedAt += held;
@@ -500,7 +501,7 @@ public sealed class EventManager : IDisposable
         if (_choiceSince is { } asked) _choiceSince = asked + held;
         // Decided here, at the moment the hold ends, so nothing waiting can be
         // taken between the switch coming on and the user being asked.
-        else if (_queue.Any(q => q.HeldBySwitch - q.HeldAnswered > HeldQueuePromptAfter)) _choiceSince = Now();
+        else if (_queue.Any(q => q.HeldBySwitch - q.HeldAnswered > HeldQueuePromptAfter)) _choiceSince = _now();
         return false;
     }
 
@@ -590,7 +591,7 @@ public sealed class EventManager : IDisposable
     public IReadOnlyList<HeldQueueEntry> OfferQueueChoice()
     {
         if (_choiceSince is null) return Array.Empty<HeldQueueEntry>();
-        DateTimeOffset now = Now();
+        DateTimeOffset now = _now();
         _offered = _queue.Select(q => q.Event).ToList();
         return _queue.Select(q => new HeldQueueEntry(q.Event, now - q.FiredAt, q.HeldBySwitch)).ToList();
     }
@@ -623,7 +624,7 @@ public sealed class EventManager : IDisposable
     {
         if (_choiceSince is not { } since) return;
         List<ScheduledEvent> offered = _offered ?? new List<ScheduledEvent>();
-        DateTimeOffset now = Now();
+        DateTimeOffset now = _now();
         _choiceSince = null;
         _offered = null;
         int dropped = 0, kept = 0;
@@ -696,7 +697,7 @@ public sealed class EventManager : IDisposable
     // what it goes back to.
     public string RunSummary => _run is not { } r
         ? "(none)"
-        : $"'{Label(r.Event)}' {r.Step} for {(Now() - r.StartedAt).TotalSeconds:0}s"
+        : $"'{Label(r.Event)}' {r.Step} for {(_now() - r.StartedAt).TotalSeconds:0}s"
           + (r.Laps > 0 ? $", {r.Laps} lap(s)" : "")
           + (r.OnThenWalk ? "" : $"; then {r.Event.ResolvedThen}")
           + (r.Resume is { } plan ? $"; resume target {plan.Describe()}" : "")
@@ -708,14 +709,14 @@ public sealed class EventManager : IDisposable
     // Said on the run and on the queue while the master switch holds them, so a
     // report of "my event never finished" shows why.
     private string HeldNote => _heldSince is { } since
-        ? $"; held by the master switch for {(Now() - since).TotalSeconds:0}s, clocks stopped"
+        ? $"; held by the master switch for {(_now() - since).TotalSeconds:0}s, clocks stopped"
           + (_whenSwitchBackOn.Count > 0 ? $", {_whenSwitchBackOn.Count} completion(s) kept for when it is back on" : "")
         : "";
 
     // For the bug report: the events waiting behind the running one, oldest first.
     public string QueueSummary => _queue.Count == 0
         ? "(empty)"
-        : string.Join(", ", _queue.Select(q => $"'{Label(q.Event)}' (waiting {(Now() - q.At).TotalSeconds:0}s)")) + HeldNote
+        : string.Join(", ", _queue.Select(q => $"'{Label(q.Event)}' (waiting {(_now() - q.At).TotalSeconds:0}s)")) + HeldNote
           + (_choiceSince is null
               ? ""
               : $"; waiting for your choice (held {_queue.Max(q => q.HeldBySwitch).TotalMinutes:0} min by the master switch)");
@@ -814,7 +815,7 @@ public sealed class EventManager : IDisposable
         {
             int at = 0;
             while (at < _queue.Count && IsLogoffType(_queue[at].Event)) at++;
-            _queue.Insert(at, new QueuedEvent(e, Now()));
+            _queue.Insert(at, new QueuedEvent(e, _now()));
             _log?.Info("Events",
                 $"Logoff event '{Label(e)}' queued ahead of the others, behind {behind}; {_queue.Count} waiting.");
             return true;
@@ -830,7 +831,7 @@ public sealed class EventManager : IDisposable
                 _log?.Debug("Events", $"Event '{Label(e)}' dropped again — the queue is still full.");
             return false;
         }
-        _queue.Add(new QueuedEvent(e, Now()));
+        _queue.Add(new QueuedEvent(e, _now()));
         _log?.Info("Events", $"Event '{Label(e)}' queued behind {behind}; {_queue.Count} waiting.");
         return true;
     }
@@ -857,7 +858,7 @@ public sealed class EventManager : IDisposable
         if (HoldsForMasterSwitch()) return;
         // Nor while the user is being asked which of them to run.
         if (_choiceSince is not null) return;
-        DateTimeOffset now = Now();
+        DateTimeOffset now = _now();
         for (int i = _queue.Count - 1; i >= 0; i--)
         {
             if (now - _queue[i].At <= MaxQueueWait) continue;
@@ -901,7 +902,7 @@ public sealed class EventManager : IDisposable
             else
             {
                 _log?.Info("Events",
-                    $"Event '{Label(next.Event)}' leaves the queue after {(Now() - next.At).TotalSeconds:0}s; {_queue.Count} still waiting.");
+                    $"Event '{Label(next.Event)}' leaves the queue after {(_now() - next.At).TotalSeconds:0}s; {_queue.Count} still waiting.");
                 return next.Event;
             }
         }
@@ -972,7 +973,7 @@ public sealed class EventManager : IDisposable
         }
         // Whatever the last event's Then was getting going is this run's to stop.
         _thenWatch = null;
-        EventRun run = new(e, origin ?? e, resume, depth, Now());
+        EventRun run = new(e, origin ?? e, resume, depth, _now());
         _run = run;
         _log?.Info("Events",
             $"Event '{Label(e)}' started: {e.ActionType}; then {e.ResolvedThen}"
@@ -1449,7 +1450,7 @@ public sealed class EventManager : IDisposable
         LastThenSummary = $"'{watch.EventLabel}' → {watch.What}: under way {Stamp()}";
     }
 
-    private string Stamp() => Now().ToLocalTime().ToString("HH:mm:ss");
+    private string Stamp() => _now().ToLocalTime().ToString("HH:mm:ss");
 
     // ----- Engine starts ----------------------------------------------
 
@@ -1763,7 +1764,7 @@ public sealed class EventManager : IDisposable
         DropExpired();
         if (run.Suspended && SuspendedTooLong(run)) return;
         ScheduledEvent e = run.Event;
-        TimeSpan elapsed = Now() - run.StartedAt;
+        TimeSpan elapsed = _now() - run.StartedAt;
         switch (run.Action)
         {
             case EventActionType.Wait:
@@ -1801,8 +1802,8 @@ public sealed class EventManager : IDisposable
             run.IdleSince = null;
             return false;
         }
-        run.IdleSince ??= Now();
-        if (Now() - run.IdleSince < SuspendedIdleLimit) return false;
+        run.IdleSince ??= _now();
+        if (_now() - run.IdleSince < SuspendedIdleLimit) return false;
         int dropped = _queue.Count;
         string minutes = SuspendedIdleLimit.TotalMinutes.ToString("0");
         _log?.Warn("Events",

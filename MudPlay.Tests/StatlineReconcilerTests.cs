@@ -29,7 +29,7 @@ public sealed class StatlineReconcilerTests
             // Install the same pattern the editor command would compile to, so
             // the scanner's match / mismatch decision mirrors production.
             Scanner.InstallRegex(StatlinePromptRegexBuilder.Build(desired));
-            Reconciler = new StatlineReconciler(Scanner) { NowProvider = () => Now };
+            Reconciler = new StatlineReconciler(Scanner, now: () => Now);
             Reconciler.SetDesiredCommandProvider(() => desired);
             Reconciler.FlagChanged += () => FlagChanges++;
             if (bind) Reconciler.SetWireSender(ReconcilerWire.Add);

@@ -22,6 +22,8 @@ public sealed class MasterSwitchRemoteCommandTests
     private sealed class Setup : IDisposable
     {
         public RemoteCommandManager Engine { get; }
+        // The clock the Engine reads: the real one unless a test sets its own.
+        public Func<DateTimeOffset> EngineNow { get; set; } = () => DateTimeOffset.UtcNow;
         // The router the engine's chat lines arrive through.
         public MessageRouter Router { get; }
         // What Engine put on the wire, through the sender the client binds.
@@ -46,7 +48,7 @@ public sealed class MasterSwitchRemoteCommandTests
             Profile = TestProfiles.Service();
             Profile.LoadDefaultProfile();
             Controller = new AutoModeController(Profile);
-            Engine = new RemoteCommandManager(chat, party, players)
+            Engine = new RemoteCommandManager(chat, party, players, now: () => EngineNow())
             {
                 BlockedByMasterSwitch = what => Controller.Blocks("Remote commands", what),
                 // Lives known and plentiful, so @suicide-shaped commands reach a handler.
@@ -311,7 +313,7 @@ public sealed class MasterSwitchRemoteCommandTests
     {
         using Setup s = new();
         DateTimeOffset now = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
-        s.Engine.Now = () => now;
+        s.EngineNow = () => now;
         s.Engine.ComebackWindow = TimeSpan.FromMinutes(2);
         s.Controller.TurnOff("test");
         ChatLines.Hear(s.Router, Telepath("@comeback"));

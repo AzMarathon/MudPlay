@@ -154,11 +154,10 @@ public sealed class CashManager : IDisposable
     private bool GetWentUnanswered(string currency) =>
         _unansweredGets.TryGetValue(currency, out (DateTime SentAt, int Retries) get)
         && get.Retries < MaxGetRetries
-        && UnansweredClock() - get.SentAt >= GetAnswerTime
+        && _unansweredClock() - get.SentAt >= GetAnswerTime
         && (get.SentAt - _deathStallAt).Duration() <= DeathStallReach;
 
-    // Test seam for the unanswered-get timing.
-    internal Func<DateTime> UnansweredClock { get; set; } = static () => DateTime.UtcNow;
+    private readonly Func<DateTime> _unansweredClock;
 
     // When a monster last died casting a silent spell that leaves the room unable
     // to act for a moment (FireTempDeathResponse). The coin get goes out on the
@@ -166,7 +165,7 @@ public sealed class CashManager : IDisposable
     private DateTime _deathStallAt = DateTime.MinValue;
     private static readonly TimeSpan DeathStallReach = TimeSpan.FromSeconds(5);
 
-    public void NoteDeathStall() => _deathStallAt = UnansweredClock();
+    public void NoteDeathStall() => _deathStallAt = _unansweredClock();
 
     // A coin get is out that the game has not answered with a pickup line.
     public bool HasUnansweredGet => _unansweredGets.Count > 0;
@@ -175,7 +174,7 @@ public sealed class CashManager : IDisposable
     {
         int retries = _unansweredGets.TryGetValue(currency, out (DateTime SentAt, int Retries) earlier)
             ? earlier.Retries + 1 : 0;
-        _unansweredGets[currency] = (UnansweredClock(), retries);
+        _unansweredGets[currency] = (_unansweredClock(), retries);
     }
 
     // Record a collect of `count` of this currency this visit, keeping the high mark.
@@ -201,10 +200,7 @@ public sealed class CashManager : IDisposable
     // inventory line. See NotifyAutoDepositAborted.
     private DateTime _autoDepositRetryNotBefore;
     private const int AutoDepositRetryCooldownMs = 60_000;
-    // Clock behind the retry cooldown. Overridable in tests so the re-arm path
-    // can be exercised without a real 60-second wait; production reads the wall
-    // clock.
-    internal Func<DateTime> AutoDepositClock { get; set; } = static () => DateTime.UtcNow;
+    private readonly Func<DateTime> _autoDepositClock;
 
     // True while standing in a marked stash room with a loop / lair running. Coin
     // auto-collect is suppressed there so a search's "You notice …" survey can't
@@ -342,8 +338,12 @@ public sealed class CashManager : IDisposable
         LogService? log = null,
         CurrencyNaming? naming = null,
         Func<string, bool>? isKnownItem = null,
-        Action<Action>? post = null)
+        Action<Action>? post = null,
+        Func<DateTime>? unansweredClock = null,
+        Func<DateTime>? autoDepositClock = null)
     {
+        _autoDepositClock = autoDepositClock ?? (() => DateTime.UtcNow);
+        _unansweredClock = unansweredClock ?? (() => DateTime.UtcNow);
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(readSettings);
         ArgumentNullException.ThrowIfNull(isEnabled);
@@ -1355,7 +1355,7 @@ public sealed class CashManager : IDisposable
     public void NotifyAutoDepositAborted()
     {
         _autoDepositFiredThisCrossing = false;
-        _autoDepositRetryNotBefore = AutoDepositClock().AddMilliseconds(AutoDepositRetryCooldownMs);
+        _autoDepositRetryNotBefore = _autoDepositClock().AddMilliseconds(AutoDepositRetryCooldownMs);
         _log?.Debug(LogCategory,
             $"auto-deposit re-armed after aborted reroute (retry held {AutoDepositRetryCooldownMs / 1000}s)");
     }
@@ -1429,7 +1429,7 @@ public sealed class CashManager : IDisposable
             // A recent reroute aborted without depositing; hold off re-firing
             // until the cooldown elapses so an unreachable bank can't thrash the
             // movement engine on every inventory line.
-            if (AutoDepositClock() < _autoDepositRetryNotBefore)
+            if (_autoDepositClock() < _autoDepositRetryNotBefore)
             {
                 _log?.Debug(LogCategory,
                     $"auto-deposit held: retry cooldown after an aborted reroute "

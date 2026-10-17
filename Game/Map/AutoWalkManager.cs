@@ -916,14 +916,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _routeAnnouncer = announcer;
     }
 
-    // Test seam — pretend the wire prompt scanner just fired, so the
-    // pending command step can advance without a real telnet client.
-    // No-op when no command step is in flight.
-    internal void FirePromptForTests()
-    {
-        if (_awaitingPromptForCommand) OnPromptObservedCore();
-    }
-
     // When non-null, the user requested a walk while the tracker still
     // had pipelined moves outstanding (Confidence == Pending). Planning is
     // deferred until the tracker reaches Confirmed; the next confirmation
@@ -988,7 +980,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     // Long enough that a slow-but-normal confirm is never cut short, short enough
     // that a wedged walk self-heals instead of stranding the character.
-    private static readonly TimeSpan StallWatchdogInterval = TimeSpan.FromSeconds(10);
+    internal static readonly TimeSpan StallWatchdogInterval = TimeSpan.FromSeconds(10);
 
     // The active walk's planning flags, captured when a route is committed in
     // WalkToImmediate and reset in Reset(). A mid-walk replan (TryReplanOrFail)
@@ -2691,9 +2683,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
         && !(_awaitingBoatArrival || _awaitingSysGotoArrival || _awaitingGreetTeleport
              || _awaitingDoorOpen || _awaitingWinch || _awaitingTrapDisarm || _awaitingHiddenReveal)
         && _recovery is { AwaitingAuthoritativeResync: false, CurrentTier: not TierLevel.Tier3 };
-
-    // Test seam — pretend the in-flight stall watchdog just elapsed.
-    internal void FireStallWatchdogForTests() => OnStallWatchdogElapsed();
 
     private void SendMoveStep(MoveStep step)
     {

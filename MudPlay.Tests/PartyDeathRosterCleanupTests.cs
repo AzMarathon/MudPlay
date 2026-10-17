@@ -41,10 +41,7 @@ public sealed class PartyDeathRosterCleanupTests
             Manager.SetWireSender(ManagerWire.Add);
             Cleanup = new PartyDeathRosterCleanup(
                 Router, Party, Manager, Coord,
-                isMovementActive: () => MovementActive)
-            {
-                NowProvider = () => Now,
-            };
+                isMovementActive: () => MovementActive, now: () => Now);
         }
 
         public PartyMember Add(string name, bool isInvited = false, bool isSelf = false)

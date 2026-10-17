@@ -385,7 +385,7 @@ public sealed class EventManagerResumeTests : IDisposable
     {
         using Harness h = NewHarness();
         DateTimeOffset now = new(2026, 9, 29, 20, 0, 0, TimeSpan.Zero);
-        h.Events.Now = () => now;
+        h.EventsNow = () => now;
         bool off = false;
         h.Events.IsMasterSwitchOff = () => off;
         Loop loop = RunLoop(h);
@@ -422,7 +422,7 @@ public sealed class EventManagerResumeTests : IDisposable
     {
         using Harness h = NewHarness();
         DateTimeOffset now = new(2026, 9, 29, 20, 0, 0, TimeSpan.Zero);
-        h.Events.Now = () => now;
+        h.EventsNow = () => now;
         Loop loop = RunLoop(h);
 
         h.Events.Fire(new ScheduledEvent
@@ -492,7 +492,7 @@ public sealed class EventManagerResumeTests : IDisposable
     {
         using Harness h = NewHarness();
         DateTimeOffset now = new(2026, 9, 29, 20, 0, 0, TimeSpan.Zero);
-        h.Events.Now = () => now;
+        h.EventsNow = () => now;
         h.Events.Events.Add(new ScheduledEvent
         {
             Name = "pause", ActionType = EventActionType.Wait, WaitSeconds = 5, Then = EventThenType.Resume,

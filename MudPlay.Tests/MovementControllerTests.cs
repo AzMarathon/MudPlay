@@ -63,6 +63,8 @@ public sealed class MovementControllerTests : IDisposable
         public required AutoLairManager AutoLair { get; init; }
         public required LairTimerStore Timers { get; init; }
         public required MovementController Controller { get; init; }
+        // The game's prompts, as the loop runner reads them.
+        public required WirePromptScanner Prompt { get; init; }
 
         public void Dispose()
         {
@@ -86,7 +88,8 @@ public sealed class MovementControllerTests : IDisposable
         MovementCoordinator coord = new();
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
         walker.SetWireSender(_ => { });
-        LoopRunner loops = new(tracker, coord, graph: graph, bfs: bfs);
+        WirePromptScanner prompt = new();
+        LoopRunner loops = new(tracker, coord, promptScanner: prompt, graph: graph, bfs: bfs);
         loops.SetWireSender(_ => { });
         LairTimerStore timers = new(cache, graph, tracker);
         AutoLairManager autoLair = new(walker, tracker, graph, bfs, timers, log: null, coordinator: coord);
@@ -100,6 +103,7 @@ public sealed class MovementControllerTests : IDisposable
             AutoLair = autoLair,
             Timers = timers,
             Controller = controller,
+            Prompt = prompt,
         };
     }
 
@@ -198,7 +202,7 @@ public sealed class MovementControllerTests : IDisposable
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Loops.Start(new Loop("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
         h.Loops.NotifyDisconnected();
-        h.Loops.FirePromptObservedForTests();
+        h.Prompt.Append(System.Text.Encoding.Latin1.GetBytes("[HP=100]: "));
         Assert.True(h.Loops.ReconnectResumeHeldForMasterSwitch);
 
         h.Controller.Stop();

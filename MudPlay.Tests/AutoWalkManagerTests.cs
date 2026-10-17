@@ -112,6 +112,10 @@ public sealed class AutoWalkManagerTests : IDisposable
         ]
         """;
 
+    // Stall watchdogs armed and still to run.
+    private static int Watchdogs(Harness h) =>
+        h.WalkTimers.PendingDelays.Count(d => d == AutoWalkManager.StallWatchdogInterval);
+
     private sealed class Harness : IDisposable
     {
         public required RoomGraphManager Graph { get; init; }
@@ -123,6 +127,10 @@ public sealed class AutoWalkManagerTests : IDisposable
         public EngineRecoveryGate? Gate { get; init; }
         public List<byte[]> Sent { get; } = new();
         public List<WalkEvent> Events { get; } = new();
+        // The game's prompts, as the walker reads them.
+        public required WirePromptScanner Prompt { get; init; }
+        // The walker's timers: the stall watchdog, the voyage and the other waits.
+        public ManualTimers WalkTimers { get; } = new();
         public void Dispose() { /* nothing to dispose */ }
     }
 
@@ -146,7 +154,8 @@ public sealed class AutoWalkManagerTests : IDisposable
         RoomTracker tracker = new(graph);
         MovementCoordinator coord = new();
         EngineRecoveryGate? gate = wireRecovery ? new EngineRecoveryGate(graph, tracker) : null;
-        AutoWalkManager walker = new(graph, bfs, tracker, coord, recovery: gate);
+        WirePromptScanner prompt = new();
+        AutoWalkManager walker = new(graph, bfs, tracker, coord, promptScanner: prompt, recovery: gate);
         Harness h = new()
         {
             Graph = graph,
@@ -155,7 +164,9 @@ public sealed class AutoWalkManagerTests : IDisposable
             Coordinator = coord,
             Walker = walker,
             Gate = gate,
+            Prompt = prompt,
         };
+        walker.SetVoyageScheduler(h.WalkTimers.Arm);
         walker.SetWireSender(b => h.Sent.Add(b));
         walker.Event += evt => h.Events.Add(evt);
         return h;
@@ -311,7 +322,7 @@ public sealed class AutoWalkManagerTests : IDisposable
 
         // No confirming observation ever arrives — the move's landing went unrecognised.
         Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
-        h.Walker.FireStallWatchdogForTests();
+        h.WalkTimers.RunDue(AutoWalkManager.StallWatchdogInterval);
 
         Assert.NotNull(resyncReason);
     }
@@ -336,7 +347,7 @@ public sealed class AutoWalkManagerTests : IDisposable
             new HashSet<Direction> { Direction.S }));
         Assert.Equal(WalkState.Idle, h.Walker.State);
 
-        h.Walker.FireStallWatchdogForTests();
+        h.WalkTimers.RunDue(AutoWalkManager.StallWatchdogInterval);
 
         Assert.False(resynced);
     }
@@ -1236,21 +1247,19 @@ public sealed class AutoWalkManagerTests : IDisposable
     {
         Harness h = HeldSuspectAtAlbaRiver(out LocateAsks rm, out Action fightEnds);
         rm.Available = false;
-        int watchdogArms = 0;
-        h.Walker.SetVoyageScheduler((_, _) => { watchdogArms++; return new NoopDisposable(); });
 
         fightEnds();
 
         Assert.Equal(new[] { "nw", "nw" }, SentText(h));
-        Assert.Equal(1, watchdogArms);
+        Assert.Equal(1, Watchdogs(h));
         Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Retrying);
 
         // The game refuses the move; from Suspect that changes nothing.
         h.Tracker.NoteMoveBlocked();
-        h.Walker.FireStallWatchdogForTests();
-        Assert.Equal(2, watchdogArms);
-        h.Walker.FireStallWatchdogForTests();
-        Assert.Equal(2, watchdogArms);
+        h.WalkTimers.RunDue(AutoWalkManager.StallWatchdogInterval);
+        Assert.Equal(1, Watchdogs(h));                      // one more wait
+        h.WalkTimers.RunDue(AutoWalkManager.StallWatchdogInterval);
+        Assert.Equal(0, Watchdogs(h));                      // and then it lets be
 
         Assert.Equal(WalkState.Walking, h.Walker.State);
         Assert.Equal(new[] { "nw", "nw" }, SentText(h));
@@ -1273,8 +1282,8 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
 
         rm.Available = true;
-        h.Walker.FireStallWatchdogForTests();
-        h.Walker.FireStallWatchdogForTests();
+        h.WalkTimers.RunDue(AutoWalkManager.StallWatchdogInterval);
+        h.WalkTimers.RunDue(AutoWalkManager.StallWatchdogInterval);
 
         Assert.Single(rm.Asked);
         Assert.Equal(new[] { "nw", "nw" }, SentText(h));
@@ -1296,7 +1305,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(new[] { "nw", "nw" }, SentText(h));
 
         h.Tracker.NoteMoveBlocked();
-        h.Walker.FireStallWatchdogForTests();
+        h.WalkTimers.RunDue(AutoWalkManager.StallWatchdogInterval);
 
         Assert.Equal(2, rm.Asked.Count);
         rm.Answer(h, new RoomKey(14, 3946));
@@ -1359,7 +1368,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         cache.SwitchSet("alpha");
         MessageRouter router = new();
         MudPlay.Services.Patterns.DefaultPatterns.Seed(router);
-        using ParadigmPositionResolver resolver = new(router, h.Tracker, h.Gate!, cache, log: null, useTimer: false);
+        using ParadigmPositionResolver resolver = new(router, h.Tracker, h.Gate!, cache, log: null, schedule: new ManualTimers().Arm);
         List<byte[]> rmSent = new();
         resolver.SetWireSender(rmSent.Add);
         h.Tracker.SetLocated(new RoomKey(14, 3799));
@@ -2574,7 +2583,7 @@ public sealed class AutoWalkManagerTests : IDisposable
 
         // Step 2: the fire-and-forget prerequisite command.
         Assert.Equal("pull lever\r", Encoding.Latin1.GetString(h.Sent[^1]));
-        h.Walker.FirePromptForTests();
+        h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
 
         // Step 3: w → 1/2 (walk back to the host room).
         Assert.Equal("w\r", Encoding.Latin1.GetString(h.Sent[^1]));

@@ -31,7 +31,8 @@ public sealed class PartyEssentialHandlersTests
         Func<MudPlay.Game.Map.Room?>? readCurrentRoom = null,
         Func<string, Action<MudPlay.Game.Map.RoomKey>, Action, bool>? requestPositionRefix = null,
         bool fleeing = false,
-        bool holdingWait = false)
+        bool holdingWait = false,
+        Func<DateTime>? now = null)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -49,7 +50,8 @@ public sealed class PartyEssentialHandlersTests
             readDraggedBy: readDraggedBy,
             readAilments: () => ailments,
             readFleeing: () => fleeing,
-            readHoldingWait: () => holdingWait);
+            readHoldingWait: () => holdingWait,
+            now: now);
         if (requestPositionRefix is not null) handlers.SetPositionRefix(requestPositionRefix);
         List<byte[]> relayCapture = new();
         handlers.SetWireSender(relayCapture.Add);
@@ -1069,10 +1071,9 @@ public sealed class PartyEssentialHandlersTests
     [Fact]
     public void OkedWithin_TracksTheLastOk()
     {
-        var (engine, handlers, _, party, _, _) = Setup();
-        SeedPartyMember(party, "Follower");
         DateTime now = new(2026, 9, 26, 19, 54, 30, DateTimeKind.Utc);
-        handlers.NowProvider = () => now;
+        var (engine, handlers, _, party, _, _) = Setup(now: () => now);
+        SeedPartyMember(party, "Follower");
 
         ChatLines.Hear(_routers[engine], Telepath("Follower", "@ok"));
         now = now.AddSeconds(1);

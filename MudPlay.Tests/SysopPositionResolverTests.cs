@@ -47,6 +47,8 @@ public sealed class SysopPositionResolverTests : IDisposable
         public SysopPositionResolver Resolver { get; }
         public RoomTracker Tracker { get; }
         public List<string> Sent { get; } = new();
+        // The wait for movement to settle before a queued locate.
+        public ManualTimers Deferral { get; } = new();
         public List<RoomKey> Resolved { get; } = new();
         public int Failures { get; private set; }
         public bool CapabilityEnabled { get; set; } = true;
@@ -68,15 +70,12 @@ public sealed class SysopPositionResolverTests : IDisposable
             graph.OnActiveSetChanged("alpha");
             Tracker = new RoomTracker(graph);
 
-            Probe = new SysStatusProbe(Parser, () => CapabilityEnabled)
+            // Only a test can fire the timeout, so no wall clock is involved.
+            Probe = new SysStatusProbe(Parser, () => CapabilityEnabled, delay: _ =>
             {
-                // Only a test can fire the timeout, so no wall clock is involved.
-                DelayProvider = _ =>
-                {
-                    _currentDelay = new TaskCompletionSource();
-                    return _currentDelay.Task;
-                },
-            };
+                _currentDelay = new TaskCompletionSource();
+                return _currentDelay.Task;
+            });
             Probe.SetWireSender(bytes =>
             {
                 Sent.Add(Encoding.Latin1.GetString(bytes));
@@ -88,7 +87,7 @@ public sealed class SysopPositionResolverTests : IDisposable
                 suppressed: () => Suppressed,
                 log: null,
                 post: _posted.Add,
-                useTimer: false);
+                schedule: Deferral.Arm);
             Resolver.PositionResolved += Resolved.Add;
             Resolver.LocateFailed += () => Failures++;
         }
@@ -243,7 +242,7 @@ public sealed class SysopPositionResolverTests : IDisposable
         h.Tracker.NoteMoveSent(Direction.N);
 
         Assert.True(h.Resolver.TryRequestLocate("test"));
-        h.Resolver.FireDeferralExpiryForTests();
+        h.Deferral.RunAll();
 
         Assert.Equal(1, h.Failures);
         Assert.Empty(h.Sent);

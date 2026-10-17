@@ -8,12 +8,15 @@ namespace MudPlay.Tests;
 
 public sealed class SysRoomStatusParserTests
 {
+    // The clock the SysRoomStatusParser reads: the real one unless a test sets its own.
+    private Func<DateTime> _parserNow = () => DateTime.UtcNow;
+
     // The game's output, fed the way the client receives it.
     private readonly ServerFeed _feed = new();
 
     private (SysRoomStatusParser parser, List<SysRoomStatus> captured) NewParser()
     {
-        SysRoomStatusParser parser = new();
+        SysRoomStatusParser parser = new(now: () => _parserNow());
         parser.AttachLineExtractor(_feed.Lines);
         List<SysRoomStatus> captured = new();
         parser.StatusParsed += captured.Add;
@@ -372,7 +375,7 @@ public sealed class SysRoomStatusParserTests
     {
         (SysRoomStatusParser parser, List<SysRoomStatus> captured) = NewParser();
         DateTime now = new(2026, 9, 2, 12, 0, 0, DateTimeKind.Utc);
-        parser.NowProvider = () => now;
+        _parserNow = () => now;
 
         Arm(parser);
         now = now.AddSeconds(30);

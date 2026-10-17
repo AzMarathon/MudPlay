@@ -43,6 +43,8 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         public CombatEntryRefusalHandler Handler { get; }
         // The game's output, fed the way the client receives it.
         public ServerFeed Feed { get; } = new();
+        // The beat between the break and the retry.
+        public ManualTimers Settle { get; } = new();
         public bool EngineActive { get; set; } = true;
         public string? LastSent { get; private set; }
         public int SendCount { get; private set; }
@@ -56,7 +58,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
             RoomGraphManager graph = new(cache);
             graph.OnActiveSetChanged("alpha");
             Tracker = new RoomTracker(graph);
-            Handler = new CombatEntryRefusalHandler(Feed.Lines, Tracker, () => EngineActive);
+            Handler = new CombatEntryRefusalHandler(Feed.Lines, Tracker, () => EngineActive, schedule: Settle.Arm);
             Handler.SetWireSender(bytes =>
             {
                 LastSent = Encoding.Latin1.GetString(bytes);
@@ -96,7 +98,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         h.SetupPending();
 
         h.Feed.Line(CombatGatedLine);
-        h.Handler.CompleteRetryForTest();
+        h.Settle.RunAll();
 
         Assert.False(h.Handler.IsSettling);
         Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);

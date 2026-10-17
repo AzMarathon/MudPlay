@@ -57,6 +57,10 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         public required RoomTracker Tracker { get; init; }
         public required WirePromptScanner Scanner { get; init; }
         public required PartyRejoinCoordinator Coord { get; init; }
+        // The coordinator's wait for our room to confirm.
+        public required ManualTimers RoomWait { get; init; }
+        // The clock the coordinator reads: the real one unless a test sets its own.
+        public Func<DateTimeOffset> CoordNow { get; set; } = () => DateTimeOffset.UtcNow;
         // What Coord put on the wire, through the sender the client binds.
         public required List<byte[]> CoordWire { get; init; }
         // Every value handed to PersistLeader, in order — mirrors the disk
@@ -92,17 +96,22 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         PartyManager mgr = new(router, state);
 
         WirePromptScanner scanner = new();
-        PartyRejoinCoordinator coord = new(scanner, state, tracker, isAutoEnabled);
+        Fixture f = null!;
+        ManualTimers roomWait = new();
+        PartyRejoinCoordinator coord = new(scanner, state, tracker, isAutoEnabled, now: () => f.CoordNow(),
+            schedule: roomWait.Arm);
         List<string?> persisted = new();
         coord.PersistLeader = leader => persisted.Add(leader);
         List<byte[]> coordWire = new();
         coord.SetWireSender(coordWire.Add);
 
-        return new Fixture
+        f = new Fixture
         {
             Router = router, Manager = mgr, Tracker = tracker,
             Scanner = scanner, Coord = coord, CoordWire = coordWire, Persisted = persisted,
+            RoomWait = roomWait,
         };
+        return f;
     }
 
     private static LineExtractor.EmittedLine Line(string text) =>
@@ -174,7 +183,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.EnterGame();
         Assert.Empty(f.CoordWire);   // waiting for our room
 
-        f.Coord.FireRoomWaitForTests();
+        f.RoomWait.RunAll();
         Assert.Equal("/MudPlay @comeback", f.Sent().Single());
     }
 
@@ -192,7 +201,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Tracker.SetLocated(new RoomKey(1, 1));
 
         Assert.Equal("/MudPlay @comeback 1/1", f.Sent().Single());
-        f.Coord.FireRoomWaitForTests();
+        f.RoomWait.RunAll();
         Assert.Single(f.CoordWire);   // the wait was cancelled
     }
 
@@ -222,7 +231,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.EnterGame();
         Assert.Empty(f.CoordWire);
 
-        f.Coord.FireRoomWaitForTests();
+        f.RoomWait.RunAll();
         Assert.Equal("/MudPlay @comeback", f.Sent().Single());
     }
 
@@ -239,7 +248,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.Arm();
 
         f.EnterGame(); // statline only — still in the dark, no exits shown
-        f.Coord.FireRoomWaitForTests();
+        f.RoomWait.RunAll();
         Assert.Equal("/MudPlay @comeback", f.Sent().Single());
 
         // A light finally reveals the room; the latch is already spent.
@@ -254,14 +263,14 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
     {
         var f = Setup();
         DateTimeOffset now = DateTimeOffset.UnixEpoch;
-        f.Coord.NowProvider = () => now;
+        f.CoordNow = () => now;
         f.Coord.HydrateRememberedLeader("MudPlay");
 
         f.Coord.NoteDisconnected();
         now += TimeSpan.FromMinutes(3);
         f.Coord.Arm();
         f.EnterGame();
-        f.Coord.FireRoomWaitForTests();
+        f.RoomWait.RunAll();
 
         Assert.Empty(f.CoordWire);
     }
@@ -271,7 +280,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
     {
         var f = Setup();
         DateTimeOffset now = DateTimeOffset.UnixEpoch;
-        f.Coord.NowProvider = () => now;
+        f.CoordNow = () => now;
         f.Coord.HydrateRememberedLeader("MudPlay");
 
         f.Coord.NoteDisconnected();
@@ -279,7 +288,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.NoteDisconnected();   // a failed redial doesn't restamp the drop
         f.Coord.Arm();
         f.EnterGame();
-        f.Coord.FireRoomWaitForTests();
+        f.RoomWait.RunAll();
 
         Assert.Equal("/MudPlay @comeback", f.Sent().Single());
     }
@@ -305,8 +314,8 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
 
         f.EnterGame();
         f.EnterGame();
-        f.Coord.FireRoomWaitForTests();
-        f.Coord.FireRoomWaitForTests();
+        f.RoomWait.RunAll();
+        f.RoomWait.RunAll();
 
         Assert.Single(f.CoordWire); // latch consumed on first prompt
     }

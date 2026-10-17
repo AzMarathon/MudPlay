@@ -328,7 +328,7 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
 
     // ----- the default task waiting out the party-rebuild window ---------------------
 
-    private sealed record Task1(DefaultTaskRunner Runner, PartyState Party);
+    private sealed record Task1(DefaultTaskRunner Runner, PartyState Party, ManualTimers Hold);
 
     // A character whose default task is the loop "ab", back in the game after a drop
     // of the line that followed a party session: the task is held for the window.
@@ -349,8 +349,10 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
             ["General"] = JsonSerializer.SerializeToElement(
                 new GeneralSettings { DefaultTask = InitialTask.BeginLoop, DefaultLoopName = "ab" }),
         };
+        ManualTimers hold = new();
         DefaultTaskRunner runner = new(
-            w.Prompt, w.Tracker, profile, loops, new LairManager(), w.Runner, w.Lairs, partyState, party, w.Log);
+            w.Prompt, w.Tracker, profile, loops, new LairManager(), w.Runner, w.Lairs, partyState, party, w.Log,
+            schedule: hold.Arm);
         _dispose.Add(runner);
         if (registered) w.Controller.AddHeldStart(() => runner.HeldStart, reason => runner.DropHold(reason));
 
@@ -368,7 +370,7 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         Assert.True(runner.IsHoldingForParty);
         Assert.Equal("loop 'ab', held for the party to rebuild,", runner.HeldStart);
         Assert.True(w.Idle);
-        return new Task1(runner, partyState);
+        return new Task1(runner, partyState, hold);
     }
 
     [Theory]
@@ -386,8 +388,9 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         Assert.Null(t.Runner.HeldStart);
         Assert.Contains(w.Log.Snapshot(), e => e.Severity == LogSeverity.Info && e.Source == "DefaultTask"
             && e.Message.StartsWith("loop 'ab' is not started when the party-rebuild hold ends: game data ", StringComparison.Ordinal));
+        Assert.Equal(0, t.Hold.Pending);   // the window's timer went with it
 
-        t.Runner.FireHoldElapsedForTests();
+        t.Hold.RunAll();
 
         Assert.True(w.Idle);
         Assert.Empty(w.Sent);
@@ -400,7 +403,7 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         Task1 t = HeldDefaultTask(w);
 
         w.Cache.SwitchSet("ALPHA");
-        t.Runner.FireHoldElapsedForTests();
+        t.Hold.RunAll();
 
         Assert.False(t.Runner.IsHoldingForParty);
         Assert.Equal(LoopState.Running, w.Runner.State);
@@ -417,7 +420,7 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         Task1 t = HeldDefaultTask(w, registered: false);
 
         Assert.Null(w.Change(reimport: false));
-        t.Runner.FireHoldElapsedForTests();
+        t.Hold.RunAll();
 
         Assert.Equal(LoopState.Running, w.Runner.State);
         Assert.Equal(new[] { "e" }, w.Sent);

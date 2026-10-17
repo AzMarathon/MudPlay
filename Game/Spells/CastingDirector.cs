@@ -363,7 +363,7 @@ public sealed class CastingDirector : IDisposable
     // removes so the at-cast strip doesn't knock them off. Empty off stock.
     private Func<IReadOnlyDictionary<string, string>>? _collisionOrder;
     private Action<string>? _selfBuffCastSink;
-    private Func<DateTime> _now = () => DateTime.UtcNow;
+    private readonly Func<DateTime> _now;
     private LineExtractor? _lines;
 
     // Last self-heal we sent — spell code, the HP + MA it was sent at, and when.
@@ -390,10 +390,11 @@ public sealed class CastingDirector : IDisposable
         Func<SpellsSettings> readSpells,
         Func<HealthSettings> readHealth,
         Func<bool> isEnabled,
-        LogService? log = null)
+        LogService? log = null,
+        Func<DateTime>? now = null)
         : this(state, cast, conditions: null, party: null,
                readSpells, readHealth, readPartySettings: null,
-               isEnabled, log) { }
+               isEnabled, log, now: now) { }
 
     // Constructor with optional ConditionTracker (for ailment cures) and PartyState
     // + PartySettings reader (for party-cast). Pass null for tests / engines that
@@ -407,8 +408,10 @@ public sealed class CastingDirector : IDisposable
         Func<HealthSettings> readHealth,
         Func<PartySettings>? readPartySettings,
         Func<bool> isEnabled,
-        LogService? log = null)
+        LogService? log = null,
+        Func<DateTime>? now = null)
     {
+        _now = now ?? (() => DateTime.UtcNow);
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(cast);
         ArgumentNullException.ThrowIfNull(readSpells);
@@ -455,10 +458,11 @@ public sealed class CastingDirector : IDisposable
         Func<SpellsSettings> readSpells,
         Func<HealthSettings> readHealth,
         Func<bool> isEnabled,
-        LogService? log = null)
+        LogService? log = null,
+        Func<DateTime>? now = null)
         : this(state, cast, conditions, party: null,
                readSpells, readHealth, readPartySettings: null,
-               isEnabled, log) { }
+               isEnabled, log, now: now) { }
 
     // Wire the "is this combat tick damage-line-driven?" probe (TickEngine). A true
     // read marks a round burst as landing (see _hpBurstAt). Optional — unset means
@@ -1061,14 +1065,6 @@ public sealed class CastingDirector : IDisposable
     // A member negated one of our buffs and is now marked on its slot (cast code, the
     // member's lower-cased given name). Raised on the UI thread with the line.
     public event Action<string, string>? BuffNegated;
-
-    // Override the clock used for buff-expiry math. Test seam — production uses
-    // DateTime.UtcNow.
-    public void SetClock(Func<DateTime> now)
-    {
-        ArgumentNullException.ThrowIfNull(now);
-        _now = now;
-    }
 
     // Subscribe to server lines so OUR party-buff casts can be confirmed against the
     // buff's CasterMessage template (capturing the target name) before the duration

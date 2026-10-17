@@ -4345,7 +4345,7 @@ public sealed class CombatManagerTests
     }
 
     // The guard is 1.5 s from the attack. The stamps it reads are wall-clock
-    // (CombatManager.SetClock doesn't reach them), so the attack is aged instead.
+    // (the injected combat clock doesn't reach them), so the attack is aged instead.
     [Theory]
     [InlineData(1.4, 1)]
     [InlineData(1.6, 2)]

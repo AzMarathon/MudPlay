@@ -56,6 +56,14 @@ public sealed class AutoLairManagerTests : IDisposable
         [ { "GroupIndex": "1-1-1", "AvgDelay": 5 } ]
         """;
 
+    // The entry and engage windows are each the newest timer the manager armed
+    // beside its once-a-second scheduler.
+    private static TimeSpan EngageWindow(Harness h) =>
+        h.LairTimers.PendingDelays.Last(d => d != AutoLairManager.SchedulerInterval);
+
+    private static void RunEntry(Harness h) =>
+        h.LairTimers.RunDue(h.LairTimers.PendingDelays.Last(d => d != AutoLairManager.SchedulerInterval));
+
     private sealed class Harness : IDisposable
     {
         public required RoomTracker Tracker { get; init; }
@@ -63,6 +71,8 @@ public sealed class AutoLairManagerTests : IDisposable
         public required AutoLairManager Roam { get; init; }
         public required LairTimerStore Timers { get; init; }
         public required MovementCoordinator Coordinator { get; init; }
+        // The manager's scheduler, entry, engage and retry timers.
+        public required ManualTimers LairTimers { get; init; }
         public void Dispose()
         {
             Roam.Dispose();
@@ -85,7 +95,8 @@ public sealed class AutoLairManagerTests : IDisposable
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
         walker.SetWireSender(_ => { });
         LairTimerStore timers = new(cache, graph, tracker);
-        AutoLairManager roam = new(walker, tracker, graph, bfs, timers, coordinator: coord);
+        ManualTimers lairTimers = new();
+        AutoLairManager roam = new(walker, tracker, graph, bfs, timers, coordinator: coord, schedule: lairTimers.Arm);
         return new Harness
         {
             Tracker = tracker,
@@ -93,6 +104,7 @@ public sealed class AutoLairManagerTests : IDisposable
             Roam = roam,
             Timers = timers,
             Coordinator = coord,
+            LairTimers = lairTimers,
         };
     }
 
@@ -438,7 +450,7 @@ public sealed class AutoLairManagerTests : IDisposable
         h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test", "master switch off");
         h.Coordinator.ParkHoldsForMasterSwitch();
 
-        h.Roam.FireEngageTimerForTests();
+        h.LairTimers.RunDue(EngageWindow(h));
         Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
 
         h.Coordinator.RestoreHoldsAfterMasterSwitch();
@@ -446,6 +458,25 @@ public sealed class AutoLairManagerTests : IDisposable
         Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);   // the fight is still on
 
         h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "killed");
+        Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
+    }
+
+    // The window passed over while frozen keeps running: its next tick after the
+    // freeze lifts calls the empty lair.
+    [Fact]
+    public void Engaging_WindowPassedOverWhileFrozen_EndsTheEngagementOnItsNextTick()
+    {
+        using Harness h = Engaging(NewHarness());
+        TimeSpan window = EngageWindow(h);
+        h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test", "master switch off");
+
+        h.LairTimers.RunDue(window);
+        Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
+
+        h.Coordinator.ClearGate(MovementCoordinator.AutoAllGate, "test", "master switch on");
+        Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
+        h.LairTimers.RunDue(window);
+
         Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
     }
 
@@ -458,9 +489,9 @@ public sealed class AutoLairManagerTests : IDisposable
         // standing in an empty room.
         using Harness h = Engaging(NewHarness());
 
-        Assert.True(h.Roam.EngageWindowForTests < TimeSpan.FromSeconds(h.Roam.EngageTimeoutSeconds));
+        Assert.True(EngageWindow(h) < TimeSpan.FromSeconds(h.Roam.EngageTimeoutSeconds));
 
-        h.Roam.FireEngageTimerForTests();
+        h.LairTimers.RunDue(EngageWindow(h));
 
         Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
     }
@@ -471,12 +502,12 @@ public sealed class AutoLairManagerTests : IDisposable
         // Once there IS a fight, the short empty-lair window must not cut it off —
         // the kill gets the full engage budget.
         using Harness h = Engaging(NewHarness());
-        TimeSpan empty = h.Roam.EngageWindowForTests;
+        TimeSpan empty = EngageWindow(h);
 
         h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "fight on");
 
-        Assert.True(h.Roam.EngageWindowForTests > empty);
-        Assert.Equal(TimeSpan.FromSeconds(h.Roam.EngageTimeoutSeconds), h.Roam.EngageWindowForTests);
+        Assert.True(EngageWindow(h) > empty);
+        Assert.Equal(TimeSpan.FromSeconds(h.Roam.EngageTimeoutSeconds), EngageWindow(h));
         Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
     }
 
@@ -568,11 +599,15 @@ public sealed class AutoLairManagerTests : IDisposable
         DoorCalls doors = new();
         walker.SetDoorEnqueuer((dir, _, _, _, _, reply) => doors.Calls.Add((dir, reply)));
         LairTimerStore timers = new(cache, graph, tracker);
-        AutoLairManager roam = new(walker, tracker, graph, bfs, timers, coordinator: coord);
+        ManualTimers lairTimers = new();
+        AutoLairManager roam = new(walker, tracker, graph, bfs, timers, coordinator: coord, schedule: lairTimers.Arm);
         foreach (RoomKey lair in marked ?? new[] { new RoomKey(3, 595), new RoomKey(3, 584) })
             roam.Mark(lair);
         tracker.SetLocated(new RoomKey(3, 589));
-        return (new Harness { Tracker = tracker, Walker = walker, Roam = roam, Timers = timers, Coordinator = coord }, doors);
+        return (new Harness
+        {
+            Tracker = tracker, Walker = walker, Roam = roam, Timers = timers, Coordinator = coord, LairTimers = lairTimers,
+        }, doors);
     }
 
     // User, 2026-10-10: a wait room can be any room that isn't the lair, ideally the
@@ -655,7 +690,7 @@ public sealed class AutoLairManagerTests : IDisposable
             Assert.Contains((new RoomKey(3, 592), new RoomKey(3, 595)), h.Roam.AbandonedDoors);
             Assert.Contains("couldn't open the door down", h.Roam.LastWalkerFailure);
 
-            h.Roam.FireRetryForTests();
+            h.LairTimers.RunDue(AutoLairManager.RetryBase);
 
             Assert.Equal(new RoomKey(3, 584), h.Roam.CurrentTarget);
             Assert.Equal(WalkState.Walking, h.Walker.State);
@@ -691,12 +726,12 @@ public sealed class AutoLairManagerTests : IDisposable
             Assert.Equal(AutoLairPhase.Approaching, h.Roam.Phase);
             Assert.Empty(h.Roam.AbandonedDoors);
 
-            h.Roam.FireRetryForTests();
+            h.LairTimers.RunDue(AutoLairManager.RetryBase);
 
             Assert.Equal(new RoomKey(3, 595), h.Roam.CurrentTarget);
             Assert.Equal(new RoomKey(3, 592), h.Roam.CurrentWaitRoom);
             Assert.Equal(AutoLairPhase.Waiting, h.Roam.Phase);
-            h.Roam.FireEntryTimerForTests();
+            RunEntry(h);
             Assert.Equal(AutoLairPhase.Entering, h.Roam.Phase);
             Assert.Equal(2, doors.Calls.Count);
             Assert.Equal(Direction.D, doors.Calls[1].Dir);
@@ -716,21 +751,21 @@ public sealed class AutoLairManagerTests : IDisposable
             Assert.True(h.Roam.Start());
             Assert.Equal(1, h.Roam.NoRouteSearchesForTests);
 
-            for (int i = 0; i < 10; i++) h.Roam.FireRetryForTests();
+            for (int i = 0; i < 10; i++) h.LairTimers.RunDue(AutoLairManager.SchedulerInterval);
             Assert.Equal(1, h.Roam.NoRouteSearchesForTests);
 
             // The stats the door rule reads change (still no way in): looked at again.
             stats.Strength = 121;
-            h.Roam.FireRetryForTests();
+            h.LairTimers.RunDue(AutoLairManager.SchedulerInterval);
             Assert.Equal(2, h.Roam.NoRouteSearchesForTests);
-            h.Roam.FireRetryForTests();
+            h.LairTimers.RunDue(AutoLairManager.SchedulerInterval);
             Assert.Equal(2, h.Roam.NoRouteSearchesForTests);
 
             // So is a different room.
             h.Tracker.SetLocated(new RoomKey(3, 588));
-            h.Roam.FireRetryForTests();
+            h.LairTimers.RunDue(AutoLairManager.SchedulerInterval);
             Assert.Equal(3, h.Roam.NoRouteSearchesForTests);
-            h.Roam.FireRetryForTests();
+            h.LairTimers.RunDue(AutoLairManager.SchedulerInterval);
             Assert.Equal(3, h.Roam.NoRouteSearchesForTests);
         }
     }
@@ -791,10 +826,10 @@ public sealed class AutoLairManagerTests : IDisposable
                 Assert.Equal(i + 1, doors.Calls.Count);
                 doors.Calls[i].Reply(new DoorOpenResult.Failed("waitingopen timed out with no response"));
 
-                Assert.Equal(TimeSpan.FromSeconds(expected[i]), h.Roam.RetryDelayForTests);
+                Assert.Contains(TimeSpan.FromSeconds(expected[i]), h.LairTimers.PendingDelays);
                 Assert.Equal(i + 1, h.Roam.FailedEntriesForTests);
-                h.Roam.FireRetryForTests();
-                h.Roam.FireEntryTimerForTests();
+                h.LairTimers.RunDue(TimeSpan.FromSeconds(expected[i]));
+                RunEntry(h);
             }
 
             // This entry works: the door opens and the character steps into the Arena.
@@ -824,7 +859,7 @@ public sealed class AutoLairManagerTests : IDisposable
             Assert.Equal(AutoLairPhase.Approaching, h.Roam.Phase);
             Assert.Empty(h.Roam.AbandonedDoors);
 
-            h.Roam.FireRetryForTests();
+            h.LairTimers.RunDue(AutoLairManager.RetryBase);
 
             // Standing in the wait room already, so it waits out the entry step
             // there and goes in on the entry timer.
@@ -848,11 +883,11 @@ public sealed class AutoLairManagerTests : IDisposable
             h.Tracker.NoteRoomObserved(new RoomObservation("Viewing Stands",
                 new HashSet<Direction> { Direction.S, Direction.D }));
             doors.Calls[0].Reply(new DoorOpenResult.Failed("waitingopen timed out with no response"));
-            h.Roam.FireRetryForTests();
+            h.LairTimers.RunDue(AutoLairManager.RetryBase);
             Assert.Equal(AutoLairPhase.Waiting, h.Roam.Phase);
 
             h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test", "master switch off");
-            h.Roam.FireEntryTimerForTests();
+            RunEntry(h);
             Assert.Equal(AutoLairPhase.Waiting, h.Roam.Phase);
 
             h.Coordinator.ClearGate(MovementCoordinator.AutoAllGate, "test", "master switch on");
@@ -874,9 +909,9 @@ public sealed class AutoLairManagerTests : IDisposable
             h.Tracker.NoteRoomObserved(new RoomObservation("Viewing Stands",
                 new HashSet<Direction> { Direction.S, Direction.D }));
             doors.Calls[0].Reply(new DoorOpenResult.Failed("waitingopen timed out with no response"));
-            h.Roam.FireRetryForTests();
+            h.LairTimers.RunDue(AutoLairManager.RetryBase);
             h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test", "master switch off");
-            h.Roam.FireEntryTimerForTests();
+            RunEntry(h);
 
             h.Roam.StartEngagementForTests();           // in the lair, by the user's own steps
             h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "fight on");

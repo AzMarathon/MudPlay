@@ -30,6 +30,10 @@ public sealed class PyramidSolverTests : IDisposable
         public required AutoWalkManager Walker { get; init; }
         public required MovementCoordinator Coord { get; init; }
         public required PyramidSolver Solver { get; init; }
+        // The solver's settle timer.
+        public required ManualTimers Settle { get; init; }
+        // The clock the solver reads: the real one unless a test sets its own.
+        public Func<DateTimeOffset> SolverNow { get; set; } = () => DateTimeOffset.UtcNow;
         // The game's output, fed the way the client receives it.
         public required ServerFeed Feed { get; init; }
         public List<byte[]> Sent { get; } = new();
@@ -100,9 +104,10 @@ public sealed class PyramidSolverTests : IDisposable
             Array.Empty<EquippedItem>(), Array.Empty<string>(), DateTimeOffset.UtcNow);
 
         Harness? made = null;
+        ManualTimers settle = new();
         PyramidSolver solver = new(tracker, walker,
             snapshot: () => snap, quickness: () => quickness,
-            log: null, useTimer: false, post: a => a(),
+            log: null, post: a => a(), schedule: settle.Arm,
             isParadigm: () => isParadigm, canDrive: () => canDrive, leaderName: () => leaderName,
             enabled: () => solverEnabled, coordinator: coord,
             isPartyMember: n => partyMembers is not null
@@ -131,11 +136,12 @@ public sealed class PyramidSolverTests : IDisposable
             },
             holdsItem: id => id == PyramidScript.GoldenLionKeyItem && made!.LeaderHasKey,
             gateEngineOn: gate => made!.EnginesOn.Contains(gate),
-            stopDoor: () => made!.DoorStops++);
+            stopDoor: () => made!.DoorStops++,
+            now: () => made!.SolverNow());
 
         ServerFeed feed = new();
         solver.AttachLineExtractor(feed.Lines);
-        Harness h = new() { Tracker = tracker, Walker = walker, Coord = coord, Solver = solver, Feed = feed };
+        Harness h = new() { Tracker = tracker, Walker = walker, Coord = coord, Solver = solver, Feed = feed, Settle = settle };
         made = h;
         walker.SetWireSender(h.Sent.Add);
         walker.SetPyramidSolver(solver);
@@ -298,8 +304,8 @@ public sealed class PyramidSolverTests : IDisposable
     {
         if (!h.Solver.Active) return false;
         if (AnswerNext(h)) return true;
-        if (!h.Solver.HasSettlePendingForTests) return false;
-        h.Solver.FireSettleForTests();
+        if (h.Settle.Pending == 0) return false;
+        h.Settle.RunAll();
         return true;
     }
 
@@ -490,7 +496,7 @@ public sealed class PyramidSolverTests : IDisposable
     {
         using Harness h = NewHarness();
         DateTimeOffset now = new(2026, 10, 7, 23, 0, 0, TimeSpan.Zero);
-        h.Solver.NowProvider = () => now;
+        h.SolverNow = () => now;
         Begin(h);
         Assert.Null(h.Solver.Floor1TimeLeft);            // still at the firepit
 
@@ -686,7 +692,7 @@ public sealed class PyramidSolverTests : IDisposable
 
         for (int i = 0; i < 10 && h.Solver.Active; i++)
         {
-            h.Solver.FireSettleForTests();
+            h.Settle.RunAll();
             h.Processed = h.Sent.Count;
         }
 

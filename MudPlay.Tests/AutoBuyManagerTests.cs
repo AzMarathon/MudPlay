@@ -48,8 +48,8 @@ public sealed class AutoBuyManagerTests
                 countCarried: n => CarriedCount.GetValueOrDefault(n),
                 isEnabled: () => Enabled,
                 log: Log,
-                isParadigm: () => Paradigm);
-            Buy.NowProvider = () => Clock;
+                isParadigm: () => Paradigm,
+                now: () => Clock);
             Buy.AttachLineExtractor(Lines);
             Buy.SetWireSender(b => Sent.Add(b));
         }

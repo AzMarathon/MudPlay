@@ -1,9 +1,10 @@
 # Version history
 
-## 3.183.36
+## 3.183.37
 
 - Commands the client sends are no longer kept in memory for the whole session
 - A prompt cut off by a dropped connection is no longer completed by the next connection's first text
+- A loop held for a re-invited party member now resumes when the wait runs out, even after that member's @join reminder has stopped
 
 ## 3.183.34
 

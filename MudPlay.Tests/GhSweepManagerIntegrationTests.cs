@@ -13,6 +13,19 @@ namespace MudPlay.Tests;
 
 public sealed class GhSweepManagerIntegrationTests : IDisposable
 {
+    // The sweep's settle, pacing and backoff timers, the clock its pacing reads,
+    // and the game's prompts as it reads them.
+    private readonly ManualTimers _sweepTimers = new();
+    private DateTimeOffset _sweepNow = new(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+    private readonly WirePromptScanner _sweepPrompt = new();
+
+    // The pace between queued commands runs out.
+    private void PaceOut()
+    {
+        _sweepNow += GhSweepManager.MinCommandInterval;
+        _sweepTimers.RunDue(GhSweepManager.PromptWaitTimeout);
+    }
+
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), "mudplay-ghsweep-manager-" + Path.GetRandomFileName());
     // GhRoomLabelStore is BBS-tier now — each test pins this scratch BBS name
@@ -100,7 +113,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            isParadigm: () => true, inventory: inventory);
+            isParadigm: () => true, inventory: inventory, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
 
         var sent = new List<string>();
         sweep.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
@@ -118,7 +131,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(1));
         Assert.Equal("sea", sent[^1]);
-        FireSearchSettle(sweep);
+        FireSearchSettle();
         Assert.Equal("n", sent[^1]);
 
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
@@ -127,7 +140,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // This item only appears as the response to recon's own search, so its
         // eventual PendingMove is explicitly tagged hidden.
         FeedRouter(router, "You notice a mace here.");
-        FireSearchSettle(sweep);
+        FireSearchSettle();
         Assert.Equal("s", sent[^1]);
 
         // The game lists a room's floor on every entry, the way back included.
@@ -135,13 +148,13 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
         Assert.Equal("sea", sent[^1]);
-        FireSearchSettle(sweep);
+        FireSearchSettle();
         Assert.Equal("s", sent[^1]);
 
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
             DateTimeOffset.UtcNow.AddSeconds(4));
         Assert.Equal("sea", sent[^1]);
-        FireSearchSettle(sweep); // completes recon lap; sorting starts northbound
+        FireSearchSettle(); // completes recon lap; sorting starts northbound
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, sweep.Phase);
         Assert.Equal("n", sent[^1]);
         int reconSearchCount = sent.Count(command => command == "sea");
@@ -171,7 +184,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             DateTimeOffset.UtcNow.AddSeconds(6));
         Assert.Equal("sea", sent[^1]); // mace was tagged hidden during recon
         Assert.Equal(reconSearchCount + 1, sent.Count(command => command == "sea"));
-        FireSearchSettle(sweep);
+        FireSearchSettle();
         Assert.Equal("get mace", sent[^1]); // picked up while still carrying the war hammer
 
         // Pack now holds everything bound for A and no source remains — deliver:
@@ -191,7 +204,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         Assert.Equal("drop war hammer", sent[^1]);
         FeedRouter(router, "You dropped war hammer.");
 
-        sweep.FirePromptWaitTimeoutForTests();
+        PaceOut();
         Assert.Equal("drop mace", sent[^1]);
         FeedRouter(router, "You dropped mace.");
         // Everything is delivered — sorting is done and a final recon pass begins to
@@ -289,7 +302,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            isParadigm: () => true, inventory: inventory);
+            isParadigm: () => true, inventory: inventory, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
 
         var sent = new List<string>();
         sweep.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
@@ -387,7 +400,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            isParadigm: () => true, inventory: inventory);
+            isParadigm: () => true, inventory: inventory, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
 
         var sent = new List<string>();
         sweep.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
@@ -401,18 +414,18 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(1));
-        FireSearchSettle(sweep);
+        FireSearchSettle();
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
-        FireSearchSettle(sweep);
+        FireSearchSettle();
         // The game lists a room's floor on every entry, the way back included.
         FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
-        FireSearchSettle(sweep);
+        FireSearchSettle();
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
             DateTimeOffset.UtcNow.AddSeconds(4));
-        FireSearchSettle(sweep);   // completes recon; sorting begins
+        FireSearchSettle();   // completes recon; sorting begins
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, sweep.Phase);
 
         // Sorting reaches C and dispatches the pickup.
@@ -499,7 +512,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            isParadigm: () => true, inventory: inventory);
+            isParadigm: () => true, inventory: inventory, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
 
         var sent = new List<string>();
         sweep.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
@@ -511,18 +524,18 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(1));
-        FireSearchSettle(sweep);
+        FireSearchSettle();
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
-        FireSearchSettle(sweep);
+        FireSearchSettle();
         // The game lists a room's floor on every entry, the way back included.
         FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
-        FireSearchSettle(sweep);
+        FireSearchSettle();
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
             DateTimeOffset.UtcNow.AddSeconds(4));
-        FireSearchSettle(sweep);
+        FireSearchSettle();
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, sweep.Phase);
 
         // Sorting reaches C and dispatches the pickup — the ledger thinks it fits.
@@ -630,7 +643,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            isParadigm: () => true, inventory: inventory);
+            isParadigm: () => true, inventory: inventory, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
 
         var sent = new List<string>();
         sweep.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
@@ -667,11 +680,12 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 
         // Prompts are ignored while we're deliberately backing off — pushing
         // again the instant the game complained is exactly what got us here.
-        sweep.FirePromptForTests();
+        _sweepPrompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
         Assert.Equal(3, sweep.QueuedCommandCountForTests);
 
         // Backoff over: the same command goes out again.
-        sweep.FireRateLimitBackoffForTests();
+        _sweepNow += GhSweepManager.RateLimitBackoff;
+        _sweepTimers.RunDue(GhSweepManager.RateLimitBackoff);
         Assert.Equal(clobbered, sent[^1]);
         FeedRouter(router, $"You took {clobbered["get ".Length..]}.");
 
@@ -680,15 +694,15 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // releasing on prompt alone speeds up under exactly the condition that
         // should slow us down — observed live as bursts of five nudges in 200ms.
         int sentBeforeEarlyPrompt = sent.Count;
-        sweep.FirePromptForTests();
+        _sweepPrompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
         Assert.Equal(sentBeforeEarlyPrompt, sent.Count);
 
         // Each remaining command waits for its own prompt.
-        sweep.FirePromptWaitTimeoutForTests();
+        PaceOut();
         Assert.Equal(3, sent.Count(c => c.StartsWith("get ", StringComparison.Ordinal)));
         Assert.Equal(1, sweep.QueuedCommandCountForTests);
 
-        sweep.FirePromptWaitTimeoutForTests();
+        PaceOut();
         Assert.Equal(4, sent.Count(c => c.StartsWith("get ", StringComparison.Ordinal)));
         Assert.Equal(0, sweep.QueuedCommandCountForTests);
 
@@ -765,7 +779,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            isParadigm: () => true, inventory: inventory);
+            isParadigm: () => true, inventory: inventory, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
 
         var sent = new List<string>();
         sweep.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
@@ -885,7 +899,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            isParadigm: () => true, inventory: inventory);
+            isParadigm: () => true, inventory: inventory, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
 
         var sent = new List<string>();
         sweep.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
@@ -993,7 +1007,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            isParadigm: () => true, inventory: inventory);
+            isParadigm: () => true, inventory: inventory, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
 
         var sent = new List<string>();
         sweep.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
@@ -1641,7 +1655,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            isParadigm: () => true, inventory: inventory);
+            isParadigm: () => true, inventory: inventory, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
 
         var sent = new List<string>();
         sweep.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
@@ -1726,7 +1740,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         }
     }
 
-    private static SweepHarness NewSweepHarness(string root, string scratchBbs,
+    private SweepHarness NewSweepHarness(string root, string scratchBbs,
         GhSuspendedSweepStore? suspended = null, int currentWeight = 1, int maxWeight = 100,
         bool paradigm = true, string carriedInventory = "nothing", Func<string?>? activeGameData = null)
     {
@@ -1791,7 +1805,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
             isParadigm: () => paradigm, inventory: inventory, suspendedStore: suspended,
-            activeGameData: activeGameData);
+            activeGameData: activeGameData, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
 
         List<string> sent = new();
         sweep.SetWireSender(b => sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
@@ -1804,9 +1818,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         };
     }
 
-    private static void FireSearchSettle(GhSweepManager sweep) =>
-        typeof(GhSweepManager).GetMethod("OnReconSearchSettleElapsed",
-            BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(sweep, null);
+    private void FireSearchSettle() => _sweepTimers.RunDue(GhSweepManager.ReconSearchSettle);
 
     private static void FireSortingLapCompleted(GhSweepManager sweep) =>
         typeof(GhSweepManager).GetMethod("OnSortingLapCompleted",
@@ -1896,7 +1908,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            isParadigm: () => true, inventory: inventory, itemLocations: locations);
+            isParadigm: () => true, inventory: inventory, itemLocations: locations, promptScanner: _sweepPrompt, now: () => _sweepNow, schedule: _sweepTimers.Arm);
 
         var sent = new List<string>();
         sweep.SetWireSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));

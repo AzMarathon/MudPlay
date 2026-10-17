@@ -28,6 +28,8 @@ public sealed class PlayerLookManagerTests
         public RoomEntryWatcher RoomEntry { get; }
         public PartyState Party { get; } = new();
         public PlayerLookManager Look { get; }
+        // The clock the Look reads: the real one unless a test sets its own.
+        public Func<DateTime> LookNow { get; set; } = () => DateTime.UtcNow;
         public List<string> Sent { get; } = new();
 
         public string? SelfName { get; set; }
@@ -38,7 +40,7 @@ public sealed class PlayerLookManagerTests
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, Log);
             RoomEntry = new RoomEntryWatcher(Router, Classifier, Log);
-            Look = new PlayerLookManager(Router, RoomEntry, Players, Party, () => SelfName);
+            Look = new PlayerLookManager(Router, RoomEntry, Players, Party, () => SelfName, now: () => LookNow());
             Look.SetWireSender(bytes => Sent.Add(Encoding.Latin1.GetString(bytes)));
         }
 
@@ -159,10 +161,10 @@ public sealed class PlayerLookManagerTests
         h.AddPlayer("Bob");
         h.Look.LookBackWhenLookedAt = true;
         DateTime day1 = new(2026, 5, 30, 12, 0, 0, DateTimeKind.Utc);
-        h.Look.NowUtcProvider = () => day1;
+        h.LookNow = () => day1;
         h.Look.TryLookBack("Bob");
 
-        h.Look.NowUtcProvider = () => day1.AddDays(1);
+        h.LookNow = () => day1.AddDays(1);
         h.Look.TryLookBack("Bob");
 
         Assert.Equal(new[] { "look Bob\r", "look Bob\r" }, h.Sent);

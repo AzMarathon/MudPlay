@@ -21,10 +21,7 @@ public sealed class TrainerMenuTrackerTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        TrainerMenuTracker tracker = new(router, state)
-        {
-            NowProvider = () => Now,
-        };
+        TrainerMenuTracker tracker = new(router, state, now: () => Now);
         return (tracker, router, state);
     }
 
@@ -174,7 +171,7 @@ public sealed class TrainerMenuTrackerTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        TrainerMenuTracker tracker = new(router, state) { NowProvider = () => t };
+        TrainerMenuTracker tracker = new(router, state, now: () => t);
         tracker.ExpectingMenuWindow = TimeSpan.FromSeconds(5);
 
         tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));

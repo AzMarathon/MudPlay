@@ -302,7 +302,7 @@ public sealed class SoundCueTests : IDisposable
         Rig rig = new();
         rig.Set(SoundCues.BossWindow);
         rig.Set(SoundCues.BossReady);
-        SoundBossWatcher watcher = new(rig.Engine, bosses, timers, cache, () => true) { Now = () => rig.Now };
+        SoundBossWatcher watcher = new(rig.Engine, bosses, timers, cache, () => true, now: () => rig.Now);
         return (rig, watcher, timers);
     }
 
@@ -368,10 +368,8 @@ public sealed class SoundCueTests : IDisposable
     public void BossTimer_NotInGame_DoesNothing()
     {
         var (rig, _, timers) = BossRig(RealmType.ParaMud, BossRespawnType.Timed);
-        SoundBossWatcher offline = new(rig.Engine, new BossStore(seedPath: _seedPath), timers, new GameDataCache(), () => false)
-        {
-            Now = () => rig.Now,
-        };
+        SoundBossWatcher offline = new(rig.Engine, new BossStore(seedPath: _seedPath), timers, new GameDataCache(), () => false,
+            now: () => rig.Now);
         timers.MarkKilled("ogre king", rig.Now - TimeSpan.FromHours(8));
         offline.Evaluate();
         Assert.Empty(rig.Played);

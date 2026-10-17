@@ -646,12 +646,10 @@ public sealed partial class CombatManager : IDisposable
     // next-round tick is never itself rejected.
     private static readonly TimeSpan AttackTallyMinGap = AlternationAdvanceMinGap;
 
-    // Clock for AlternationAdvanceMinGap, mirroring CastingDirector.SetClock —
-    // tests inject a fake clock so a synchronous burst of Tick() calls can
-    // exercise multi-round phase timing without real elapsed wall-clock time.
-    // Scoped to just this one check; every other timestamp in this file still
-    // reads DateTimeOffset.Now directly.
-    private Func<DateTimeOffset> _now = () => DateTimeOffset.Now;
+    // Clock for AlternationAdvanceMinGap and the move hold, so a synchronous burst
+    // of combat ticks can carry multi-round phase timing. Every other timestamp in
+    // this file still reads DateTimeOffset.Now directly.
+    private readonly Func<DateTimeOffset> _now;
 
     private string? _lastAttackCommand;
     private DateTimeOffset _lastRoomRefreshAt = DateTimeOffset.MinValue;
@@ -1005,8 +1003,10 @@ public sealed partial class CombatManager : IDisposable
         LogService? log = null,
         Func<PartySettings>? readPartySettings = null,
         Func<string, int?>? roomAwareResolve = null,
-        Func<string, Game.Spells.KnownSpell?>? resolveSpellByCode = null)
+        Func<string, Game.Spells.KnownSpell?>? resolveSpellByCode = null,
+        Func<DateTimeOffset>? now = null)
     {
+        _now = now ?? (() => DateTimeOffset.Now);
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(classifier);
         ArgumentNullException.ThrowIfNull(monsters);
@@ -1133,13 +1133,6 @@ public sealed partial class CombatManager : IDisposable
         if (verb.Equals("bs", StringComparison.OrdinalIgnoreCase)) _backstabOpenerConsumed = false;
         _log?.Combat(LogCategory, $"attack on '{target}' held — the send gate is up; re-decided when it lifts");
         return true;
-    }
-
-    // Test-only clock override for AlternationAdvanceMinGap — see _now.
-    public void SetClock(Func<DateTimeOffset> now)
-    {
-        ArgumentNullException.ThrowIfNull(now);
-        _now = now;
     }
 
     // Wire the recovery anchor for a blocked initial combat-spell dispatch. The

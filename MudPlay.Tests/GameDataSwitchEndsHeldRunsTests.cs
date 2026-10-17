@@ -64,7 +64,7 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
         using EventEngineHarness h = EventEngineHarness.Create(Path.Combine(_root, kind), TestLoopSet);
         MovementController controller = ControllerOver(h);
         DateTimeOffset now = new(2026, 10, 11, 20, 0, 0, TimeSpan.Zero);
-        h.Events.Now = () => now;
+        h.EventsNow = () => now;
         h.Tracker.SetLocated(new RoomKey(1, 1));
         if (kind == "loop") h.Runner.Start(new Loop("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
         else
@@ -132,7 +132,8 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
 
     private sealed record Pickup(
         PartyComebackManager Comeback, RemoteCommandManager Engine, MessageRouter Router, PartyState Party,
-        RoomTracker Tracker, LoopRunner Runner, MovementController Controller, List<string> Sent);
+        RoomTracker Tracker, LoopRunner Runner, MovementController Controller, List<string> Sent,
+        ManualTimers ComebackTimers);
 
     // The engines and a pick-up manager over them, the controller wired to it as
     // AppServices wires it. cancelWired false leaves that wiring out.
@@ -164,7 +165,9 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
         AutoLairManager lair = new(walker, tracker, graph, bfs, timers);
         RoomEntityClassifier classifier = new(router, new MonsterMessageStore(), players, tracker);
         PartyManager party = new(router, partyState);
-        PartyComebackManager comeback = new(engine, party, tracker, classifier, walker, runner, lair, router, bfs);
+        ManualTimers comebackTimers = new();
+        PartyComebackManager comeback = new(engine, party, tracker, classifier, walker, runner, lair, router, bfs,
+            schedule: comebackTimers.Arm);
         comeback.SetWireSender(_ => { });
         MovementController controller = new(walker, runner, lair, coord);
         if (cancelWired)
@@ -174,7 +177,7 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
                 comeback.Cancel(reason);
             };
         _dispose.AddRange(new IDisposable[] { controller, comeback, lair, timers, party, engine });
-        return new Pickup(comeback, engine, router, partyState, tracker, runner, controller, sent);
+        return new Pickup(comeback, engine, router, partyState, tracker, runner, controller, sent, comebackTimers);
     }
 
     // Standing in the member's room, re-invited and waiting for them to follow, with
@@ -205,7 +208,7 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
         Assert.Null(p.Comeback.RecoveringMember);
 
         // The member never follows: the wait running out is what put the loop back.
-        p.Comeback.FireFollowTimeoutForTests();
+        p.ComebackTimers.RunAll();
 
         Assert.Equal(LoopState.Idle, p.Runner.State);
         Assert.Equal(sent, p.Sent.Count);
@@ -219,7 +222,7 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
         WaitForTheMember(p);
 
         p.Controller.StopForGameDataChange("alpha", "beta");
-        p.Comeback.FireFollowTimeoutForTests();
+        p.ComebackTimers.RunAll();
 
         Assert.NotEqual(LoopState.Idle, p.Runner.State);
     }

@@ -28,16 +28,13 @@ public sealed class SysStatusProbeTests
         public Harness()
         {
             Parser.AttachLineExtractor(Feed.Lines);
-            Probe = new SysStatusProbe(Parser, () => CapabilityEnabled, () => Now)
+            // The "timeout" completes only when a test fires it explicitly,
+            // so a slow machine can never flake these.
+            Probe = new SysStatusProbe(Parser, () => CapabilityEnabled, () => Now, delay: _ =>
             {
-                // The "timeout" completes only when a test fires it explicitly,
-                // so a slow machine can never flake these.
-                DelayProvider = _ =>
-                {
-                    _currentDelay = new TaskCompletionSource();
-                    return _currentDelay.Task;
-                },
-            };
+                _currentDelay = new TaskCompletionSource();
+                return _currentDelay.Task;
+            });
             Probe.SetWireSender(bytes =>
             {
                 Sent.Add(Encoding.Latin1.GetString(bytes));

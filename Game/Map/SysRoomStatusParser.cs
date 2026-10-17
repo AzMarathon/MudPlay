@@ -54,8 +54,7 @@ public sealed partial class SysRoomStatusParser : IDisposable
     // whole session. Observed live — the same command answered fine 16 minutes later.
     public TimeSpan ExpectingBlockWindow { get; set; } = TimeSpan.FromSeconds(10);
 
-    // Test seam.
-    public Func<DateTime> NowProvider { get; set; } = () => DateTime.UtcNow;
+    private readonly Func<DateTime> _now;
 
     private DateTime? _windowOpenedAt;
 
@@ -74,8 +73,9 @@ public sealed partial class SysRoomStatusParser : IDisposable
     // Fires once per completed room block.
     public event Action<SysRoomStatus>? StatusParsed;
 
-    public SysRoomStatusParser(WirePromptScanner? promptScanner = null, LogService? log = null)
+    public SysRoomStatusParser(WirePromptScanner? promptScanner = null, LogService? log = null, Func<DateTime>? now = null)
     {
+        _now = now ?? (() => DateTime.UtcNow);
         _promptScanner = promptScanner;
         _log = log;
         if (_promptScanner is not null) _promptScanner.PromptObserved += OnPromptObserved;
@@ -127,7 +127,7 @@ public sealed partial class SysRoomStatusParser : IDisposable
         if (!IsPrefixOf(words[1], "status", minLength: 2)) return;
 
         Reset();
-        _windowOpenedAt = NowProvider();
+        _windowOpenedAt = _now();
         _log?.Log(LogSeverity.Info, LogCategory,
             $"Observed outbound `{line}` — armed {ExpectingBlockWindow.TotalSeconds:0}s scan window.");
     }
@@ -144,7 +144,7 @@ public sealed partial class SysRoomStatusParser : IDisposable
     {
         if (_windowOpenedAt is not { } opened) return;
 
-        if (NowProvider() - opened > ExpectingBlockWindow)
+        if (_now() - opened > ExpectingBlockWindow)
         {
             CloseWindow("window expired");
             return;

@@ -9,6 +9,9 @@ namespace MudPlay.Tests;
 
 public sealed class PartyManagerTests
 {
+    // The clock the PartyManager reads: the real one unless a test sets its own.
+    private Func<DateTimeOffset> _partyNow = () => DateTimeOffset.UtcNow;
+
     private static LineExtractor.EmittedLine Line(string text) =>
         new(text, new CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
 
@@ -29,7 +32,7 @@ public sealed class PartyManagerTests
     {
         MessageRouter router = _router;
         PartyState state = new();
-        PartyManager party = new(router, state);
+        PartyManager party = new(router, state, now: () => _partyNow());
         party.AttachLineExtractor(_feed.Lines);
         if (localCharacterName is not null) party.LocalCharacterName = localCharacterName;
         return (router, party);
@@ -384,7 +387,7 @@ public sealed class PartyManagerTests
     {
         DateTimeOffset t0 = new(2026, 6, 10, 0, 0, 0, TimeSpan.Zero);
         var (router, p) = Setup(localCharacterName: "MudPlay");
-        p.NowProvider = () => t0;
+        _partyNow = () => t0;
         router.Dispatch(Line("Raijin started to follow you."));
 
         // Raijin gets left behind / self-departs — stamps the grace window.
@@ -400,7 +403,7 @@ public sealed class PartyManagerTests
     {
         DateTimeOffset t0 = new(2026, 6, 10, 0, 0, 0, TimeSpan.Zero);
         var (router, p) = Setup(localCharacterName: "MudPlay");
-        p.NowProvider = () => t0;
+        _partyNow = () => t0;
 
         // Follow/stop lines capture the given name only (the \w+ patterns
         // never span the space), so the grace-window key is "Raijin".
@@ -419,14 +422,14 @@ public sealed class PartyManagerTests
         var (router, p) = Setup(localCharacterName: "MudPlay");
         p.DisconnectGraceWindow = TimeSpan.FromSeconds(30);
         p.ComebackWindow = TimeSpan.FromMinutes(2);
-        p.NowProvider = () => t0;
+        _partyNow = () => t0;
         router.Dispatch(Line("Raijin started to follow you."));
         router.Dispatch(Line("Raijin stops following you."));
 
         // Eligibility runs on the @comeback window, not the re-invite one.
-        p.NowProvider = () => t0.AddSeconds(31);
+        _partyNow = () => t0.AddSeconds(31);
         Assert.True(p.WasRecentlyPartied("Raijin"));
-        p.NowProvider = () => t0.AddSeconds(121);
+        _partyNow = () => t0.AddSeconds(121);
         Assert.False(p.WasRecentlyPartied("Raijin"));
     }
 
@@ -435,7 +438,7 @@ public sealed class PartyManagerTests
     {
         DateTimeOffset t0 = new(2026, 6, 10, 0, 0, 0, TimeSpan.Zero);
         var (router, p) = Setup(localCharacterName: "MudPlay");
-        p.NowProvider = () => t0;
+        _partyNow = () => t0;
         router.Dispatch(Line("Raijin started to follow you."));
 
         // WE uninvited Raijin — "removed from your followers" does NOT

@@ -92,11 +92,11 @@ public sealed class PartyEssentialHandlers : IDisposable
     // When each member last sent @ok (given name), to spot a premature one.
     private readonly Dictionary<string, DateTime> _lastOkAt = new(StringComparer.OrdinalIgnoreCase);
 
-    public Func<DateTime> NowProvider { get; set; } = () => DateTime.UtcNow;
+    private readonly Func<DateTime> _now;
 
     // Whether member sent @ok within window of now.
     public bool OkedWithin(string member, TimeSpan window)
-        => _lastOkAt.TryGetValue(GivenName(member), out DateTime at) && NowProvider() - at <= window;
+        => _lastOkAt.TryGetValue(GivenName(member), out DateTime at) && _now() - at <= window;
 
     // Fires on every transition of IsPaused. Lets the pause-gate consumer drop a
     // single subscription instead of polling.
@@ -113,8 +113,10 @@ public sealed class PartyEssentialHandlers : IDisposable
         Func<string?>? readDraggedBy = null,
         Func<MessageFlags>? readAilments = null,
         Func<bool>? readFleeing = null,
-        Func<bool>? readHoldingWait = null)
+        Func<bool>? readHoldingWait = null,
+        Func<DateTime>? now = null)
     {
+        _now = now ?? (() => DateTime.UtcNow);
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(player);
         ArgumentNullException.ThrowIfNull(party);
@@ -748,7 +750,7 @@ public sealed class PartyEssentialHandlers : IDisposable
 
     private void OnOk(RemoteCommandContext ctx)
     {
-        _lastOkAt[GivenName(ctx.Sender)] = NowProvider();
+        _lastOkAt[GivenName(ctx.Sender)] = _now();
         if (_okDistrusted.Contains(GivenName(ctx.Sender))) return;
         bool wasPaused = IsPaused;
         WaitingMembers.Remove(ctx.Sender);

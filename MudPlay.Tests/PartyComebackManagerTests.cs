@@ -82,6 +82,12 @@ public sealed class PartyComebackManagerTests : IDisposable
         public required AutoLairManager Lair { get; init; }
         public required LairTimerStore Timers { get; init; }
         public required PartyComebackManager Comeback { get; init; }
+        // The clock the comeback manager reads: the real one unless a test sets its own.
+        public Func<DateTimeOffset> ComebackNow { get; set; } = () => DateTimeOffset.UtcNow;
+        // The manager's CR-fallback, join-fallback and follow-wait timers.
+        public required ManualTimers ComebackTimers { get; init; }
+        // The game's prompts, as the loop runner reads them.
+        public required WirePromptScanner Prompt { get; init; }
         // What Engine, Party and Comeback each put on the wire.
         public List<byte[]> EngineWire { get; } = new();
         public List<byte[]> PartyWire { get; } = new();
@@ -144,17 +150,21 @@ public sealed class PartyComebackManagerTests : IDisposable
         MovementCoordinator coord = new();
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
         walker.SetWireSender(_ => { });
-        LoopRunner loop = new(tracker, coord, graph: graph, bfs: bfs, walker: walker);
+        WirePromptScanner prompt = new();
+        LoopRunner loop = new(tracker, coord, promptScanner: prompt, graph: graph, bfs: bfs, walker: walker);
         LairTimerStore timers = new(cache, graph, tracker);
         AutoLairManager lair = new(walker, tracker, graph, bfs, timers);
         MonsterMessageStore monsters = new();
         RoomEntityClassifier classifier = new(router, monsters, players, tracker);
 
         PartyManager party = new(router, partyState);
+        Harness h = null!;
+        ManualTimers comebackTimers = new();
         PartyComebackManager comeback =
-            new(engine, party, tracker, classifier, walker, loop, lair, router, bfs);
+            new(engine, party, tracker, classifier, walker, loop, lair, router, bfs, now: () => h.ComebackNow(),
+                schedule: comebackTimers.Arm);
 
-        Harness h = new()
+        h = new()
         {
             Router = router,
             PartyState = partyState,
@@ -167,6 +177,8 @@ public sealed class PartyComebackManagerTests : IDisposable
             Lair = lair,
             Timers = timers,
             Comeback = comeback,
+            ComebackTimers = comebackTimers,
+            Prompt = prompt,
             Coordinator = coord,
         };
         engine.SetWireSender(h.EngineWire.Add);
@@ -705,7 +717,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
 
-        h.Comeback.NowProvider = () => DateTimeOffset.UtcNow.AddSeconds(30);
+        h.ComebackNow = () => DateTimeOffset.UtcNow.AddSeconds(30);
         h.Router.Dispatch(Line("Tank is no longer following you."));
 
         Assert.Null(h.Comeback.RecoveringMember);
@@ -778,7 +790,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         // is still owed, which a same-direction keystroke would be taken for).
         DateTimeOffset typedAt = DateTimeOffset.UtcNow.AddSeconds(3);
         h.Tracker.NoteMoveSentByObserver(Direction.N, typedAt);
-        h.Comeback.NowProvider = () => typedAt.AddSeconds(1);
+        h.ComebackNow = () => typedAt.AddSeconds(1);
 
         h.Router.Dispatch(Line("Tank is no longer following you."));
 
@@ -801,7 +813,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.True(h.Loop.Start(new Loop("circuit", [new RoomKey(1, 1), new RoomKey(1, 3)])));
         h.Loop.NotifyDisconnected();
         h.Tracker.SetLocated(new RoomKey(1, 1));
-        h.Loop.FirePromptObservedForTests();
+        h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
         Assert.Equal(LoopState.Paused, h.Loop.State);
         Assert.True(h.Loop.ReconnectResumeHeldForReform);
 
@@ -1003,7 +1015,7 @@ public sealed class PartyComebackManagerTests : IDisposable
 
         // Tank didn't rejoin via invite-on-seen (re-entered elsewhere), so the
         // fallback fires the @where probe.
-        h.Comeback.FireCrFallbackForTests();
+        h.ComebackTimers.RunAll();
         Assert.True(Sent(h, "/Tank @where"));
     }
 
@@ -1022,7 +1034,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         // AutoPartyManager's invite-on-seen and Tank re-followed — so by the time
         // the fallback fires he's back in the party and no @where is spent.
         h.Router.Dispatch(Line("Tank started to follow you."));
-        h.Comeback.FireCrFallbackForTests();
+        h.ComebackTimers.RunAll();
 
         Assert.False(Sent(h, "/Tank @where"));
     }
@@ -1037,7 +1049,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Router.Dispatch(Line("Tank just disconnected!!!."));
         h.Router.Dispatch(Line("Tank just entered the Realm."));
         // CR re-observe found no Tank in our room → fallback fires the @where probe.
-        h.Comeback.FireCrFallbackForTests();
+        h.ComebackTimers.RunAll();
         // Leader probed @where; Tank answers with their location (the wrapped
         // MudPlay reply format PartyEssentialHandlers builds).
         h.Router.Dispatch(Line("Tank telepaths: {Throne Room (map 1, room 3); exits: north}"));
@@ -1281,7 +1293,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         using Harness h = NewHarness(GatedGraphJson);
         StartLoopAtTheGate(h);
         StepThroughTheGate(h);
-        h.Comeback.NowProvider = () => DateTimeOffset.UtcNow.AddSeconds(5);
+        h.ComebackNow = () => DateTimeOffset.UtcNow.AddSeconds(5);
         h.Router.Dispatch(Line("Tank started to follow you."));   // with us, this side of the gate
 
         ChatLines.Hear(h.Router, Telepath("Tank", "@comeback"));
@@ -1432,7 +1444,7 @@ public sealed class PartyComebackManagerTests : IDisposable
     {
         using Harness h = NewHarness(GatedGraphJson);
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         h.Comeback.MemberCanPass = (_, _) => true;
         StartLoopAtTheGate(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -1472,7 +1484,7 @@ public sealed class PartyComebackManagerTests : IDisposable
     {
         using Harness h = NewHarness(GatedGraphJson);
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         h.Comeback.MemberCanPass = (_, _) => true;
         StartLoopAtTheGate(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -1588,7 +1600,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         List<string> notices = new();
         h.Comeback.Notice = notices.Add;
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         WalkThroughTheGate_PickUpOnce(h, () => now += TimeSpan.FromSeconds(1));
 
         now += TimeSpan.FromSeconds(1);
@@ -1615,7 +1627,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         List<string> notices = new();
         h.Comeback.Notice = notices.Add;
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         WalkThroughTheGate_PickUpOnce(h, () => now += TimeSpan.FromSeconds(1));
 
         now += TimeSpan.FromSeconds(1);
@@ -1638,7 +1650,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         List<string> notices = new();
         h.Comeback.Notice = notices.Add;
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         SeatFollower(h, "Tank");
         h.Tracker.SetLocated(new RoomKey(1, 4));
         Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
@@ -1976,7 +1988,7 @@ public sealed class PartyComebackManagerTests : IDisposable
     {
         using Harness h = NewHarness(GatedGraphJson);
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         SeatFollower(h, "Tank");
         h.Tracker.SetLocated(new RoomKey(1, 3));
         h.Comeback.TrainTripEnded(byItself: true, setOut: ["Tank"]);
@@ -2061,7 +2073,7 @@ public sealed class PartyComebackManagerTests : IDisposable
     {
         using Harness h = NewHarness(GatedGraphJson);
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         bool tripOn = true, masterOff = false;
         h.Comeback.TrainTripRunning = () => tripOn;
         h.Comeback.MasterSwitchOff = () => masterOff;
@@ -2118,7 +2130,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Tracker.SetLocated(new RoomKey(1, 1));   // there, and re-invited
 
         Assert.True(h.Comeback.FollowTimerRunning);
-        h.Comeback.FireFollowTimeoutForTests();
+        h.ComebackTimers.RunAll();
 
         Assert.Null(h.Comeback.RecoveringMember);
         Assert.True(h.Lair.IsActive);
@@ -2248,12 +2260,12 @@ public sealed class PartyComebackManagerTests : IDisposable
         using Harness h = NewHarness();
         h.Comeback.OnStock = () => true;
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         List<string> partyWire = ReachAMemberStillOnOurRoster(h);
 
         h.Router.Dispatch(Line("Tank started to follow you."));
         now += TimeSpan.FromSeconds(30);
-        h.Comeback.FireJoinFallbackForTests();
+        h.ComebackTimers.RunAll();
 
         Assert.Empty(partyWire);
         Assert.Empty(h.Comeback.AskedToJoin);
@@ -2269,19 +2281,22 @@ public sealed class PartyComebackManagerTests : IDisposable
         using Harness h = NewHarness();
         h.Comeback.OnStock = () => true;
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         List<string> partyWire = ReachAMemberStillOnOurRoster(h);
+        void Wait(double seconds)
+        {
+            now += TimeSpan.FromSeconds(seconds);
+            h.ComebackTimers.Advance(TimeSpan.FromSeconds(seconds));
+        }
 
-        now += TimeSpan.FromSeconds(2);
-        h.Comeback.FireJoinFallbackForTests();
+        Wait(2);
         Assert.Empty(partyWire);                                 // still inside the wait
 
-        now += TimeSpan.FromSeconds(4);
-        h.Comeback.FireJoinFallbackForTests();
+        Wait(4);
         Assert.Single(partyWire, w => w == "invite Tank");
         Assert.Empty(h.Comeback.AskedToJoin);
 
-        h.Comeback.FireJoinFallbackForTests();
+        Wait(4);
         Assert.Single(partyWire);                                // once
         Assert.Equal("Tank", h.Comeback.RecoveringMember);       // the follow is still waited for
     }
@@ -2331,20 +2346,23 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Comeback.OnStock = () => true;
         h.Comeback.FollowWaitWindow = TimeSpan.FromSeconds(3);
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         List<string> partyWire = ReachAMemberStillOnOurRoster(h);
         Assert.True(Sent(h, "/Tank @join"));
+        void Wait(double seconds)
+        {
+            now += TimeSpan.FromSeconds(seconds);
+            h.ComebackTimers.Advance(TimeSpan.FromSeconds(seconds));
+        }
 
-        now += TimeSpan.FromSeconds(1);
-        h.Comeback.FireJoinFallbackForTests();
+        Wait(1);
         Assert.Empty(partyWire);
 
-        now += TimeSpan.FromSeconds(0.6);
-        h.Comeback.FireJoinFallbackForTests();
+        Wait(0.6);
         Assert.Single(partyWire, w => w == "invite Tank");
         Assert.Equal("Tank", h.Comeback.RecoveringMember);       // still inside the 3 s
 
-        h.Comeback.FireFollowTimeoutForTests();
+        Wait(1.5);
         Assert.Null(h.Comeback.RecoveringMember);
         Assert.Single(partyWire);
     }
@@ -2389,12 +2407,12 @@ public sealed class PartyComebackManagerTests : IDisposable
         using Harness h = NewHarness();
         h.Comeback.OnStock = () => true;
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         List<string> partyWire = ReachAMemberStillOnOurRoster(h);
 
         ChatLines.Hear(h.Router, Telepath("Tank", "@forget"));
         now += TimeSpan.FromSeconds(30);
-        h.Comeback.FireJoinFallbackForTests();
+        h.ComebackTimers.RunAll();
 
         Assert.Null(h.Comeback.RecoveringMember);
         Assert.Empty(partyWire);
@@ -2407,7 +2425,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         List<string> partyWire = new();
         h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        h.Comeback.NowProvider = () => now;
+        h.ComebackNow = () => now;
         h.Tracker.SetLocated(new RoomKey(1, 4));
         h.Lair.Mark(new RoomKey(1, 1));
         h.Lair.Mark(new RoomKey(1, 3));
@@ -2478,8 +2496,8 @@ public sealed class PartyComebackManagerTests : IDisposable
     private static void LetTheJoinWaitRunOut(Harness h)
     {
         DateTimeOffset later = DateTimeOffset.UtcNow.AddSeconds(30);
-        h.Comeback.NowProvider = () => later;
-        h.Comeback.FireJoinFallbackForTests();
+        h.ComebackNow = () => later;
+        h.ComebackTimers.RunAll();
     }
 
     // Still standing with them when the join wait runs out: invited after all.
@@ -2491,7 +2509,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         List<string> partyWire = LeftAtAnExitByAutoLair_NoLineFromTheGame(h);
 
         AlsoHere(h, "Tank");
-        h.Comeback.FireJoinFallbackForTests();
+        h.ComebackTimers.RunAll();
         Assert.Empty(partyWire);                                 // inside the join wait
 
         LetTheJoinWaitRunOut(h);

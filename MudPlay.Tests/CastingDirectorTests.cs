@@ -848,13 +848,13 @@ public sealed class CastingDirectorTests
                 readSpells: () => Spells,
                 readHealth: () => Health,
                 isEnabled: () => AutoHealRestEnabled,
-                log: Log);
+                log: Log,
+                now: () => Now);
             Director.SetAutoBlessGate(() => AutoBlessEnabled);
             Director.SetTriggeredRestGate(() => TriggeredRest);
             Director.SetBuffStripRoomGate(() => BuffStripRoom);
             Director.SetStealthMaintenanceDeferGate(() => DeferMaintenanceForStealth);
             Director.SetCombatTickSource(() => CombatTickDamageDriven);
-            Director.SetClock(() => Now);
             // Self buffs now live in the unified list. Fold the tests' self-bless
             // config (Spells.BlessSlots / WhenHp/MaFull) into it at read time, exactly
             // like ProfileMigrations does on load, so the tests set them the old way.
@@ -1428,7 +1428,8 @@ public sealed class CastingDirectorTests
         h.EnableBurstSettle();
         DateTimeOffset start = new(2026, 10, 9, 12, 7, 51, 486, TimeSpan.Zero);
         h.Now = start.UtcDateTime;
-        using TickEngine tick = new(h.Router, () => new DateTimeOffset(h.Now, TimeSpan.Zero));
+        ManualTimers polls = new();
+        using TickEngine tick = new(h.Router, () => new DateTimeOffset(h.Now, TimeSpan.Zero), schedule: polls.Arm);
         tick.CombatTickElapsed += () => h.Cast.OnCombatTick(tick.LastCombatTickWasPlaced);
         tick.CombatTickElapsed += h.Director.NotifyRoundComplete;
         h.Director.SetCombatTickSource(() => tick.LastCombatTickWasDamageDriven);
@@ -1463,7 +1464,7 @@ public sealed class CastingDirectorTests
 
         // The next round, projected from the one seen.
         h.Now = start.UtcDateTime + TickEngine.CombatTickInterval;
-        tick.PollTimersForTests();
+        polls.RunAll();
         h.RunSettledPass();
         Assert.Equal(new[] { "grhe", "grhe" }, h.CastsSent);
     }
@@ -4096,6 +4097,8 @@ public sealed class CastingDirectorTests
         public SpellsSettings Spells { get; set; } = new();
         public HealthSettings Health { get; set; } = new();
         public PartySettings PartySettings { get; set; } = new();
+        // The director's clock: the real one unless a test sets its own.
+        public Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
 
         public PartyHarness()
         {
@@ -4109,7 +4112,8 @@ public sealed class CastingDirectorTests
                 readHealth: () => Health,
                 readPartySettings: () => PartySettings,
                 isEnabled: () => true,
-                log: Log);
+                log: Log,
+                now: () => Clock());
             State.MaxHp = 200;
             State.Hp = 200;
             State.MaxMa = 100;
@@ -4546,7 +4550,7 @@ public sealed class CastingDirectorTests
     {
         using PartyHarness h = new();
         DateTime now = new(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc);
-        h.Director.SetClock(() => now);
+        h.Clock = () => now;
         h.Spells.CurePoisonSpell = "mgra";
         PartyMember tank = h.AddMember("Tank", hpPercent: 100);
         PartyMember mage = h.AddMember("Mage", hpPercent: 100);
@@ -4758,9 +4762,9 @@ public sealed class CastingDirectorTests
                 readHealth: () => Health,
                 readPartySettings: () => PartySettings,
                 isEnabled: () => true,
-                log: Log);
+                log: Log,
+                now: () => Now);
             Director.AttachLineExtractor(Server.Lines);
-            Director.SetClock(() => Now);
             Director.SetTriggeredRestGate(() => TriggeredRest);
             Director.SetBuffDurationSources(
                 code => BuffInfo.TryGetValue(code, out (string Caster, long Duration) info)

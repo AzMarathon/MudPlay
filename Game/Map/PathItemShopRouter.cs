@@ -87,8 +87,10 @@ public sealed class PathItemShopRouter : IDisposable
     private readonly TimeSpan _buyTimeout;
     private readonly TimeSpan _withdrawTimeout;
     private readonly WireSender _wire = new();
-    private readonly Timer _buyTimer;
-    private readonly Timer _withdrawTimer;
+    private IDisposable? _buyTimer;
+    // Arms one tick after the delay; disposing what it returns cancels it.
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
+    private IDisposable? _withdrawTimer;
 
     private Phase _phase = Phase.Idle;
     private int _itemId;
@@ -125,7 +127,8 @@ public sealed class PathItemShopRouter : IDisposable
         // is known to hold. readPartyPurses: has their purses read first and calls
         // back; it calls back at once when there is nothing to read them for.
         Func<RoomKey, RoomKey, RoomKey, long, (long Copper, string Said)>? partyTollTopUp = null,
-        Action<RoomKey, RoomKey, RoomKey, Action>? readPartyPurses = null)
+        Action<RoomKey, RoomKey, RoomKey, Action>? readPartyPurses = null,
+        Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
         _partyTollTopUp = partyTollTopUp;
         _readPartyPurses = readPartyPurses;
@@ -157,13 +160,11 @@ public sealed class PathItemShopRouter : IDisposable
         _engineWalkActive = engineWalkActive;
         _walkTo = walkTo;
         _post = post;
+        _schedule = schedule
+            ?? ((delay, tick) => new Timer(_ => _post(tick), null, delay, Timeout.InfiniteTimeSpan));
         _log = log;
         _buyTimeout = buyTimeout ?? TimeSpan.FromSeconds(8);
         _withdrawTimeout = withdrawTimeout ?? TimeSpan.FromSeconds(8);
-        _buyTimer = new Timer(_ => _post(OnBuyTimeout), null,
-            Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-        _withdrawTimer = new Timer(_ => _post(OnWithdrawTimeout), null,
-            Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     }
 
     // Bind the wire sink used to issue the buy command.
@@ -330,9 +331,8 @@ public sealed class PathItemShopRouter : IDisposable
 
     // Buy-window elapsed. If the item still isn't carried the buy didn't land
     // (no gold, out of stock, class-refused) — resume to the destination and
-    // leave the need outstanding for search. Invoked on the UI thread via the
-    // injected post delegate; tests call it directly.
-    public void OnBuyTimeout()
+    // leave the need outstanding for search. Runs on the UI thread.
+    private void OnBuyTimeout()
     {
         if (_phase != Phase.Buying) return;
         if (_carriedCount(_itemId) >= _targetCount) return; // race: OnInventoryChanged handled it
@@ -345,8 +345,8 @@ public sealed class PathItemShopRouter : IDisposable
     // didn't land the shortfall — the bank held less than we asked, and an
     // over-request silently no-ops (cash unchanged). We can't fund the buy, so
     // halt at the bank and leave it for the user rather than walking on to a shop
-    // we can't pay at. Invoked on the UI thread via post; tests call it directly.
-    public void OnWithdrawTimeout()
+    // we can't pay at. Runs on the UI thread.
+    private void OnWithdrawTimeout()
     {
         if (_phase != Phase.Withdrawing) return;
         if (_cashOnHand() >= _costTarget) return;   // race: OnInventoryChanged handled it
@@ -358,8 +358,8 @@ public sealed class PathItemShopRouter : IDisposable
 
     public void Dispose()
     {
-        _buyTimer.Dispose();
-        _withdrawTimer.Dispose();
+        _buyTimer?.Dispose();
+        _withdrawTimer?.Dispose();
     }
 
     private void BeginWithdrawing()
@@ -466,16 +466,28 @@ public sealed class PathItemShopRouter : IDisposable
     }
 
     private void ArmBuyTimer()
-        => _buyTimer.Change(_buyTimeout, Timeout.InfiniteTimeSpan);
+    {
+        _buyTimer?.Dispose();
+        _buyTimer = _schedule(_buyTimeout, OnBuyTimeout);
+    }
 
     private void DisarmBuyTimer()
-        => _buyTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+    {
+        _buyTimer?.Dispose();
+        _buyTimer = null;
+    }
 
     private void ArmWithdrawTimer()
-        => _withdrawTimer.Change(_withdrawTimeout, Timeout.InfiniteTimeSpan);
+    {
+        _withdrawTimer?.Dispose();
+        _withdrawTimer = _schedule(_withdrawTimeout, OnWithdrawTimeout);
+    }
 
     private void DisarmWithdrawTimer()
-        => _withdrawTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+    {
+        _withdrawTimer?.Dispose();
+        _withdrawTimer = null;
+    }
 
     private bool TrySelectShop(RoomKey cur, RoomKey dest, int itemId, out RoomKey best)
         => TrySelectShop(_shopRoomsSellingItem(itemId), cur, dest, _distanceBetween, out best);

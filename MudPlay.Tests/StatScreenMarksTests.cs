@@ -175,12 +175,13 @@ public sealed class StatScreenMarksTests
             + $"{E}0mYou feel strong, but clumsy! (96s)\r\n";
 
         var stats = new PlayerStats();
-        using var parser = new StatParser(stats);
+        ManualTimers timers = new();
+        using var parser = new StatParser(stats, schedule: timers.Arm);
         parser.AttachLineExtractor(_feed.Lines);
         var emulator = new TerminalEmulator(80, 24);
         parser.AttachLineExtractor(new LineExtractor(emulator));
         emulator.Feed(System.Text.Encoding.Latin1.GetBytes(wire));
-        parser.SettleNowForTests();
+        timers.RunAll();
 
         Assert.Equal(153, stats.Strength);
         Assert.Equal(26, stats.Cp);

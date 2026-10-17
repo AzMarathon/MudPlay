@@ -47,6 +47,9 @@ public sealed class CashManagerTests
         // tests) and run them on demand via RunPosts().
         public bool DeferPosts { get; set; }
         public List<Action> Posts { get; } = new();
+        // The clocks behind the unanswered-get timing and the auto-deposit cooldown.
+        public Func<DateTime> UnansweredNow { get; set; } = () => DateTime.UtcNow;
+        public Func<DateTime> AutoDepositNow { get; set; } = () => DateTime.UtcNow;
 
         public Harness()
         {
@@ -60,7 +63,9 @@ public sealed class CashManagerTests
                 isPeekSuppressed: () => PeekSuppressed,
                 log: Log,
                 isKnownItem: entry => KnownItem?.Invoke(entry) ?? false,
-                post: a => { if (DeferPosts) Posts.Add(a); else a(); });
+                post: a => { if (DeferPosts) Posts.Add(a); else a(); },
+                unansweredClock: () => UnansweredNow(),
+                autoDepositClock: () => AutoDepositNow());
             Cash.SetWireSender(b => Sent.Add(b));
             Cash.CashDispatched += (c, n, p) => Dispatches.Add((c, n, p));
             Cash.AutoDepositRequested += t => AutoDeposits.Add(t);
@@ -474,7 +479,7 @@ public sealed class CashManagerTests
         h.Settings.BankRoomKey = "bank";
 
         DateTime now = DateTime.UtcNow;
-        h.Cash.AutoDepositClock = () => now;
+        h.AutoDepositNow = () => now;
 
         h.Snapshot = Wealth(150);
         h.Cash.OnInventoryChanged();
@@ -507,7 +512,7 @@ public sealed class CashManagerTests
         h.Settings.BankRoomKey = "bank";
 
         DateTime now = DateTime.UtcNow;
-        h.Cash.AutoDepositClock = () => now;
+        h.AutoDepositNow = () => now;
 
         h.Snapshot = Wealth(150);
         h.Cash.OnInventoryChanged();
@@ -1616,7 +1621,7 @@ public sealed class CashManagerTests
     {
         using Harness h = new();
         DateTime now = new(2026, 10, 7, 11, 19, 23, DateTimeKind.Utc);
-        h.Cash.UnansweredClock = () => now;
+        h.UnansweredNow = () => now;
 
         h.Feed("5 platinum drop to the ground.");
         int afterFirst = h.AllSent.Count(c => c.StartsWith("get "));
@@ -1641,7 +1646,7 @@ public sealed class CashManagerTests
     {
         using Harness h = new();
         DateTime now = new(2026, 10, 7, 11, 19, 23, DateTimeKind.Utc);
-        h.Cash.UnansweredClock = () => now;
+        h.UnansweredNow = () => now;
 
         h.Feed("5 platinum drop to the ground.");
         now = now.AddSeconds(2);

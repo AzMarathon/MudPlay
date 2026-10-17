@@ -36,11 +36,8 @@ public sealed class GreetManagerTests
             Router = new MessageRouter();
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, Log);
-            Greet = new GreetManager(Classifier, Players, Party, () => SelfName)
-            {
-                Enabled = true,
-                NowUtcProvider = () => Now,
-            };
+            Greet = new GreetManager(Classifier, Players, Party, () => SelfName, now: () => Now)
+            { Enabled = true };
             Greet.SetWireSender(bytes => Sent.Add(Encoding.Latin1.GetString(bytes)));
         }
 

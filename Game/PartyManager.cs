@@ -160,8 +160,7 @@ public sealed partial class PartyManager : IDisposable
     public Models.Profile.PartyRank LocalRankPreference { get; set; }
         = Models.Profile.PartyRank.Mid;
 
-    // Test-friendly clock — overridable so tests don't have to wait real time.
-    internal Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.UtcNow;
+    private readonly Func<DateTimeOffset> _now;
 
     // Locally-connected character's given name (matches the profile name; e.g.
     // "MudPlay" / "Raijin"). Used to detect PartyMember.IsSelf when parsing par
@@ -377,8 +376,9 @@ public sealed partial class PartyManager : IDisposable
     // main-window VM owns it because it lives only for the active terminal
     // session, while the manager is app-level so consumers (the remote-command
     // engine, the PartyWindow) can hold a stable reference.
-    public PartyManager(MessageRouter router, PartyState state, LogService? log = null)
+    public PartyManager(MessageRouter router, PartyState state, LogService? log = null, Func<DateTimeOffset>? now = null)
     {
+        _now = now ?? (() => DateTimeOffset.UtcNow);
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(state);
         _router = router;
@@ -390,7 +390,7 @@ public sealed partial class PartyManager : IDisposable
         _subs.Add(_router.Subscribe(KnownPatterns.PartyStopsFollowing, OnStopsFollowing));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyLeftBehind,     OnLeftBehind));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyYouInvited,     OnYouInvited));
-        _subs.Add(_router.Subscribe(KnownPatterns.PartyParFollowing,   _ => _parFollowingLineAt = NowProvider()));
+        _subs.Add(_router.Subscribe(KnownPatterns.PartyParFollowing,   _ => _parFollowingLineAt = _now()));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyHeader,         OnParHeader));
         // Disconnect / death / reconnect grace window. We watch every "X just
         // disconnected" / "X just entered the Realm" line because a party
@@ -728,7 +728,7 @@ public sealed partial class PartyManager : IDisposable
         // so stamp X into the grace window. If they re-enter the realm
         // inside the window, the Re-invite-lost-members flow picks
         // them up.
-        _recentlyDisconnected[name] = NowProvider();
+        _recentlyDisconnected[name] = _now();
         RemoveMember(name);
     }
 
@@ -743,7 +743,7 @@ public sealed partial class PartyManager : IDisposable
         string name = result.Groups[0];
         if (string.IsNullOrEmpty(name)) return;
         bool leading = State.SelfIsLeader;
-        _recentlyDisconnected[name] = NowProvider();
+        _recentlyDisconnected[name] = _now();
         RemoveMember(name);
         if (leading && AutoInviteEnabled) MemberLeftBehind?.Invoke(GivenNameOf(name));
     }
@@ -813,7 +813,7 @@ public sealed partial class PartyManager : IDisposable
         // we're still leader / soloed at that moment.
         if (State.SelfIsLeader)
         {
-            DateTimeOffset now = NowProvider();
+            DateTimeOffset now = _now();
             foreach (PartyMember m in State.Members)
             {
                 if (m.IsSelf) continue;
@@ -928,7 +928,7 @@ public sealed partial class PartyManager : IDisposable
             : null;
         // The game's own word outranks what we believe: told we follow someone, the
         // leader can't be an [Invited] row, and nothing in the block makes us lead.
-        bool saysFollowing = NowProvider() - _parFollowingLineAt <= ParFollowingLineWindow;
+        bool saysFollowing = _now() - _parFollowingLineAt <= ParFollowingLineWindow;
         _parFollowingLineAt = DateTimeOffset.MinValue;
         _parFollowing = saysFollowing || _parFollowedLeader is not null;
         if (saysFollowing)
@@ -1063,7 +1063,7 @@ public sealed partial class PartyManager : IDisposable
         }
         bool selfLeads = State.SelfIsLeader;
         RemoveMember(given);
-        _recentlyDisconnected[given] = NowProvider();
+        _recentlyDisconnected[given] = _now();
         // Leader-only: a follower's own movement is already held by FollowerGate,
         // so a second wait gate there would only linger to timeout.
         if (selfLeads) MemberDisconnected?.Invoke(given);
@@ -1087,7 +1087,7 @@ public sealed partial class PartyManager : IDisposable
         if (string.IsNullOrEmpty(name)) return;
         if (!_recentlyDisconnected.TryGetValue(name, out DateTimeOffset droppedAt)) return;
         _returnedAfterDrop[name] = droppedAt;
-        if (NowProvider() - droppedAt > DisconnectGraceWindow)
+        if (_now() - droppedAt > DisconnectGraceWindow)
         {
             // Past the window — clear the stale entry and bail.
             _recentlyDisconnected.Remove(name);
@@ -1151,7 +1151,7 @@ public sealed partial class PartyManager : IDisposable
     {
         if (string.IsNullOrEmpty(sender)) return false;
         string senderGiven = GivenNameOf(sender);
-        DateTimeOffset now = NowProvider();
+        DateTimeOffset now = _now();
         foreach (KeyValuePair<string, DateTimeOffset> kv in _recentlyDisconnected.Concat(_returnedAfterDrop))
         {
             if (now - kv.Value > ComebackWindow) continue;
@@ -1171,7 +1171,7 @@ public sealed partial class PartyManager : IDisposable
     public void ExpectComebackFrom(string given)
     {
         string name = GivenNameOf(given);
-        if (name.Length > 0) _recentlyDisconnected[name] = NowProvider();
+        if (name.Length > 0) _recentlyDisconnected[name] = _now();
     }
 
     // Given names of the followers we're currently leading (self + pending
@@ -1213,7 +1213,7 @@ public sealed partial class PartyManager : IDisposable
         _parBlockNames.Clear();
         ResetPartyMembership();
 
-        DateTimeOffset now = NowProvider();
+        DateTimeOffset now = _now();
         foreach (string name in followerGivens)
         {
             string given = GivenNameOf(name);
@@ -1257,7 +1257,7 @@ public sealed partial class PartyManager : IDisposable
         HashSet<string> present = new(StringComparer.OrdinalIgnoreCase);
         foreach (string n in _parBlockNames) present.Add(GivenNameOf(n));
 
-        DateTimeOffset now = NowProvider();
+        DateTimeOffset now = _now();
         List<PartyMember>? missing = null;
         foreach (PartyMember m in State.Members)
         {
@@ -1756,7 +1756,7 @@ public sealed partial class PartyManager : IDisposable
         if (member.IsSelf) return;
         if (_hpEstimates.Remove(member) && member.HpPercent != percent)
             HpEstimateCorrected?.Invoke(member.Name, member.HpPercent, percent, source);
-        _hpReadings[member] = new PartyHpReading(percent, NowProvider(), source);
+        _hpReadings[member] = new PartyHpReading(percent, _now(), source);
     }
 
     private void OnMembersChangedForHpEstimates(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)

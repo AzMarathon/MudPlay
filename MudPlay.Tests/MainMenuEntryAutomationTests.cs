@@ -16,10 +16,16 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class MainMenuEntryAutomationTests
 {
+    // The clock the MainMenuEntryAutomation reads: the real one unless a test sets its own.
+    private Func<DateTime> _menuNow = () => DateTime.UtcNow;
+
     private static readonly DateTime Now = new(2026, 6, 2, 12, 0, 0, DateTimeKind.Utc);
 
     // What the engine put on the wire, through the sender the client binds.
     private readonly List<byte[]> _sent = new();
+
+    // The startup-sequence step timer.
+    private readonly ManualTimers _menuTimers = new();
 
     private (MainMenuEntryAutomation engine, MessageRouter router, GameCommands commands, HangupSignal signal) Setup()
     {
@@ -27,10 +33,8 @@ public sealed class MainMenuEntryAutomationTests
         DefaultPatterns.Seed(router);
         GameCommands commands = new();   // defaults: "E" / "=x"
         HangupSignal signal = new();
-        MainMenuEntryAutomation engine = new(router, commands, signal)
-        {
-            NowProvider = () => Now,
-        };
+        _menuNow = () => Now;
+        MainMenuEntryAutomation engine = new(router, commands, signal, schedule: _menuTimers.Arm, now: () => _menuNow());
         engine.SetWireSender(_sent.Add);
         return (engine, router, commands, signal);
     }
@@ -104,12 +108,12 @@ public sealed class MainMenuEntryAutomationTests
         // matching line must NOT fire.
         var (engine, router, _, _) = Setup();
         DateTime t0 = Now;
-        engine.NowProvider = () => t0;
+        _menuNow = () => t0;
         engine.ArmWindow = TimeSpan.FromSeconds(15);
         engine.Arm();
 
         // Advance past the window.
-        engine.NowProvider = () => t0.AddSeconds(16);
+        _menuNow = () => t0.AddSeconds(16);
         DispatchMenuLine(router);
 
         Assert.Empty(_sent);
@@ -120,12 +124,12 @@ public sealed class MainMenuEntryAutomationTests
     {
         var (engine, router, _, _) = Setup();
         DateTime t0 = Now;
-        engine.NowProvider = () => t0;
+        _menuNow = () => t0;
         engine.ArmWindow = TimeSpan.FromSeconds(15);
         engine.Arm();
 
         // Inside the window.
-        engine.NowProvider = () => t0.AddSeconds(10);
+        _menuNow = () => t0.AddSeconds(10);
         DispatchMenuLine(router);
 
         Assert.Single(_sent);
@@ -162,13 +166,13 @@ public sealed class MainMenuEntryAutomationTests
     {
         var (engine, _, _, _) = Setup();
         DateTime t0 = Now;
-        engine.NowProvider = () => t0;
+        _menuNow = () => t0;
 
         Assert.False(engine.IsArmed);
         engine.Arm();
         Assert.True(engine.IsArmed);
 
-        engine.NowProvider = () => t0.Add(engine.ArmWindow + TimeSpan.FromSeconds(1));
+        _menuNow = () => t0.Add(engine.ArmWindow + TimeSpan.FromSeconds(1));
         Assert.False(engine.IsArmed);
     }
 
@@ -266,14 +270,14 @@ public sealed class MainMenuEntryAutomationTests
         // lapsed still fires the entry command.
         var (engine, router, _, _) = Setup();
         DateTime t0 = Now;
-        engine.NowProvider = () => t0;
+        _menuNow = () => t0;
         engine.ArmWindow = TimeSpan.FromSeconds(15);
         engine.Arm();                                 // login start → window t0+15
 
-        engine.NowProvider = () => t0.AddSeconds(14); // a step lands late in the window
+        _menuNow = () => t0.AddSeconds(14); // a step lands late in the window
         engine.KeepArmed();                           // window now (t0+14)+15 = t0+29
 
-        engine.NowProvider = () => t0.AddSeconds(20);  // past the ORIGINAL t0+15
+        _menuNow = () => t0.AddSeconds(20);  // past the ORIGINAL t0+15
         DispatchMenuLine(router);
 
         Assert.Single(_sent);        // still fires thanks to the refresh
@@ -384,7 +388,7 @@ public sealed class MainMenuEntryAutomationTests
         // Only the entry command on the wire so far.
         Assert.Equal("E\r", Encoding.Latin1.GetString(Assert.Single(_sent)));
 
-        engine.TickStartupSequenceForTests();   // no room yet → nothing
+        _menuTimers.RunAll();   // no room yet → nothing
         Assert.Single(_sent);
     }
 
@@ -398,7 +402,7 @@ public sealed class MainMenuEntryAutomationTests
         DispatchMenuLine(router);
         DispatchRoomLine(router);
         for (int i = 0; i < MainMenuEntryAutomation.StartupSequence.Count; i++)
-            engine.TickStartupSequenceForTests();
+            _menuTimers.RunAll();
 
         // First slot is the entry command, then the 2 startup steps.
         Assert.Equal(3, _sent.Count);
@@ -414,7 +418,7 @@ public sealed class MainMenuEntryAutomationTests
         // the refresh — the gate requires an entry first.
         var (engine, router, _, _) = Setup();
         DispatchRoomLine(router);
-        engine.TickStartupSequenceForTests();
+        _menuTimers.RunAll();
 
         Assert.Empty(_sent);
     }
@@ -429,13 +433,13 @@ public sealed class MainMenuEntryAutomationTests
         DispatchMenuLine(router);
         DispatchRoomLine(router);
         for (int i = 0; i < MainMenuEntryAutomation.StartupSequence.Count; i++)
-            engine.TickStartupSequenceForTests();
+            _menuTimers.RunAll();
         Assert.Equal(3, _sent.Count);   // E + stat/i
 
         // A second room display must not queue another refresh.
         DispatchRoomLine(router);
         for (int i = 0; i < MainMenuEntryAutomation.StartupSequence.Count; i++)
-            engine.TickStartupSequenceForTests();
+            _menuTimers.RunAll();
         Assert.Equal(3, _sent.Count);
     }
 
@@ -449,7 +453,7 @@ public sealed class MainMenuEntryAutomationTests
         DispatchMenuLine(router);
         DispatchRoomLine(router);
         for (int i = 0; i < MainMenuEntryAutomation.StartupSequence.Count + 5; i++)
-            engine.TickStartupSequenceForTests();
+            _menuTimers.RunAll();
 
         // Entry + 2 startup steps, no more.
         Assert.Equal(3, _sent.Count);
@@ -468,7 +472,7 @@ public sealed class MainMenuEntryAutomationTests
         DispatchMenuLine(router);
         DispatchRoomLine(router);
         for (int i = 0; i < MainMenuEntryAutomation.StartupSequence.Count + 1; i++)
-            engine.TickStartupSequenceForTests();
+            _menuTimers.RunAll();
 
         Assert.Empty(_sent);
     }
@@ -488,7 +492,7 @@ public sealed class MainMenuEntryAutomationTests
         engine.Arm();               // fresh login resets the gate
 
         DispatchRoomLine(router);   // stale room line — must be ignored
-        engine.TickStartupSequenceForTests();
+        _menuTimers.RunAll();
         Assert.Single(_sent);   // still just the entry
     }
 

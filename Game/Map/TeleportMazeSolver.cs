@@ -48,11 +48,11 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
 
     // A teleport can echo two room displays back-to-back; wait this long with no
     // fresh display before treating the last one as the settled landing room.
-    private static readonly TimeSpan SettleWindow = TimeSpan.FromMilliseconds(700);
+    internal static readonly TimeSpan SettleWindow = TimeSpan.FromMilliseconds(700);
 
     // A `look <dir>` peek that never renders a room within this window fails the
     // relocalization rather than hanging the solve.
-    private static readonly TimeSpan LookTimeout = TimeSpan.FromSeconds(3);
+    internal static readonly TimeSpan LookTimeout = TimeSpan.FromSeconds(3);
 
     // Safety bound on the probabilistic reshuffle search — each attempt is one
     // move plus a settle. A genuine pocket is small; this caps runaway churn if
@@ -81,7 +81,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     // Paradigm authoritative-position source. Its PositionResolved event fires on
     // (and only on) a parsed `rm` reply, so the solver keys its relocalization off
     // the true answer — never a same-second move-confirm that would race it. Null
-    // on stock / in tests, where the sweep or a test seam drives relocalization.
+    // on stock, where the look sweep drives relocalization.
     private readonly ParadigmPositionResolver? _paradigmResolver;
 
     // Defers the initial Start() (and the walker delegation) off the current
@@ -93,8 +93,10 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     // Settings → Other master toggle (default on). Gates CanSolve via Enabled.
     private readonly Func<bool> _enabled;
 
-    private readonly DispatcherTimer? _settleTimer;
-    private readonly DispatcherTimer? _lookTimeout;
+    private IDisposable? _settleTimer;
+    private IDisposable? _lookTimeout;
+    // Arms one tick after the delay; disposing what it returns cancels it.
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
 
     private Action<byte[]>? _wireSender;
     private bool _disposed;
@@ -199,25 +201,11 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         Func<bool>? enabled = null,
         Action<Direction, Action<bool>>? openDoor = null,
         MovementCoordinator? coordinator = null,
-        Action? stopDoor = null)
-        : this(index, graph, tracker, bfs, walker, log, useTimer: true, post: null, isParadigm, paradigmResolver, enabled, openDoor, coordinator, stopDoor) { }
-
-    internal TeleportMazeSolver(
-        TeleportMazeIndex index,
-        RoomGraphManager graph,
-        RoomTracker tracker,
-        BfsMapper bfs,
-        AutoWalkManager walker,
-        LogService? log,
-        bool useTimer,
-        Action<Action>? post,
-        Func<bool>? isParadigm = null,
-        ParadigmPositionResolver? paradigmResolver = null,
-        Func<bool>? enabled = null,
-        Action<Direction, Action<bool>>? openDoor = null,
-        MovementCoordinator? coordinator = null,
-        Action? stopDoor = null)
+        Action? stopDoor = null,
+        Action<Action>? post = null,
+        Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
+        _schedule = schedule ?? DispatcherTicks.Once;
         ArgumentNullException.ThrowIfNull(index);
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(tracker);
@@ -242,14 +230,6 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         if (_coordinator is not null) _coordinator.GatesChanged += OnGatesChanged;
         if (_paradigmResolver is not null)
             _paradigmResolver.PositionResolved += OnParadigmPositionResolved;
-
-        if (useTimer)
-        {
-            _settleTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = SettleWindow };
-            _settleTimer.Tick += (_, _) => OnSettleElapsed();
-            _lookTimeout = new DispatcherTimer(DispatcherPriority.Background) { Interval = LookTimeout };
-            _lookTimeout.Tick += (_, _) => OnLookTimeout();
-        }
     }
 
     // Main-window VM supplies the EngineSendGate-wrapped SendUserInput. Without
@@ -300,7 +280,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
                 // peek fires from OnPeekDoorResolved once the door is open.
                 if (_awaitingPeekDoor) break;
                 _neighbourMasks[_currentLookDir] = MaskOf(obs.Exits);
-                _lookTimeout?.Stop();
+                StopLookTimeout();
                 SendNextLook();
                 break;
             case Phase.Settling:
@@ -586,7 +566,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     private void OnParadigmPositionResolved(RoomKey here)
     {
         if (!Active || _phase != Phase.Resyncing) return;
-        _lookTimeout?.Stop();
+        StopLookTimeout();
 
         _log?.Log(LogSeverity.Info, LogSource, $"relocalized to {here} via authoritative `rm`");
         ContinueFromLocated(here);
@@ -819,13 +799,13 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
 
     private void RestartSettle()
     {
-        _settleTimer?.Stop();
-        _settleTimer?.Start();
+        _settleTimer?.Dispose();
+        _settleTimer = _schedule(SettleWindow, OnSettleElapsed);
     }
 
     private void OnSettleElapsed()
     {
-        _settleTimer?.Stop();
+        _settleTimer = null;
         if (!Active) return;
 
         // Fast walk: the settle window is pure pacing between moves — no render is
@@ -855,19 +835,25 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
             RestartSettle();
             return;
         }
-        _lookTimeout?.Stop();
+        StopLookTimeout();
         BeginRelocalize();   // stock post-teleport: full 1x2 look sweep
     }
 
     private void RestartLookTimeout()
     {
-        _lookTimeout?.Stop();
-        _lookTimeout?.Start();
+        _lookTimeout?.Dispose();
+        _lookTimeout = _schedule(LookTimeout, OnLookTimeout);
+    }
+
+    private void StopLookTimeout()
+    {
+        _lookTimeout?.Dispose();
+        _lookTimeout = null;
     }
 
     private void OnLookTimeout()
     {
-        _lookTimeout?.Stop();
+        _lookTimeout = null;
         if (!Active) return;
         if (_phase == Phase.Looking)
             FailSolve($"look {_currentLookDir.ToLongName()} did not render a room");
@@ -891,8 +877,9 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
 
     private void StopTimers()
     {
-        _settleTimer?.Stop();
-        _lookTimeout?.Stop();
+        _settleTimer?.Dispose();
+        _settleTimer = null;
+        StopLookTimeout();
     }
 
     // ----- wire ------------------------------------------------------
@@ -930,11 +917,6 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
                 m |= 1u << (int)d;
         return m;
     }
-
-    // ----- test seams ------------------------------------------------
-    internal void FireSettleForTests() => OnSettleElapsed();
-    internal void FireLookTimeoutForTests() => OnLookTimeout();
-    internal void FireParadigmPositionResolvedForTests(RoomKey here) => OnParadigmPositionResolved(here);
 
     public void Dispose()
     {

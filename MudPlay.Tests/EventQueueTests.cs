@@ -382,7 +382,7 @@ public sealed class EventQueueTests : IDisposable
     {
         using Harness h = NewHarness();
         DateTimeOffset now = new(2026, 10, 10, 9, 0, 0, TimeSpan.Zero);
-        h.Events.Now = () => now;
+        h.EventsNow = () => now;
         h.Profile.Current!.EventQueueLimit = 1;
         h.Profile.Current!.EventQueueWaitMinutes = 5;
         h.Tracker.SetLocated(A);
@@ -503,7 +503,7 @@ public sealed class EventQueueTests : IDisposable
     {
         using Harness h = NewHarness();
         DateTimeOffset now = new(2026, 10, 10, 18, 0, 0, TimeSpan.Zero);
-        h.Events.Now = () => now;
+        h.EventsNow = () => now;
         bool off = false;
         h.Events.IsMasterSwitchOff = () => off;
         h.Tracker.SetLocated(A);
@@ -558,7 +558,7 @@ public sealed class EventQueueTests : IDisposable
     private HeldQueue WithWaiting(Harness h, params string[] waiting)
     {
         HeldQueue q = new() { H = h };
-        h.Events.Now = () => q.Now;
+        h.EventsNow = () => q.Now;
         h.Events.IsMasterSwitchOff = () => q.Off;
         h.Events.BlockedByMasterSwitch = _ => q.Off;
         h.Events.QueueChoiceNeeded += () => q.Asked++;
@@ -903,7 +903,7 @@ public sealed class EventQueueTests : IDisposable
     {
         using Harness h = NewHarness();
         HeldQueue q = new() { H = h };
-        h.Events.Now = () => q.Now;
+        h.EventsNow = () => q.Now;
         h.Events.IsMasterSwitchOff = () => q.Off;
         h.Events.QueueChoiceNeeded += () => q.Asked++;
         h.Tracker.SetLocated(A);
@@ -968,7 +968,7 @@ public sealed class EventQueueTests : IDisposable
     {
         using Harness h = NewHarness();
         HeldQueue q = new() { H = h };
-        h.Events.Now = () => q.Now;
+        h.EventsNow = () => q.Now;
         h.Events.IsMasterSwitchOff = () => q.Off;
         h.Events.QueueChoiceNeeded += () => q.Asked++;
         h.Tracker.SetLocated(A);
@@ -994,7 +994,7 @@ public sealed class EventQueueTests : IDisposable
     {
         using Harness h = NewHarness();
         DateTimeOffset now = new(2026, 10, 9, 18, 0, 0, TimeSpan.Zero);
-        h.Events.Now = () => now;
+        h.EventsNow = () => now;
         h.Tracker.SetLocated(A);
         h.Events.Fire(Add(h, WalkTo("stuck", C, EventThenType.Nothing)));
         h.Events.Fire(Add(h, WalkTo("stale", B, EventThenType.Nothing)));
@@ -1240,7 +1240,7 @@ public sealed class EventQueueTests : IDisposable
     {
         using Harness h = NewHarness();
         DateTimeOffset now = new(2026, 10, 9, 18, 0, 0, TimeSpan.Zero);
-        h.Events.Now = () => now;
+        h.EventsNow = () => now;
         h.Tracker.SetLocated(A);
         h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test");
 

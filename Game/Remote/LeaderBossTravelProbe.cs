@@ -52,7 +52,7 @@ public sealed class LeaderBossTravelProbe : IDisposable
     // leaderGivenName: the leader we're following, or null when we lead / are solo.
     // headsToBoss: whether a leader's @path report describes a trip to a boss room.
     // stillNeeded: the gear is still being kept on, so an answer still matters.
-    // schedule: one-shot timer (null in tests, which drive OnTimeout directly).
+    // schedule: the one-shot timer that ends the wait for an answer.
     public LeaderBossTravelProbe(
         PathReplyTracker replies,
         Func<string?> leaderGivenName,
@@ -155,7 +155,7 @@ public sealed class LeaderBossTravelProbe : IDisposable
         _leaderGivenName() is { Length: > 0 } leader
         && string.Equals(leader, sender, StringComparison.OrdinalIgnoreCase);
 
-    internal void OnTimeout()
+    private void OnTimeout()
     {
         if (!_awaiting) return;
         if (_confirming)

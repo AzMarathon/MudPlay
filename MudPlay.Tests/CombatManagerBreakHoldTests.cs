@@ -88,10 +88,10 @@ public sealed class CombatManagerBreakHoldTests
                 isEnabled: () => AutoCombatEnabled,
                 readOwnGivenName: () => "MudPlay",
                 post: a => Posted.Add(a),
-                log: Log);
+                log: Log,
+                now: () => _clock);
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.RoomSpellKill += Deaths.NoteRoomSpellKill;
-            Combat.SetClock(() => _clock);
             Combat.SetDarkRoomProbe(() => Dark);
             Combat.SetBackstabHooks(() => Sneaking, _ => false);
             Combat.SetCombatSpellPredicate(c => AttackSpells.Contains(c));
