@@ -1,10 +1,10 @@
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// One aggregated equipment-bonus row in the Character Info section's Equipment
-// Bonuses box: a stat label (Stat, e.g. "Armour Class"), its net bonus value
-// (Value, e.g. "+15" or "5.0"), and a newline-joined tooltip listing which worn
-// items contributed what (Tooltip; null when there's only one trivial source
-// worth no hover detail).
+// One aggregated bonus row — the Equipment Manager's Equipment Bonuses box, the
+// Item Finder's trial set and Character Info's Quest Bonuses box: a stat label
+// (Stat, e.g. "Armour Class"), its net bonus value (Value, e.g. "+15" or "5.0"),
+// and a newline-joined tooltip listing which sources contributed what (Tooltip;
+// null when there's only one trivial source worth no hover detail).
 public sealed record EquipBonusRow(string Stat, string Value, string? Tooltip)
 {
     // True when the net bonus is a penalty. Value is always signed ("+0;-0" /

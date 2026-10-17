@@ -9,7 +9,7 @@ namespace MudPlay.Game.Map;
 // processes it, immediately before rendering the destination room, whereas a
 // spontaneous redisplay (an NPC walking through, a regen-tick refresh, a
 // post-combat redraw) carries no echo. RoomTracker uses it to tell a move's real
-// landing from a stray re-look in an identically-named grid (issue #478) without
+// landing from a stray re-look in an identically-named grid without
 // relying on the fragile round-trip timing heuristic.
 //
 // Three ways the echoed command reaches us — two because the prompt is

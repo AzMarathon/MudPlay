@@ -14,7 +14,7 @@ namespace MudPlay.Models.GameData;
 // editable in the Game Data Browser) and matches the bare Name — so a custom realm with
 // tens of thousands of monsters needs no per-monster prefix list at all.
 //
-// One record per MonsterRecord Number. Records are NOT deduplicated by name — multiple
+// One record per Monsters-table Number. Records are NOT deduplicated by name — multiple
 // monsters can share a name in the game data (giant rat #1 vs #109 are different rows).
 //
 // Storage parallels MessageRecord: per-set runtime file at game data/{set}/monster-messages.json,

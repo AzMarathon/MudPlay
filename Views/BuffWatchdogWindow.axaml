@@ -13,11 +13,9 @@
         ShowInTaskbar="False">
 
     <Window.Resources>
-        <!-- One config-panel row, shared by the ordinary-spell list and the
-             "Weapons" (#item-cast) list below it — same columns as the header
-             Grid so both stay aligned. Column 0's name cell is itself a Grid
-             (Auto,Auto,*,Auto,Auto), not a StackPanel: a StackPanel never
-             constrains a child's width, so TextTrimming="CharacterEllipsis" on
+        <!-- One config-panel row — same columns as the header Grid so they stay
+             aligned. Column 0's name cell is itself a Grid, not a StackPanel: a
+             StackPanel never constrains a child's width, so TextTrimming="CharacterEllipsis" on
              the name TextBlock had nothing to trim against and a long name (esp.
              once the "(Lvl N)" tag was added) painted straight through the Self
              checkbox in the next column instead of eliding. The "*" column here
@@ -154,7 +152,7 @@
     </Window.Resources>
 
     <Window.Styles>
-        <!-- Section header (Self buffs / Party buffs). -->
+        <!-- Per-player group header over the timer bars. -->
         <Style Selector="TextBlock.SectionHeader">
             <Setter Property="Margin" Value="10,10,10,4"/>
             <Setter Property="FontSize" Value="11"/>
@@ -266,7 +264,7 @@
                             <Button Content="Add all blesses" Padding="8,2"
                                     IsEnabled="{Binding CanAddAllBlesses}"
                                     Command="{Binding AddAllBlessesCommand}"
-                                    ToolTip.Tip="List every buff you or the party can cast, regardless of level. Where two self buffs would strip each other off (e.g. greater zeal / zeal), both are listed but only the higher-level one comes checked — checking the other unchecks it, and vice versa. Whole-party buffs are listed too but never pre-checked — tick Party Wide yourself to turn one on."/>
+                                    ToolTip.Tip="List every buff you or the party can cast, regardless of level. Where two self buffs would strip each other off (e.g. greater zeal / zeal), both are listed but only the higher-level one comes checked — checking the other unchecks it, and vice versa. Whole-party buffs are listed too but never pre-checked — tick the row's Party toggle yourself to turn one on."/>
                             <Button Content="Remove all" Padding="8,2"
                                     IsEnabled="{Binding HasSlots}"
                                     Command="{Binding RemoveAllBuffsCommand}"
@@ -308,7 +306,7 @@
                             </TextBlock.Text>
                         </TextBlock>
 
-                        <!-- Shown when Add buff is greyed out: every learned buff is listed already. -->
+                        <!-- Shown when Add buff is greyed out: says why there's nothing to add. -->
                         <TextBlock IsVisible="{Binding HasSetupHint}" Margin="8,0,8,6"
                                    Text="{Binding SetupHint}"
                                    Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"
@@ -321,7 +319,8 @@
 
                         <!-- Buff rows. Shared columns (buff | self | all-none | per-member) line
                              up under the header; a whole-party buff spans the member columns
-                             with "Party Wide". Solo hides the all-none + member columns.
+                             with its "Party" label and Solo toggle. Solo hides the all-none +
+                             member columns.
                              Horizontal scroll for a full party. -->
                         <ScrollViewer IsVisible="{Binding HasSlots}"
                                       HorizontalScrollBarVisibility="Auto"

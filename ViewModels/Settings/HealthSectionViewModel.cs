@@ -138,7 +138,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     public void NotifyLiveSysGotoChanged() => RefreshWimpyGoto();
 
     // Convenience for SettingsWindowViewModel, which builds the shared session and
-    // passes the same instance to both the Combat and Health section VMs.
+    // passes the same instance to the Combat, Health, Spells and Party section VMs.
     // "Include in combat profile" checkboxes, one per header on this tab.
     // The profile chips, so profiles can be switched from this tab too.
     public CombatProfileChipBar ChipBar { get; }
@@ -466,10 +466,10 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     public string HealIfAboveMaCombatConverted    => FormatConversion(HealIfAboveMaCombat,    PreviewMa, MaModePercentage);
     public string RunIfBelowMaConverted           => FormatConversion(RunIfBelowMa,           PreviewMa, MaModePercentage);
 
-    // Commit through the shared session (folds both tabs + persists Settings
-    // ["Combat"] + Settings["Health"] + the profile blob + weapons as one unit).
-    // Guarded on the session's dirty flag, so whichever of the Combat / Health Apply
-    // runs first commits and the other no-ops.
+    // Commit through the shared session (folds every tab + persists Settings
+    // ["Combat"] + ["Spells"] + ["Health"] + the profile blob + weapons as one unit).
+    // Guarded on the session's dirty flag, so whichever tab's Apply runs first
+    // commits and the others no-op.
     public override void Apply() => _session.CommitIfDirty();
 
     public override void Discard() => _session.DiscardAndReset();

@@ -9,8 +9,8 @@ namespace MudPlay.Views.CharacterWorkshop;
 // Attached behaviour that renders a quest step's QuestStepSegmentViewModel list
 // into a TextBlock's inline runs: plain segments become text Runs (so the line
 // still wraps at word boundaries) and link segments become an inline, underlined
-// hot-text button wired to the segment's walk-to command. Bind SegmentsProperty
-// in XAML; the handler rebuilds the inlines whenever the bound list changes.
+// hot-text button wired to the segment's command (a walk to a map/room, or a
+// command typed at the game). Bind SegmentsProperty in XAML; the handler rebuilds the inlines whenever the bound list changes.
 public static class QuestStepInlines
 {
     public static readonly AttachedProperty<IReadOnlyList<QuestStepSegmentViewModel>?> SegmentsProperty =

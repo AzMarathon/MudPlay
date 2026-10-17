@@ -52,8 +52,7 @@ public sealed record Room
 
     // Spell record number triggered when the player steps into this room
     // (0 = none). Surfaced as the purple Spell room type on the map, per the
-    // MajorMUD convention for cast-on-enter effects. Detailed interpretation of
-    // the spell payload is the SpellMessages consumer's concern.
+    // MajorMUD convention for cast-on-enter effects.
     public int Spell { get; init; }
 
     // NPC field from the MDB — the monster number of a monster "placed"

@@ -4,16 +4,17 @@ using MudPlay.Models.GameData;
 namespace MudPlay.Services;
 
 // In-memory cache of staged, unrecognized-message candidates for the active
-// game-data set. Parallels MessageStore/MonsterMessageStore's load/save shape,
-// but candidates are pure runtime-observed state rather than curated data —
+// realm. Parallels MessageStore/MonsterMessageStore's load/save shape, but
+// candidates are pure runtime-observed state rather than curated data —
 // there's nothing to ship as a starting point, so unlike those two stores
-// there is no universal-seed fallback: a missing per-set file just means an
-// empty catalogue.
+// there is no universal-seed fallback: a missing file just means an empty
+// catalogue.
 //
-// Wiring: AppServices subscribes the store to GameDataCache.ActiveSetChanged —
-// on every set switch the per-set file at AppPaths.MessageCandidatesFile is
-// reloaded (missing file ⇒ empty). Game.MessageCandidateWatcher is the sole
-// writer via RecordSighting; the Game Data Browser's Unrecognized Lines tab and the
+// Wiring: AppServices reloads it from the active realm's file
+// (AppPaths.RealmMessageCandidatesFile) on every profile load / realm re-pin; a
+// realm with no file yet takes a copy of its game-data set's legacy one.
+// Game.MessageCandidateWatcher is the sole writer via RecordSighting; the Game
+// Data Browser's Unrecognized Lines tab and the
 // LogPane double-click flow both read/dismiss/remove through this store.
 public sealed class MessageCandidateStore
 {

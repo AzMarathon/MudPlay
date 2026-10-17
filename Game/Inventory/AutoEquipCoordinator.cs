@@ -31,11 +31,11 @@ namespace MudPlay.Game.Inventory;
 //     re-wearing on death-pile recovery — lives in the recovery engine, gated by
 //     its own setting.
 //
-// The Backstab set isn't auto-fired here yet — it needs the combat engine's
-// "room clear → sneak → surprise round" sequencing that isn't built; until then
-// Backstab is editable and manually / remotely appliable. The decision halves
-// (ClassifyRest, ResolveTarget) are pure and unit-tested; the subscription
-// plumbing is smoke-tested live.
+// The Backstab set isn't fired here: the combat engine applies its armor on the
+// pre-move hook before the sneak (CombatManager.PrepBackstabForMove →
+// EquipmentManager.ApplyBackstabArmor). The decision halves (ClassifyRest,
+// ResolveTarget) are pure and unit-tested; the subscription plumbing is
+// smoke-tested live.
 //
 // A fired moment is held until the worn loadout is known (InventoryManager
 // has parsed at least one full 'i' dump). The apply engine diffs the desired
@@ -861,7 +861,7 @@ public sealed class AutoEquipCoordinator : IDisposable
             // a sit/rest-posture mid-fight is transient — swapping to weak pre-rest gear
             // there gets the character ravaged, and it thrashes against the
             // swap-to-Default-on-combat restore (report paradigm-20260916-104923). Combat
-            // gear holds until OnCombatStateChanged restores the rest set once combat clears.
+            // gear holds until OnCombatChanged restores the rest set once combat clears.
             if (_player.InCombat) return;
             // The server confirmed the sit after the rest it began had already
             // finished — a regen tick topped the pool off on the very next prompt, so

@@ -16,8 +16,7 @@ namespace MudPlay.Views;
 public partial class MonsterIntelWindow : Window
 {
     // Stable id under which the list/detail column split persists in
-    // CharacterProfile.SplitterRatios (mirrors MonsterEditDialog's own use of
-    // SplitterLayoutStore for the same kind of two-pane split).
+    // CharacterProfile.SplitterRatios.
     private const string SplitterId = "MonsterIntelWindow";
 
     public MonsterIntelWindow()

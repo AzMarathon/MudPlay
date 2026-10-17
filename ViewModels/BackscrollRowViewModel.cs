@@ -14,7 +14,7 @@ public sealed class BackscrollRowViewModel
     public string TimestampText { get; }
     public Cell[] Cells => Source.Cells;
 
-    // Plain-text projection of the row, used by search + export. Built on
+    // Plain-text projection of the row, for search + export. Built on
     // first access and cached — the transcript renders straight from Cells,
     // so a row that's never searched or exported never pays for this string.
     // Deferring it keeps a full backscroll's worth of row VMs from each

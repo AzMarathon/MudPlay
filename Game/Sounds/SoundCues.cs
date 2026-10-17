@@ -63,7 +63,7 @@ public static class SoundCues
 
         new(Death, Danger, "You died", "You are killed.", SoundTones.Low),
         new(MortallyWounded, Danger, "Mortally wounded", "You drop to the ground.", SoundTones.Alarm),
-        new(Flee, Danger, "Fleeing", "A low-HP flee starts.", SoundTones.Alert),
+        new(Flee, Danger, "Fleeing", "A flee starts.", SoundTones.Alert),
         new(NavigationStopped, Danger, "Navigation stopped", "A walk or loop fails, or the client loses track of the room.", SoundTones.Alert),
 
         new(Disconnected, Connection, "Disconnected", "The connection drops.", SoundTones.Low),

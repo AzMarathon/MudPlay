@@ -3,9 +3,9 @@ namespace MudPlay.Models.Profile;
 // Per-character "Auto-Lair" settings — the scheduler's tuning surface.
 // Stored as the "AutoLair" entry in CharacterProfile.Settings.
 //
-// The marker set itself is BBS-scoped — saved LairSetups live under
-// Data/BBS/{bbs}/Lairs/ because lair locations are game-data facts (every
-// character on the same BBS sees the same rooms). The knobs here are
+// The marker set itself is set-scoped — saved LairSetups live in the
+// game-data set's Loops folder because lair locations are game-data facts
+// (every character on the same set sees the same rooms). The knobs here are
 // per-character because they describe the player's playstyle and class
 // capabilities (a thief on light boots walks at a different pace than a
 // wizard dragging full plate).
@@ -21,14 +21,9 @@ public sealed class AutoLairSettings
 
     // Scoring heuristic the scheduler uses to rank candidate lairs.
     // Maps 1:1 onto Game.Map.AutoLairHeuristic:
-    //   Default — balance wasted-respawn vs idle-wait under IdlePenalty.
+    //   Default — the closest lair that's up by arrival, else the soonest fight.
     //   Throughput — minimise wasted respawn only; idle wait is free.
     public Game.Map.AutoLairHeuristic Heuristic { get; set; } = Game.Map.AutoLairHeuristic.Default;
-
-    // Weight on idle-wait time under the Default heuristic.
-    // 0 = ignore idle (= Throughput); 1 = treat idle and wasted equally
-    // (default); higher = prefer ready-now lairs over standing around.
-    public double IdlePenalty { get; set; } = 1.0;
 
     // How long (in seconds) the scheduler stays in the Engaging phase after
     // entering a lair before re-evaluating. Default 30 s.

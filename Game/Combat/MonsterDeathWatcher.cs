@@ -6,10 +6,10 @@ namespace MudPlay.Game.Combat;
 // Recognises monster deaths from the always-present exp signal. A kill prints, in a
 // fixed order, the monster's death-flavor line → "You gain N experience." → *Combat
 // Off*. The exp line is the reliable, monster-agnostic kill signal (see GAME_MECHANICS
-// "Monster-kill message order"): an exp gain followed by a *Combat Off* within a short
-// window is a death. Fires MonsterDied with IsFallback = true and no Candidates —
-// consumers attribute the kill to whatever they were fighting
-// (CombatManager.CurrentTarget) and force a roster re-display to pick the survivor.
+// "Kill detection and monster-kill message order"): an exp gain followed by a *Combat
+// Off* within a short window is a death. MonsterDied names no monster — consumers
+// attribute the kill to whatever they were fighting (CombatManager.CurrentTarget)
+// and force a roster re-display to pick the survivor.
 //
 // Not every *Combat Off* inside the window is the kill's. On Paradigm a room spell
 // that leaves a survivor prints its kills' exp lines and no Off at all, and the next
@@ -88,10 +88,8 @@ public sealed class MonsterDeathWatcher : IDisposable
         _log?.Info(LogCategory,
             $"death — exp={experience} under a room spell; one of {roster.Count} kind(s) of monster the room listed");
         MonsterDied?.Invoke(new MonsterDeathEvent(
-            Candidates:       Array.Empty<MonsterDeathIdentity>(),
             ExperienceGained: experience,
             At:               NowProvider(),
-            IsFallback:       true,
             RoomSpellRoster:  roster));
     }
 
@@ -117,10 +115,8 @@ public sealed class MonsterDeathWatcher : IDisposable
         }
 
         MonsterDeathEvent evt = new(
-            Candidates:       Array.Empty<MonsterDeathIdentity>(),
             ExperienceGained: _lastExpAmount,
-            At:               now,
-            IsFallback:       true);
+            At:               now);
         _log?.Info(LogCategory,
             $"death — exp={_lastExpAmount} + *Combat Off* within {ExpToCombatOffWindow.TotalSeconds:F0}s");
         MonsterDied?.Invoke(evt);

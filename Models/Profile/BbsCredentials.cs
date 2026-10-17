@@ -5,7 +5,8 @@ namespace MudPlay.Models.Profile;
 // character has ever logged into.
 //
 // The password is stored inline as EncryptedPassword — an AES-GCM blob
-// produced by PasswordProtector with the per-user Data/.credkey file.
+// produced by PasswordProtector with the per-user .credkey file in the app
+// data folder.
 // Plaintext passwords never land in any user-readable file written by the app.
 public sealed class BbsCredentials
 {
@@ -20,7 +21,7 @@ public sealed class BbsCredentials
     // AES-GCM-encrypted password, produced by PasswordProtector.Protect. Stored
     // inline on the character profile JSON so the profile is fully
     // self-contained for backup / copy; decryption needs the per-user key file
-    // at Data/.credkey. null when no password has been set.
+    // at the app data folder's .credkey. null when no password has been set.
     public string? EncryptedPassword { get; set; }
 
     // Menu-navigation steps the LoginAutomator walks after the BBS
@@ -54,8 +55,8 @@ public sealed class BbsCredentials
 
     // The user's curated goto locations for this BBS. Each row's Name is sent
     // verbatim after `sys goto`; the Map/Room is where the jump LANDS (used to
-    // re-anchor position, and — in a later PR — to route through the jump as a
-    // shortcut). Per-character per-BBS, like the powers above; no SettingsResolver
+    // re-anchor position and to route through the jump as a shortcut).
+    // Per-character per-BBS, like the powers above; no SettingsResolver
     // tier (the sysop powers deliberately bypass the 4-tier hierarchy). Seeded with
     // the standard starter locations so the table isn't empty on first use — an old
     // profile whose JSON lacks the field keeps this default; a user who clears every

@@ -23,8 +23,8 @@ namespace MudPlay.Game;
 //      sends, but the walker / loop / auto-lair each also key off the
 //      coordinator for a clean, visible pause reason ("why are we paused?" =
 //      MortallyWounded) rather than looking silently wedged. Auto-clears on
-//      recovery, unlike the death halt's UserGate which waits for a manual
-//      resume — a drop is recoverable in place (aid + heal), a death is not.
+//      recovery: a drop is recoverable in place (aid + heal), a death is not,
+//      which is why PlayerDeathMovementHalt stops the engines outright.
 //
 //   3. PartyManager.NoteSelfDropped — dropping removes us from the party on the
 //      game-engine side (a follower is dropped; a leader can't lead mortally

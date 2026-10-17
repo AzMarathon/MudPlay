@@ -288,8 +288,8 @@ public sealed partial class RouteChoiceDialogViewModel
     public bool IsSearchSelected => SelectedRoute == RouteChoiceResult.SearchEnRoute;
 
     // Full construction: compute the heading from the labels, then Populate the card
-    // data from the resolved choice straight away. Used by every fork whose options
-    // are ready at construction time (all but the buy path).
+    // data from the resolved choice straight away, for a fork whose options are
+    // ready at construction time (all but the buy path).
     public RouteChoiceDialogViewModel(
         RouteChoice choice,
         string destinationLabel,

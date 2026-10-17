@@ -14,10 +14,10 @@ namespace MudPlay.Game;
 // test enforces this at build time). Consumers — including the status bar
 // view-model — bind to these properties; they never call setters.
 //
-// MaxHp / MaxMa are populated from the largest observed running value, since
-// the baseline MajorMUD statline doesn't emit a denominator. Settings →
-// Statline lets users build a richer wildcard string that includes %H / %M;
-// the parser will start consuming those captures from there.
+// MaxHp / MaxMa ratchet up from the largest observed running value, since the
+// default MajorMUD statline prints no denominator; the stat screen's ceilings
+// correct them through PromptParser.ApplyStatScreenMax. A custom statline's %H / %M
+// are matched but not captured, so PromptParser stays the one writer.
 public sealed partial class PlayerState : ObservableObject
 {
     [ObservableProperty] [field: Owner(typeof(PromptParser))] private int _hp;

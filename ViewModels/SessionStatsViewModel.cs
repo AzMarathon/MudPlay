@@ -159,8 +159,8 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     // vertical scrub cursor so they can see exactly which step they're centred on.
     [ObservableProperty] private bool _isScrubbing;
 
-    // Per-panel visibility toggles — each of the five panels (the two rate
-    // graphs and the three stat sections) can be shown or hidden via the
+    // Per-panel visibility toggles — each of the six panels (the three graphs
+    // and the three stat sections) can be shown or hidden via the
     // window's context menu. Each change is written through to the
     // per-character layout via PersistLayout; _loadingLayout gates the write
     // so applying a saved layout doesn't echo straight back to disk.
@@ -425,9 +425,6 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     public string HpLegendText => $"HP (low {RateText.Percent(LowestHpPercent)})";
     public string MaLegendText => $"MA (low {RateText.Percent(LowestMaPercent)})";
 
-    // HP/MA graph slider bounds: the window pans from step 1 to the tail, so the
-    // slider's max is the count past a full window; it's only shown (and only
-    // pannable) once the loop is longer than one window.
     // Slider spans every step (its max is the last step index), so the cursor can
     // anchor anywhere; only shown once the loop is longer than one window (a loop
     // that fits needs no panning).
@@ -457,7 +454,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
         }
     }
 
-    // Adaptive vertical floor for the graph (top is fixed at 100%): 30 points below
+    // Adaptive vertical floor for the graph (top is fixed at 100%): AxisFloorHeadroom points below
     // the lowest value seen across the plotted series, clamped at 0. 0 before any
     // data lands. AxisMinText labels the bottom scale tick.
     public double AxisMin

@@ -3,8 +3,8 @@ using System.Text;
 namespace MudPlay.Game.Remote;
 
 // One-to-many @-command sender. Telepaths an @-command to every non-self
-// PartyMember in PartyState.Members. Provides the BroadcastExpReset sugar method
-// called when a loop or Auto-Lair starts.
+// PartyMember in PartyState.Members. Provides the BroadcastExpReset sugar method,
+// sent when a loop reaches its first waypoint.
 //
 // Self is skipped — there's no point telepathing ourselves. Members without a
 // known name are skipped. The broadcaster is silent (no-op) when not in a party,
@@ -36,9 +36,9 @@ public sealed class PartyBroadcaster
         _wireSender = sender;
     }
 
-    // Broadcast @Reset to every non-self party member. Called by the LoopManager /
-    // AutoLairScheduler on start to reset expected-XP rounds counters across the
-    // party. Silent if the AutoExpResetEnabled toggle is off, if not in a party,
+    // Broadcast @Reset to every non-self party member. Sent when a loop reaches its
+    // first waypoint, so every member's session stats re-anchor to the new circuit.
+    // Silent if the AutoExpResetEnabled toggle is off, if not in a party,
     // or if no wire-sender is bound.
     public void BroadcastExpReset()
     {

@@ -26,7 +26,7 @@ namespace MudPlay.Game.Remote;
 // don't leak handler entries.
 public sealed class PartyEssentialHandlers : IDisposable
 {
-    // Commands this consumer registers. Used by Dispose to clean up.
+    // Commands this consumer registers, so Dispose can unregister them all.
     private static readonly string[] RegisteredCommands =
     {
         "@version", "@health", "@status", "@where", "@who", "@path",
@@ -134,7 +134,7 @@ public sealed class PartyEssentialHandlers : IDisposable
         // for every documented @-command's required permission category.
         // Hardcoding the category per RegisterHandler call led to drift; routing
         // through the catalog keeps every handler consistent with the
-        // Players-tab 12-checkbox UI.
+        // per-category permission checkboxes in the player edit dialog.
         Register("@version", OnVersion);
         Register("@health",  OnHealth);
         Register("@status",  OnStatus);

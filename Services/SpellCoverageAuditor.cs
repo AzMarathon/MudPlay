@@ -74,8 +74,7 @@ public sealed class SpellCoverageAuditor
             Avalonia.Threading.DispatcherPriority.Background);
     }
 
-    // Explicit re-audit hook for the report window's "Refresh" button + future
-    // MDB-import callers.
+    // Explicit re-audit, for the report window's "Refresh" button.
     public CoverageResult? Run()
     {
         string? set = _cache.ActiveSet;
@@ -335,9 +334,8 @@ public sealed class SpellCoverageAuditor
     }
 
     // Parse every "Monster #N" / "Item #N" / "Spell #N" reference in raw into
-    // structured (Table, Number) tuples. Used by the coverage report's drilldown
-    // to seed Links on a fresh Message record. Unknown / future reference types
-    // are skipped.
+    // structured (Table, Number) tuples. Unknown / future reference types are
+    // skipped.
     public static IEnumerable<(string Table, int Number)> ParseRefs(string? raw)
     {
         if (string.IsNullOrEmpty(raw)) yield break;

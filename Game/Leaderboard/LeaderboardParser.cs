@@ -84,30 +84,6 @@ public static partial class LeaderboardParser
         return m.Success && int.TryParse(m.Groups[1].Value, out int n) ? n : 0;
     }
 
-    // Convenience whole-block parse (used by tests): feed every line of a captured
-    // block, get back the snapshot. Returns null when no header + rows are found.
-    public static LeaderboardSnapshot? ParseBlock(
-        IEnumerable<string> lines, DateTimeOffset capturedAtUtc, int requestedCount)
-    {
-        Columns cols = default;
-        bool haveHeader = false;
-        List<LeaderboardEntry> entries = new();
-
-        foreach (string line in lines)
-        {
-            if (!haveHeader)
-            {
-                if (TryParseHeader(line, out cols)) haveHeader = true;
-                continue;
-            }
-            if (TryParseRow(line, cols, out LeaderboardEntry e)) entries.Add(e);
-        }
-
-        return haveHeader && entries.Count > 0
-            ? new LeaderboardSnapshot(capturedAtUtc, requestedCount, entries)
-            : null;
-    }
-
     private static string Slice(string line, int start, int end)
     {
         if (start >= line.Length) return string.Empty;

@@ -17,8 +17,7 @@ namespace MudPlay.Game;
 // universal and by itself lifts a dropped ally back above 0 HP, so any party
 // member reacts — a heal top-up (when configured) merely speeds the recovery.
 //
-// The whole flow is confirmed MajorMUD mechanics (see GAME_MECHANICS.md, the
-// "Drop removes you from your party" section):
+// The whole flow is confirmed MajorMUD mechanics (GAME_MECHANICS "Dropped ally rescue"):
 //   • "<name> drops to the ground!" is the room/party-side signal a member went
 //     down. The dropper sees it with their own name, so a self-match is ignored.
 //   • A dropped ally leaves `par` — their vitals stop refreshing — so once we've
@@ -210,12 +209,12 @@ public sealed partial class AllyDroppedHandler : IDisposable
         _wireSender = sender;
     }
 
-    // Given names of aided-but-still-off-roster downed allies the CastingDirector
-    // should top up by name (fed via SetDownedAllyProvider). Empty until an ally
-    // is aided — an un-aided, still-mortally-wounded ally can't be healed anyway.
     // Every ally we're holding for while they're down, aided or not yet.
     public IReadOnlyCollection<string> DownedGivenNames => _downed.Keys;
 
+    // Given names of aided-but-still-off-roster downed allies the CastingDirector
+    // should top up by name (fed via SetDownedAllyProvider). Empty until an ally
+    // is aided — an un-aided, still-mortally-wounded ally can't be healed anyway.
     public IReadOnlyList<string> AidedDownedGivenNames()
     {
         List<string>? names = null;
@@ -512,14 +511,14 @@ public sealed partial class AllyDroppedHandler : IDisposable
 
     // ----- Resolution + wire ---------------------------------------------
 
-    // Drop a tracked ally and, once the last one is resolved, release the movement
-    // hold + stop the poll timer. Idempotent — an untracked name is a no-op.
     // Reset States: stop the rescue of every downed ally and release the hold.
     public void Clear(string reason)
     {
         foreach (string given in _downed.Keys.ToList()) Resolve(given, reason);
     }
 
+    // Drop a tracked ally and, once the last one is resolved, release the movement
+    // hold + stop the poll timer. Idempotent — an untracked name is a no-op.
     private void Resolve(string given, string reason)
     {
         if (!_downed.Remove(given)) return;

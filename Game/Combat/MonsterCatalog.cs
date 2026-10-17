@@ -54,8 +54,7 @@ public sealed record MonsterAbilitySlot(int Code, int Value);
 // reads somewhere, parsed once, plus a handful of pre-resolved lookups
 // (elemental resists, Magical/SpellImmu, spell-cast elements) that several
 // independent indexes (MonsterResistIndex, MonsterMagicIndex, ...) otherwise
-// each re-derive from the same raw abilities. See MonsterCatalog's own comment
-// for why those indexes aren't retired yet.
+// each re-derive from the same raw abilities.
 public sealed record MonsterCatalogEntry(
     int Number,
     string Name,
@@ -98,8 +97,7 @@ public sealed record MonsterCatalogEntry(
     bool NonLiving,         // Abil 109 — gates life-drain eligibility with Undead
     // Distinct elements ("Fire", "Cold", ...) this monster can cast, resolved by
     // cross-referencing each spell-attack slot's Accuracy-as-spell-Number and
-    // each mid-spell slot's SpellId against Spells.AttType. New — nothing before
-    // this rolled a monster's outgoing spell elements up into one place.
+    // each mid-spell slot's SpellId against Spells.AttType.
     IReadOnlyList<string> CastsElements)
 {
     // True experience awarded: the raw EXP field × its ExpMulti multiplier
@@ -178,7 +176,7 @@ public sealed record MonsterCatalogEntry(
     // all (spell-only). This is a typed equivalent of
     // MonstersSectionViewModel.ComputeAttackAccuracy's existing highest-single-
     // chance logic — deliberately NOT the true majority-threshold accuracy
-    // formula, which is unconfirmed and left for a follow-up rather than guessed.
+    // formula, which is unconfirmed and not guessed at.
     public (int Majority, int Max)? PhysicalAccuracy
     {
         get
@@ -199,8 +197,7 @@ public sealed record MonsterCatalogEntry(
     // slots (falls back to the raw Percent when a decode isn't present). Empty for
     // a spell-only / attackless monster. Feeds Monster Intel's weighted "Hits You
     // %" (each attack's own hit chance blended by how often the monster throws it)
-    // and the all-accuracies column, which the single "majority" accuracy above
-    // deliberately left for this follow-up.
+    // and the all-accuracies column.
     public IReadOnlyList<(int Accuracy, double Weight)> PhysicalAttacks
     {
         get
@@ -267,15 +264,9 @@ public sealed record MonsterCatalogEntry(
 // MonsterHpIndex, MonsterLifeIndex, MonsterDeathSummonIndex,
 // MonsterSummonTargetsIndex, Services.MonsterSpawnIndex, Services.MonsterDropIndex).
 //
-// This is a NEW shared read layer, not yet a replacement for those — each of
-// the eight existing indexes carries its own hard-won edge-case handling
+// Not a replacement for those indexes: each carries its own edge-case handling
 // (permissive vs strict Summoned-By token classification, MinBase-vs-AbilVal
-// summon-target fallback, fail-open semantics for unknown monsters, etc.) and
-// migrating all of them onto this catalog in one pass would be a much larger,
-// riskier change than building the catalog itself. They're left as-is for now;
-// consolidating them onto MonsterCatalog is deliberately deferred to a later,
-// separately-reviewable change once this catalog's shape has proven itself
-// against real consumers.
+// summon-target fallback, fail-open semantics for unknown monsters, etc.).
 public sealed class MonsterCatalog
 {
     // Elemental resist ability codes — mirrors MonsterResistIndex exactly (kept

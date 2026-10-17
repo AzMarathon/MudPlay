@@ -91,7 +91,8 @@ public sealed partial class OutboundMovementObserver
             return;
         }
 
-        // "leave party" leaves the party (GAME_MECHANICS "Party commands") and
+        // "leave party" leaves the party (GAME_MECHANICS "Party commands: `invite`,
+        // `join` / `follow`, `leave`, `uninvite`, `disband party`") and
         // moves nobody. "leave" is also a text-exit verb, so without this guard
         // TextMovementPattern
         // reads "leave party" as a text-exit move and enqueues a phantom,

@@ -109,11 +109,11 @@ public sealed class MessageRouter
     public int PatternCount => _catalog.Count;
 
     // Read-only probe: would ANY catalog pattern recognize line, without
-    // actually dispatching it. Used by Game.MessageCandidateWatcher to exclude
-    // already-known line shapes (chat, combat-round text, movement, etc.) from
-    // its unrecognized-message capture — deliberately side-effect-free, so it
-    // must never call Dispatch or fire LineDispatched (that would double-fire
-    // every registered handler for a line the caller is only inspecting).
+    // actually dispatching it — so a caller can tell known line shapes (chat,
+    // combat-round text, movement, etc.) from unrecognized ones. Deliberately
+    // side-effect-free, so it must never call Dispatch or fire LineDispatched
+    // (that would double-fire every registered handler for a line the caller is
+    // only inspecting).
     public bool AnyPatternMatches(LineExtractor.EmittedLine line)
     {
         foreach (IMessagePattern pattern in _catalog.Values)

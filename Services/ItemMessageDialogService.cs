@@ -95,7 +95,6 @@ public sealed class ItemMessageDialogService
 
         MessageEditDialogViewModel vm = new(
             record,
-            currentTier:     SettingsTier.Defaults,
             existingRecords: _messages.Messages,
             isNew:           isNew,
             cache:           _cache,

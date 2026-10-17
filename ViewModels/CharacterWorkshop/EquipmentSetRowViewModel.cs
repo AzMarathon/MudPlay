@@ -5,7 +5,8 @@ using MudPlay.Models.Profile;
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // One entry in the Equipment Manager's left-hand list: a fixed trigger-purposed
-// EquipmentSet (Default / Backstab / Pre-rest HP / Pre-rest Mana). Exposes the
+// EquipmentSet (Default / Backstab / Pre-rest HP / Pre-rest Mana / While Moving /
+// Bossing). Exposes the
 // set's Name and an observable Enabled mirror so the Enable / Disable buttons
 // redraw the row's enabled state live (the backing EquipmentSet isn't
 // observable). The section owns the toggle: it writes both this mirror and Set

@@ -124,9 +124,9 @@ public sealed class SpellbookState
         return first;
     }
 
-    // The cast-on-use items the active class can use (wands / scrolls / potions
-    // carrying an Items code-43 CastsSp ability). The Spell Book lists these
-    // alongside learnable spells. Empty when no class is set yet.
+    // The cast-on-use items the active class can ready and use (a weapon such as a
+    // wand, or worn gear, carrying an Items code-43 CastsSp ability), plus a carried
+    // draw item. Empty when no class is set yet.
     public IReadOnlyList<ClassCastItem> GetCastItems() => _castItems;
 
     // Every cast-on-use item for the Spell Book's reference list: the ones above

@@ -33,12 +33,6 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
 
     public bool HasProfile => _profile.Current is not null;
 
-    public string Description =>
-        "Per-character tuning for the Auto-Lair scheduler. The marked-room list itself is per BBS " +
-        "(saved with the Save chip in the Navigation window's lair mode); these knobs say how aggressively " +
-        "the scheduler chases ready-now lairs, how it estimates travel time, and how long the engage " +
-        "window holds at a lair before re-evaluating.";
-
     public override Control View => _view ??= new AutoLairSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels
@@ -49,7 +43,6 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
             yield return "Heuristic";
             yield return "Default";
             yield return "Throughput";
-            yield return "Idle penalty";
             yield return "Engage timeout";
             yield return "Travel cost";
             yield return "Automatic";
@@ -83,7 +76,6 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
         set { if (value) Heuristic = AutoLairHeuristic.Throughput; }
     }
 
-    [ObservableProperty] private double _idlePenalty = 1.0;
     [ObservableProperty] private int    _engageTimeoutSeconds = 30;
 
     // ----- Travel cost mode -----------------------------------------
@@ -164,7 +156,6 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
     private AutoLairSettings BuildDto() => new()
     {
         Heuristic = Heuristic,
-        IdlePenalty = Math.Max(0, IdlePenalty),
         EngageTimeoutSeconds = Math.Clamp(EngageTimeoutSeconds, 1, 3600),
         TravelCostMode = TravelCostMode,
         FlatSecondsPerHop = Math.Max(0.1, FlatSecondsPerHop),
@@ -194,7 +185,6 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
     {
         AutoLairSettings dto = ReadOrDefault();
         Heuristic = dto.Heuristic;
-        IdlePenalty = dto.IdlePenalty;
         EngageTimeoutSeconds = dto.EngageTimeoutSeconds;
         TravelCostMode = dto.TravelCostMode;
         FlatSecondsPerHop = dto.FlatSecondsPerHop;
@@ -222,14 +212,13 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
     }
 
     // Push the DTO into the live AutoLairManager — both the scalar knobs
-    // (heuristic / idle penalty / engage timeout) AND the travel-cost model
+    // (heuristic / engage timeout) AND the travel-cost model
     // selection. The replacement is atomic from the scheduler's perspective; the
     // next tick (≤ 1 s away) sees the new estimate.
     private static void ApplyToServices(AutoLairSettings dto)
     {
         AppServices svcs = AppServices.Current;
         svcs.AutoLair.Heuristic = dto.Heuristic;
-        svcs.AutoLair.IdlePenalty = Math.Max(0, dto.IdlePenalty);
         svcs.AutoLair.EngageTimeoutSeconds = Math.Clamp(dto.EngageTimeoutSeconds, 1, 3600);
 
         svcs.AutoLair.TravelCostModel = svcs.BuildTravelCostModel(dto);
@@ -244,7 +233,6 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
     }
 
     partial void OnHeuristicChanged(AutoLairHeuristic value)       => MarkDirty();
-    partial void OnIdlePenaltyChanged(double value)                 => MarkDirty();
     partial void OnEngageTimeoutSecondsChanged(int value)           => MarkDirty();
     partial void OnTravelCostModeChanged(AutoLairTravelCostMode value) => MarkDirty();
     partial void OnFlatSecondsPerHopChanged(double value)           => MarkDirty();

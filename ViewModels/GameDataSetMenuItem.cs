@@ -4,13 +4,13 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace MudPlay.ViewModels;
 
-// One entry in the File → Game Data → Active set submenu. Carries the set
+// One entry in the Game Data menu's list of imported sets. Carries the set
 // name + a checkbox-style IsActive flag (the currently-selected set's row
 // gets the checkmark) + the command that switches the active set when the
 // user clicks the row.
 public sealed partial class GameDataSetMenuItem : ObservableObject
 {
-    // On-disk folder name under Data/game data/.
+    // On-disk folder name under game data/.
     public string Name { get; }
 
     // True when this entry matches the cache's current ActiveSet.

@@ -7,8 +7,8 @@ namespace MudPlay.Services;
 // Live observable mirror of the active character profile's toolbar layout +
 // visibility / position. The main window's toolbar borders bind to the derived
 // ShowTop / ShowBottom / ShowLeft / ShowRight flags so the right border lights
-// up automatically when the user toggles Settings → Toolbar's Show / Position
-// controls. AppServices hydrates on every ProfileService.ProfileLoaded /
+// up automatically when the user toggles Settings → Toolbar + Shortcuts' Show /
+// Position controls. AppServices hydrates on every ProfileService.ProfileLoaded /
 // ProfileMutated tick and resets to defaults on ProfileClosed.
 public sealed partial class ToolbarConfig : ObservableObject
 {

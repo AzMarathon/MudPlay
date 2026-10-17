@@ -20,10 +20,9 @@ namespace MudPlay.Game.Events;
 //     (a prior in-session disconnect happened). Never on the first connect of a
 //     profile session. The _hadInSessionDisconnect latch tracks this and resets
 //     on profile load.
-//   * Logoff is NOT fired here — it's the caller's responsibility.
-//     EventManager.FireLogoffEvents gets called from the user-initiated
-//     disconnect path BEFORE the wire closes. Dropped connections skip it
-//     entirely.
+//   * Logoff fires here, once per session, when CleanupWarningWatcher sees
+//     the BBS announce its cleanup shutdown (OnCleanupWarningObserved). The
+//     user's own disconnect and a dropped connection don't fire it.
 //   * AtTime events check on a 30 s ticker; an event matching the current HH:mm
 //     wall-clock local fires (deduped via _atTimeFiredAt so a single matched
 //     minute fires each event at most once). Only fires while in-game.

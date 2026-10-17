@@ -1,12 +1,12 @@
 namespace MudPlay.Game;
 
 // Reasons an engine can ask the party leader to pause via
-// PartyRestSync.RequestWait. The on-the-wire @wait signal carries no reason
-// ("an @wait doesn't need to say why") — the reason exists only inside
-// PartyRestSync so that several independent gates (auto-rest recovery plus each
-// curable ailment) can hold the wait at once and @ok only fires when the LAST
-// reason clears. Without this, an ailment recovering would prematurely release a
-// wait the HealthManager still needs (or vice-versa).
+// PartyRestSync.RequestWait. The @wait on the wire carries the reason only as a
+// note for the leader to read; a receiver keys on the token alone. The reason
+// exists inside PartyRestSync so that several independent gates (auto-rest
+// recovery plus each curable ailment) can hold the wait at once and @ok only
+// fires when the LAST reason clears. Without this, an ailment recovering would
+// prematurely release a wait the HealthManager still needs (or vice-versa).
 public enum WaitReason
 {
     // HealthManager auto-rest / recovery gate.

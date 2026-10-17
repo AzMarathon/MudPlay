@@ -54,20 +54,21 @@
                  Combat tab; they're not duplicated here. -->
             <Grid ColumnDefinitions="140,Auto,Auto,Auto,*" RowDefinitions="Auto" Margin="0,2,0,0">
 
-                <!-- Rank: Front / Mid / Back. Persisted; not yet consumed for
-                     combat target ordering. -->
+                <!-- Rank: sent as frontrank / backrank when joining a party as
+                     a follower (a leader is always front; Mid is the server
+                     default, nothing sent). -->
                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rank"/>
                 <RadioButton Grid.Row="0" Grid.Column="1" GroupName="Rank" Content="Front"
                              IsChecked="{Binding RankFront, Mode=TwoWay}"
                              Margin="0,0,16,0"
-                             ToolTip.Tip="Front rank — defaults the target order to attack-first."/>
+                             ToolTip.Tip="Front rank — sends frontrank when you join a party as a follower."/>
                 <RadioButton Grid.Row="0" Grid.Column="2" GroupName="Rank" Content="Mid"
                              IsChecked="{Binding RankMid, Mode=TwoWay}"
                              Margin="0,0,16,0"
-                             ToolTip.Tip="Mid rank — balanced default."/>
+                             ToolTip.Tip="Mid rank — the game's default; nothing is sent."/>
                 <RadioButton Grid.Row="0" Grid.Column="3" GroupName="Rank" Content="Back"
                              IsChecked="{Binding RankBack, Mode=TwoWay}"
-                             ToolTip.Tip="Back rank — caster / healer position."/>
+                             ToolTip.Tip="Back rank — sends backrank when you join a party as a follower. For a caster or healer."/>
             </Grid>
 
             <!-- ============ Party heal (inline spell + threshold) ============ -->

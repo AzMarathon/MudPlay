@@ -575,7 +575,7 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
-    public void GuardBlock_ClearedWhenPriorityDies()
+    public void GuardBlock_SurvivesAKill()
     {
         using Harness h = new();
         h.AddMonster(1, "brigand chief", killable: true);
@@ -585,27 +585,14 @@ public sealed class CombatManagerTests
         h.Feed("large brigand moves to protect brigand chief");
         Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
 
-        // The chief finally falls (last guard dead → direct hit → death line).
-        h.Combat.NoteMonsterDied("brigand chief");
-
-        Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
-        Assert.Null(h.Combat.CurrentTarget);
-    }
-
-    [Fact]
-    public void GuardBlock_SurvivesGuardDeath_ClearsOnlyOnPriorityDeath()
-    {
-        using Harness h = new();
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
-
-        h.Feed("Also here: brigand chief.");
-        h.Feed("large brigand moves to protect brigand chief");
-        Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
-
-        // A GUARD dying must not drop the block — the chief is still shielded /
-        // pending until it itself dies.
-        h.Combat.NoteMonsterDied("brigand");
+        // A guard dying must not drop the block: the chief is still shielded. The
+        // kill comes as the client sees one (the exp line, the kill's *Combat Off*,
+        // the death event AppServices routes to NoteUnattributedDeath), which names
+        // no monster. Clearing the block when the priority itself dies is not
+        // covered yet: on this path no death names the chief.
+        h.Feed("You gain 10 experience.");
+        h.Feed("*Combat Off*");
+        h.Combat.NoteUnattributedDeath();
         Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
     }
 
@@ -1015,8 +1002,8 @@ public sealed class CombatManagerTests
         // RawName. The pre-fix CombatManager hit the "server still
         // swinging at current" short-circuit (RawName matched) and
         // went silent while the surviving rat (and lashworm) kept
-        // biting. NoteMonsterDied must clear _currentTarget so the
-        // next observation re-issues `pu giant rat`.
+        // biting. The death must clear _currentTarget so the survivor
+        // is re-engaged.
         using Harness h = new();
         h.AddMonster(1, "giant rat", killable: true, allowNoPrefix: true);
 
@@ -1025,14 +1012,13 @@ public sealed class CombatManagerTests
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
         int initialSent = h.Sent.Count;
 
-        // One giant rat dies — simulate the MonsterDeath path that
-        // AppServices wires (NoteMonsterDied THEN remove).
-        h.Combat.NoteMonsterDied("giant rat");
-        Assert.Null(h.Combat.CurrentTarget);
-
-        // The classifier's next Also-Here observation now shows the
-        // surviving rat + lashworm; CombatManager must re-issue.
-        h.Feed("Also here: giant rat, lashworm.");
+        // One giant rat dies; the roster drops one rat and the re-pick
+        // re-engages the surviving one.
+        // A kill as the client sees one: the exp line, the kill's *Combat Off*, and
+        // the death event AppServices routes to NoteUnattributedDeath.
+        h.Feed("You gain 10 experience.");
+        h.Feed("*Combat Off*");
+        h.Combat.NoteUnattributedDeath();
         Assert.True(h.Sent.Count > initialSent,
             "expected a fresh `pu giant rat` after the same-name kill");
         Assert.Equal("a giant rat", h.LastSent);
@@ -4541,35 +4527,6 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
-    public void MatchedDeath_ThenSameKillsExpAndCombatOff_DoesNotDropTheRePickedSurvivor()
-    {
-        // Report 215511: the first kill's death LINE cleared the corpse and
-        // re-picked the next survivor, then the SAME kill's exp + *Combat Off*
-        // tripped the exp-inference — which dropped the freshly-picked survivor
-        // and re-attacked it, double-firing the attack command. A matched death
-        // line must gate that inference off (this Off is the matched kill's Off).
-        using Harness h = new();
-        h.AddMonster(1, "orc lieutenant", killable: true, allowNoPrefix: false,
-            "small", "short");
-
-        h.Feed("Also here: small orc lieutenant, short orc lieutenant.");
-        Assert.Equal("small orc lieutenant", h.Combat.CurrentTarget);
-
-        // First orc's death line matches → clear + re-display re-picks the survivor.
-        h.Combat.NoteMonsterDied("small orc lieutenant");
-        h.Feed("Also here: short orc lieutenant.");
-        Assert.Equal("short orc lieutenant", h.Combat.CurrentTarget);
-        int sentAfterRepick = h.Sent.Count;
-
-        // The SAME kill's exp + *Combat Off* arrive — must NOT infer a second kill.
-        h.Feed("You gain 100 experience.");
-        h.Feed("*Combat Off*");
-
-        Assert.Equal("short orc lieutenant", h.Combat.CurrentTarget);   // survivor still engaged
-        Assert.Equal(sentAfterRepick, h.Sent.Count);                    // no double-fire
-    }
-
-    [Fact]
     public void BetweenRoundCast_ThenCombatOff_ResumesImmediately()
     {
         // The reported case: a between-round CastingDirector self-heal fires
@@ -4909,17 +4866,18 @@ public sealed class CombatManagerTests
         Assert.Single(h.Sent);
         Assert.Equal("a dark goblin archer", h.LastSent);
 
-        // Archer dies — the death path clears the target, and the room
-        // re-display re-picks + swings at the surviving thug (send #2).
-        h.Combat.NoteMonsterDied("dark goblin archer");
-        h.Feed("Also here: nasty thug.");
+        // Archer dies — the death path drops it from the roster and the re-pick
+        // swings at the surviving thug (send #2).
+        // A kill as the client sees one: the exp line, the kill's *Combat Off*, and
+        // the death event AppServices routes to NoteUnattributedDeath.
+        h.Feed("You gain 10 experience.");
+        h.Feed("*Combat Off*");
+        h.Combat.NoteUnattributedDeath();
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal("a nasty thug", h.LastSent);
 
-        // The kill's delayed *Combat Off* re-arms the interrupt, then the thug
-        // swings. Without the guard this resumes and doubles the swing; with it,
-        // the fresh send #2 keeps the resume from firing.
-        h.Feed("*Combat Off*");
+        // The thug swings. The kill's *Combat Off* must not leave a resume armed
+        // that doubles the swing: the fresh send #2 keeps it from firing.
         h.Feed("The nasty thug swings at you but misses!");
 
         Assert.Equal(2, h.Sent.Count);          // no double — resume stood down

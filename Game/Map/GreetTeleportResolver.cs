@@ -22,8 +22,8 @@ namespace MudPlay.Game.Map;
 // simply won't route through it. A `class N` gate is likewise kept and surfaced
 // as RequiredClass, stamped onto the synthesized edge's ClassGate so the existing
 // MovementFilter.IsClassGateBlocked drops it for every class but N — a class-only
-// transport stays routable for its class but never for the wrong one (issue #455:
-// a bard-only barmaid teleport was being routed through by non-bards). The player
+// transport stays routable for its class but never for the wrong one (a
+// bard-only barmaid teleport must not be routed through by non-bards). The player
 // types `ask <noun> <keyword>`, noun = last word of the monster's name ("The Grey
 // Lord" → "Lord").
 public static class GreetTeleportResolver

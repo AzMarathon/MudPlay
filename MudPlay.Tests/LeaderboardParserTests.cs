@@ -138,37 +138,4 @@ public sealed class LeaderboardParserTests
     [InlineData("topple 5", 0)]
     public void ParseRequestedCount_ReadsTheEchoedCommand(string line, int expected)
         => Assert.Equal(expected, LeaderboardParser.ParseRequestedCount(line));
-
-    [Fact]
-    public void ParseBlock_StitchesHeaderAndRows_IntoSnapshot()
-    {
-        var now = new DateTimeOffset(2026, 7, 20, 20, 3, 25, TimeSpan.Zero);
-        string[] block =
-        {
-            "Top Heroes of the Realm",
-            "-=-=-=-=-=-=-=-=-=-=-=-",
-            "",
-            BuildHeader(),
-            "=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-",
-            Row(1, "Salty Exp", "Bard", "Droppin' Loads", "1529225118"),
-            Row(2, "Shooting Loads", "Ranger", "what happen", "1522027759"),
-            Row(3, "Thick Loads", "Cleric", "what happen", "1487816504"),
-            "[HP=91/KAI=10]:",
-        };
-
-        LeaderboardSnapshot? snap = LeaderboardParser.ParseBlock(block, now, requestedCount: 100);
-
-        Assert.NotNull(snap);
-        Assert.Equal(100, snap!.RequestedCount);
-        Assert.Equal(3, snap.Entries.Count);
-        Assert.Equal("Salty Exp", snap.Entries[0].Name);
-        Assert.Equal("Thick Loads", snap.Entries[2].Name);
-        Assert.Equal(now, snap.CapturedAtUtc);
-    }
-
-    [Fact]
-    public void ParseBlock_NoHeader_ReturnsNull()
-        => Assert.Null(LeaderboardParser.ParseBlock(
-            new[] { "just some chatter", "obvious exits: north" },
-            DateTimeOffset.UtcNow, 100));
 }

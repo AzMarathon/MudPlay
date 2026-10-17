@@ -18,7 +18,7 @@ namespace MudPlay.Game.Map;
 // A room can contribute two targets: its lair group AND a separately-placed NPC
 // fixture (e.g. the cave-worm room). Only exp-bearing targets are emitted —
 // a 0-exp fixture (the barmaid) is left out so it doesn't tax lap time for no
-// gain. See GAME_MECHANICS.md "Lair respawn timers & NPC-placed monsters".
+// gain. See GAME_MECHANICS "Lair respawn timers" and "NPC-placed monsters".
 public sealed class RouteExpResolver : IDisposable
 {
     private readonly RoomGraphManager _graph;

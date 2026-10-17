@@ -9,8 +9,7 @@ namespace MudPlay.Models.Profile;
 // + Monsters.json AttackPriority. CombatSettings dictates HOW to dispatch the
 // list; AttackPriority dictates WHO is in the list and in what order.
 //
-// Defaults are conservative: DoBackstab off, PoliteMode off. New characters
-// don't auto-engage anything until the user opts in.
+// Defaults are conservative: DoBackstab off, PoliteMode off.
 public sealed class CombatSettings
 {
     // ----- Wire command ---------------------------------------------
@@ -177,7 +176,7 @@ public sealed class CombatSettings
 
     // ----- Spell combat ---------------------------------------------
 
-    // How CombatSpellSlot.MinManaPerCast values are read across all five spell
+    // How CombatSpellSlot.MinManaPerCast values are read across all seven spell
     // slots below. Default Percentage.
     public ThresholdMode SpellManaThresholdMode { get; set; } = ThresholdMode.Percentage;
 

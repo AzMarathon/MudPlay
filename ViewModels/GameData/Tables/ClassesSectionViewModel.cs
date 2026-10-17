@@ -4,8 +4,8 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
-// Game Data Browser → Classes tab. Static MDB class definitions — drives the Workshop
-// CharacterPlanner ability previews, the Spells tab's class filtering, and CastingDirector's
+// Game Data Browser → Classes tab. Static MDB class definitions — drives the Workshop's
+// character calculators, the Spells tab's class filtering, and CastingDirector's
 // class-specific cure-spell selection.
 //
 // Column names mirror the MajorMUD MDB schema verbatim. MinHits / MaxHits bracket starting HP

@@ -6,8 +6,7 @@ namespace MudPlay.Game.Map;
 
 // Bridges the walker's planned-route item requirements to the NeedsRegistry as
 // NeedKind.PathItem needs, and resolves them when the required item enters
-// inventory. Backs the Settings → Other "search rooms if item needed"
-// affordance: while any PathItem need is outstanding (and the feature is on),
+// inventory. While any PathItem need is outstanding and Auto-Search is on,
 // AutoSearchManager arms itself so every room entry issues a bare "sea",
 // revealing the concealed item that unlocks the route.
 //
@@ -40,11 +39,10 @@ public sealed class PathItemDemandTracker
     private readonly Func<int, int> _carriedCount;
     private readonly Func<bool> _inventoryLoaded;
     // Posting gate: whether a PathItem need is registered at all when the walker
-    // demands one. On when the "search rooms if item needed" setting is on OR the
-    // route picker forced a per-walk obtain — posting the need is what arms the
-    // shop / give / drop fulfillers (the reliable acquire path), so it must stay
-    // open on a forced obtain even with master auto-search off, or the buy-at-shop
-    // fallback would never fire.
+    // demands one. On while the route picker's pick has this journey obtain the
+    // item — posting the need is what arms the shop / give / drop fulfillers (the
+    // reliable acquire path), so it stays open even with master auto-search off,
+    // or the buy-at-shop fallback would never fire.
     private readonly Func<bool> _isEnabled;
     // Search-demand gate: whether an outstanding need should arm the per-room `sea`.
     // Deliberately SEPARATE from _isEnabled — a picker forced-obtain still posts

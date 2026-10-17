@@ -4,10 +4,11 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.Profile;
 
-// File → Save profile as dialog. Prompts the user for a profile name (which becomes the
-// per-character folder under Data/profiles/). Inline validates the name against
-// filesystem-unsafe characters and surfaces an overwrite warning when a folder with
-// that name already exists; Save commits on Enter / button, Cancel / X returns null.
+// Name-a-profile dialog (Profile Management's add / rename / copy, and saving the
+// unnamed profile). The name becomes the character's folder under BBS/{bbs}/profiles/.
+// Inline validates the name against filesystem-unsafe characters and surfaces an
+// overwrite warning when that name already exists; Save commits on Enter / button,
+// Cancel / X returns null.
 public sealed partial class ProfileNameInputDialogViewModel : ObservableObject, IDialogViewModel<string>
 {
     public event Action<string?>? CloseRequested;

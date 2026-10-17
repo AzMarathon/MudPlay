@@ -112,7 +112,7 @@
 
             <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" Margin="0,6,0,0">
                 <Button Content="Reset to defaults" Command="{Binding ResetToDefaultsCommand}"
-                        ToolTip.Tip="Ticks every spell that damages on every tick and clears the rest."/>
+                        ToolTip.Tip="Ticks every spell that damages on every tick or on a timer, and clears the rest."/>
                 <TextBlock Classes="Readout" Text="{Binding Summary}" VerticalAlignment="Center"/>
             </StackPanel>
 

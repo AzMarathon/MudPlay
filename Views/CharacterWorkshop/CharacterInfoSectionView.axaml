@@ -51,10 +51,11 @@
             <Setter Property="Padding" Value="12"/>
         </Style>
 
-        <!-- Clickable item-name link — matches the Game Data edit dialogs. Renders
-             as plain mono text; underlines on hover; greys when there's no record
-             to open (name didn't resolve to an Items Number). A carried container's
-             chest icon uses it too, so the icon strokes in the same link colour. -->
+        <!-- Clickable item-name link — matches the Game Data edit dialogs: cyan
+             mono text that underlines on hover. With no record to open (the name
+             didn't resolve to an Items Number) it drops to plain text at full
+             opacity instead of the disabled grey. A carried container's chest icon
+             uses it too, so the icon strokes in the same link colour. -->
         <Style Selector="Button.ItemLink">
             <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
@@ -229,7 +230,7 @@
                         </Grid>
                     </Border>
 
-                    <!-- ===== Box C: Derived Combat (moved below Character Info) ===== -->
+                    <!-- ===== Derived Combat: attack / bash / smash / backstab / martial-arts rows, under the base stats ===== -->
                     <Border Classes="Box">
                         <StackPanel Spacing="2">
                             <Grid ColumnDefinitions="Auto,Auto,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">

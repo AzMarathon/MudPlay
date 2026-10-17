@@ -12,10 +12,10 @@ namespace MudPlay.Services;
 //
 // Subscribes to GameDataCache.ActiveSetChanged, loads the Items table,
 // populates the int → string map plus the slot-filtered name lists in a
-// single pass, then evicts the table. Only the fields these
-// indexes need (Number, Name, ItemType, Worn, Encum) are retained — full
-// item editing is owned by the Game Data browser and reads its own copy.
-// (Gettable is retained too — see _gettableByNumber.)
+// single pass, then evicts the table. Only the fields these indexes need
+// (Number, Name, ItemType, Worn, Encum, Price, WeaponType, ArmourType, Gettable
+// and a carried item's Stealth) are retained — full item editing is owned by
+// the Game Data browser and reads its own copy.
 public sealed class ItemNameStore
 {
     private readonly GameDataCache _cache;
@@ -153,8 +153,7 @@ public sealed class ItemNameStore
     // Carry weight (MDB Encum) of the item a game display name refers to, or
     // null when nothing in the active set matches. Name matching reuses
     // FindByName's article/count normalization, so "a torch" / "torch" both
-    // resolve. Used by the inventory tracker to move the encumbrance estimate
-    // as items enter / leave the pack.
+    // resolve.
     public int? WeightOf(string displayName)
         => FindByName(displayName) is int number
            && _encumByNumber.TryGetValue(number, out int encum)
@@ -162,16 +161,15 @@ public sealed class ItemNameStore
 
     // Equip-location code (MDB Worn) of the item a game display name refers
     // to, or null when nothing in the active set matches. Name matching
-    // reuses FindByName's article/count normalization. Used by the inventory
-    // tracker to slot a freshly-worn piece by its real location when the wear
-    // line itself names none.
+    // reuses FindByName's article/count normalization. Lets a freshly-worn piece
+    // be slotted by its real location when the wear line itself names none.
     public int? WornCodeOf(string displayName)
         => FindByName(displayName) is int number
            && _wornByNumber.TryGetValue(number, out int worn)
             ? worn : null;
 
     // ItemType (MDB kind code) of the item id, or null when the id isn't in
-    // the active set. Used by the auto-open engine's container gate.
+    // the active set.
     public int? ItemTypeOf(int number)
         => _itemTypeByNumber.TryGetValue(number, out int t) ? t : null;
 
@@ -190,21 +188,19 @@ public sealed class ItemNameStore
     // Weapon and ArmourType only for Armour — or it would compare 0 cross-category.
 
     // WeaponType (MDB subtype code, meaningful only when ItemType is Weapon)
-    // of the item id, or null when the id isn't in the active set. Used by
-    // Roomba Mode's room-label matching.
+    // of the item id, or null when the id isn't in the active set.
     public int? WeaponTypeOf(int number)
         => _weaponTypeByNumber.TryGetValue(number, out int t) ? t : null;
 
     // ArmourType (MDB subtype code, meaningful only when ItemType is Armour)
-    // of the item id, or null when the id isn't in the active set. Used by
-    // Roomba Mode's room-label matching.
+    // of the item id, or null when the id isn't in the active set.
     public int? ArmourTypeOf(int number)
         => _armourTypeByNumber.TryGetValue(number, out int t) ? t : null;
 
     // Worn (MDB equip-slot code) of the item id, or null when the id isn't in
-    // the active set. Backed by the same _wornByNumber index WornCodeOf uses.
-    // Used by Roomba Mode's slot-based room-label rules (Neck / Wrist /
-    // Off-Hand rooms, which aren't classified by ItemType or ArmourType).
+    // the active set — what tells Neck / Wrist / Off-Hand items apart, which
+    // ItemType and ArmourType don't. Backed by the same _wornByNumber index
+    // WornCodeOf uses.
     public int? WornOf(int number)
         => _wornByNumber.TryGetValue(number, out int w) ? w : null;
 

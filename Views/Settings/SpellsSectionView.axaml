@@ -170,7 +170,7 @@
                                              ItemTemplate="{StaticResource SpellPickItem}"
                                              PlaceholderText="Type code or name…"
                                              Width="260" HorizontalAlignment="Left"
-                                             ToolTip.Tip="HP-regen HoT (e.g. regeneration) used as assisted healing: when the Minor heal threshold trips, this is cast FIRST — ahead of the single-target minor heal — unless HP is already in life-threat range or the HoT is still ticking. Want it kept always-up instead? Put it in a Bless slot."/>
+                                             ToolTip.Tip="HP-regen HoT (e.g. regeneration) used as assisted healing: when the Minor heal threshold trips, this is cast FIRST — ahead of the single-target minor heal — unless HP is already in life-threat range or the HoT is still ticking. Want it kept always-up instead? Add it as a buff in the Buff Watchdog."/>
                         </Grid>
                     </StackPanel>
                 </Panel>

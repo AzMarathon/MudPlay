@@ -22,8 +22,8 @@ public abstract partial class GameDataSectionViewModel : ObservableObject, IDisp
     // "ability" → Items.
     public virtual IEnumerable<string> SearchableLabels => new[] { Title };
 
-    // Sidebar grouping: true places the section in the bottom "MDB-derived tables" group,
-    // false in the top "engine-backed" group. JSON tables and their derived views
+    // Sidebar grouping: true places the section in the bottom "Imported tables" group,
+    // false in the top "Tables + editors" group. JSON tables and their derived views
     // (Unobtainable, Quest Flags) belong with the tables; engine tabs / placeholders don't.
     public virtual bool ShowInTableGroup => false;
 

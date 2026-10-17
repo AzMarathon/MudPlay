@@ -7,8 +7,8 @@ using MudPlay.Services;
 namespace MudPlay.ViewModels;
 
 // View-model behind Views.WireInspectorWindow. Polls the shared WireBuffer
-// on a low-frequency UI tick (200 ms) and exposes the rendered Raw +
-// Stripped text the two panes bind to.
+// on a low-frequency UI tick (200 ms) and exposes the rendered Raw, Stripped
+// and Classified text the three panes bind to.
 //
 // We poll rather than subscribe to WireBuffer.BufferChanged because incoming
 // bytes arrive in tiny chunks (one per Telnet read) and repainting the
@@ -58,7 +58,7 @@ public sealed partial class WireInspectorViewModel : ObservableObject, IDisposab
     [ObservableProperty]
     private bool _syncScroll = true;
 
-    // When true (default), each refresh tick scrolls both panes to the bottom
+    // When true (default), each refresh tick scrolls every pane to the bottom
     // so the freshest bytes are always visible. The window's code-behind does
     // the actual ScrollToEnd call in response to RefreshCompleted.
     [ObservableProperty]
@@ -122,7 +122,7 @@ public sealed partial class WireInspectorViewModel : ObservableObject, IDisposab
         if (!IsPaused) Refresh();
     }
 
-    // Drop every byte from the buffer and wipe both panes.
+    // Drop every byte from the buffer and wipe all three panes.
     [RelayCommand]
     private void Clear()
     {

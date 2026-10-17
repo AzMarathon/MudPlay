@@ -59,9 +59,8 @@
                        Margin="0,4,0,0"
                        Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
-            <!-- Marker list. Right-click → "Add to Auto-Lair" on the
-                 map adds rows; the editor is read-only for marker
-                 placement. Override-seconds is editable inline. -->
+            <!-- Marker list. Rows come from Lair mode on the map or the
+                 add box below. Override-seconds is editable inline. -->
             <ListBox Grid.Row="3"
                      ItemsSource="{Binding Markers}"
                      Background="Transparent"
@@ -116,10 +115,9 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <!-- Add-marker row (mirrors LoopEditor's add-room search):
+            <!-- Add-marker row (mirrors LoopEditorDialog's add-room search):
                  type a room key or substring, dropdown surfaces live
-                 matches, Enter / Add commits. Or right-click → Add to
-                 Auto-Lair on the map. -->
+                 matches, Enter / Add commits. -->
             <Grid Grid.Row="4" RowDefinitions="Auto,Auto,Auto" RowSpacing="2">
                 <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
                     <TextBlock Grid.Column="0"

@@ -154,9 +154,8 @@ public sealed class MudSplashAnimator : IDisposable
     }
 
     // Per-tick render — the header and background persist; clear only the previous
-    // frame's scene footprint and re-draw the scene. Avoids the whole-grid ClearAll
-    // and header redraw every 80ms, and leaves the changed cells in
-    // SplashCanvas.DirtyCells for a later partial-repaint path.
+    // frame's scene footprint and re-draw the scene, avoiding the whole-grid
+    // ClearAll and header redraw every 80ms.
     private void RenderSceneFrame(int f)
     {
         _canvas.BeginFrame();

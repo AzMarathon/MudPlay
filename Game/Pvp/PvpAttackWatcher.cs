@@ -8,7 +8,7 @@ namespace MudPlay.Game.Pvp;
 
 // Recognises another player attacking us and keeps the relationship in step: a
 // Neutral who attacks becomes an Enemy, saved on their record (GAME_MECHANICS
-// "Damage lines", Client policy). Three signs count:
+// "Damage lines — who hit whom", Client policy). Three signs count:
 //
 //   - "<player> moves to attack you!";
 //   - a damage line naming a player (the backstop for a missed announce);
@@ -129,7 +129,7 @@ public sealed partial class PvpAttackWatcher : IDisposable
             if (_warnedPvpOff) return;
             _warnedPvpOff = true;
             _log?.Warn(LogCategory,
-                $"{name} attacked us, but PvP isn't enabled for this realm (Settings → BBS), so nothing is done about it");
+                $"{name} attacked us, but PvP isn't enabled for this realm (Settings → BBS + Display), so nothing is done about it");
             return;
         }
 

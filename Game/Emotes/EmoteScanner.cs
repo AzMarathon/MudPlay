@@ -28,8 +28,7 @@ public sealed class EmoteScanner
         _regex = BuildRegex(catalog);
     }
 
-    // The catalog this scanner matches against — used by the input picker to suggest
-    // shortcodes.
+    // The catalog this scanner matches against.
     public EmoteCatalog Catalog => _catalog;
 
     // Wraps the static built-in catalog — the conversation renderer's default.

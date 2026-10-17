@@ -31,7 +31,7 @@ public readonly record struct BossTimerSyncResponse(
 // in order, decodes, and raises ResponseReceived once a sender's set is complete.
 // Correlation is by responder name (every reply line carries it), so a shared gang/local
 // channel just yields one set per responder — no request token needed. Collection is
-// transient: Begin on send, Stop / Dispose when the merge window closes.
+// transient: Begin on send, Dispose when the merge window closes.
 //
 // Data is taken only on a channel a request of ours went out on. Nothing here turns
 // a responder away for who they are (answering at all is their grant to us), so a
@@ -165,15 +165,6 @@ public sealed class BossTimerSyncCollector : IDisposable
             _partial.Remove(delivered);
         if (byUser) UserAsked?.Invoke();
         Activity?.Invoke();
-    }
-
-    public void Stop()
-    {
-        _collecting = false;
-        _partial.Clear();
-        _askedOn.Clear();
-        _usersAskedOn.Clear();
-        _telepathed.Clear();
     }
 
     // True while the one thing asked is a telepath, of one player the game has

@@ -7,7 +7,7 @@ namespace MudPlay.Game.Conditions;
 
 // Mirrors our OWN curable, non-movement ailments (poison / blindness / disease)
 // onto the self row's party-window chip. The say-driven chip mirror
-// (PartyAilmentTracker) only lights OTHER members' chips off their '.@X on'
+// (PartyAilmentTracker) only lights OTHER members' chips off their '.@X'
 // announcements — our own say echo is ignored there because our condition state
 // is owned by ConditionTracker — so without this our self row never lit a poison
 // / blind / disease chip even though "You feel ill." (etc.) and the `par` display

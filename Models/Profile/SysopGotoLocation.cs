@@ -12,14 +12,14 @@ public sealed class SysopGotoLocation
     public string Name { get; set; } = string.Empty;
 
     // Where the jump lands, in the same map/room addressing the nav graph keys rooms
-    // by (RoomKey). Used to re-anchor position after the jump and — in a later PR —
-    // to route through the goto as a shortcut.
+    // by (RoomKey). Used to re-anchor position after the jump and to route through
+    // the goto as a shortcut (SysopGotoRoutePlanner).
     public int Map { get; set; }
     public int Room { get; set; }
 
     // Optional per-row routing/firing guard: below this level the destination is too
-    // dangerous for the character, so menus grey the row out and (PR 2) the router
-    // won't take the hop. 0 means ungated. This is a client-side judgement the user
+    // dangerous for the character, so menus grey the row out and the router won't
+    // take the hop. 0 means ungated. This is a client-side judgement the user
     // encodes, not a game rule — all goto rooms are safe rooms.
     public int MinLevel { get; set; }
 

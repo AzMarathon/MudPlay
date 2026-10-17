@@ -126,8 +126,7 @@
                             </Border>
 
                             <!-- (2) Name on top line; class on a small muted
-                                 subtitle below — mirrors the skeleton design's
-                                 two-line member cell. -->
+                                 subtitle below. -->
                             <StackPanel Grid.Column="2" Orientation="Vertical"
                                         VerticalAlignment="Center" Margin="6,0,0,0">
                                 <TextBlock Text="{Binding Name}"
@@ -140,9 +139,8 @@
                                            IsVisible="{Binding ClassDisplay, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                             </StackPanel>
 
-                            <!-- (3) HP + MA stacked, single column (HEALTH · MANA).
-                                 Skeleton-design layout: each member gets two
-                                 vertical rows — HP bar + "H:cur/max pct%" on top,
+                            <!-- (3) HP + MA stacked, single column (HEALTH · MANA):
+                                 HP bar + "H:cur/max pct%" on top,
                                  MA bar + "M:cur/max pct%" below. The MA sub-row
                                  hides when BaselineMp=0 (warrior / no-mana class
                                  / pre-@health-exchange) so the row collapses to
@@ -200,9 +198,9 @@
 
                             <!-- (4) Status-flag chips. Each chip self-collapses when the
                                  corresponding flag is false. REST / MED communicate
-                                 stance (from par's state column); the four ailments
-                                 (BLD / PSN / DIS / CNF) will be lit by the combat
-                                 engine once it parses applied / cured messages; WAIT
+                                 stance (from par's state column); the ailments
+                                 (BLD / PSN / DIS / CNF / HELD) are set by PartyManager
+                                 from par and the applied / cured messages; WAIT
                                  fires from the @wait / @ok protocol handlers. -->
                             <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border Classes="StatusChip"

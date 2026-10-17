@@ -6,10 +6,9 @@ namespace MudPlay.Game;
 //
 // Timestamp: wall-clock time the originating line was emitted.
 // Channel: which channel the line is classified into.
-// Speaker: player name when known. null for outgoing telepaths (the echo gives
-//   the recipient instead), broadcasts (operator's name lives in Speaker),
-//   realm-events with no named subject, or own yells where the speaker is the
-//   local player. Specific semantics per channel are documented inline in
+// Speaker: player name when known — for an outgoing telepath, the recipient the
+//   echo names. null for realm-events with no named subject and for our own says
+//   and yells. Specific semantics per channel are documented inline in
 //   ChatRouter. A yell heard from the next room does not name the yeller; its
 //   Speaker is the word the game prints, "Someone".
 // Message: the message text. For realm events this is a short verb phrase

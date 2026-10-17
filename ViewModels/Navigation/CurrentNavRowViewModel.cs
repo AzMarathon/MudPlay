@@ -15,10 +15,9 @@ public sealed class CurrentNavRowViewModel
     public CurrentNavRowStatus Status { get; }
     public RoomKey? RemoveKey { get; }
 
-    // When non-null, the row shows an Edit (✎) button alongside Remove.
-    // Currently used by the Auto-Lair rows to expose a per-marker
-    // timer-override dialog; loop / walk steps don't have a per-step edit
-    // affordance so they leave this null.
+    // When non-null, the row shows an Edit (✎) button alongside Remove: an
+    // Auto-Lair marker's timer override. Loop / walk steps have no per-step
+    // edit affordance, so they leave this null.
     public RoomKey? EditKey { get; }
 
     // True for the synthetic first row of a running loop — "⚙ Entire Loop

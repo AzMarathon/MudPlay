@@ -47,8 +47,8 @@ public sealed class BbsProfile
     // pause once a retry is already in play.
     public bool InfiniteRetries { get; set; }
 
-    // Minutes the BBS is offline for its nightly auto-cleanup. Used by the
-    // ReconnectAfterCleanup schedule: when the CleanupWarningWatcher catches
+    // Minutes the BBS is offline for its nightly auto-cleanup. With
+    // ReconnectAfterCleanup on, when the CleanupWarningWatcher catches
     // a "shutting down in N minutes" announcement, the client arms a
     // reconnect at warning_observed_at + N + CleanupPeriodMinutes. 0 means
     // "dial back the moment shutdown_at is past."
@@ -125,9 +125,9 @@ public sealed class BbsProfile
     // Terminal rows to advertise via Telnet NAWS. Defaults to 25.
     public int TerminalRows { get; set; } = 25;
 
-    // How many scrolled-off rows the backscroll ring retains. Applies on
-    // next launch — in-place ring resize would need to copy / drop rows and
-    // is intentionally deferred.
+    // How many scrolled-off rows the backscroll ring retains. A change applies
+    // at once: the ring is resized in place, dropping the oldest rows when it
+    // shrinks.
     public int ScrollbackLines { get; set; } = 4_000;
 
     // How many rows one mouse-wheel notch scrolls in the Backscroll window.

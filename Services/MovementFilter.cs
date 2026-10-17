@@ -1022,15 +1022,6 @@ public sealed class MovementFilter : IRoomFilter
             levelProbe();
     }
 
-    // Warm the party @wealth reading and @level freshness before a walk, but
-    // only when each is actually needed. BFS explores off-path gate edges (any
-    // toll / level exit inside the search frontier, in any direction), so
-    // probing from the per-exit gate would fire a round-trip for a gate the
-    // party would never walk through. Here we plan the route ONCE per gate kind
-    // with that gate suspended — the path the party WOULD take if every gate of
-    // that kind were passable — and probe only when that path genuinely crosses
-    // one. Each half is independent: a toll on the route warms @wealth, a level
-    // gate on the route warms @level; a route with neither warms nothing.
     // The tolls and fares on the route a walk WOULD take once it can pay them: the
     // toll gate stands down (an unaffordable toll is routed around only until the
     // money is in hand), and so do the acquirable gates a train or detour walk plans
@@ -1047,6 +1038,15 @@ public sealed class MovementFilter : IRoomFilter
         finally { _tollGateSuspended = false; }
     }
 
+    // Warm the party @wealth reading and @level freshness before a walk, but
+    // only when each is actually needed. BFS explores off-path gate edges (any
+    // toll / level exit inside the search frontier, in any direction), so
+    // probing from the per-exit gate would fire a round-trip for a gate the
+    // party would never walk through. Here we plan the route ONCE per gate kind
+    // with that gate suspended — the path the party WOULD take if every gate of
+    // that kind were passable — and probe only when that path genuinely crosses
+    // one. Each half is independent: a toll on the route warms @wealth, a level
+    // gate on the route warms @level; a route with neither warms nothing.
     public void WarmForRoute(BfsMapper bfs, RoomKey source, RoomKey destination)
     {
         ArgumentNullException.ThrowIfNull(bfs);
@@ -1138,10 +1138,9 @@ public sealed class MovementFilter : IRoomFilter
         StashChanged?.Invoke();
     }
 
-    // Replace both the avoided and stash sets in one shot and persist once.
-    // Used by the Modify-Avoid-Rooms dialog on Save — it stages the merged,
-    // type-tagged working copy locally and commits both sets together so Cancel
-    // can discard cleanly (mirrors RoomBlacklistStore.ReplaceAll). No-op when no
+    // Replace both the avoided and stash sets in one shot and persist once — one
+    // commit of a staged, type-tagged working copy, so an editor's Cancel can
+    // discard cleanly (mirrors RoomBlacklistStore.ReplaceAll). No-op when no
     // profile is loaded. Fires both change events so the map recolours the
     // affected cells.
     public void ReplaceAll(IEnumerable<RoomKey> avoided, IEnumerable<RoomKey> stash)

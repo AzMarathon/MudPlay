@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace MudPlay.Models.Settings;
 
-// Root DTO for Data/Global/global.json — the Global tier of the settings
+// Root DTO for Global/global.json — the Global tier of the settings
 // hierarchy. Holds app-wide deltas (the things every character shares) plus
 // pointers the launcher needs before any profile is loaded. Anything in
 // this file must be resolvable without a character profile loaded (Global

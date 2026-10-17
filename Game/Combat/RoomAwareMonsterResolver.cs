@@ -53,8 +53,8 @@ public sealed class RoomAwareMonsterResolver
     //
     // The looked-at name carries the game's flavor prefix ("short orc lieutenant",
     // "fierce orc lieutenant") while the Monsters record holds the base name ("orc
-    // lieutenant"). ResolveBaseName strips the prefix via the classifier's real
-    // per-monster prefix rules (a distinct "short orc lieutenant" record resolves
+    // lieutenant"). ResolveBaseName strips the prefix with the classifier's shared
+    // flavor vocabulary (a distinct "short orc lieutenant" record resolves
     // to itself; a prefixed bare record resolves to "orc lieutenant"), then the
     // candidate is matched on that base name. Unresolvable names fall through to a
     // raw exact match, which typically finds nothing → caller's first-match fallback.

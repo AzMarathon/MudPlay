@@ -38,7 +38,7 @@
                           ToolTip.Tip="Auto-accept party invites coming from this player."/>
                 <CheckBox Content="Don't auto-delete this player"
                           IsChecked="{Binding DontAutoDelete, Mode=TwoWay}"
-                          ToolTip.Tip="Skip this record during the periodic cleanup of stale players (Settings → General)."/>
+                          ToolTip.Tip="Skip this record during the periodic cleanup of stale players (Settings → Other → Cleanup Player Database)."/>
                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
                     <TextBlock Classes="FieldLabel" Text="Account name" Width="90"/>
                     <TextBox Text="{Binding AccountName, Mode=TwoWay}" Width="200"

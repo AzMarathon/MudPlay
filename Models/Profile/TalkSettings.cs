@@ -55,7 +55,7 @@ public sealed class TalkSettings
 
     // When true, the first time we spot a non-party player in the room each
     // local-calendar day — whether from an Also here: list or a live arrival
-    // line — the client sends greet then look at them. Tracked per-BBS on the
+    // line — the client sends greet then look at them. Tracked per realm on the
     // player observation row, so re-meeting the same person later the same day
     // is silent. Self and current party members are always skipped. Default
     // false (opt-in). Wired to Game.GreetManager.
@@ -73,12 +73,12 @@ public sealed class TalkSettings
     // Game.PlayerLookManager.
     public bool LookAtPlayersOnArrival { get; set; }
 
-    // Persist the Conversation window to Data/Logs/<char>.<bbs>.talk.log so it
+    // Persist the Conversation window to Logs/<char>.<bbs>.talk.log so it
     // survives restarts. Default on. Wired to Services.SessionLogService.
     public bool LogConversations { get; set; } = true;
 
     // Persist the Session Stats → Transaction history to
-    // Data/Logs/<char>.<bbs>.transactions.log. Default on.
+    // Logs/<char>.<bbs>.transactions.log. Default on.
     public bool LogTransactions { get; set; } = true;
 
     // Rolling line cap shared by both logs — the file keeps only its last N

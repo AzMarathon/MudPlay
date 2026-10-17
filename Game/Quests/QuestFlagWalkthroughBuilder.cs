@@ -12,13 +12,14 @@ namespace MudPlay.Game.Quests;
 //   failability / checkability / testability — "NPC keyword hand-over detection" (at least /
 //     at most) and "Deck of cards (Gypsy)" (failability stops the line for a character who
 //     has the ability; its second number is a message).
-//   giveability / addability / removeability — "Quest stat rewards — giveability vs addability".
+//   giveability / addability / removeability — "Quest stat rewards — `giveability` vs
+//     `addability`".
 //   minlevel / maxlevel, checkitem / takeitem, nomonsters / monsters / needmonster, and the
 //     trailing message number on a condition — "Room-command refusals".
 //   class — "Greet teleports — an NPC transports a player who asks".
-//   failitem — "Room-spell hazard shape 2 — TextBlock action guarded by failitem <itemNum>".
+//   failitem — "Room-spell hazard shape 2 — TextBlock action guarded by `failitem <itemNum>`".
 //   roomitem — "Item-use teleports".
-//   price with no coin letter — "Repeated price directives add up".
+//   price with no coin letter — "Repeated `price` directives add up".
 //   giveitem — "Chests and chest loot tables"; teleport <room> <map> — "CMD-driven room
 //     teleports split the party"; random <table> — "Chests and chest loot tables".
 // race, addexp and learnspell are read the way QuestCrawler and KnownSpellCatalog already read

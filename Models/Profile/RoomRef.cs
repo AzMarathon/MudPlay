@@ -1,7 +1,7 @@
 namespace MudPlay.Models.Profile;
 
 // JSON-friendly representation of a Game.Map.RoomKey for per-character storage
-// (avoided rooms, stash rooms, future favorites bookmarks). Plain mutable POCO
+// (avoided rooms, stash rooms, event targets). Plain mutable POCO
 // so System.Text.Json round-trips it without a converter.
 public sealed class RoomRef
 {

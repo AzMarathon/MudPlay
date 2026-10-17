@@ -199,7 +199,7 @@ public sealed class WindowLayoutStore
         };
     }
 
-    // Take a snapshot of every known window's bounds — used by ProfileSaving.
+    // Take a snapshot of every known window's bounds, for the profile save.
     //
     // CAPTURE THE STILL-OPEN WINDOWS FIRST. Bounds were only ever recorded in
     // the Closing handler, which is one event too late for the save that

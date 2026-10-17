@@ -7,9 +7,8 @@ using MudPlay.Services.Patterns;
 namespace MudPlay.Game;
 
 // The combat-cycle heartbeat. Every automation engine (HealthManager,
-// CastingDirector, CombatManager) subscribes to CombatTickElapsed or one of
-// the regen-tick events; the status bar binds to the observable last-tick
-// timestamps for the countdown display.
+// CastingDirector, CombatManager) subscribes to CombatTickElapsed; the status
+// bar binds to the observable last-tick timestamps for the countdown display.
 //
 // A combat round is nominally 5 s on every realm. Two sources drive the event:
 //   Damage-driven: server damage lines (UserHits + MobHits) are the canonical
@@ -20,11 +19,7 @@ namespace MudPlay.Game;
 //     heartbeat going when the user is idle / out of combat / between hits.
 //     It steps by RoundLength, the round as this board has been running it.
 //
-// HP and MA regen ticks use the same timer-fallback only — server damage
-// lines don't correlate to regen. Intervals are realm-specific, so we don't
-// assume a realm. HpRegenInterval and ManaRegenInterval default to
-// TimeSpan.Zero (disabled — the corresponding events don't fire); the
-// Settings.Health and Settings.RealmType surfaces populate them.
+// Regen countdowns are RegenTracker's, not this engine's.
 public sealed partial class TickEngine : ObservableObject, IDisposable
 {
     // Combat tick interval — universal across MajorMUD realm flavours.
@@ -98,7 +93,7 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     // engines don't take it as the game having handed back the round's cast.
     public bool LastCombatTickWasPlaced { get; private set; } = true;
 
-    // Coarse watchdog heartbeat. Unlike the combat / regen ticks this carries no
+    // Coarse watchdog heartbeat. Unlike the combat tick this carries no
     // cycle semantics — it's a plain "another second passed" poll off the same
     // 100 ms timer, so a subscriber (the idle-stall watchdog on
     // CombatStateTracker) can re-check its state at ~1 s granularity instead of
@@ -113,12 +108,6 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     private DateTimeOffset? _lastHeartbeat;
     private bool _disposed;
 
-    // HP regen interval. TimeSpan.Zero disables the regen event.
-    public TimeSpan HpRegenInterval { get; set; } = TimeSpan.Zero;
-
-    // MA / KAI regen interval. TimeSpan.Zero disables the regen event.
-    public TimeSpan ManaRegenInterval { get; set; } = TimeSpan.Zero;
-
     // Wall-clock time of the last combat tick, or null before the first fire.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TimeToNextCombatTick))]
@@ -132,23 +121,9 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     // pick until HP settles.
     public bool LastCombatTickWasDamageDriven { get; private set; }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TimeToNextHpRegenTick))]
-    private DateTimeOffset? _lastHpRegenTick;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TimeToNextManaRegenTick))]
-    private DateTimeOffset? _lastManaRegenTick;
-
     // Time remaining to the next combat tick, or null if no tick has been
     // observed yet.
     public TimeSpan? TimeToNextCombatTick => RemainingFor(LastCombatTick, RoundLength);
-
-    public TimeSpan? TimeToNextHpRegenTick =>
-        HpRegenInterval == TimeSpan.Zero ? null : RemainingFor(LastHpRegenTick, HpRegenInterval);
-
-    public TimeSpan? TimeToNextManaRegenTick =>
-        ManaRegenInterval == TimeSpan.Zero ? null : RemainingFor(LastManaRegenTick, ManaRegenInterval);
 
     // Fired on every combat tick — every 5 s, refreshed by damage lines.
     public event Action? CombatTickElapsed;
@@ -156,12 +131,6 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     // Fired every HeartbeatInterval (1 s) — a coarse watchdog poll with no cycle
     // semantics (see HeartbeatInterval).
     public event Action? HeartbeatElapsed;
-
-    // Fired at HpRegenInterval when configured.
-    public event Action? HpRegenTickElapsed;
-
-    // Fired at ManaRegenInterval when configured.
-    public event Action? ManaRegenTickElapsed;
 
     public TickEngine(MessageRouter router, Func<DateTimeOffset>? now = null)
     {
@@ -353,34 +322,6 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
             CombatTickElapsed?.Invoke();
         }
 
-        // HP / MA regen — pure timer-driven. Each runs independently when
-        // its interval is non-zero. First fire seeds the "last" timestamp.
-        if (HpRegenInterval > TimeSpan.Zero)
-        {
-            if (LastHpRegenTick is not { } hp)
-            {
-                LastHpRegenTick = now;
-            }
-            else if (now - hp >= HpRegenInterval)
-            {
-                LastHpRegenTick = now;
-                HpRegenTickElapsed?.Invoke();
-            }
-        }
-
-        if (ManaRegenInterval > TimeSpan.Zero)
-        {
-            if (LastManaRegenTick is not { } ma)
-            {
-                LastManaRegenTick = now;
-            }
-            else if (now - ma >= ManaRegenInterval)
-            {
-                LastManaRegenTick = now;
-                ManaRegenTickElapsed?.Invoke();
-            }
-        }
-
         // Watchdog heartbeat — a plain 1 s poll re-anchored at now (precision
         // doesn't matter for a stuck-state re-check, unlike the projected combat
         // cycle). First tick seeds the stamp without firing.
@@ -397,8 +338,6 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         // Refresh the countdown properties so the status bar updates each
         // tick of the dispatcher timer.
         OnPropertyChanged(nameof(TimeToNextCombatTick));
-        OnPropertyChanged(nameof(TimeToNextHpRegenTick));
-        OnPropertyChanged(nameof(TimeToNextManaRegenTick));
     }
 
     // Deterministic test seam for the DispatcherTimer callback. Production only

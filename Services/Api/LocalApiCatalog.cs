@@ -11,7 +11,7 @@ namespace MudPlay.Services.Api;
 //
 // Every room→monster answer comes from the same two sources the map's ROOM INFO
 // panel uses, and NOT from re-reading the raw tables:
-//   - the room's own Lair tag, parsed by LairTagParser (lair spawners), and
+//   - the room's own Lair tag, parsed by RoomTooltipBuilder.ParseLairTag (lair spawners), and
 //   - MonsterSpawnIndex (placed fixtures and assigned roamers, derived from each
 //     monster's `Summoned By` field).
 // Those two disagree in interesting ways and the distinction matters — a lair

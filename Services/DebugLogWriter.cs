@@ -1,7 +1,7 @@
 namespace MudPlay.Services;
 
 // Per-session diagnostic file writer. Each instance opens one file under
-// Data/Logs/{yyyy-MM-dd_HH-mm-ss}-p{pid}-{topic}.log and appends timestamped
+// Logs/{yyyy-MM-dd_HH-mm-ss}-p{pid}-{topic}.log and appends timestamped
 // lines (the pid keeps concurrent instances from sharing a filename).
 // Used by walk / loop / match diagnostics — anything too noisy for LogService
 // but useful when chasing a bug.
@@ -9,9 +9,8 @@ namespace MudPlay.Services;
 // Thread-safe: a single internal lock guards the writer. Lines are flushed to
 // disk on every WriteLine call so a crash doesn't truncate the tail.
 //
-// Rotation: callers invoke the static PruneOldLogs once at startup to delete
-// files older than the configured retention window (default 30 days).
-// Settings.Other exposes the knob.
+// Rotation: PruneOldLogs runs once at startup and deletes files older than
+// DefaultRetentionDays (30 days).
 public sealed class DebugLogWriter : IDisposable, IAsyncDisposable
 {
     // Default retention window applied by PruneOldLogs.

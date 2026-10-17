@@ -126,9 +126,10 @@ public sealed partial class GhRuleEditRowViewModel : ObservableObject
     private void Remove() => _onRemove(this);
 }
 
-// Right-click "Label as GH room…" picker for Roomba Mode. Holds a list of
-// rule rows (OR'd together for this room) plus a catch-all toggle. Save
-// writes through GhRoomLabelStore.SetLabel; Cancel discards.
+// Rule picker for a Roomba room, opened from the map's right-click "Toggle:
+// Roomba Room" and the Workshop's Roomba tab. Holds a list of rule rows (OR'd
+// together for this room) plus a catch-all toggle. Save writes through
+// GhRoomLabelStore.SetLabel; Cancel discards.
 public sealed partial class GhRoomLabelPickerDialogViewModel : ObservableObject, IDialogViewModel<GhRoomLabel?>
 {
     public event Action<GhRoomLabel?>? CloseRequested;

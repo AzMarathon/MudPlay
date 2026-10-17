@@ -33,8 +33,6 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     [NotifyPropertyChangedFor(nameof(CanSave))]
     private string _name = string.Empty;
 
-    [ObservableProperty] private SettingsTier _useTier = SettingsTier.Defaults;
-
     // ----- Five perspective line slots -----
 
     [ObservableProperty]
@@ -67,7 +65,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     [NotifyPropertyChangedFor(nameof(CanSave))]
     private string _appliedEndsWith = string.Empty;
 
-    // Typed effect flags — bound to checkboxes in the dialog. Twelve
+    // Typed effect flags — bound to checkboxes in the dialog. Nine
     // bits surfaced; the MegaMUD find-mode flags and the four retired inert
     // effect bits (LosingHp / HpRegenerating / ManaRegenerating / EndsCombat)
     // are NOT exposed in the UI.
@@ -96,14 +94,6 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     // empty when there are none (silent auto-fill only). See TryAutofillFromRecord.
     public ObservableCollection<LinkFillConflict> LinkFillConflicts { get; } = new();
     public bool HasLinkFillConflicts => LinkFillConflicts.Count > 0;
-
-    public IReadOnlyList<TierOption> AvailableTiers { get; } = new[]
-    {
-        new TierOption(SettingsTier.Defaults,  "Defaults"),
-        new TierOption(SettingsTier.Global,    "Global"),
-        new TierOption(SettingsTier.Bbs,       "Realm"),
-        new TierOption(SettingsTier.Character, "Character"),
-    };
 
     // Editable Links list — see LinkRow for shape.
     public System.Collections.ObjectModel.ObservableCollection<LinkRow> LinkRows { get; } = new();
@@ -241,7 +231,6 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
 
     public MessageEditDialogViewModel(
         MessageRecord original,
-        SettingsTier currentTier,
         IReadOnlyCollection<MessageRecord> existingRecords,
         bool isNew,
         GameDataCache? cache = null,
@@ -274,7 +263,6 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         }
 
         Name            = original.Name;
-        UseTier         = currentTier;
         CasterMessage   = original.CasterMessage;
         TargetMessage   = original.TargetMessage;
         WitnessMessage  = original.WitnessMessage;
@@ -338,7 +326,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
             ConfuseFumbleLine: ConfuseFumbleLine ?? string.Empty,
             CastResponse:      CastResponse ?? string.Empty);
 
-        CloseRequested?.Invoke(new MessageEditResult(_original, updated, UseTier));
+        CloseRequested?.Invoke(new MessageEditResult(_original, updated));
     }
 
     [RelayCommand]
@@ -443,11 +431,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
 // Result returned from MessageEditDialogViewModel on Save.
 public sealed record MessageEditResult(
     MessageRecord Original,
-    MessageRecord Updated,
-    SettingsTier  Tier);
-
-// One Use-dropdown row — friendly label for a SettingsTier.
-public sealed record TierOption(SettingsTier Value, string Label);
+    MessageRecord Updated);
 
 // One row on the dialog's read-only Game Data tab — a field label and its rendered value
 // from the source game-data row.
@@ -463,8 +447,8 @@ public sealed record GameDataInfoRow(
 {
     public bool HasLinks => Links is { Count: > 0 };
 
-    // Links held back behind a "show N more" expander — used by long lists (Cast in
-    // rooms) that show the first batch inline and hide the tail until asked.
+    // Links held back behind a "show N more" expander, so a long list (Cast in rooms)
+    // shows the first batch inline and hides the tail until asked.
     public bool HasOverflow => Overflow is { Count: > 0 };
     public string OverflowLabel => $"show {(Overflow?.Count ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture)} more";
 }

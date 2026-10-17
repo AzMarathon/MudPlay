@@ -23,8 +23,8 @@ namespace MudPlay.Game;
 // interrogate it before deciding whether to enqueue or send a denial reply. It
 // reads a positive parsed Traps stat OR a class/race game-data trap-skill grant,
 // so a character whose Traps value isn't captured yet still counts as able. The
-// handler also owns the channel-aware silence (Say/Gangpath when no skill →
-// silent; Telepath → reply) since the channel context lives at handler dispatch
+// handler also owns the channel-aware silence (Say when no skill → silent; every
+// other channel → a refusal) since the channel context lives at handler dispatch
 // time.
 //
 // An exit we disarmed ourselves stays down until the engine re-arms it (5 minutes
