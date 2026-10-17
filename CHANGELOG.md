@@ -1,5 +1,10 @@
 # Version history
 
+## 3.181.15
+
+- A telepath the game refused on every try, or whose letters fit two players, is let go at once
+- A later telepath to that player no longer makes them the one a timer request asked
+
 ## 3.181.13
 
 - Loading another character drops a loop held for a reconnect or loaded to start, with a notice

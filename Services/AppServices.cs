@@ -3298,6 +3298,10 @@ public sealed class AppServices
                 .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
                     System.Threading.Tasks.TaskScheduler.Default),
             log: Log);
+        // A telepath the game would not send, or whose letters fit two players, is
+        // not left pending in the chat log for a later confirmation to take.
+        Telepaths.GaveUp += Chat.TelepathGivenUp;
+        Chat.LastTelepathOnWire = () => Telepaths.LastWrittenTelepath;
         // Auto-party flag consumer — invites flagged players when they
         // appear in our room, accepts invites from flagged players.
         // Wire-sender is bound by MainWindowViewModel once the telnet
