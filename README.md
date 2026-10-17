@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.32**
+> **Version 3.183.7**
 > - A realm whose name can't be a folder gets no realm-tier game-data overrides instead of sharing the holding folder
 > - A profile whose game data set's name can't be used says so on the terminal, not only in the log
 > - A loop or Auto-Lair folder name that can't be a folder is refused as you type, and the holding folder stays out of the tree
@@ -27,7 +27,7 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 - **Game Data** — import MajorMUD `.mdb` sets; browse, filter and override every monster, item, spell and room; **Monster Intel** answers "can I fight this?".
 - **Automation** — macros, aliases, triggers, scheduled events, per-engine toggles, and a one-press kill switch.
 - **Chat** — a conversation window with channel filters, search and history.
-- **Help & diagnostics** — a built-in Help guide, first-run setup tour, update checker, scrollback search, program log, session stats, wire inspector, and a one-click **bug reporter**.
+- **Help & diagnostics** — a built-in Help guide, step-by-step Visual Guides (the first-run setup tour among them), update checker, scrollback search, program log, session stats, wire inspector, and a one-click **bug reporter**.
 - **Your layout** — editable toolbar, rebindable keys, a custom right-click menu, and windows that snap together.
 
 ## Getting started
@@ -55,7 +55,7 @@ If local state ever gets weird, `dotnet clean` and rebuild.
 4. **Connect.** **Alt+H**, or File → Connect. You're in.
 5. **Want the automation?** Open **Game Data** → **Import .mdb** and pick a MajorMUD database. That fills the monster/item/spell/room tables the engines read from. The terminal works fine without it — the robots don't.
 
-On a fresh install a **setup tour** walks you through these steps. **Help → Help topics…** explains every feature and setting.
+On a fresh install a **setup tour** walks you through these steps; **Help → Visual Guides…** has step-by-step guides to the rest. **Help → Help topics…** explains every feature and setting.
 
 ### Where your data lives
 

@@ -1,17 +1,17 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:MudPlay.ViewModels"
+             xmlns:vm="using:MudPlay.ViewModels.Guides"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="660" d:DesignHeight="520"
-             x:Class="MudPlay.Views.FirstRunTutorialOverlay"
-             x:DataType="vm:FirstRunTutorialViewModel"
+             x:Class="MudPlay.Views.GuideOverlay"
+             x:DataType="vm:GuideViewModel"
              IsHitTestVisible="False"
              IsVisible="{Binding IsActive}">
 
     <!-- Highlight-only layer: a ring around the menu the current step points at.
-         Nothing is drawn over the terminal (the step card lives in a docked left
-         panel), and the whole control is hit-test-transparent. Ring geometry is
+         Nothing is drawn over the terminal (the step card is its own floating
+         window), and the whole control is hit-test-transparent. Ring geometry is
          placed in code-behind against the target menu's live bounds. -->
     <Canvas x:Name="Layer">
         <Border x:Name="Ring"

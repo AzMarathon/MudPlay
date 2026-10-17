@@ -594,6 +594,39 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
         Assert.Equal(CastReach.Verdict.Unknown, VerdictOn(1042, new CastReach.Here(0, Monsters: null, Nobody)));
     }
 
+    // A hostile spell players learn only from an item's LearnSp slot (#9202) or a
+    // textblock's `learnspell` (#9204), with no "Learnable" or "Learned From" to say
+    // so, is read as a learnable one, not left open as an item's or textblock's cast.
+    [Theory]
+    [InlineData(9202)]
+    [InlineData(9204)]
+    public void ATaughtSpellAimedAtFoes_IsReadByThePlayersOutsideTheParty(int spell)
+    {
+        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(spell, new CastReach.Here(0, Nobody, Nobody)));
+        Assert.Equal(CastReach.Verdict.InReach, VerdictOn(spell, new CastReach.Here(0, Nobody, new[] { "Bob" })));
+    }
+
+    // The Underwater Passage line again, with mists only an item or a textblock
+    // teaches: the dark wizard's ice storm is here, their caster (the ice sorceress)
+    // isn't, and no player outside the party is, so neither confuses.
+    [Fact]
+    public void AnIceStormCasterHere_MistsAnItemOrATextblockTeaches_AreLeftOut()
+    {
+        AddTheFreezingFamily(withTheLearnableMist: false);
+        _messages.Messages.Add(Record("item-taught mist", MessageFlags.Confused,
+            "An opalescent white mist surrounds you!", "You are freezing", "You are no longer freezing", 9202));
+        _messages.Messages.Add(Record("textblock-taught mist", MessageFlags.Confused,
+            "An opalescent white mist surrounds you!", "You are freezing", "You are no longer freezing", 9204));
+        Monsters("dark wizard");
+
+        Feed("You are freezing");
+
+        Assert.Contains("ice storm", AppliedNames);
+        Assert.DoesNotContain("item-taught mist", AppliedNames);
+        Assert.DoesNotContain("textblock-taught mist", AppliedNames);
+        Assert.False(_tracker.IsConfused);
+    }
+
     private static readonly string[] Nobody = Array.Empty<string>();
 
     // ----- Standing: what the client's own state lets it go by -------

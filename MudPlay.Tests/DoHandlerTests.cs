@@ -129,6 +129,47 @@ public sealed class DoHandlerTests
         Assert.Equal("cast major heal Helper\r", Encoding.Latin1.GetString(Assert.Single(wire)));
     }
 
+    // The relayed words get the clean-up every reply gets: a character outside
+    // plain ASCII (here the CP437 é and ═ as the screen decodes them) goes out as
+    // `?`.
+    [Fact]
+    public void Do_TextOutsideAscii_GoesOutAsQuestionMarks()
+    {
+        var (engine, _, players, wire) = Setup();
+        SeedPlayer(players, "Trusted", PlayerRemoteControls.ExecuteCommands);
+
+        engine.DispatchForTests(Telepath("Trusted", "@do say café ══"));
+
+        Assert.Equal("say caf? ??\r", Encoding.Latin1.GetString(Assert.Single(wire)));
+    }
+
+    [Fact]
+    public void Do_PlainAsciiCommand_GoesOutByteForByte()
+    {
+        var (engine, _, players, wire) = Setup();
+        SeedPlayer(players, "Trusted", PlayerRemoteControls.ExecuteCommands);
+        const string command = "say Hi, \"there\" ~ {x} [1+2=3] 50% @home!";
+
+        engine.DispatchForTests(Telepath("Trusted", "@do " + command));
+
+        Assert.Equal(Encoding.ASCII.GetBytes(command + "\r"), Assert.Single(wire));
+    }
+
+    // A letter outside ASCII would leave a `suicide` beside it as `suicide?`, which
+    // the game may take as the command: the rule reads the word as it goes out.
+    [Fact]
+    public void Do_SuicideNextToALetterOutsideAscii_IsRefused()
+    {
+        var (engine, _, players, wire) = Setup();
+        SeedPlayer(players, "Trusted", PlayerRemoteControls.ExecuteCommands);
+
+        engine.DispatchForTests(Telepath("Trusted", "@do suicideé"));
+
+        Assert.Empty(wire);
+        Assert.Equal("/Trusted {@do suicide is not allowed, use @suicide}\r",
+            Encoding.Latin1.GetString(engine.LastSentForTests[^1]));
+    }
+
     [Fact]
     public void Do_NoArgs_NoOp()
     {

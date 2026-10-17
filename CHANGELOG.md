@@ -1,11 +1,36 @@
 # Version history
 
-## 3.181.32
+## 3.183.7
 
 - A realm whose name can't be a folder gets no realm-tier game-data overrides instead of sharing the holding folder
 - A profile whose game data set's name can't be used says so on the terminal, not only in the log
 - A loop or Auto-Lair folder name that can't be a folder is refused as you type, and the holding folder stays out of the tree
 - A renamed loop is saved under its new name before the old one goes, so a failed save loses nothing
+
+## 3.183.3
+
+- `@do` and `@party` relays send plain text: a character outside ASCII goes out as `?` or its plain spelling, as in every reply
+- `@divert` forwards telepaths as plain text too
+- The `@do` and relay-back `suicide` refusal reads the word as sent: a non-ASCII letter beside it no longer hides it
+
+## 3.183.0
+
+- Help → Visual Guides: step-by-step guides to loops, Auto-Lair, walking, loop settings, MegaMUD imports, macros, aliases, triggers, events, Monster Intel, the Workshop, Item Finder, the Game Data Browser, player permissions, buffs, gear and combat profiles, Settings and bug reports
+- Each guide ticks its steps as you really do them, keeps your place, and can be restarted
+- The first-time setup tour is one of them and still opens on its own on a new install
+
+## 3.182.0
+
+- Recovering a friend's corpse with `recover corpse <name> <password>` records every item and coin taken from it
+- Death Recovery lists those corpses; Corpse handoff gives everything back to the name you type, paced, and keeps what was refused or unanswered
+- The recover password is never saved or logged, and is masked in the Commands-sent capture, Up-arrow recall and bug reports
+- Recovering a friend's corpse no longer marks your own open pile recovered
+
+## 3.181.32
+
+- Shared condition lines read who can cast a spell from the item, textblock and room tables, not just the spell's cut-off caster list
+- Spells cast by an item, a textblock or an exit that the caster list missed are never ruled out (Stock's blazing comet, Paradigm's clean room)
+- A spell that lands when another spell with a duration runs out is never ruled out by who is in the room
 
 ## 3.181.29
 

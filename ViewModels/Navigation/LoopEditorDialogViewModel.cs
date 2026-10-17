@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -492,6 +493,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
             SaveError = $"Loop not saved: {failed}";
             return;
         }
+        GuideActions.Report(GuideActions.LoopSaved);
         // The tick box is this character's choice, kept apart from the loop file.
         _loops.SetFavorite(_original.Name, Favorite);
         SaveError = string.Empty;

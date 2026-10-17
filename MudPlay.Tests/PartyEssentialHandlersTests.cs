@@ -887,6 +887,35 @@ public sealed class PartyEssentialHandlersTests
         Assert.Equal("cast heal raijin\r", Encoding.Latin1.GetString(relay[0]));
     }
 
+    // Verbatim stops at plain ASCII: a character outside it (here the CP437 é and ═
+    // as the screen decodes them) goes out as `?`, as in every reply, and the
+    // relayed-directive event is told the command as sent.
+    [Fact]
+    public void PartyRelay_TextOutsideAscii_GoesOutAsQuestionMarks()
+    {
+        var (engine, handlers, _, party, _, relay) = Setup();
+        SeedPartyMember(party, "Leader", isLeader: true);
+        List<string> relayed = new();
+        handlers.PartyDirectiveRelayed += (_, command) => relayed.Add(command);
+
+        engine.DispatchForTests(Say("Leader", "@party say café ══"));
+
+        Assert.Equal("say caf? ??\r", Encoding.Latin1.GetString(Assert.Single(relay)));
+        Assert.Equal(new[] { "say caf? ??" }, relayed);
+    }
+
+    [Fact]
+    public void PartyRelay_PlainAsciiCommand_GoesOutByteForByte()
+    {
+        var (engine, _, _, party, _, relay) = Setup();
+        SeedPartyMember(party, "Leader", isLeader: true);
+        const string command = "say Hi, \"there\" ~ {x} [1+2=3] 50% @home!";
+
+        engine.DispatchForTests(Say("Leader", "@party " + command));
+
+        Assert.Equal(Encoding.ASCII.GetBytes(command + "\r"), Assert.Single(relay));
+    }
+
     // Plain `suicide` relays like any other passthrough — only the `set suicide`
     // phrase and reroll are refused (both blocked at engine level before this
     // handler runs, verified below and in RemoteCommandManagerTests).

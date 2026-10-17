@@ -48,6 +48,8 @@ public sealed class GroundItemTracker : IDisposable
     // What printed the list now being read, settled on the row that opens it: later
     // rows of a wrapped list follow that row, not an echo.
     private FloorSurveySource _openListSource;
+    // The clock a survey's read time is taken on.
+    private readonly Func<long> _timestamp;
 
     // isKnownItem resolves a survey entry against the active item table (true
     // when it names a real Items.json record). Injected so the cash filter can
@@ -56,13 +58,15 @@ public sealed class GroundItemTracker : IDisposable
     // isRoomName says whether a line is the name of a room in the active set; null
     // when no map is wired, where no list can be shown to be a room display's.
     public GroundItemTracker(MessageRouter router, CurrencyNaming naming,
-        Func<string, bool>? isKnownItem = null, Func<string, bool>? isRoomName = null)
+        Func<string, bool>? isKnownItem = null, Func<string, bool>? isRoomName = null,
+        Func<long>? timestamp = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(naming);
         _naming = naming;
         _isKnownItem = isKnownItem;
         _isRoomName = isRoomName;
+        _timestamp = timestamp ?? System.Diagnostics.Stopwatch.GetTimestamp;
         _router = router;
         // Ahead of the pattern handlers, and inside the dispatch that knows which
         // command the line answers.
@@ -181,14 +185,14 @@ public sealed class GroundItemTracker : IDisposable
     // keep item wording verbatim.
     private void RebuildFrom(string list)
     {
-        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        long started = _timestamp();
         _items.Clear();
         foreach (string entry in SplitEntries(list))
         {
             if (IsCashEntry(entry)) continue;
             _items.Add(entry);
         }
-        LastSurveyReadTime = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+        LastSurveyReadTime = System.Diagnostics.Stopwatch.GetElapsedTime(started, _timestamp());
         LastSurveySource = _openListSource;
         SurveyUpdated?.Invoke();
     }
