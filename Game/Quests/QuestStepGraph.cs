@@ -198,7 +198,8 @@ public static class QuestStepGraph
     }
 
     // A line that hands over an item for the quest, leaving the flag alone: it checks
-    // the flag and gives an item, and no step of it gives, adds to or clears the flag.
+    // the flag and gives an item, no step of it gives, adds to or clears the flag, and it
+    // checks no other flag.
     // The check is checkability / testability while the quest is under way, or
     // failability before it starts (`failability 130:failitem 3867:giveitem 3867`, the
     // chalice Blood Champ's hand-in takes). Its Order is, for now, the value the check
@@ -233,6 +234,10 @@ public static class QuestStepGraph
                 case "failability" when onFlag:
                     without = true;
                     break;
+                // A line that also asks for another flag's progress belongs to that
+                // quest; its give is gated on it, not on this one.
+                case "checkability" or "testability":
+                    return null;
                 case "checkitem" when p.Length >= 2 && int.TryParse(p[1], out int ci):
                     if (!requiredItems.Contains(ci)) requiredItems.Add(ci);
                     break;

@@ -12,9 +12,11 @@ namespace MudPlay.Game.Quests;
 // gather step, ahead of the first step that needs it, drawn from the set's own records,
 // sure sources first: a room command that summons a monster which always drops it, the
 // monsters whose drop slot holds it at 100 (MonsterDropIndex), an NPC or room that hands
-// it over through a textblock (ItemSourceIndex), any other monster that drops it, then a
+// it over through a textblock (ItemSourceIndex), any other monster that drops it, a give
+// that is only one outcome of a roll, a room that gives it with nothing to type, then a
 // chest that can hold it. An item none of them yields is left as the step's own note.
-// A drop off a monster an earlier line already kills is noted on that line instead.
+// A drop off a monster an earlier line of the same tier already kills is noted on that
+// line instead.
 internal static class QuestItemGathering
 {
     // Monsters named on one kill line; a common drop can come off dozens.
@@ -34,8 +36,13 @@ internal static class QuestItemGathering
     // there yields the same: so a lost-item reissue (`failitem 622:giveitem 622`), a gather
     // for a step that folded away, and the other wordings or sources of one fetch drop
     // out. Then the items still unaccounted for get their gather lines from the indexes.
+    //
+    // tierOf tells which of the flag's tiers a give-step's line is drafted in (null for
+    // a single-part quest), so a drop is only noted on a kill line its own tier shows.
+    // The draft is the same whichever tier is asked for, which the tick moves rely on.
     public static IReadOnlyList<QuestStep> Draft(GameDataCache cache,
-        IReadOnlyList<QuestStep> steps, bool byAbilityValue, ItemSourceIndex? givers, MonsterDropIndex? drops)
+        IReadOnlyList<QuestStep> steps, bool byAbilityValue, ItemSourceIndex? givers, MonsterDropIndex? drops,
+        Func<int, int>? tierOf = null)
     {
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(steps);
@@ -54,14 +61,14 @@ internal static class QuestItemGathering
                 continue;
             drafted.Add(step);
         }
-        return WithSources(cache, drafted, givers, drops);
+        return WithSources(cache, drafted, givers, drops, tierOf ?? (_ => 0));
     }
 
     private static bool Needs(QuestStep step, IReadOnlyList<int> items) =>
         items.Any(i => step.TurnInItems.Contains(i) || step.RequiredItems.Contains(i));
 
     private static IReadOnlyList<QuestStep> WithSources(GameDataCache cache,
-        IReadOnlyList<QuestStep> steps, ItemSourceIndex? givers, MonsterDropIndex? drops)
+        IReadOnlyList<QuestStep> steps, ItemSourceIndex? givers, MonsterDropIndex? drops, Func<int, int> tierOf)
     {
         if (givers is null && drops is null) return steps;
 
@@ -79,10 +86,11 @@ internal static class QuestItemGathering
                 if (!gathered.Add(item) || result.Any(s => s.GrantedItems.Contains(item))) continue;
                 if (SourceStep(step.Order, item, givers, drops) is not { } gather) continue;
 
-                // The monster is killed on an earlier line anyway (the quest's own
-                // kill, or the fetch of another of its drops): the item comes with it.
+                // The monster is killed on an earlier line of this tier anyway (the
+                // quest's own kill, or the fetch of another of its drops): the item comes
+                // with it. A kill on another tier's card is no help here.
                 int killer = gather.Command is null && gather.Droppers is { } droppers
-                    ? result.FindIndex(s => Kills(cache, s).Intersect(droppers).Any())
+                    ? result.FindIndex(s => tierOf(s.Order) == tierOf(step.Order) && Kills(cache, s).Intersect(droppers).Any())
                     : -1;
                 if (killer >= 0)
                 {
@@ -105,11 +113,12 @@ internal static class QuestItemGathering
         return result;
     }
 
-    // The monsters a drafted line has the player kill: a drop fetch's droppers, or the
-    // monsters whose death runs a command-less step.
+    // The monsters a drafted line has the player kill: a drop fetch's droppers (a
+    // summoned one's too, which leads with its command), or the monsters whose death
+    // runs a command-less step.
     private static IEnumerable<int> Kills(GameDataCache cache, QuestStep s) =>
-        s.Command is not null ? Enumerable.Empty<int>()
-        : s.Droppers is { Count: > 0 } droppers ? droppers
+        s.Droppers is { Count: > 0 } droppers ? droppers
+        : s.Command is not null ? Enumerable.Empty<int>()
         : QuestDeathSpells.KilledAt(cache, s.Location);
 
     private static QuestStep? SourceStep(int order, int item, ItemSourceIndex? givers, MonsterDropIndex? drops)
@@ -129,29 +138,21 @@ internal static class QuestItemGathering
         if (DropStep(order, granted, droppers.Where(d => d.DropPercent >= SureDropPercent)) is { } sure)
             return sure;
 
-        if (givers is not null)
-        {
-            // A line that also sets a flag ("quest reward") is another quest's step,
-            // gated on that quest: Stock's Good 1 box give refuses an evil character, who
-            // takes the box off Commander Markus instead.
-            List<ItemGiver> usable = givers.GiversOf(item).Where(g => g.Requirement != "quest reward").ToList();
-            foreach (ItemGiver g in usable.Where(g => IsTyped(g.Keyword)))
-            {
-                if (g.Kind == ItemGiverKind.Monster)
-                    return GiverStep(order, granted, g, $"ask {g.Name.ToLowerInvariant()} {g.Keyword}",
-                        string.Create(CultureInfo.InvariantCulture, $"Monster #{g.Number}"));
-                if (g.Map > 0 && g.Room > 0)
-                    return GiverStep(order, granted, g, g.Keyword,
-                        string.Create(CultureInfo.InvariantCulture, $"Room {g.Map}/{g.Room}"));
-            }
-            // A room that gives it with nothing to type for it (a draw of a room's roll
-            // table): where to go, not what to type.
-            foreach (ItemGiver g in usable.Where(g => g.Kind == ItemGiverKind.Room && g.Map > 0 && g.Room > 0))
-                return GiverStep(order, granted, g, null,
-                    string.Create(CultureInfo.InvariantCulture, $"Room {g.Map}/{g.Room}"));
-        }
+        // A line that also sets a flag ("quest reward") is another quest's step, gated on
+        // that quest: Stock's Good 1 box give refuses an evil character, who takes the box
+        // off Commander Markus instead.
+        List<ItemGiver> usable = givers is null ? new List<ItemGiver>()
+            : givers.GiversOf(item).Where(g => g.Requirement != "quest reward").ToList();
 
+        if (TypedGive(order, granted, usable.Where(g => !g.Rolled)) is { } give) return give;
         if (DropStep(order, granted, droppers) is { } drop) return drop;
+        if (TypedGive(order, granted, usable.Where(g => g.Rolled)) is { } rolled) return rolled;
+
+        // A room that gives it with nothing to type for it (its trigger isn't recorded):
+        // where to go, not what to type.
+        foreach (ItemGiver g in usable.Where(g => g.Kind == ItemGiverKind.Room && g.Map > 0 && g.Room > 0))
+            return GiverStep(order, granted, g, null,
+                string.Create(CultureInfo.InvariantCulture, $"Room {g.Map}/{g.Room}"));
 
         if (givers?.ContainersOf(item) is { Count: > 0 } chests)
             return new QuestStep(order, null, null, Array.Empty<int>(), Array.Empty<int>(), granted,
@@ -160,12 +161,34 @@ internal static class QuestItemGathering
         return null;
     }
 
-    // A give from an NPC or room: the item it takes is needed first (and fetched in turn);
-    // a purchase is noted, since what it costs isn't an item.
-    private static QuestStep GiverStep(int order, int[] granted, ItemGiver g, string? command, string location) =>
-        new(order, command, location, Array.Empty<int>(),
+    // The first give with a keyword to type, as an ask (an NPC) or the room's command.
+    private static QuestStep? TypedGive(int order, int[] granted, IEnumerable<ItemGiver> gives)
+    {
+        foreach (ItemGiver g in gives.Where(g => IsTyped(g.Keyword)))
+        {
+            if (g.Kind == ItemGiverKind.Monster)
+                return GiverStep(order, granted, g, $"ask {g.Name.ToLowerInvariant()} {g.Keyword}",
+                    string.Create(CultureInfo.InvariantCulture, $"Monster #{g.Number}"));
+            if (g.Map > 0 && g.Room > 0)
+                return GiverStep(order, granted, g, g.Keyword,
+                    string.Create(CultureInfo.InvariantCulture, $"Room {g.Map}/{g.Room}"));
+        }
+        return null;
+    }
+
+    // A give from an NPC or room: the item it takes, and any it checks for, are needed
+    // first (and fetched in turn); a purchase is noted, since what it costs isn't an
+    // item, and so is a give that comes only on a roll — with no odds, which the line
+    // doesn't state.
+    private static QuestStep GiverStep(int order, int[] granted, ItemGiver g, string? command, string location)
+    {
+        var notes = new List<string>();
+        if (g.TakenItemId == 0 && g.Requirement.Length > 0) notes.Add(g.Requirement);
+        if (g.Rolled) notes.Add("on a roll");
+        return new(order, command, location, g.NeededItems ?? Array.Empty<int>(),
             g.TakenItemId > 0 ? new[] { g.TakenItemId } : Array.Empty<int>(), granted, Gathers: true,
-            Note: g.TakenItemId == 0 && g.Requirement.Length > 0 ? g.Requirement : null);
+            Note: notes.Count > 0 ? string.Join("; ", notes) : null);
+    }
 
     // A keyword the player types to get the give: not one an NPC shows by itself, and
     // not a roll-table band.

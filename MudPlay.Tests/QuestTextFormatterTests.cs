@@ -397,6 +397,13 @@ public sealed class QuestTextFormatterTests
     }
 
     [Fact]
+    public void Step_HandInWithNothingElseToDo_ReadsTurnIn()
+    {
+        Assert.Equal("(6/3109) turn in #100, #200",
+            QuestTextFormatter.Step(NoSet, MakeStep(10, null, "Room 6/3109", turnIn: new[] { 100, 200 })));
+    }
+
+    [Fact]
     public void Step_MultiRoomLocation_ListsEveryRoomAsItsOwnLink()
     {
         Assert.Equal("(5/294) (16/368) (1/527)",

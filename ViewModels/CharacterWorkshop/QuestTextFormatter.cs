@@ -171,11 +171,19 @@ internal static partial class QuestTextFormatter
 
         // What the step needs on hand, taken or only checked, goes ahead of the action as
         // the guides write it: "(6/1357) (Gleaming Shard required) `ask martok forge`".
-        List<int> needs = s.TurnInItems.Concat(s.RequiredItems).Distinct().ToList();
+        // A step with nothing else to do (no command, kill or give) is the hand-in itself,
+        // so what it takes is its action: "turn in Ice Tear, Eternal Fire".
+        bool handInOnly = !hasCommand && killTargets.Count == 0 && granted.Length == 0 && s.TurnInItems.Count > 0;
+        List<int> needs = (handInOnly ? s.RequiredItems.Except(s.TurnInItems) : s.TurnInItems.Concat(s.RequiredItems))
+            .Distinct().ToList();
         if (needs.Count > 0)
             segments.Add("(" + string.Join(", ", needs.Select(id => ItemName(gameData, id))) + " required)");
 
-        if (hasCommand)
+        if (handInOnly)
+        {
+            segments.Add("turn in " + string.Join(", ", s.TurnInItems.Select(id => ItemName(gameData, id))));
+        }
+        else if (hasCommand)
         {
             segments.Add($"`{s.Command!.Trim()}`");
             if (granted.Length > 0) segments.Add($"(get {granted})");
@@ -299,6 +307,23 @@ internal static partial class QuestTextFormatter
         return (start, end);
     }
 
+    // Which of a flag's tiers a give-step is drafted in: the tier ordinal whose
+    // DraftRange holds it, 0 for a single-part quest, -1 past every tier.
+    private static Func<int, int> TierOf(GameDataCache gameData, int flag)
+    {
+        List<(int Ordinal, (int Start, int End) Range)> tiers = QuestCrawler.Crawl(gameData, null)
+            .Where(c => c.Flag == flag && DraftRange(c) is not null)
+            .Select(c => (c.BandOrdinal, DraftRange(c)!.Value))
+            .ToList();
+        if (tiers.Count == 0) return _ => 0;
+        return order =>
+        {
+            foreach ((int ordinal, (int start, int end)) in tiers)
+                if (order >= start && order <= end) return ordinal;
+            return -1;
+        };
+    }
+
     // Every step the draft considers for a quest's flag, in checklist order: its place in
     // the flag's whole draft, its body (null when it has nothing followable), whether
     // the draft had a line for it before kill steps were read off the death-spell chain,
@@ -310,7 +335,8 @@ internal static partial class QuestTextFormatter
         ItemSourceIndex? itemSources, MonsterDropIndex? itemDrops)
     {
         IReadOnlyList<QuestStep> steps = QuestStepGraph.Build(gameData, flag, byAbilityValue);
-        IReadOnlyList<QuestStep> drafted = QuestItemGathering.Draft(gameData, steps, byAbilityValue, itemSources, itemDrops);
+        IReadOnlyList<QuestStep> drafted = QuestItemGathering.Draft(gameData, steps, byAbilityValue, itemSources, itemDrops,
+            TierOf(gameData, flag));
         for (int position = 0; position < drafted.Count; position++)
         {
             QuestStep s = drafted[position];

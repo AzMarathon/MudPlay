@@ -48,7 +48,13 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 686, "Name": "Spirit Dagger of Goijar" },
           { "Number": 687, "Name": "golden chest" },
           { "Number": 688, "Name": "severed head of Goru-Nezar" },
-          { "Number": 689, "Name": "golden chest" }
+          { "Number": 689, "Name": "golden chest" },
+          { "Number": 691, "Name": "troll tooth" },
+          { "Number": 692, "Name": "jade figurine" },
+          { "Number": 693, "Name": "crowbar" },
+          { "Number": 694, "Name": "dusty tome" },
+          { "Number": 695, "Name": "ancient chalice" },
+          { "Number": 696, "Name": "silver idol" }
         ]
         """;
 
@@ -65,7 +71,12 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 66, "Name": "spectral knight", "DeathSpell": 580 },
           { "Number": 70, "Name": "chancellor annora", "DeathSpell": 0 },
           { "Number": 71, "Name": "king kulgar", "DeathSpell": 0 },
-          { "Number": 72, "Name": "Goru-Nezar", "DeathSpell": 0, "DropItem-0": 688, "DropItem%-0": 100 }
+          { "Number": 72, "Name": "Goru-Nezar", "DeathSpell": 0, "DropItem-0": 688, "DropItem%-0": 100 },
+          { "Number": 73, "Name": "troll", "DeathSpell": 590, "DropItem-0": 691, "DropItem%-0": 50 },
+          { "Number": 74, "Name": "ghoul", "DeathSpell": 0, "DropItem-0": 692, "DropItem%-0": 10 },
+          { "Number": 75, "Name": "Giovanni", "DeathSpell": 0, "DropItem-0": 693, "DropItem%-0": 100 },
+          { "Number": 76, "Name": "greater hellion", "DeathSpell": 600 },
+          { "Number": 77, "Name": "lesser hellion", "DeathSpell": 601 }
         ]
         """;
 
@@ -74,7 +85,10 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 5519, "Name": "hill chieftan text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 5211 },
           { "Number": 5521, "Name": "stone chieftan text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 5212 },
           { "Number": 574, "Name": "kobold king text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 1400 },
-          { "Number": 580, "Name": "spectral knight text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 1510 }
+          { "Number": 580, "Name": "spectral knight text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 1510 },
+          { "Number": 590, "Name": "troll text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 1900 },
+          { "Number": 600, "Name": "greater hellion text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 1950 },
+          { "Number": 601, "Name": "lesser hellion text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 1951 }
         ]
         """;
 
@@ -123,7 +137,24 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 1701, "Action": "", "Called From": "Textblock #1700" },
           { "Number": 1702, "Action": "", "Called From": "Textblock #1700" },
           { "Number": 1711, "Action": "checkability 141 2:giveability 141 3\n", "Called From": "Textblock #1701" },
-          { "Number": 1712, "Action": "checkability 141 3:giveitem 689:giveability 141 4\n", "Called From": "Textblock #1702" }
+          { "Number": 1712, "Action": "checkability 141 3:giveitem 689:giveability 141 4\n", "Called From": "Textblock #1702" },
+
+          { "Number": 1890, "Action": "start:minlevel 10:failability 142:giveability 142 1\n", "Called From": "Room 5/1" },
+          { "Number": 1900, "Action": "checkability 142 1:giveability 142 2\n", "Called From": "Spell #590" },
+          { "Number": 1901, "Action": "reward:minlevel 20:giveability 142 3\n", "Called From": "Room 5/2" },
+          { "Number": 1902, "Action": "hand:checkability 142 3:takeitem 691:giveability 142 4\n", "Called From": "Room 5/3" },
+
+          { "Number": 1800, "Action": "pry coffin:checkitem 693:random 1801\n", "Called From": "Room 17/278" },
+          { "Number": 1801, "Action": "100:giveitem 692\n", "Called From": "Textblock(rndm) #1800" },
+          { "Number": 1802, "Action": "offer:takeitem 692:giveability 143 1\n", "Called From": "Room 17/300" },
+          { "Number": 1810, "Action": "pull book:checkitem 693:random 1811\n", "Called From": "Room 17/9786" },
+          { "Number": 1811, "Action": "100:giveitem 694\n", "Called From": "Textblock(rndm) #1810" },
+          { "Number": 1812, "Action": "read:takeitem 694:giveability 144 1\n", "Called From": "Room 17/301" },
+
+          { "Number": 1950, "Action": "minlevel 18:failability 145:failitem 695:giveitem 695\n", "Called From": "Spell #600" },
+          { "Number": 1951, "Action": "failability 145:checkability 999 1:giveitem 696\n", "Called From": "Spell #601" },
+          { "Number": 1952, "Action": "return:takeitem 695:giveability 145 1\n", "Called From": "Room 2/2561" },
+          { "Number": 1953, "Action": "bonus:checkability 145 1:takeitem 696:giveability 145 2\n", "Called From": "Room 2/2562" }
         ]
         """;
 
@@ -163,6 +194,10 @@ public sealed class QuestItemGatheringTests : IDisposable
         [70] = new[] { new RoomKey(1, 1333) },
         [71] = new[] { new RoomKey(6, 1387) },
         [72] = new[] { new RoomKey(3, 668) },
+        [73] = new[] { new RoomKey(5, 9) },
+        [74] = new[] { new RoomKey(17, 5) },
+        [75] = new[] { new RoomKey(1, 334) },
+        [76] = new[] { new RoomKey(2, 2600) },
     };
 
     private static CrawledQuest Quest(GameDataCache cache, int flag) =>
@@ -277,7 +312,7 @@ public sealed class QuestItemGatheringTests : IDisposable
         Assert.False(ore.Deterministic);
         Assert.Equal(new[]
         {
-            "[] (14/7127) `mine vein` (get adamant ore)",
+            "[] (14/7127) `mine vein` (get adamant ore) (on a roll)",
             "[] (14/7225) (adamant ore required) `forge ore`",
         }, QuestTextFormatter.StepLines(cache, Quest(cache, 301), Placement, givers, drops));
     }
@@ -381,5 +416,68 @@ public sealed class QuestItemGatheringTests : IDisposable
             "[] (6/1387) `ask king kulgar return` (get golden chest)",
             "[] (1/1333) `ask chancellor annora success`",
         }, QuestTextFormatter.StepLines(cache, tiers[1], Placement, givers, drops));
+    }
+
+    [Fact]
+    public void DropOffAKillOnAnotherTier_GetsItsOwnFetchLine()
+    {
+        GameDataCache cache = NewCache();
+        (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
+        // The troll is a tier-1 kill; tier 2 needs its tooth. The tooth isn't noted on the
+        // tier-1 line (that tier never uses it) and tier 2 gets the fetch.
+        List<CrawledQuest> tiers = QuestCrawler.Crawl(cache, null).Where(q => q.Flag == 142).ToList();
+
+        Assert.Equal(new[]
+        {
+            "[] (5/1) `start`",
+            "[] (5/9) kill troll",
+            "[] (5/2) `reward`",
+        }, QuestTextFormatter.StepLines(cache, tiers[0], Placement, givers, drops));
+        Assert.Equal(new[]
+        {
+            "[] (5/9) kill troll (troll tooth)",
+            "[] (5/3) (troll tooth required) `hand`",
+        }, QuestTextFormatter.StepLines(cache, tiers[1], Placement, givers, drops));
+    }
+
+    [Fact]
+    public void GiveOnARoll_RanksBelowADrop_AndNamesWhatItsDrawNeeds()
+    {
+        GameDataCache cache = NewCache();
+        (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
+
+        ItemGiver coffin = Assert.Single(givers.GiversOf(692));
+        Assert.True(coffin.Rolled);
+        Assert.Equal(new[] { 693 }, coffin.NeededItems);
+
+        // Any drop beats a roll, however rare the drop.
+        Assert.Equal(new[]
+        {
+            "[] (17/5) kill ghoul (jade figurine)",
+            "[] (17/300) (jade figurine required) `offer`",
+        }, QuestTextFormatter.StepLines(cache, Quest(cache, 143), Placement, givers, drops));
+
+        // With only the roll, it's drafted as one, after a fetch for what the draw checks.
+        Assert.Equal(new[]
+        {
+            "[] (1/334) kill Giovanni (crowbar)",
+            "[] (17/9786) (crowbar required) `pull book` (get dusty tome) (on a roll)",
+            "[] (17/301) (dusty tome required) `read`",
+        }, QuestTextFormatter.StepLines(cache, Quest(cache, 144), Placement, givers, drops));
+    }
+
+    [Fact]
+    public void GiveBeforeTheQuestStarts_IsAGatherLine_ButNotOneGatedOnAnotherFlag()
+    {
+        GameDataCache cache = NewCache();
+        // Blood Champ's chalice: the greater hellion's death hands it to one who doesn't
+        // hold the flag yet (`minlevel 18:failability 130:failitem 3867:giveitem 3867`).
+        // The lesser hellion's give also asks for flag 999, so it's that quest's.
+        Assert.Equal(new[]
+        {
+            "[] (2/2600) kill greater hellion (ancient chalice)",
+            "[] (2/2561) (ancient chalice required) `return`",
+            "[] (2/2562) (silver idol required) `bonus`",
+        }, QuestTextFormatter.StepLines(cache, Quest(cache, 145), Placement));
     }
 }
