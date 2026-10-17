@@ -1,11 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.29**
-> - A buff a party member negates is no longer cast on them; their Buff Watchdog box shows red until re-ticked
-> - Only a negate line about a cast you sent counts, matched by spell name and member; a resisted cast is not a negate
-> - A resisted attack spell counts toward its cast cap and as a miss, like a negated one
-> - A buff a party member negated or resisted is no longer counted as a miss of yours
+> **Version 3.181.35**
+> - Sync Timers: the first telepathed player's answer waits while your next telepath request is still unconfirmed
+> - Sync Timers: a pick you apply no longer reads "changed since you asked"
+> - Sync Timers: what you held when you asked is taken as you press Enter, not when the game echoes it
+> - Sync Timers: a request typed into the open window before Request Timers is now collected there
+> - Sync Timers: an expired timer of yours counts as none, so a reply for it merges in
+> - Help: a request typed at a non-game prompt opens no window where the board shows nothing back
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

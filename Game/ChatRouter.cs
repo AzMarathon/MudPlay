@@ -56,7 +56,7 @@ public sealed class ChatRouter : IDisposable
     // discards anything older than this before trusting it as the real pairing —
     // generous enough to survive a paced multi-line burst, nowhere near long
     // enough for a stale cross-session entry to still count as "the" match.
-    private static readonly TimeSpan PendingCaptureStaleAfter = TimeSpan.FromSeconds(15);
+    internal static readonly TimeSpan PendingCaptureStaleAfter = TimeSpan.FromSeconds(15);
 
     private readonly LogService? _log;
     private readonly Func<DateTimeOffset> _now;
@@ -356,7 +356,29 @@ public sealed class ChatRouter : IDisposable
                 _sentLately.Add((outLine, now));
             }
             TryCaptureDirectedSay(outLine);
+            if (usersOwn) UsersLineSent?.Invoke(outLine);
         }
+    }
+
+    // A line of the user's own going out, as ObserveOutbound is told it: the moment
+    // they pressed Enter or a button of theirs sent it, before the game has shown
+    // anything for it. Raised after a telepath has been noted as awaiting its answer.
+    public event Action<string>? UsersLineSent;
+
+    // A telepath the game answered with something other than a confirmation, as it
+    // went out: it reached nobody (DropUnsentTelepath).
+    public event Action<string>? UnsentTelepathDropped;
+
+    // Whether a telepath the user sent, as it went out, is still waiting for the
+    // game's answer: neither confirmed, nor known not to have been sent, nor older
+    // than a confirmation ever comes.
+    public bool AwaitsConfirmation(string line)
+    {
+        string sent = line.Trim();
+        DateTimeOffset now = _now();
+        return _pendingTelepaths.Exists(p => p.UsersOwn
+                                             && now - p.EnqueuedAt <= PendingCaptureStaleAfter
+                                             && $"/{p.Target} {p.Message}" == sent);
     }
 
     // The telepath lines seen going out lately, so that the row the board shows
@@ -556,6 +578,7 @@ public sealed class ChatRouter : IDisposable
         _pendingTelepaths.RemoveAt(at);
         DroppedUnsentTelepaths++;
         _log?.Debug("ChatRouter", $"dropping pending telepath {Describe(dropped)}: {why}; it asked nobody.");
+        UnsentTelepathDropped?.Invoke(sent);
     }
 
     // Bug-report surface.

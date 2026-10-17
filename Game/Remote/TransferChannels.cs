@@ -118,6 +118,23 @@ public static class TransferChannels
         return (transfer, channel);
     }
 
+    // The same for a line as it went out, before the game shows anything for it:
+    // which transfer the line asks for and the channel its speak form puts it on,
+    // or null when it asks for none. The channel is null for a form not recorded
+    // (SpokenOn), which may be any. A telepath is one addressed name, then the
+    // command.
+    public static (Transfer Transfer, RemoteChannel? Channel)? RequestIn(string sentLine)
+    {
+        string line = sentLine.Trim();
+        int at = line.IndexOf('@');
+        if (at < 0) return null;
+        string[] words = line[at..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length < 2 || Identify(words[0], words[1..]) is not { } transfer) return null;
+        string form = line[..at];
+        if (form.StartsWith('/') && form.Trim().Any(char.IsWhiteSpace)) return null;
+        return (transfer, SpokenOn(form));
+    }
+
     // Whether a request of ours, seen in the chat log as echo, was the user's own
     // doing, as against one the client sent for another player (their `@do`, their
     // relay-back). The one place that says so, for every transfer and channel; it
