@@ -363,9 +363,8 @@ public sealed class QuestItemGatheringTests : IDisposable
             "[] (1/1333) (Spirit Dagger of Goijar required) `success`",
         }, QuestTextFormatter.StepLines(cache, tiers[1], Placement, givers, drops));
 
-        // Only where the draft draws the tier line moved: the tier's complete value is
-        // still read off its own give-step span.
-        Assert.Equal(2, tiers[0].CompleteValue);
+        // The tier is complete after its hand-in, the line that closes its draft.
+        Assert.Equal(3, tiers[0].CompleteValue);
     }
 
     [Fact]
@@ -479,5 +478,29 @@ public sealed class QuestItemGatheringTests : IDisposable
             "[] (2/2561) (ancient chalice required) `return`",
             "[] (2/2562) (silver idol required) `bonus`",
         }, QuestTextFormatter.StepLines(cache, Quest(cache, 145), Placement));
+    }
+
+    [Fact]
+    public void FlagAtTheValueBeforeTheHandIn_LeavesTheTierOpen_AndTheHandInUnticked()
+    {
+        GameDataCache cache = NewCache();
+        (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
+        // Good 2's shape: `missions` sets 1, the head hand-in sets 2. A live flag of 1 (the
+        // value the tier used to complete at) is short of the hand-in: the tier isn't done
+        // and its hand-in line isn't proven.
+        CrawledQuest good2 = QuestCrawler.Crawl(cache, null).Where(q => q.Flag == 141).OrderBy(q => q.BandOrdinal).First();
+        Assert.Equal(2, good2.CompleteValue);
+
+        var observed = new Dictionary<int, int> { [141] = 1 };
+        var target = new QuestFlagCompletion.Target(good2.Flag, good2.Step, good2.CompleteValue);
+        Assert.Empty(QuestFlagCompletion.ResolveNewlyComplete(new[] { target }, observed, new HashSet<QuestFlagCompletion.QuestKey>()));
+
+        IReadOnlyList<(int Order, string Line)> entries = QuestTextFormatter.StepEntries(cache, good2, Placement, givers, drops);
+        (int Order, string Line) handIn = entries.Last();
+        Assert.Contains("`ask chancellor annora head`", handIn.Line, StringComparison.Ordinal);
+        Assert.True(handIn.Order > observed[141]);   // the Quest tab ticks lines up to the read value
+
+        observed[141] = 2;
+        Assert.Single(QuestFlagCompletion.ResolveNewlyComplete(new[] { target }, observed, new HashSet<QuestFlagCompletion.QuestKey>()));
     }
 }

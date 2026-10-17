@@ -665,12 +665,13 @@ public static class QuestCrawler
             int rangeStart = i == 0 ? 1 : ladder[i].Step;
             int rangeEnd = i == ladder.Count - 1 ? int.MaxValue : ladder[i + 1].Step - 1;
 
-            // A tier completes at the highest actual give value that falls inside its range —
-            // NOT the range's upper edge (which runs up to the next tier's entry). So the
-            // Evil tiers, whose gives land at 2 / 3 / 11 / 13 / 31, complete at those values
-            // rather than at the gaps between them.
+            // A tier is complete after its reward hand-in, which is the next tier's gate step
+            // (user, 2026-10-17; GAME_MECHANICS "Quest-flag values"): the highest actual give
+            // value up to that gate, so Paradigm's Evil tiers complete at 3 / 4 / 12 / 14 and
+            // the last tier at the highest give it reaches.
+            int completeBound = i == ladder.Count - 1 ? rangeEnd : ladder[i + 1].Step;
             int? completeValue = DetectableValue(
-                chains.Select(c => c.GiveStep).Where(v => v <= rangeEnd).DefaultIfEmpty(0).Max());
+                chains.Select(c => c.GiveStep).Where(v => v <= completeBound).DefaultIfEmpty(0).Max());
 
             yield return new CrawledQuest(
                 flag, level, level, bonuses, items, classRestrict, raceRestrict, classLevels,

@@ -942,19 +942,22 @@ public sealed class QuestCrawlerTests : IDisposable
     }
 
     [Fact]
-    public void Crawl_TierLadder_EachBandCompletesAtItsOwnGiveValue()
+    public void Crawl_TierLadder_EachBandCompletesAfterItsRewardHandIn()
     {
-        // A minlevel staircase whose gives land at 2 / 3 / 11 (the Evil-alignment shape):
-        // each crawler band completes at the highest give value inside its range, NOT the
-        // gap up to the next tier — so the bands read 2, 3, 11, not 2, 10, 11.
+        // A minlevel staircase in the Evil-alignment shape: each tier's reward hand-in is the
+        // next tier's level-gated give (3 at level 20, 11 at level 30), and a tier is complete
+        // after that hand-in (user, 2026-10-17) — 3 and 11, not the 2 and 4 given before it.
+        // The last tier completes at the highest give it reaches.
         IReadOnlyList<CrawledQuest> quests = QuestCrawler.Crawl(
             CacheWithTbInfo(
                 "giveability 128 2:minlevel 10",
                 "giveability 128 3:minlevel 20",
-                "giveability 128 11:minlevel 30"), classId: null);
+                "giveability 128 4",
+                "giveability 128 11:minlevel 30",
+                "giveability 128 12"), classId: null);
 
         int[] completes = quests.OrderBy(q => q.BandOrdinal).Select(q => q.CompleteValue ?? -1).ToArray();
-        Assert.Equal(new[] { 2, 3, 11 }, completes);
+        Assert.Equal(new[] { 3, 11, 12 }, completes);
     }
 
     [Fact]

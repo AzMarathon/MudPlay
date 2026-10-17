@@ -6,6 +6,7 @@
 - Drafted quest checklists read like the shipped guides: what a step needs comes first, "(gleaming shard required)", each tier ends with its own reward hand-in, and the next opens with "-Complete <tier> first-"
 - Drafts add a line to fetch each item a step needs: the quest's own give, a sure drop, the NPC or room that gives it, other drops or a chest, and a fetch for what that NPC wants in turn; a drop off a monster the quest already kills is noted on that kill
 - A give drawn from a room's roll table names the command that draws it (`mine vein`), never the roll number, and drafts mark it "(on a roll)" after any surer source
+- A quest tier reads complete after its reward hand-in (Evil 3/4/12/14, Good 6/8/17/19, Neutral 7/8/11/13), the line its draft ends on
 - A quest keeps the class lock of the lines that start it, though its hand-in names no class (Conquest 1 and 2, Tarl, Luca Prodigio)
 - bug reports addressed: paradigm-20261011-230844
 
