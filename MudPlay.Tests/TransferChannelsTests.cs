@@ -684,7 +684,7 @@ public sealed class TransferChannelsTests
 
         Assert.Empty(e.Ran);
         Assert.Single(e.Wire);
-        Assert.Equal(1, e.Commands.BroadcastSpeakersRememberedForTests);
+        Assert.Equal(1, e.Commands.BroadcastAnswers().Remembered);
     }
 
     // Every gate that stands on the other channels stands there for an ordinary
@@ -1141,7 +1141,8 @@ public sealed class TransferChannelsTests
     [InlineData(RemoteChannel.Broadcast, "br ")]
     public void ARelayBackOfSuicide_IsRefusedAsDoIs_OnEveryChannel(RemoteChannel channel, string verb)
     {
-        foreach (string line in new[] { "&@suicide", "&@suicide!", "&@do suicide", "&@do br @suicide", "&@do /Friend \"suicide\"" })
+        // `suicideé` would be relayed as `suicide?`, so it counts as the word.
+        foreach (string line in new[] { "&@suicide", "&@suicide!", "&@do suicide", "&@do br @suicide", "&@do /Friend \"suicide\"", "&@do suicideé" })
         {
             Engine e = new(everyCommand: true);
             e.Commands.DispatchForTests(On(channel, "Friend", line));
@@ -1228,7 +1229,7 @@ public sealed class TransferChannelsTests
         laterRefusal!("and one thing more");
 
         Assert.Equal(new[] { "br {attempting}\r", "br {disarmed}\r", "br {and one thing more}\r" }, e.Wire);
-        Assert.Equal(1, e.Commands.BroadcastSpeakersRememberedForTests);
+        Assert.Equal(1, e.Commands.BroadcastAnswers().Remembered);
 
         e.Commands.DispatchForTests(Broadcast("Friend", "@trap s"));
         Assert.Single(e.Ran);
@@ -1278,7 +1279,7 @@ public sealed class TransferChannelsTests
         }
 
         Assert.Equal(cap, e.Wire.Length);
-        Assert.Equal(cap, e.Commands.BroadcastSpeakersRememberedForTests);
+        Assert.Equal(cap, e.Commands.BroadcastAnswers().Remembered);
         Assert.Contains(DebugLines(e), l => l.Contains($"{cap} answers were given there in the last minute"));
 
         // Those were refusals, to players nobody granted anything. They are counted
@@ -1298,7 +1299,29 @@ public sealed class TransferChannelsTests
         e.Commands.DispatchForTests(Broadcast("Latecomer", "@timer sync"));
         Assert.Equal(cap + 2, e.Wire.Length);
         Assert.Equal("br {command invalid or not allowed}\r", e.Wire.Last());
-        Assert.Equal(cap + 1, e.Commands.BroadcastSpeakersRememberedForTests);
+        Assert.Equal(cap + 1, e.Commands.BroadcastAnswers().Remembered);
+    }
+
+    // The bug report's view of the two bounds: the turns spent this minute, kept
+    // apart, and no speaker named.
+    [Fact]
+    public void TheBugReport_CountsTheMinutesTurns_PermittedAndRefusedApart_WithNoNames()
+    {
+        Engine e = new();
+        e.Commands.DispatchForTests(Broadcast("Passerby", "@timer sync"));
+        e.Commands.DispatchForTests(Broadcast("Friend", "@timer sync"));
+
+        RemoteCommandManager.BroadcastAnswerCounts counts = e.Commands.BroadcastAnswers();
+        Assert.Equal(new RemoteCommandManager.BroadcastAnswerCounts(Permitted: 1, Refused: 1, Remembered: 2), counts);
+        string said = BugReportAutomationSections.BroadcastAnswers(counts);
+        Assert.Contains($"1 of {BroadcastAnswerBudget.AnswersPerWindow} answers to permitted speakers", said);
+        Assert.Contains($"1 of {BroadcastAnswerBudget.AnswersPerWindow} refusals", said);
+        Assert.DoesNotContain("Friend", said);
+        Assert.DoesNotContain("Passerby", said);
+
+        // Past the minute nothing is spent, and reading it dropped nobody.
+        e.Clock += BroadcastAnswerBudget.Window;
+        Assert.Equal(new RemoteCommandManager.BroadcastAnswerCounts(0, 0, 2), e.Commands.BroadcastAnswers());
     }
 
     // The bookkeeping holds a speaker for a minute and no longer, and never more of

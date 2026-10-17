@@ -95,9 +95,11 @@ public sealed class MonsterSummonWatcherTests
 
         h.Feed("The fat half-orc sentry shouts for aid!");
         Assert.False(h.Classifier.RosterIsWhole);
+        Assert.Equal("a summon: 'The fat half-orc sentry shouts for aid!'", h.Classifier.RosterNotWholeBecause);
 
         h.Feed("Also here: fat half-orc sentry, orc warrior.");
         Assert.True(h.Classifier.RosterIsWhole);
+        Assert.Null(h.Classifier.RosterNotWholeBecause);
 
         h.Feed("The burly dwarven guard shouts for aid!");      // a summoner the roster doesn't even list
         Assert.False(h.Classifier.RosterIsWhole);

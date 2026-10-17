@@ -6,6 +6,7 @@ using MudPlay.Game.Map;
 using MudPlay.Game.Quests;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Tables;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.GameData;
 
@@ -153,6 +154,9 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         }
         if (newValue is Tables.GameDataTableSectionViewModel tab)
             tab.OnActivated();
+        if (newValue is null) return;
+        foreach (string key in GuidePageActions.ForBrowserSection(oldValue?.Id, newValue.Id))
+            GuideActions.Report(key);
     }
 
     private void RebuildVisibleSections()

@@ -278,7 +278,7 @@ public partial class App : Application
                 MudPlay.ViewModels.Navigation.LoopEditorDialogViewModel,
                 MudPlay.Views.Navigation.LoopEditorDialog>();
 
-            // Auto-Lair Setups pane → right-click → "Edit…" + "Save lairs"
+            // Auto-Lair Setups pane → right-click → "Edit…" + the chip row's Save
             // bottom-strip button both route through this dialog. Name /
             // Notes / Marker list with per-marker respawn override.
             AppServices.Current.Dialogs.RegisterWindow<

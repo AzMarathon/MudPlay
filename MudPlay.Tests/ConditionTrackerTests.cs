@@ -607,6 +607,25 @@ public sealed class ConditionTrackerTests
             && e.Message.Contains("no spell record of that name", StringComparison.Ordinal));
     }
 
+    // A name several records carry is counted, not listed: the list says no more of
+    // which one was cast.
+    [Fact]
+    public void ANegatedCast_OfANameSeveralRecordsCarry_CountsThem()
+    {
+        using Harness h = new();
+        h.Log.Diagnostics = new LogDiagnosticState { DebugDiagnostics = true };
+        foreach (int spell in new[] { 135, 1363, 5027 })
+            h.Messages.Messages.Add(Full("ice storm", MessageFlags.None,
+                "{null}", "{null}", "{null}", "{null}", "{null}", spell));
+
+        h.Feed("You negate Aldric's cast of ice storm!");
+
+        LogEntry said = Assert.Single(h.Log.Snapshot(), e => e.Message.Contains("negated cast", StringComparison.Ordinal));
+        Assert.Contains("Aldric cast 'ice storm' at You", said.Message, StringComparison.Ordinal);
+        Assert.Contains("3 spell records carry that name", said.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("#1363", said.Message, StringComparison.Ordinal);
+    }
+
     // The line names the spell, and a record's applied or wear-off text can be words
     // of that name. The cast did nothing: neither is read off it.
     [Fact]

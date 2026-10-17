@@ -1016,20 +1016,18 @@ public sealed class AppServices
     public ConnectionSnapshot Connection
         => _connectionProvider?.Invoke() ?? new ConnectionSnapshot(false, false, false);
 
-    // Force-show the first-run setup tour from anywhere, bypassing the
-    // missing-prerequisite + dismissed gates. The bool is demo mode: true (the
-    // Program Log test button) shows every step as if nothing is configured;
-    // false (Help → First-time setup) replays the user's real outstanding steps.
-    // MainWindow wires this on open; null before the window exists. Invoke on the
-    // UI thread.
-    public Action<bool>? StartFirstRunTutorial { get; set; }
+    // Show the whole first-run setup tour as a demo (every step as if nothing were
+    // configured) — the Program Log test button. MainWindow wires this on open;
+    // null before the window exists. Invoke on the UI thread.
+    public Action? StartSetupTourDemo { get; set; }
 
-    // ----- First-run tour cross-window bridge -----------------------------
-    // The tour lives on MainWindowViewModel, but its deep steps play out in the
-    // Profile Management + Settings windows. Those windows report progress by
-    // calling NotifyTourAction("AddBbs" / "BbsHostPort" / …), and glow the right
-    // control by reading CurrentTourAction (the action the tour wants next) and
-    // subscribing to TourActionChanged. String keys only — no view-model coupling.
+    // ----- Visual Guides cross-window bridge ------------------------------
+    // The guide runner lives on MainWindowViewModel, but guide steps play out in
+    // other windows (Profile Management, Settings, Navigation, the Game Data
+    // Browser, …). Those report progress by calling NotifyTourAction with a
+    // GuideActions key, and glow the right control by reading CurrentTourAction
+    // (the action the guide wants next) and subscribing to TourActionChanged.
+    // String keys only — no view-model coupling.
     public Action<string>? NotifyTourAction { get; set; }
 
     public string? CurrentTourAction { get; private set; }
@@ -2070,6 +2068,9 @@ public sealed class AppServices
     // state machine off room re-entry and pickup confirmations.
     public Game.Recovery.DeathRecoveryManager DeathRecovery { get; private set; } = null!;
 
+    // Other players' corpses recovered with their password, kept to hand back.
+    public Game.Recovery.CorpseHandoffManager CorpseHandoff { get; private set; } = null!;
+
     // Runtime inventory parser. Folds the full i
     // dump into a currency + numeric-encumbrance
     // Game.Inventory.InventorySnapshot and patches it
@@ -2661,7 +2662,7 @@ public sealed class AppServices
     public Game.Map.GhItemLocationStore GhItemLocations { get; private set; } = null!;
 
     // Per-character favourite-room bookmarks. Wires Navigation's
-    // GOTO pane + the map's "Add to favorites" context menu;
+    // GOTO pane + the map's "Save as Go To" context menu;
     // persisted via ProfileService.
     public FavoritesStore Favorites { get; private set; } = null!;
 
@@ -5317,7 +5318,7 @@ public sealed class AppServices
         // An applied line several spells print is read by which of them the room or
         // a monster in it casts. What of the room and its roster can be gone by is
         // CastReach.Standing's to say.
-        SpellCasters = new Game.GameData.SpellCasterIndex(GameData, () => RoomGraph.Rooms, Log);
+        SpellCasters = new Game.GameData.SpellCasterIndex(GameData, () => RoomGraph.Rooms, Log, TBInfo);
         RoomGraph.GraphReloaded += () => Task.Run(SpellCasters.Warm);
         if (GameData.ActiveSet is not null) Task.Run(SpellCasters.Warm);
         CastReach = new Game.Conditions.CastReach(SpellCasters, () =>
@@ -7263,6 +7264,39 @@ public sealed class AppServices
         // updates holdings — this is the only path that catches buy / sell
         // wealth swings (CashManager's own patterns see get / drop only).
         Inventory.Changed += Cash.OnInventoryChanged;
+
+        // Another player's corpse recovered with their password: recorded off the
+        // recovery's lines and handed back through the item-sweep pacer, each give
+        // struck off on the game's confirmation.
+        CorpseHandoff = new Game.Recovery.CorpseHandoffManager(
+            Profile,
+            selfName: () => Party.LocalCharacterName ?? Profile.Current?.Name,
+            currentRoom: () => RoomTracker.State.CurrentRoom is { } here
+                ? (new Models.Profile.RoomRef(here.Key.Map, here.Key.Room), here.Name)
+                : (null, null),
+            canonicalCurrency: Currency.Canonicalize,
+            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            runicName: () => Currency.RunicName,
+            sendPaced: (commands, owner, mayGo) => InventoryAction.SendPaced(commands, owner, mayGo),
+            recallPaced: owner => InventoryAction.RecallPaced(owner, _ => true),
+            scheduleAfter: (delay, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            log: Log);
+        Cash.CoinCollected += CorpseHandoff.NoteCoinsPicked;
+        Inventory.ItemGivenAway += CorpseHandoff.OnItemGivenAway;
+        Inventory.CoinsGivenAway += CorpseHandoff.OnCoinsGivenAway;
+        Inventory.GiveRefused += CorpseHandoff.OnGiveRefused;
+        Inventory.CoinGiveMisaimed += CorpseHandoff.OnCoinGiveRefused;
+        Inventory.CoinGiveLackedCoins += CorpseHandoff.OnCoinGiveRefused;
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewRoom is not null && t.PreviousRoom is not null && !t.PreviousRoom.Key.Equals(t.NewRoom.Key))
+                CorpseHandoff.NoteRoomChanged();
+        };
 
         // StashRoomManager. NOT autonomous:
         // AutoDepositManager (built below) drives ExecuteStash on arrival
@@ -16248,19 +16282,10 @@ public sealed class AppServices
         return (bbs, realm);
     }
 
-    // The active realm's data folder (AppPaths.RealmFolder), or null with no BBS, or
-    // when a name in the way can't be a folder (a bbs.json can hold any text): the
-    // stores keyed on the realm then hold nothing, as with no BBS, instead of sharing
-    // AppPaths' holding folder for refused names.
-    public string? ActiveRealmFolder()
-    {
-        if (ResolveActiveRealm() is not { } r) return null;
-        if (PathGuard.Child(AppPaths.BbsDir, r.Bbs.Name) is not null
-            && PathGuard.Child(AppPaths.RealmsDir(r.Bbs.Name), r.Realm.Name) is not null)
-            return AppPaths.RealmFolder(r.Bbs.Name, r.Realm.Name);
-        PathGuard.Refuse("Finding the active realm's data folder", "realm name", r.Realm.Name);
-        return null;
-    }
+    // The active realm's data folder, or null with no BBS or when a name in the way
+    // can't be a folder (AppPaths.UsableRealmFolder).
+    public string? ActiveRealmFolder() =>
+        ResolveActiveRealm() is { } r ? AppPaths.UsableRealmFolder(r.Bbs.Name, r.Realm.Name) : null;
 
     // Whether the loaded character has the "Sysop status" power on the active BBS
     // — the Settings → BBS credentials checkbox. Sysop powers are granted to an
@@ -16482,20 +16507,38 @@ public sealed class AppServices
     // that runs before the set has been switched.
     //
     // A name that can't be a folder in the game-data folder is no set: null, with the
-    // reason in the program log, rather than a name every store keyed on the set
-    // would be handed.
+    // reason in the program log and on the terminal (GameDataSetRefused), rather than
+    // a name every store keyed on the set would be handed.
     private string? ProfileGameDataSet()
     {
         string? set = ResolveActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
         string? usable = GameData.UsableSet(set, out string? whyNot);
-        if (whyNot is null) return usable;
-        // Asked again on every profile event: said once for each name met.
-        if (!string.Equals(Interlocked.Exchange(ref _unusableGameDataSetSaid, set), set, StringComparison.Ordinal))
-            Log.Warn("GameData", $"This profile's game data set {PathGuard.Show(set)} can't be used, so no game data is loaded: {whyNot}");
+        if (whyNot is null)
+        {
+            // A usable set in between, so the refused one is said again when it is
+            // next met: loading that profile again is worth a word.
+            Interlocked.Exchange(ref _refusedGameDataSetNotice, null);
+            return usable;
+        }
+        // Asked again on every profile event: said once each time the name is met.
+        string notice = GameDataCache.RefusedSetNotice(set, whyNot);
+        if (!string.Equals(Interlocked.Exchange(ref _refusedGameDataSetNotice, notice), notice, StringComparison.Ordinal))
+        {
+            Log.Warn("GameData", notice);
+            GameDataSetRefused?.Invoke(notice);
+        }
         return null;
     }
 
-    private string? _unusableGameDataSetSaid;
+    // Why the loaded profile runs with no game data, while its set's name can't be
+    // used; null otherwise. Read by the main window at start-up, where the profile
+    // is loaded before anything can hear GameDataSetRefused, and by the bug report.
+    public string? RefusedGameDataSetNotice => Volatile.Read(ref _refusedGameDataSetNotice);
+    private string? _refusedGameDataSetNotice;
+
+    // Raised with RefusedGameDataSetNotice each time it is newly said. May be raised
+    // off the UI thread.
+    public event Action<string>? GameDataSetRefused;
 
     // Drop any persisted reference to a just-deleted game-data set so a
     // later resolve doesn't point GameData at a folder

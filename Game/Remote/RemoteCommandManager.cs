@@ -1039,11 +1039,13 @@ public sealed class RemoteCommandManager : IDisposable
     }
 
     // The test of the rule above, for whatever words this client is asked to put
-    // on the wire for another player: `@do`'s, and a relay-back's payload.
+    // on the wire for another player: `@do`'s, and a relay-back's payload. Each word
+    // is read as it goes out as well, after WireText: a letter outside ASCII leaves
+    // as `?`, so `suicideé` would reach the game as `suicide?`.
     private static bool SendsSuicide(IEnumerable<string> words)
     {
         foreach (string word in words)
-            if (HasLetterRun(word, "suicide"))
+            if (HasLetterRun(word, "suicide") || HasLetterRun(WireText.Ascii(word), "suicide"))
                 return true;
         return false;
     }
@@ -1340,8 +1342,18 @@ public sealed class RemoteCommandManager : IDisposable
         return true;
     }
 
-    // For tests: how many speakers the two broadcast bounds are holding a time for.
-    internal int BroadcastSpeakersRememberedForTests => _broadcastAnswers.Remembered + _broadcastRefusals.Remembered;
+    // For the bug report: the turns spent this minute of the two broadcast bounds,
+    // each out of BroadcastAnswerBudget.AnswersPerWindow, and how many speakers they
+    // hold a time for (a speaker past the minute is dropped at the next look). Counts
+    // only: the speakers are other players.
+    public readonly record struct BroadcastAnswerCounts(int Permitted, int Refused, int Remembered);
+
+    public BroadcastAnswerCounts BroadcastAnswers()
+    {
+        DateTimeOffset now = Now();
+        return new(_broadcastAnswers.SpentAt(now), _broadcastRefusals.SpentAt(now),
+            _broadcastAnswers.Remembered + _broadcastRefusals.Remembered);
+    }
 
     // True when speaker is the local character (a public-channel self-echo). The gang
     // echo carries a single-word given name, while our own name may be "Given Family", so

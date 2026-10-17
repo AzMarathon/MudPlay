@@ -36,6 +36,10 @@ internal sealed class BroadcastAnswerBudget
 
     public int Remembered => _answeredAt.Count;
 
+    // The speakers answered inside the minute before now: the turns spent. Counts
+    // without dropping anyone, so a bug report reading it changes nothing.
+    public int SpentAt(DateTimeOffset now) => _answeredAt.Values.Count(at => now - at < Window);
+
     // Why speaker would not be answered now, for the log, or null when they would.
     public string? WhyNot(string speaker, DateTimeOffset now)
     {
