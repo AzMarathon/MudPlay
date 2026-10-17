@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.2**
-> - Deaths remember the game data they were recorded on, shown in a new Game data column
-> - Recover Now, Auto-Recover and the map's skull skip a pile recorded on another game data; older deaths, and those of a game data no longer installed, count as the active one's
-> - A hang-up death keeps the game data the link dropped on
-> - @death names the game data of a death recorded on another one
+> **Version 3.181.5**
+> - Start-up clean-up of saved rankings no longer waits on a ranking file that won't open
+> - A ranked tour on the map is cleared when its ranking is dropped on a game-data reload
+> - Saved rankings ignore a game-data set folder that is a symbolic link
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
