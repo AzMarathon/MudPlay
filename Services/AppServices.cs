@@ -498,7 +498,7 @@ public sealed class AppServices
     // @what and the write-side @get-all; cleared on room change.
     public Game.Inventory.GroundItemTracker GroundItems { get; private set; } = null!;
 
-    // Collects a demanded path item (NeedKind.PathItem) the moment a floor survey
+    // Collects a demanded path item (a path-item need) the moment a floor survey
     // reveals it — so search-en-route is a real sourcing method, independent of the
     // Auto-Get engine's master toggle + per-item AutoCollect flag.
     public Game.Map.PathItemFloorCollector PathItemFloor { get; private set; } = null!;
@@ -1464,7 +1464,7 @@ public sealed class AppServices
     {
         if (change.ReadInAgain) return;
         string reason = change.Why;
-        int needs = Needs.Clear(NeedKind.PathItem);
+        int needs = Needs.Clear();
         if (needs > 0) Log.Info("Needs", $"{needs} route item need(s) dropped: {reason}");
         PartyPathItemGate.Clear();
         PartyHandOvers.Clear(reason);
@@ -2157,7 +2157,7 @@ public sealed class AppServices
     public Game.Map.AutoSearchManager AutoSearch { get; private set; } = null!;
 
     // Demand-driven auto-search coordinator — posts a
-    // NeedKind.PathItem need when the walker plans a route
+    // path-item need when the walker plans a route
     // through an Item/Ticket exit whose item we don't carry, and resolves it
     // when the item enters inventory. While such a need is outstanding and
     // the Auto-Search toggle is on, AutoSearch arms itself via
@@ -2169,7 +2169,7 @@ public sealed class AppServices
     // lookup; rebuilt on GameDataCache.ActiveSetChanged.
     public ShopStockIndex ShopStock { get; private set; } = null!;
 
-    // Active fulfiller for NeedKind.PathItem needs backed by a
+    // Active fulfiller for path-item needs backed by a
     // shop: on a one-shot walk-to that needs an uncarried item a shop sells,
     // detours to the fewest-added-steps shop, buys it, and resumes. Gated per
     // item by the item record's AutoObtainForPath flag.
@@ -2197,7 +2197,7 @@ public sealed class AppServices
     // Room Info panel. Lazy + self-invalidating like ItemSources.
     public RoomFloorItemIndex RoomFloorItems { get; private set; } = null!;
 
-    // Active fulfiller for NeedKind.PathItem needs an NPC / room hands over for
+    // Active fulfiller for path-item needs an NPC / room hands over for
     // free: on a one-shot walk-to that needs an uncarried item a deterministic
     // textblock `giveitem` supplies, detours to the fewest-added-steps giver,
     // issues the `ask <npc> <keyword>` / room-CMD command, and resumes once it
@@ -2246,7 +2246,7 @@ public sealed class AppServices
     // rebuilt on GameDataCache.ActiveSetChanged.
     public RoomSpellDamageIndex RoomSpellDamage { get; private set; } = null!;
 
-    // Active fulfiller for NeedKind.PathItem needs no shop can
+    // Active fulfiller for path-item needs no shop can
     // satisfy: on a one-shot walk-to that needs an uncarried item no shop
     // sells, prompts to reroute to the nearest room a monster that drops it
     // spawns in, then resumes once it lands. Gated per item by the item
@@ -7394,7 +7394,7 @@ public sealed class AppServices
         AutoGetItems.SetRoomRedisplay(RoomRedisplay);
         // A light on the floor is picked up for Auto-Light, flagged or not and with
         // Auto-Get Items on or off (AutoLightProvisioner is built further down).
-        AutoGetItems.SetExtraCollect(item => AutoLightProvisioner.WantsFloorLight(item.Number), "for Auto-Light");
+        AutoGetItems.SetExtraCollect(item => AutoLightProvisioner.FloorLightsWanted(item.Number), "for Auto-Light");
         // Combat-finished flush: every room-entity observation re-checks
         // the deferred queue (CombatStateTracker's handler ran first, so
         // the hostile flag is current).
@@ -8370,6 +8370,16 @@ public sealed class AppServices
             settings:    () => ReadSection<Models.Profile.AutoLightSettings>(Profile.Current, "AutoLight"),
             currentRoom: () => RoomTracker.State.CurrentRoom,
             inDarkRoom:  () => RoomTracker.IsInDarkRoom,
+            // The spell's caster line from the Messages data: a light-making cast
+            // reads the inventory for its item once this line says it was cast.
+            castLineFor: code => Spellbook.FindByCastCode(code) is { } spell
+                && FindSpellMessage(spell.Number, spell.Name)?.CasterMessage is { } line
+                && !Models.GameData.MessageRecord.IsBlankOrAbsent(line) ? line : null,
+            // Blind, or under a spell that takes light away: what lighting does then
+            // says nothing about the room-light spell.
+            sightTakenAway: () => Conditions.IsBlinded
+                || Conditions.AnyActive(r => r.Links?.Any(l => string.Equals(l.Table, "Spells", StringComparison.OrdinalIgnoreCase)
+                    && RoomLightSpell.IsDarkeningSpell(l.Number)) == true),
             log:         Log);
         Profile.ProfileLoaded += _ => AutoLightProvisioner.Forget("profile loaded");
         GameData.ActiveSetChanged += _ => AutoLightProvisioner.Forget("game data changed");
@@ -9821,6 +9831,19 @@ public sealed class AppServices
             if (ShopSpells.OnScrollAlreadyKnown() is { } spell) Spellbook.MarkObtainedByName(spell);
         });
         TrainerWalk.SetSpellErrand(ShopSpells);
+        // A walk to the trainer that runs dark stops at a light shop first, as the
+        // bank run's walk home does: the walk-to light router stands down while an
+        // errand has the walker, so the errand provisions its own walk.
+        Game.Light.LightShopBuy trainLightBuyer = new(CountItemCarried,
+            Game.Light.LightShopBuy.PostedTimer(action => Avalonia.Threading.Dispatcher.UIThread.Post(action)), log: Log);
+        TrainerWalk.SetLightShopBuy(trainLightBuyer);
+        Inventory.Changed += trainLightBuyer.OnInventoryChanged;
+        TrainerWalk.PlanLightStop = (from, trainer) =>
+            Walker.TryComputeRouteKeys(from, trainer) is { } route
+            && AutoLightProvisioner.PlanRouteBuy(route) is { } buy
+            && AutoLightShopRouter.TrySelectShop(from, trainer, buy.ItemId, out Game.Map.RoomKey shop)
+                ? (shop, buy)
+                : null;
         TrainerWalk.PlanShopSpells = (from, returnTo, level) =>
             PlanShopSpells(from, returnTo, level, budgetCopper: null);
 
@@ -9995,13 +10018,22 @@ public sealed class AppServices
             // Party follower = in a party and not the leader; gates the opt-in
             // follower pass-through stash (Cash → "stash as follower").
             isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
-            nearestLoopRoom: NearestLoopRoom);
-        // A loop's or Auto-Lair's lit light dwindling under Reorder-at: the walk-to
-        // shop router stands down while they run, so the restock is a trip of its own
-        // off the engine, back to it once bought.
+            nearestLoopRoom: NearestLoopRoom,
+            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement));
+        // A loop or Auto-Lair run that crosses dark rooms its lights can't cover, or
+        // whose lit light dwindles under Reorder-at: the walk-to shop router stands
+        // down while they run, so the buy is a trip of its own off the engine, back
+        // to it once bought. Posted, since a check can be raised from inside the
+        // walker's route announcement.
         AutoLightProvisioner.SetLoopRestock(
             engineRunning: () => LoopRunner.State != Game.Map.LoopState.Idle || AutoLair.IsActive,
-            restock: buy => AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "reorder"));
+            restock: buy => AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "light for the run"),
+            engineRooms: LoopRunner.ResolveLoopRoomKeys,
+            defer: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
+        LoopRunner.Event += e =>
+        {
+            if (e.Kind == Game.Map.LoopEventKind.Started) AutoLightProvisioner.OnEngineStarted();
+        };
         // A split-teleport reform waits for the leader to leave the room it started in.
         AutoParty.SetRoomProbe(() => RoomTracker.State.CurrentRoom?.Key);
         // Players listed by a `look <direction>` peek stand in the next room.
@@ -15002,7 +15034,8 @@ public sealed class AppServices
         return new Game.Inventory.AutoGetItemsManager.ResolvedItem(
             number, name, overlay.AutoCollect ?? false, overlay.CannotBeTaken ?? false,
             MaxCap(overlay), ItemNames.WeightOf(name) ?? 0,
-            AutoSell: ResolveAutoSellItem(name) is { Sell: true });
+            AutoSell: ResolveAutoSellItem(name) is { Sell: true },
+            AutoCollectSet: overlay.AutoCollect, AutoDiscard: overlay.AutoDiscard ?? false);
     }
 
     // Resolve a carried entry for AutoDiscard: map the loose carry wording to an
@@ -15697,7 +15730,7 @@ public sealed class AppServices
     private void WalkToForPathItemDetour(Game.Map.RoomKey key)
         => Walker.WalkTo(
             key,
-            planThroughAcquirableGates: Needs.Outstanding(NeedKind.PathItem).Count > 0,
+            planThroughAcquirableGates: Needs.Outstanding().Count > 0,
             supersedeSilently: true);
 
     // Reset States: put every engine back where it would be if the player were
@@ -15785,7 +15818,7 @@ public sealed class AppServices
     private bool HasOutstandingPathItemNeed(int itemId)
     {
         string descriptor = itemId.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        foreach (Need n in Needs.Outstanding(NeedKind.PathItem))
+        foreach (Need n in Needs.Outstanding())
             if (string.Equals(n.Descriptor, descriptor, StringComparison.Ordinal))
                 return true;
         return false;

@@ -83,6 +83,9 @@ public sealed class AutoLightProvisionerTests
         public Func<RoomKey, Room?> Graph = GraphOf(RoomAt(A, -300));
         public Room? Here;
         public bool InDark;
+        public bool SightTakenAway;
+        // The light-making spell's caster line, as the Messages data gives it.
+        public string? CastLine;
         public readonly List<AutoLightBuyRequest> BuyRequests = new();
         public readonly List<string> Sent = new();
         public readonly MessageRouter Router = new();
@@ -108,9 +111,11 @@ public sealed class AutoLightProvisionerTests
                 roomLightSpellUp: SpellsUp.Contains,
                 settings:    () => Settings,
                 currentRoom: () => Here,
-                inDarkRoom:  () => InDark);
+                inDarkRoom:  () => InDark,
+                castLineFor: _ => CastLine,
+                sightTakenAway: () => SightTakenAway);
             Engine.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
-            Engine.SetProvisioner(BuyRequests.Add);
+            Engine.SetProvisioner(req => { BuyRequests.Add(req); return true; });
             Engine.AttachRouter(Router);
         }
 
@@ -916,18 +921,139 @@ public sealed class AutoLightProvisionerTests
         Assert.Empty(h.Sent);
     }
 
+    // Spell first, the light-making kind too (user, 2026-10-17): illuminate is cast
+    // ahead of the dark room though a torch is carried, and the ball it makes is
+    // lit for that room once the inventory shows it — the torch stays in the pack.
     [Fact]
-    public void Approach_LightMakingSpell_CarriedLightGoesFirst()
+    public void Approach_LightMakingSpell_CastsFirst_AndLightsItsBall_NoCarriedLightOnTop()
     {
         Harness h = new()
         {
             Graph = GraphOf(RoomAt(DarkAhead, -300)),
-            Snapshot = Snap(carried: new[] { "torch" }),
+            Snapshot = Snap(carried: new[] { "torch" }, stamp: 1),
             Spell = Illuminate,
         };
         h.Approach(DarkAhead);
+        Assert.Equal(new[] { "illu" }, h.CastSpells);
+        Assert.Equal(new[] { "i" }, h.Sent);
+
+        h.Snapshot = Snap(carried: new[] { "torch", "light ball" }, stamp: 2);
+        h.Poll();
+        Assert.Equal(new[] { "i", "use light ball" }, h.Sent);
+    }
+
+    // The probe that found 4 casts and 4 balls: a torch or lantern lit, the room
+    // still dark, a can't-see line after another. A ball would be no brighter than
+    // what is lit, so nothing is cast.
+    [Theory]
+    [InlineData("torch", 80)]
+    [InlineData("lantern", 240)]
+    public void LightMakingSpell_ALightAsStrongIsLit_RepeatedDarkLines_NeverCast(string lit, int readied)
+    {
+        Harness h = new()
+        {
+            Spell = Illuminate,
+            Here = RoomAt(A, -450),
+            Snapshot = Snap(readied: new ReadiedLight(lit, readied)),
+        };
+        h.Dark();
+        h.Dark();
+        h.Dark();
         Assert.Empty(h.CastSpells);
-        Assert.Equal(new[] { "use torch" }, h.Sent);
+        Assert.Empty(h.Sent);
+    }
+
+    // A ball already in the pack (here one no brighter than the lit lantern) is
+    // never made again.
+    [Fact]
+    public void LightMakingSpell_ABallCarried_NotCastAgain()
+    {
+        Harness h = new()
+        {
+            Spell = Illuminate,
+            Here = RoomAt(A, -450),
+            Snapshot = Snap(carried: new[] { "light ball" }, readied: new ReadiedLight("lantern", 240)),
+        };
+        h.Dark();
+        h.Dark();
+        Assert.Empty(h.CastSpells);
+    }
+
+    // The game gives the ball with the spell's own cast message and no line of its
+    // own: the inventory read waits for "You cast illuminate!", and a fizzle
+    // instead drops the wait so the spell can be tried again.
+    [Fact]
+    public void LightMakingSpell_ReadsTheInventoryAfterItsCastMessage_AFizzleEndsTheWait()
+    {
+        Harness h = new()
+        {
+            Spell = Illuminate,
+            CastLine = "You cast {spellname}!",
+            Here = RoomAt(A, -300),
+            InDark = true,
+        };
+        h.Dark();
+        Assert.Equal(new[] { "illu" }, h.CastSpells);
+        Assert.Empty(h.Sent);
+
+        h.Feed("You cast illuminate!");
+        Assert.Equal(new[] { "i" }, h.Sent);
+
+        h.Snapshot = Snap(stamp: 5);    // the dump: no ball (it didn't take after all)
+        h.Poll();
+        h.Dark();
+        Assert.Equal(new[] { "illu", "illu" }, h.CastSpells);
+        h.Feed("You attempt to cast illuminate, but fail.");
+        h.Dark();
+        Assert.Equal(new[] { "illu", "illu", "illu" }, h.CastSpells);
+        Assert.Equal(new[] { "i" }, h.Sent);
+    }
+
+    // Blind or under a darkening spell (globe of darkness and the like), lighting
+    // can't show the room: nothing is cast, lit or latched.
+    [Fact]
+    public void SightTakenAway_DarkLines_NothingCastLitOrLatched()
+    {
+        Harness h = new()
+        {
+            Graph = GraphOf(RoomAt(DarkAhead, -300)),
+            Spell = Starlight,
+            Snapshot = Snap(carried: new[] { "torch" }),
+            Here = RoomAt(A, -300),
+            SightTakenAway = true,
+        };
+        h.SpellsUp.Add("star");
+        h.Dark();
+        h.Approach(DarkAhead);
+        Assert.Empty(h.Sent);
+        Assert.DoesNotContain("not enough at Light", h.Engine.DescribeState());
+    }
+
+    // The latch holds for the dark stretch it was found in: a room shown ends it,
+    // and a brighter light lit (or better worn gear) makes it void.
+    [Fact]
+    public void SpellLatch_EndsWithTheDarkStretch_AndWithABrighterLight()
+    {
+        Harness h = new()
+        {
+            Graph = GraphOf(RoomAt(DeepAhead, -450)),
+            Spell = Starlight,
+            Here = RoomAt(DeepAhead, -450),
+        };
+        h.Approach(DeepAhead);
+        h.Dark();                       // latched, nothing lit
+        h.SpellsUp.Clear();
+        h.Snapshot = Snap(readied: new ReadiedLight("torch", 80));
+        h.Approach(DeepAhead);          // a torch now lit: the latch was for nothing lit
+        Assert.Equal(2, h.CastSpells.Count);
+
+        h.Dark();                       // latched again with the torch
+        h.SpellsUp.Clear();
+        h.Approach(DeepAhead);
+        Assert.Equal(2, h.CastSpells.Count);
+        h.Enter(0);                     // out of the dark
+        h.Approach(DeepAhead);
+        Assert.Equal(3, h.CastSpells.Count);
     }
 
     [Fact]
@@ -1002,36 +1128,39 @@ public sealed class AutoLightProvisionerTests
         h.Plan(A);
         h.Poll();
         Assert.Empty(h.BuyRequests);
-        Assert.False(h.Engine.WantsFloorLight(Torch.Number));
+        Assert.Equal(0, h.Engine.FloorLightsWanted(Torch.Number));
         Assert.Null(h.Engine.PlanStockUp(new[] { A }));
     }
 
     // ----- A light on the floor -------------------------------------------------
 
     [Fact]
-    public void FloorLight_WantedWhileShortOfCarryHours()
+    public void FloorLight_AsManyAsTheCarryHoursShortfall()
     {
         Harness h = new();
-        Assert.True(h.Engine.WantsFloorLight(Torch.Number));
+        Assert.Equal(18, h.Engine.FloorLightsWanted(Torch.Number));   // 12 h of 40-minute torches
+        h.Snapshot = Snap(carried: new[] { "5 lantern" });    // 10 h of 12: 2 h short
+        Assert.Equal(3, h.Engine.FloorLightsWanted(Torch.Number));
+        Assert.Equal(1, h.Engine.FloorLightsWanted(Lantern.Number));
         h.Snapshot = Snap(carried: new[] { "6 lantern" });    // 6 × 2 h = the 12 h target
-        Assert.False(h.Engine.WantsFloorLight(Torch.Number));
-        Assert.False(h.Engine.WantsFloorLight(99));           // not a light
+        Assert.Equal(0, h.Engine.FloorLightsWanted(Torch.Number));
+        Assert.Equal(0, h.Engine.FloorLightsWanted(99));      // not a light
     }
 
     [Fact]
     public void FloorLight_CarryHoursZero_OnlyWhenNoLightCarried()
     {
         Harness h = new() { Settings = new() { CarryHours = 0 } };
-        Assert.True(h.Engine.WantsFloorLight(Torch.Number));
+        Assert.Equal(1, h.Engine.FloorLightsWanted(Torch.Number));
         h.Snapshot = Snap(carried: new[] { "torch" });
-        Assert.False(h.Engine.WantsFloorLight(Torch.Number));
+        Assert.Equal(0, h.Engine.FloorLightsWanted(Torch.Number));
     }
 
     [Fact]
     public void FloorLight_Disabled_NotWanted()
     {
         Harness h = new() { Enabled = false };
-        Assert.False(h.Engine.WantsFloorLight(Torch.Number));
+        Assert.Equal(0, h.Engine.FloorLightsWanted(Torch.Number));
     }
 
     // ----- Stocking up on a trip that passes a shop ----------------------------
@@ -1121,5 +1250,96 @@ public sealed class AutoLightProvisionerTests
         h.Poll();
         Assert.Equal(0, asks);
         Assert.Single(h.BuyRequests);
+    }
+
+    // ----- The shop router's answer ---------------------------------------------
+
+    // A reorder the walk-to router turns down (another errand has the walker) isn't
+    // latched: the next `i` dump asks again, and once the router takes it the
+    // reorder is latched and logged as a plan.
+    [Fact]
+    public void Reorder_RouterRefuses_NotLatched_AskedAgainUntilItTakesIt()
+    {
+        Harness h = new() { Snapshot = Snap(readied: new ReadiedLight("lantern", 100)) };
+        bool errandWalking = true;
+        List<RoomKey> walks = new();
+        RoomKey shop = new(1, 150), here = new(1, 100), dest = new(1, 200);
+        AutoLightShopRouter router = new(
+            shopRoomsSellingItem: _ => new[] { shop },
+            currentRoom: () => here,
+            walkDestination: () => dest,
+            distanceBetween: (_, _) => 3,
+            carriedCount: _ => 0,
+            isEnabled: () => true,
+            engineWalkActive: () => errandWalking,
+            walkTo: walks.Add,
+            post: a => a(),
+            buyTimeout: TimeSpan.FromHours(1));
+        h.Engine.SetProvisioner(router.OnBuyRequested);
+
+        h.Poll();
+        Assert.Empty(walks);
+        Assert.Contains("last planned buy none", h.Engine.DescribeState());
+
+        errandWalking = false;
+        h.Poll();
+        Assert.Equal(new[] { shop }, walks);
+        Assert.Contains("reorder latched lantern", h.Engine.DescribeState());
+
+        h.Poll();
+        Assert.Single(walks);
+        router.Dispose();
+    }
+
+    // ----- A loop with no light ---------------------------------------------------
+
+    // A loop whose circuit crosses a room nothing lights, with no light carried:
+    // a light trip off the loop, asked once per loop and lights carried.
+    [Fact]
+    public void Loop_CircuitRunsDark_NothingCarried_OneLightTrip()
+    {
+        Harness h = new();
+        List<AutoLightBuyRequest> trips = new();
+        h.Engine.SetLoopRestock(() => true, req => { trips.Add(req); return LightRestockOutcome.NotPossible; },
+            engineRooms: () => new[] { A });
+
+        h.Engine.OnEngineStarted();
+        h.Poll();
+        Assert.Equal(new[] { new AutoLightBuyRequest(2, "lantern", 6) }, trips);   // the weakest light that covers -300
+
+        h.Snapshot = Snap(carried: new[] { "torch" });   // the lights carried changed: asked again
+        h.Poll();
+        Assert.Equal(2, trips.Count);
+    }
+
+    [Fact]
+    public void Loop_TripBusy_AskedAgain_SpellOnly_NeverAsked()
+    {
+        Harness h = new();
+        int asks = 0;
+        h.Engine.SetLoopRestock(() => true, _ => { asks++; return LightRestockOutcome.Busy; },
+            engineRooms: () => new[] { A });
+        h.Poll();
+        h.Poll();
+        Assert.Equal(2, asks);
+
+        h.Settings = new() { CarryHours = 12, UseRoomLightSpellOnly = true };
+        h.Poll();
+        Assert.Equal(2, asks);
+    }
+
+    // The last light burning out mid-loop leaves the circuit unlit: a trip.
+    [Fact]
+    public void Loop_LastLightBurnsOut_LightTrip()
+    {
+        Harness h = new() { Snapshot = Snap(readied: new ReadiedLight("lantern", 200)) };
+        List<AutoLightBuyRequest> trips = new();
+        h.Engine.SetLoopRestock(() => true, req => { trips.Add(req); return LightRestockOutcome.Started; },
+            engineRooms: () => new[] { A });
+        h.Engine.OnEngineStarted();
+        Assert.Empty(trips);            // the lit lantern covers the circuit
+
+        h.Feed("Your lamp runs out of oil, and goes out.");
+        Assert.Single(trips);
     }
 }

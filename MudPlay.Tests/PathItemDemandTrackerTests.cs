@@ -36,11 +36,11 @@ public sealed class PathItemDemandTrackerTests
 
         public void Carry(int id, int n = 1) => Carried[id] = n;
 
-        public int OutstandingCount => Needs.Outstanding(NeedKind.PathItem).Count;
+        public int OutstandingCount => Needs.Outstanding().Count;
 
         public int? QuantityOf(int id)
         {
-            foreach (Need n in Needs.Outstanding(NeedKind.PathItem))
+            foreach (Need n in Needs.Outstanding())
                 if (n.Descriptor == id.ToString()) return n.Quantity;
             return null;
         }

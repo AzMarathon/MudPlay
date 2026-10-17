@@ -142,28 +142,29 @@ public sealed class AutoLightShopRouter : IDisposable
     // detour toward the fewest-added-steps shop that stocks the light. A no-op when
     // the feature is off, an engine walk is driving, a detour is already running,
     // this destination's last buy already failed, no reachable shop stocks it, or
-    // we can't compute a route.
-    public void OnBuyRequested(AutoLightBuyRequest req)
+    // we can't compute a route. Returns whether the detour was taken on, so the
+    // provisioner latches a reorder only when it was.
+    public bool OnBuyRequested(AutoLightBuyRequest req)
     {
-        if (_phase != Phase.Idle) return;
-        if (!_isEnabled()) return;
-        if (_engineWalkActive()) return;
-        if (req.ItemId <= 0 || string.IsNullOrWhiteSpace(req.LightName)) return;
+        if (_phase != Phase.Idle) return false;
+        if (!_isEnabled()) return false;
+        if (_engineWalkActive()) return false;
+        if (req.ItemId <= 0 || string.IsNullOrWhiteSpace(req.LightName)) return false;
 
-        if (_currentRoom() is not { } cur) return;
-        if (_walkDestination() is not { } dest) return;
+        if (_currentRoom() is not { } cur) return false;
+        if (_walkDestination() is not { } dest) return false;
 
         // A different destination means the situation changed — lift any
         // suppression left by a previous failed buy, then honour a live one.
         if (_suppressedDest is { } sup && !sup.Equals(dest)) _suppressedDest = null;
-        if (_suppressedDest is not null) return;
+        if (_suppressedDest is not null) return false;
 
         if (!TrySelectShop(cur, dest, req.ItemId, out RoomKey shopRoom))
         {
             _log?.Info(LogCategory,
                 $"no reachable shop stocks '{req.LightName}' — walking on with what is carried");
             _suppressedDest = dest;
-            return;
+            return false;
         }
 
         _itemId = req.ItemId;
@@ -176,6 +177,7 @@ public sealed class AutoLightShopRouter : IDisposable
         _log?.Info(LogCategory,
             $"provisioning '{req.LightName}' x{_targetCount} — detouring to shop at {shopRoom}");
         _post(() => DriveWalk(shopRoom));
+        return true;
     }
 
     // Walker-event callback (wired to AutoWalkManager.Event). Arrival at the shop

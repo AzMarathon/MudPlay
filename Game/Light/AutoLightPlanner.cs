@@ -49,7 +49,9 @@ public static class AutoLightPlanner
             double remainingMinutes = rl.Readied * SecondsPerReadiedPoint / 60.0;
             if (remainingMinutes < settings.ReorderThresholdMinutes)
             {
-                LightItem? restock = FindByName(rl.Name, catalogue) ?? preferred;
+                // The Preferred light, as for any buy; under Automatic, more of
+                // the kind that is lit.
+                LightItem? restock = preferred ?? FindByName(rl.Name, catalogue);
                 if (restock is { } rs)
                     return AutoLightPlan.ReorderLight(
                         rs.Name, CarryCount(settings.CarryHours, rs.BurnTime),

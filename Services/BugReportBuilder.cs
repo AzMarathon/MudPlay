@@ -2593,7 +2593,7 @@ public static class BugReportBuilder
                 ? $" — waiting on {sm}"
                 : string.Empty));
 
-        IReadOnlyList<Need> needs = svc.Needs.Outstanding(NeedKind.PathItem);
+        IReadOnlyList<Need> needs = svc.Needs.Outstanding();
         sb.Append("\nOutstanding path-item needs (").Append(needs.Count).Append(")\n\n");
         if (needs.Count == 0) sb.Append("_(none)_\n");
         else foreach (Need n in needs)

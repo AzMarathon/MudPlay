@@ -12,12 +12,11 @@ public sealed class NeedsRegistryTests
         Need? fired = null;
         r.NeedPosted += n => fired = n;
 
-        Need posted = r.Post(NeedKind.PathItem, "42", "PathItemDemandTracker");
+        Need posted = r.Post("42", "PathItemDemandTracker");
 
-        Assert.Equal(NeedKind.PathItem, posted.Kind);
         Assert.Equal("42", posted.Descriptor);
         Assert.Equal(posted, fired);
-        Assert.Single(r.Outstanding(NeedKind.PathItem));
+        Assert.Single(r.Outstanding());
     }
 
     [Fact]
@@ -27,21 +26,21 @@ public sealed class NeedsRegistryTests
         int fires = 0;
         r.NeedPosted += _ => fires++;
 
-        r.Post(NeedKind.PathItem, "42", "PathItemDemandTracker");
-        r.Post(NeedKind.PathItem, "42", "SomeoneElse");
+        r.Post("42", "PathItemDemandTracker");
+        r.Post("42", "SomeoneElse");
 
         Assert.Equal(1, fires);
-        Assert.Single(r.Outstanding(NeedKind.PathItem));
+        Assert.Single(r.Outstanding());
     }
 
     [Fact]
     public void Resolve_RemovesNeed()
     {
         NeedsRegistry r = new();
-        Need n = r.Post(NeedKind.PathItem, "42", "PathItemDemandTracker");
+        Need n = r.Post("42", "PathItemDemandTracker");
 
         Assert.True(r.Resolve(n));
-        Assert.Empty(r.Outstanding(NeedKind.PathItem));
+        Assert.Empty(r.Outstanding());
         Assert.False(r.Resolve(n));
     }
 
@@ -49,11 +48,11 @@ public sealed class NeedsRegistryTests
     public void Clear_DropsAllNeeds()
     {
         NeedsRegistry r = new();
-        r.Post(NeedKind.PathItem, "42", "PathItemDemandTracker");
-        r.Post(NeedKind.PathItem, "100", "PathItemDemandTracker");
+        r.Post("42", "PathItemDemandTracker");
+        r.Post("100", "PathItemDemandTracker");
 
         r.Clear();
 
-        Assert.Empty(r.Outstanding(NeedKind.PathItem));
+        Assert.Empty(r.Outstanding());
     }
 }

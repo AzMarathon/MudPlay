@@ -209,6 +209,19 @@ public sealed class AutoLightPlannerTests
     }
 
     [Fact]
+    public void Reorder_BuysThePreferredLight_NotTheKindLit()
+    {
+        // A torch the character picked up is lit and dwindling; the Preferred light
+        // is the lantern, so the reorder buys lanterns.
+        AutoLightPlan plan = AutoLightPlanner.Plan(
+            Lit, wornIllu: 0, roomLightSpellIllu: 0, readied: new ReadiedLight("torch", Readied: 50),
+            carriedLights: System.Array.Empty<LightItem>(), Catalogue, Settings(carry: 12, reorder: 60, preferred: "lantern"));
+
+        Assert.Equal(AutoLightAction.Reorder, plan.Action);
+        Assert.Equal("lantern", plan.LightName);
+    }
+
+    [Fact]
     public void Reorder_ReadiedLightAboveThreshold_DoesNotFire()
     {
         // 200 points → 100 min left, above 60 → no reorder; lit route → nothing.

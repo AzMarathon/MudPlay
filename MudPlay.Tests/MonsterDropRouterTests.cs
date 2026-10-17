@@ -15,7 +15,7 @@ public sealed class MonsterDropRouterTests
     private static readonly RoomKey Spawn2 = new(1, 160);
 
     private static Need PathNeed(int id)
-        => new(NeedKind.PathItem, id.ToString(), "test", DateTimeOffset.Now);
+        => new(id.ToString(), "test", DateTimeOffset.Now);
 
     private sealed class Harness
     {

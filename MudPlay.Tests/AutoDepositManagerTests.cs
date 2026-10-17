@@ -1042,6 +1042,36 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.False(h.AutoDeposit.IsRerouting);
     }
 
+    // A loop whose circuit crosses the dark 1/2 with no light carried: Auto-Light
+    // stops it for a light trip — to the shop at 1/4, a torch bought, back to 1/1,
+    // the loop resumed (user, 2026-10-17) — and asks no second time on the resumed
+    // loop once the torch is carried.
+    [Fact]
+    public void LoopCircuitRunsDark_NoLight_LightTripThenTheLoopResumes()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLoop(h);
+        EnableLightDetour(h);
+        h.Provisioner.SetLoopRestock(
+            engineRunning: () => h.Loop.State != LoopState.Idle,
+            restock: buy => h.AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "light for the run"),
+            engineRooms: h.Loop.ResolveLoopRoomKeys);
+
+        h.Provisioner.OnEngineStarted();
+
+        Assert.True(h.AutoDeposit.IsLightTrip);
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal("buy torch", h.BuyLines().Single());
+        GiveTorch(h);
+        Arrive(h, new RoomKey(1, 1));
+        Assert.Equal(LoopState.Running, h.Loop.State);
+
+        h.Provisioner.OnEngineStarted();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.Single(h.BuyLines());
+    }
+
     [Fact]
     public void LightRestockTrip_NoShopSellsTheLight_LoopKeepsRunning()
     {
