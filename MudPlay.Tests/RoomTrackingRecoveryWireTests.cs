@@ -218,6 +218,62 @@ public sealed class RoomTrackingRecoveryWireTests
         AssertLocatedAt(rig, A(3));
     }
 
+    // A command the game didn't echo (it printed only the prompt) is not retired by
+    // the next move's echo, so that move's display is read against it and the
+    // footprint exhausts. On Stock the move the display really answered was echoed,
+    // so its display has come: it is dropped, and the leader's drags that follow
+    // (which echo nothing) fold with their own displays, not a move behind.
+    [Fact]
+    public void PassiveLocate_AnExhaustedFootprint_DropsAMoveAlreadyEchoed()
+    {
+        using TrackerWireRig rig = StartInPair(PairWorld(split: 2));
+        rig.Echo = false;
+        rig.Do("enter portal");
+        rig.Echo = true;
+
+        rig.Do(Token(0));
+        rig.Drag(Walk[1]);
+        rig.Drag(Walk[2]);
+
+        AssertLocatedAt(rig, A(3));
+    }
+
+    // The same where an echo marks nothing (Paradigm): the move the display answered
+    // went out more than a hop before it, so its display has come, and it is dropped.
+    [Fact]
+    public void PassiveLocate_AnExhaustedFootprint_DropsAMoveOlderThanAHop()
+    {
+        using TrackerWireRig rig = StartInPair(PairWorld(split: 2));
+        rig.EchoMarksExecution = false;
+        rig.AnswerDelay = TimeSpan.FromSeconds(1.5);
+        rig.Do("enter portal");   // the game prints only the prompt
+
+        for (int step = 0; step < 3; step++) rig.Do(Token(step));
+
+        AssertLocatedAt(rig, A(3));
+    }
+
+    // Three moves typed together, the first landing in a room that shows an exit the
+    // map lacks: the footprint exhausts on it. The two moves behind it are still out
+    // (not echoed yet, and sent within a hop), so they stay: the next display seeds
+    // afresh and the one after folds with its own move.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PassiveLocate_AnExhaustedFootprint_KeepsTheMovesStillOut(bool echo)
+    {
+        using TrackerWireRig rig = StartInPair(PairWorld(split: 2));
+        rig.Echo = echo;
+        rig.ExtraShownExits[A(1)] = new[] { Direction.D };
+
+        rig.Type(Token(0));
+        rig.Type(Token(1));
+        rig.Type(Token(2));
+        rig.Pump();
+
+        AssertLocatedAt(rig, A(3));
+    }
+
     // A heavy character's hops: two moves typed together, answered 2–3 s apart with no
     // echo. Neither is taken for a move with no answer, each display folds with its
     // own move, and the footprint isn't settled before the second move lands.

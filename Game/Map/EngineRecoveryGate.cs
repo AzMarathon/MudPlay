@@ -1058,7 +1058,8 @@ public sealed class EngineRecoveryGate
     // converge on the wrong room. The engines send a step only once the one before
     // has landed (and MayProceedWithPlannedStep holds one the room can't make), so
     // two steps landing together means one never did: a refused step the walker
-    // sent again.
+    // sent again. Convergence doesn't wait for steps in flight, so an engine that
+    // sent steps ahead would be re-anchored with them forgotten.
     private void FoldTier2ForwardLanding(RoomTransition t, RoomObservation? shown)
     {
         if (!_tier2ForwardActive) return;

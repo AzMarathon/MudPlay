@@ -6910,6 +6910,9 @@ Among protectable hazards, a further split governs whether the navigator may off
       encumbrance, plus lag, and a 32%-encumbered priest's 1.37 s median has a tail past 1.5 s; Stock is ~0.6–0.7 s
       light and ~1.65 s Heavy, with more units when dragging or after several moves. Moves typed together are
       answered one hop apart, so a shorter bound retired a heavy character's typed-ahead move.
+    - An exhausted footprint drops the waiting moves whose display must already have been read against an
+      older move (`DropMovesAlreadyAnswered`): on Stock those already echoed, elsewhere those sent more than one
+      expected hop ago. A move not yet echoed, or sent within a hop, stays (moves typed together).
     - PR #1091 review, 2026-10-17.
 - **Client policy** *(Claude's design in PR #1091, 2026-10-17; not a user ruling)*: a footprint that comes
   down to one room while a later move is still in flight waits for that move's display before re-anchoring

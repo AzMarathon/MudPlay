@@ -114,14 +114,21 @@ public sealed class RoomTracker
     // move that got no answer then waits for a pause of that length.
     private static readonly TimeSpan UnansweredMoveFloor = TimeSpan.FromSeconds(3.5);
 
-    private TimeSpan UnansweredMoveAge
+    // Read once per send or line (NoteEventTime): on Paradigm the estimate totals the
+    // worn gear's stats, too much to redo for every move it ages.
+    private TimeSpan _expectedHopNow = DefaultExpectedHop;
+    private TimeSpan UnansweredMoveAge { get; set; } = UnansweredMoveFloor;
+
+    // A light character's hop with no travel model wired: Paradigm's 1.0 s cap plus
+    // its usual lag (Stock's light hop is shorter). Two of them plus a second is the
+    // floor.
+    private static readonly TimeSpan DefaultExpectedHop = TimeSpan.FromSeconds(1.25);
+
+    private void RefreshMoveTiming()
     {
-        get
-        {
-            if (_expectedHop?.Invoke() is not { } hop) return UnansweredMoveFloor;
-            TimeSpan derived = hop + hop + TimeSpan.FromSeconds(1);
-            return derived > UnansweredMoveFloor ? derived : UnansweredMoveFloor;
-        }
+        _expectedHopNow = _expectedHop?.Invoke() is { } hop && hop > TimeSpan.Zero ? hop : DefaultExpectedHop;
+        TimeSpan derived = _expectedHopNow + _expectedHopNow + TimeSpan.FromSeconds(1);
+        UnansweredMoveAge = derived > UnansweredMoveFloor ? derived : UnansweredMoveFloor;
     }
 
     // The character's expected time per hop (the travel model Auto-Lair plans
@@ -155,6 +162,7 @@ public sealed class RoomTracker
     private void NoteEventTime(DateTimeOffset when)
     {
         if (when > _latestEventAt) _latestEventAt = when;
+        RefreshMoveTiming();
     }
 
     private bool StillAwaited(PendingMove move, DateTimeOffset now) =>
@@ -2596,15 +2604,27 @@ public sealed class RoomTracker
         if (_passiveGrid.IsExhausted)
         {
             // The walked footprint fits no graph path (a stale map, an unobserved
-            // forced move such as fear, or a move with no answer that hasn't been
-            // retired yet, so displays were read against the wrong moves). Drop it,
-            // and the moves still waiting with it, and re-seed from the next display.
+            // forced move such as fear, or a move with no answer not retired yet, so
+            // displays were read against the wrong moves). Drop it, and the waiting
+            // moves that can't still be out, and re-seed from the next display.
+            int dropped = DropMovesAlreadyAnswered(when);
             _log?.Log(LogSeverity.Info, "RoomTracker",
                 "Passive grid locate exhausted: walked footprint fits no graph path; re-seeding on the next observation"
-                + (_unsureMoves.Count > 0 ? $" and no longer waiting on {_unsureMoves.Count} move(s)." : "."));
-            ResetPassiveLocate();
+                + (dropped > 0 ? $" and no longer waiting on {dropped} move(s) that can't still be out." : "."));
+            ClearPassiveGrid();
         }
         return false;
+    }
+
+    // After an exhausted footprint, the waiting moves whose own display must already
+    // have been read against an older move. Where an echo marks a command being run
+    // (Stock), that is a move already echoed: its display came. Elsewhere it is a move
+    // older than one expected hop. A move not yet echoed, or sent within a hop, may be
+    // a real move still out (moves typed together), and stays for the age rule.
+    private int DropMovesAlreadyAnswered(DateTimeOffset when)
+    {
+        bool byEcho = EchoMarksExecution && _everReceivedEcho;
+        return _unsureMoves.RemoveAll(u => byEcho ? u.Echoed : when - u.Move.SentAt > _expectedHopNow);
     }
 
     // A footprint down to one room, waiting on moves that have since passed
