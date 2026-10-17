@@ -147,6 +147,7 @@ public static class BugReportBuilder
             new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
             new("Exp/Hr estimator", SafeSection(() => BuildExpEstimator(svc))),
             new("Loop simulator", SafeSection(() => BuildSimulator(svc))),
+            new("Incoming-hit defence", SafeSection(() => BuildIncomingHitDefence(svc))),
 
             // The bulky, mostly static sections: what is configured, not what is
             // happening.
@@ -2677,6 +2678,24 @@ public static class BugReportBuilder
     // simulated number looks wrong" report needs beside the character sections. Its
     // state lives on the Navigation view-model, which registers the provider; null
     // (no Navigation window yet) reads as not opened.
+    // The defence Monster Intel's Hits You % and route Details' danger colours start
+    // from (Monster Intel's what-if fields seed from it): a "wrong hit %" report needs
+    // the AC, the raw dodge and the class floor the figure was worked from.
+    private static string BuildIncomingHitDefence(AppServices svc)
+    {
+        if (svc.LiveIncomingHitDefense() is not { } d) return "_(no `stat` capture yet)_";
+        System.Globalization.CultureInfo inv = System.Globalization.CultureInfo.InvariantCulture;
+        RealmType realm = svc.GameData.ActiveRealm;
+        StringBuilder sb = new();
+        Kv(sb, "AC", $"{d.Ac} for the to-hit formula ({d.AcExact.ToString("0.0", inv)} before the floor), worn gear + race/class + quests + configured buffs");
+        Kv(sb, "Dodge (raw)", $"{d.Dodge}; {Game.Calculators.CombatCalculator.CalcDodgeVSAccuracy(d.Dodge, 100, realm)}% vs accuracy 100");
+        Kv(sb, "Wards", $"Prot Evil {d.ProtEvil}, Prot Good {d.ProtGood}, Vile Ward {d.VileWard}, Shadow {(d.Shadow ? "yes" : "no")}");
+        int floor = Game.Calculators.CombatCalculator.CalculateHitChance(
+            100, 1, 0, defenderArmourType: d.ArmourType, realmType: realm).HitMinCap;
+        Kv(sb, "Class ArmourType", $"{d.ArmourType} → to-hit floor {floor}% ({realm})");
+        return sb.ToString();
+    }
+
     private static string BuildSimulator(AppServices svc)
     {
         Game.Simulation.SimulatorSnapshot? snap = svc.SimulatorSnapshotProvider?.Invoke();

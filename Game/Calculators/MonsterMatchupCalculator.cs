@@ -279,17 +279,36 @@ public static class MonsterMatchupCalculatorSpells
                 protGood, realm, hasShadow, vileWard, defenderEvil)
             : null;
 
-    // Chance ONE monster attack of the given accuracy lands on the defender,
-    // applying whichever ward (Prot Evil / Prot Good / Vile Ward) matches the
-    // monster's alignment. Shared by the single-slot IncomingHitPercent, the
-    // weighted blend below, and Monster Intel's per-attack detail lines.
-    // MajorMUD alignment codes 1/2/5/6 are evil, 0/4 are good.
+    // Chance ONE monster attack of the given accuracy lands on the defender, as a
+    // whole percent, applying whichever ward (Prot Evil / Prot Good / Vile Ward)
+    // matches the monster's alignment. The loop simulator's per-swing roll uses it;
+    // Monster Intel reads the unrounded AttackHitChance below.
     public static int AttackHitPercent(
         int accuracy, int alignment,
         int defenderAc, int defenderDodge, int protEvil, int protGood,
         RealmType realm, bool hasShadow = false,
         int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint,
         int defenderArmourType = 0)
+        => AttackHit(accuracy, alignment, defenderAc, defenderDodge, protEvil, protGood,
+            realm, hasShadow, vileWard, defenderEvil, defenderArmourType).OverallHitPercent;
+
+    // The same chance unrounded, so the defender's dodge still shows against a hit
+    // chance at or near the floor.
+    public static double AttackHitChance(
+        int accuracy, int alignment,
+        int defenderAc, int defenderDodge, int protEvil, int protGood,
+        RealmType realm, bool hasShadow = false,
+        int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint,
+        int defenderArmourType = 0)
+        => AttackHit(accuracy, alignment, defenderAc, defenderDodge, protEvil, protGood,
+            realm, hasShadow, vileWard, defenderEvil, defenderArmourType).OverallHitChance;
+
+    // MajorMUD alignment codes 1/2/5/6 are evil, 0/4 are good.
+    private static HitCalcResult AttackHit(
+        int accuracy, int alignment,
+        int defenderAc, int defenderDodge, int protEvil, int protGood,
+        RealmType realm, bool hasShadow, int vileWard, EvilLevel defenderEvil,
+        int defenderArmourType)
     {
         bool isEvil = alignment is 1 or 2 or 5 or 6;
         bool isGood = alignment is 0 or 4;
@@ -307,47 +326,40 @@ public static class MonsterMatchupCalculatorSpells
             evilLevel: defenderEvil,
             hasShadow: hasShadow,
             defenderArmourType: defenderArmourType,
-            realmType: realm).OverallHitPercent;
+            realmType: realm);
     }
 
     // A monster's overall chance to land a hit when it swings, blended across ALL
-    // its physical attacks: each attack's own hit% weighted by how often the
+    // its physical attacks: each attack's own hit chance weighted by how often the
     // monster throws it (its use-weight, which sums to ~100 across the physical
     // slots). This is the "resembles the real chance it hits you, considering
     // every attack" figure — more faithful than the single majority-slot accuracy,
     // and it averages the per-attack hit OUTPUTS, not the accuracies (which would
-    // skew through the non-linear hit formula). `accuracyDelta` is subtracted from
-    // every attack's accuracy (a folded accuracy debuff; 0 for the base case) and
-    // may push it negative. Null when the monster has no physical attack to blend.
-    public static int? WeightedIncomingHitPercent(
+    // skew through the non-linear hit formula). Unrounded, like AttackHitChance.
+    // `accuracyDelta` is subtracted from every attack's accuracy (a folded accuracy
+    // debuff; 0 for the base case) and may push it negative. Null when the monster
+    // has no physical attack to blend.
+    public static double? WeightedIncomingHitChance(
         IReadOnlyList<(int Accuracy, double Weight)> physicalAttacks, int accuracyDelta,
         int alignment, int defenderAc, int defenderDodge, int protEvil, int protGood,
         RealmType realm, bool hasShadow = false,
         int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint, int defenderArmourType = 0)
     {
         if (physicalAttacks is null || physicalAttacks.Count == 0) return null;
-        double totalWeight = 0, weightedHit = 0;
+        double totalWeight = 0, weightedHit = 0, sum = 0;
         foreach ((int accuracy, double weight) in physicalAttacks)
         {
             double w = weight > 0 ? weight : 0;
-            int hit = AttackHitPercent(accuracy - accuracyDelta, alignment, defenderAc,
+            double hit = AttackHitChance(accuracy - accuracyDelta, alignment, defenderAc,
                 defenderDodge, protEvil, protGood, realm, hasShadow, vileWard, defenderEvil,
                 defenderArmourType);
             weightedHit += w * hit;
             totalWeight += w;
+            sum += hit;
         }
         // Every weight zero (a data quirk) → fall back to a plain mean so the row
         // still shows a number rather than dropping out.
-        if (totalWeight <= 0)
-        {
-            double sum = 0;
-            foreach ((int accuracy, double _) in physicalAttacks)
-                sum += AttackHitPercent(accuracy - accuracyDelta, alignment, defenderAc,
-                    defenderDodge, protEvil, protGood, realm, hasShadow, vileWard, defenderEvil,
-                    defenderArmourType);
-            return (int)System.Math.Round(sum / physicalAttacks.Count);
-        }
-        return (int)System.Math.Round(weightedHit / totalWeight);
+        return totalWeight > 0 ? weightedHit / totalWeight : sum / physicalAttacks.Count;
     }
 
     // Rank the player's known attack spells by effective damage against one

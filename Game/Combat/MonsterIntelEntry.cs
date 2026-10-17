@@ -54,14 +54,26 @@ public sealed class MonsterIntelEntry : INotifyPropertyChanged
     // than just this monster's own data. Set (for every entry at once) by
     // MonsterIntelViewModel.RebuildCharacterCapabilities whenever gear
     // changes. -1 = no character context, or the monster has no catalogued
-    // physical attack to compute against.
-    private int _incomingHitPercent = -1;
-    public int IncomingHitPercent
+    // physical attack to compute against. Unrounded (a floor-level chance with
+    // dodge is a fraction of a percent); IncomingHitPercent is the whole percent
+    // the filter bands compare.
+    private double _incomingHitChance = -1;
+    public double IncomingHitChance
     {
-        get => _incomingHitPercent;
-        set { if (_incomingHitPercent == value) return; _incomingHitPercent = value; Raise(nameof(IncomingHitPercent)); Raise(nameof(IncomingHitPercentText)); }
+        get => _incomingHitChance;
+        set
+        {
+            if (_incomingHitChance.Equals(value)) return;
+            _incomingHitChance = value;
+            Raise(nameof(IncomingHitChance));
+            Raise(nameof(IncomingHitPercent));
+            Raise(nameof(IncomingHitPercentText));
+        }
     }
-    public string IncomingHitPercentText => IncomingHitPercent >= 0 ? $"{IncomingHitPercent}%" : string.Empty;
+    public int IncomingHitPercent =>
+        IncomingHitChance >= 0 ? Calculators.IncomingHitEstimator.RoundPercent(IncomingHitChance) : -1;
+    public string IncomingHitPercentText =>
+        IncomingHitChance >= 0 ? Calculators.IncomingHitEstimator.FormatPercent(IncomingHitChance) : string.Empty;
 
     // Projected rounds for the player to kill this monster with the attack basis
     // picked in Edit Attacks (by default the fastest of their melee attacks and

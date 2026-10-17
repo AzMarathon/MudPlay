@@ -263,16 +263,17 @@
                             </Flyout>
                         </Button.Flyout>
                     </Button>
-                    <!-- Apply Debuffs: fold your known enemy debuffs onto the selected
-                         monster in the matchup what-if (AC / DR / Dodge / accuracy /
-                         slowness). Mirrors Edit Attacks' flyout-picker shape. -->
+                    <!-- Apply Debuffs: fold your known enemy debuffs onto the monsters
+                         in the what-if (AC / DR / Dodge / accuracy / slowness) — the
+                         list's columns and Your Matchup alike. Mirrors Edit Attacks'
+                         flyout-picker shape. -->
                     <Button Content="Apply Debuffs…" HorizontalAlignment="Stretch"
-                            ToolTip.Tip="Fold your known enemy debuffs (AC / DR / Dodge / accuracy / slowness) onto the selected monster, so Your Matchup shows the fight against a debuffed target.">
+                            ToolTip.Tip="Fold your known enemy debuffs (AC / DR / Dodge / accuracy / slowness) onto the monsters, so the list's Hits You % and rounds to kill, and Your Matchup, show the fight against a debuffed target.">
                         <Button.Flyout>
                             <Flyout Placement="Bottom">
                                 <StackPanel MinWidth="320" Spacing="6">
                                     <TextBlock Classes="FieldLabel" TextWrapping="Wrap" MaxWidth="340"
-                                               Text="Check a debuff to fold its effect onto the selected monster in Your Matchup. Stats may go negative — below-zero accuracy can't hit you, below-zero AC is trivially hit."/>
+                                               Text="Check a debuff to fold its effect onto every monster in the list and Your Matchup. Stats may go negative — below-zero accuracy can't hit you, below-zero AC is trivially hit."/>
                                     <TextBlock IsVisible="{Binding !HasKnownDebuffs}"
                                                Classes="DetailLine" TextWrapping="Wrap" MaxWidth="340"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
@@ -402,7 +403,7 @@
                         <DataGridTextColumn Header="HP"         Binding="{ReflectionBinding HpText}"               Width="Auto" MinWidth="80"  SortMemberPath="Hp"/>
                         <DataGridTextColumn Header="EXP"        Binding="{ReflectionBinding ExpText}"              Width="Auto" MinWidth="90"  SortMemberPath="Exp"/>
                         <DataGridTextColumn Header="Accuracies" Binding="{ReflectionBinding AccuracyText}"         Width="Auto" MinWidth="90"  SortMemberPath="Accuracy"/>
-                        <DataGridTextColumn Header="Hits You %" Binding="{ReflectionBinding IncomingHitPercentText}" Width="Auto" MinWidth="90" SortMemberPath="IncomingHitPercent"/>
+                        <DataGridTextColumn Header="Hits You %" Binding="{ReflectionBinding IncomingHitPercentText}" Width="Auto" MinWidth="90" SortMemberPath="IncomingHitChance"/>
                         <DataGridTextColumn Header="Est. Rounds to Kill" Binding="{ReflectionBinding EstimatedRoundsToKillText}" Width="Auto" MinWidth="130" SortMemberPath="EstimatedRoundsToKill"/>
                     </DataGrid.Columns>
                 </DataGrid>

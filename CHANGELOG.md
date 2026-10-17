@@ -1,5 +1,14 @@
 # Version history
 
+## 3.180.43
+
+- Monster Intel's Hits You % counts your dodge, shown to the tenth below 10%
+- Your Matchup's Melee line uses your class's to-hit floor (1% for Silk on Paradigm) and matches the list
+- Applied debuffs move the list's Hits You % and rounds to kill, not just Your Matchup
+- Your Matchup lists each of a monster's physical attacks under the Melee line
+- Bug reports carry the AC, dodge and class floor the hit chances are worked from
+- bug reports addressed: paradigm-20261014-121847
+
 ## 3.180.42
 
 - Logon steps run without a saved username or password: that step is left for you to type, the menu steps after it still go
