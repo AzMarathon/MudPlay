@@ -34,8 +34,8 @@ public readonly record struct PlayerDefenseProfile(
 
 // Shared source for "how likely is this monster to hit me right now" — the single
 // weighted incoming-hit figure Monster Intel's master list surfaces, extracted here
-// so the route Details window colours monster names from the SAME number Monster
-// Intel shows. Pure domain: takes explicit character inputs, no service holder.
+// so the route Details window colours monster names from the same calculation Monster
+// Intel uses. Pure domain: takes explicit character inputs, no service holder.
 public static class IncomingHitEstimator
 {
     // Assemble the live defense profile from explicit character inputs — the exact
@@ -92,8 +92,9 @@ public static class IncomingHitEstimator
     }
 
     // A monster's blended chance to land a hit on the player across ALL its physical
-    // attacks, rounded to the whole percent the route Details bands compare — the
-    // same figure Monster Intel's Hits-You-% column shows. Null when the monster has
+    // attacks, rounded to the whole percent the route Details bands compare — Monster
+    // Intel's Hits-You-% column with no debuffs applied and its what-if fields at their
+    // live values. Null when the monster has
     // no catalogued physical attack (an NPC/caster record).
     public static int? WeightedHitPercent(
         MonsterCatalogEntry monster, in PlayerDefenseProfile def, RealmType realm)
@@ -142,9 +143,11 @@ public static class IncomingHitEstimator
     public static int RoundPercent(double chance) => (int)Math.Round(chance, MidpointRounding.AwayFromZero);
 
     // A hit chance for display: to the tenth below 10%, where the floor and dodge
-    // live and a whole percent would hide them, whole above.
+    // live and a whole percent would hide them, whole above. A chance too small for
+    // a tenth isn't shown as 0%: it can still land.
     public static string FormatPercent(double chance)
-        => chance < 9.95
-            ? chance.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "%"
-            : RoundPercent(chance).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+        => chance > 0 && chance < 0.05 ? "<0.1%"
+            : chance < 9.95
+                ? chance.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "%"
+                : RoundPercent(chance).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
 }

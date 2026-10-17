@@ -3498,7 +3498,7 @@ On both realms these counts are **saved per character**, so they survive a resta
 
 Below the wealth block it shows an **AC / DR breakdown** in two lines: one for what your worn gear grants, and one for what your **configured self-buffs** add on top (assuming they're up) — the same buff figure the Equipment Manager and Monster Intel use.
 
-**Calculators** holds what-if tools: the Hit Calculator, Swing and Backstab calculators, Movement Speed, Mana Regen, and Monster Aggro. The **Hit Calculator** projects your hit% and damage against a monster with your current weapon; for the reverse — how often a monster hits *you*, and whether it's safe to fight — see **Monster Intel**. Both directions count dodge: your hit% is your chance to get through its armour times the share of swings it doesn't dodge, never below the realm's floor before the dodge (a monster has no armour type, so that's 2% on Paradigm and 9% on Stock). Each of the monster's attack rows gives its chance to hit you from your AC, dodge, the ward that applies to its alignment and your class's floor — the same figure Monster Intel shows. Under 10% both read to the tenth.
+**Calculators** holds what-if tools: the Hit Calculator, Swing and Backstab calculators, Movement Speed, Mana Regen, and Monster Aggro. The **Hit Calculator** projects your hit% and damage against a monster with your current weapon; for the reverse — how often a monster hits *you*, and whether it's safe to fight — see **Monster Intel**. Both directions count dodge: your hit% is your chance to get through its armour times the share of swings it doesn't dodge, never below the realm's floor before the dodge (a monster has no armour type, so that's 2% on Paradigm and 9% on Stock). Each of the monster's attack rows gives its chance to hit you from your AC, dodge, the ward that applies to its alignment and your class's floor. Shadow and Vile Ward aren't counted here; Monster Intel counts them. Under 10% both read to the tenth.
 
 ### Monster Aggro
 
@@ -4108,7 +4108,7 @@ A **Hits You %** filter dropdown narrows the list by how dangerous a monster's o
 
 The bands are **realm- and class-dependent**, because the lowest a monster's attack can ever get through your armour differs — **9% on Stock, 2% on ParaMUD**, dropping to **1% on ParaMUD for a light-armour class** (the engine lets Silk/Ninja/Leather armour-type classes floor one point lower; a Mage, Priest or Mystic is Silk). Your dodge then comes off that, so a monster's Hits You % can read under the floor. A band holds the figure rounded to the whole percent (`0.9%` is in `≤1%`):
 
-- **Stock** skips the impossible sub-9% bands and starts at `≤9%` (an attack there lands at least 9 times in 99, and at most 98 in 99).
+- **Stock** starts at `≤9%`: nothing gets through your armour less than 9 times in 99, and with your dodge off that, anything lower falls in this band too.
 - **ParaMUD** offers `≤2%, 3–5%, 6–10%, 11–15%, …`.
 - **A light-armour ParaMUD character** additionally gets a leading `≤1%` band.
 
@@ -4125,7 +4125,7 @@ Select a monster to fill the right-hand detail panel, which has two parts — **
 
 The **Edit Attacks** button (top-right of the window) drives this list: check which attacks appear here, and pick (the radio) what fills the master list's **Est. Rounds to Kill** column — **Fastest of all my attacks** (the default) or one specific attack — so you can weigh "how many rounds if I nuke it with my best spell?" against "if I just swing my weapon?" The attack you picked there is **highlighted** in Your Matchup (a cyan wash with a bar down its left edge), melee line or spell row, so the attack you're judging monsters by stands out. For the full attack-type-by-attack-type melee breakdown with editable what-if inputs, use the Player Workshop's **Calculators** tab.
 
-The **Apply Debuffs** button (just under Edit Attacks) folds your known enemy debuffs onto the monsters as a what-if: check any of your stat-affecting debuffs — the ones that lower a monster's **AC**, **DR**, **Dodge**, or **accuracy**, or **slow** it — and the list's **Hits You %** and **Est. Rounds to Kill** recompute against the softened monsters, along with every number in Your Matchup (your hit %, rounds-to-kill, and the monster's Melee threat lines), with a banner naming what's applied.
+The **Apply Debuffs** button (just under Edit Attacks) folds your known enemy debuffs onto the monsters as a what-if: check any of your stat-affecting debuffs — the ones that lower a monster's **AC**, **DR**, **Dodge**, or **accuracy**, or **slow** it — and the list's **Hits You %** and **Est. Rounds to Kill** recompute against the softened monsters, along with every number in Your Matchup (your hit %, rounds-to-kill, and the monster's Melee threat lines), with a banner naming what's applied. Your picks are saved with the character, and while any are applied the button reads **Apply Debuffs (n)…**, so a list softened by debuffs ticked last session says so.
 
 **Backstab** is judged on the safe side, as a single opener:
 

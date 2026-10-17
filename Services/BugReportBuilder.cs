@@ -2674,10 +2674,6 @@ public static class BugReportBuilder
         return sb.ToString();
     }
 
-    // The Simulator window's last result, live check and area ranking — what a "the
-    // simulated number looks wrong" report needs beside the character sections. Its
-    // state lives on the Navigation view-model, which registers the provider; null
-    // (no Navigation window yet) reads as not opened.
     // The defence Monster Intel's Hits You % and route Details' danger colours start
     // from (Monster Intel's what-if fields seed from it): a "wrong hit %" report needs
     // the AC, the raw dodge and the class floor the figure was worked from.
@@ -2696,6 +2692,10 @@ public static class BugReportBuilder
         return sb.ToString();
     }
 
+    // The Simulator window's last result, live check and area ranking — what a "the
+    // simulated number looks wrong" report needs beside the character sections. Its
+    // state lives on the Navigation view-model, which registers the provider; null
+    // (no Navigation window yet) reads as not opened.
     private static string BuildSimulator(AppServices svc)
     {
         Game.Simulation.SimulatorSnapshot? snap = svc.SimulatorSnapshotProvider?.Invoke();

@@ -1375,8 +1375,8 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
     // Return-hit chance of one monster attack against the current (editable)
     // player AC + dodge, with the player's ward applied only for the matching
-    // alignment and the class's to-hit floor — the same unrounded chance Monster
-    // Intel shows, in the same format.
+    // alignment and the class's to-hit floor, unrounded and formatted as Monster
+    // Intel's. Shadow and Vile Ward aren't modelled here.
     private double HitFor(int accuracy) => MonsterMatchupCalculatorSpells.AttackHitChance(
         accuracy, _monsterAlign, PlayerAc, PlayerDodge, _protEvil, _protGood, _realm,
         defenderArmourType: _armourType);

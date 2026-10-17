@@ -267,7 +267,7 @@
                          in the what-if (AC / DR / Dodge / accuracy / slowness) — the
                          list's columns and Your Matchup alike. Mirrors Edit Attacks'
                          flyout-picker shape. -->
-                    <Button Content="Apply Debuffs…" HorizontalAlignment="Stretch"
+                    <Button Content="{Binding ApplyDebuffsLabel}" HorizontalAlignment="Stretch"
                             ToolTip.Tip="Fold your known enemy debuffs (AC / DR / Dodge / accuracy / slowness) onto the monsters, so the list's Hits You % and rounds to kill, and Your Matchup, show the fight against a debuffed target.">
                         <Button.Flyout>
                             <Flyout Placement="Bottom">

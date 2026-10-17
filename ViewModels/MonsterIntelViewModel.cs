@@ -124,6 +124,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     public ObservableCollection<SpellPickRow> DebuffOptions { get; } = new();
     [ObservableProperty] private bool _hasAppliedDebuffs;
     [ObservableProperty] private string _debuffSummary = "";
+    // The Apply Debuffs button's text, counting what's applied: the debuffs are saved
+    // with the character and move every row, so the list says so without a selection.
+    [ObservableProperty] private string _applyDebuffsLabel = "Apply Debuffs…";
     public bool HasKnownDebuffs => DebuffOptions.Count > 0;
 
     // "Apply Buffs" picker state — the offense mirror of Apply Debuffs: the
@@ -351,9 +354,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // Hits-You-% filter: a multi-select dropdown of contiguous %-bands. Selecting
     // none shows every monster (still subject to the "no computable value" drop);
     // selecting any keeps a monster whose Hits You % falls in ANY selected band.
-    // The band set is REALM-DEPENDENT — the lowest a monster's attack can land is
-    // 9% on Stock and 2% on ParaMUD (CombatCalculator.GetHitMin), so Stock drops
-    // the 2/5 bands (dead below its floor) and gains a band at its floor. Session-only (not
+    // The band set is REALM-DEPENDENT — the least a monster's attack gets through
+    // armour is 9% on Stock and 2% on ParaMUD (CombatCalculator.GetHitMin), so Stock
+    // folds the 2/5 bands into one at its floor (dodge can take a figure lower). Session-only (not
     // persisted), built once from the active realm at construction.
     public ObservableCollection<HitsFilterBucket> HitsFilterBuckets { get; } = new();
 
@@ -903,6 +906,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _monsterDebuff = Game.Spells.MonsterDebuffCalculator.Fold(applied, _stats?.Level ?? 1);
         HasAppliedDebuffs = applied.Count > 0;
         DebuffSummary = HasAppliedDebuffs ? FormatDebuffSummary(_monsterDebuff) : "";
+        ApplyDebuffsLabel = applied.Count > 0 ? $"Apply Debuffs ({applied.Count})…" : "Apply Debuffs…";
     }
 
     // Persist the applied debuff cast-codes on the character tier, resolve-then-write
@@ -1102,8 +1106,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private void UpdateManaLabel() => ManaLabel = _playerState?.ManaType == ManaType.Kai ? "Kai" : "Mana";
 
     // Build the Hits-You-% filter bands for the active realm — contiguous [lo,hi]
-    // ranges from the realm's thresholds (Stock omits the 2/5 bands below its 9%
-    // floor, and starts with a band at that floor). Called once at construction; the realm is fixed
+    // ranges from the realm's thresholds (Stock's first band runs up to its 9% armour
+    // floor and holds anything dodge takes lower). Called once at construction; the realm is fixed
     // for the window's life, like the catalog itself.
     private void RebuildHitsFilterBuckets()
     {
