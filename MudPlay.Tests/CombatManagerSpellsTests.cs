@@ -695,6 +695,68 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("a giant rat", h.LastSent);
     }
 
+    // The arrival settle's defer on a kill, as a kill reaches the client now: an exp
+    // line in the window, with no target of ours for it to drop, so no death is
+    // stamped. The settle used to engage the accumulated roster and send `nebo` at
+    // the just-killed muckworm; it waits for the room's re-display instead.
+    [Fact]
+    public void ArrivalSettle_ExpGainInsideWindow_DefersToResync_NoCorpseCast()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nebo", MinEnemies = 1 };
+        h.AddMonster(1, "muckworm");
+
+        h.Arrive("muckworm");                       // arms the settle hold (no target yet)
+        Assert.Equal(string.Empty, h.LastSent);
+
+        h.Feed("You gain 10 experience.");          // a kill pays us inside the window
+        int sentBeforeSettle = h.Sent.Count;
+
+        h.FireSettle();
+
+        Assert.DoesNotContain("nebo muckworm", h.AllSent);   // never corpse-cast
+        Assert.Equal(sentBeforeSettle + 1, h.Sent.Count);    // exactly the CR resync went out
+        Assert.Equal(string.Empty, h.LastSent);              // = the bare CR (trimmed to empty)
+        Assert.Contains("exp line", h.Combat.LastArrivalSettleDecision);
+    }
+
+    // The same exp line where no re-display can be asked for (a dark room): the
+    // settle has disarmed and nothing would engage the arrival until it swung. It
+    // waits one more window instead, then engages.
+    [Fact]
+    public void ArrivalSettle_ExpGainInsideWindow_NoReDisplayPossible_EngagesAfterOneMoreWindow()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nebo", MinEnemies = 1 };
+        h.AddMonster(1, "muckworm");
+        h.Combat.SetDarkRoomProbe(() => true);
+
+        h.Arrive("muckworm");
+        h.Feed("You gain 10 experience.");
+        h.FireSettle();
+        Assert.DoesNotContain("nebo muckworm", h.AllSent);
+
+        h.FireSettle();
+
+        Assert.Equal("nebo muckworm", h.LastSent);
+    }
+
+    // An exp line from before the hold armed is no kill of the window's: the settle
+    // engages the arrival as usual.
+    [Fact]
+    public void ArrivalSettle_ExpGainBeforeWindow_EngagesTheArrival()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nebo", MinEnemies = 1 };
+        h.AddMonster(1, "muckworm");
+
+        h.Feed("You gain 10 experience.");
+        h.Arrive("muckworm");
+        h.FireSettle();
+
+        Assert.Equal("nebo muckworm", h.LastSent);
+    }
+
     // ----- a swing while our move is in flight (report paradigm-20261010-231540) -----
 
     // A loop that only attacks in lairs walks through a room with one brute zombie in

@@ -1,5 +1,10 @@
 # Version history
 
+## 3.183.34
+
+- Combat: a guarded monster's death no longer leaves a guard retry aimed at its corpse; the room is re-read after a kill in a guard fight and the retry waits for it (in a dark room it retries at once)
+- Combat: a monster that walks in just as a kill pays you exp is no longer attacked off the stale room list; the room is re-read first
+
 ## 3.183.32
 
 - A renamed room not yet shown, redisplaying mid-step, no longer loses the map's place or (with a move echo) names the room ahead

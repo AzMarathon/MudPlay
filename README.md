@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.32**
-> - A renamed room not yet shown, redisplaying mid-step, no longer loses the map's place or (with a move echo) names the room ahead
-> - With no move echo, two look-alike house rooms no longer lend the room ahead the name of the one beyond
-> - A gang-house room renamed to a name the game data has elsewhere is re-learned
-> - A look into a named room next door no longer names the house room ahead
+> **Version 3.183.34**
+> - Combat: a guarded monster's death no longer leaves a guard retry aimed at its corpse; the room is re-read after a kill in a guard fight and the retry waits for it (in a dark room it retries at once)
+> - Combat: a monster that walks in just as a kill pays you exp is no longer attacked off the stale room list; the room is re-read first
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
