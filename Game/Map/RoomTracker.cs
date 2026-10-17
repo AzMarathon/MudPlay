@@ -68,6 +68,13 @@ public sealed class RoomTracker
     // the trail during a run of ambiguous non-strict confirms and makes replay abort.
     private RoomKey? _stepsAnchor;
 
+    // The room held was worked out while unsure (a footprint, a walk-back, a name or
+    // trail re-match, a re-confirm from Suspect), or follows on from one. It is a
+    // guess (user, 2026-10-17), so a profile save keeps the room last known and the
+    // trail from the guess rather than saving the guess as known. Only a strict
+    // anchor (a 1-of-1 match, a manual locate) ends it.
+    public bool PositionIsGuess { get; private set; }
+
     // Passive, engine-independent grid re-localiser. When we're stuck Lost /
     // ambiguous-Suspect in a block of identically-named rooms (the Soldiers'
     // Quarters grid) and NO navigation engine is attached, EngineRecoveryGate's
@@ -140,7 +147,6 @@ public sealed class RoomTracker
         ArgumentNullException.ThrowIfNull(probe);
         _expectedHop = probe;
     }
-
 
     // The time of the latest send, display, dark line or blind line the tracker was
     // given: what MovesInFlight ages moves against, on the same clock they were sent on.
@@ -460,19 +466,21 @@ public sealed class RoomTracker
     // with the same profile reuses the seed.
     //
     // Seeding strategy: if LastKnownRoom resolves to a room in the active graph,
-    // we land Confirmed there and prime the _recentSteps list with the persisted
-    // entries (so a subsequent failed observation triggers replay). If the room
-    // can't be resolved (stale profile, different game-data set, graph not yet
-    // loaded), the tracker stays Unknown and the next observation lands
-    // normally.
+    // we land Confirmed at the trail's start and prime the _recentSteps list with
+    // the persisted entries (so a subsequent failed observation triggers replay).
+    // The trail starts at LastKnownRoom unless RecentStepsFrom names the room it
+    // was begun in instead, one worked out while unsure: the relog then lands there,
+    // still a guess, as the tracker held it before. If the room can't be resolved
+    // (stale profile, different game-data set, graph not yet loaded), the tracker
+    // stays Unknown and the next observation lands normally.
     public void Hydrate(CharacterProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
         _profile = profile;
 
         if (profile.LastKnownRoom is not { } persisted) return;
-        Room? room = _graph.GetRoom(new RoomKey(persisted.Map, persisted.Room));
-        if (room is null)
+        Room? known = _graph.GetRoom(new RoomKey(persisted.Map, persisted.Room));
+        if (known is null)
         {
             _log?.Log(LogSeverity.Info, "RoomTracker",
                 $"Hydrate: LastKnownRoom {persisted.Map}/{persisted.Room} not in active graph; staying Unknown.");
@@ -481,14 +489,31 @@ public sealed class RoomTracker
 
         _recentSteps.Clear();
         if (profile.RecentSteps is { } steps) _recentSteps.AddRange(steps);
-        // The persisted steps project from the room we're hydrating as Confirmed,
-        // or from the room they were saved as starting in when that's another one
-        // (a trail begun where the tracker settled without saving the room as known).
-        _stepsAnchor = profile.RecentStepsFrom is { } from && _graph.GetRoom(new RoomKey(from.Map, from.Room)) is { } start
-            ? start.Key
-            : room.Key;
-        // A relog lands sure of the saved room; nothing from an unsure spell before
-        // it may fold into a later footprint.
+        Room room = known;
+        bool guess = false;
+        if (profile.RecentStepsFrom is { } from)
+        {
+            if (_graph.GetRoom(new RoomKey(from.Map, from.Room)) is { } start)
+            {
+                room = start;
+                guess = true;
+            }
+            else
+            {
+                // Replayed from the saved room instead, the steps would lead somewhere
+                // they never went; landing sure of the saved room is all that's left.
+                _log?.Log(LogSeverity.Warn, "RoomTracker",
+                    $"Hydrate: the saved trail starts at {from.Map}/{from.Room}, not in the active graph; " +
+                    $"dropping its {_recentSteps.Count} steps.");
+                _recentSteps.Clear();
+                profile.RecentSteps = null;
+                profile.RecentStepsFrom = null;
+            }
+        }
+        _stepsAnchor = room.Key;
+        PositionIsGuess = guess;
+        // A relog lands as sure as the room it lands in; nothing from an unsure
+        // spell before it may fold into a later footprint.
         ResetPassiveLocate();
 
         // Set Confirmed without writing back to the profile (we just
@@ -501,8 +526,10 @@ public sealed class RoomTracker
         State.SuspectStrikes = 0;
         State.LastUpdatedAt = _now();
         PushHistory(room.Key, State.LastUpdatedAt);
-        _log?.Log(LogSeverity.Info, "RoomTracker",
-            $"Hydrate: Confirmed at {room.Name} {room.Key} with {_recentSteps.Count} pending replay steps.");
+        _log?.Log(LogSeverity.Info, "RoomTracker", guess
+            ? $"Hydrate: Confirmed at {room.Name} {room.Key}, a room worked out (not the saved {known.Key}), " +
+              $"with {_recentSteps.Count} pending replay steps from it."
+            : $"Hydrate: Confirmed at {room.Name} {room.Key} with {_recentSteps.Count} pending replay steps from it.");
         RaiseStateChanged(prevConf, RoomConfidence.Confirmed, prev, room);
     }
 
@@ -518,12 +545,19 @@ public sealed class RoomTracker
     // position. Writes the live position as the anchor and clears the replay tail
     // (the anchor now IS the current room — nothing left to replay). No-op unless
     // the position is Confirmed; a Suspect/Unknown view leaves the existing anchor
-    // untouched so we never overwrite a good anchor with a guess.
+    // untouched so we never overwrite a good anchor with a guess. A position worked
+    // out while unsure is a guess too, however Confirmed (PositionIsGuess): the save
+    // keeps the room last known and writes the trail from the guess instead.
     public void PersistCurrentRoomForSave()
     {
         if (_profile is null) return;
         if (State.Confidence != RoomConfidence.Confirmed) return;
         if (State.CurrentRoom is not { } room) return;
+        if (PositionIsGuess)
+        {
+            PersistSteps();
+            return;
+        }
         PersistConfirmedAnchor(room, State.LastUpdatedAt);
     }
 
@@ -1510,6 +1544,7 @@ public sealed class RoomTracker
         while (_pending.TryDequeue(out _)) { /* drain */ }
         _recentSteps.Clear();
         _stepsAnchor = null;
+        PositionIsGuess = false;   // dying ends the trail, and any guess with it
         ResetPassiveLocate();
         PersistSteps();
         IsInDarkRoom = false;
@@ -1871,7 +1906,7 @@ public sealed class RoomTracker
             return;
         }
         ClearPendingAndSteps();
-        SetRoom(room, RoomConfidence.Confirmed, when, reason, isStrictAnchor: false);
+        SetRoom(room, RoomConfidence.Confirmed, when, reason, isGuess: true);
     }
 
     // Subscribed by AppServices to RoomGraphManager.GraphReloaded. The active set
@@ -2297,12 +2332,13 @@ public sealed class RoomTracker
         if (current is not null && MatchesPredicted(current, observation))
         {
             // Glitch resolved — server caught up. Back to Confirmed.
-            // No PersistConfirmedAnchor — re-confirming the same room
-            // we were already at adds no strict signal beyond what was
-            // already on disk.
+            // No PersistConfirmedAnchor — the room held while unsure is
+            // re-confirmed by a display that fits it, which in look-alike
+            // rooms says nothing about which one: a guess, saved as none.
             State.SuspectStrikes = 0;
             ClearPendingAndSteps();
             SetConfidence(RoomConfidence.Confirmed, when, "suspect resolved (current room re-confirmed)");
+            MarkGuess();
             return;
         }
 
@@ -2474,7 +2510,7 @@ public sealed class RoomTracker
             $"Replay-recovery succeeded: {start} + {_recentSteps.Count} steps → {cursor.Key} ({cursor.Name}).");
 
         ClearPendingAndSteps();
-        SetRoom(cursor, RoomConfidence.Confirmed, when, "replay-from-last-Confirmed succeeded");
+        SetRoom(cursor, RoomConfidence.Confirmed, when, "replay-from-last-Confirmed succeeded", isGuess: true);
         return true;
     }
 
@@ -2495,7 +2531,7 @@ public sealed class RoomTracker
 
         ClearPendingAndSteps();
         SetRoom(room, RoomConfidence.Confirmed, when,
-            $"name-unique re-anchor ({context}); observed exits subset of graph exits");
+            $"name-unique re-anchor ({context}); observed exits subset of graph exits", isGuess: true);
         return true;
     }
 
@@ -2588,7 +2624,7 @@ public sealed class RoomTracker
             ClearPendingAndSteps();   // also retires the passive footprint
             // A deduction, like replay-recovery — non-strict so it updates in-memory
             // position without overwriting the stronger on-disk LastKnownRoom anchor.
-            SetRoom(room, RoomConfidence.Confirmed, when, "passive grid re-localise converged", isStrictAnchor: false);
+            SetRoom(room, RoomConfidence.Confirmed, when, "passive grid re-localise converged", isGuess: true);
             return true;
         }
 
@@ -3278,7 +3314,8 @@ public sealed class RoomTracker
         RoomConfidence confidence,
         DateTimeOffset when,
         string reason,
-        bool isStrictAnchor = false)
+        bool isStrictAnchor = false,
+        bool isGuess = false)
     {
         Room? prevRoom = State.CurrentRoom;
         RoomConfidence prev = State.Confidence;
@@ -3310,8 +3347,17 @@ public sealed class RoomTracker
             // update in-memory state but don't overwrite the on-disk
             // anchor — the existing anchor is a stronger trust signal
             // than any deduction.
-            if (isStrictAnchor) PersistConfirmedAnchor(room, when);
+            // A room worked out while unsure (isGuess) marks the position a guess;
+            // any other non-strict one carries on from what came before it: a move
+            // predicted from a guess is still one.
+            if (isStrictAnchor)
+            {
+                PersistConfirmedAnchor(room, when);
+                PositionIsGuess = false;
+            }
+            else if (isGuess) MarkGuess();
         }
+        else if (room is null) PositionIsGuess = false;
 
         _log?.Log(LogSeverity.Info, "RoomTracker",
             $"{prev} → {confidence} ({reason}): " +
@@ -3434,6 +3480,12 @@ public sealed class RoomTracker
         PersistSteps();
     }
 
+    private void MarkGuess()
+    {
+        PositionIsGuess = true;
+        PersistSteps();
+    }
+
     private void PushHistory(RoomKey key, DateTimeOffset when)
     {
         _history.AddFirst(new HistoryEntry(key, when));
@@ -3461,11 +3513,14 @@ public sealed class RoomTracker
         // A trail can start somewhere other than the saved room: every settling that
         // isn't saved as known (a re-confirm while unsure, a footprint, a name
         // re-anchor) begins a new trail where it settled. Saving that start lets a
-        // relog replay the trail from it, not from a room the steps never left.
+        // relog replay the trail from it, not from a room the steps never left. A
+        // guess with no step taken from it yet is a trail of none, starting there.
+        RoomKey? start = _recentSteps.Count > 0 ? _stepsAnchor
+            : PositionIsGuess && State.Confidence == RoomConfidence.Confirmed ? State.CurrentRoom?.Key
+            : null;
         RoomRef? known = _profile.LastKnownRoom;
         _profile.RecentStepsFrom =
-            _recentSteps.Count > 0 && _stepsAnchor is { } from
-            && (known is null || known.Map != from.Map || known.Room != from.Room)
+            start is { } from && (known is null || known.Map != from.Map || known.Room != from.Room)
                 ? new RoomRef(from.Map, from.Room)
                 : null;
     }

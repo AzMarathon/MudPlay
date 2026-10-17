@@ -424,7 +424,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - **How Stock's typed-ahead queue drains** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_fast_update_character` @0x4232c6 / @0x423149 / @0x423280, `_execute_pending_command` @0x450f24, `_cleanup_pending_commands`; Realm: Stock, Paradigm not recorded)*:
   - **One waiting command runs per fast tick.** A tick that starts with the delay at 0 runs one waiting command; the tick on which a delay runs out performs the deferred move and then runs one. So ten `get`s sent behind a move take ten ticks to answer, and anything sent meanwhile joins the back of the same queue. A line typed while the delay is 0 and the queue is empty runs at once (`_execute_input` @0x450171–0x4501a6).
   - **The game prints a queued command itself when it runs it**: the command text and a line break (`%s` + CR, @0x450f24), then the command's own output. So a command run from the queue is echoed at the time it runs, not when it was typed.
-  - **Paradigm echoes a typed-ahead move the same way: when the game runs it** *([CONFIRMED] 2026-10-17, user)*. A move sent before the one ahead of it has landed is echoed when it runs, not when it is typed. (An earlier note said Paradigm's timing was not recorded; superseded 2026-10-17.) **Client use:** on both realms `RoomTracker.NoteUnsureEcho` reads an echo as "every command before this one has been answered", and `DropMovesAlreadyAnswered` takes an echoed move's display as come (*Movement & navigation → Passive grid re-localiser (command-free)*).
+  - **Paradigm echoes a typed-ahead move the same way: when the game runs it** *([CONFIRMED] 2026-10-17, user)*. A move sent before the one ahead of it has landed is echoed when it runs, not when it is typed. (An earlier note said Paradigm's timing was not recorded, asked of the user 2026-10-17 (PR #1091 review); superseded 2026-10-17.) **Client use:** on both realms `RoomTracker.NoteUnsureEcho` reads an echo as "every command before this one has been answered", and `DropMovesAlreadyAnswered` takes an echoed move's display as come (*Movement & navigation → Passive grid re-localiser (command-free)*).
   - **A queued line is kept to 254 characters** (@0x450fba).
   - **Leaving the game empties the queue, and so does dying.** `_cleanup_pending_commands` has one caller, `_cleanup_when_user_leaves` (@0x420e38), which runs on a death, a suicide, the end of the exit wait, a logoff and a hang-up. No flush was found on `break`, on being attacked or on a refused move (callees not all read).
 - **Stock has no `Too many messages sent…` line** *([OBSERVED] 2026-10-09: the text is not in `wccmmud.dll`, `wccmmpls.dll`, the message table or the textblocks; Realm: Stock)*. The Stock engine's only "slow down" lines are the two in the *Stock realms are stricter* bullet of this topic, both printed by `_add_delayed_command` (@0x45103e, @0x45105b). Its chat traffic has per-recipient caps instead, which print no rate line: see *Talk & chat channels → Telepath throttle and per-telepath acknowledgement* and *Talk & chat channels → Gossip and auction*.
@@ -4888,13 +4888,26 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     and a room it settles on is located as a deduction (`RoomTracker.LocateDeduced`), never as the persisted
     strict anchor.
   - **Client policy** *(user, 2026-10-17)*: a room the tier-3 walk-back settles on is a guess too.
-    `EngineRecoveryGate.FinishTier3Success` locates it with `LocateDeduced`, so `LastKnownRoom` stays the
-    last room the tracker knew. The walker and the loop runner resume from the key either way, and the bug
-    report's *Recovery anchor* is the gate's own walk-back anchor.
+    `EngineRecoveryGate.FinishTier3Success` locates it with `LocateDeduced`. The walker and the loop runner
+    resume from the key either way, and the bug report's *Recovery anchor* is the gate's own walk-back anchor.
+  - **Client policy** *(user, 2026-10-17; held to every save in the PR #1091 review)*: **a room worked out while unsure is never saved
+    as the known room, by any save.** That covers the tier-2 and tier-3 footprints (`LocateDeduced`), the
+    passive locate's convergence, a name or trail re-match (`TryReanchorByName`, `TryReplayRecover`) and a
+    re-confirm of the room held while Suspect. Each sets `RoomTracker.PositionIsGuess`, and so does every
+    move predicted on from one. Only a strict anchor (a 1-of-1 match, a manual locate, `rm` or `sys st`)
+    clears it.
+    - The profile saves all through play (a buff dropping, an equipment change, a settings apply) as well
+      as on close. Each save runs `RoomTracker.PersistCurrentRoomForSave`. While the flag is set, it keeps
+      `LastKnownRoom` and writes the trail from the guess instead.
+    - Otherwise it still saves the room held as known, with the trail cleared: a run of moves through rooms
+      that read alike, such as Paradigm's ~100 `Graveyard` rooms, confirms every room by prediction and
+      never by a 1-of-1 match.
   - A room settled on without saving it as known starts a new step trail there. The trail's start is saved
-    with it (`CharacterProfile.RecentStepsFrom`), and `RoomTracker.Hydrate` replays a relog's trail from that
-    room rather than from `LastKnownRoom`. Before, a relog after such a settling replayed the new steps from
-    the old anchor, as if they had been taken there.
+    with it (`CharacterProfile.RecentStepsFrom`), a guess with no step taken from it yet as a trail of none.
+    `RoomTracker.Hydrate` lands a relog at that start, still a guess, and replays the trail from it rather
+    than from `LastKnownRoom`. A start no longer in the active game data drops the trail (logged), and the
+    relog lands on `LastKnownRoom`. Before, a relog after such a settling replayed the new steps from the
+    old anchor, as if they had been taken there.
 
 ### Dark rooms — no name, no exits, traversal inferred from no bonk
 *Status: CONFIRMED*

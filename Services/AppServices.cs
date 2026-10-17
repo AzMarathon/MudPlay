@@ -4213,7 +4213,8 @@ public sealed class AppServices
         // On every save (including the save-on-close), stamp the live confirmed
         // room as LastKnownRoom so the next session lands where the player actually
         // is — not at the last strict anchor, which lags behind predicted-neighbour
-        // moves through same-named rooms.
+        // moves through same-named rooms. A room worked out while unsure is a guess
+        // and is never stamped; the save keeps the trail from it instead.
         Profile.ProfileSaving += _ => RoomTracker.PersistCurrentRoomForSave();
         if (Profile.Current is { } loaded) RoomTracker.Hydrate(loaded);
 

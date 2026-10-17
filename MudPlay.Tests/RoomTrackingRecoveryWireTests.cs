@@ -216,8 +216,8 @@ public sealed class RoomTrackingRecoveryWireTests
 
     // A command the game didn't echo (it printed only the prompt) is not retired by
     // the next move's echo, so that move's display is read against it and the
-    // footprint exhausts. On Stock the move the display really answered was echoed,
-    // so its display has come: it is dropped, and the leader's drags that follow
+    // footprint exhausts. The move the display really answered was echoed, so its
+    // display has come: it is dropped, and the leader's drags that follow
     // (which echo nothing) fold with their own displays, not a move behind.
     [Fact]
     public void PassiveLocate_AnExhaustedFootprint_DropsAMoveAlreadyEchoed()
@@ -648,11 +648,17 @@ public sealed class RoomTrackingRecoveryWireTests
 
     // ----- deduced locates: a guess, and a relog after one -----------------
 
-    // A relog: the profile closes and loads again, and the game shows the room the
-    // character stands in. The tracker comes back sure of the saved room with the
-    // saved trail, and the display is checked against that trail's end.
+    // What every profile save runs first (ProfileService.ProfileSaving): profiles
+    // save all through play, on a buff dropping, an equipment change, a settings
+    // apply, and on the way out.
+    private static void Save(TrackerWireRig rig) => rig.Tracker.PersistCurrentRoomForSave();
+
+    // A relog: the profile saves, closes and loads again, and the game shows the
+    // room the character stands in. The tracker comes back at the saved trail's
+    // start, and the display is checked against that trail's end.
     private static void Relog(TrackerWireRig rig, CharacterProfile profile)
     {
+        Save(rig);
         rig.Tracker.OnProfileClosed();
         rig.Tracker.Hydrate(profile);
         rig.ShowRoom();
@@ -737,12 +743,14 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.Equal(A(0), Saved(profile));
     }
 
-    // C. The same after a tier-2 deduced locate: the trail starts at the room the
-    // footprint settled on, and a relog replays it from there.
+    // C. The same after a tier-2 deduced locate. The map holds A(0), really in its
+    // twin B(0); B's room 2 shows an exit A's lacks (shared with a decoy), so the
+    // tracker can't place that landing and the forward footprint settles on B(2).
+    // The trail starts there, and a save on the way to the relog keeps A(0).
     [Fact]
     public void Tier2Forward_ARelogAfterADeducedLocate_ReplaysFromWhereTheTrailStarts()
     {
-        TrackerWireRig rig = new(PairWorld(split: 1)) { Position = A(0) };
+        TrackerWireRig rig = new(PairWorld(split: 6, decoyAt: 2)) { Position = B(0) };
         using TrackerWireRig _ = rig;
         CharacterProfile profile = new() { LastKnownRoom = new RoomRef(A(0).Map, A(0).Room) };
         rig.Tracker.Hydrate(profile);
@@ -756,13 +764,97 @@ public sealed class RoomTrackingRecoveryWireTests
         rig.Pump();
         Assert.True(engine.Step());
         rig.Pump();
-        Assert.Equal(A(2), rig.Gate.Anchor);   // the forward footprint's deduced locate
+        Assert.Equal(B(2), rig.Gate.Anchor);
+        AssertLocatedAt(rig, B(2));
+        Assert.True(rig.Tracker.PositionIsGuess);
         rig.Gate.Detach();
 
         rig.Do(Token(2));
         Relog(rig, profile);
 
-        AssertLocatedAt(rig, A(3));
+        AssertLocatedAt(rig, B(3));
         Assert.Equal(A(0), Saved(profile));
+    }
+
+    // A save straight after a guess, before any step from it, keeps the known
+    // room and saves the guess as a trail of none; the relog lands on the guess.
+    [Fact]
+    public void ASaveAfterAGuess_KeepsTheKnownRoom_AndARelogLandsOnTheGuess()
+    {
+        using TrackerWireRig rig = new(PairWorld(split: 1)) { Position = A(0) };
+        CharacterProfile profile = new() { LastKnownRoom = new RoomRef(A(0).Map, A(0).Room) };
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+        rig.NextAnswers.Enqueue("You fall to the ground with a thud, taking 3 damage!");
+        rig.Do(Token(0));
+        rig.Do(Token(0));
+        rig.Do(Token(1));                          // the passive locate settles on A(2)
+        AssertLocatedAt(rig, A(2));
+
+        Save(rig);
+
+        Assert.Equal(A(0), Saved(profile));
+        Assert.Null(profile.RecentSteps);
+        Assert.Equal((A(2).Map, A(2).Room), (profile.RecentStepsFrom!.Map, profile.RecentStepsFrom.Room));
+
+        Relog(rig, profile);
+
+        AssertLocatedAt(rig, A(2));
+        Assert.True(rig.Tracker.PositionIsGuess);
+        Assert.Equal(A(0), Saved(profile));
+    }
+
+    // A strict confirm ends a guess: a save after it saves the room held, even
+    // one reached since by a move through rooms that read alike (as a walk through
+    // the Graveyard is).
+    [Fact]
+    public void ASaveAfterAStrictConfirm_SavesTheRoomHeld()
+    {
+        using TrackerWireRig rig = new(PairWorld(split: 1)) { Position = B(0) };
+        CharacterProfile profile = new()
+        {
+            LastKnownRoom = new RoomRef(A(0).Map, A(0).Room),
+            RecentStepsFrom = new RoomRef(B(0).Map, B(0).Room),   // saved after a guess at B(0)
+        };
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+        AssertLocatedAt(rig, B(0));
+        Assert.True(rig.Tracker.PositionIsGuess);
+
+        rig.Do(Token(0));
+        rig.Do(Token(1));                          // into the Cellar, which only one room reads as
+        AssertLocatedAt(rig, Cellar);
+        Assert.False(rig.Tracker.PositionIsGuess);
+        rig.Do("s");                               // on to B(2), which reads as A(2) too
+        AssertLocatedAt(rig, B(2));
+
+        Save(rig);
+
+        Assert.Equal(B(2), Saved(profile));
+        Assert.Null(profile.RecentSteps);
+        Assert.Null(profile.RecentStepsFrom);
+    }
+
+    // A trail saved as starting in a room the active game data doesn't have can't be
+    // replayed from anywhere true: it is dropped, and the relog lands on the known room.
+    [Fact]
+    public void ARelog_WhoseTrailStartsInARoomNoLongerOnTheMap_DropsTheTrail()
+    {
+        using TrackerWireRig rig = new(PairWorld(split: 1)) { Position = A(0) };
+        CharacterProfile profile = new()
+        {
+            LastKnownRoom = new RoomRef(A(0).Map, A(0).Room),
+            RecentSteps = new() { new DirectionDto(Walk[0]) },
+            RecentStepsFrom = new RoomRef(9, 999),
+        };
+
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+
+        AssertLocatedAt(rig, A(0));
+        Assert.False(rig.Tracker.PositionIsGuess);
+        Assert.Null(profile.RecentSteps);
+        Assert.Null(profile.RecentStepsFrom);
+        Assert.Contains(rig.Log.Snapshot(), e => e.Message.StartsWith("Hydrate: the saved trail starts at 9/999"));
     }
 }

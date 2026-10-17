@@ -375,8 +375,8 @@ public sealed class CharacterProfile
 
     // The room RecentSteps start from, when that isn't LastKnownRoom: the tracker
     // settled on a room it worked out (a footprint, a re-confirm while unsure) and
-    // began a new trail there without saving that room as known. null = the steps
-    // start from LastKnownRoom.
+    // began a new trail there without saving that room as known. Set with no steps,
+    // it is that room itself. null = the steps start from LastKnownRoom.
     public RoomRef? RecentStepsFrom { get; set; }
 
     // Append-only history of deaths observed for this character. Written by
