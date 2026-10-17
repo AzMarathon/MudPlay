@@ -185,6 +185,7 @@ public sealed class HostileNameTests : IDisposable
         new("Realm.MoveData(bbs, H, new)", Under.Realms, (t, h) => t.Realms().MoveData(t.Bbs, h, "moved")),
         new("Realm.DeleteContents(bbs, H)", Under.Realms, (t, h) => t.Realms().DeleteContents(t.Bbs, h, Array.Empty<ProfileRef>())),
         new("Realm.Rename(bbs, home, H)", Under.Realms, (t, h) => t.Realms().Rename(t.Bbs, Realm, h)),
+        new("Resolver: a realm-tier override with realm H of the loaded profile", Under.Realms, (t, h) => t.WriteRealmOverride(h)),
 
         // A game-data set's name.
         new("Sets.DeleteSet(H)", Under.Sets, (t, h) => t.Sets().DeleteSet(h)),
@@ -213,6 +214,30 @@ public sealed class HostileNameTests : IDisposable
         File.WriteAllText(file, "x");
         try { new MdbImporter().ImportAsync(file, target).GetAwaiter().GetResult(); }
         finally { File.Delete(file); }
+    }
+
+    // A bbs.json can name a realm anything. The BBS is read with realm H in it and
+    // its file put back as it was before anything is compared; then a game-data
+    // override is written "only for this realm", and read back.
+    private void WriteRealmOverride(string realm)
+    {
+        string file = Path.Combine(AppPaths.BbsDir, Bbs, "bbs.json");
+        byte[] was = File.ReadAllBytes(file);
+        SettingsResolver resolver;
+        try
+        {
+            var json = System.Text.Json.Nodes.JsonNode.Parse(was)!.AsObject();
+            json["Realms"]![0]!["Name"] = realm;
+            File.WriteAllText(file, json.ToJsonString());
+            _profiles.Current!.Realm = realm;
+            resolver = new SettingsResolver(new SettingsService(), new BbsProfileStore(), _profiles, () => Set);
+        }
+        finally { File.WriteAllBytes(file, was); }
+        // A one-segment name on this platform is a realm folder of that name, kept
+        // working like any realm made before the rule; only the others are tested.
+        if (PathGuard.Child(RealmsDir, realm) is not null) return;
+        resolver.ResolveGameData("Monsters", "1", new Models.GameData.MonsterOverlay());
+        resolver.WriteGameDataAt(SettingsTier.Bbs, "Monsters", "1", new Models.GameData.MonsterOverlay { Name = "x" });
     }
 
     private void SaveALoopOn(string set)

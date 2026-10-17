@@ -16282,19 +16282,10 @@ public sealed class AppServices
         return (bbs, realm);
     }
 
-    // The active realm's data folder (AppPaths.RealmFolder), or null with no BBS, or
-    // when a name in the way can't be a folder (a bbs.json can hold any text): the
-    // stores keyed on the realm then hold nothing, as with no BBS, instead of sharing
-    // AppPaths' holding folder for refused names.
-    public string? ActiveRealmFolder()
-    {
-        if (ResolveActiveRealm() is not { } r) return null;
-        if (PathGuard.Child(AppPaths.BbsDir, r.Bbs.Name) is not null
-            && PathGuard.Child(AppPaths.RealmsDir(r.Bbs.Name), r.Realm.Name) is not null)
-            return AppPaths.RealmFolder(r.Bbs.Name, r.Realm.Name);
-        PathGuard.Refuse("Finding the active realm's data folder", "realm name", r.Realm.Name);
-        return null;
-    }
+    // The active realm's data folder, or null with no BBS or when a name in the way
+    // can't be a folder (AppPaths.UsableRealmFolder).
+    public string? ActiveRealmFolder() =>
+        ResolveActiveRealm() is { } r ? AppPaths.UsableRealmFolder(r.Bbs.Name, r.Realm.Name) : null;
 
     // Whether the loaded character has the "Sysop status" power on the active BBS
     // — the Settings → BBS credentials checkbox. Sysop powers are granted to an
@@ -16516,20 +16507,38 @@ public sealed class AppServices
     // that runs before the set has been switched.
     //
     // A name that can't be a folder in the game-data folder is no set: null, with the
-    // reason in the program log, rather than a name every store keyed on the set
-    // would be handed.
+    // reason in the program log and on the terminal (GameDataSetRefused), rather than
+    // a name every store keyed on the set would be handed.
     private string? ProfileGameDataSet()
     {
         string? set = ResolveActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
         string? usable = GameData.UsableSet(set, out string? whyNot);
-        if (whyNot is null) return usable;
-        // Asked again on every profile event: said once for each name met.
-        if (!string.Equals(Interlocked.Exchange(ref _unusableGameDataSetSaid, set), set, StringComparison.Ordinal))
-            Log.Warn("GameData", $"This profile's game data set {PathGuard.Show(set)} can't be used, so no game data is loaded: {whyNot}");
+        if (whyNot is null)
+        {
+            // A usable set in between, so the refused one is said again when it is
+            // next met: loading that profile again is worth a word.
+            Interlocked.Exchange(ref _refusedGameDataSetNotice, null);
+            return usable;
+        }
+        // Asked again on every profile event: said once each time the name is met.
+        string notice = GameDataCache.RefusedSetNotice(set, whyNot);
+        if (!string.Equals(Interlocked.Exchange(ref _refusedGameDataSetNotice, notice), notice, StringComparison.Ordinal))
+        {
+            Log.Warn("GameData", notice);
+            GameDataSetRefused?.Invoke(notice);
+        }
         return null;
     }
 
-    private string? _unusableGameDataSetSaid;
+    // Why the loaded profile runs with no game data, while its set's name can't be
+    // used; null otherwise. Read by the main window at start-up, where the profile
+    // is loaded before anything can hear GameDataSetRefused, and by the bug report.
+    public string? RefusedGameDataSetNotice => Volatile.Read(ref _refusedGameDataSetNotice);
+    private string? _refusedGameDataSetNotice;
+
+    // Raised with RefusedGameDataSetNotice each time it is newly said. May be raised
+    // off the UI thread.
+    public event Action<string>? GameDataSetRefused;
 
     // Drop any persisted reference to a just-deleted game-data set so a
     // later resolve doesn't point GameData at a folder
